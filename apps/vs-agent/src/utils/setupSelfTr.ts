@@ -11,6 +11,7 @@ import {
   DidRecord,
   W3cPresentationOptions,
   Logger,
+  utils,
 } from '@credo-ts/core'
 // No type definitions available for this library
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -87,8 +88,9 @@ export const createJsonSubjectRef = (id: string): W3cCredentialSubject => ({
 export const mapToSelfTr = (url: string, publicApiBaseUrl: string): string =>
   url.replace('ecosystem', `${publicApiBaseUrl}/vt`)
 
-const buildIntegrityData = (data: Record<string, unknown>) => {
-  return generateDigestSRI(JSON.stringify(data, Object.keys(data).sort()))
+const buildIntegrityData = async (data: Record<string, unknown>) => {
+  const res = new TextEncoder().encode(JSON.stringify(data, Object.keys(data as object).sort()))
+  return await generateDigestSRI(res)
 }
 
 // TODO: Resolve url must be with verre or similar
@@ -331,7 +333,7 @@ export async function generateVerifiablePresentation(
   })
   const verifiablePresentation = await generateVerifiableCredential(
     agent,
-    agent.did,
+    `${agent.did}#${utils.uuid()}`,
     ecsSchemas,
     schemaKey,
     type,
@@ -469,17 +471,11 @@ export async function addDigestSRI<T extends object>(
     )
   }
 
-  let schemaContent: string
-
-  if (response.ok) {
-    schemaContent = await response.text()
-  } else {
-    schemaContent = JSON.stringify({ schema: JSON.stringify(fallbackSchema) })
-  }
-
+  const schemaText = response.ok ? await response.text() : JSON.stringify({ schema: fallbackSchema })
+  const schemaContent = new TextEncoder().encode(schemaText)
   return {
     ...data,
-    digestSRI: generateDigestSRI(schemaContent),
+    digestSRI: await generateDigestSRI(schemaContent),
   }
 }
 
@@ -489,10 +485,8 @@ export async function addDigestSRI<T extends object>(
  * @param algorithm - The hash algorithm to use (default: sha256).
  * @returns The SRI digest string.
  */
-export function generateDigestSRI(content: string, algorithm: string = 'sha384'): string {
-  const hash = createHash(algorithm)
-    .update(JSON.stringify(JSON.parse(content)), 'utf8')
-    .digest('base64')
+export function generateDigestSRI(content: Uint8Array, algorithm: string = 'sha384'): string {
+  const hash = createHash(algorithm).update(content).digest('base64')
   return `${algorithm}-${hash}`
 }
 
