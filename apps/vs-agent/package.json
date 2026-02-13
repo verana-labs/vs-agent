@@ -3,7 +3,7 @@
   "main": "build/index",
   "types": "build/index",
   "private": true,
-  "version": "1.7.2",
+  "version": "1.7.3",
   "files": [
     "build"
   ],
