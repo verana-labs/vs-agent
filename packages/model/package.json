@@ -2,7 +2,7 @@
   "name": "@verana-labs/vs-agent-model",
   "main": "build/index",
   "types": "build/index",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "repository": {
     "type": "git",
     "url": "https://github.com/verana-labs/vs-agent"
