@@ -226,9 +226,9 @@ export class TrustController {
 
   @Get('json-schema-credentials')
   @ApiOperation({
-    summary: 'Retrieve one or multiple JSON Schema Credential (JSC)',
+    summary: 'Retrieve one or multiple Verifiable Trust Json Schema Credential (VTJSC).',
     description:
-      'Retrieves a JSON Schema Credential (JSC) associated with the given schema identifier (`schemaId`). ' +
+      'Retrieves a Verifiable Trust Json Schema Credential (VTJSC) associated with the given schema identifier (`schemaId`). ' +
       'A JSON Schema Credential defines the structure, types, and validation rules for a corresponding Verifiable Trust Credential (VTC). ' +
       'This endpoint follows the [Verifiable Trust Specification](https://verana-labs.github.io/verifiable-trust-spec/#json-schema-credentials).',
   })
@@ -237,7 +237,7 @@ export class TrustController {
     required: false,
     type: String,
     description:
-      'The identifier or URL of the JSON Schema Credential (JSC) to retrieve. ' +
+      'The identifier or URL of the Verifiable Trust Json Schema Credential (VTJSC) to retrieve. ' +
       'This schema describes the structure of the Verifiable Trust Credential (VTC) it governs.',
     examples: {
       jsonSchemaCredentialId: {
@@ -275,9 +275,9 @@ export class TrustController {
 
   @Delete('json-schema-credentials')
   @ApiOperation({
-    summary: 'Delete a JSON Schema Credential (JSC)',
+    summary: 'Delete a a Verifiable Trust Json Schema Credential (VTJSC)',
     description:
-      'Deletes a stored JSON Schema Credential (JSC) associated with the specified schema identifier (`schemaId`). ' +
+      'Deletes a stored Verifiable Trust Json Schema Credential (VTJSC) associated with the specified schema identifier (`schemaId`). ' +
       'A JSON Schema Credential defines the structure and validation rules for a Verifiable Trust Credential (VTC). ' +
       'Removing a JSC also invalidates any Verifiable Trust Credentials that rely on it. ' +
       'This operation follows the [Verifiable Trust Specification](https://verana-labs.github.io/verifiable-trust-spec/#json-schema-credentials).',
@@ -287,23 +287,23 @@ export class TrustController {
     required: true,
     type: String,
     description:
-      'The identifier or URL of the JSON Schema Credential (JSC) to delete. ' +
+      'The identifier or URL of the Verifiable Trust Json Schema Credential (VTJSC) to delete. ' +
       'This must correspond to an existing stored schema definition.',
     examples: {
       jsonSchemaCredentialId: {
         summary: 'JSON Schema Credential example',
-        description: 'A full URL identifying the JSON Schema Credential (JSC) to be deleted.',
+        description: 'A full URL identifying the Verifiable Trust Json Schema Credential (VTJSC) to be deleted.',
         value: 'https://ecosystem/shemas-example-jsc.json',
       },
     },
   })
   @ApiResponse({
     status: 200,
-    description: 'The JSON Schema Credential (JSC) was successfully deleted for the given schema ID.',
+    description: 'The Verifiable Trust Json Schema Credential (VTJSC) was successfully deleted for the given schema ID.',
   })
   @ApiResponse({
     status: 404,
-    description: 'No JSON Schema Credential (JSC) was found for the provided schema ID.',
+    description: 'No Verifiable Trust Json Schema Credential (VTJSC) was found for the provided schema ID.',
   })
   async removeJsonSchemaCredential(@Query('schemaId') schemaId: string) {
     return await this.trustService.removeJsonSchemaCredential(schemaId)
@@ -311,21 +311,28 @@ export class TrustController {
 
   @Post('json-schema-credentials')
   @ApiOperation({
-    summary: 'Create or update a JSON Schema Credential (JSC)',
-    description:
-      'Creates or updates a JSON Schema Credential (JSC) based on the provided schema base identifier (`schemaBaseId`) and JSON Schema reference (`jsonSchemaRef`). ' +
-      'A JSON Schema Credential defines the structure, data types, and validation rules for a corresponding Verifiable Trust Credential (VTC). ' +
-      'This operation follows the [Verifiable Trust Specification](https://verana-labs.github.io/verifiable-trust-spec/#json-schema-credentials).',
+    summary: 'Create or update a Verifiable Trust Json Schema Credential (VTJSC)',
+    description: `
+  Creates or updates a **Verifiable Trust Json Schema Credential (VTJSC)**, used by **Trust Registries** to cryptographically sign and attest to **Credential Schemas** they have created in the Verana ledger.
+
+  A VTJSC binds a CredentialSchema entry in the VPR to the **Ecosystem DID** that governs the Trust Registry.
+  - schemaBaseId: the name you want to show in the url path of the create vtjsc. Example: organizationtest will create the VTJSC with the id: https:///vt/schemas-organizationtest-jsc.json
+  - jsonSchemaRef: the URI of your schema in the Verana ledger.
+  
+  The **issuer DID** of the VTJSC MUST be the **same DID** as the Ecosystem DID of the Trust Registry that created the referenced CredentialSchema in the ledger.
+
+  VTJSCs issued by any other DID will be be considered invalid by trust resolvers.
+  `,
   })
   @ApiBody({
     type: JsonSchemaCredentialDto,
     description:
-      'Defines the base schema identifier and the JSON Schema reference used to create or update the JSON Schema Credential (JSC).',
+      'Defines the base schema identifier and the JSON Schema reference used to create or update the Verifiable Trust Json Schema Credential (VTJSC).',
     examples: {
       service: {
         summary: 'JSON Schema Credential Example',
         description:
-          'Creates a JSON Schema Credential (JSC) for an organization or service. ' +
+          'Creates a Verifiable Trust Json Schema Credential (VTJSC) for an organization or service. ' +
           'The `schemaBaseId` determines the base schema name, and the `jsonSchemaRef` provides the reference to the JSON Schema definition.',
         value: {
           schemaBaseId: 'organization',
@@ -337,7 +344,7 @@ export class TrustController {
   @ApiResponse({
     status: 201,
     description:
-      'The JSON Schema Credential (JSC) was successfully created or updated based on the provided schema base ID and reference.',
+      'The Verifiable Trust Json Schema Credential (VTJSC) was successfully created or updated.',
   })
   @ApiResponse({
     status: 400,
