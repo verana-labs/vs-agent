@@ -86,7 +86,8 @@ export const SELF_ISSUED_VTC_ORG_REGISTRYURL =
 export const SELF_ISSUED_VTC_ORG_ADDRESS = process.env.SELF_ISSUED_VTC_ORG_ADDRESS ?? 'Some address'
 
 // Values for Service credential
-export const SELF_ISSUED_VTC_SERVICE_TYPE = process.env.SELF_ISSUED_VTC_SERVICE_TYPE ?? 'WEB_PORTAL'
+export const SELF_ISSUED_VTC_SERVICE_TYPE =
+  process.env.SELF_ISSUED_VTC_SERVICE_TYPE?.replace(' ', '_') ?? 'WEB_PORTAL'
 export const SELF_ISSUED_VTC_SERVICE_DESCRIPTION =
   process.env.SELF_ISSUED_VTC_SERVICE_DESCRIPTION ?? 'Some description'
 export const SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED = Number(
