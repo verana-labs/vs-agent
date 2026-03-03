@@ -255,7 +255,6 @@ export class CredentialTypesService {
     version?: string
     relatedJsonSchemaCredentialId?: string
   }) {
-    const agent = await this.agentService.getAgent()
     let credentialDefinitionRecord = await this.findAnonCredsCredentialDefinition({
       schemaId,
       issuerId,

@@ -470,10 +470,30 @@ export async function addDigestSRI<T extends object>(
       `Failed to fetch schema from ${id}: ${response.status} ${response.statusText}, and no local fallback found.`,
     )
   }
+  assertValidSchema(schemaContent, id)
 
   return {
     ...data,
     digestSRI: generateDigestSRI(schemaContent),
+  }
+}
+
+function assertValidSchema(schemaContent: string, id: string): void {
+  try {
+    if (!ajv.validateSchema(JSON.parse(schemaContent))) {
+      const reason = ajv.errors?.map(e => e.message).join(', ') ?? 'Invalid schema structure'
+
+      throw new Error(reason)
+    }
+  } catch (error) {
+    const message =
+      error instanceof SyntaxError
+        ? 'Invalid JSON format'
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error'
+
+    throw new Error(`Schema from ${id} is not valid: ${message}`)
   }
 }
 
