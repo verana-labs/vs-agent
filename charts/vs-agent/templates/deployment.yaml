@@ -196,8 +196,10 @@ spec:
             ports:
             -  containerPort: {{ .Values.adminPort }}
             -  containerPort: {{ .Values.didcommPort }}
+            {{- if .Values.resources }}
             resources:
-{{- toYaml .Values.resources | nindent 12 }}
+{{- toYaml .Values.resources | nindent 14 }}
+            {{- end }}
             livenessProbe:
               httpGet:
                 path: /v1/health
@@ -231,7 +233,7 @@ spec:
             ports:
             -  containerPort: 5432
             resources:
-{{- toYaml .Values.database.resources | nindent 12 }}
+{{- toYaml .Values.database.resources | nindent 14 }}
             volumeMounts:
             - name: {{ .Values.name }}-pg-pv-main
               mountPath: /var/lib/postgresql/data
@@ -243,7 +245,7 @@ spec:
             ports:
             -  containerPort: 6379
             resources:
-{{- toYaml .Values.redis.resources | nindent 12 }}
+{{- toYaml .Values.redis.resources | nindent 14 }}
             volumeMounts:
             - name: {{ .Values.name }}-redis-main
               mountPath: /home/data
