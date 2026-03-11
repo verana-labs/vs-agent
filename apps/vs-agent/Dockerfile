@@ -34,4 +34,4 @@ COPY apps/vs-agent/nest-cli.json apps/vs-agent/nest-cli.json
 
 
 RUN pnpm build
-CMD ["pnpm", "start"]
+CMD ["pnpm", "--filter", "@verana-labs/vs-agent", "start:prod"]
