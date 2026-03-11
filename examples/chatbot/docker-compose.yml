@@ -12,14 +12,13 @@ services:
       - 3000:3000
       - 3001:3001
     environment:
-      - AGENT_ENDPOINT=ws://10.82.14.7:3001
-      - AGENT_INVITATION_IMAGE_URL=http://10.82.14.7:3001/avatar.png
-      - PUBLIC_API_BASE_URL=http://10.82.14.7:3001
+      - AGENT_ENDPOINT=ws://192.168.100.105:3001
+      - AGENT_INVITATION_IMAGE_URL=http://192.168.100.105:3001/avatar.png
+      - PUBLIC_API_BASE_URL=http://192.168.100.105:3001
       - AGENT_LABEL=Chatbot Agent
       - USE_CORS=true
       - EVENTS_BASE_URL=http://chatbot-backend:5000
       - AGENT_INVITATION_BASE_URL=https://hologram.zone/
-      - REDIS_HOST=redis
     volumes:
       - ./afj:/root/.afj
 
@@ -40,24 +39,5 @@ services:
       - PORT=5000
       - VS_AGENT_ADMIN_BASE_URL=http://chatbot-vs-agent:3000
 
-  redis:
-    image: redis:alpine
-    restart: always
-    networks:
-      - chatbot
-    ports:
-      - 6379:6379
-    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
-
-  postgres:
-    image: postgres:15.2
-    restart: always
-    networks:
-      - chatbot
-    ports:
-      - 5432:5432
-    environment:
-      - POSTGRES_PASSWORD=64270demo
-      - POSTGRES_USER=emailvs
 networks:
   chatbot:
