@@ -1,11 +1,9 @@
-version: '3'
-
 services:
   vs-agent:
     build: 
       context: ../..
       dockerfile: ./apps/vs-agent/Dockerfile
-    image: 2060-vs-agent
+    image: vs-agent
     container_name: verifier-vs-agent
     restart: always
     networks:
@@ -14,14 +12,12 @@ services:
       - 3000:3000
       - 3001:3001
     environment:
-      - AGENT_PUBLIC_DID=did:web:10.82.14.12%3A3001
-      - PUBLIC_API_BASE_URL=http://10.82.14.12:3001
-      - AGENT_ENDPOINT=ws://10.82.14.12:3001
-      - AGENT_INVITATION_IMAGE_URL=http://10.82.14.12:3001/avatar.png
+      - AGENT_ENDPOINT=ws://192.168.100.105:3001
+      - AGENT_INVITATION_IMAGE_URL=http://192.168.100.105:3001/avatar.png
+      - PUBLIC_API_BASE_URL=http://192.168.100.105:3001
       - AGENT_LABEL=Verifier Agent
       - USE_CORS=true
       - EVENTS_BASE_URL=http://verifier-backend:5100
-      - REDIS_HOST=redis
     volumes:
       - ./afj:/root/.afj
 
@@ -29,7 +25,7 @@ services:
     build: 
       context: ../..
       dockerfile: ./examples/verifier/Dockerfile
-    image: 2060-vs-agent-verifier
+    image: vs-agent-verifier
     container_name: verifier-backend
     restart: always
     networks:
@@ -40,24 +36,6 @@ services:
       - PORT=5100
       - VS_AGENT_ADMIN_BASE_URL=http://verifier-vs-agent:3000
       - PUBLIC_BASE_URL=http://10.82.14.12:5100
-  redis:
-    image: redis:alpine
-    restart: always
-    networks:
-      - verifier
-    ports:
-      - 6379:6379
-    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
 
-  postgres:
-    image: postgres:15.2
-    restart: always
-    networks:
-      - verifier
-    ports:
-      - 5432:5432
-    environment:
-      - POSTGRES_PASSWORD=64270demo
-      - POSTGRES_USER=emailvs
 networks:
   verifier:
