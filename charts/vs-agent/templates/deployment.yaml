@@ -198,11 +198,6 @@ spec:
 {{- end }}
 {{- end }}
 {{- end }}
-{{- if or .Values.agentSecret.create .Values.agentSecret.existingSecret }}
-            envFrom:
-            - secretRef:
-                name: {{ .Values.agentSecret.existingSecret | default (printf "%s-secret" .Values.name) }}
-{{- end }}
             ports:
             -  containerPort: {{ .Values.adminPort }}
             -  containerPort: {{ .Values.didcommPort }}
