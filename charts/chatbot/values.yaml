@@ -47,9 +47,8 @@ vs-agent-chart:
     existingSecret: ""  # if set, uses this pre-existing Secret instead
     env:
       - name: AGENT_WALLET_KEY
-        value: 'Chatbot Agent'
+        value: ''
 
-  # Non-sensitive environment variables
   extraEnv:
     - name: AGENT_WALLET_ID
       value: 'Chatbot Agent'
