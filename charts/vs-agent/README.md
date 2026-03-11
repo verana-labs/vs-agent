@@ -9,6 +9,7 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 * Persistent storage using PersistentVolumeClaim with customizable storage class and size
 * Configurable environment variables for agent ports, endpoints, and external services
 * Optional PostgreSQL and Redis support
+* Sensitive environment variable management via Kubernetes Secrets (`agentSecret`)
 * Customizable deployment color label for easy versioning or environment differentiation
 
 ## Kubernetes Resources
@@ -47,13 +48,54 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 | `publicDidMethod`          | DID method to use for public DID: 'web' or 'webvh' | `webvh` |
 | `extraEnv`                 | Additional environment variables for the agent   | `[]`                            |
 
+### Secrets Management
+
+| Parameter                    | Description                                                      | Default |
+| ---------------------------- | ---------------------------------------------------------------- | ------- |
+| `agentSecret.create`         | If `true`, chart creates a Secret from `agentSecret.env`         | `false` |
+| `agentSecret.existingSecret` | Name of a pre-existing Secret (`existingSecret` takes precedence) | `""`   |
+| `agentSecret.env`            | Array of `{name, value}` entries written into the created Secret | `[]`    |
+
+Each secret key must be explicitly mapped to an env var via `extraEnv`. The secret name is `<name>-secret` by default or the value of `existingSecret`.
+
+```yaml
+agentSecret:
+  create: true
+  env:
+    - name: AGENT_WALLET_KEY
+      value: "my-wallet-key"
+
+extraEnv:
+  - name: AGENT_WALLET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: <name>-secret
+        key: AGENT_WALLET_KEY
+```
+
+For an external secret with different key names:
+
+```yaml
+agentSecret:
+  existingSecret: "my-external-secret"
+
+extraEnv:
+  - name: AGENT_WALLET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: my-external-secret
+        key: AGENT_WALLET_KEY_SECRET
+```
+
+---
+
 ### Database Configuration (Optional)
 
-| Parameter                  | Description                                      | Default                          |
-| -------------------------- | ------------------------------------------------ | -------------------------------- |
-| `database.enabled`         | Enable PostgreSQL database                       | `false`                         |
-| `database.user`            | PostgreSQL username                              | `unicid`                        |
-| `database.pwd`             | PostgreSQL password                              | `mypassword123`                 |
+| Parameter                  | Description                                                                 | Default              |
+| -------------------------- | --------------------------------------------------------------------------- | -------------------- |
+| `database.enabled`         | Enable PostgreSQL sidecar                                                   | `false`              |
+| `database.user`            | PostgreSQL username (plain value)                                           | `""`                 |
+| `database.secretPwdKey`    | Key name for the password inside `agentSecret` (useful for external secrets with different key names) | `POSTGRES_PASSWORD` |
 
 ### Redis Configuration (Optional)
 
