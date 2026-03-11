@@ -14,6 +14,7 @@ import { VsAgent } from './utils'
 @Module({})
 export class PublicModule {
   static register(agent: VsAgent, publicApiBaseUrl: string): DynamicModule {
+    const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
     return {
       module: PublicModule,
       imports: [],
@@ -21,11 +22,11 @@ export class PublicModule {
       providers: [
         {
           provide: 'VSAGENT',
-          useValue: agent,
+          useFactory: () => agentRef.get(),
         },
         {
           provide: 'PUBLIC_API_BASE_URL',
-          useValue: publicApiBaseUrl,
+          useFactory: () => publicApiBaseUrl,
         },
         VsAgentService,
         TrustService,
