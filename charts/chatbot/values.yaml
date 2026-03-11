@@ -41,9 +41,20 @@ vs-agent-chart:
       whitelistSourceRange: "" # Source IP ranges allowed to access the private ingress (e.g. "192.168.1.0/24,10.0.0.0/8").
       host: '' # Private ingress host (if this value is set, the private Ingress will be enabled)
 
-  # Environment variables specific to the chatbot backend service
+  # Sensitive env vars — stored in a Kubernetes Secret
+  agentSecret:
+    create: true
+    existingSecret: ""  # if set, uses this pre-existing Secret instead
+    env:
+      - name: AGENT_WALLET_KEY
+        value: 'Chatbot Agent'
+
+  # Non-sensitive environment variables
   extraEnv:
     - name: AGENT_WALLET_ID
       value: 'Chatbot Agent'
     - name: AGENT_WALLET_KEY
-      value: 'Chatbot Agent'
+      valueFrom:
+        secretKeyRef:
+          name: chatbot-secret
+          key: AGENT_WALLET_KEY

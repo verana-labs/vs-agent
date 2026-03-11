@@ -28,11 +28,25 @@ image:
   repository: ""
   tag: ""
 
+# Agent secret — holds all sensitive env vars
+agentSecret:
+  create: false          # if true, chart creates a Secret from the env array below
+  existingSecret: ""     # if set, uses this pre-existing Secret (takes precedence over create)
+  env: []                # sensitive env vars injected via envFrom into the agent container
+  # - name: AGENT_WALLET_KEY
+  #   value: ""
+  # - name: POSTGRES_PASSWORD
+  #   value: ""
+  # - name: POSTGRES_ADMIN_PASSWORD
+  #   value: ""
+  # - name: REDIS_PASSWORD
+  #   value: ""
+
 # DB and Redis configuration
 database:
   enabled: false
-  user: unicid
-  pwd: mypassword123
+  secretPwdKey: ""     # key name for POSTGRES_PASSWORD in agentSecret (default: POSTGRES_PASSWORD)
+  user: ""             # plain value, injected directly
   resources:
     requests:
       cpu: 100m
