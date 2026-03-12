@@ -9,8 +9,7 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 * Persistent storage using PersistentVolumeClaim with customizable storage class and size
 * Configurable environment variables for agent ports, endpoints, and external services
 * Optional PostgreSQL and Redis support
-* Sensitive environment variable management via Kubernetes Secrets (`agentSecret`)
-* Customizable deployment color label for easy versioning or environment differentiation
+* Sensitive environment variable injection via pre-existing Kubernetes Secrets using `extraEnv[].valueFrom`
 
 ## Kubernetes Resources
 
@@ -50,41 +49,28 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 
 ### Secrets Management
 
-| Parameter                    | Description                                                      | Default |
-| ---------------------------- | ---------------------------------------------------------------- | ------- |
-| `agentSecret.create`         | If `true`, chart creates a Secret from `agentSecret.env`         | `false` |
-| `agentSecret.existingSecret` | Name of a pre-existing Secret (`existingSecret` takes precedence) | `""`   |
-| `agentSecret.env`            | Array of `{name, value}` entries written into the created Secret | `[]`    |
-
-Each secret key must be explicitly mapped to an env var via `extraEnv`. The secret name is `<name>-secret` by default or the value of `existingSecret`.
+This chart does not create Kubernetes Secrets. Sensitive values must be stored in a pre-existing Secret (created manually, via External Secrets Operator, Vault, Sealed Secrets, etc.) and referenced through `extraEnv[].valueFrom`.
 
 ```yaml
-agentSecret:
-  create: true
-  env:
-    - name: AGENT_WALLET_KEY
-      value: "my-wallet-key"
-
 extraEnv:
   - name: AGENT_WALLET_KEY
     valueFrom:
       secretKeyRef:
-        name: <name>-secret
+        name: my-existing-secret
         key: AGENT_WALLET_KEY
 ```
 
-For an external secret with different key names:
+Both direct values and secret references can be mixed in `extraEnv`:
 
 ```yaml
-agentSecret:
-  existingSecret: "my-external-secret"
-
 extraEnv:
+  - name: AGENT_WALLET_ID
+    value: "my-wallet"
   - name: AGENT_WALLET_KEY
     valueFrom:
       secretKeyRef:
-        name: my-external-secret
-        key: AGENT_WALLET_KEY_SECRET
+        name: my-existing-secret
+        key: AGENT_WALLET_KEY
 ```
 
 ---
@@ -94,8 +80,9 @@ extraEnv:
 | Parameter                  | Description                                                                 | Default              |
 | -------------------------- | --------------------------------------------------------------------------- | -------------------- |
 | `database.enabled`         | Enable PostgreSQL sidecar                                                   | `false`              |
+| `database.existingSecret`  | Name of a pre-existing Secret containing the PostgreSQL password            | `""`                 |
 | `database.user`            | PostgreSQL username (plain value)                                           | `""`                 |
-| `database.secretPwdKey`    | Key name for the password inside `agentSecret` (useful for external secrets with different key names) | `POSTGRES_PASSWORD` |
+| `database.secretPwdKey`    | Key name for the password inside `database.existingSecret`                  | `POSTGRES_PASSWORD`  |
 
 ### Redis Configuration (Optional)
 
