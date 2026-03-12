@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.9.0](https://github.com/verana-labs/vs-agent/compare/v1.8.1...v1.9.0) (2026-03-12)
+
+
+### Features
+
+* **charts:** add agentSecret support for sensitive env vars ([#366](https://github.com/verana-labs/vs-agent/issues/366)) ([2b8f3ef](https://github.com/verana-labs/vs-agent/commit/2b8f3ef9f58536e78b4a33ee10edfb50d4f4e8e1))
+* reduce examples image sizes ([#365](https://github.com/verana-labs/vs-agent/issues/365)) ([13ab858](https://github.com/verana-labs/vs-agent/commit/13ab85821841ace2b1c308b699274e7eca36348b))
+* relax action menu state checking ([#362](https://github.com/verana-labs/vs-agent/issues/362)) ([94eaf8b](https://github.com/verana-labs/vs-agent/commit/94eaf8bc9b52659a4c3c623ce3a6cd574ec1156e))
+
+
+### Bug Fixes
+
+* chart indent for resources ([#357](https://github.com/verana-labs/vs-agent/issues/357)) ([a5ae9ed](https://github.com/verana-labs/vs-agent/commit/a5ae9ed1b320e808a6e0c4a32708df8386d14524))
+* **charts:** simplify helm deployment logic ([#369](https://github.com/verana-labs/vs-agent/issues/369)) ([7338da3](https://github.com/verana-labs/vs-agent/commit/7338da36c9efa424430c0078323c426d314535d9))
+* improvement jsc validations ([#359](https://github.com/verana-labs/vs-agent/issues/359)) ([64978fd](https://github.com/verana-labs/vs-agent/commit/64978fdeeaa796b06985cd5fcc7d6a086ae82b87))
+* reduce vs-agent docker image size ([#368](https://github.com/verana-labs/vs-agent/issues/368)) ([99d503e](https://github.com/verana-labs/vs-agent/commit/99d503e64429e2846229a8f56a340caaa564e868))
+* solve problem over convertShortDate ([#360](https://github.com/verana-labs/vs-agent/issues/360)) ([021c1f3](https://github.com/verana-labs/vs-agent/commit/021c1f338323c96d4f2ef15637af768c7e2eb410))
+* speed-up docker image startup ([#363](https://github.com/verana-labs/vs-agent/issues/363)) ([7966b12](https://github.com/verana-labs/vs-agent/commit/7966b127c98fa715707aa7e8a68bd417b878bce0))
+* speed-up nest module loading ([#364](https://github.com/verana-labs/vs-agent/issues/364)) ([ef9561e](https://github.com/verana-labs/vs-agent/commit/ef9561ec9af174cb96cf032cd6c78e48a038edfa))
+
 ## [1.8.1](https://github.com/verana-labs/vs-agent/compare/v1.8.0...v1.8.1) (2026-02-24)
 
 
