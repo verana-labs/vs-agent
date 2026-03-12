@@ -178,25 +178,17 @@ spec:
             imagePullPolicy: Always
             env:
             - name: AGENT_LABEL
-              value: {{ .Values.didcommLabel }}
+              value: {{ .Values.didcommLabel | quote }}
             - name: AGENT_INVITATION_IMAGE_URL
-              value: "{{ tpl .Values.didcommInvitationImageUrl . }}"
+              value: {{ tpl .Values.didcommInvitationImageUrl . | quote }}
             - name: EVENTS_BASE_URL
-              value: "{{ tpl .Values.eventsBaseUrl . }}"
+              value: {{ tpl .Values.eventsBaseUrl . | quote }}
             - name: ENABLE_PUBLIC_API_SWAGGER
-              value: "{{ .Values.enablePublicApiSwagger | quote }}"
+              value: {{ .Values.enablePublicApiSwagger | quote }}
             - name: AGENT_PUBLIC_DID
               value: "did:{{ default "webvh" .Values.publicDidMethod }}:{{ tpl .Values.ingress.host . }}"
 {{- with .Values.extraEnv }}
-{{- range . }}
-            - name: {{ .name }}
-{{- if .valueFrom }}
-              valueFrom:
-{{- toYaml .valueFrom | nindent 16 }}
-{{- else }}
-              value: {{ tpl .value $ | quote }}
-{{- end }}
-{{- end }}
+{{ toYaml . | nindent 12 }}
 {{- end }}
             ports:
             -  containerPort: {{ .Values.adminPort }}
