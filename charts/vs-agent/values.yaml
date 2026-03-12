@@ -31,8 +31,9 @@ image:
 # DB and Redis configuration
 database:
   enabled: false
-  user: unicid
-  pwd: mypassword123
+  existingSecret: ""   # name of a pre-existing Secret containing POSTGRES_PASSWORD
+  secretPwdKey: ""     # key name for POSTGRES_PASSWORD in the secret (default: POSTGRES_PASSWORD)
+  user: ""             # plain value, injected directly
   resources:
     requests:
       cpu: 100m

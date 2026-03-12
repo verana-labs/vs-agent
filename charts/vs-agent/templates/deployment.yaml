@@ -190,7 +190,12 @@ spec:
 {{- with .Values.extraEnv }}
 {{- range . }}
             - name: {{ .name }}
+{{- if .valueFrom }}
+              valueFrom:
+{{- toYaml .valueFrom | nindent 16 }}
+{{- else }}
               value: {{ tpl .value $ | quote }}
+{{- end }}
 {{- end }}
 {{- end }}
             ports:
@@ -225,9 +230,12 @@ spec:
             imagePullPolicy: Always
             env:
             - name: POSTGRES_PASSWORD
-              value: {{ .Values.database.pwd }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.secretPwdKey | default "POSTGRES_PASSWORD" }}
             - name: POSTGRES_USER
-              value: {{ .Values.database.user }}
+              value: {{ .Values.database.user | quote }}
             - name: PGDATA
               value: "/var/lib/postgresql/data/pgdata"
             ports:
