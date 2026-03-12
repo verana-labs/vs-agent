@@ -28,20 +28,11 @@ image:
   repository: ""
   tag: ""
 
-# Agent secret — holds all sensitive env vars
-agentSecret:
-  create: false          # if true, chart creates a Secret from the env array below
-  existingSecret: ""     # if set, uses this pre-existing Secret (takes precedence over create)
-  env: []                # entries written into the created Secret (only used when create: true)
-  # - name: AGENT_WALLET_KEY
-  #   value: ""
-  # - name: POSTGRES_PASSWORD
-  #   value: ""
-
 # DB and Redis configuration
 database:
   enabled: false
-  secretPwdKey: ""     # key name for POSTGRES_PASSWORD in agentSecret (default: POSTGRES_PASSWORD)
+  existingSecret: ""   # name of a pre-existing Secret containing POSTGRES_PASSWORD
+  secretPwdKey: ""     # key name for POSTGRES_PASSWORD in the secret (default: POSTGRES_PASSWORD)
   user: ""             # plain value, injected directly
   resources:
     requests:

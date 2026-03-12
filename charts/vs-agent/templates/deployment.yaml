@@ -232,7 +232,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.agentSecret.existingSecret | default (printf "%s-secret" .Values.name) }}
+                  name: {{ .Values.database.existingSecret }}
                   key: {{ .Values.database.secretPwdKey | default "POSTGRES_PASSWORD" }}
             - name: POSTGRES_USER
               value: {{ .Values.database.user | quote }}
