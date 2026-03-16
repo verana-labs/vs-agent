@@ -57,6 +57,8 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl))
   commonAppConfig(adminApp, cors)
+  adminApp.use(express.json({ limit: '5mb' }))
+  adminApp.use(express.urlencoded({ extended: true, limit: '5mb' }))
   await adminApp.listen(port)
 
   // PublicModule-specific config
