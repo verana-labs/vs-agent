@@ -1,37 +1,66 @@
 import { useState, useEffect } from 'react'
 import { getCredentials, updateCredential, deleteCredential } from '../api'
 
-const TYPES = ['organization', 'service', 'persona', 'userAgent']
+const TYPES = ['organization', 'service', 'persona', 'useragent']
 
-function CredentialCard({ cred, onEdit, onDelete }) {
-  const attrs = Object.entries(cred).filter(
-    ([k]) => k !== 'type' && k !== 'id' && k !== 'credentialId',
-  )
+function getCredentialType(item) {
+  const schemaId = (item.schemaId ?? '').toLowerCase()
+  for (const t of TYPES) {
+    if (schemaId.includes(t)) return t
+  }
+  const types = item.credential?.type ?? []
+  for (const t of types) {
+    const lower = t.toLowerCase()
+    for (const known of TYPES) {
+      if (lower.includes(known)) return known
+    }
+  }
+  return 'other'
+}
+
+function CredentialCard({ item, onEdit, onDelete }) {
+  const subject = item.credential?.credentialSubject ?? {}
+  const attrs = Object.entries(subject).filter(([k]) => k !== 'id')
+  const schemaId = item.schemaId ?? item.credential?.credentialSchema?.id ?? ''
 
   return (
     <div className="cred-card">
+      {schemaId && (
+        <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10, wordBreak: 'break-all' }}>
+          {schemaId}
+        </div>
+      )}
       <div className="cred-card-attrs">
         <table>
           <tbody>
-            {attrs.map(([key, value]) => (
-              <tr key={key}>
-                <td>{key}</td>
-                <td>{typeof value === 'object' ? JSON.stringify(value) : String(value)}</td>
+            {subject.id && (
+              <tr>
+                <td title="id">id</td>
+                <td title={subject.id}>{subject.id}</td>
               </tr>
-            ))}
+            )}
+            {attrs.map(([key, value]) => {
+              const display = typeof value === 'object' ? JSON.stringify(value) : String(value)
+              return (
+                <tr key={key}>
+                  <td title={key}>{key}</td>
+                  <td title={display}>{display}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
       <div className="cred-card-actions">
-        <button className="btn btn-edit" onClick={() => onEdit(cred)}>Edit</button>
-        <button className="btn btn-delete" onClick={() => onDelete(cred)}>Delete</button>
+        <button className="btn btn-edit" onClick={() => onEdit(item)}>Edit</button>
+        <button className="btn btn-delete" onClick={() => onDelete(item)}>Delete</button>
       </div>
     </div>
   )
 }
 
-function EditModal({ cred, onSave, onClose }) {
-  const [value, setValue] = useState(JSON.stringify(cred, null, 2))
+function EditModal({ item, onSave, onClose }) {
+  const [value, setValue] = useState(JSON.stringify(item.credential, null, 2))
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
 
@@ -39,7 +68,8 @@ function EditModal({ cred, onSave, onClose }) {
     try {
       const parsed = JSON.parse(value)
       setSaving(true)
-      await updateCredential(parsed)
+      const schemaBaseId = item.schemaId?.match(/schemas-(.+?)-c-vp/)?.[1] ?? 'unknown'
+      await updateCredential({ schemaBaseId, credential: parsed })
       onSave()
     } catch (e) {
       setError(e.message)
@@ -72,9 +102,9 @@ function CreateForm({ onCreate }) {
 
   const handleSubmit = async () => {
     try {
-      const parsed = JSON.parse(json)
+      const credential = JSON.parse(json)
       setCreating(true)
-      await updateCredential({ ...parsed, type })
+      await updateCredential({ schemaBaseId: type, credential })
       setJson('{\n  \n}')
       setError(null)
       onCreate()
@@ -96,7 +126,7 @@ function CreateForm({ onCreate }) {
         </select>
       </div>
       <div className="form-group">
-        <label>Attributes (JSON)</label>
+        <label>W3C Credential (JSON)</label>
         <textarea value={json} onChange={e => setJson(e.target.value)} />
       </div>
       <button className="btn btn-primary" onClick={handleSubmit} disabled={creating}>
@@ -107,7 +137,7 @@ function CreateForm({ onCreate }) {
 }
 
 export default function Credentials() {
-  const [credentials, setCredentials] = useState([])
+  const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null)
@@ -115,8 +145,9 @@ export default function Credentials() {
   const load = () => {
     setLoading(true)
     getCredentials()
-      .then(data => {
-        setCredentials(Array.isArray(data) ? data : data?.credentials ?? [])
+      .then(res => {
+        const list = Array.isArray(res) ? res : (res?.data ?? [])
+        setItems(list)
         setError(null)
       })
       .catch(err => setError(err.message))
@@ -125,22 +156,22 @@ export default function Credentials() {
 
   useEffect(load, [])
 
-  const handleDelete = async cred => {
+  const handleDelete = async item => {
     if (!confirm('Delete this credential?')) return
+    const schemaId = item.verifiablePresentation?.id ?? item.credential?.id
     try {
-      await deleteCredential(cred.id ?? cred.credentialId)
+      await deleteCredential(schemaId)
       load()
     } catch (e) {
       alert(e.message)
     }
   }
 
-  const grouped = TYPES.reduce((acc, type) => {
-    acc[type] = credentials.filter(c => c.type === type)
+  const allTypes = [...new Set(items.map(getCredentialType))]
+  const grouped = allTypes.reduce((acc, t) => {
+    acc[t] = items.filter(item => getCredentialType(item) === t)
     return acc
   }, {})
-
-  const hasAny = credentials.length > 0
 
   if (loading) return <p className="loading">Loading...</p>
   if (error) return <p className="error-msg">{error}</p>
@@ -151,31 +182,27 @@ export default function Credentials() {
 
       <h2 className="section-title">Credentials</h2>
 
-      {!hasAny && <p className="empty-msg">No credentials found.</p>}
+      {items.length === 0 && <p className="empty-msg">No credentials found.</p>}
 
-      {TYPES.map(type => {
-        const items = grouped[type]
-        if (items.length === 0) return null
-        return (
-          <div key={type} className="cred-group">
-            <div className="cred-group-title">{type}</div>
-            <div className="cred-cards">
-              {items.map((cred, i) => (
-                <CredentialCard
-                  key={cred.id ?? cred.credentialId ?? i}
-                  cred={cred}
-                  onEdit={setEditing}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </div>
+      {allTypes.map(type => (
+        <div key={type} className="cred-group">
+          <div className="cred-group-title">{type}</div>
+          <div className="cred-cards">
+            {grouped[type].map((item, i) => (
+              <CredentialCard
+                key={item.verifiablePresentation?.id ?? item.credential?.id ?? i}
+                item={item}
+                onEdit={setEditing}
+                onDelete={handleDelete}
+              />
+            ))}
           </div>
-        )
-      })}
+        </div>
+      ))}
 
       {editing && (
         <EditModal
-          cred={editing}
+          item={editing}
           onSave={() => { setEditing(null); load() }}
           onClose={() => setEditing(null)}
         />

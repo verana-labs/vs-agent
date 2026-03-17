@@ -268,8 +268,9 @@ body {
 .cred-card {
   background: #fff;
   border-radius: 12px;
-  padding: 18px 20px;
+  padding: 20px 24px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+  min-width: 0;
 }
 
 .cred-card-attrs {
@@ -281,11 +282,15 @@ body {
 .cred-card-attrs table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .cred-card-attrs td {
-  padding: 3px 0;
+  padding: 4px 0;
   vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cred-card-attrs td:first-child {
@@ -293,7 +298,14 @@ body {
   font-weight: 500;
   padding-right: 12px;
   white-space: nowrap;
-  width: 40%;
+  width: 36%;
+}
+
+.cred-card-attrs td:last-child {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cred-card-actions {

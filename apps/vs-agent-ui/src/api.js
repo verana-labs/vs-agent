@@ -34,11 +34,9 @@ export async function updateCredential(credential) {
   return res.json()
 }
 
-export async function deleteCredential(id) {
-  const res = await fetch(`${BASE}/vt/linked-credentials`, {
+export async function deleteCredential(schemaId) {
+  const res = await fetch(`${BASE}/vt/linked-credentials?schemaId=${encodeURIComponent(schemaId)}`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id }),
   })
   if (!res.ok) throw new Error('Failed to delete credential')
 }

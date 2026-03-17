@@ -12,7 +12,7 @@ export default function Dashboard() {
       .then(([agentData, conns, creds]) => {
         setAgent(agentData)
         setConnectionCount(Array.isArray(conns) ? conns.length : conns?.total ?? '—')
-        setCredentialCount(Array.isArray(creds) ? creds.length : creds?.total ?? '—')
+        setCredentialCount(creds?.meta?.totalItems ?? (Array.isArray(creds) ? creds.length : '—'))
       })
       .catch(err => setError(err.message))
   }, [])
