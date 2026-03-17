@@ -51,9 +51,24 @@ RUN rm -rf \
     node_modules/@nestjs/cli \
     node_modules/@nestjs/schematics \
     node_modules/@nestjs/testing \
-    node_modules/postinstall-postinstall
+    node_modules/postinstall-postinstall \
+    node_modules/@angular-devkit \
+    node_modules/typeorm \
+    node_modules/webpack \
+    node_modules/fork-ts-checker-webpack-plugin \
+    node_modules/terser-webpack-plugin \
+    node_modules/caniuse-lite \
+    node_modules/lightningcss \
+    node_modules/lightningcss-linux-x64-musl \
+    node_modules/lightningcss-linux-x64-gnu \
+    node_modules/@unrs \
+    node_modules/@rollup \
+    node_modules/@babel \
+    node_modules/vite
 
-FROM node:22.19-slim AS final
+FROM node:22.19-alpine AS final
+
+RUN apk add --no-cache gcompat
 
 WORKDIR /www
 ENV RUN_MODE="docker"

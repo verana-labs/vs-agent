@@ -63,6 +63,9 @@
   "pnpm": {
     "patchedDependencies": {
       "@credo-ts/action-menu": "patches/@credo-ts__action-menu.patch"
+    },
+    "overrides": {
+      "libphonenumber-js": "^1.12.33"
     }
   }
 }
