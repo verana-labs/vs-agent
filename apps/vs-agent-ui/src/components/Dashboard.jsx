@@ -1,17 +1,15 @@
 import { useState, useEffect } from 'react'
-import { getAgent, getConnections, getCredentials } from '../api'
+import { getAgent, getCredentials } from '../api'
 
 export default function Dashboard() {
   const [agent, setAgent] = useState(null)
-  const [connectionCount, setConnectionCount] = useState(null)
   const [credentialCount, setCredentialCount] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    Promise.all([getAgent(), getConnections(), getCredentials()])
-      .then(([agentData, conns, creds]) => {
+    Promise.all([getAgent(), getCredentials()])
+      .then(([agentData, creds]) => {
         setAgent(agentData)
-        setConnectionCount(Array.isArray(conns) ? conns.length : conns?.total ?? '—')
         setCredentialCount(creds?.meta?.totalItems ?? (Array.isArray(creds) ? creds.length : '—'))
       })
       .catch(err => setError(err.message))
@@ -23,37 +21,60 @@ export default function Dashboard() {
   return (
     <div>
       <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 24 }}>
-        Monitor network status and manage your VS Agent interactions
+        Monitor and manage your VS Agent configuration
       </p>
 
-      <div className="cards-grid">
-        <div className="card">
-          <div className="card-icon">🤖</div>
-          <div className="card-label">Agent Label</div>
-          <div className="card-value" style={{ fontSize: 18 }}>{agent.label ?? '—'}</div>
-        </div>
+      <section style={{ marginBottom: 32 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 16 }}>
+          VS Agent Information
+        </h2>
 
-        <div className="card">
-          <div className="card-icon">🔗</div>
-          <div className="card-label">Connections</div>
-          <div className="card-value">{connectionCount ?? '—'}</div>
-        </div>
+        <div className="agent-info-card">
+          <div className="agent-info-row">
+            <span className="agent-info-label">Label</span>
+            <span className="agent-info-value">{agent.label ?? '—'}</span>
+          </div>
 
-        <div className="card">
-          <div className="card-icon">🪪</div>
-          <div className="card-label">Credentials</div>
-          <div className="card-value">{credentialCount ?? '—'}</div>
-        </div>
-      </div>
+          <div className="agent-info-row">
+            <span className="agent-info-label">Status</span>
+            <span className="agent-info-value">
+              <span className={`status-pill ${agent.isInitialized ? 'status-pill--ok' : 'status-pill--warn'}`}>
+                {agent.isInitialized ? 'Initialized' : 'Not initialized'}
+              </span>
+            </span>
+          </div>
 
-      {agent.did && (
-        <div className="card" style={{ maxWidth: 560 }}>
-          <div className="card-label">Agent DID</div>
-          <div className="card-sub" style={{ fontSize: 13, color: '#374151', wordBreak: 'break-all' }}>
-            {agent.did}
+          <div className="agent-info-row">
+            <span className="agent-info-label">Public DID</span>
+            <span className="agent-info-value agent-info-mono">
+              {agent.publicDid ?? <span style={{ color: '#9ca3af' }}>Not assigned</span>}
+            </span>
+          </div>
+
+          {agent.endpoints?.length > 0 && (
+            <div className="agent-info-row">
+              <span className="agent-info-label">Endpoints</span>
+              <span className="agent-info-value agent-info-mono">
+                {agent.endpoints.join(', ')}
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 16 }}>
+          Summary
+        </h2>
+
+        <div className="cards-grid">
+          <div className="card">
+            <div className="card-icon">🪪</div>
+            <div className="card-label">Linked Credentials</div>
+            <div className="card-value">{credentialCount ?? '—'}</div>
           </div>
         </div>
-      )}
+      </section>
     </div>
   )
 }

@@ -234,6 +234,72 @@ body {
   margin-bottom: 10px;
 }
 
+/* ─── Agent info card ────────────────────────────────────── */
+.agent-info-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 8px 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+  max-width: 640px;
+}
+
+.agent-info-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.agent-info-row:last-child {
+  border-bottom: none;
+}
+
+.agent-info-label {
+  flex-shrink: 0;
+  width: 120px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.agent-info-value {
+  flex: 1;
+  font-size: 13px;
+  color: #111827;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-info-mono {
+  font-family: monospace;
+  font-size: 12px;
+  white-space: normal;
+  word-break: break-all;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-pill--ok {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-pill--warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 /* ─── Section title ──────────────────────────────────────── */
 .section-title {
   font-size: 16px;
