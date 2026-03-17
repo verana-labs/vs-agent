@@ -1,27 +1,17 @@
 import { useState, useEffect } from 'react'
 import { getCredentials, updateCredential, deleteCredential } from '../api'
+import { resolveCredentialType } from '@verana-labs/vs-agent-model/ecs'
 
-const TYPES = ['organization', 'service', 'persona', 'useragent']
+const TYPES = ['ecs-service', 'ecs-org', 'ecs-persona', 'ecs-user-agent']
 
-function getCredentialType(item) {
-  const schemaId = (item.schemaId ?? '').toLowerCase()
-  for (const t of TYPES) {
-    if (schemaId.includes(t)) return t
-  }
-  const types = item.credential?.type ?? []
-  for (const t of types) {
-    const lower = t.toLowerCase()
-    for (const known of TYPES) {
-      if (lower.includes(known)) return known
-    }
-  }
-  return 'other'
+function itemKey(item, i) {
+  return item.credential?.credentialSchema?.id ?? item.credential?.id ?? i
 }
 
-function CredentialCard({ item, onEdit, onDelete }) {
+function CredentialCard({ item, type, onEdit, onDelete }) {
   const subject = item.credential?.credentialSubject ?? {}
   const attrs = Object.entries(subject).filter(([k]) => k !== 'id')
-  const schemaId = item.schemaId ?? item.credential?.credentialSchema?.id ?? ''
+  const schemaId = item.credential?.credentialSchema?.id ?? ''
 
   return (
     <div className="cred-card">
@@ -138,17 +128,26 @@ function CreateForm({ onCreate }) {
 
 export default function Credentials() {
   const [items, setItems] = useState([])
+  const [types, setTypes] = useState({})   // { [itemKey]: ECS type string }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null)
 
   const load = () => {
     setLoading(true)
+    setTypes({})
     getCredentials()
       .then(res => {
         const list = Array.isArray(res) ? res : (res?.data ?? [])
         setItems(list)
         setError(null)
+        // Resolve credential types asynchronously, one by one
+        list.forEach((item, i) => {
+          const key = itemKey(item, i)
+          resolveCredentialType(item).then(type => {
+            setTypes(prev => ({ ...prev, [key]: type }))
+          })
+        })
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
@@ -167,9 +166,15 @@ export default function Credentials() {
     }
   }
 
-  const allTypes = [...new Set(items.map(getCredentialType))]
+  const getType = (item, i) => types[itemKey(item, i)]
+
+  // Group by resolved type; items whose type is still resolving go into a pending bucket
+  const resolvedItems = items.filter((item, i) => getType(item, i) !== undefined)
+  const pendingCount = items.length - resolvedItems.length
+
+  const allTypes = [...new Set(resolvedItems.map((item, i) => getType(item, i)))]
   const grouped = allTypes.reduce((acc, t) => {
-    acc[t] = items.filter(item => getCredentialType(item) === t)
+    acc[t] = resolvedItems.filter((item, i) => getType(item, i) === t)
     return acc
   }, {})
 
@@ -184,14 +189,21 @@ export default function Credentials() {
 
       {items.length === 0 && <p className="empty-msg">No credentials found.</p>}
 
+      {pendingCount > 0 && (
+        <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
+          Resolving {pendingCount} credential type{pendingCount > 1 ? 's' : ''}…
+        </p>
+      )}
+
       {allTypes.map(type => (
         <div key={type} className="cred-group">
           <div className="cred-group-title">{type}</div>
           <div className="cred-cards">
             {grouped[type].map((item, i) => (
               <CredentialCard
-                key={item.verifiablePresentation?.id ?? item.credential?.id ?? i}
+                key={itemKey(item, i)}
                 item={item}
+                type={type}
                 onEdit={setEditing}
                 onDelete={handleDelete}
               />

@@ -2,6 +2,17 @@
   "name": "@verana-labs/vs-agent-model",
   "main": "build/index",
   "types": "build/index",
+  "exports": {
+    ".": {
+      "require": "./build/index.js",
+      "types": "./build/index.d.ts"
+    },
+    "./ecs": {
+      "require": "./build/utils/ecs.js",
+      "default": "./build/utils/ecs.js",
+      "types": "./build/utils/ecs.d.ts"
+    }
+  },
   "version": "1.8.1",
   "repository": {
     "type": "git",

@@ -223,6 +223,9 @@ importers:
 
   apps/vs-agent-ui:
     dependencies:
+      '@verana-labs/vs-agent-model':
+        specifier: workspace:*
+        version: link:../../packages/model
       react:
         specifier: ^18.0.0
         version: 18.3.1

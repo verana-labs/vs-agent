@@ -9,6 +9,7 @@
     "build:watch": "vite build --watch"
   },
   "dependencies": {
+    "@verana-labs/vs-agent-model": "workspace:*",
     "react": "^18.0.0",
     "react-dom": "^18.0.0"
   },
