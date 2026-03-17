@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getHealth } from '../api'
 
-export default function Header({ title }) {
+export default function Header({ title, onMenuToggle }) {
   const [connected, setConnected] = useState(false)
 
   useEffect(() => {
@@ -19,10 +19,17 @@ export default function Header({ title }) {
       <div className="header-center">
         <h1>{title}</h1>
       </div>
-      <div className="status-badge">
+      {/* Desktop: connection status */}
+      <div className="status-badge header-status-desktop">
         <span className={`status-dot ${connected ? 'connected' : ''}`} />
         <span className="status-label">{connected ? 'Connected' : 'Disconnected'}</span>
       </div>
+      {/* Mobile: hamburger */}
+      <button className="hamburger" onClick={onMenuToggle} aria-label="Toggle menu">
+        <span />
+        <span />
+        <span />
+      </button>
     </header>
   )
 }

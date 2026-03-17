@@ -7,6 +7,7 @@ import QRSection from './components/QRSection'
 
 export default function App() {
   const [view, setView] = useState('dashboard')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const titles = {
     dashboard: 'Dashboard',
@@ -14,11 +15,26 @@ export default function App() {
     qr: 'Scan QR',
   }
 
+  const handleNavigate = (key) => {
+    setView(key)
+    setSidebarOpen(false)
+  }
+
   return (
     <div className="layout">
-      <Header title={titles[view]} />
+      <Header
+        title={titles[view]}
+        onMenuToggle={() => setSidebarOpen(o => !o)}
+      />
       <div className="body">
-        <Sidebar current={view} onNavigate={setView} />
+        {sidebarOpen && (
+          <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+        )}
+        <Sidebar
+          current={view}
+          onNavigate={handleNavigate}
+          open={sidebarOpen}
+        />
         <div className="content">
           {view === 'dashboard' && <Dashboard />}
           {view === 'credentials' && <Credentials />}
