@@ -3,7 +3,6 @@ import 'reflect-metadata'
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
-import express from 'express'
 import * as fs from 'fs'
 import { IncomingMessage } from 'http'
 import { Socket } from 'net'
@@ -57,15 +56,11 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl))
   commonAppConfig(adminApp, cors)
-  adminApp.use(express.json({ limit: '5mb' }))
-  adminApp.use(express.urlencoded({ extended: true, limit: '5mb' }))
   await adminApp.listen(port)
 
   // PublicModule-specific config
   const publicApp = await NestFactory.create(PublicModule.register(agent, publicApiBaseUrl))
   commonAppConfig(publicApp, cors, true)
-  publicApp.use(express.json({ limit: '5mb' }))
-  publicApp.use(express.urlencoded({ extended: true, limit: '5mb' }))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
