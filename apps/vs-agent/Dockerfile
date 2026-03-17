@@ -64,11 +64,14 @@ RUN rm -rf \
     node_modules/@unrs \
     node_modules/@rollup \
     node_modules/@babel \
-    node_modules/vite
+    node_modules/vite \
+    node_modules/@esbuild \
+    node_modules/esbuild \
+    node_modules/rollup \
+    node_modules/terser \
+    node_modules/@eslint
 
-FROM node:22.19-alpine AS final
-
-RUN apk add --no-cache gcompat
+FROM node:22.19-slim AS final
 
 WORKDIR /www
 ENV RUN_MODE="docker"
