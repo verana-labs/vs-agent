@@ -16,6 +16,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 //@ts-ignore
 import { purposes } from '@digitalcredentials/jsonld-signatures'
+import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
 import axios, { isAxiosError } from 'axios'
@@ -36,8 +37,6 @@ import {
   SELF_ISSUED_VTC_ORG_COUNTRYCODE,
   FALLBACK_BASE64,
 } from '../config'
-
-import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from './VsAgent'
 import { getEcsSchemas } from './data'
@@ -92,7 +91,6 @@ export const mapToSelfTr = (url: string, publicApiBaseUrl: string): string =>
 const buildIntegrityData = (data: Record<string, unknown>) => {
   return generateDigestSRI(JSON.stringify(data, Object.keys(data).sort()))
 }
-
 
 export const setupSelfTr = async ({
   agent,

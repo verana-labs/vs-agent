@@ -32,10 +32,18 @@ function canonicalize(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return '[' + (value as unknown[]).map(canonicalize).join(',') + ']'
   const obj = value as Record<string, unknown>
-  return '{' + Object.keys(obj).sort().map(k => `${JSON.stringify(k)}:${canonicalize(obj[k])}`).join(',') + '}'
+  return (
+    '{' +
+    Object.keys(obj)
+      .sort()
+      .map(k => `${JSON.stringify(k)}:${canonicalize(obj[k])}`)
+      .join(',') +
+    '}'
+  )
 }
 
 async function computeSchemaDigest(schemaObj: Record<string, unknown>): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { $id: _, ...schemaWithoutId } = schemaObj
   const canonical = canonicalize(schemaWithoutId)
   const encoded = new TextEncoder().encode(canonical)

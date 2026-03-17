@@ -5,7 +5,6 @@ import {
 } from '@credo-ts/anoncreds'
 import { JsonObject, TagsBase, utils, W3cCredential } from '@credo-ts/core'
 import { Inject, Logger } from '@nestjs/common'
-
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 
 import { VsAgentService } from '../../../services/VsAgentService'
