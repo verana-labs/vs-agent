@@ -2,6 +2,7 @@ import 'reflect-metadata'
 
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
+import * as express from 'express'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import * as fs from 'fs'
 import { IncomingMessage } from 'http'
@@ -56,6 +57,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl))
   commonAppConfig(adminApp, cors)
+  adminApp.use(express.static(path.join(__dirname, '../../public')))
   await adminApp.listen(port)
 
   // PublicModule-specific config
