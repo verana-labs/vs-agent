@@ -440,7 +440,7 @@ export const createVsAgent = (options: VsAgentOptions): VsAgent => {
           new WebVhAnonCredsRegistry(),
         ],
       }),
-      actionMenu: new ActionMenuModule(),
+      actionMenu: new ActionMenuModule({ strictStateChecking: false }),
       calls: new DidCommCallsModule(),
       dids: new DidsModule({
         resolvers: [

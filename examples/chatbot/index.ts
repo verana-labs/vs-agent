@@ -514,8 +514,6 @@ expressHandler.messageReceived(async (req, res) => {
     await handleMenuSelection({ connectionId: obj.connectionId, item: obj.menuItems[0]?.id ?? 'nothing' })
   } else if (obj.type === ContextualMenuSelectMessage.type) {
     await submitMessageReceipt(obj, 'viewed')
-    // Refresh context menu
-    await sendRootMenu(obj.connectionId)
 
     await handleMenuSelection({ connectionId: obj.connectionId, item: obj.selectionId ?? 'nothing' })
   } else if (obj.type === IdentityProofSubmitMessage.type) {

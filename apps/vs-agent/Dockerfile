@@ -1,37 +1,69 @@
-FROM node:22 AS base
+FROM node:22.19 AS build
 
-# Setup pnpm version
-RUN corepack enable
+ENV COREPACK_INTEGRITY_KEYS=0
 
-# AFJ specifc setup
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && \
+    rm -rf /var/lib/apt/lists/* && \
+    corepack enable && \
+    corepack prepare pnpm@9.15.3 --activate
+
 WORKDIR /www
 ENV RUN_MODE="docker"
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY patches ./patches
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json tsconfig.build.json ./
 
 COPY packages/model/package.json packages/model/package.json
 COPY apps/vs-agent/package.json apps/vs-agent/package.json
-COPY patches ./patches
 
-# Run install after copying only depdendency file
-# to make use of docker layer caching
-RUN pnpm install
+RUN pnpm install --frozen-lockfile
 
-# Copy other depdencies
 COPY packages/model/src ./packages/model/src
-COPY apps/vs-agent/src ./apps/vs-agent/src
-
-COPY tsconfig.json tsconfig.json
-COPY tsconfig.build.json tsconfig.build.json
-COPY apps/vs-agent/discovery.json apps/vs-agent/discovery.json
-
 COPY packages/model/tsconfig.json packages/model/tsconfig.json
 COPY packages/model/tsconfig.build.json packages/model/tsconfig.build.json
 
+COPY apps/vs-agent/src ./apps/vs-agent/src
+COPY apps/vs-agent/discovery.json apps/vs-agent/discovery.json
 COPY apps/vs-agent/tsconfig.json apps/vs-agent/tsconfig.json
 COPY apps/vs-agent/tsconfig.build.json apps/vs-agent/tsconfig.build.json
 COPY apps/vs-agent/nest-cli.json apps/vs-agent/nest-cli.json
 
+RUN pnpm --filter @verana-labs/vs-agent-model build && \
+    pnpm --filter @verana-labs/vs-agent build
 
-RUN pnpm build
-CMD ["pnpm", "start"]
+RUN rm -rf \
+    node_modules/@types \
+    node_modules/@typescript-eslint \
+    node_modules/@vitest \
+    node_modules/eslint \
+    node_modules/eslint-config-prettier \
+    node_modules/eslint-import-resolver-typescript \
+    node_modules/eslint-plugin-import \
+    node_modules/eslint-plugin-prettier \
+    node_modules/prettier \
+    node_modules/rimraf \
+    node_modules/supertest \
+    node_modules/ts-node \
+    node_modules/ts-node-dev \
+    node_modules/tsconfig-paths \
+    node_modules/typescript \
+    node_modules/vitest \
+    node_modules/@nestjs/cli \
+    node_modules/@nestjs/schematics \
+    node_modules/@nestjs/testing \
+    node_modules/postinstall-postinstall
+
+FROM node:22.19-slim AS final
+
+WORKDIR /www
+ENV RUN_MODE="docker"
+
+COPY --from=build /www/node_modules ./node_modules
+COPY --from=build /www/packages/model/package.json ./packages/model/package.json
+COPY --from=build /www/packages/model/build ./packages/model/build
+COPY --from=build /www/apps/vs-agent/node_modules ./apps/vs-agent/node_modules
+COPY apps/vs-agent/package.json ./apps/vs-agent/package.json
+COPY --from=build /www/apps/vs-agent/build ./apps/vs-agent/build
+COPY apps/vs-agent/discovery.json ./apps/vs-agent/discovery.json
+
+CMD ["node", "apps/vs-agent/build/src/main"]
