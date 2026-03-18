@@ -120,6 +120,7 @@ export default function Dashboard() {
   const endpoints = (doc.service ?? [])
     .filter(s => s.type === 'did-communication')
     .map(s => s.serviceEndpoint)
+  const webDid = (doc.alsoKnownAs ?? []).find(d => d.startsWith('did:webvh:'))
 
   const noCredentials = !credsLoading && cvpItems.length === 0 && jscItems.length === 0
 
@@ -138,7 +139,7 @@ export default function Dashboard() {
           <div className="agent-info-row">
             <span className="agent-info-label">Public DID</span>
             <span className="agent-info-value agent-info-mono">
-              {doc.id ?? <span style={{ color: '#9ca3af' }}>Not assigned</span>}
+              {webDid ?? <span style={{ color: '#9ca3af' }}>Not assigned</span>}
             </span>
           </div>
 
