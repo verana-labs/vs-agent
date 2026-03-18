@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getDidDocument } from '../api'
+import { getDidDocument, qrUrl } from '../api'
 
 export default function Dashboard() {
   const [doc, setDoc] = useState(null)
@@ -52,6 +52,13 @@ export default function Dashboard() {
               </span>
             </div>
           )}
+
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 24 }}>
+            <div style={{ textAlign: 'center' }}>
+              <img src={qrUrl} alt="Invitation QR" style={{ width: 200, height: 200, display: 'block' }} />
+              <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Scan to connect</p>
+            </div>
+          </div>
         </div>
       </section>
 

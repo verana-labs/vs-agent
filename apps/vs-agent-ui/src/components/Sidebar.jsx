@@ -2,7 +2,6 @@ export default function Sidebar({ current, onNavigate, open }) {
   const items = [
     { key: 'dashboard', label: 'Dashboard', icon: '◈' },
     { key: 'credentials', label: 'Credentials', icon: '◉' },
-    { key: 'qr', label: 'Scan QR', icon: '⊞' },
   ]
 
   return (

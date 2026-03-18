@@ -3,8 +3,6 @@ import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import Dashboard from './components/Dashboard'
 import Credentials from './components/Credentials'
-import QRSection from './components/QRSection'
-
 export default function App() {
   const [view, setView] = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -12,7 +10,6 @@ export default function App() {
   const titles = {
     dashboard: 'Dashboard',
     credentials: 'Credentials',
-    qr: 'Scan QR',
   }
 
   const handleNavigate = (key) => {
@@ -38,7 +35,6 @@ export default function App() {
         <div className="content">
           {view === 'dashboard' && <Dashboard />}
           {view === 'credentials' && <Credentials />}
-          {view === 'qr' && <QRSection />}
         </div>
       </div>
     </div>
