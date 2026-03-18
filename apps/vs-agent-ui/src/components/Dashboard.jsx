@@ -34,13 +34,19 @@ function CredentialCard({ vc, type, onSelect }) {
   const subject = vc?.credentialSubject ?? {}
   const attrs = Object.entries(subject).filter(([k]) => k !== 'id')
   const schemaId = vc?.credentialSchema?.id ?? ''
+  const issuer = typeof vc?.issuer === 'string' ? vc.issuer : (vc?.issuer?.id ?? '')
 
   return (
     <div className="cred-card" onClick={onSelect} style={{ cursor: 'pointer' }}>
       {type && <div className="cred-card-type">{type}</div>}
       {schemaId && (
+        <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6, wordBreak: 'break-all' }}>
+          <span style={{ fontWeight: 600 }}>credentialSchemaId:</span> {schemaId}
+        </div>
+      )}
+      {issuer && (
         <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10, wordBreak: 'break-all' }}>
-          {schemaId}
+          <span style={{ fontWeight: 600 }}>issuer:</span> {issuer}
         </div>
       )}
       <div className="cred-card-attrs">
