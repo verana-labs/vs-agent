@@ -2,13 +2,41 @@ import { useState, useEffect } from 'react'
 import { resolveVTCType, resolveJSCType } from '@verana-labs/vs-agent-model/ecs'
 import { getDidDocument, qrUrl } from '../api'
 
-function CredentialCard({ vc }) {
+function JsonModal({ data, onClose }) {
+  const [copied, setCopied] = useState(false)
+  const json = JSON.stringify(data, null, 2)
+
+  function copy() {
+    navigator.clipboard.writeText(json)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ width: 780, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h2 style={{ margin: 0 }}>JSON</h2>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" onClick={copy}>{copied ? 'Copied!' : 'Copy'}</button>
+            <button className="btn btn-secondary" onClick={onClose}>Close</button>
+          </div>
+        </div>
+        <pre style={{ flex: 1, overflow: 'auto', fontSize: 12, fontFamily: "'Fira Code', 'Courier New', monospace", background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+          {json}
+        </pre>
+      </div>
+    </div>
+  )
+}
+
+function CredentialCard({ vc, onSelect }) {
   const subject = vc?.credentialSubject ?? {}
   const attrs = Object.entries(subject).filter(([k]) => k !== 'id')
   const schemaId = vc?.credentialSchema?.id ?? ''
 
   return (
-    <div className="cred-card">
+    <div className="cred-card" onClick={onSelect} style={{ cursor: 'pointer' }}>
       {schemaId && (
         <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10, wordBreak: 'break-all' }}>
           {schemaId}
@@ -97,6 +125,7 @@ export default function Dashboard() {
   const [jscItems, setJscItems] = useState([])
   const [credsLoading, setCredsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [selected, setSelected] = useState(null)
 
   useEffect(() => {
     getDidDocument()
@@ -126,6 +155,8 @@ export default function Dashboard() {
 
   return (
     <div>
+      {selected && <JsonModal data={selected} onClose={() => setSelected(null)} />}
+
       <section style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, color: '#111827', marginBottom: 16, textAlign: 'center' }}>
           VS Agent Information
@@ -166,7 +197,7 @@ export default function Dashboard() {
         items={cvpItems}
         renderItem={(item, i) =>
           item.credentials.map((vc, j) => (
-            <CredentialCard key={`${i}-${j}`} vc={vc} />
+            <CredentialCard key={`${i}-${j}`} vc={vc} onSelect={() => setSelected(vc)} />
           ))
         }
       />
@@ -175,7 +206,7 @@ export default function Dashboard() {
         title="Schema Credentials"
         items={jscItems}
         renderItem={(item, i) => (
-          <div key={i} className="cred-card">
+          <div key={i} className="cred-card" onClick={() => setSelected(item.service)} style={{ cursor: 'pointer' }}>
             <div style={{ fontSize: 12, color: '#6b7280', wordBreak: 'break-all' }}>
               {item.service.serviceEndpoint}
             </div>
