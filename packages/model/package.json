@@ -4,13 +4,14 @@
   "types": "build/index",
   "exports": {
     ".": {
+      "types": "./build/index.d.ts",
       "require": "./build/index.js",
-      "types": "./build/index.d.ts"
+      "default": "./build/index.js"
     },
     "./ecs": {
+      "types": "./build/utils/ecs.d.ts",
       "require": "./build/utils/ecs.js",
-      "default": "./build/utils/ecs.js",
-      "types": "./build/utils/ecs.d.ts"
+      "default": "./build/utils/ecs.js"
     }
   },
   "version": "1.8.1",
