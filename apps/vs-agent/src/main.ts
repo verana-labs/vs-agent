@@ -57,12 +57,12 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl))
   commonAppConfig(adminApp, cors)
-  adminApp.use(express.static(path.join(__dirname, '../../public')))
   await adminApp.listen(port)
 
   // PublicModule-specific config
   const publicApp = await NestFactory.create(PublicModule.register(agent, publicApiBaseUrl))
   commonAppConfig(publicApp, cors, true)
+  publicApp.use(express.static(path.join(__dirname, '../../public')))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
