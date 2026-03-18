@@ -1,17 +1,11 @@
 import { useState, useEffect } from 'react'
-import { getCredentials, updateCredential, deleteCredential } from '../api'
-import { resolveCredentialType } from '@verana-labs/vs-agent-model/ecs'
+import { identifySchema, resolveCredentialType } from '@verana-labs/vs-agent-model/ecs'
+import { getDidDocument } from '../api'
 
-const TYPES = ['ecs-service', 'ecs-org', 'ecs-persona', 'ecs-user-agent']
-
-function itemKey(item, i) {
-  return item.credential?.credentialSchema?.id ?? item.credential?.id ?? i
-}
-
-function CredentialCard({ item, type, onEdit, onDelete }) {
-  const subject = item.credential?.credentialSubject ?? {}
+function CredentialCard({ vc }) {
+  const subject = vc?.credentialSubject ?? {}
   const attrs = Object.entries(subject).filter(([k]) => k !== 'id')
-  const schemaId = item.credential?.credentialSchema?.id ?? ''
+  const schemaId = vc?.credentialSchema?.id ?? ''
 
   return (
     <div className="cred-card">
@@ -41,184 +35,106 @@ function CredentialCard({ item, type, onEdit, onDelete }) {
           </tbody>
         </table>
       </div>
-      <div className="cred-card-actions">
-        <button className="btn btn-edit" onClick={() => onEdit(item)}>Edit</button>
-        <button className="btn btn-delete" onClick={() => onDelete(item)}>Delete</button>
-      </div>
     </div>
   )
 }
 
-function EditModal({ item, onSave, onClose }) {
-  const [value, setValue] = useState(JSON.stringify(item.credential, null, 2))
-  const [error, setError] = useState(null)
-  const [saving, setSaving] = useState(false)
-
-  const handleSave = async () => {
-    try {
-      const parsed = JSON.parse(value)
-      setSaving(true)
-      const schemaBaseId = item.schemaId?.match(/schemas-(.+?)-c-vp/)?.[1] ?? 'unknown'
-      await updateCredential({ schemaBaseId, credential: parsed })
-      onSave()
-    } catch (e) {
-      setError(e.message)
-      setSaving(false)
-    }
+async function resolveCvpService(service) {
+  try {
+    const vp = await fetch(service.serviceEndpoint).then(r => r.ok ? r.json() : null)
+    if (!vp) return { service, type: 'other', credentials: [] }
+    const raw = vp.verifiableCredential
+    const vcs = Array.isArray(raw) ? raw : (raw ? [raw] : [])
+    const type = vcs.length > 0 ? await resolveCredentialType({ credential: vcs[0] }) : 'other'
+    return { service, type, credentials: vcs }
+  } catch {
+    return { service, type: 'other', credentials: [] }
   }
+}
 
+async function resolveJscService(service) {
+  try {
+    const schema = await fetch(service.serviceEndpoint).then(r => r.ok ? r.json() : null)
+    if (!schema) return { service, type: 'other' }
+    const type = (await identifySchema(schema)) ?? 'other'
+    return { service, type }
+  } catch {
+    return { service, type: 'other' }
+  }
+}
+
+function groupByType(items) {
+  return items.reduce((acc, item) => {
+    acc[item.type] = acc[item.type] ?? []
+    acc[item.type].push(item)
+    return acc
+  }, {})
+}
+
+function CredentialSection({ title, items, renderItem }) {
+  if (items.length === 0) return null
+  const grouped = groupByType(items)
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <h2>Edit Credential</h2>
-        {error && <p className="error-msg">{error}</p>}
-        <textarea value={value} onChange={e => setValue(e.target.value)} />
-        <div className="modal-actions">
-          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
-          </button>
+    <section style={{ marginBottom: 32 }}>
+      <h2 className="section-title">{title}</h2>
+      {Object.entries(grouped).map(([type, group]) => (
+        <div key={type} className="cred-group">
+          <div className="cred-group-title">{type}</div>
+          <div className="cred-cards">
+            {group.map((item, i) => renderItem(item, i))}
+          </div>
         </div>
-      </div>
-    </div>
-  )
-}
-
-function CreateForm({ onCreate }) {
-  const [type, setType] = useState(TYPES[0])
-  const [json, setJson] = useState('{\n  \n}')
-  const [error, setError] = useState(null)
-  const [creating, setCreating] = useState(false)
-
-  const handleSubmit = async () => {
-    try {
-      const credential = JSON.parse(json)
-      setCreating(true)
-      await updateCredential({ schemaBaseId: type, credential })
-      setJson('{\n  \n}')
-      setError(null)
-      onCreate()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  return (
-    <div className="create-form">
-      <h2>Create Credential</h2>
-      {error && <p className="error-msg">{error}</p>}
-      <div className="form-group">
-        <label>Type</label>
-        <select value={type} onChange={e => setType(e.target.value)}>
-          {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-      </div>
-      <div className="form-group">
-        <label>W3C Credential (JSON)</label>
-        <textarea value={json} onChange={e => setJson(e.target.value)} />
-      </div>
-      <button className="btn btn-primary" onClick={handleSubmit} disabled={creating}>
-        {creating ? 'Creating...' : 'Create'}
-      </button>
-    </div>
+      ))}
+    </section>
   )
 }
 
 export default function Credentials() {
-  const [items, setItems] = useState([])
-  const [types, setTypes] = useState({})   // { [itemKey]: ECS type string }
+  const [cvpItems, setCvpItems] = useState([])
+  const [jscItems, setJscItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [editing, setEditing] = useState(null)
 
-  const load = () => {
-    setLoading(true)
-    setTypes({})
-    getCredentials()
-      .then(res => {
-        const list = Array.isArray(res) ? res : (res?.data ?? [])
-        setItems(list)
-        setError(null)
-        // Resolve credential types asynchronously, one by one
-        list.forEach((item, i) => {
-          const key = itemKey(item, i)
-          resolveCredentialType(item).then(type => {
-            setTypes(prev => ({ ...prev, [key]: type }))
-          })
-        })
+  useEffect(() => {
+    getDidDocument()
+      .then(doc => {
+        const vprServices = (doc.service ?? []).filter(s => (s.id?.split('#')[1] ?? '').startsWith('vpr'))
+        const cvp = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-c-vp'))
+        const jsc = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-jsc-vp'))
+
+        Promise.all(cvp.map(resolveCvpService)).then(setCvpItems)
+        Promise.all(jsc.map(resolveJscService)).then(setJscItems)
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }
-
-  useEffect(load, [])
-
-  const handleDelete = async item => {
-    if (!confirm('Delete this credential?')) return
-    const schemaId = item.verifiablePresentation?.id ?? item.credential?.id
-    try {
-      await deleteCredential(schemaId)
-      load()
-    } catch (e) {
-      alert(e.message)
-    }
-  }
-
-  const getType = (item, i) => types[itemKey(item, i)]
-
-  // Group by resolved type; items whose type is still resolving go into a pending bucket
-  const resolvedItems = items.filter((item, i) => getType(item, i) !== undefined)
-  const pendingCount = items.length - resolvedItems.length
-
-  const allTypes = [...new Set(resolvedItems.map((item, i) => getType(item, i)))]
-  const grouped = allTypes.reduce((acc, t) => {
-    acc[t] = resolvedItems.filter((item, i) => getType(item, i) === t)
-    return acc
-  }, {})
+  }, [])
 
   if (loading) return <p className="loading">Loading...</p>
   if (error) return <p className="error-msg">{error}</p>
+  if (cvpItems.length === 0 && jscItems.length === 0) return <p className="empty-msg">No credentials found.</p>
 
   return (
     <div>
-      <CreateForm onCreate={load} />
-
-      <h2 className="section-title">Credentials</h2>
-
-      {items.length === 0 && <p className="empty-msg">No credentials found.</p>}
-
-      {pendingCount > 0 && (
-        <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
-          Resolving {pendingCount} credential type{pendingCount > 1 ? 's' : ''}…
-        </p>
-      )}
-
-      {allTypes.map(type => (
-        <div key={type} className="cred-group">
-          <div className="cred-group-title">{type}</div>
-          <div className="cred-cards">
-            {grouped[type].map((item, i) => (
-              <CredentialCard
-                key={itemKey(item, i)}
-                item={item}
-                type={type}
-                onEdit={setEditing}
-                onDelete={handleDelete}
-              />
-            ))}
+      <CredentialSection
+        title="Linked Credentials"
+        items={cvpItems}
+        renderItem={(item, i) =>
+          item.credentials.map((vc, j) => (
+            <CredentialCard key={`${i}-${j}`} vc={vc} />
+          ))
+        }
+      />
+      <CredentialSection
+        title="Schema Credentials"
+        items={jscItems}
+        renderItem={(item, i) => (
+          <div key={i} className="cred-card">
+            <div style={{ fontSize: 12, color: '#6b7280', wordBreak: 'break-all' }}>
+              {item.service.serviceEndpoint}
+            </div>
           </div>
-        </div>
-      ))}
-
-      {editing && (
-        <EditModal
-          item={editing}
-          onSave={() => { setEditing(null); load() }}
-          onClose={() => setEditing(null)}
-        />
-      )}
+        )}
+      />
     </div>
   )
 }

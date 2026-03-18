@@ -1,22 +1,29 @@
 import { useState, useEffect } from 'react'
-import { getAgent, getCredentials } from '../api'
+import { getDidDocument } from '../api'
 
 export default function Dashboard() {
-  const [agent, setAgent] = useState(null)
-  const [credentialCount, setCredentialCount] = useState(null)
+  const [doc, setDoc] = useState(null)
+  const [cvpCount, setCvpCount] = useState(null)
+  const [jscCount, setJscCount] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    Promise.all([getAgent(), getCredentials()])
-      .then(([agentData, creds]) => {
-        setAgent(agentData)
-        setCredentialCount(creds?.meta?.totalItems ?? (Array.isArray(creds) ? creds.length : '—'))
+    getDidDocument()
+      .then(d => {
+        setDoc(d)
+        const vprServices = (d.service ?? []).filter(s => (s.id?.split('#')[1] ?? '').startsWith('vpr'))
+        setCvpCount(vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-c-vp')).length)
+        setJscCount(vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-jsc-vp')).length)
       })
       .catch(err => setError(err.message))
   }, [])
 
   if (error) return <p className="error-msg">{error}</p>
-  if (!agent) return <p className="loading">Loading...</p>
+  if (!doc) return <p className="loading">Loading...</p>
+
+  const endpoints = (doc.service ?? [])
+    .filter(s => s.type === 'did-communication')
+    .map(s => s.serviceEndpoint)
 
   return (
     <div>
@@ -31,31 +38,17 @@ export default function Dashboard() {
 
         <div className="agent-info-card">
           <div className="agent-info-row">
-            <span className="agent-info-label">Label</span>
-            <span className="agent-info-value">{agent.label ?? '—'}</span>
-          </div>
-
-          <div className="agent-info-row">
-            <span className="agent-info-label">Status</span>
-            <span className="agent-info-value">
-              <span className={`status-pill ${agent.isInitialized ? 'status-pill--ok' : 'status-pill--warn'}`}>
-                {agent.isInitialized ? 'Initialized' : 'Not initialized'}
-              </span>
-            </span>
-          </div>
-
-          <div className="agent-info-row">
             <span className="agent-info-label">Public DID</span>
             <span className="agent-info-value agent-info-mono">
-              {agent.publicDid ?? <span style={{ color: '#9ca3af' }}>Not assigned</span>}
+              {doc.id ?? <span style={{ color: '#9ca3af' }}>Not assigned</span>}
             </span>
           </div>
 
-          {agent.endpoints?.length > 0 && (
+          {endpoints.length > 0 && (
             <div className="agent-info-row">
               <span className="agent-info-label">Endpoints</span>
               <span className="agent-info-value agent-info-mono">
-                {agent.endpoints.join(', ')}
+                {endpoints.join(', ')}
               </span>
             </div>
           )}
@@ -71,7 +64,12 @@ export default function Dashboard() {
           <div className="card">
             <div className="card-icon">🪪</div>
             <div className="card-label">Linked Credentials</div>
-            <div className="card-value">{credentialCount ?? '—'}</div>
+            <div className="card-value">{cvpCount ?? '—'}</div>
+          </div>
+          <div className="card">
+            <div className="card-icon">📋</div>
+            <div className="card-label">Schema Credentials</div>
+            <div className="card-value">{jscCount ?? '—'}</div>
           </div>
         </div>
       </section>
