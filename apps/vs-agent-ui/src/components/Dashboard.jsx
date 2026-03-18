@@ -71,13 +71,13 @@ function CredentialCard({ vc, type, onSelect }) {
 async function resolveCVpService(service) {
   try {
     const vp = await fetch(service.serviceEndpoint).then(r => r.ok ? r.json() : null)
-    if (!vp) return { service, type: 'other', credentials: [] }
+    if (!vp) return { service, type: 'other', credentials: [], vp: null }
     const raw = vp.verifiableCredential
     const vcs = Array.isArray(raw) ? raw : (raw ? [raw] : [])
     const type = vcs.length > 0 ? await resolveVTCType({ credential: vcs[0] }) : 'other'
-    return { service, type, credentials: vcs }
+    return { service, type, credentials: vcs, vp }
   } catch {
-    return { service, type: 'other', credentials: [] }
+    return { service, type: 'other', credentials: [], vp: null }
   }
 }
 
@@ -203,7 +203,7 @@ export default function Dashboard() {
         items={cvpItems}
         renderItem={(item, i) =>
           item.credentials.map((vc, j) => (
-            <CredentialCard key={`${i}-${j}`} vc={vc} type={item.type} onSelect={() => setSelected(vc)} />
+            <CredentialCard key={`${i}-${j}`} vc={vc} type={item.type} onSelect={() => setSelected(item.vp)} />
           ))
         }
       />
