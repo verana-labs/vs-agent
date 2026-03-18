@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { identifySchema, resolveCredentialType } from '@verana-labs/vs-agent-model/ecs'
+import { resolveVTCType, resolveJSCType } from '@verana-labs/vs-agent-model/ecs'
 import { getDidDocument, qrUrl } from '../api'
 
 function CredentialCard({ vc }) {
@@ -39,27 +39,29 @@ function CredentialCard({ vc }) {
   )
 }
 
-async function resolveCvpService(service) {
+async function resolveCVpService(service) {
   try {
     const vp = await fetch(service.serviceEndpoint).then(r => r.ok ? r.json() : null)
     if (!vp) return { service, type: 'other', credentials: [] }
     const raw = vp.verifiableCredential
     const vcs = Array.isArray(raw) ? raw : (raw ? [raw] : [])
-    const type = vcs.length > 0 ? await resolveCredentialType({ credential: vcs[0] }) : 'other'
+    const type = vcs.length > 0 ? await resolveVTCType({ credential: vcs[0] }) : 'other'
     return { service, type, credentials: vcs }
   } catch {
     return { service, type: 'other', credentials: [] }
   }
 }
 
-async function resolveJscService(service) {
+async function resolveJscVpService(service) {
   try {
-    const schema = await fetch(service.serviceEndpoint).then(r => r.ok ? r.json() : null)
-    if (!schema) return { service, type: 'other' }
-    const type = (await identifySchema(schema)) ?? 'other'
-    return { service, type }
+    const vp = await fetch(service.serviceEndpoint).then(r => r.ok ? r.json() : null)
+    if (!vp) return { service, type: 'other', credentials: [] }
+    const raw = vp.verifiableCredential
+    const vcs = Array.isArray(raw) ? raw : (raw ? [raw] : [])
+    const type = vcs.length > 0 ? await resolveJSCType({ credential: vcs[0] }) : 'other'
+    return { service, type, credentials: vcs }
   } catch {
-    return { service, type: 'other' }
+    return { service, type: 'other', credentials: [] }
   }
 }
 
@@ -104,8 +106,8 @@ export default function Dashboard() {
         const cvp = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-c-vp'))
         const jsc = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-jsc-vp'))
 
-        Promise.all(cvp.map(resolveCvpService)).then(setCvpItems)
-        Promise.all(jsc.map(resolveJscService))
+        Promise.all(cvp.map(resolveCVpService)).then(setCvpItems)
+        Promise.all(jsc.map(resolveJscVpService))
           .then(setJscItems)
           .finally(() => setCredsLoading(false))
       })
