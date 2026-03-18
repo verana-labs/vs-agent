@@ -126,10 +126,6 @@ export default function Dashboard() {
 
   return (
     <div>
-      <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 24 }}>
-        Monitor your VS Agent configuration
-      </p>
-
       <section style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, color: '#111827', marginBottom: 16, textAlign: 'center' }}>
           VS Agent Information
