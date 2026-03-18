@@ -20,7 +20,7 @@ function CredentialCard({ vc }) {
             {subject.id && (
               <tr>
                 <td title="id">id</td>
-                <td title={subject.id}>{subject.id}</td>
+                <td style={{ whiteSpace: 'normal', wordBreak: 'break-all' }}>{subject.id}</td>
               </tr>
             )}
             {attrs.map(([key, value]) => {
