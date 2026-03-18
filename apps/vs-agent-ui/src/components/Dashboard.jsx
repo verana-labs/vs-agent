@@ -120,7 +120,7 @@ export default function Dashboard() {
   const endpoints = (doc.service ?? [])
     .filter(s => s.type === 'did-communication')
     .map(s => s.serviceEndpoint)
-  const webDid = (doc.alsoKnownAs ?? []).find(d => d.startsWith('did:webvh:'))
+  const webDid = (doc.alsoKnownAs ?? []).find(d => d.startsWith('did:webvh:')) ?? doc.id
 
   const noCredentials = !credsLoading && cvpItems.length === 0 && jscItems.length === 0
 
