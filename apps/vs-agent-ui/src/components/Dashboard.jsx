@@ -94,13 +94,20 @@ async function resolveJscVpService(service) {
   }
 }
 
+const TYPE_ORDER = ['ecs-org', 'ecs-persona', 'ecs-service', 'ecs-user-agent']
+function typeRank(type) {
+  const i = TYPE_ORDER.indexOf(type)
+  return i === -1 ? Infinity : i
+}
+
 function CredentialSection({ title, items, renderItem }) {
   if (items.length === 0) return null
+  const sorted = [...items].sort((a, b) => typeRank(a.type) - typeRank(b.type))
   return (
     <section style={{ marginBottom: 32 }}>
       <h2 className="section-title">{title}</h2>
       <div className="cred-cards">
-        {items.flatMap((item, i) => renderItem(item, i))}
+        {sorted.flatMap((item, i) => renderItem(item, i))}
       </div>
     </section>
   )
