@@ -68,16 +68,24 @@ export async function identifySchema(schemaObj: Record<string, unknown>): Promis
   return null
 }
 
-/**
- * Resolves the ECS credential type for a linked credential item by:
- * 1. Reading credentialSchema.id from the credential
- * 2. Fetching that URL → W3C credential with credentialSubject.id (a VPR URL)
- * 3. Applying mapToEcosystem to get a resolvable HTTP URL
- * 4. Fetching the JSON schema and identifying it via SHA-384 digest
- *
- * @returns The ECS type string (e.g. 'ecs-org') or 'other' on any failure.
- */
-export async function resolveCredentialType(item: {
+type W3CCred = {
+  credentialSubject?: { jsonSchema?: { $ref?: string } }
+}
+
+async function resolveBySubjectRef(subjectRef: string): Promise<ECS | 'other'> {
+  const schemaFetchUrl = mapToEcosystem(subjectRef)
+  const schemaObj = await fetch(schemaFetchUrl).then(r => (r.ok ? r.json() : null))
+  if (!schemaObj) return 'other'
+  return (await identifySchema(schemaObj as Record<string, unknown>)) ?? 'other'
+}
+
+async function resolveFromW3CCred(cred: W3CCred): Promise<ECS | 'other'> {
+  const ref = cred.credentialSubject?.jsonSchema?.$ref
+  if (!ref) return 'other'
+  return resolveBySubjectRef(ref)
+}
+
+export async function resolveVTCType(item: {
   credential?: { credentialSchema?: { id?: string } }
 }): Promise<ECS | 'other'> {
   try {
@@ -87,14 +95,18 @@ export async function resolveCredentialType(item: {
     const w3cCred = await fetch(schemaUrl).then(r => (r.ok ? r.json() : null))
     if (!w3cCred) return 'other'
 
-    const subjectId = (w3cCred as { credentialSubject?: { id?: string } }).credentialSubject?.id
-    if (!subjectId) return 'other'
+    return resolveFromW3CCred(w3cCred as W3CCred)
+  } catch {
+    return 'other'
+  }
+}
 
-    const schemaFetchUrl = mapToEcosystem(subjectId)
-    const schemaObj = await fetch(schemaFetchUrl).then(r => (r.ok ? r.json() : null))
-    if (!schemaObj) return 'other'
-
-    return (await identifySchema(schemaObj as Record<string, unknown>)) ?? 'other'
+export async function resolveJSCType(item: {
+  credential?: W3CCred
+}): Promise<ECS | 'other'> {
+  try {
+    if (!item.credential) return 'other'
+    return resolveFromW3CCred(item.credential)
   } catch {
     return 'other'
   }
