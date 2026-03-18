@@ -30,13 +30,14 @@ function JsonModal({ data, onClose }) {
   )
 }
 
-function CredentialCard({ vc, onSelect }) {
+function CredentialCard({ vc, type, onSelect }) {
   const subject = vc?.credentialSubject ?? {}
   const attrs = Object.entries(subject).filter(([k]) => k !== 'id')
   const schemaId = vc?.credentialSchema?.id ?? ''
 
   return (
     <div className="cred-card" onClick={onSelect} style={{ cursor: 'pointer' }}>
+      {type && <div className="cred-card-type">{type}</div>}
       {schemaId && (
         <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10, wordBreak: 'break-all' }}>
           {schemaId}
@@ -93,28 +94,14 @@ async function resolveJscVpService(service) {
   }
 }
 
-function groupByType(items) {
-  return items.reduce((acc, item) => {
-    acc[item.type] = acc[item.type] ?? []
-    acc[item.type].push(item)
-    return acc
-  }, {})
-}
-
 function CredentialSection({ title, items, renderItem }) {
   if (items.length === 0) return null
-  const grouped = groupByType(items)
   return (
     <section style={{ marginBottom: 32 }}>
       <h2 className="section-title">{title}</h2>
-      {Object.entries(grouped).map(([type, group]) => (
-        <div key={type} className="cred-group">
-          <div className="cred-group-title">{type}</div>
-          <div className="cred-cards">
-            {group.map((item, i) => renderItem(item, i))}
-          </div>
-        </div>
-      ))}
+      <div className="cred-cards">
+        {items.flatMap((item, i) => renderItem(item, i))}
+      </div>
     </section>
   )
 }
@@ -209,7 +196,7 @@ export default function Dashboard() {
         items={cvpItems}
         renderItem={(item, i) =>
           item.credentials.map((vc, j) => (
-            <CredentialCard key={`${i}-${j}`} vc={vc} onSelect={() => setSelected(vc)} />
+            <CredentialCard key={`${i}-${j}`} vc={vc} type={item.type} onSelect={() => setSelected(vc)} />
           ))
         }
       />
@@ -219,6 +206,7 @@ export default function Dashboard() {
         items={jscItems}
         renderItem={(item, i) => (
           <div key={i} className="cred-card" onClick={() => setSelected(item.service)} style={{ cursor: 'pointer' }}>
+            <div className="cred-card-type">{item.type}</div>
             <div style={{ fontSize: 12, color: '#6b7280', wordBreak: 'break-all' }}>
               {item.service.serviceEndpoint}
             </div>

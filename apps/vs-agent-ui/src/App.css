@@ -221,26 +221,19 @@ body {
   margin-top: 8px;
 }
 
-/* ─── Credential groups ──────────────────────────────────── */
-.cred-group {
-  margin-bottom: 32px;
+.cred-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
-.cred-group-title {
-  font-size: 13px;
+.cred-card-type {
+  font-size: 11px;
   font-weight: 600;
-  color: #6b7280;
+  color: #6d28d9;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.cred-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 16px;
+  margin-bottom: 10px;
 }
 
 .cred-card {
@@ -248,6 +241,7 @@ body {
   border-radius: 12px;
   padding: 20px 24px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+  flex: 0 0 340px;
   min-width: 0;
 }
 

@@ -67,12 +67,15 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   // Send environment to UI
   const publicDir = path.join(__dirname, '../../public')
   const indexPath = path.join(publicDir, 'index.html')
-  publicApp.getHttpAdapter().getInstance().get(['/', '/index.html'], (_req: express.Request, res: express.Response) => {
-    const config = { label: AGENT_LABEL, welcomeMessage: UI_WELCOME_MESSAGE }
-    const script = `<script>window.__VS_AGENT__=${JSON.stringify(config)};</script>`
-    const html = fs.readFileSync(indexPath, 'utf-8').replace('</head>', `${script}</head>`)
-    res.type('html').send(html)
-  })
+  publicApp
+    .getHttpAdapter()
+    .getInstance()
+    .get(['/', '/index.html'], (_req: express.Request, res: express.Response) => {
+      const config = { label: AGENT_LABEL, welcomeMessage: UI_WELCOME_MESSAGE }
+      const script = `<script>window.__VS_AGENT__=${JSON.stringify(config)};</script>`
+      const html = fs.readFileSync(indexPath, 'utf-8').replace('</head>', `${script}</head>`)
+      res.type('html').send(html)
+    })
   publicApp.use(express.static(publicDir))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
