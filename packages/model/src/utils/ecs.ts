@@ -101,9 +101,7 @@ export async function resolveVTCType(item: {
   }
 }
 
-export async function resolveJSCType(item: {
-  credential?: W3CCred
-}): Promise<ECS | 'other'> {
+export async function resolveJSCType(item: { credential?: W3CCred }): Promise<ECS | 'other'> {
   try {
     if (!item.credential) return 'other'
     return resolveFromW3CCred(item.credential)
