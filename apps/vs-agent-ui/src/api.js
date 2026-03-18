@@ -4,4 +4,8 @@ export async function getDidDocument() {
   return res.json()
 }
 
+export function getAgentConfig() {
+  return window.__VS_AGENT__ ?? { label: 'VS Agent', welcomeMessage: null }
+}
+
 export const qrUrl = '/qr'

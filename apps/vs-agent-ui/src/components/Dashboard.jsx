@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { resolveVTCType, resolveJSCType } from '@verana-labs/vs-agent-model/ecs'
-import { getDidDocument, qrUrl } from '../api'
+import { getAgentConfig, getDidDocument, qrUrl } from '../api'
 
 function JsonModal({ data, onClose }) {
   const [copied, setCopied] = useState(false)
@@ -120,6 +120,7 @@ function CredentialSection({ title, items, renderItem }) {
 }
 
 export default function Dashboard() {
+  const agentConfig = getAgentConfig()
   const [doc, setDoc] = useState(null)
   const [cvpItems, setCvpItems] = useState([])
   const [jscItems, setJscItems] = useState([])
@@ -157,12 +158,23 @@ export default function Dashboard() {
     <div>
       {selected && <JsonModal data={selected} onClose={() => setSelected(null)} />}
 
+      {agentConfig.welcomeMessage && (
+        <h1 style={{ fontSize: 32, fontWeight: 700, color: '#111827', marginBottom: 28, textAlign: 'center' }}>
+          {agentConfig.welcomeMessage}
+        </h1>
+      )}
+
       <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#111827', marginBottom: 16, textAlign: 'center' }}>
+        <h2 style={{ fontSize: 20, fontWeight: 600, color: '#111827', marginBottom: 16, textAlign: 'center' }}>
           VS Agent Information
         </h2>
 
         <div className="agent-info-card">
+          <div className="agent-info-row">
+            <span className="agent-info-label">Name</span>
+            <span className="agent-info-value">{agentConfig.label}</span>
+          </div>
+
           <div className="agent-info-row">
             <span className="agent-info-label">Public DID</span>
             <span className="agent-info-value agent-info-mono">
