@@ -53,11 +53,17 @@ function CredentialCard({ vc, type, onSelect }) {
               </tr>
             )}
             {attrs.map(([key, value]) => {
+              const isLogo = key === 'logo' && typeof value === 'string'
               const display = typeof value === 'object' ? JSON.stringify(value) : String(value)
               return (
                 <tr key={key}>
                   <td title={key}>{key}</td>
-                  <td title={display}>{display}</td>
+                  <td>
+                    {isLogo
+                      ? <img src={value} alt="logo" style={{ maxWidth: 120, maxHeight: 60, objectFit: 'contain', display: 'block' }} onError={e => { e.currentTarget.style.display = 'none' }} />
+                      : <span title={display}>{display}</span>
+                    }
+                  </td>
                 </tr>
               )
             })}
