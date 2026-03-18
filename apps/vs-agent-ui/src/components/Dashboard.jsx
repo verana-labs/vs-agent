@@ -124,11 +124,11 @@ export default function Dashboard() {
   return (
     <div>
       <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 24 }}>
-        Monitor and manage your VS Agent configuration
+        Monitor your VS Agent configuration
       </p>
 
       <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 16 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#111827', marginBottom: 16, textAlign: 'center' }}>
           VS Agent Information
         </h2>
 
@@ -151,7 +151,7 @@ export default function Dashboard() {
 
           <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 24 }}>
             <div style={{ textAlign: 'center' }}>
-              <img src={qrUrl} alt="Invitation QR" style={{ width: 200, height: 200, display: 'block' }} />
+              <img src={qrUrl} alt="Invitation QR" style={{ width: 280, height: 280, display: 'block' }} />
               <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Scan to connect</p>
             </div>
           </div>
