@@ -457,8 +457,13 @@ body {
   margin-bottom: 16px;
 }
 
+.qr-mobile { display: none; }
+.qr-desktop { display: block; }
+
 /* ─── Responsive ─────────────────────────────────────────── */
 @media (max-width: 768px) {
+  .qr-desktop { display: none; }
+  .qr-mobile { display: block; }
   .header {
     padding: 0 16px;
     gap: 12px;

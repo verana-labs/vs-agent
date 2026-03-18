@@ -197,11 +197,17 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 24 }}>
-            <div style={{ textAlign: 'center' }}>
-              <img src={qrUrl} alt="Invitation QR" style={{ width: 280, height: 280, display: 'block' }} />
-              <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Scan to connect</p>
+          <div className="qr-desktop">
+            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 24 }}>
+              <div style={{ textAlign: 'center' }}>
+                <img src={qrUrl} alt="Invitation QR" style={{ width: 280, height: 280, display: 'block' }} />
+                <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Scan to connect</p>
+              </div>
             </div>
+          </div>
+
+          <div className="qr-mobile" style={{ paddingTop: 16, textAlign: 'center' }}>
+            <a href="/invitation" className="btn btn-primary">Connect</a>
           </div>
         </div>
       </section>
