@@ -95,99 +95,9 @@ body {
   color: #6b7280;
 }
 
-/* Hamburger — mobile only */
-.hamburger {
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  gap: 5px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-
-.hamburger:hover {
-  background: #f3f4f6;
-}
-
-.hamburger span {
-  display: block;
-  width: 22px;
-  height: 2px;
-  background: #6b7280;
-  border-radius: 2px;
-}
-
-/* ─── Body ───────────────────────────────────────────────── */
-.body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  position: relative;
-}
-
-/* ─── Sidebar ────────────────────────────────────────────── */
-.sidebar {
-  width: 200px;
-  background: #fff;
-  border-right: 1px solid #e5e7eb;
-  flex-shrink: 0;
-}
-
-.sidebar-nav {
-  list-style: none;
-  padding: 16px 0;
-}
-
-.sidebar-nav li {
-  padding: 0 10px;
-  margin-bottom: 4px;
-}
-
-.sidebar-nav button {
-  width: 100%;
-  background: none;
-  border: none;
-  color: #6b7280;
-  cursor: pointer;
-  padding: 10px 14px;
-  border-radius: 8px;
-  text-align: left;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  transition: background 0.15s;
-}
-
-.sidebar-nav button:hover {
-  background: #f3f4f6;
-  color: #111827;
-}
-
-.sidebar-nav button.active {
-  background: #ede9fe;
-  color: #6d28d9;
-  font-weight: 600;
-}
-
-.sidebar-nav .nav-icon {
-  font-size: 16px;
-  width: 20px;
-  text-align: center;
-}
-
-/* Overlay behind sidebar on mobile */
-.sidebar-overlay {
-  display: none;
-}
 
 /* ─── Content ────────────────────────────────────────────── */
 .content {
-  flex: 1;
   padding: 28px;
   min-width: 0;
 }
@@ -554,7 +464,6 @@ body {
 
 /* ─── Responsive ─────────────────────────────────────────── */
 @media (max-width: 768px) {
-  /* Header: hide logo name and status, show hamburger */
   .header {
     padding: 0 16px;
     gap: 12px;
@@ -568,46 +477,10 @@ body {
     display: none;
   }
 
-  .header-status-desktop {
-    display: none;
-  }
-
-  .hamburger {
-    display: flex;
-    margin-left: auto;
-  }
-
-  /* Sidebar: hidden by default, slides in as drawer */
-  .sidebar {
-    position: fixed;
-    top: 60px;
-    left: 0;
-    bottom: 0;
-    z-index: 40;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08);
-  }
-
-  .sidebar.sidebar-open {
-    transform: translateX(0);
-  }
-
-  /* Overlay behind drawer */
-  .sidebar-overlay {
-    display: block;
-    position: fixed;
-    inset: 60px 0 0 0;
-    background: rgba(0, 0, 0, 0.3);
-    z-index: 39;
-  }
-
-  /* Content takes full width */
   .content {
     padding: 20px 16px;
   }
 
-  /* Cards single column */
   .cards-grid {
     grid-template-columns: 1fr 1fr;
     gap: 12px;
