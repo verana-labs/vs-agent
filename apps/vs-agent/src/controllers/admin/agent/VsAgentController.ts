@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiOkResponse, getSchemaPath, ApiExtraModels } from '@nestjs/swagger'
 
-import { AGENT_LABEL } from '../../../../src/config'
+import { AGENT_LABEL, AGENT_VERSION } from '../../../../src/config'
 import { VsAgentService } from '../../../services/VsAgentService'
 
 import { VsAgentInfoDto } from './dto'
@@ -29,6 +29,7 @@ export class VsAgentController {
       endpoints: vsAgent.didcomm.config.endpoints,
       isInitialized: vsAgent.isInitialized,
       publicDid: vsAgent.did,
+      version: AGENT_VERSION,
     }
   }
 }
