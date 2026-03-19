@@ -16,6 +16,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 //@ts-ignore
 import { purposes } from '@digitalcredentials/jsonld-signatures'
+import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
 import axios, { isAxiosError } from 'axios'
@@ -89,22 +90,6 @@ export const mapToSelfTr = (url: string, publicApiBaseUrl: string): string =>
 
 const buildIntegrityData = (data: Record<string, unknown>) => {
   return generateDigestSRI(JSON.stringify(data, Object.keys(data).sort()))
-}
-
-// TODO: Resolve url must be with verre or similar
-const urlMap = new Map<string, string>([
-  ['vpr:verana:vna-mainnet-1', 'https://idx.testnet.verana.network/verana'],
-  ['vpr:verana:vna-testnet-1', 'https://idx.testnet.verana.network/verana'],
-  ['vpr:verana:vna-devnet-1', 'https://idx.devnet.verana.network/verana'],
-])
-
-export function mapToEcosystem(input: string): string {
-  for (const [key, value] of urlMap.entries()) {
-    if (input.includes(key)) {
-      input = input.replace(key, value)
-    }
-  }
-  return input
 }
 
 export const setupSelfTr = async ({

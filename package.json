@@ -11,8 +11,9 @@
   },
   "scripts": {
     "build": "pnpm -r --workspace-concurrency=1 --sort run build",
-    "start": "pnpm --filter @verana-labs/vs-agent start",
-    "start:dev": "pnpm --filter @verana-labs/vs-agent start:dev",
+    "ui": "pnpm --filter @verana-labs/vs-agent-ui",
+    "start": "pnpm ui build && pnpm --filter @verana-labs/vs-agent start",
+    "start:dev": "pnpm ui build:watch & pnpm --filter @verana-labs/vs-agent start:dev",
     "start:chatbot": "pnpm --filter demo-chatbot start",
     "start:verifier": "pnpm --filter demo-verifier start",
     "start:nestjsvs": "pnpm --filter nestjs-vs start",

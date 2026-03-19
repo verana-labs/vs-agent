@@ -12,6 +12,7 @@ export const ADMIN_PORT = Number(process.env.ADMIN_PORT || 3000)
 
 export const AGENT_NAME = process.env.AGENT_NAME // This one is deprecated. Only used to throw error if it is defined
 export const AGENT_LABEL = process.env.AGENT_LABEL || 'Test VS Agent'
+export const UI_WELCOME_MESSAGE = process.env.UI_WELCOME_MESSAGE || 'Welcome to VS Agent'
 export const AGENT_INVITATION_IMAGE_URL = process.env.AGENT_INVITATION_IMAGE_URL
 export const AGENT_ENDPOINT = process.env.AGENT_ENDPOINT
 export const AGENT_ENDPOINTS = process.env.AGENT_ENDPOINT

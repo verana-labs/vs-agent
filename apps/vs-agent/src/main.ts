@@ -3,6 +3,7 @@ import 'reflect-metadata'
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
+import * as express from 'express'
 import * as fs from 'fs'
 import { IncomingMessage } from 'http'
 import { Socket } from 'net'
@@ -18,6 +19,7 @@ import {
   AGENT_ENDPOINTS,
   AGENT_INVITATION_IMAGE_URL,
   AGENT_LABEL,
+  UI_WELCOME_MESSAGE,
   AGENT_LOG_LEVEL,
   AGENT_NAME,
   AGENT_PORT,
@@ -61,6 +63,20 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   // PublicModule-specific config
   const publicApp = await NestFactory.create(PublicModule.register(agent, publicApiBaseUrl))
   commonAppConfig(publicApp, cors, true)
+
+  // Send environment to UI
+  const publicDir = path.join(__dirname, '../../public')
+  const indexPath = path.join(publicDir, 'index.html')
+  publicApp
+    .getHttpAdapter()
+    .getInstance()
+    .get(['/', '/index.html'], (_req: express.Request, res: express.Response) => {
+      const config = { label: AGENT_LABEL, welcomeMessage: UI_WELCOME_MESSAGE }
+      const script = `<script>window.__VS_AGENT__=${JSON.stringify(config)};</script>`
+      const html = fs.readFileSync(indexPath, 'utf-8').replace('</head>', `${script}</head>`)
+      res.type('html').send(html)
+    })
+  publicApp.use(express.static(publicDir))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))

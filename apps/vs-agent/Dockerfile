@@ -15,6 +15,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json tsconf
 
 COPY packages/model/package.json packages/model/package.json
 COPY apps/vs-agent/package.json apps/vs-agent/package.json
+COPY apps/vs-agent-ui/package.json apps/vs-agent-ui/package.json
 
 RUN pnpm install --frozen-lockfile
 
@@ -28,7 +29,13 @@ COPY apps/vs-agent/tsconfig.json apps/vs-agent/tsconfig.json
 COPY apps/vs-agent/tsconfig.build.json apps/vs-agent/tsconfig.build.json
 COPY apps/vs-agent/nest-cli.json apps/vs-agent/nest-cli.json
 
+COPY apps/vs-agent-ui/src ./apps/vs-agent-ui/src
+COPY apps/vs-agent-ui/index.html apps/vs-agent-ui/index.html
+COPY apps/vs-agent-ui/vite.config.js apps/vs-agent-ui/vite.config.js
+COPY apps/vs-agent-ui/tsconfig.json apps/vs-agent-ui/tsconfig.json
+
 RUN pnpm --filter @verana-labs/vs-agent-model build && \
+    pnpm --filter @verana-labs/vs-agent-ui build && \
     pnpm --filter @verana-labs/vs-agent build
 
 RUN rm -rf \
@@ -69,7 +76,11 @@ RUN rm -rf \
     node_modules/esbuild \
     node_modules/rollup \
     node_modules/terser \
-    node_modules/@eslint
+    node_modules/@eslint \
+    node_modules/react \
+    node_modules/react-dom \
+    node_modules/react-is \
+    node_modules/@vitejs
 
 FROM node:22.19-slim AS final
 
@@ -82,6 +93,7 @@ COPY --from=build /www/packages/model/build ./packages/model/build
 COPY --from=build /www/apps/vs-agent/node_modules ./apps/vs-agent/node_modules
 COPY apps/vs-agent/package.json ./apps/vs-agent/package.json
 COPY --from=build /www/apps/vs-agent/build ./apps/vs-agent/build
+COPY --from=build /www/apps/vs-agent/public ./apps/vs-agent/public
 COPY apps/vs-agent/discovery.json ./apps/vs-agent/discovery.json
 
 CMD ["node", "apps/vs-agent/build/src/main"]
