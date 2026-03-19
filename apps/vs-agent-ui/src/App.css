@@ -1,3 +1,26 @@
+/* ─── Typography variables ───────────────────────────────── */
+:root {
+  --text-xs:   11px;   /* badges, type labels */
+  --text-sm:   12px;   /* small labels, mono values */
+  --text-base: 14px;   /* body, info rows */
+  --text-md:   15px;   /* default body */
+  --text-lg:   16px;   /* modal h2, form h2 */
+  --text-xl:   20px;   /* section titles */
+  --text-2xl:  24px;   /* large numbers */
+  --text-3xl:  30px;   /* h1 welcome */
+
+  --fw-normal:  400;
+  --fw-semibold: 600;
+
+  --color-text-primary:   #111827;
+  --color-text-secondary: #374151;
+  --color-text-muted:     #6b7280;
+  --color-text-subtle:    #9ca3af;
+
+  --lh-tight:  1.25;
+  --lh-normal: 1.5;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -6,9 +29,11 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 15px;
+  font-size: var(--text-md);
+  font-weight: var(--fw-normal);
+  line-height: var(--lh-normal);
   background: #f3f4f6;
-  color: #111827;
+  color: var(--color-text-primary);
 }
 
 /* ─── Layout ─────────────────────────────────────────────── */
@@ -49,16 +74,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 15px;
+  font-weight: var(--fw-semibold);
+  font-size: var(--text-md);
   color: #fff;
   flex-shrink: 0;
+  line-height: var(--lh-tight);
 }
 
 .header-logo-name {
-  font-size: 17px;
-  font-weight: 700;
-  color: #111827;
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-primary);
+  line-height: var(--lh-tight);
 }
 
 .header-center {
@@ -66,9 +93,10 @@ body {
 }
 
 .header h1 {
-  font-size: 15px;
-  font-weight: 500;
-  color: #6b7280;
+  font-size: var(--text-md);
+  font-weight: var(--fw-normal);
+  color: var(--color-text-muted);
+  line-height: var(--lh-tight);
 }
 
 /* Status badge — desktop only */
@@ -76,8 +104,8 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--fw-normal);
 }
 
 .status-dot {
@@ -92,7 +120,7 @@ body {
 }
 
 .status-label {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 
@@ -118,26 +146,28 @@ body {
 }
 
 .card-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #6b7280;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 8px;
+  line-height: var(--lh-normal);
 }
 
 .card-value {
-  font-size: 26px;
-  font-weight: 700;
-  color: #111827;
-  line-height: 1.2;
+  font-size: var(--text-2xl);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-primary);
+  line-height: var(--lh-tight);
 }
 
 .card-sub {
-  font-size: 12px;
-  color: #6b7280;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
   margin-top: 4px;
   word-break: break-all;
+  line-height: var(--lh-normal);
 }
 
 .card-icon {
@@ -170,24 +200,27 @@ body {
 .agent-info-label {
   flex-shrink: 0;
   width: 120px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #6b7280;
+  font-size: var(--text-base);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  line-height: var(--lh-normal);
 }
 
 .agent-info-value {
   flex: 1;
-  font-size: 14px;
-  color: #111827;
+  font-size: var(--text-base);
+  font-weight: var(--fw-normal);
+  color: var(--color-text-primary);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: var(--lh-normal);
 }
 
 .agent-info-mono {
   font-family: monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   white-space: normal;
   word-break: break-all;
   overflow: visible;
@@ -198,8 +231,9 @@ body {
   display: inline-block;
   padding: 2px 10px;
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-normal);
 }
 
 .status-pill--ok {
@@ -214,9 +248,10 @@ body {
 
 /* ─── Section title ──────────────────────────────────────── */
 .section-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #374151;
+  font-size: var(--text-xl);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-secondary);
+  line-height: var(--lh-tight);
   margin-bottom: 16px;
   margin-top: 8px;
   text-align: center;
@@ -230,12 +265,13 @@ body {
 }
 
 .cred-card-type {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semibold);
   color: #6d28d9;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: 10px;
+  line-height: var(--lh-normal);
 }
 
 .cred-card {
@@ -254,8 +290,9 @@ body {
 }
 
 .cred-card-attrs {
-  font-size: 14px;
-  color: #374151;
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  line-height: var(--lh-normal);
   margin-bottom: 16px;
 }
 
@@ -271,11 +308,12 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: var(--lh-normal);
 }
 
 .cred-card-attrs td:first-child {
-  color: #6b7280;
-  font-weight: 500;
+  color: var(--color-text-muted);
+  font-weight: var(--fw-semibold);
   padding-right: 12px;
   white-space: nowrap;
   width: 36%;
@@ -298,10 +336,11 @@ body {
   border: none;
   border-radius: 6px;
   padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--fw-semibold);
   cursor: pointer;
   transition: opacity 0.15s;
+  line-height: var(--lh-normal);
 }
 
 .btn:hover { opacity: 0.85; }
@@ -309,7 +348,7 @@ body {
 .btn-edit   { background: #ede9fe; color: #6d28d9; }
 .btn-delete { background: #fee2e2; color: #dc2626; }
 .btn-primary   { background: #7c3aed; color: #fff; padding: 8px 18px; }
-.btn-secondary { background: #e5e7eb; color: #374151; padding: 8px 18px; }
+.btn-secondary { background: #e5e7eb; color: var(--color-text-secondary); padding: 8px 18px; }
 
 /* ─── Modal ──────────────────────────────────────────────── */
 .modal-overlay {
@@ -333,8 +372,10 @@ body {
 }
 
 .modal h2 {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-primary);
+  line-height: var(--lh-tight);
   margin-bottom: 16px;
 }
 
@@ -342,13 +383,14 @@ body {
   width: 100%;
   height: 240px;
   font-family: 'Fira Code', 'Courier New', monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   padding: 12px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
   resize: vertical;
   background: #f9fafb;
-  color: #111827;
+  color: var(--color-text-primary);
+  line-height: var(--lh-normal);
 }
 
 .modal textarea:focus {
@@ -374,8 +416,10 @@ body {
 }
 
 .create-form h2 {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-primary);
+  line-height: var(--lh-tight);
   margin-bottom: 16px;
 }
 
@@ -385,10 +429,11 @@ body {
 
 .form-group label {
   display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: #374151;
+  font-size: var(--text-base);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
+  line-height: var(--lh-normal);
 }
 
 .form-group select,
@@ -396,9 +441,10 @@ body {
   width: 100%;
   border: 1px solid #d1d5db;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: var(--text-base);
   background: #fff;
-  color: #111827;
+  color: var(--color-text-primary);
+  line-height: var(--lh-normal);
 }
 
 .form-group select {
@@ -408,7 +454,7 @@ body {
 .form-group textarea {
   height: 160px;
   font-family: 'Fira Code', 'Courier New', monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   padding: 10px 12px;
   resize: vertical;
   background: #f9fafb;
@@ -447,21 +493,23 @@ body {
 }
 
 .qr-label {
-  font-size: 15px;
-  color: #6b7280;
-  font-weight: 500;
+  font-size: var(--text-md);
+  font-weight: var(--fw-normal);
+  color: var(--color-text-muted);
+  line-height: var(--lh-normal);
 }
 
 /* ─── Utilities ──────────────────────────────────────────── */
-.loading  { color: #6b7280; font-size: 14px; padding: 20px 0; }
-.empty-msg { color: #9ca3af; font-size: 14px; padding: 16px 0; }
+.loading  { color: var(--color-text-muted); font-size: var(--text-base); padding: 20px 0; line-height: var(--lh-normal); }
+.empty-msg { color: var(--color-text-subtle); font-size: var(--text-base); padding: 16px 0; line-height: var(--lh-normal); text-align: center; }
 .error-msg {
   color: #dc2626;
-  font-size: 13px;
+  font-size: var(--text-base);
   padding: 12px 16px;
   background: #fee2e2;
   border-radius: 8px;
   margin-bottom: 16px;
+  line-height: var(--lh-normal);
 }
 
 .qr-mobile { display: none; }
@@ -527,6 +575,6 @@ body {
   .header-logo-icon {
     width: 28px;
     height: 28px;
-    font-size: 13px;
+    font-size: var(--text-sm);
   }
 }
