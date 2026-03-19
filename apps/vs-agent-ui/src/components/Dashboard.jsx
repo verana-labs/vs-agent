@@ -30,9 +30,25 @@ function JsonModal({ data, onClose }) {
   )
 }
 
+function didToUrl(str) {
+  if (str.startsWith('did:web:')) {
+    const domain = decodeURIComponent(str.slice('did:web:'.length).split(':')[0])
+    return `https://${domain}`
+  }
+  if (str.startsWith('did:webvh:')) {
+    const parts = str.slice('did:webvh:'.length).split(':')
+    if (parts.length < 2) return null
+    const domain = decodeURIComponent(parts[1])
+    return `https://${domain}`
+  }
+  return null
+}
+
 function LinkOrText({ text, style }) {
-  if (typeof text === 'string' && text.startsWith('http')) {
-    return <a href={text} target="_blank" rel="noopener noreferrer" className="subtle-link" style={{ wordBreak: 'break-all', ...style }}>{text}</a>
+  if (typeof text !== 'string') return <span style={style}>{text}</span>
+  const url = text.startsWith('http') ? text : didToUrl(text)
+  if (url) {
+    return <a href={url} target="_blank" rel="noopener noreferrer" className="subtle-link" style={{ wordBreak: 'break-all', ...style }}>{text}</a>
   }
   return <span style={style}>{text}</span>
 }
@@ -41,7 +57,8 @@ function AttrValue({ value }) {
   const [imgFailed, setImgFailed] = useState(false)
   const str = typeof value === 'object' ? JSON.stringify(value) : String(value)
   if (typeof value !== 'string') return <span>{str}</span>
-  if (imgFailed) return <LinkOrText text={value} />
+  const mightBeImage = value.startsWith('http') || value.startsWith('data:image/')
+  if (!mightBeImage || imgFailed) return <LinkOrText text={value} />
   return (
     <img src={value} alt="" style={{ maxWidth: 120, maxHeight: 60, objectFit: 'contain', display: 'block' }} onError={() => setImgFailed(true)} />
   )
@@ -216,7 +233,7 @@ export default function Dashboard() {
           <div className="agent-info-row">
             <span className="agent-info-label">Public DID</span>
             <span className="agent-info-value agent-info-mono">
-              {webDid ?? <span style={{ color: '#9ca3af' }}>Not assigned</span>}
+              {webDid ? <LinkOrText text={webDid} /> : <span style={{ color: '#9ca3af' }}>Not assigned</span>}
             </span>
           </div>
 
