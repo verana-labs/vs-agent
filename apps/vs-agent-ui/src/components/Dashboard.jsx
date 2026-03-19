@@ -42,7 +42,7 @@ function AttrValue({ value }) {
 function CardSection({ label, children }) {
   return (
     <div style={{ marginBottom: 10 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: 3, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', paddingBottom: 4, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
         {label}
       </div>
       {children}
@@ -63,30 +63,30 @@ function CredentialCard({ vc, type, onSelect }) {
 
       {schemaId && (
         <CardSection label="Schema">
-          <div style={{ fontSize: 11, color: '#6b7280', wordBreak: 'break-all' }}>{schemaId}</div>
+          <div style={{ fontSize: 14, color: '#111827', wordBreak: 'break-all', lineHeight: 1.5 }}>{schemaId}</div>
         </CardSection>
       )}
 
       {issuer && (
         <CardSection label="Issuer">
-          <div style={{ fontSize: 11, color: '#6b7280', wordBreak: 'break-all' }}>{issuer}</div>
+          <div style={{ fontSize: 14, color: '#111827', wordBreak: 'break-all', lineHeight: 1.5 }}>{issuer}</div>
         </CardSection>
       )}
 
       {hasAttrs && (
         <CardSection label="Attributes">
-          <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
             <tbody>
               {subject.id && (
                 <tr>
-                  <td style={{ color: '#9ca3af', paddingRight: 8, whiteSpace: 'nowrap', verticalAlign: 'middle', paddingBottom: 3 }}>id</td>
-                  <td style={{ color: '#374151', wordBreak: 'break-all', paddingBottom: 3 }}>{subject.id}</td>
+                  <td style={{ fontSize: 13, color: '#6b7280', fontWeight: 500, paddingRight: 12, whiteSpace: 'nowrap', verticalAlign: 'middle', paddingBottom: 6 }}>id</td>
+                  <td style={{ color: '#111827', wordBreak: 'break-all', paddingBottom: 6, lineHeight: 1.5 }}>{subject.id}</td>
                 </tr>
               )}
               {attrs.map(([key, value]) => (
                 <tr key={key}>
-                  <td style={{ color: '#9ca3af', paddingRight: 8, whiteSpace: 'nowrap', verticalAlign: 'middle', paddingBottom: 3 }}>{key}</td>
-                  <td style={{ color: '#374151', wordBreak: 'break-all', paddingBottom: 3 }}>
+                  <td style={{ fontSize: 13, color: '#6b7280', fontWeight: 500, paddingRight: 12, whiteSpace: 'nowrap', verticalAlign: 'middle', paddingBottom: 6 }}>{key}</td>
+                  <td style={{ color: '#111827', wordBreak: 'break-all', paddingBottom: 6, lineHeight: 1.5 }}>
                     <AttrValue value={value} />
                   </td>
                 </tr>
