@@ -30,52 +30,69 @@ function JsonModal({ data, onClose }) {
   )
 }
 
+function CardSection({ label, children }) {
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: 3, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 function CredentialCard({ vc, type, onSelect }) {
   const subject = vc?.credentialSubject ?? {}
   const attrs = Object.entries(subject).filter(([k]) => k !== 'id')
   const schemaId = vc?.credentialSchema?.id ?? ''
   const issuer = typeof vc?.issuer === 'string' ? vc.issuer : (vc?.issuer?.id ?? '')
+  const hasAttrs = subject.id || attrs.length > 0
 
   return (
     <div className="cred-card" onClick={onSelect} style={{ cursor: 'pointer' }}>
       {type && <div className="cred-card-type">{type}</div>}
+
       {schemaId && (
-        <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6, wordBreak: 'break-all' }}>
-          <span style={{ fontWeight: 600 }}>credentialSchemaId:</span> {schemaId}
-        </div>
+        <CardSection label="Schema">
+          <div style={{ fontSize: 11, color: '#6b7280', wordBreak: 'break-all' }}>{schemaId}</div>
+        </CardSection>
       )}
+
       {issuer && (
-        <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10, wordBreak: 'break-all' }}>
-          <span style={{ fontWeight: 600 }}>issuer:</span> {issuer}
-        </div>
+        <CardSection label="Issuer">
+          <div style={{ fontSize: 11, color: '#6b7280', wordBreak: 'break-all' }}>{issuer}</div>
+        </CardSection>
       )}
-      <div className="cred-card-attrs">
-        <table>
-          <tbody>
-            {subject.id && (
-              <tr>
-                <td title="id">id</td>
-                <td style={{ whiteSpace: 'normal', wordBreak: 'break-all' }}>{subject.id}</td>
-              </tr>
-            )}
-            {attrs.map(([key, value]) => {
-              const isLogo = key === 'logo' && typeof value === 'string'
-              const display = typeof value === 'object' ? JSON.stringify(value) : String(value)
-              return (
-                <tr key={key}>
-                  <td title={key}>{key}</td>
-                  <td>
-                    {isLogo
-                      ? <img src={value} alt="logo" style={{ maxWidth: 120, maxHeight: 60, objectFit: 'contain', display: 'block' }} onError={e => { e.currentTarget.style.display = 'none' }} />
-                      : <span title={display}>{display}</span>
-                    }
-                  </td>
+
+      {hasAttrs && (
+        <CardSection label="Attributes">
+          <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
+            <tbody>
+              {subject.id && (
+                <tr>
+                  <td style={{ color: '#9ca3af', paddingRight: 8, whiteSpace: 'nowrap', verticalAlign: 'top', paddingBottom: 3 }}>id</td>
+                  <td style={{ color: '#374151', wordBreak: 'break-all', paddingBottom: 3 }}>{subject.id}</td>
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+              )}
+              {attrs.map(([key, value]) => {
+                const isLogo = key === 'logo' && typeof value === 'string'
+                const display = typeof value === 'object' ? JSON.stringify(value) : String(value)
+                return (
+                  <tr key={key}>
+                    <td style={{ color: '#9ca3af', paddingRight: 8, whiteSpace: 'nowrap', verticalAlign: 'top', paddingBottom: 3 }}>{key}</td>
+                    <td style={{ color: '#374151', wordBreak: 'break-all', paddingBottom: 3 }}>
+                      {isLogo
+                        ? <img src={value} alt="logo" style={{ maxWidth: 120, maxHeight: 60, objectFit: 'contain', display: 'block' }} onError={e => { e.currentTarget.style.display = 'none' }} />
+                        : <span title={display}>{display}</span>
+                      }
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </CardSection>
+      )}
     </div>
   )
 }
