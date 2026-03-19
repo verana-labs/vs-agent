@@ -30,12 +30,20 @@ function JsonModal({ data, onClose }) {
   )
 }
 
+function LinkOrText({ text, style }) {
+  if (typeof text === 'string' && text.startsWith('http')) {
+    return <a href={text} target="_blank" rel="noopener noreferrer" className="subtle-link" style={{ wordBreak: 'break-all', ...style }}>{text}</a>
+  }
+  return <span style={style}>{text}</span>
+}
+
 function AttrValue({ value }) {
-  const [showText, setShowText] = useState(false)
+  const [imgFailed, setImgFailed] = useState(false)
   const str = typeof value === 'object' ? JSON.stringify(value) : String(value)
-  if (typeof value !== 'string' || showText) return <span title={str}>{str}</span>
+  if (typeof value !== 'string') return <span>{str}</span>
+  if (imgFailed) return <LinkOrText text={value} />
   return (
-    <img src={value} alt="" style={{ maxWidth: 120, maxHeight: 60, objectFit: 'contain', display: 'block' }} onError={() => setShowText(true)} />
+    <img src={value} alt="" style={{ maxWidth: 120, maxHeight: 60, objectFit: 'contain', display: 'block' }} onError={() => setImgFailed(true)} />
   )
 }
 
@@ -58,18 +66,23 @@ function CredentialCard({ vc, type, onSelect }) {
   const hasAttrs = subject.id || attrs.length > 0
 
   return (
-    <div className="cred-card" onClick={onSelect} style={{ cursor: 'pointer' }}>
+    <div className="cred-card" style={{ position: 'relative' }}>
+      <button className="cred-card-details-btn" onClick={onSelect} title="View details">{'{ }'}</button>
       {type && <div className="cred-card-type">{type}</div>}
 
       {schemaId && (
         <CardSection label="Schema">
-          <div style={{ fontSize: 14, color: '#111827', wordBreak: 'break-all', lineHeight: 1.5 }}>{schemaId}</div>
+          <div style={{ fontSize: 14, color: '#111827', wordBreak: 'break-all', lineHeight: 1.5 }}>
+            <LinkOrText text={schemaId} />
+          </div>
         </CardSection>
       )}
 
       {issuer && (
         <CardSection label="Issuer">
-          <div style={{ fontSize: 14, color: '#111827', wordBreak: 'break-all', lineHeight: 1.5 }}>{issuer}</div>
+          <div style={{ fontSize: 14, color: '#111827', wordBreak: 'break-all', lineHeight: 1.5 }}>
+            <LinkOrText text={issuer} />
+          </div>
         </CardSection>
       )}
 
@@ -81,7 +94,7 @@ function CredentialCard({ vc, type, onSelect }) {
                 {subject.id && (
                   <tr>
                     <td>id</td>
-                    <td>{subject.id}</td>
+                    <td><LinkOrText text={subject.id} /></td>
                   </tr>
                 )}
                 {attrs.map(([key, value]) => (
@@ -249,10 +262,11 @@ export default function Dashboard() {
         title="Schema Credentials"
         items={jscItems}
         renderItem={(item, i) => (
-          <div key={i} className="cred-card" onClick={() => setSelected(item.service)} style={{ cursor: 'pointer' }}>
+          <div key={i} className="cred-card" style={{ position: 'relative' }}>
+            <button className="cred-card-details-btn" onClick={() => setSelected(item.service)} title="View details">{'{ }'}</button>
             <div className="cred-card-type">{item.type}</div>
             <div style={{ fontSize: 12, color: '#6b7280', wordBreak: 'break-all' }}>
-              {item.service.serviceEndpoint}
+              <LinkOrText text={item.service.serviceEndpoint} />
             </div>
           </div>
         )}
