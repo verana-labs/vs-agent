@@ -79,13 +79,13 @@ function CredentialCard({ vc, type, onSelect }) {
             <tbody>
               {subject.id && (
                 <tr>
-                  <td style={{ color: '#9ca3af', paddingRight: 8, whiteSpace: 'nowrap', verticalAlign: 'top', paddingBottom: 3 }}>id</td>
+                  <td style={{ color: '#9ca3af', paddingRight: 8, whiteSpace: 'nowrap', verticalAlign: 'middle', paddingBottom: 3 }}>id</td>
                   <td style={{ color: '#374151', wordBreak: 'break-all', paddingBottom: 3 }}>{subject.id}</td>
                 </tr>
               )}
               {attrs.map(([key, value]) => (
                 <tr key={key}>
-                  <td style={{ color: '#9ca3af', paddingRight: 8, whiteSpace: 'nowrap', verticalAlign: 'top', paddingBottom: 3 }}>{key}</td>
+                  <td style={{ color: '#9ca3af', paddingRight: 8, whiteSpace: 'nowrap', verticalAlign: 'middle', paddingBottom: 3 }}>{key}</td>
                   <td style={{ color: '#374151', wordBreak: 'break-all', paddingBottom: 3 }}>
                     <AttrValue value={value} />
                   </td>
