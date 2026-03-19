@@ -75,24 +75,24 @@ function CredentialCard({ vc, type, onSelect }) {
 
       {hasAttrs && (
         <CardSection label="Attributes">
-          <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
-            <tbody>
-              {subject.id && (
-                <tr>
-                  <td style={{ fontSize: 13, color: '#6b7280', fontWeight: 500, paddingRight: 12, whiteSpace: 'nowrap', verticalAlign: 'middle', paddingBottom: 6 }}>id</td>
-                  <td style={{ color: '#111827', wordBreak: 'break-all', paddingBottom: 6, lineHeight: 1.5 }}>{subject.id}</td>
-                </tr>
-              )}
-              {attrs.map(([key, value]) => (
-                <tr key={key}>
-                  <td style={{ fontSize: 13, color: '#6b7280', fontWeight: 500, paddingRight: 12, whiteSpace: 'nowrap', verticalAlign: 'middle', paddingBottom: 6 }}>{key}</td>
-                  <td style={{ color: '#111827', wordBreak: 'break-all', paddingBottom: 6, lineHeight: 1.5 }}>
-                    <AttrValue value={value} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="cred-card-attrs">
+            <table>
+              <tbody>
+                {subject.id && (
+                  <tr>
+                    <td>id</td>
+                    <td>{subject.id}</td>
+                  </tr>
+                )}
+                {attrs.map(([key, value]) => (
+                  <tr key={key}>
+                    <td>{key}</td>
+                    <td><AttrValue value={value} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </CardSection>
       )}
     </div>

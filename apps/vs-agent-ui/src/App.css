@@ -292,9 +292,7 @@ body {
 
 .cred-card-attrs {
   font-size: var(--text-base);
-  color: var(--color-text-secondary);
   line-height: var(--lh-normal);
-  margin-bottom: 16px;
 }
 
 .cred-card-attrs table {
@@ -304,27 +302,26 @@ body {
 }
 
 .cred-card-attrs td {
-  padding: 4px 0;
-  vertical-align: top;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 0 0 6px 0;
+  vertical-align: middle;
   line-height: var(--lh-normal);
 }
 
 .cred-card-attrs td:first-child {
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
   font-weight: var(--fw-semibold);
   padding-right: 12px;
-  white-space: nowrap;
-  width: 36%;
+  white-space: normal;
+  word-break: break-word;
+  width: 18%;
 }
 
 .cred-card-attrs td:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--color-text-primary);
   word-break: break-all;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .cred-card-actions {
@@ -543,7 +540,13 @@ body {
   }
 
   .cred-cards {
-    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .cred-card {
+    padding: 16px;
+    border-radius: 8px;
+    max-width: 100%;
   }
 
   .create-form {
