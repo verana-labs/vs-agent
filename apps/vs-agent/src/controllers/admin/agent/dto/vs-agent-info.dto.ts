@@ -30,4 +30,10 @@ export class VsAgentInfoDto {
     nullable: true,
   })
   publicDid?: string
+
+  @ApiProperty({
+    description: 'Application version',
+    example: '1.8.1',
+  })
+  version!: string
 }

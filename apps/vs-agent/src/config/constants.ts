@@ -3,7 +3,11 @@ import { LogLevel } from '@credo-ts/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import dotenv from 'dotenv'
 
+import packageJson from '../../package.json'
+
 dotenv.config()
+
+export const AGENT_VERSION: string = packageJson.version
 
 // Basic parameters
 
