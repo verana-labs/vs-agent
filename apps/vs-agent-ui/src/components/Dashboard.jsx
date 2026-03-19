@@ -30,6 +30,15 @@ function JsonModal({ data, onClose }) {
   )
 }
 
+function AttrValue({ value }) {
+  const [showText, setShowText] = useState(false)
+  const str = typeof value === 'object' ? JSON.stringify(value) : String(value)
+  if (typeof value !== 'string' || showText) return <span title={str}>{str}</span>
+  return (
+    <img src={value} alt="" style={{ maxWidth: 120, maxHeight: 60, objectFit: 'contain', display: 'block' }} onError={() => setShowText(true)} />
+  )
+}
+
 function CardSection({ label, children }) {
   return (
     <div style={{ marginBottom: 10 }}>
@@ -74,21 +83,14 @@ function CredentialCard({ vc, type, onSelect }) {
                   <td style={{ color: '#374151', wordBreak: 'break-all', paddingBottom: 3 }}>{subject.id}</td>
                 </tr>
               )}
-              {attrs.map(([key, value]) => {
-                const isLogo = key === 'logo' && typeof value === 'string'
-                const display = typeof value === 'object' ? JSON.stringify(value) : String(value)
-                return (
-                  <tr key={key}>
-                    <td style={{ color: '#9ca3af', paddingRight: 8, whiteSpace: 'nowrap', verticalAlign: 'top', paddingBottom: 3 }}>{key}</td>
-                    <td style={{ color: '#374151', wordBreak: 'break-all', paddingBottom: 3 }}>
-                      {isLogo
-                        ? <img src={value} alt="logo" style={{ maxWidth: 120, maxHeight: 60, objectFit: 'contain', display: 'block' }} onError={e => { e.currentTarget.style.display = 'none' }} />
-                        : <span title={display}>{display}</span>
-                      }
-                    </td>
-                  </tr>
-                )
-              })}
+              {attrs.map(([key, value]) => (
+                <tr key={key}>
+                  <td style={{ color: '#9ca3af', paddingRight: 8, whiteSpace: 'nowrap', verticalAlign: 'top', paddingBottom: 3 }}>{key}</td>
+                  <td style={{ color: '#374151', wordBreak: 'break-all', paddingBottom: 3 }}>
+                    <AttrValue value={value} />
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </CardSection>
