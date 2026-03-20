@@ -364,28 +364,19 @@ export class TrustService {
     throw new HttpException(message || defaultMsg, HttpStatus.INTERNAL_SERVER_ERROR)
   }
 
-  private async fetchJson<T>(url: string): Promise<T> {
-    const res = await fetch(url)
-    if (!res.ok) {
-      throw new HttpException(`Failed to fetch ${url}: ${res.statusText}`, HttpStatus.BAD_REQUEST)
-    }
-    return res.json() as Promise<T>
-  }
-
-  private getCredentialSubjectId(credentialSubject: any): string {
-    const subject = Array.isArray(credentialSubject) ? credentialSubject[0] : credentialSubject
-    const id = subject?.id
-    if (!id) {
-      throw new HttpException(`Missing credentialSubject.id in credential`, HttpStatus.BAD_REQUEST)
-    }
-    return id
-  }
-
-  private findMetadataEntry(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc', id?: string) {
+  private findMetadataEntry(
+    didRecord: DidRecord,
+    key: '_vt/vtc' | '_vt/jsc',
+    id?: string,
+    jsonSchemaRef?: string,
+  ) {
     const metadata = didRecord.metadata.get(key)
     if (!metadata) return null
     if (!id) return { data: metadata }
     for (const [schemaId, entry] of Object.entries(metadata)) {
+      if (schemaId === jsonSchemaRef) {
+        return { schemaId, ...entry, data: entry.verifiablePresentation }
+      }
       const credId = entry.credential?.id
       const presId = entry.verifiablePresentation?.id
 
@@ -417,9 +408,15 @@ export class TrustService {
 
     const record = didRecord.metadata.get(key) ?? {}
     // Remove previous entry for this credential ID (if exists)
-    const found = this.findMetadataEntry(didRecord, key, credential.id)
-    if (found) delete record[found.schemaId]
-
+    const found = this.findMetadataEntry(didRecord, key, credential.id, ref)
+    if (found) {
+      if (didRecord.didDocument?.service) {
+        didRecord.didDocument.service = didRecord.didDocument.service.filter(
+          s => s.id !== found.didDocumentServiceId,
+        )
+      }
+      delete record[found.schemaId]
+    }
     // Save new entry
     record[ref] = {
       credential: credential.jsonCredential,
