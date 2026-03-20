@@ -36,6 +36,74 @@ describe('TrustService', () => {
   let aliceConnection: DidCommConnectionRecord
   let aliceEvents: ReturnType<typeof vi.spyOn>
 
+  describe('JSC creation and DID document references', () => {
+    let jscFaberApp: INestApplication
+    let jscFaberService: TrustService
+    let jscFaberAgent: VsAgent
+
+    beforeEach(async () => {
+      jscFaberAgent = await startAgent({ label: 'Faber JSC Test', domain: 'faber' })
+      jscFaberAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(faberMessages))
+      jscFaberAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+      await jscFaberAgent.initialize()
+      jscFaberApp = await startServersTesting(jscFaberAgent)
+      jscFaberService = jscFaberApp.get<TrustService>(TrustService)
+    })
+
+    afterEach(async () => {
+      await jscFaberApp.close()
+      await jscFaberAgent.shutdown()
+      vi.restoreAllMocks()
+    })
+
+    it('should add a service reference to the DID document after creating a JSC', async () => {
+      await jscFaberService.createJsc(
+        'org-schema',
+        'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-org',
+      )
+
+      const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
+      const services = didRecord.didDocument?.service ?? []
+      const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-jsc-vp`
+
+      expect(services.some(s => s.id === serviceId)).toBe(true)
+    })
+
+    it('should not create duplicate service references when the same JSC is created twice', async () => {
+      const schemaBaseId = 'org-schema'
+      const jsonSchemaRef = 'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-org'
+
+      await jscFaberService.createJsc(schemaBaseId, jsonSchemaRef)
+      await jscFaberService.createJsc(schemaBaseId, jsonSchemaRef)
+
+      const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
+      const services = didRecord.didDocument?.service ?? []
+      const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-jsc-vp`
+      const matchingServices = services.filter(s => s.id === serviceId)
+
+      expect(matchingServices).toHaveLength(1)
+    })
+
+    it('should maintain independent service references for different JSC schemas', async () => {
+      await jscFaberService.createJsc(
+        'org-schema',
+        'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-org',
+      )
+      await jscFaberService.createJsc(
+        'service-schema',
+        'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-service',
+      )
+
+      const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
+      const services = didRecord.didDocument?.service ?? []
+      const orgServiceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-jsc-vp`
+      const svcServiceId = `${jscFaberAgent.did}#vpr-schemas-service-schema-jsc-vp`
+
+      expect(services.filter(s => s.id === orgServiceId)).toHaveLength(1)
+      expect(services.filter(s => s.id === svcServiceId)).toHaveLength(1)
+    })
+  })
+
   describe('Testing for message exchange with VsAgent', async () => {
     beforeEach(async () => {
       faberAgent = await startAgent({ label: 'Faber Test', domain: 'faber' })
