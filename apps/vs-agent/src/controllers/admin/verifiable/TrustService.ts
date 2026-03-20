@@ -138,22 +138,12 @@ export class TrustService {
       const schemaId = `schemas-${id}-c-vp.json`
       const didDocumentServiceId = `${agent.did}#vpr-${schemaId.replace('.json', '')}`
       const serviceEndpoint = `${this.publicApiBaseUrl}/vt/${schemaId}`
-      const record = this.findMetadataEntry(didRecord, '_vt/vtc', serviceEndpoint)
       const unsignedPresentation = createPresentation({
         id: serviceEndpoint,
         holder: agent.did,
         verifiableCredential: [credential],
       })
 
-      if (!record) {
-        didRecord.didDocument?.service?.push(
-          new DidDocumentService({
-            id: didDocumentServiceId,
-            serviceEndpoint,
-            type: 'LinkedVerifiablePresentation',
-          }),
-        )
-      }
       const verifiablePresentation = await signerW3c(
         agent,
         unsignedPresentation,
@@ -187,7 +177,6 @@ export class TrustService {
       const schemaCredential = `schemas-${id}-jsc.json`
       const serviceEndpoint = `${this.publicApiBaseUrl}/vt/${schemaPresentation}`
       const didDocumentServiceId = `${agent.did}#vpr-${schemaPresentation.replace('.json', '')}`
-      const record = this.findMetadataEntry(didRecord, '_vt/jsc', serviceEndpoint)
       const unsignedCredential = createCredential({
         id: `${this.publicApiBaseUrl}/vt/${schemaCredential}`,
         type: ['VerifiableCredential', 'JsonSchemaCredential'],
@@ -218,15 +207,6 @@ export class TrustService {
         getVerificationMethodId(agent.config.logger, didRecord),
       )
 
-      if (!record) {
-        didRecord.didDocument?.service?.push(
-          new DidDocumentService({
-            id: didDocumentServiceId,
-            serviceEndpoint,
-            type: 'LinkedVerifiablePresentation',
-          }),
-        )
-      }
       await this.saveMetadataEntry(
         agent,
         didRecord,
@@ -423,6 +403,13 @@ export class TrustService {
       verifiablePresentation,
       didDocumentServiceId,
     }
+    didRecord.didDocument?.service?.push(
+      new DidDocumentService({
+        id: didDocumentServiceId,
+        serviceEndpoint: verifiablePresentation.id!,
+        type: 'LinkedVerifiablePresentation',
+      }),
+    )
     didRecord.metadata.set(key, record)
 
     // Update #whois with new endpoint
