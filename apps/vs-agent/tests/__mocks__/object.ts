@@ -38,7 +38,31 @@ export const jsonSchemaOrgMock = {
   },
 }
 
+export const jsonSchemaServiceMock = {
+  $id: 'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-service',
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  title: 'ServiceCredential',
+  description: 'ServiceCredential using JsonSchema',
+  type: 'object',
+  properties: {
+    credentialSubject: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uri' },
+        name: { type: 'string', minLength: 0, maxLength: 512 },
+      },
+    },
+  },
+}
+
+export const jsonSchemaV2Mock = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  type: 'object',
+}
+
 export const mockResponses: { [key: string]: any } = {
   'https://example.org/vt/schemas-example-org-jsc.json': jsonSchemaCredentialMock,
   'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-org': jsonSchemaOrgMock,
+  'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-service': jsonSchemaServiceMock,
+  'https://www.w3.org/ns/credentials/json-schema/v2.json': jsonSchemaV2Mock,
 }
