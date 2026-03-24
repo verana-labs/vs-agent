@@ -14,7 +14,7 @@
       "default": "./build/utils/ecs.js"
     }
   },
-  "version": "1.9.0",
+  "version": "1.9.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/verana-labs/vs-agent"

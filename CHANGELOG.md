@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/verana-labs/vs-agent/compare/v1.9.0...v1.9.1) (2026-03-23)
+
+
+### Bug Fixes
+
+* **bug:** replace credential references ([#375](https://github.com/verana-labs/vs-agent/issues/375)) ([8901d89](https://github.com/verana-labs/vs-agent/commit/8901d891250898ebfb009ee7f98d94be9f21e0e1))
+
 ## [1.9.0](https://github.com/verana-labs/vs-agent/compare/v1.8.1...v1.9.0) (2026-03-20)
 
 
