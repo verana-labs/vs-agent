@@ -69,14 +69,6 @@ body {
 .header-logo-icon {
   width: 32px;
   height: 32px;
-  background: #7c3aed;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: var(--fw-semibold);
-  font-size: var(--text-md);
-  color: #fff;
   flex-shrink: 0;
   line-height: var(--lh-tight);
 }
@@ -611,6 +603,5 @@ body {
   .header-logo-icon {
     width: 28px;
     height: 28px;
-    font-size: var(--text-sm);
   }
 }
