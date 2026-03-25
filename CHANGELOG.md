@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.2](https://github.com/verana-labs/vs-agent/compare/v1.9.1...v1.9.2) (2026-03-25)
+
+
+### Bug Fixes
+
+* vs agent main page add verana icon ([#378](https://github.com/verana-labs/vs-agent/issues/378)) ([e9eb4c1](https://github.com/verana-labs/vs-agent/commit/e9eb4c12c636254129b3aae7d7ebee716e0904a6))
+
 ## [1.9.1](https://github.com/verana-labs/vs-agent/compare/v1.9.0...v1.9.1) (2026-03-23)
 
 
