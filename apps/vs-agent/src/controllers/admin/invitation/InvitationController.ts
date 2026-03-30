@@ -1,4 +1,9 @@
-import { AnonCredsRequestedAttribute } from '@credo-ts/anoncreds'
+import {
+  AnonCredsProofRequestRestriction,
+  AnonCredsRequestedAttribute,
+  AnonCredsSchema,
+} from '@credo-ts/anoncreds'
+import { Agent } from '@credo-ts/core'
 import { Controller, Get, Post, Body, Query, Inject } from '@nestjs/common'
 import {
   ApiBadRequestResponse,
@@ -16,7 +21,7 @@ import {
 
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { createInvitation } from '../../../utils'
+import { createInvitation, fetchJson } from '../../../utils'
 
 import { CreateCredentialOfferDto, CreatePresentationRequestDto } from './InvitationDto'
 
@@ -98,30 +103,24 @@ export class InvitationController {
     if (!requestedCredentials?.length) {
       throw Error('You must specify a least a requested credential')
     }
-    const credentialDefinitionId = requestedCredentials[0].credentialDefinitionId
-    let attributes = requestedCredentials[0].attributes
 
-    if (!credentialDefinitionId) {
-      throw Error('Verifiable credential request must include credentialDefinitionId')
-    }
+    const {
+      credentialDefinitionId,
+      relatedJsonSchemaCredentialId,
+      attributes: inputAttributes,
+    } = requestedCredentials[0]
 
-    if (attributes && !Array.isArray(attributes)) {
+    if (inputAttributes && !Array.isArray(inputAttributes)) {
       throw new Error('Received attributes is not an array')
     }
 
-    const { credentialDefinition } =
-      await agent.modules.anoncreds.getCredentialDefinition(credentialDefinitionId)
+    const { schema, restrictions } = await this.resolveSchemaAndRestrictions({
+      agent,
+      credentialDefinitionId,
+      relatedJsonSchemaCredentialId,
+    })
 
-    if (!credentialDefinition) {
-      throw Error(`Cannot find information about credential definition ${credentialDefinitionId}.`)
-    }
-
-    // Verify that requested attributes are present in credential definition
-    const { schema } = await agent.modules.anoncreds.getSchema(credentialDefinition.schemaId)
-
-    if (!schema) {
-      throw Error(`Cannot find information about schema ${credentialDefinition.schemaId}.`)
-    }
+    let attributes = inputAttributes
 
     // If no attributes are specified, request all of them
     if (!attributes) {
@@ -138,7 +137,7 @@ export class InvitationController {
 
     requestedAttributes[schema.name] = {
       names: attributes,
-      restrictions: [{ cred_def_id: credentialDefinitionId }],
+      restrictions,
     }
 
     const request = await agent.didcomm.proofs.createRequest({
@@ -153,7 +152,7 @@ export class InvitationController {
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { url } = await createInvitation({
-      agent: await this.agentService.getAgent(),
+      agent,
       messages: [request.message],
       useLegacyDid,
     })
@@ -283,5 +282,56 @@ export class InvitationController {
       url,
       shortUrl,
     }
+  }
+
+  private async resolveSchemaAndRestrictions({
+    agent,
+    credentialDefinitionId,
+    relatedJsonSchemaCredentialId,
+  }: {
+    agent: Agent
+    credentialDefinitionId?: string
+    relatedJsonSchemaCredentialId?: string
+  }): Promise<{
+    schema: AnonCredsSchema
+    restrictions: AnonCredsProofRequestRestriction[]
+  }> {
+    if (!relatedJsonSchemaCredentialId && !credentialDefinitionId) {
+      throw new Error(
+        'Verifiable credential request must include either credentialDefinitionId or relatedJsonSchemaCredentialId.',
+      )
+    }
+
+    if (relatedJsonSchemaCredentialId) {
+      const resourcesUrl = `${this.publicApiBaseUrl}/resources?resourceType=anonCredsSchema&relatedJsonSchemaCredentialId=${relatedJsonSchemaCredentialId}`
+      const resources = await fetchJson<Array<{ id: string; content: AnonCredsSchema }>>(resourcesUrl)
+
+      if (!resources.length) {
+        throw new Error(`No schema found for relatedJsonSchemaCredentialId: ${relatedJsonSchemaCredentialId}`)
+      }
+
+      const { id: schemaId, content: schema } = resources[0]
+      if (!schemaId) {
+        throw new Error(
+          `Schema resource for relatedJsonSchemaCredentialId ${relatedJsonSchemaCredentialId} has no id.`,
+        )
+      }
+
+      return { schema, restrictions: [{ schema_id: schemaId }] }
+    }
+
+    const { credentialDefinition } = await agent.modules.anoncreds.getCredentialDefinition(
+      credentialDefinitionId!,
+    )
+    if (!credentialDefinition) {
+      throw new Error(`Cannot find credential definition: ${credentialDefinitionId}.`)
+    }
+
+    const { schema } = await agent.modules.anoncreds.getSchema(credentialDefinition.schemaId)
+    if (!schema) {
+      throw new Error(`Cannot find schema: ${credentialDefinition.schemaId}.`)
+    }
+
+    return { schema, restrictions: [{ cred_def_id: credentialDefinitionId! }] }
   }
 }
