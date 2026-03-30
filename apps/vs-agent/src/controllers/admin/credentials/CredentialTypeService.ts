@@ -117,11 +117,18 @@ export class CredentialTypesService {
       }
     } else {
       // No schema found. A new one will be created
-      const schemaAttributes =
-        options.attributes ??
-        (await this.parseJsonSchemaCredential(options.relatedJsonSchemaCredentialId!)).attrNames
+      const parsedJsc = options.relatedJsonSchemaCredentialId
+        ? await this.parseJsonSchemaCredential(options.relatedJsonSchemaCredentialId).catch(() => undefined)
+        : undefined
+      const schemaAttributes = options.attributes ?? parsedJsc?.attrNames
+      if (!schemaAttributes) {
+        throw new Error(
+          'No schema attributes provided and could not be derived from relatedJsonSchemaCredentialId',
+        )
+      }
       const schemaName =
         options.name ??
+        parsedJsc?.title ??
         options.relatedJsonSchemaCredentialId?.match(/schemas-(.+?)-jsc\.json$/)?.[1] ??
         'credential'
 
@@ -315,7 +322,7 @@ export class CredentialTypesService {
       if (attrNames.length === 0) {
         throw new Error(`No properties found in credentialSubject of schema from ${jsonSchemaCredentialId}`)
       }
-      return { parsedSchema, attrNames }
+      return { parsedSchema, attrNames, title: parsedSchema?.title as string | undefined }
     } catch (error) {
       throw new Error(`Failed to parse JSON Schema Credential ${jsonSchemaCredentialId}: ${error}`)
     }
