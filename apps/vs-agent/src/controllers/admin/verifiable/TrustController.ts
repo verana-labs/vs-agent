@@ -40,7 +40,7 @@ export class TrustController {
       anoncreds: {
         summary: 'Anoncreds Credential Example',
         value: {
-          type: 'anoncreds',
+          format: 'anoncreds',
           jsonSchemaCredentialId: 'https://example.org/vt/schemas-example-org-jsc.json',
           claims: {
             id: 'https://example.org/org/123',

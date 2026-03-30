@@ -178,7 +178,7 @@ curl -X 'POST' \
   -H 'accept: */*' \
   -H 'Content-Type: application/json' \
   -d '{
-  "type": "anoncreds",
+  "format": "anoncreds",
   "jsonSchemaCredential": "https://localhost:3001/vt/schemas-organization-jsc.json",
   "claims": {
     "id": "https://example.org/org/123",
