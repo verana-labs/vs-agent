@@ -143,11 +143,9 @@ export class CredentialTypesService {
           'No schema attributes provided and could not be derived from relatedJsonSchemaCredentialId',
         )
       }
-      const schemaName =
-        options.name ??
-        parsedJsc?.title ??
-        options.relatedJsonSchemaCredentialId?.match(/schemas-(.+?)-jsc\.json$/)?.[1] ??
-        'credential'
+
+      const schemaName = options.name ?? parsedJsc?.title
+      if (!schemaName) throw new Error(`Missing schema name (no 'name' or JSON Schema 'title')`)
 
       const schemaRegistrationOptions = {
         extraMetadata: {
