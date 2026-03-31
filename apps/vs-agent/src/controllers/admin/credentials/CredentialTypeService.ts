@@ -103,14 +103,6 @@ export class CredentialTypesService {
     if (credentialDefinitionRecord) return credentialDefinitionRecord
   }
 
-  private async fetchJson<T>(url: string): Promise<T> {
-    const res = await fetch(url)
-    if (!res.ok) {
-      throw new Error(`Failed to fetch ${url}: ${res.statusText}`)
-    }
-    return res.json() as Promise<T>
-  }
-
   public async getOrRegisterAnonCredsSchema(options: {
     schemaId?: string
     attributes?: string[]
@@ -330,6 +322,14 @@ export class CredentialTypesService {
     })
 
     return credentialDefinitionRecord
+  }
+
+  private async fetchJson<T>(url: string): Promise<T> {
+    const res = await fetch(url)
+    if (!res.ok) {
+      throw new Error(`Failed to fetch ${url}: ${res.statusText}`)
+    }
+    return res.json() as Promise<T>
   }
 
   private getCredentialSubjectId(credentialSubject: any): string {
