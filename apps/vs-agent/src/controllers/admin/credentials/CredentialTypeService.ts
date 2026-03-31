@@ -138,8 +138,7 @@ export class CredentialTypesService {
     let schemaId: string | undefined
     let schema: AnonCredsSchema | undefined
 
-    const issuerId = options.issuerId ?? agent.did
-    if (!issuerId) {
+    if (!agent.did) {
       throw new Error('Agent does not have any defined public DID')
     }
     let schemaRecord = await this.findAnonCredsSchema(options)
@@ -149,7 +148,7 @@ export class CredentialTypesService {
       schema = schemaRecord.schema
       return {
         schemaId: schemaRecord.schemaId,
-        issuerId: schemaRecord.schema.issuerId,
+        issuerId: agent.did,
         schema: schemaRecord.schema,
       }
     } else {
@@ -175,7 +174,7 @@ export class CredentialTypesService {
             attrNames: schemaAttributes,
             name: schemaName,
             version: options.version ?? '1.0',
-            issuerId,
+            issuerId: agent.did,
           },
           options: schemaRegistrationOptions,
         })
@@ -205,7 +204,7 @@ export class CredentialTypesService {
         relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId,
       })
     }
-    return { issuerId, schemaId, schema }
+    return { issuerId: agent.did, schemaId, schema }
   }
 
   public async registerAnonCredsCredentialDefinition(options: {
@@ -305,19 +304,22 @@ export class CredentialTypesService {
     if (credentialDefinitionRecord) return credentialDefinitionRecord
 
     // Credential definition not found: create an appropriate schema for it
-    const getOrRegisterSchemaResult = await this.getOrRegisterAnonCredsSchema({
+    const {
+      schema,
+      schemaId: resolvedSchemaId,
+      issuerId: resolvedIssuerId,
+    } = await this.getOrRegisterAnonCredsSchema({
       name,
       version,
       issuerId,
       attributes,
       relatedJsonSchemaCredentialId,
     })
-    const { schema, schemaId: resolvedSchemaId } = getOrRegisterSchemaResult
     credentialDefinitionRecord = await this.registerAnonCredsCredentialDefinition({
       name: schema.name,
       version: schema.version,
       schemaId: resolvedSchemaId,
-      issuerId: schema.issuerId,
+      issuerId: resolvedIssuerId,
       supportRevocation,
       relatedJsonSchemaCredentialId,
     })
