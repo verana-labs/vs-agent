@@ -3,7 +3,7 @@ import {
   AnonCredsRequestedAttribute,
   AnonCredsSchema,
 } from '@credo-ts/anoncreds'
-import { Agent } from '@credo-ts/core'
+import { Agent, parseDid } from '@credo-ts/core'
 import { Controller, Get, Post, Body, Query, Inject } from '@nestjs/common'
 import {
   ApiBadRequestResponse,
@@ -107,6 +107,7 @@ export class InvitationController {
     const {
       credentialDefinitionId,
       relatedJsonSchemaCredentialId,
+      did,
       attributes: inputAttributes,
     } = requestedCredentials[0]
 
@@ -118,6 +119,7 @@ export class InvitationController {
       agent,
       credentialDefinitionId,
       relatedJsonSchemaCredentialId,
+      did,
     })
 
     let attributes = inputAttributes
@@ -288,10 +290,12 @@ export class InvitationController {
     agent,
     credentialDefinitionId,
     relatedJsonSchemaCredentialId,
+    did,
   }: {
     agent: Agent
     credentialDefinitionId?: string
     relatedJsonSchemaCredentialId?: string
+    did?: string
   }): Promise<{
     schema: AnonCredsSchema
     restrictions: AnonCredsProofRequestRestriction[]
@@ -303,7 +307,13 @@ export class InvitationController {
     }
 
     if (relatedJsonSchemaCredentialId) {
-      const resourcesUrl = `${this.publicApiBaseUrl}/resources?resourceType=anonCredsSchema&relatedJsonSchemaCredentialId=${relatedJsonSchemaCredentialId}`
+      if (!did) throw new Error('A DID is required when using relatedJsonSchemaCredentialId.')
+      const parsedIssuerDid = parseDid(did)
+      const didId =
+        parsedIssuerDid.method === 'webvh'
+          ? parsedIssuerDid.id.split(':').slice(1).join('/')
+          : parsedIssuerDid.id.replace(/:/g, '/')
+      const resourcesUrl = `https://${didId}/resources?resourceType=anonCredsSchema&relatedJsonSchemaCredentialId=${relatedJsonSchemaCredentialId}`
       const resources = await fetchJson<Array<{ id: string; content: AnonCredsSchema }>>(resourcesUrl)
 
       if (!resources.length) {
