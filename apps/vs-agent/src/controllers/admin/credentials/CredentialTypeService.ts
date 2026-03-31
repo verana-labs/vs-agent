@@ -9,7 +9,7 @@ import { Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 
 import { VsAgentService } from '../../../services/VsAgentService'
-import { fetchJson, VsAgent } from '../../../utils'
+import { VsAgent } from '../../../utils'
 
 type Tags = TagsBase & {
   type?: never
@@ -72,8 +72,9 @@ export class CredentialTypesService {
     }
 
     const resourcesUrl = `https://${parsedIssuer}/resources?${params.toString()}`
-    const [resource] = await fetchJson<Array<{ id: string; content: AnonCredsSchema }>>(resourcesUrl)
-    if (!resource) return undefined
+    const response = await fetch(resourcesUrl)
+    if (!response.ok) return undefined
+    const [resource] = (await response.json()) as Array<{ id: string; content: AnonCredsSchema }>
 
     return new AnonCredsSchemaRecord({
       schemaId: resource.id,
@@ -100,6 +101,14 @@ export class CredentialTypesService {
       relatedJsonSchemaCredentialId,
     })
     if (credentialDefinitionRecord) return credentialDefinitionRecord
+  }
+
+  private async fetchJson<T>(url: string): Promise<T> {
+    const res = await fetch(url)
+    if (!res.ok) {
+      throw new Error(`Failed to fetch ${url}: ${res.statusText}`)
+    }
+    return res.json() as Promise<T>
   }
 
   public async getOrRegisterAnonCredsSchema(options: {
@@ -334,9 +343,9 @@ export class CredentialTypesService {
 
   public async parseJsonSchemaCredential(jsonSchemaCredentialId: string) {
     try {
-      const jscData = await fetchJson<W3cCredential>(jsonSchemaCredentialId)
+      const jscData = await this.fetchJson<W3cCredential>(jsonSchemaCredentialId)
       const subjectId = this.getCredentialSubjectId(jscData.credentialSubject)
-      const schemaData = await fetchJson<JsonObject>(mapToEcosystem(subjectId))
+      const schemaData = await this.fetchJson<JsonObject>(mapToEcosystem(subjectId))
       const parsedSchema = schemaData as any
       const subjectProps = parsedSchema?.properties?.credentialSubject?.properties ?? {}
 
