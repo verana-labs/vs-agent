@@ -147,6 +147,9 @@ importers:
       '@verana-labs/vs-agent-model':
         specifier: workspace:*
         version: link:../../packages/model
+      '@verana-labs/vs-agent-sdk':
+        specifier: workspace:*
+        version: link:../../packages/agent-sdk
       ajv:
         specifier: ^8.17.1
         version: 8.17.1
@@ -455,6 +458,73 @@ importers:
       typescript:
         specifier: ^5.6.2
         version: 5.8.3
+
+  packages/agent-sdk:
+    dependencies:
+      '@2060.io/credo-ts-didcomm-calls':
+        specifier: ^0.0.11
+        version: 0.0.11(@credo-ts/core@0.6.3(typescript@5.8.3))(@credo-ts/didcomm@0.6.3(typescript@5.8.3))
+      '@2060.io/credo-ts-didcomm-media-sharing':
+        specifier: 0.0.6
+        version: 0.0.6(typescript@5.8.3)
+      '@2060.io/credo-ts-didcomm-mrtd':
+        specifier: 0.0.20
+        version: 0.0.20(@credo-ts/core@0.6.3(typescript@5.8.3))(@credo-ts/didcomm@0.6.3(typescript@5.8.3))(typescript@5.8.3)
+      '@2060.io/credo-ts-didcomm-receipts':
+        specifier: 0.0.8
+        version: 0.0.8(typescript@5.8.3)
+      '@2060.io/credo-ts-didcomm-user-profile':
+        specifier: 0.0.8
+        version: 0.0.8(@credo-ts/core@0.6.3(typescript@5.8.3))(@credo-ts/didcomm@0.6.3(typescript@5.8.3))
+      '@credo-ts/action-menu':
+        specifier: ^0.6.3
+        version: 0.6.3(patch_hash=7b7k34m2j7vr2ue7r5smdrb5ke)(typescript@5.8.3)
+      '@credo-ts/anoncreds':
+        specifier: ^0.6.3
+        version: 0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.8.3)
+      '@credo-ts/askar':
+        specifier: ^0.6.3
+        version: 0.6.3(@openwallet-foundation/askar-shared@0.4.3)(typescript@5.8.3)
+      '@credo-ts/core':
+        specifier: ^0.6.3
+        version: 0.6.3(typescript@5.8.3)
+      '@credo-ts/didcomm':
+        specifier: ^0.6.3
+        version: 0.6.3(typescript@5.8.3)
+      '@credo-ts/node':
+        specifier: ^0.6.3
+        version: 0.6.3(typescript@5.8.3)
+      '@credo-ts/question-answer':
+        specifier: ^0.6.3
+        version: 0.6.3(typescript@5.8.3)
+      '@credo-ts/webvh':
+        specifier: ^0.6.3
+        version: 0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.8.3)
+      '@hyperledger/anoncreds-nodejs':
+        specifier: 0.2.4
+        version: 0.2.4
+      '@openwallet-foundation/askar-nodejs':
+        specifier: ^0.4.3
+        version: 0.4.3
+      '@verana-labs/vs-agent-model':
+        specifier: workspace:*
+        version: link:../model
+      credo-ts-didweb-anoncreds:
+        specifier: ^0.0.1-alpha.10
+        version: 0.0.1-alpha.14(@credo-ts/anoncreds@0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.8.3))(@credo-ts/core@0.6.3(typescript@5.8.3))(@hyperledger/anoncreds-shared@0.2.4)
+      didwebvh-ts:
+        specifier: ^2.5.6
+        version: 2.7.2
+      express:
+        specifier: ^4.18.1
+        version: 4.21.2
+      tsyringe:
+        specifier: 4.8.0
+        version: 4.8.0
+    devDependencies:
+      ts-node-dev:
+        specifier: ^2.0.0
+        version: 2.0.0(@types/node@20.11.19)(typescript@5.8.3)
 
   packages/client:
     dependencies:
@@ -5590,10 +5660,33 @@ snapshots:
       class-validator: 0.14.1
       tsyringe: 4.8.0
 
+  '@2060.io/credo-ts-didcomm-calls@0.0.11(@credo-ts/core@0.6.3(typescript@5.8.3))(@credo-ts/didcomm@0.6.3(typescript@5.8.3))':
+    dependencies:
+      '@credo-ts/core': 0.6.3(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.6.3(typescript@5.8.3)
+      class-transformer: 0.5.1
+      class-validator: 0.14.1
+      tsyringe: 4.8.0
+
   '@2060.io/credo-ts-didcomm-media-sharing@0.0.6(typescript@5.7.2)':
     dependencies:
       '@credo-ts/core': 0.6.3(typescript@5.7.2)
       '@credo-ts/didcomm': 0.6.3(typescript@5.7.2)
+      class-transformer: 0.5.1
+      class-validator: 0.14.3
+      reflect-metadata: 0.1.14
+      rxjs: 7.8.2
+      tsyringe: 4.8.0
+      uuid: 9.0.1
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - typescript
+
+  '@2060.io/credo-ts-didcomm-media-sharing@0.0.6(typescript@5.8.3)':
+    dependencies:
+      '@credo-ts/core': 0.6.3(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.6.3(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.3
       reflect-metadata: 0.1.14
@@ -5679,6 +5772,16 @@ snapshots:
     dependencies:
       '@credo-ts/core': 0.6.3(typescript@5.7.2)
       '@credo-ts/didcomm': 0.6.3(typescript@5.7.2)
+      class-transformer: 0.5.1
+      class-validator: 0.14.1
+      reflect-metadata: 0.1.14
+      rxjs: 7.8.2
+      tsyringe: 4.8.0
+
+  '@2060.io/credo-ts-didcomm-user-profile@0.0.8(@credo-ts/core@0.6.3(typescript@5.8.3))(@credo-ts/didcomm@0.6.3(typescript@5.8.3))':
+    dependencies:
+      '@credo-ts/core': 0.6.3(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.6.3(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
@@ -5908,6 +6011,18 @@ snapshots:
       - supports-color
       - typescript
 
+  '@credo-ts/action-menu@0.6.3(patch_hash=7b7k34m2j7vr2ue7r5smdrb5ke)(typescript@5.8.3)':
+    dependencies:
+      '@credo-ts/core': 0.6.3(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.6.3(typescript@5.8.3)
+      class-transformer: 0.5.1
+      class-validator: 0.14.3
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - typescript
+
   '@credo-ts/anoncreds@0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.7.2)':
     dependencies:
       '@astronautlabs/jsonpath': 1.1.2
@@ -5923,9 +6038,37 @@ snapshots:
       - supports-color
       - typescript
 
+  '@credo-ts/anoncreds@0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.8.3)':
+    dependencies:
+      '@astronautlabs/jsonpath': 1.1.2
+      '@credo-ts/core': 0.6.3(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.6.3(typescript@5.8.3)
+      '@hyperledger/anoncreds-shared': 0.2.4
+      '@sphereon/pex-models': 2.3.2
+      class-transformer: 0.5.1
+      class-validator: 0.14.3
+      reflect-metadata: 0.2.2
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - typescript
+
   '@credo-ts/askar@0.6.3(@openwallet-foundation/askar-shared@0.4.3)(typescript@5.7.2)':
     dependencies:
       '@credo-ts/core': 0.6.3(typescript@5.7.2)
+      '@openwallet-foundation/askar-shared': 0.4.3
+      class-transformer: 0.5.1
+      class-validator: 0.14.3
+      rxjs: 7.8.2
+      tsyringe: 4.8.0
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - typescript
+
+  '@credo-ts/askar@0.6.3(@openwallet-foundation/askar-shared@0.4.3)(typescript@5.8.3)':
+    dependencies:
+      '@credo-ts/core': 0.6.3(typescript@5.8.3)
       '@openwallet-foundation/askar-shared': 0.4.3
       class-transformer: 0.5.1
       class-validator: 0.14.3
@@ -6075,6 +6218,21 @@ snapshots:
       - typescript
       - utf-8-validate
 
+  '@credo-ts/node@0.6.3(typescript@5.8.3)':
+    dependencies:
+      '@credo-ts/core': 0.6.3(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.6.3(typescript@5.8.3)
+      '@types/express': 5.0.6
+      express: 5.2.1
+      rxjs: 7.8.2
+      ws: 8.19.0
+    transitivePeerDependencies:
+      - bufferutil
+      - encoding
+      - supports-color
+      - typescript
+      - utf-8-validate
+
   '@credo-ts/question-answer@0.6.3(typescript@5.7.2)':
     dependencies:
       '@credo-ts/core': 0.6.3(typescript@5.7.2)
@@ -6087,10 +6245,37 @@ snapshots:
       - supports-color
       - typescript
 
+  '@credo-ts/question-answer@0.6.3(typescript@5.8.3)':
+    dependencies:
+      '@credo-ts/core': 0.6.3(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.6.3(typescript@5.8.3)
+      class-transformer: 0.5.1
+      class-validator: 0.14.3
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - typescript
+
   '@credo-ts/webvh@0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.7.2)':
     dependencies:
       '@credo-ts/anoncreds': 0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.7.2)
       '@credo-ts/core': 0.6.3(typescript@5.7.2)
+      class-transformer: 0.5.1
+      class-validator: 0.14.3
+      didwebvh-ts: 2.7.2
+      json-canonicalize: 2.0.0
+      tsyringe: 4.8.0
+    transitivePeerDependencies:
+      - '@hyperledger/anoncreds-shared'
+      - encoding
+      - supports-color
+      - typescript
+
+  '@credo-ts/webvh@0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.8.3)':
+    dependencies:
+      '@credo-ts/anoncreds': 0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.8.3)
+      '@credo-ts/core': 0.6.3(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.3
       didwebvh-ts: 2.7.2
@@ -6440,7 +6625,7 @@ snapshots:
 
   '@isaacs/fs-minipass@4.0.1':
     dependencies:
-      minipass: 7.1.2
+      minipass: 7.1.3
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -8285,7 +8470,7 @@ snapshots:
   cosmiconfig@8.3.6(typescript@5.7.2):
     dependencies:
       import-fresh: 3.3.1
-      js-yaml: 4.1.0
+      js-yaml: 4.1.1
       parse-json: 5.2.0
       path-type: 4.0.0
     optionalDependencies:
@@ -8299,6 +8484,14 @@ snapshots:
     dependencies:
       '@credo-ts/anoncreds': 0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.7.2)
       '@credo-ts/core': 0.6.3(typescript@5.7.2)
+      '@hyperledger/anoncreds-shared': 0.2.4
+      canonicalize: 1.0.8
+      query-string: 7.1.3
+
+  credo-ts-didweb-anoncreds@0.0.1-alpha.14(@credo-ts/anoncreds@0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.8.3))(@credo-ts/core@0.6.3(typescript@5.8.3))(@hyperledger/anoncreds-shared@0.2.4):
+    dependencies:
+      '@credo-ts/anoncreds': 0.6.3(@hyperledger/anoncreds-shared@0.2.4)(typescript@5.8.3)
+      '@credo-ts/core': 0.6.3(typescript@5.8.3)
       '@hyperledger/anoncreds-shared': 0.2.4
       canonicalize: 1.0.8
       query-string: 7.1.3
@@ -9832,7 +10025,7 @@ snapshots:
 
   minizlib@3.1.0:
     dependencies:
-      minipass: 7.1.2
+      minipass: 7.1.3
 
   mkdirp@0.5.6:
     dependencies:

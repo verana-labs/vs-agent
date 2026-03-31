@@ -1,0 +1,61 @@
+{
+  "name": "@verana-labs/vs-agent-sdk",
+  "main": "build/index",
+  "types": "build/index",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "require": "./build/index.js",
+      "default": "./build/index.js"
+    }
+  },
+  "version": "1.9.2",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/verana-labs/vs-agent"
+  },
+  "files": [
+    "build"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "Apache-2.0",
+  "description": "Framework-agnostic Verifiable Service Agent SDK",
+  "scripts": {
+    "build": "pnpm run clean && pnpm run compile",
+    "clean": "rimraf -rf ./build",
+    "compile": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "version": "pnpm version --allow-same-version",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@2060.io/credo-ts-didcomm-calls": "^0.0.11",
+    "@2060.io/credo-ts-didcomm-media-sharing": "0.0.6",
+    "@2060.io/credo-ts-didcomm-mrtd": "0.0.20",
+    "@2060.io/credo-ts-didcomm-receipts": "0.0.8",
+    "@2060.io/credo-ts-didcomm-user-profile": "0.0.8",
+    "@credo-ts/action-menu": "^0.6.3",
+    "@credo-ts/anoncreds": "^0.6.3",
+    "@credo-ts/askar": "^0.6.3",
+    "@credo-ts/core": "^0.6.3",
+    "@credo-ts/didcomm": "^0.6.3",
+    "@credo-ts/question-answer": "^0.6.3",
+    "@credo-ts/webvh": "^0.6.3",
+    "@hyperledger/anoncreds-nodejs": "^0.2.4",
+    "@openwallet-foundation/askar-nodejs": "^0.4.3",
+    "credo-ts-didweb-anoncreds": "^0.0.1-alpha.10",
+    "didwebvh-ts": "^2.5.6",
+    "tsyringe": "4.8.0",
+    "@verana-labs/vs-agent-model": "workspace:*",
+    "express": "^4.18.1"
+  },
+  "peerDependencies": {
+    "@credo-ts/core": "^0.6.3",
+    "@credo-ts/node": "^0.6.3"
+  },
+  "devDependencies": {
+    "ts-node-dev": "^2.0.0"
+  }
+}

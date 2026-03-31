@@ -1,0 +1,49 @@
+import { parseDid } from '@credo-ts/core'
+import { DidCommHandshakeProtocol, DidCommMessage } from '@credo-ts/didcomm'
+
+import { VsAgent } from '../agent/VsAgent'
+import { DidCommAgentModules } from '../agent/types'
+
+/**
+ * Creates an out of band invitation that will equal to the public DID in case the agent has one defined,
+ * and a new one every time in case the agent does not have any public DID.
+ */
+export async function createInvitation(options: {
+  agent: VsAgent<DidCommAgentModules>
+  messages?: DidCommMessage[]
+  useLegacyDid?: boolean
+  invitationBaseUrl: string
+  imageUrl?: string
+}) {
+  const { agent, messages, useLegacyDid, invitationBaseUrl, imageUrl } = options
+
+  const invitationDid =
+    agent.did && parseDid(agent.did).method === 'webvh' && useLegacyDid
+      ? `did:web:${parseDid(agent.did).id.split(':')[1]}`
+      : agent.did
+
+  const outOfBandInvitation = (
+    await agent.didcomm.oob.createInvitation({
+      label: agent.label,
+      handshakeProtocols: [DidCommHandshakeProtocol.DidExchange, DidCommHandshakeProtocol.Connections],
+      invitationDid,
+      multiUseInvitation: !messages,
+      imageUrl,
+      messages,
+    })
+  ).outOfBandInvitation
+  return {
+    url: outOfBandInvitation.toUrl({
+      domain: invitationBaseUrl,
+    }),
+  }
+}
+
+export async function getWebDid(agent: VsAgent) {
+  if (agent.did) {
+    const parsedDid = parseDid(agent.did)
+
+    if (parsedDid.method === 'web') return agent.did
+    if (parsedDid.method === 'webvh') return `did:web:${parsedDid.id.split(':')[1]}`
+  }
+}

@@ -1,0 +1,33 @@
+// Agent
+export { VsAgent, defaultDocumentLoader } from './agent/VsAgent'
+export type { VsAgentOptions } from './agent/VsAgent'
+export { createVsAgent } from './agent/createVsAgent'
+export type { CreateVsAgentOptions } from './agent/createVsAgent'
+export type { BaseAgentModules, DidCommAgentModules } from './agent/types'
+
+// Plugins
+export { setupVeranaSigner } from './plugins/setupVeranaSigner'
+export type { SignerPlugin, SignerPluginOptions } from './plugins/setupVeranaSigner'
+export { setupDidComm } from './plugins/setupDidComm'
+export type { DidCommPlugin, DidCommPluginOptions } from './plugins/setupDidComm'
+
+// DID utilities
+export { CachedWebDidResolver } from './did/CachedWebDidResolver'
+export { WebDidRegistrar } from './did/WebDidRegistrar'
+export { getLegacyDidDocument } from './did/legacyDidWeb'
+
+// Transports
+export { HttpInboundTransport, HttpTransportSession } from './transports/HttpInboundTransport'
+export { VsAgentWsInboundTransport, WebSocketTransportSession } from './transports/VsAgentWsInboundTransport'
+export { VsAgentWsOutboundTransport } from './transports/VsAgentWsOutboundTransport'
+
+// Credentials
+export { FullTailsFileService, tailsIndex, baseFilePath } from './credentials/FullTailsFileService'
+
+// Utils
+export { createInvitation, getWebDid } from './utils/agent'
+export { parseDataUrl, parsePictureData, createDataUrl, didcommReceiptFromVsAgentReceipt, UriValidator } from './utils/parsers'
+export { getEcsSchemas } from './utils/data'
+export { webhookListener } from './utils/webhook'
+export type { WebhookData } from './utils/webhook'
+export * from './utils/util'
