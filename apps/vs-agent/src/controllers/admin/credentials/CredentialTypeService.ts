@@ -53,30 +53,26 @@ export class CredentialTypesService {
       throw new Error('Either relatedJsonSchemaCredentialId or "name" and "version" must be provided')
     }
 
-    const issuerId = options.issuerId ?? agent.did
-    if (!issuerId) {
-      throw new Error('Agent does not have any defined public DID')
+    if (!options.issuerId) {
+      const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({
+        relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId,
+      })
+      return schemaRecord ?? undefined
     }
 
-    const parsedIssuerDid = parseDid(issuerId)
-    const didId =
+    const parsedIssuerDid = parseDid(options.issuerId)
+    const parsedIssuer =
       parsedIssuerDid.method === 'webvh'
         ? parsedIssuerDid.id.split(':').slice(1).join('/')
         : parsedIssuerDid.id.replace(/:/g, '/')
 
     const params = new URLSearchParams({ resourceType: 'anonCredsSchema' })
-
     if (options.relatedJsonSchemaCredentialId) {
       params.set('relatedJsonSchemaCredentialId', options.relatedJsonSchemaCredentialId)
     }
 
-    const resourcesUrl = `https://${didId}/resources?${params.toString()}`
-    const resources = await fetchJson<Array<{ id: string; content: AnonCredsSchema }>>(resourcesUrl)
-
-    const resource = options.relatedJsonSchemaCredentialId
-      ? resources[0]
-      : resources.find(r => r.content.name === options.name && r.content.version === options.version)
-
+    const resourcesUrl = `https://${parsedIssuer}/resources?${params.toString()}`
+    const [resource] = await fetchJson<Array<{ id: string; content: AnonCredsSchema }>>(resourcesUrl)
     if (!resource) return undefined
 
     return new AnonCredsSchemaRecord({
