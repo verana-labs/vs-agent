@@ -1,9 +1,10 @@
 import {
   AnonCredsCredentialDefinitionRepository,
   AnonCredsSchema,
+  AnonCredsSchemaRecord,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
-import { JsonObject, TagsBase, utils, W3cCredential } from '@credo-ts/core'
+import { JsonObject, parseDid, TagsBase, utils, W3cCredential } from '@credo-ts/core'
 import { Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 
@@ -48,7 +49,7 @@ export class CredentialTypesService {
       if (schemaRecord) return schemaRecord
     }
 
-    if (!options.relatedJsonSchemaCredentialId && (!options.name || !options.version)) {
+    if (!options.relatedJsonSchemaCredentialId || (!options.name && !options.version)) {
       throw new Error('Either relatedJsonSchemaCredentialId or "name" and "version" must be provided')
     }
     const issuerId = options.issuerId ?? agent.did
@@ -56,13 +57,25 @@ export class CredentialTypesService {
       throw new Error('Agent does not have any defined public DID')
     }
 
-    const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({
-      issuerId,
-      ...(options.relatedJsonSchemaCredentialId && {
-        relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId,
-      }),
+    const parsedIssuerDid = parseDid(issuerId)
+    const didId =
+      parsedIssuerDid.method === 'webvh'
+        ? parsedIssuerDid.id.split(':').slice(1).join('/')
+        : parsedIssuerDid.id.replace(/:/g, '/')
+
+    const params = new URLSearchParams({ resourceType: 'anonCredsSchema' })
+    params.set('relatedJsonSchemaCredentialId', options.relatedJsonSchemaCredentialId)
+
+    const resourcesUrl = `https://${didId}/resources?${params.toString()}`
+    const [resource] = await fetchJson<Array<{ id: string; content: AnonCredsSchema }>>(resourcesUrl)
+
+    if (!resource) return undefined
+
+    return new AnonCredsSchemaRecord({
+      schemaId: resource.id,
+      schema: resource.content,
+      methodName: parsedIssuerDid.method,
     })
-    if (schemaRecord) return schemaRecord
   }
 
   public async findAnonCredsCredentialDefinition(options: {
