@@ -118,7 +118,7 @@ export class CredentialTypesService {
     } else {
       // No schema found. A new one will be created
       const parsedJsc = options.relatedJsonSchemaCredentialId
-        ? await this.parseJsonSchemaCredential(options.relatedJsonSchemaCredentialId).catch(() => undefined)
+        ? await this.parseJsonSchemaCredential(options.relatedJsonSchemaCredentialId)
         : undefined
       const schemaAttributes = options.attributes ?? parsedJsc?.attrNames
       if (!schemaAttributes) {
