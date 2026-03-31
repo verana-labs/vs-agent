@@ -147,11 +147,12 @@ export class CredentialTypesController {
       let credentialDefinitionRecord = await this.service.findAnonCredsCredentialDefinition({
         name,
         version,
+        relatedJsonSchemaCredentialId,
       })
 
       if (credentialDefinitionRecord) {
         throw new BadRequestException(
-          `Credential type with name "${name}", version "${version}" already exists.`,
+          `Credential type with name "${name}", version "${version}" or related JSON Schema credential ID ${relatedJsonSchemaCredentialId} already exists.`,
         )
       }
 
