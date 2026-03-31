@@ -1,7 +1,6 @@
 import {
   AnonCredsCredentialDefinitionRepository,
   AnonCredsSchema,
-  AnonCredsSchemaRecord,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
 import { JsonObject, TagsBase, utils, W3cCredential } from '@credo-ts/core'
@@ -41,20 +40,20 @@ export class CredentialTypesService {
     version?: string
     issuerId?: string
     relatedJsonSchemaCredentialId?: string
-  }): Promise<AnonCredsSchemaRecord | undefined> {
+  }) {
     const agent = await this.agentService.getAgent()
 
     if (options.schemaId) {
       const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({ schemaId: options.schemaId })
-      return schemaRecord ?? undefined
+      if (schemaRecord) return schemaRecord
     }
 
+    if (!options.relatedJsonSchemaCredentialId && (!options.name || !options.version)) {
+      throw new Error('Either relatedJsonSchemaCredentialId or "name" and "version" must be provided')
+    }
     const issuerId = options.issuerId ?? agent.did
     if (!issuerId) {
       throw new Error('Agent does not have any defined public DID')
-    }
-    if (!options.relatedJsonSchemaCredentialId && (!options.name || !options.version)) {
-      throw new Error('Either relatedJsonSchemaCredentialId or "name" and "version" must be provided')
     }
 
     const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({
@@ -63,7 +62,7 @@ export class CredentialTypesService {
         relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId,
       }),
     })
-    return schemaRecord ?? undefined
+    if (schemaRecord) return schemaRecord
   }
 
   public async findAnonCredsCredentialDefinition(options: {
@@ -138,14 +137,11 @@ export class CredentialTypesService {
         ? await this.parseJsonSchemaCredential(options.relatedJsonSchemaCredentialId)
         : undefined
       const schemaAttributes = options.attributes ?? parsedJsc?.attrNames
-      if (!schemaAttributes) {
-        throw new Error(
-          'No schema attributes provided and could not be derived from relatedJsonSchemaCredentialId',
-        )
-      }
-
       const schemaName = options.name ?? parsedJsc?.title
-      if (!schemaName) throw new Error(`Missing schema name (no 'name' or JSON Schema 'title')`)
+
+      if (!schemaAttributes || !schemaName) {
+        throw new Error('Schema must include both name and attributes (provided or derived from JSON Schema)')
+      }
 
       const schemaRegistrationOptions = {
         extraMetadata: {
