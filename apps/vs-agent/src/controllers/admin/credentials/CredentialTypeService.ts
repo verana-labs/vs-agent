@@ -245,7 +245,7 @@ export class CredentialTypesService {
     const credentialDefinitionId = credentialDefinitionState.credentialDefinitionId
 
     if (!credentialDefinitionId) {
-      throw new Error(`Cannot create credential definition: ${JSON.stringify(credentialRegistration)}`)
+      throw new Error(`Cannot create credential definition: ${JSON.stringify(credentialDefinitionState)}`)
     }
 
     // Apply name and version as tags
