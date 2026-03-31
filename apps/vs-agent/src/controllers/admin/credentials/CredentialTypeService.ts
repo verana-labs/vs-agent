@@ -41,7 +41,7 @@ export class CredentialTypesService {
     version?: string
     issuerId?: string
     relatedJsonSchemaCredentialId?: string
-  }) {
+  }): Promise<AnonCredsSchemaRecord | undefined> {
     const agent = await this.agentService.getAgent()
 
     if (options.schemaId) {
