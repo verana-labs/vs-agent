@@ -49,9 +49,10 @@ export class CredentialTypesService {
       if (schemaRecord) return schemaRecord
     }
 
-    if (!options.relatedJsonSchemaCredentialId || (!options.name && !options.version)) {
+    if (!options.relatedJsonSchemaCredentialId && (!options.name || !options.version)) {
       throw new Error('Either relatedJsonSchemaCredentialId or "name" and "version" must be provided')
     }
+
     const issuerId = options.issuerId ?? agent.did
     if (!issuerId) {
       throw new Error('Agent does not have any defined public DID')
@@ -64,10 +65,17 @@ export class CredentialTypesService {
         : parsedIssuerDid.id.replace(/:/g, '/')
 
     const params = new URLSearchParams({ resourceType: 'anonCredsSchema' })
-    params.set('relatedJsonSchemaCredentialId', options.relatedJsonSchemaCredentialId)
+
+    if (options.relatedJsonSchemaCredentialId) {
+      params.set('relatedJsonSchemaCredentialId', options.relatedJsonSchemaCredentialId)
+    }
 
     const resourcesUrl = `https://${didId}/resources?${params.toString()}`
-    const [resource] = await fetchJson<Array<{ id: string; content: AnonCredsSchema }>>(resourcesUrl)
+    const resources = await fetchJson<Array<{ id: string; content: AnonCredsSchema }>>(resourcesUrl)
+
+    const resource = options.relatedJsonSchemaCredentialId
+      ? resources[0]
+      : resources.find(r => r.content.name === options.name && r.content.version === options.version)
 
     if (!resource) return undefined
 

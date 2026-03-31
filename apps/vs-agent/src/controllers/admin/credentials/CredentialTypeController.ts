@@ -118,6 +118,14 @@ export class CredentialTypesController {
           supportRevocation: true,
         },
       },
+      govId: {
+        summary: 'Government ID VC (linked to JSON Schema)',
+        value: {
+          issuerId:
+            'did:webvh:QmbfsYcjFS2bnouwXBSoZZ65jREEgZGSPdcatcwY7i1Gq2:dm.gov-id-issuer.demos.dev.2060.io',
+          relatedJsonSchemaCredentialId: 'https://dm.gov-id-tr.demos.dev.2060.io/vt/schemas-gov-id-jsc.json',
+        },
+      },
     },
   })
   @ApiOkResponse({
@@ -149,8 +157,8 @@ export class CredentialTypesController {
 
       const { schema, schemaId } = await this.service.getOrRegisterAnonCredsSchema(options)
       credentialDefinitionRecord = await this.service.registerAnonCredsCredentialDefinition({
-        name,
-        version,
+        name: name ?? schema.name,
+        version: version ?? schema.version,
         schemaId: schemaId,
         issuerId: schema.issuerId,
         supportRevocation,
