@@ -1,6 +1,7 @@
 import {
   AnonCredsCredentialDefinitionRepository,
   AnonCredsSchema,
+  AnonCredsSchemaRecord,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
 import { JsonObject, TagsBase, utils, W3cCredential } from '@credo-ts/core'
@@ -40,25 +41,29 @@ export class CredentialTypesService {
     version?: string
     issuerId?: string
     relatedJsonSchemaCredentialId?: string
-  }) {
+  }): Promise<AnonCredsSchemaRecord | undefined> {
     const agent = await this.agentService.getAgent()
-    let schemaId: string | undefined
 
-    if (!options.relatedJsonSchemaCredentialId && (!options.name || !options.version)) {
-      throw new Error('Either relatedJsonSchemaCredentialId or "name" and "version" must be provided')
+    if (options.schemaId) {
+      const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({ schemaId: options.schemaId })
+      return schemaRecord ?? undefined
     }
+
     const issuerId = options.issuerId ?? agent.did
     if (!issuerId) {
       throw new Error('Agent does not have any defined public DID')
     }
+    if (!options.relatedJsonSchemaCredentialId && (!options.name || !options.version)) {
+      throw new Error('Either relatedJsonSchemaCredentialId or "name" and "version" must be provided')
+    }
 
     const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({
-      schemaId,
       issuerId,
-      // FIXME: use an advanced query to allow searching for null values when relatedJsonSchemaCredentialId is not provided
-      relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId ?? 'dummy-value-to-avoid-null',
+      ...(options.relatedJsonSchemaCredentialId && {
+        relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId,
+      }),
     })
-    if (schemaRecord) return schemaRecord
+    return schemaRecord ?? undefined
   }
 
   public async findAnonCredsCredentialDefinition(options: {
@@ -89,6 +94,18 @@ export class CredentialTypesService {
     issuerId?: string
     relatedJsonSchemaCredentialId?: string
   }) {
+    if (options.schemaId) {
+      const schemaRecord = await this.findAnonCredsSchema({ schemaId: options.schemaId })
+      if (!schemaRecord) {
+        throw new Error(`Schema not found for schemaId: ${options.schemaId}`)
+      }
+      return {
+        schemaId: schemaRecord.schemaId,
+        issuerId: schemaRecord.schema.issuerId,
+        schema: schemaRecord.schema,
+      }
+    }
+
     if (options.attributes && options.relatedJsonSchemaCredentialId) {
       throw new Error('Cannot provide both "attributes" and "relatedJsonSchemaCredentialId" options')
     }
