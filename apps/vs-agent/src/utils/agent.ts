@@ -1,52 +1,27 @@
-import { parseDid } from '@credo-ts/core'
-import { DidCommHandshakeProtocol, DidCommMessage } from '@credo-ts/didcomm'
+import {
+  createInvitation as sdkCreateInvitation,
+  getWebDid,
+  VsAgent,
+} from '@verana-labs/vs-agent-sdk'
+import { DidCommMessage } from '@credo-ts/didcomm'
 
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../config/constants'
+import { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 
-import { VsAgent } from './VsAgent'
+export { getWebDid }
 
 /**
- * Creates an out of band invitation that will equal to the public DID in case the agent has one defined,
- * and a new one every time in case the agent does not have any public DID.
- *
- * @param agent
- * @returns
+ * Creates an out of band invitation using app-level configuration.
+ * Wraps the SDK createInvitation with constants from environment variables.
  */
 export async function createInvitation(options: {
-  agent: VsAgent
+  agent: VsAgent<DidCommAgentModules>
   messages?: DidCommMessage[]
   useLegacyDid?: boolean
 }) {
-  const { agent, messages, useLegacyDid } = options
-
-  // Use legacy did:web in case agent's did is webvh and using legacy did
-  const invitationDid =
-    agent.did && parseDid(agent.did).method === 'webvh' && useLegacyDid
-      ? `did:web:${parseDid(agent.did).id.split(':')[1]}`
-      : agent.did
-
-  const outOfBandInvitation = (
-    await agent.didcomm.oob.createInvitation({
-      label: agent.label,
-      handshakeProtocols: [DidCommHandshakeProtocol.DidExchange, DidCommHandshakeProtocol.Connections],
-      invitationDid,
-      multiUseInvitation: !messages,
-      imageUrl: AGENT_INVITATION_IMAGE_URL,
-      messages,
-    })
-  ).outOfBandInvitation
-  return {
-    url: outOfBandInvitation.toUrl({
-      domain: AGENT_INVITATION_BASE_URL,
-    }),
-  }
-}
-
-export async function getWebDid(agent: VsAgent) {
-  if (agent.did) {
-    const parsedDid = parseDid(agent.did)
-
-    if (parsedDid.method === 'web') return agent.did
-    if (parsedDid.method === 'webvh') return `did:web:${parsedDid.id.split(':')[1]}`
-  }
+  return sdkCreateInvitation({
+    ...options,
+    invitationBaseUrl: AGENT_INVITATION_BASE_URL,
+    imageUrl: AGENT_INVITATION_IMAGE_URL,
+  })
 }

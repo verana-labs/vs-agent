@@ -83,7 +83,8 @@ export class ConnectionController {
       outOfBandId,
     })
 
-    return connections.map(record => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return connections.map((record: any) => ({
       id: record.id,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,

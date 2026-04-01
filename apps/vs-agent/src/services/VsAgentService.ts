@@ -1,12 +1,11 @@
+import { VsAgent } from '@verana-labs/vs-agent-sdk'
 import { Inject, Injectable } from '@nestjs/common'
-
-import { VsAgent } from '../utils'
 
 @Injectable()
 export class VsAgentService {
-  constructor(@Inject('VSAGENT') private agent: VsAgent) {}
+  constructor(@Inject('VSAGENT') private agent: VsAgent<any>) {}
 
-  async getAgent(): Promise<VsAgent> {
+  async getAgent(): Promise<VsAgent<any>> {
     if (!this.agent.isInitialized) {
       await this.agent.initialize()
     }

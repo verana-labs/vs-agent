@@ -1,4 +1,5 @@
 import { DynamicModule, Module } from '@nestjs/common'
+import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
   ConnectionController,
@@ -20,44 +21,58 @@ import {
 import { HandledRedisModule } from './modules/redis.module'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
-import { VsAgent } from './utils'
 
 @Module({})
 export class VsAgentModule {
-  static register(agent: VsAgent, publicApiBaseUrl: string): DynamicModule {
+  static register(agent: VsAgent, publicApiBaseUrl: string, mode: 'vtc' | 'didcomm' = 'didcomm'): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
+
+    const baseControllers = [
+      VsAgentController,
+      CredentialTypesController,
+      HealthController,
+      InvitationController,
+      QrController,
+      TrustController,
+    ]
+
+    const didcommControllers = [
+      ConnectionController,
+      MessageController,
+      PresentationsController,
+    ]
+
+    const baseProviders = [
+      {
+        provide: 'VSAGENT',
+        useFactory: () => agentRef.get(),
+      },
+      {
+        provide: 'PUBLIC_API_BASE_URL',
+        useFactory: () => publicApiBaseUrl,
+      },
+      VsAgentService,
+      UrlShorteningService,
+      TrustService,
+      CredentialTypesService,
+    ]
+
+    const didcommProviders = [
+      MessageService,
+      RedisMessageService,
+      CoreMessageService,
+      MessageServiceFactory,
+    ]
+
     return {
       module: VsAgentModule,
-      imports: [HandledRedisModule.forRoot()],
-      controllers: [
-        VsAgentController,
-        ConnectionController,
-        CredentialTypesController,
-        HealthController,
-        MessageController,
-        PresentationsController,
-        InvitationController,
-        QrController,
-        TrustController,
-      ],
-      providers: [
-        {
-          provide: 'VSAGENT',
-          useFactory: () => agentRef.get(),
-        },
-        {
-          provide: 'PUBLIC_API_BASE_URL',
-          useFactory: () => publicApiBaseUrl,
-        },
-        VsAgentService,
-        UrlShorteningService,
-        MessageService,
-        RedisMessageService,
-        CoreMessageService,
-        MessageServiceFactory,
-        TrustService,
-        CredentialTypesService,
-      ],
+      imports: mode === 'didcomm' ? [HandledRedisModule.forRoot()] : [],
+      controllers: mode === 'didcomm'
+        ? [...baseControllers, ...didcommControllers]
+        : baseControllers,
+      providers: mode === 'didcomm'
+        ? [...baseProviders, ...didcommProviders]
+        : baseProviders,
       exports: [VsAgentService],
     }
   }

@@ -3,6 +3,8 @@ import 'reflect-metadata'
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
+import { HttpInboundTransport, VsAgent, VsAgentWsInboundTransport } from '@verana-labs/vs-agent-sdk'
+import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
 import { IncomingMessage } from 'http'
@@ -21,6 +23,7 @@ import {
   AGENT_LABEL,
   UI_WELCOME_MESSAGE,
   AGENT_LOG_LEVEL,
+  AGENT_MODE,
   AGENT_NAME,
   AGENT_PORT,
   AGENT_PUBLIC_DID,
@@ -44,19 +47,17 @@ import { messageEvents } from './events/MessageEvents'
 import { PublicModule } from './public.module'
 import {
   commonAppConfig,
-  HttpInboundTransport,
   type ServerConfig,
   setupAgent,
   setupSelfTr,
   TsLogger,
-  VsAgent,
-  VsAgentWsInboundTransport,
 } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl } = serverConfig
+  const isDidComm = AGENT_MODE === 'didcomm'
 
-  const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl))
+  const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, AGENT_MODE))
   commonAppConfig(adminApp, cors)
   await adminApp.listen(port)
 
@@ -79,28 +80,33 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   publicApp.use(express.static(publicDir))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
-  const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
-  const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
+  if (isDidComm) {
+    const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
+    const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
+    const didcommAgent = agent as unknown as VsAgent<DidCommAgentModules>
 
-  const webSocketServer = agent.didcomm.inboundTransports
-    .find(x => x instanceof VsAgentWsInboundTransport)
-    ?.getServer()
-  const httpInboundTransport = agent.didcomm.inboundTransports.find(x => x instanceof HttpInboundTransport)
+    const webSocketServer = didcommAgent.didcomm.inboundTransports
+      .find(x => x instanceof VsAgentWsInboundTransport)
+      ?.getServer()
+    const httpInboundTransport = didcommAgent.didcomm.inboundTransports
+      .find(x => x instanceof HttpInboundTransport)
 
-  if (enableHttp) {
-    httpInboundTransport?.setApp(publicApp.getHttpAdapter().getInstance())
-  }
+    if (enableHttp) {
+      httpInboundTransport?.setApp(publicApp.getHttpAdapter().getInstance())
+    }
 
-  const httpServer = httpInboundTransport ? httpInboundTransport.server : await publicApp.listen(AGENT_PORT)
+    const httpServer = httpInboundTransport ? httpInboundTransport.server : await publicApp.listen(AGENT_PORT)
 
-  // Add WebSocket support if required
-  if (enableWs) {
-    httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
-      webSocketServer?.handleUpgrade(request, socket as Socket, head, socketParam => {
-        const socketId = utils.uuid()
-        webSocketServer?.emit('connection', socketParam, request, socketId)
+    if (enableWs) {
+      httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
+        webSocketServer?.handleUpgrade(request, socket as Socket, head, socketParam => {
+          const socketId = utils.uuid()
+          webSocketServer?.emit('connection', socketParam, request, socketId)
+        })
       })
-    })
+    }
+  } else {
+    await publicApp.listen(AGENT_PORT)
   }
 }
 
@@ -183,9 +189,12 @@ const run = async () => {
   // Initialize Self-Trust Registry
   if (agent.did) await setupSelfTr({ agent, publicApiBaseUrl })
 
-  // Listen to events emitted by the agent
-  connectionEvents(agent, conf)
-  messageEvents(agent, conf)
+  // Listen to events emitted by the agent (DIDComm mode only)
+  if (AGENT_MODE === 'didcomm') {
+    const didcommAgent = agent as unknown as VsAgent<DidCommAgentModules>
+    connectionEvents(didcommAgent, conf)
+    messageEvents(didcommAgent, conf)
+  }
 
   agent.config.logger.info(
     `VS Agent v${packageJson['version']} running in port ${AGENT_PORT}. Admin interface at port ${conf.port}`,

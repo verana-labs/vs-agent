@@ -63,6 +63,8 @@ import {
   CallAcceptRequestMessage,
 } from '@verana-labs/vs-agent-model'
 
+import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+
 import { createDataUrl, VsAgent } from '../utils'
 
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
@@ -70,7 +72,7 @@ import { sendWebhookEvent } from './WebhookEvent'
 
 // FIXME: timestamps are currently taken from reception date. They should be get from the originating DIDComm message
 // as soon as the corresponding extension is added to them
-export const messageEvents = async (agent: VsAgent, config: ServerConfig) => {
+export const messageEvents = async (agent: VsAgent<DidCommAgentModules>, config: ServerConfig) => {
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
     async ({ payload }: DidCommMessageProcessedEvent) => {
@@ -546,7 +548,7 @@ export const messageEvents = async (agent: VsAgent, config: ServerConfig) => {
 }
 
 const sendMessageReceivedEvent = async (
-  agent: VsAgent,
+  agent: VsAgent<DidCommAgentModules>,
   message: BaseMessage,
   timestamp: Date,
   config: ServerConfig,
@@ -560,7 +562,7 @@ const sendMessageReceivedEvent = async (
 }
 
 const sendMessageStateUpdatedEvent = async (options: {
-  agent: VsAgent
+  agent: VsAgent<DidCommAgentModules>
   messageId: string
   connectionId: string
   state: MessageState
@@ -579,7 +581,7 @@ const sendMessageStateUpdatedEvent = async (options: {
   await sendWebhookEvent(config.webhookUrl + '/message-state-updated', body, config.logger)
 }
 
-const getRecordId = async (agent: VsAgent, id: string): Promise<string> => {
+const getRecordId = async (agent: VsAgent<DidCommAgentModules>, id: string): Promise<string> => {
   const record = await agent.genericRecords.findById(id)
   return (record?.getTag('messageId') as string) ?? id
 }
