@@ -40,15 +40,16 @@ export class CredentialTypesService {
     version?: string
     issuerId?: string
     relatedJsonSchemaCredentialId?: string
-  }): Promise<{schema: AnonCredsSchema, schemaId: string} | undefined> {
+  }): Promise<{ schema: AnonCredsSchema; schemaId: string } | undefined> {
     const agent = await this.agentService.getAgent()
 
     if (options.schemaId) {
       const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({ schemaId: options.schemaId })
-      if (schemaRecord) return {
-        schema: schemaRecord.schema,
-        schemaId: schemaRecord.schemaId
-      }
+      if (schemaRecord)
+        return {
+          schema: schemaRecord.schema,
+          schemaId: schemaRecord.schemaId,
+        }
     }
 
     if (!options.relatedJsonSchemaCredentialId && (!options.name || !options.version)) {
