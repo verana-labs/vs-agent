@@ -61,10 +61,12 @@ export class CredentialTypesService {
     }
 
     const parsedIssuerDid = parseDid(options.issuerId)
-    const parsedIssuer =
-      parsedIssuerDid.method === 'webvh'
-        ? parsedIssuerDid.id.split(':').slice(1).join('/')
-        : parsedIssuerDid.id.replace(/:/g, '/')
+    if (parsedIssuerDid.method !== 'webvh') {
+      throw new Error(
+        `Unsupported DID method '${parsedIssuerDid.method}'. When using 'relatedJsonSchemaCredentialId' with an external issuer, only 'webvh' DIDs are supported.`,
+      )
+    }
+    const parsedIssuer = parsedIssuerDid.id.split(':').slice(1).join('/')
 
     const params = new URLSearchParams({ resourceType: 'anonCredsSchema' })
     if (options.relatedJsonSchemaCredentialId) {
