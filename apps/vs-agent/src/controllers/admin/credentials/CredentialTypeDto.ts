@@ -61,7 +61,7 @@ export class CreateCredentialTypeDto {
   @IsString()
   @IsOptional()
   @IsNotEmpty()
-  issuerId?: string
+  issuerDid?: string
 
   @ApiProperty({
     description:

@@ -38,7 +38,7 @@ export class CredentialTypesService {
     attributes?: string[]
     name?: string
     version?: string
-    issuerId?: string
+    issuerDid?: string
     relatedJsonSchemaCredentialId?: string
   }): Promise<{ schema: AnonCredsSchema; schemaId: string } | undefined> {
     const agent = await this.agentService.getAgent()
@@ -56,7 +56,7 @@ export class CredentialTypesService {
       throw new Error('Either relatedJsonSchemaCredentialId or "name" and "version" must be provided')
     }
 
-    if (!options.issuerId) {
+    if (!options.issuerDid) {
       const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({
         relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId,
       })
@@ -67,7 +67,7 @@ export class CredentialTypesService {
       }
     }
 
-    const parsedIssuerDid = parseDid(options.issuerId)
+    const parsedIssuerDid = parseDid(options.issuerDid)
     if (parsedIssuerDid.method !== 'webvh') {
       throw new Error(
         `Unsupported DID method '${parsedIssuerDid.method}'. When using 'relatedJsonSchemaCredentialId' with an external issuer, only 'webvh' DIDs are supported.`,
@@ -114,7 +114,7 @@ export class CredentialTypesService {
     attributes?: string[]
     name?: string
     version?: string
-    issuerId?: string
+    issuerDid?: string
     relatedJsonSchemaCredentialId?: string
   }) {
     if (options.schemaId) {
