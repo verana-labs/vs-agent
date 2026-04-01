@@ -93,18 +93,16 @@ export class CredentialTypesService {
 
   public async findAnonCredsCredentialDefinition(options: {
     schemaId?: string
-    issuerId?: string
     name?: string
     version?: string
     relatedJsonSchemaCredentialId?: string
   }) {
-    const { name, version, schemaId, issuerId, relatedJsonSchemaCredentialId } = options
+    const { name, version, schemaId, relatedJsonSchemaCredentialId } = options
 
     const agent = await this.agentService.getAgent()
 
     const [credentialDefinitionRecord] = await agent.modules.anoncreds.getCreatedCredentialDefinitions({
       schemaId,
-      issuerId,
       ...(name && version ? { tag: `${name}.${version}` } : {}),
       relatedJsonSchemaCredentialId,
     })
@@ -126,7 +124,6 @@ export class CredentialTypesService {
       }
       return {
         schemaId: schemaRecord.schemaId,
-        issuerId: schemaRecord.schema.issuerId,
         schema: schemaRecord.schema,
       }
     }
@@ -151,7 +148,6 @@ export class CredentialTypesService {
     if (foundSchema) {
       return {
         schemaId: foundSchema.schemaId,
-        issuerId: agent.did,
         schema: foundSchema.schema,
       }
     } else {
@@ -207,13 +203,12 @@ export class CredentialTypesService {
         relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId,
       })
     }
-    return { issuerId: agent.did, schemaId, schema }
+    return { schemaId, schema }
   }
 
   public async registerAnonCredsCredentialDefinition(options: {
     name: string
     schemaId: string
-    issuerId: string
     supportRevocation?: boolean
     version?: string
     relatedJsonSchemaCredentialId?: string
@@ -221,12 +216,12 @@ export class CredentialTypesService {
     const {
       name,
       schemaId,
-      issuerId,
       supportRevocation = false,
       version = '1.0',
       relatedJsonSchemaCredentialId,
     } = options
     const agent = await this.agentService.getAgent()
+    if (!agent.did) throw new Error('Agent does not have any defined public DID')
 
     const credentialDefinitionRegistrationOptions = {
       supportRevocation,
@@ -237,7 +232,7 @@ export class CredentialTypesService {
 
     const { credentialDefinitionState, registrationMetadata: credDefMetadata } =
       await agent.modules.anoncreds.registerCredentialDefinition({
-        credentialDefinition: { issuerId, schemaId, tag: `${name}.${version}` },
+        credentialDefinition: { issuerId: agent.did, schemaId, tag: `${name}.${version}` },
         options: credentialDefinitionRegistrationOptions,
       })
     const { attestedResource: credentialRegistration } = credDefMetadata as {
@@ -283,7 +278,6 @@ export class CredentialTypesService {
   public async getOrRegisterAnonCredsCredentialDefinition({
     name,
     schemaId,
-    issuerId,
     supportRevocation = false,
     version = '1.0',
     attributes,
@@ -291,7 +285,6 @@ export class CredentialTypesService {
   }: {
     name?: string
     schemaId?: string
-    issuerId?: string
     attributes?: string[]
     supportRevocation?: boolean
     version?: string
@@ -299,7 +292,6 @@ export class CredentialTypesService {
   }) {
     let credentialDefinitionRecord = await this.findAnonCredsCredentialDefinition({
       schemaId,
-      issuerId,
       name,
       version,
       relatedJsonSchemaCredentialId,
@@ -307,14 +299,9 @@ export class CredentialTypesService {
     if (credentialDefinitionRecord) return credentialDefinitionRecord
 
     // Credential definition not found: create an appropriate schema for it
-    const {
-      schema,
-      schemaId: resolvedSchemaId,
-      issuerId: resolvedIssuerId,
-    } = await this.getOrRegisterAnonCredsSchema({
+    const { schema, schemaId: resolvedSchemaId } = await this.getOrRegisterAnonCredsSchema({
       name,
       version,
-      issuerId,
       attributes,
       relatedJsonSchemaCredentialId,
     })
@@ -322,7 +309,6 @@ export class CredentialTypesService {
       name: schema.name,
       version: schema.version,
       schemaId: resolvedSchemaId,
-      issuerId: resolvedIssuerId,
       supportRevocation,
       relatedJsonSchemaCredentialId,
     })

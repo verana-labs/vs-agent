@@ -156,16 +156,11 @@ export class CredentialTypesController {
         )
       }
 
-      const {
-        schema,
-        schemaId,
-        issuerId: resolvedIssuerId,
-      } = await this.service.getOrRegisterAnonCredsSchema(options)
+      const { schema, schemaId } = await this.service.getOrRegisterAnonCredsSchema(options)
       credentialDefinitionRecord = await this.service.registerAnonCredsCredentialDefinition({
         name: name ?? schema.name,
         version: version ?? schema.version,
         schemaId: schemaId,
-        issuerId: resolvedIssuerId,
         supportRevocation,
         relatedJsonSchemaCredentialId,
       })
