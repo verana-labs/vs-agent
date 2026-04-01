@@ -6,6 +6,8 @@ import { Subject } from 'rxjs'
 import request from 'supertest'
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 
+import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+
 import { MessageService, TrustService } from '../src/controllers'
 import { VsAgent } from '../src/utils'
 
@@ -30,8 +32,8 @@ describe('TrustService', () => {
     'rxjs:faber': faberMessages,
     'rxjs:alice': aliceMessages,
   }
-  let faberAgent: VsAgent
-  let aliceAgent: VsAgent
+  let faberAgent: VsAgent<DidCommAgentModules>
+  let aliceAgent: VsAgent<DidCommAgentModules>
   let faberConnection: DidCommConnectionRecord
   let aliceConnection: DidCommConnectionRecord
   let aliceEvents: ReturnType<typeof vi.spyOn>
@@ -39,7 +41,7 @@ describe('TrustService', () => {
   describe('JSC creation and DID document references', () => {
     let jscFaberApp: INestApplication
     let jscFaberService: TrustService
-    let jscFaberAgent: VsAgent
+    let jscFaberAgent: VsAgent<DidCommAgentModules>
 
     beforeEach(async () => {
       jscFaberAgent = await startAgent({ label: 'Faber JSC Test', domain: 'faber' })

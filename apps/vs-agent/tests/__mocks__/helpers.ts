@@ -11,12 +11,14 @@ import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { vi } from 'vitest'
 
+import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+
 import { VsAgentModule } from '../../src/admin.module'
 import { messageEvents } from '../../src/events/MessageEvents'
 import { PublicModule } from '../../src/public.module'
 import { ServerConfig, TsLogger, VsAgent } from '../../src/utils'
 
-export async function makeConnection(agentA: VsAgent, agentB: VsAgent) {
+export async function makeConnection(agentA: VsAgent<DidCommAgentModules>, agentB: VsAgent<DidCommAgentModules>) {
   const agentAOutOfBand = await agentA.didcomm.oob.createInvitation({
     handshakeProtocols: [DidCommHandshakeProtocol.Connections],
   })
@@ -92,7 +94,7 @@ export function waitForEvent<T>(
   })
 }
 
-export const startServersTesting = async (agent: VsAgent): Promise<INestApplication> => {
+export const startServersTesting = async (agent: VsAgent<DidCommAgentModules>): Promise<INestApplication> => {
   const moduleRef = await Test.createTestingModule({
     imports: [
       VsAgentModule.register(agent, 'http://localhost:3001'),

@@ -2,23 +2,34 @@ import { AskarSqliteStorageConfig } from '@credo-ts/askar'
 import { LogLevel, utils } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
+import { createVsAgent, setupVeranaSigner, setupDidComm, VsAgent, DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 
 import { keyDerivationMethodMap } from '../../src/config'
-import { createVsAgent, TsLogger } from '../../src/utils'
+import { TsLogger } from '../../src/utils'
 
-export const startAgent = async ({ label, domain }: { label: string; domain: string }) => {
+export const startAgent = async ({
+  label,
+  domain,
+}: {
+  label: string
+  domain: string
+}): Promise<VsAgent<DidCommAgentModules>> => {
+  const walletConfig = getAskarStoreConfig(label, { inMemory: true })
   const agent = createVsAgent({
+    plugins: [
+      setupVeranaSigner({ walletConfig, publicApiBaseUrl: `https://${domain}` }),
+      setupDidComm({ endpoints: [`rxjs:${domain}`] }),
+    ],
     config: {
       logger: new TsLogger(LogLevel.off, label),
     },
-    walletConfig: getAskarStoreConfig(label, { inMemory: true }),
-    endpoints: [`rxjs:${domain}`],
+    walletConfig,
     did: `did:webvh:${domain}`,
     dependencies: agentDependencies,
     publicApiBaseUrl: `https://${domain}`,
     label,
   })
-  return agent
+  return agent as unknown as VsAgent<DidCommAgentModules>
 }
 
 export function getAskarStoreConfig(

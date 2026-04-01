@@ -5,6 +5,8 @@ import { ProfileMessage, TextMessage } from '@verana-labs/vs-agent-model'
 import { Subject } from 'rxjs'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
+import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+
 import { MessageService } from '../src/controllers'
 import { VsAgent } from '../src/utils'
 
@@ -31,8 +33,8 @@ describe('MessageService', () => {
     'rxjs:faber': faberMessages,
     'rxjs:alice': aliceMessages,
   }
-  let faberAgent: VsAgent
-  let aliceAgent: VsAgent
+  let faberAgent: VsAgent<DidCommAgentModules>
+  let aliceAgent: VsAgent<DidCommAgentModules>
   let faberConnection: DidCommConnectionRecord
   let aliceConnection: DidCommConnectionRecord
   let faberEvents: ReturnType<typeof vi.spyOn>
