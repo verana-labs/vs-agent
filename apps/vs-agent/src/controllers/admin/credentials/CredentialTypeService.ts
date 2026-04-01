@@ -58,8 +58,7 @@ export class CredentialTypesService {
     }
 
     if (!issuerDid) {
-      const hasFilters =
-        name != null || version != null || relatedJsonSchemaCredentialId != null
+      const hasFilters = name != null || version != null || relatedJsonSchemaCredentialId != null
 
       if (!hasFilters) return undefined
       const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({
