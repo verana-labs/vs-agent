@@ -43,12 +43,12 @@ export class CreateCredentialTypeDto {
   schemaId?: string
 
   @ApiProperty({
-    description:
-      'Base Verifiable Trust JSON Schema Credential the credential type is based on. Required when issuerDid is provided.',
+    description: 'Base Verifiable Trust JSON Schema Credential the credential type is based on.',
     example: 'https://example.2060.io/vt/schemas-example-service-jsc.json',
   })
   @ValidateIf(o => !!o.issuerDid || !!o.relatedJsonSchemaCredentialId)
   @IsString()
+  @IsOptional()
   @IsNotEmpty()
   relatedJsonSchemaCredentialId?: string
 
@@ -57,7 +57,7 @@ export class CreateCredentialTypeDto {
       'DID of the schema issuer. Used to fetch an existing AnonCreds schema from an external agent. Requires relatedJsonSchemaCredentialId.',
     example: 'did:web:issuer',
   })
-  @ValidateIf(o => !!o.issuerDid)
+  @ValidateIf(o => o.relatedJsonSchemaCredentialId)
   @IsString()
   @IsOptional()
   @IsNotEmpty()
