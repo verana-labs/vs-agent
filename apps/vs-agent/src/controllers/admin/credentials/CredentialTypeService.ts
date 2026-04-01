@@ -1,7 +1,6 @@
 import {
   AnonCredsCredentialDefinitionRepository,
   AnonCredsSchema,
-  AnonCredsSchemaRecord,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
 import { JsonObject, parseDid, TagsBase, utils, W3cCredential } from '@credo-ts/core'
@@ -41,12 +40,15 @@ export class CredentialTypesService {
     version?: string
     issuerId?: string
     relatedJsonSchemaCredentialId?: string
-  }): Promise<AnonCredsSchemaRecord | undefined> {
+  }): Promise<{schema: AnonCredsSchema, schemaId: string} | undefined> {
     const agent = await this.agentService.getAgent()
 
     if (options.schemaId) {
       const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({ schemaId: options.schemaId })
-      if (schemaRecord) return schemaRecord
+      if (schemaRecord) return {
+        schema: schemaRecord.schema,
+        schemaId: schemaRecord.schemaId
+      }
     }
 
     if (!options.relatedJsonSchemaCredentialId && (!options.name || !options.version)) {
@@ -57,7 +59,11 @@ export class CredentialTypesService {
       const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({
         relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId,
       })
-      return schemaRecord ?? undefined
+      if (!schemaRecord) return undefined
+      return {
+        schema: schemaRecord.schema,
+        schemaId: schemaRecord.schemaId,
+      }
     }
 
     const parsedIssuerDid = parseDid(options.issuerId)
@@ -78,11 +84,10 @@ export class CredentialTypesService {
     if (!response.ok) return undefined
     const [resource] = (await response.json()) as Array<{ id: string; content: AnonCredsSchema }>
 
-    return new AnonCredsSchemaRecord({
+    return {
       schemaId: resource.id,
       schema: resource.content,
-      methodName: parsedIssuerDid.method,
-    })
+    }
   }
 
   public async findAnonCredsCredentialDefinition(options: {
@@ -140,15 +145,13 @@ export class CredentialTypesService {
     if (!agent.did) {
       throw new Error('Agent does not have any defined public DID')
     }
-    let schemaRecord = await this.findAnonCredsSchema(options)
+    const foundSchema = await this.findAnonCredsSchema(options)
 
-    if (schemaRecord) {
-      schemaId = schemaRecord.schemaId
-      schema = schemaRecord.schema
+    if (foundSchema) {
       return {
-        schemaId: schemaRecord.schemaId,
+        schemaId: foundSchema.schemaId,
         issuerId: agent.did,
-        schema: schemaRecord.schema,
+        schema: foundSchema.schema,
       }
     } else {
       // No schema found. A new one will be created
@@ -188,7 +191,7 @@ export class CredentialTypesService {
         throw new Error('Schema for the credential definition could not be created')
       }
       const schemaRepository = agent.dependencyManager.resolve(AnonCredsSchemaRepository)
-      schemaRecord = (await schemaRepository.findBySchemaId(agent.context, schemaId)) ?? undefined
+      const schemaRecord = (await schemaRepository.findBySchemaId(agent.context, schemaId)) ?? undefined
       if (!schemaRecord)
         throw new Error(`Schema record not found after registration for schemaId: ${schemaId}`)
 
