@@ -40,7 +40,7 @@ export class CredentialTypesService {
     version?: string
     issuerDid?: string
     relatedJsonSchemaCredentialId?: string
-  }): Promise<{ schema: AnonCredsSchema; schemaId: string } | undefined> {
+  }) {
     const agent = await this.agentService.getAgent()
 
     if (options.schemaId) {
@@ -299,12 +299,13 @@ export class CredentialTypesService {
     if (credentialDefinitionRecord) return credentialDefinitionRecord
 
     // Credential definition not found: create an appropriate schema for it
-    const { schema, schemaId: resolvedSchemaId } = await this.getOrRegisterAnonCredsSchema({
+    const getOrRegisterSchemaResult = await this.getOrRegisterAnonCredsSchema({
       name,
       version,
       attributes,
       relatedJsonSchemaCredentialId,
     })
+    const { schema, schemaId: resolvedSchemaId } = getOrRegisterSchemaResult
     credentialDefinitionRecord = await this.registerAnonCredsCredentialDefinition({
       name: schema.name,
       version: schema.version,
