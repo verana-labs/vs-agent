@@ -121,7 +121,7 @@ export class CredentialTypesController {
       govId: {
         summary: 'Government ID VC (linked to JSON Schema)',
         value: {
-          issuerId:
+          issuerDid:
             'did:webvh:QmbfsYcjFS2bnouwXBSoZZ65jREEgZGSPdcatcwY7i1Gq2:dm.gov-id-issuer.demos.dev.2060.io',
           relatedJsonSchemaCredentialId: 'https://dm.gov-id-tr.demos.dev.2060.io/vt/schemas-gov-id-jsc.json',
         },
