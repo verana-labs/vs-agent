@@ -1,11 +1,11 @@
+import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+
 import { PictureData } from '@2060.io/credo-ts-didcomm-user-profile'
 import { DidCommBasicMessage, DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { INestApplication } from '@nestjs/common'
 import { ProfileMessage, TextMessage } from '@verana-labs/vs-agent-model'
 import { Subject } from 'rxjs'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-
-import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 
 import { MessageService } from '../src/controllers'
 import { VsAgent } from '../src/utils'

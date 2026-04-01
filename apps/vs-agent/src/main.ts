@@ -1,10 +1,11 @@
 import 'reflect-metadata'
 
+import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import { HttpInboundTransport, VsAgent, VsAgentWsInboundTransport } from '@verana-labs/vs-agent-sdk'
-import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
 import { IncomingMessage } from 'http'
@@ -45,13 +46,7 @@ import {
 import { connectionEvents } from './events/ConnectionEvents'
 import { messageEvents } from './events/MessageEvents'
 import { PublicModule } from './public.module'
-import {
-  commonAppConfig,
-  type ServerConfig,
-  setupAgent,
-  setupSelfTr,
-  TsLogger,
-} from './utils'
+import { commonAppConfig, type ServerConfig, setupAgent, setupSelfTr, TsLogger } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl } = serverConfig
@@ -88,8 +83,9 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
     const webSocketServer = didcommAgent.didcomm.inboundTransports
       .find(x => x instanceof VsAgentWsInboundTransport)
       ?.getServer()
-    const httpInboundTransport = didcommAgent.didcomm.inboundTransports
-      .find(x => x instanceof HttpInboundTransport)
+    const httpInboundTransport = didcommAgent.didcomm.inboundTransports.find(
+      x => x instanceof HttpInboundTransport,
+    )
 
     if (enableHttp) {
       httpInboundTransport?.setApp(publicApp.getHttpAdapter().getInstance())

@@ -1,12 +1,12 @@
+import { DidCommMessage } from '@credo-ts/didcomm'
 import {
   createInvitation as sdkCreateInvitation,
   getWebDid,
   VsAgent,
+  DidCommAgentModules,
 } from '@verana-labs/vs-agent-sdk'
-import { DidCommMessage } from '@credo-ts/didcomm'
 
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../config/constants'
-import { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 
 export { getWebDid }
 

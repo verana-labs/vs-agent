@@ -1,6 +1,4 @@
-import {
-  AnonCredsModule,
-} from '@credo-ts/anoncreds'
+import { AnonCredsModule } from '@credo-ts/anoncreds'
 import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { DidsModule, W3cCredentialsModule } from '@credo-ts/core'
 import { WebVhAnonCredsRegistry, WebVhDidRegistrar, WebVhDidResolver } from '@credo-ts/webvh'
@@ -8,11 +6,11 @@ import { anoncreds } from '@hyperledger/anoncreds-nodejs'
 import { askar } from '@openwallet-foundation/askar-nodejs'
 import { DidWebAnonCredsRegistry } from 'credo-ts-didweb-anoncreds'
 
+import { BaseAgentModules } from '../agent/types'
+import { FullTailsFileService } from '../credentials/FullTailsFileService'
 import { defaultDocumentLoader } from '../did/CachedDocumentLoader'
 import { CachedWebDidResolver } from '../did/CachedWebDidResolver'
 import { WebDidRegistrar } from '../did/WebDidRegistrar'
-import { FullTailsFileService } from '../credentials/FullTailsFileService'
-import { BaseAgentModules } from '../agent/types'
 
 export interface SignerPluginOptions {
   walletConfig: AskarModuleConfigStoreOptions

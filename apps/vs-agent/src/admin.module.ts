@@ -24,7 +24,11 @@ import { VsAgentService } from './services/VsAgentService'
 
 @Module({})
 export class VsAgentModule {
-  static register(agent: VsAgent, publicApiBaseUrl: string, mode: 'vtc' | 'didcomm' = 'didcomm'): DynamicModule {
+  static register(
+    agent: VsAgent,
+    publicApiBaseUrl: string,
+    mode: 'vtc' | 'didcomm' = 'didcomm',
+  ): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
 
     const baseControllers = [
@@ -36,11 +40,7 @@ export class VsAgentModule {
       TrustController,
     ]
 
-    const didcommControllers = [
-      ConnectionController,
-      MessageController,
-      PresentationsController,
-    ]
+    const didcommControllers = [ConnectionController, MessageController, PresentationsController]
 
     const baseProviders = [
       {
@@ -57,22 +57,13 @@ export class VsAgentModule {
       CredentialTypesService,
     ]
 
-    const didcommProviders = [
-      MessageService,
-      RedisMessageService,
-      CoreMessageService,
-      MessageServiceFactory,
-    ]
+    const didcommProviders = [MessageService, RedisMessageService, CoreMessageService, MessageServiceFactory]
 
     return {
       module: VsAgentModule,
       imports: mode === 'didcomm' ? [HandledRedisModule.forRoot()] : [],
-      controllers: mode === 'didcomm'
-        ? [...baseControllers, ...didcommControllers]
-        : baseControllers,
-      providers: mode === 'didcomm'
-        ? [...baseProviders, ...didcommProviders]
-        : baseProviders,
+      controllers: mode === 'didcomm' ? [...baseControllers, ...didcommControllers] : baseControllers,
+      providers: mode === 'didcomm' ? [...baseProviders, ...didcommProviders] : baseProviders,
       exports: [VsAgentService],
     }
   }

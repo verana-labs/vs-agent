@@ -2,7 +2,13 @@ import { AskarSqliteStorageConfig } from '@credo-ts/askar'
 import { LogLevel, utils } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
-import { createVsAgent, setupVeranaSigner, setupDidComm, VsAgent, DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+import {
+  createVsAgent,
+  setupVeranaSigner,
+  setupDidComm,
+  VsAgent,
+  DidCommAgentModules,
+} from '@verana-labs/vs-agent-sdk'
 
 import { keyDerivationMethodMap } from '../../src/config'
 import { TsLogger } from '../../src/utils'

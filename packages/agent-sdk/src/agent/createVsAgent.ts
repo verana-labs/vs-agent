@@ -1,11 +1,11 @@
-import { AgentDependencies, InitConfig, LogLevel } from '@credo-ts/core'
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
+import { AgentDependencies, InitConfig, LogLevel } from '@credo-ts/core'
 
-import { SignerPlugin } from '../plugins/setupVeranaSigner'
 import { DidCommPlugin } from '../plugins/setupDidComm'
+import { SignerPlugin } from '../plugins/setupVeranaSigner'
 
 import { VsAgent } from './VsAgent'
-import { BaseAgentModules, DidCommAgentModules } from './types'
+import { BaseAgentModules } from './types'
 
 type Plugin = SignerPlugin | DidCommPlugin
 

@@ -21,7 +21,12 @@ export {
   webhookListener,
   defaultDocumentLoader,
 } from '@verana-labs/vs-agent-sdk'
-export type { WebhookData, VsAgentOptions, BaseAgentModules, DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+export type {
+  WebhookData,
+  VsAgentOptions,
+  BaseAgentModules,
+  DidCommAgentModules,
+} from '@verana-labs/vs-agent-sdk'
 
 export * from './agent'
 export * from './ServerConfig'

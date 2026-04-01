@@ -1,5 +1,5 @@
-import { VsAgent } from '@verana-labs/vs-agent-sdk'
 import { Inject, Injectable } from '@nestjs/common'
+import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 @Injectable()
 export class VsAgentService {
