@@ -3,14 +3,21 @@ import { LogLevel, ParsedDid } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
+import {
+  createVsAgent,
+  DidCommAgentModules,
+  HttpInboundTransport,
+  setupDidComm,
+  setupVeranaSigner,
+  VsAgent,
+  VsAgentWsInboundTransport,
+} from '@verana-labs/vs-agent-sdk'
 import express from 'express'
 import WebSocket from 'ws'
 
 import { ENABLE_PUBLIC_API_SWAGGER } from '../config'
+import { AGENT_MODE } from '../config/constants'
 
-import { HttpInboundTransport } from './HttpInboundTransport'
-import { createVsAgent } from './VsAgent'
-import { VsAgentWsInboundTransport } from './VsAgentWsInboundTransport'
 import { TsLogger } from './logger'
 
 export const setupAgent = async ({
@@ -40,17 +47,26 @@ export const setupAgent = async ({
 }) => {
   const logger = new TsLogger(logLevel ?? LogLevel.warn, 'Agent')
   const publicDid = parsedDid?.did
+  const isDidComm = AGENT_MODE === 'didcomm'
 
-  if (endpoints.length === 0) {
+  if (isDidComm && endpoints.length === 0) {
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
+  const plugins = isDidComm
+    ? [
+        setupVeranaSigner({ walletConfig, publicApiBaseUrl, masterListCscaLocation }),
+        setupDidComm({ endpoints, masterListCscaLocation }),
+      ]
+    : [setupVeranaSigner({ walletConfig, publicApiBaseUrl, masterListCscaLocation })]
+
   const agent = createVsAgent({
+    plugins,
     config: {
       logger,
       autoUpdateStorageOnStartup,
     },
-    endpoints,
+    label,
     walletConfig,
     did: publicDid,
     autoDiscloseUserProfile,
@@ -58,21 +74,23 @@ export const setupAgent = async ({
     publicApiBaseUrl,
     masterListCscaLocation,
     displayPictureUrl,
-    label,
   })
 
-  const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
-  if (enableHttp) {
-    logger.info('Inbound HTTP transport enabled')
-    agent.didcomm.registerInboundTransport(new HttpInboundTransport({ port }))
-  }
+  if (isDidComm) {
+    const didcommAgent = agent as unknown as VsAgent<DidCommAgentModules>
+    const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
+    if (enableHttp) {
+      logger.info('Inbound HTTP transport enabled')
+      didcommAgent.didcomm.registerInboundTransport(new HttpInboundTransport({ port }))
+    }
 
-  const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
-  if (enableWs) {
-    logger.info('Inbound WebSocket transport enabled')
-    agent.didcomm.registerInboundTransport(
-      new VsAgentWsInboundTransport({ server: new WebSocket.Server({ noServer: true }) }),
-    )
+    const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
+    if (enableWs) {
+      logger.info('Inbound WebSocket transport enabled')
+      didcommAgent.didcomm.registerInboundTransport(
+        new VsAgentWsInboundTransport({ server: new WebSocket.Server({ noServer: true }) }),
+      )
+    }
   }
 
   await agent.initialize()

@@ -38,8 +38,7 @@ import {
   FALLBACK_BASE64,
 } from '../config'
 
-import { VsAgent } from './VsAgent'
-import { getEcsSchemas } from './data'
+import { VsAgent, getEcsSchemas } from '@verana-labs/vs-agent-sdk'
 
 const ajv = new Ajv({ strict: false })
 addFormats(ajv)
