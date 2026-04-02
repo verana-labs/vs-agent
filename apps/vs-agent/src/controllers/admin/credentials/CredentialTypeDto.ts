@@ -1,24 +1,28 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { IsString, IsNotEmpty, IsOptional, IsBoolean } from 'class-validator'
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, ValidateIf } from 'class-validator'
 
 export class CreateCredentialTypeDto {
   @ApiProperty({
     description:
-      'Name. Used together with version to identify the credential type. Must be unique across all credential types.',
+      'Name. Used together with version to identify the credential type. Required if relatedJsonSchemaCredentialId is not provided.',
     example: 'myCredentialType',
+    required: false,
   })
+  @ValidateIf(o => !o.relatedJsonSchemaCredentialId)
   @IsString()
   @IsNotEmpty()
-  name!: string
+  name?: string
 
   @ApiProperty({
     description:
-      'Version. Used together with name to identify the credential type. Must be unique across all credential types.',
+      'Version. Used together with name to identify the credential type. Required if relatedJsonSchemaCredentialId is not provided.',
     example: '1.0',
+    required: false,
   })
+  @ValidateIf(o => !o.relatedJsonSchemaCredentialId)
   @IsString()
   @IsNotEmpty()
-  version!: string
+  version?: string
 
   @ApiProperty({
     description:
@@ -30,8 +34,7 @@ export class CreateCredentialTypeDto {
   attributes?: string[]
 
   @ApiProperty({
-    description:
-      'Base AnonCreds schema id in case you want to. Note: Deprecated, will be removed in next releases',
+    description: 'Base AnonCreds schema id in case you want to.',
     example: 'did:web:issuer#anoncreds?relativeRef=/schema/1234',
   })
   @IsString()
@@ -43,19 +46,22 @@ export class CreateCredentialTypeDto {
     description: 'Base Verifiable Trust JSON Schema Credential the credential type is based on.',
     example: 'https://example.2060.io/vt/schemas-example-service-jsc.json',
   })
+  @ValidateIf(o => !!o.issuerDid || !!o.relatedJsonSchemaCredentialId)
   @IsString()
   @IsOptional()
   @IsNotEmpty()
   relatedJsonSchemaCredentialId?: string
 
   @ApiProperty({
-    description: 'New issuer id in case you want to. Deprecated, will be removed in next releases',
+    description:
+      'DID of the schema issuer. Used to fetch an existing AnonCreds schema from an external agent. Requires relatedJsonSchemaCredentialId.',
     example: 'did:web:issuer',
   })
+  @ValidateIf(o => o.relatedJsonSchemaCredentialId)
   @IsString()
   @IsOptional()
   @IsNotEmpty()
-  issuerId?: string
+  issuerDid?: string
 
   @ApiProperty({
     description:

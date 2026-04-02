@@ -77,7 +77,8 @@ export interface CreatePresentationRequestOptions {
 }
 
 export type RequestedCredential = {
-  credentialDefinitionId: string
+  credentialDefinitionId?: string
+  relatedJsonSchemaCredentialId?: string
   attributes?: string[]
 }
 
