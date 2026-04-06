@@ -6,6 +6,9 @@ import { VsAgent } from '../agent/VsAgent'
 /**
  * Creates an out of band invitation that will equal to the public DID in case the agent has one defined,
  * and a new one every time in case the agent does not have any public DID.
+ *
+ * @param agent
+ * @returns
  */
 export async function createInvitation(options: {
   agent: VsAgent
@@ -16,6 +19,7 @@ export async function createInvitation(options: {
 }) {
   const { agent, messages, useLegacyDid, invitationBaseUrl, imageUrl } = options
 
+  // Use legacy did:web in case agent's did is webvh and using legacy did
   const invitationDid =
     agent.did && parseDid(agent.did).method === 'webvh' && useLegacyDid
       ? `did:web:${parseDid(agent.did).id.split(':')[1]}`
