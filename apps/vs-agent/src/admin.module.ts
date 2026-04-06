@@ -17,9 +17,8 @@ import { VsAgentService } from './services/VsAgentService'
 
 @Module({})
 export class VsAgentModule {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static register(
-    agent: VsAgent<any>,
+    agent: VsAgent,
     publicApiBaseUrl: string,
     nestPlugins: VsAgentNestPlugin[] = [],
   ): DynamicModule {

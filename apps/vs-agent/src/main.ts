@@ -81,12 +81,10 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
 
   const webSocketServer = didcommAgent.didcomm.inboundTransports
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .find((x: any) => x instanceof VsAgentWsInboundTransport)
+    .find(x => x instanceof VsAgentWsInboundTransport)
     ?.getServer()
   const httpInboundTransport = didcommAgent.didcomm.inboundTransports
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .find((x: any) => x instanceof HttpInboundTransport)
+    .find(x => x instanceof HttpInboundTransport)
 
   if (enableHttp) {
     httpInboundTransport?.setApp(publicApp.getHttpAdapter().getInstance())
@@ -96,8 +94,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   if (enableWs) {
     httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      webSocketServer?.handleUpgrade(request, socket as Socket, head, (socketParam: any) => {
+      webSocketServer?.handleUpgrade(request, socket as Socket, head, (socketParam) => {
         const socketId = utils.uuid()
         webSocketServer?.emit('connection', socketParam, request, socketId)
       })

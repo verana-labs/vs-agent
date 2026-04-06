@@ -106,13 +106,12 @@ export class VsAgentWsInboundTransport implements DidCommInboundTransport {
       ;(socket as ExtWebSocket).isAlive = true
     })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    socket.addEventListener('message', async (event: any) => {
+    socket.addEventListener('message', async (event: WebSocket.MessageEvent) => {
       this.logger.debug('WebSocket message event received.', { url: event.target.url, data: event.data })
       ;(socket as ExtWebSocket).lastActivity = new Date()
       try {
         const messageReceiver = agentContext.dependencyManager.resolve(DidCommMessageReceiver)
-        await messageReceiver.receiveMessage(JSON.parse(event.data), session)
+        await messageReceiver.receiveMessage(JSON.parse(event.data.toString()), session)
       } catch (error) {
         this.logger.error('Error processing message')
       }

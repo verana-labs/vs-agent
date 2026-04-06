@@ -79,8 +79,7 @@ export class CredentialTypesController {
     const credentialDefinitions = await agent.modules.anoncreds.getCreatedCredentialDefinitions({})
 
     return Promise.all(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      credentialDefinitions.map(async (record: any) => {
+      credentialDefinitions.map(async (record: AnonCredsCredentialDefinitionRecord) => {
         const schemaResult = await agent.modules.anoncreds.getSchema(record.credentialDefinition.schemaId)
 
         const schema = schemaResult.schema

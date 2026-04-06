@@ -1,5 +1,5 @@
 import { RecordNotFoundError } from '@credo-ts/core'
-import { DidCommDidExchangeState } from '@credo-ts/didcomm'
+import { type DidCommConnectionRecord, DidCommDidExchangeState } from '@credo-ts/didcomm'
 import {
   Controller,
   Delete,
@@ -83,8 +83,7 @@ export class ConnectionController {
       outOfBandId,
     })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return connections.map((record: any) => ({
+    return connections.map((record: DidCommConnectionRecord) => ({
       id: record.id,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,

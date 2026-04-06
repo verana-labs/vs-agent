@@ -59,7 +59,7 @@ export class VsAgentWsOutboundTransport implements DidCommOutboundTransport {
     this.logger = agentConfig.logger
     this.eventEmitter = this.agentContext.dependencyManager.resolve(EventEmitter)
     this.logger.debug('Starting WS outbound transport')
-    this.WebSocketClass = agentConfig.agentDependencies.WebSocketClass
+    this.WebSocketClass = agentConfig.agentDependencies.WebSocketClass as unknown as typeof WebSocket
   }
 
   public async stop() {
@@ -120,11 +120,10 @@ export class VsAgentWsOutboundTransport implements DidCommOutboundTransport {
 
   // NOTE: Because this method is passed to the event handler this must be a lambda method
   // so 'this' is scoped to the 'WsOutboundTransport' class instance
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private handleMessageEvent = (event: { type: string; data: any; target: WebSocket }) => {
+  private handleMessageEvent = (event: WebSocket.MessageEvent) => {
     this.logger.trace('WebSocket message event received.', { url: event.target.url, data: event.data })
     ;(event.target as ExtWebSocket).lastActivity = new Date()
-    const payload = JsonEncoder.fromBuffer(event.data)
+    const payload = JsonEncoder.fromBuffer(Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data.toString()))
     if (!isValidJweStructure(payload)) {
       throw new Error(
         `Received a response from the other agent but the structure of the
