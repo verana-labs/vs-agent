@@ -231,7 +231,6 @@ export class MessageService {
           if (!credentialDefinitionId && msg.jsonSchemaCredentialId) {
             ;({ credentialDefinitionId } =
               await this.credentialService.getOrRegisterAnonCredsCredentialDefinition({
-                issuerId: agent.did,
                 relatedJsonSchemaCredentialId: msg.jsonSchemaCredentialId,
               }))
           }

@@ -119,6 +119,14 @@ export class CredentialTypesController {
           supportRevocation: true,
         },
       },
+      govId: {
+        summary: 'Government ID VC (linked to JSON Schema)',
+        value: {
+          issuerDid:
+            'did:webvh:QmbfsYcjFS2bnouwXBSoZZ65jREEgZGSPdcatcwY7i1Gq2:dm.gov-id-issuer.demos.dev.2060.io',
+          relatedJsonSchemaCredentialId: 'https://dm.gov-id-tr.demos.dev.2060.io/vt/schemas-gov-id-jsc.json',
+        },
+      },
     },
   })
   @ApiOkResponse({
@@ -140,20 +148,20 @@ export class CredentialTypesController {
       let credentialDefinitionRecord = await this.service.findAnonCredsCredentialDefinition({
         name,
         version,
+        relatedJsonSchemaCredentialId,
       })
 
       if (credentialDefinitionRecord) {
         throw new BadRequestException(
-          `Credential type with name "${name}", version "${version}" already exists.`,
+          `Credential type with name "${name}", version "${version}" or related JSON Schema credential ID ${relatedJsonSchemaCredentialId} already exists.`,
         )
       }
 
       const { schema, schemaId } = await this.service.getOrRegisterAnonCredsSchema(options)
       credentialDefinitionRecord = await this.service.registerAnonCredsCredentialDefinition({
-        name,
-        version,
+        name: name ?? schema.name,
+        version: version ?? schema.version,
         schemaId: schemaId,
-        issuerId: schema.issuerId,
         supportRevocation,
         relatedJsonSchemaCredentialId,
       })
