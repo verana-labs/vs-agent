@@ -13,7 +13,8 @@ import { VsAgent } from './utils'
 
 @Module({})
 export class PublicModule {
-  static register(agent: VsAgent, publicApiBaseUrl: string): DynamicModule {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  static register(agent: VsAgent<any>, publicApiBaseUrl: string): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
     return {
       module: PublicModule,

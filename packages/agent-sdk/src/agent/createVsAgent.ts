@@ -1,13 +1,16 @@
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { AgentDependencies, InitConfig, LogLevel } from '@credo-ts/core'
 
+import { BaseDidCommPlugin } from '../plugins/setupBaseDidComm'
+import { ChatPlugin } from '../plugins/setupChatProtocols'
 import { DidCommPlugin } from '../plugins/setupDidComm'
+import { MrtdPlugin } from '../plugins/setupMrtdProtocol'
 import { SignerPlugin } from '../plugins/setupVeranaSigner'
 
 import { VsAgent } from './VsAgent'
 import { BaseAgentModules } from './types'
 
-type Plugin = SignerPlugin | DidCommPlugin
+export type Plugin = SignerPlugin | BaseDidCommPlugin | ChatPlugin | MrtdPlugin | DidCommPlugin
 
 type MergePluginModules<T extends Plugin[]> = T extends [infer First, ...infer Rest]
   ? First extends { modules: infer M }

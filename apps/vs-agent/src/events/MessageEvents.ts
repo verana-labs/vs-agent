@@ -1,4 +1,4 @@
-import type { ServerConfig } from '../utils'
+import type { EventConfig } from '../utils/EventConfig'
 import type { MessageReceiptsReceivedEvent, MessageState } from '@2060.io/credo-ts-didcomm-receipts'
 import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 
@@ -14,13 +14,6 @@ import {
   DidCommMediaSharingState,
   DidCommMediaSharingStateChangedEvent,
 } from '@2060.io/credo-ts-didcomm-media-sharing'
-import {
-  EMrtdDataReceivedEvent,
-  MrtdEventTypes,
-  MrtdProblemReportEvent,
-  MrtdProblemReportReason,
-  MrzDataReceivedEvent,
-} from '@2060.io/credo-ts-didcomm-mrtd'
 import { ReceiptsEventTypes } from '@2060.io/credo-ts-didcomm-receipts'
 import {
   ConnectionProfileUpdatedEvent,
@@ -55,12 +48,9 @@ import {
   CallEndRequestMessage,
   CallRejectRequestMessage,
   ProfileMessage,
-  MrzDataSubmitMessage,
-  EMrtdDataSubmitMessage,
   VerifiableCredentialSubmittedProofItem,
   MessageStateUpdated,
   MessageReceived,
-  MrtdSubmitState,
   CallAcceptRequestMessage,
 } from '@verana-labs/vs-agent-model'
 
@@ -71,7 +61,7 @@ import { sendWebhookEvent } from './WebhookEvent'
 
 // FIXME: timestamps are currently taken from reception date. They should be get from the originating DIDComm message
 // as soon as the corresponding extension is added to them
-export const messageEvents = async (agent: VsAgent<DidCommAgentModules>, config: ServerConfig) => {
+export const messageEvents = async (agent: VsAgent<DidCommAgentModules>, config: EventConfig) => {
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
     async ({ payload }: DidCommMessageProcessedEvent) => {
@@ -476,81 +466,17 @@ export const messageEvents = async (agent: VsAgent<DidCommAgentModules>, config:
     },
   )
 
-  // MRTD events
-  agent.events.on(MrtdEventTypes.MrzDataReceived, async ({ payload }: MrzDataReceivedEvent) => {
-    const { connection, mrzData, threadId } = payload
-
-    const msg = new MrzDataSubmitMessage({
-      connectionId: connection.id,
-      threadId,
-      state: MrtdSubmitState.Submitted,
-      mrzData,
-    })
-
-    msg.id = await getRecordId(agent, msg.id)
-    await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
-  })
-
-  agent.events.on(MrtdEventTypes.EMrtdDataReceived, async ({ payload }: EMrtdDataReceivedEvent) => {
-    const { connection, dataGroups, threadId } = payload
-
-    const msg = new EMrtdDataSubmitMessage({
-      connectionId: connection.id,
-      threadId,
-      state: MrtdSubmitState.Submitted,
-      dataGroups,
-    })
-
-    msg.id = await getRecordId(agent, msg.id)
-    await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
-  })
-
-  // MRTD problem reports
-  agent.events.on(MrtdEventTypes.MrtdProblemReport, async ({ payload }: MrtdProblemReportEvent) => {
-    const { connection, description, threadId } = payload
-
-    const stateMap: Record<MrtdProblemReportReason, MrtdSubmitState> = {
-      'e.p.emrtd-refused': MrtdSubmitState.Declined,
-      'e.p.emrtd-timeout': MrtdSubmitState.Timeout,
-      'e.p.mrz-refused': MrtdSubmitState.Declined,
-      'e.p.mrz-timeout': MrtdSubmitState.Timeout,
-    }
-
-    if (
-      [MrtdProblemReportReason.EmrtdRefused, MrtdProblemReportReason.EmrtdTimeout].includes(
-        description.code as MrtdProblemReportReason,
-      )
-    ) {
-      const msg = new EMrtdDataSubmitMessage({
-        connectionId: connection.id,
-        threadId,
-        state: stateMap[description.code as MrtdProblemReportReason],
-      })
-      msg.id = await getRecordId(agent, msg.id)
-      await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
-    } else if (
-      [MrtdProblemReportReason.MrzRefused, MrtdProblemReportReason.MrzTimeout].includes(
-        description.code as MrtdProblemReportReason,
-      )
-    ) {
-      const msg = new MrzDataSubmitMessage({
-        connectionId: connection.id,
-        threadId,
-        state: stateMap[description.code as MrtdProblemReportReason],
-      })
-      msg.id = await getRecordId(agent, msg.id)
-      await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
-    }
-  })
-
   // At the moment we only support refusal/timeouts. Other errors are TBD
 }
+
+/** Alias for use by the ChatPlugin */
+export { messageEvents as chatEvents }
 
 const sendMessageReceivedEvent = async (
   agent: VsAgent<DidCommAgentModules>,
   message: BaseMessage,
   timestamp: Date,
-  config: ServerConfig,
+  config: EventConfig,
 ) => {
   const body = new MessageReceived({
     timestamp,
@@ -566,7 +492,7 @@ const sendMessageStateUpdatedEvent = async (options: {
   connectionId: string
   state: MessageState
   timestamp: Date
-  config: ServerConfig
+  config: EventConfig
 }) => {
   const { agent, messageId, connectionId, state, timestamp, config } = options
   const recordId = await agent.genericRecords.findById(messageId)

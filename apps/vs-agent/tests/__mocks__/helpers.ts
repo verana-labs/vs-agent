@@ -15,6 +15,7 @@ import { vi } from 'vitest'
 
 import { VsAgentModule } from '../../src/admin.module'
 import { messageEvents } from '../../src/events/MessageEvents'
+import { ChatPlugin } from '../../src/plugins/ChatPlugin'
 import { PublicModule } from '../../src/public.module'
 import { ServerConfig, TsLogger, VsAgent } from '../../src/utils'
 
@@ -100,7 +101,7 @@ export function waitForEvent<T>(
 export const startServersTesting = async (agent: VsAgent<DidCommAgentModules>): Promise<INestApplication> => {
   const moduleRef = await Test.createTestingModule({
     imports: [
-      VsAgentModule.register(agent, 'http://localhost:3001'),
+      VsAgentModule.register(agent, 'http://localhost:3001', [ChatPlugin]),
       PublicModule.register(agent, 'http://localhost:3001'),
     ],
   }).compile()

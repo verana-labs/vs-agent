@@ -4,10 +4,12 @@ import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import {
+  BaseDidCommAgentModules,
   createVsAgent,
-  DidCommAgentModules,
   HttpInboundTransport,
-  setupDidComm,
+  setupBaseDidComm,
+  setupChatProtocols,
+  setupMrtdProtocol,
   setupVeranaSigner,
   VsAgent,
   VsAgentWsInboundTransport,
@@ -16,7 +18,8 @@ import express from 'express'
 import WebSocket from 'ws'
 
 import { ENABLE_PUBLIC_API_SWAGGER } from '../config'
-import { AGENT_MODE } from '../config/constants'
+import { ENABLED_PLUGINS } from '../config/constants'
+import { VsAgentNestPlugin } from '../plugins/types'
 
 import { TsLogger } from './logger'
 
@@ -32,6 +35,7 @@ export const setupAgent = async ({
   autoDiscloseUserProfile,
   masterListCscaLocation,
   autoUpdateStorageOnStartup,
+  nestPlugins,
 }: {
   port: number
   walletConfig: AskarModuleConfigStoreOptions
@@ -44,21 +48,23 @@ export const setupAgent = async ({
   parsedDid?: ParsedDid
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
+  nestPlugins?: VsAgentNestPlugin[]
 }) => {
   const logger = new TsLogger(logLevel ?? LogLevel.warn, 'Agent')
   const publicDid = parsedDid?.did
-  const isDidComm = AGENT_MODE === 'didcomm'
 
-  if (isDidComm && endpoints.length === 0) {
+  if (endpoints.length === 0) {
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
-  const plugins = isDidComm
-    ? [
-        setupVeranaSigner({ walletConfig, publicApiBaseUrl, masterListCscaLocation }),
-        setupDidComm({ endpoints, masterListCscaLocation }),
-      ]
-    : [setupVeranaSigner({ walletConfig, publicApiBaseUrl, masterListCscaLocation })]
+  const plugins = [
+    setupVeranaSigner({ walletConfig, publicApiBaseUrl, masterListCscaLocation }),
+    setupBaseDidComm({ endpoints }),
+    ...(ENABLED_PLUGINS.includes('chat') ? [setupChatProtocols()] : []),
+    ...(ENABLED_PLUGINS.includes('mrtd') ? [setupMrtdProtocol({ masterListCscaLocation })] : []),
+    // Also merge any extra Credo modules from NestJS plugins
+    ...(nestPlugins?.filter(p => p.credoPlugin).map(p => p.credoPlugin!) ?? []),
+  ]
 
   const agent = createVsAgent({
     plugins,
@@ -76,21 +82,19 @@ export const setupAgent = async ({
     displayPictureUrl,
   })
 
-  if (isDidComm) {
-    const didcommAgent = agent as unknown as VsAgent<DidCommAgentModules>
-    const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
-    if (enableHttp) {
-      logger.info('Inbound HTTP transport enabled')
-      didcommAgent.didcomm.registerInboundTransport(new HttpInboundTransport({ port }))
-    }
+  const didcommAgent = agent as unknown as VsAgent<BaseDidCommAgentModules>
+  const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
+  if (enableHttp) {
+    logger.info('Inbound HTTP transport enabled')
+    didcommAgent.didcomm.registerInboundTransport(new HttpInboundTransport({ port }))
+  }
 
-    const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
-    if (enableWs) {
-      logger.info('Inbound WebSocket transport enabled')
-      didcommAgent.didcomm.registerInboundTransport(
-        new VsAgentWsInboundTransport({ server: new WebSocket.Server({ noServer: true }) }),
-      )
-    }
+  const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
+  if (enableWs) {
+    logger.info('Inbound WebSocket transport enabled')
+    didcommAgent.didcomm.registerInboundTransport(
+      new VsAgentWsInboundTransport({ server: new WebSocket.Server({ noServer: true }) }),
+    )
   }
 
   await agent.initialize()

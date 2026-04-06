@@ -29,6 +29,7 @@ export type {
 } from '@verana-labs/vs-agent-sdk'
 
 export * from './agent'
+export * from './EventConfig'
 export * from './ServerConfig'
 export * from './logger'
 export * from './setupAgent'

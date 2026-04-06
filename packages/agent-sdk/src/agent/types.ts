@@ -30,6 +30,36 @@ export type BaseAgentModules = {
   w3cCredentials: W3cCredentialsModule
 }
 
+export type BaseDidCommAgentModules = BaseAgentModules & {
+  didcomm: DidCommModule<
+    DidCommModuleConfigOptions & {
+      credentials: DidCommCredentialsModuleConfigOptions<
+        [
+          DidCommCredentialV2Protocol<
+            [LegacyIndyDidCommCredentialFormatService, AnonCredsDidCommCredentialFormatService]
+          >,
+        ]
+      >
+      proofs: DidCommProofsModuleConfigOptions<
+        [DidCommProofV2Protocol<[LegacyIndyDidCommProofFormatService, AnonCredsDidCommProofFormatService]>]
+      >
+    }
+  >
+}
+
+export type ChatAgentModules = BaseDidCommAgentModules & {
+  actionMenu: ActionMenuModule
+  calls: DidCommCallsModule
+  media: DidCommMediaSharingModule
+  questionAnswer: QuestionAnswerModule
+  receipts: DidCommReceiptsModule
+  userProfile: DidCommUserProfileModule
+}
+
+export type MrtdAgentModules = BaseDidCommAgentModules & {
+  mrtd: DidCommMrtdModule
+}
+
 export type DidCommAgentModules = BaseAgentModules & {
   didcomm: DidCommModule<
     DidCommModuleConfigOptions & {

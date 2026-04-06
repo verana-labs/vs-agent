@@ -116,5 +116,11 @@ export const AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP =
 
 export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFORE_STORAGE_UPDATE !== 'false' // removed on credo-ts v0.6.0
 
-// Agent mode: 'vtc' (signer-only, no DIDComm) or 'didcomm' (full DIDComm agent, default)
-export const AGENT_MODE = (process.env.AGENT_MODE ?? 'didcomm') as 'vtc' | 'didcomm'
+// Active plugins: comma-separated list of plugin names (default: all)
+// Available: 'chat' (messaging, connections, presentations), 'mrtd' (eMRTD reading/verification)
+export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'chat')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean)
+
+if (MASTER_LIST_CSCA_LOCATION && !ENABLED_PLUGINS.includes('mrtd')) ENABLED_PLUGINS.push('mrtd')

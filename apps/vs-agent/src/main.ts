@@ -1,11 +1,14 @@
 import 'reflect-metadata'
 
-import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
-
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
-import { HttpInboundTransport, VsAgent, VsAgentWsInboundTransport } from '@verana-labs/vs-agent-sdk'
+import {
+  BaseDidCommAgentModules,
+  HttpInboundTransport,
+  VsAgent,
+  VsAgentWsInboundTransport,
+} from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
 import { IncomingMessage } from 'http'
@@ -24,7 +27,6 @@ import {
   AGENT_LABEL,
   UI_WELCOME_MESSAGE,
   AGENT_LOG_LEVEL,
-  AGENT_MODE,
   AGENT_NAME,
   AGENT_PORT,
   AGENT_PUBLIC_DID,
@@ -34,6 +36,7 @@ import {
   askarPostgresConfig,
   DEFAULT_AGENT_ENDPOINTS,
   DEFAULT_PUBLIC_API_BASE_URL,
+  ENABLED_PLUGINS,
   EVENTS_BASE_URL,
   keyDerivationMethodMap,
   POSTGRES_HOST,
@@ -43,16 +46,14 @@ import {
   MASTER_LIST_CSCA_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
 } from './config'
-import { connectionEvents } from './events/ConnectionEvents'
-import { messageEvents } from './events/MessageEvents'
+import { ChatPlugin, MrtdPlugin, VsAgentNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { commonAppConfig, type ServerConfig, setupAgent, setupSelfTr, TsLogger } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
-  const { port, cors, endpoints, publicApiBaseUrl } = serverConfig
-  const isDidComm = AGENT_MODE === 'didcomm'
+  const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
 
-  const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, AGENT_MODE))
+  const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins))
   commonAppConfig(adminApp, cors)
   await adminApp.listen(port)
 
@@ -75,34 +76,32 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   publicApp.use(express.static(publicDir))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
-  if (isDidComm) {
-    const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
-    const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
-    const didcommAgent = agent as unknown as VsAgent<DidCommAgentModules>
+  const didcommAgent = agent as unknown as VsAgent<BaseDidCommAgentModules>
+  const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
+  const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
 
-    const webSocketServer = didcommAgent.didcomm.inboundTransports
-      .find(x => x instanceof VsAgentWsInboundTransport)
-      ?.getServer()
-    const httpInboundTransport = didcommAgent.didcomm.inboundTransports.find(
-      x => x instanceof HttpInboundTransport,
-    )
+  const webSocketServer = didcommAgent.didcomm.inboundTransports
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .find((x: any) => x instanceof VsAgentWsInboundTransport)
+    ?.getServer()
+  const httpInboundTransport = didcommAgent.didcomm.inboundTransports
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .find((x: any) => x instanceof HttpInboundTransport)
 
-    if (enableHttp) {
-      httpInboundTransport?.setApp(publicApp.getHttpAdapter().getInstance())
-    }
+  if (enableHttp) {
+    httpInboundTransport?.setApp(publicApp.getHttpAdapter().getInstance())
+  }
 
-    const httpServer = httpInboundTransport ? httpInboundTransport.server : await publicApp.listen(AGENT_PORT)
+  const httpServer = httpInboundTransport ? httpInboundTransport.server : await publicApp.listen(AGENT_PORT)
 
-    if (enableWs) {
-      httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
-        webSocketServer?.handleUpgrade(request, socket as Socket, head, socketParam => {
-          const socketId = utils.uuid()
-          webSocketServer?.emit('connection', socketParam, request, socketId)
-        })
+  if (enableWs) {
+    httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      webSocketServer?.handleUpgrade(request, socket as Socket, head, (socketParam: any) => {
+        const socketId = utils.uuid()
+        webSocketServer?.emit('connection', socketParam, request, socketId)
       })
-    }
-  } else {
-    await publicApp.listen(AGENT_PORT)
+    })
   }
 }
 
@@ -143,6 +142,15 @@ const run = async () => {
   if (!publicApiBaseUrl) publicApiBaseUrl = DEFAULT_PUBLIC_API_BASE_URL
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
+
+  // Build the list of active NestJS plugins
+  const nestPlugins: VsAgentNestPlugin[] = [
+    ...(ENABLED_PLUGINS.includes('chat') ? [ChatPlugin] : []),
+    ...(ENABLED_PLUGINS.includes('mrtd')
+      ? [MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })]
+      : []),
+  ]
+
   const { agent } = await setupAgent({
     endpoints,
     port: AGENT_PORT,
@@ -160,6 +168,7 @@ const run = async () => {
     autoDiscloseUserProfile: USER_PROFILE_AUTODISCLOSE,
     masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
+    nestPlugins,
   })
 
   const discoveryOptions = (() => {
@@ -178,6 +187,7 @@ const run = async () => {
     publicApiBaseUrl,
     discoveryOptions,
     endpoints,
+    nestPlugins,
   }
 
   await startServers(agent, conf)
@@ -185,11 +195,9 @@ const run = async () => {
   // Initialize Self-Trust Registry
   if (agent.did) await setupSelfTr({ agent, publicApiBaseUrl })
 
-  // Listen to events emitted by the agent (DIDComm mode only)
-  if (AGENT_MODE === 'didcomm') {
-    const didcommAgent = agent as unknown as VsAgent<DidCommAgentModules>
-    connectionEvents(didcommAgent, conf)
-    messageEvents(didcommAgent, conf)
+  // Register plugin events after agent is initialized
+  for (const plugin of nestPlugins) {
+    plugin.registerEvents?.(agent, conf)
   }
 
   agent.config.logger.info(

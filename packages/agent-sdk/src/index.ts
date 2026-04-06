@@ -2,12 +2,24 @@
 export { VsAgent, defaultDocumentLoader } from './agent/VsAgent'
 export type { VsAgentOptions } from './agent/VsAgent'
 export { createVsAgent } from './agent/createVsAgent'
-export type { CreateVsAgentOptions } from './agent/createVsAgent'
-export type { BaseAgentModules, DidCommAgentModules } from './agent/types'
+export type { CreateVsAgentOptions, Plugin } from './agent/createVsAgent'
+export type {
+  BaseAgentModules,
+  BaseDidCommAgentModules,
+  ChatAgentModules,
+  MrtdAgentModules,
+  DidCommAgentModules,
+} from './agent/types'
 
 // Plugins
 export { setupVeranaSigner } from './plugins/setupVeranaSigner'
 export type { SignerPlugin, SignerPluginOptions } from './plugins/setupVeranaSigner'
+export { setupBaseDidComm } from './plugins/setupBaseDidComm'
+export type { BaseDidCommPlugin, BaseDidCommPluginOptions } from './plugins/setupBaseDidComm'
+export { setupChatProtocols } from './plugins/setupChatProtocols'
+export type { ChatPlugin } from './plugins/setupChatProtocols'
+export { setupMrtdProtocol } from './plugins/setupMrtdProtocol'
+export type { MrtdPlugin, MrtdPluginOptions } from './plugins/setupMrtdProtocol'
 export { setupDidComm } from './plugins/setupDidComm'
 export type { DidCommPlugin, DidCommPluginOptions } from './plugins/setupDidComm'
 

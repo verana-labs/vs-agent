@@ -2,32 +2,26 @@ import { DynamicModule, Module } from '@nestjs/common'
 import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
-  ConnectionController,
-  CoreMessageService,
   CredentialTypesController,
   CredentialTypesService,
   HealthController,
   InvitationController,
-  MessageController,
-  MessageService,
-  MessageServiceFactory,
-  PresentationsController,
   QrController,
-  RedisMessageService,
   TrustController,
   TrustService,
   VsAgentController,
 } from './controllers'
-import { HandledRedisModule } from './modules/redis.module'
+import { VsAgentNestPlugin } from './plugins'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
 
 @Module({})
 export class VsAgentModule {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static register(
-    agent: VsAgent,
+    agent: VsAgent<any>,
     publicApiBaseUrl: string,
-    mode: 'vtc' | 'didcomm' = 'didcomm',
+    nestPlugins: VsAgentNestPlugin[] = [],
   ): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
 
@@ -39,8 +33,6 @@ export class VsAgentModule {
       QrController,
       TrustController,
     ]
-
-    const didcommControllers = [ConnectionController, MessageController, PresentationsController]
 
     const baseProviders = [
       {
@@ -57,13 +49,11 @@ export class VsAgentModule {
       CredentialTypesService,
     ]
 
-    const didcommProviders = [MessageService, RedisMessageService, CoreMessageService, MessageServiceFactory]
-
     return {
       module: VsAgentModule,
-      imports: mode === 'didcomm' ? [HandledRedisModule.forRoot()] : [],
-      controllers: mode === 'didcomm' ? [...baseControllers, ...didcommControllers] : baseControllers,
-      providers: mode === 'didcomm' ? [...baseProviders, ...didcommProviders] : baseProviders,
+      imports: nestPlugins.flatMap(p => p.imports ?? []),
+      controllers: [...baseControllers, ...nestPlugins.flatMap(p => p.controllers ?? [])],
+      providers: [...baseProviders, ...nestPlugins.flatMap(p => p.providers ?? [])],
       exports: [VsAgentService],
     }
   }
