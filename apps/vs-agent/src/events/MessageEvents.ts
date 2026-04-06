@@ -469,7 +469,6 @@ export const messageEvents = async (agent: VsAgent<DidCommAgentModules>, config:
   // At the moment we only support refusal/timeouts. Other errors are TBD
 }
 
-/** Alias for use by the ChatPlugin */
 export { messageEvents as chatEvents }
 
 const sendMessageReceivedEvent = async (

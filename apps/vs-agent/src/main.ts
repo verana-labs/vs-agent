@@ -168,7 +168,6 @@ const run = async () => {
     autoDiscloseUserProfile: USER_PROFILE_AUTODISCLOSE,
     masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
-    nestPlugins,
   })
 
   const discoveryOptions = (() => {

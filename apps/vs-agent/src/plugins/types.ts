@@ -1,17 +1,16 @@
 import type { EventConfig } from '../utils/EventConfig'
 import type { DynamicModule, Provider, Type } from '@nestjs/common'
-import type { Plugin, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
+/**
+ * Represents a plugin that extends the VsAgent within a NestJS application.
+ * It allows registering NestJS components (controllers, providers, imports),
+ * and hooking into the agent lifecycle to attach custom event listeners after initialization.
+ */
 export interface VsAgentNestPlugin {
   name: string
-  /** Credo modules to merge into the agent at construction time */
-  credoPlugin?: Plugin
-  /** NestJS controllers to register in the admin module */
   controllers?: Type<any>[]
-  /** NestJS providers to register in the admin module */
   providers?: Provider[]
-  /** NestJS DynamicModules to import in the admin module */
   imports?: DynamicModule[]
-  /** Event subscriptions to register after agent initialization */
   registerEvents?: (agent: VsAgent<any>, config: EventConfig) => void
 }

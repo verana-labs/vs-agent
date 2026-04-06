@@ -19,7 +19,6 @@ import WebSocket from 'ws'
 
 import { ENABLE_PUBLIC_API_SWAGGER } from '../config'
 import { ENABLED_PLUGINS } from '../config/constants'
-import { VsAgentNestPlugin } from '../plugins/types'
 
 import { TsLogger } from './logger'
 
@@ -35,7 +34,6 @@ export const setupAgent = async ({
   autoDiscloseUserProfile,
   masterListCscaLocation,
   autoUpdateStorageOnStartup,
-  nestPlugins,
 }: {
   port: number
   walletConfig: AskarModuleConfigStoreOptions
@@ -48,7 +46,6 @@ export const setupAgent = async ({
   parsedDid?: ParsedDid
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
-  nestPlugins?: VsAgentNestPlugin[]
 }) => {
   const logger = new TsLogger(logLevel ?? LogLevel.warn, 'Agent')
   const publicDid = parsedDid?.did
@@ -62,8 +59,6 @@ export const setupAgent = async ({
     setupBaseDidComm({ endpoints }),
     ...(ENABLED_PLUGINS.includes('chat') ? [setupChatProtocols()] : []),
     ...(ENABLED_PLUGINS.includes('mrtd') ? [setupMrtdProtocol({ masterListCscaLocation })] : []),
-    // Also merge any extra Credo modules from NestJS plugins
-    ...(nestPlugins?.filter(p => p.credoPlugin).map(p => p.credoPlugin!) ?? []),
   ]
 
   const agent = createVsAgent({

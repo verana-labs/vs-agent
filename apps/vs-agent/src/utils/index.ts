@@ -1,4 +1,3 @@
-// Re-export from SDK for backwards compatibility
 export {
   CachedWebDidResolver,
   HttpInboundTransport,
