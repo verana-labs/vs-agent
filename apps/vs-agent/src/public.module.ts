@@ -1,4 +1,5 @@
 import { DynamicModule, Module } from '@nestjs/common'
+import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
   CredentialTypesService,
@@ -9,7 +10,6 @@ import {
 } from './controllers'
 import { UrlShorteningService } from './services'
 import { VsAgentService } from './services/VsAgentService'
-import { VsAgent } from './utils'
 
 @Module({})
 export class PublicModule {

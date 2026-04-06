@@ -2,13 +2,7 @@ import { AskarSqliteStorageConfig } from '@credo-ts/askar'
 import { LogLevel, utils } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
-import {
-  createVsAgent,
-  setupVeranaSigner,
-  setupDidComm,
-  VsAgent,
-  DidCommAgentModules,
-} from '@verana-labs/vs-agent-sdk'
+import { createVsAgent, setupDidComm, VsAgent, DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 
 import { keyDerivationMethodMap } from '../../src/config'
 import { TsLogger } from '../../src/utils'
@@ -23,8 +17,7 @@ export const startAgent = async ({
   const walletConfig = getAskarStoreConfig(label, { inMemory: true })
   const agent = createVsAgent({
     plugins: [
-      setupVeranaSigner({ walletConfig, publicApiBaseUrl: `https://${domain}` }),
-      setupDidComm({ endpoints: [`rxjs:${domain}`] }),
+      setupDidComm({ walletConfig, publicApiBaseUrl: `https://${domain}`, endpoints: [`rxjs:${domain}`] }),
     ],
     config: {
       logger: new TsLogger(LogLevel.off, label),

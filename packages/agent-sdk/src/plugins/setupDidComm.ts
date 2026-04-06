@@ -1,8 +1,12 @@
+import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
+
 import { setupBaseDidComm } from './setupBaseDidComm'
 import { setupChatProtocols } from './setupChatProtocols'
 import { setupMrtdProtocol } from './setupMrtdProtocol'
 
 export interface DidCommPluginOptions {
+  walletConfig: AskarModuleConfigStoreOptions
+  publicApiBaseUrl: string
   endpoints: string[]
   masterListCscaLocation?: string
 }
@@ -18,11 +22,12 @@ export interface DidCommPlugin {
  * For selective module inclusion, use the individual setup functions instead.
  */
 export function setupDidComm(options: DidCommPluginOptions): DidCommPlugin {
+  const { walletConfig, publicApiBaseUrl, endpoints, masterListCscaLocation } = options
   return {
     modules: {
-      ...setupBaseDidComm({ endpoints: options.endpoints }).modules,
+      ...setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints }).modules,
       ...setupChatProtocols().modules,
-      ...setupMrtdProtocol({ masterListCscaLocation: options.masterListCscaLocation }).modules,
+      ...setupMrtdProtocol({ masterListCscaLocation }).modules,
     },
   }
 }

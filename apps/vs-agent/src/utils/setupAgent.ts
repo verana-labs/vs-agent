@@ -4,13 +4,12 @@ import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import {
-  BaseDidCommAgentModules,
+  BaseAgentModules,
   createVsAgent,
   HttpInboundTransport,
   setupBaseDidComm,
   setupChatProtocols,
   setupMrtdProtocol,
-  setupVeranaSigner,
   VsAgent,
   VsAgentWsInboundTransport,
 } from '@verana-labs/vs-agent-sdk'
@@ -54,15 +53,12 @@ export const setupAgent = async ({
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
-  const plugins = [
-    setupVeranaSigner({ walletConfig, publicApiBaseUrl, masterListCscaLocation }),
-    setupBaseDidComm({ endpoints }),
-    ...(ENABLED_PLUGINS.includes('chat') ? [setupChatProtocols()] : []),
-    ...(ENABLED_PLUGINS.includes('mrtd') ? [setupMrtdProtocol({ masterListCscaLocation })] : []),
-  ]
-
   const agent = createVsAgent({
-    plugins,
+    plugins: [
+      setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints }),
+      ...(ENABLED_PLUGINS.includes('chat') ? [setupChatProtocols()] : []),
+      ...(ENABLED_PLUGINS.includes('mrtd') ? [setupMrtdProtocol({ masterListCscaLocation })] : []),
+    ],
     config: {
       logger,
       autoUpdateStorageOnStartup,
@@ -77,7 +73,7 @@ export const setupAgent = async ({
     displayPictureUrl,
   })
 
-  const didcommAgent = agent as unknown as VsAgent<BaseDidCommAgentModules>
+  const didcommAgent = agent as unknown as VsAgent<BaseAgentModules>
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
   if (enableHttp) {
     logger.info('Inbound HTTP transport enabled')

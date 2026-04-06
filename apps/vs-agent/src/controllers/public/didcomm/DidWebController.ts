@@ -4,12 +4,12 @@ import {
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
 import { Controller, Get, Param, Res, HttpStatus, HttpException, Inject, Query } from '@nestjs/common'
+import { getLegacyDidDocument, getWebDid, VsAgent } from '@verana-labs/vs-agent-sdk'
 import { DIDLog } from 'didwebvh-ts'
 import { Response } from 'express'
 import * as fs from 'fs'
 
 import { baseFilePath, tailsIndex, VsAgentService } from '../../../services'
-import { getLegacyDidDocument, getWebDid, VsAgent } from '../../../utils'
 
 @Controller()
 export class DidWebController {

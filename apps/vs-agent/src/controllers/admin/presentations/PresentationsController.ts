@@ -55,8 +55,7 @@ export class PresentationsController {
     const records = await agent.didcomm.proofs.getAll()
 
     return Promise.all(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      records.map(async (record: any) => {
+      records.map(async (record: DidCommProofExchangeRecord) => {
         return await this.getPresentationData(record)
       }),
     )
@@ -130,15 +129,13 @@ export class PresentationsController {
     const claims: Claim[] = []
     if (revealedAttributes) {
       for (const [name, value] of Object.entries(revealedAttributes)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        claims.push(new Claim({ name, value: (value as any).raw }))
+        claims.push(new Claim({ name, value: (value as { raw: string }).raw }))
       }
     }
 
     if (revealedAttributeGroups) {
       for (const [, groupAttributes] of Object.entries(revealedAttributeGroups)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const groupAttrs = groupAttributes as any
+        const groupAttrs = groupAttributes as { values: Record<string, { raw: string }> }
         for (const attrName in groupAttrs.values) {
           claims.push(new Claim({ name: attrName, value: groupAttrs.values[attrName].raw }))
         }

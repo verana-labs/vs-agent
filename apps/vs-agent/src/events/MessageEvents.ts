@@ -53,8 +53,7 @@ import {
   MessageReceived,
   CallAcceptRequestMessage,
 } from '@verana-labs/vs-agent-model'
-
-import { createDataUrl, VsAgent } from '../utils'
+import { createDataUrl, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
 import { sendWebhookEvent } from './WebhookEvent'

@@ -5,12 +5,11 @@ import { BaseDidCommPlugin } from '../plugins/setupBaseDidComm'
 import { ChatPlugin } from '../plugins/setupChatProtocols'
 import { DidCommPlugin } from '../plugins/setupDidComm'
 import { MrtdPlugin } from '../plugins/setupMrtdProtocol'
-import { SignerPlugin } from '../plugins/setupVeranaSigner'
 
 import { VsAgent } from './VsAgent'
 import { BaseAgentModules } from './types'
 
-export type Plugin = SignerPlugin | BaseDidCommPlugin | ChatPlugin | MrtdPlugin | DidCommPlugin
+export type Plugin = BaseDidCommPlugin | ChatPlugin | MrtdPlugin | DidCommPlugin
 
 type MergePluginModules<T extends Plugin[]> = T extends [infer First, ...infer Rest]
   ? First extends { modules: infer M }
@@ -44,7 +43,7 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
  * @example
  * // Signer-only agent (no DIDComm)
  * const agent = createVsAgent({
- *   plugins: [setupVeranaSigner({ walletConfig, publicApiBaseUrl })],
+ *   plugins: [setupDidComm({ walletConfig, publicApiBaseUrl. endpoints })],
  *   label: 'My Agent',
  *   publicApiBaseUrl,
  *   dependencies: agentDependencies,
@@ -54,8 +53,7 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
  * // Full DIDComm agent
  * const agent = createVsAgent({
  *   plugins: [
- *     setupVeranaSigner({ walletConfig, publicApiBaseUrl }),
- *     setupDidComm({ endpoints }),
+ *     setupDidComm({ walletConfig, publicApiBaseUrl. endpoints }),
  *   ],
  *   label: 'My Agent',
  *   publicApiBaseUrl,

@@ -28,9 +28,6 @@ export type BaseAgentModules = {
   anoncreds: AnonCredsModule
   dids: DidsModule
   w3cCredentials: W3cCredentialsModule
-}
-
-export type BaseDidCommAgentModules = BaseAgentModules & {
   didcomm: DidCommModule<
     DidCommModuleConfigOptions & {
       credentials: DidCommCredentialsModuleConfigOptions<
@@ -47,7 +44,7 @@ export type BaseDidCommAgentModules = BaseAgentModules & {
   >
 }
 
-export type ChatAgentModules = BaseDidCommAgentModules & {
+export type ChatAgentModules = BaseAgentModules & {
   actionMenu: ActionMenuModule
   calls: DidCommCallsModule
   media: DidCommMediaSharingModule
@@ -56,25 +53,11 @@ export type ChatAgentModules = BaseDidCommAgentModules & {
   userProfile: DidCommUserProfileModule
 }
 
-export type MrtdAgentModules = BaseDidCommAgentModules & {
+export type MrtdAgentModules = BaseAgentModules & {
   mrtd: DidCommMrtdModule
 }
 
 export type DidCommAgentModules = BaseAgentModules & {
-  didcomm: DidCommModule<
-    DidCommModuleConfigOptions & {
-      credentials: DidCommCredentialsModuleConfigOptions<
-        [
-          DidCommCredentialV2Protocol<
-            [LegacyIndyDidCommCredentialFormatService, AnonCredsDidCommCredentialFormatService]
-          >,
-        ]
-      >
-      proofs: DidCommProofsModuleConfigOptions<
-        [DidCommProofV2Protocol<[LegacyIndyDidCommProofFormatService, AnonCredsDidCommProofFormatService]>]
-      >
-    }
-  >
   actionMenu: ActionMenuModule
   calls: DidCommCallsModule
   media: DidCommMediaSharingModule

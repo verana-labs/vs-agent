@@ -123,7 +123,9 @@ export class VsAgentWsOutboundTransport implements DidCommOutboundTransport {
   private handleMessageEvent = (event: WebSocket.MessageEvent) => {
     this.logger.trace('WebSocket message event received.', { url: event.target.url, data: event.data })
     ;(event.target as ExtWebSocket).lastActivity = new Date()
-    const payload = JsonEncoder.fromBuffer(Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data.toString()))
+    const payload = JsonEncoder.fromBuffer(
+      Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data.toString()),
+    )
     if (!isValidJweStructure(payload)) {
       throw new Error(
         `Received a response from the other agent but the structure of the

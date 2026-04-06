@@ -13,10 +13,11 @@ import {
   CreatePresentationRequestResult,
   CreateInvitationResult,
 } from '@verana-labs/vs-agent-model'
+import { createInvitation } from '@verana-labs/vs-agent-sdk'
 
+import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../config'
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { createInvitation } from '../../../utils'
 
 import { CreateCredentialOfferDto, CreatePresentationRequestDto } from './InvitationDto'
 
@@ -48,7 +49,11 @@ export class InvitationController {
   })
   @ApiQuery({ name: 'legacy', required: false, type: Boolean })
   public async getInvitation(@Query('legacy') useLegacyDid?: boolean): Promise<CreateInvitationResult> {
-    return await createInvitation({ agent: await this.agentService.getAgent(), useLegacyDid })
+    return await createInvitation({
+      agent: await this.agentService.getAgent(),
+      useLegacyDid,
+      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
+    })
   }
 
   @Post('/presentation-request')
@@ -156,6 +161,8 @@ export class InvitationController {
       agent: await this.agentService.getAgent(),
       messages: [request.message],
       useLegacyDid,
+      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
+      imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({
@@ -270,6 +277,8 @@ export class InvitationController {
       agent: await this.agentService.getAgent(),
       messages: [request.message],
       useLegacyDid,
+      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
+      imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({

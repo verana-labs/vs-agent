@@ -3,9 +3,9 @@ import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 @Injectable()
 export class VsAgentService {
-  constructor(@Inject('VSAGENT') private agent: VsAgent<any>) {}
+  constructor(@Inject('VSAGENT') private agent: VsAgent) {}
 
-  async getAgent(): Promise<VsAgent<any>> {
+  async getAgent(): Promise<VsAgent> {
     if (!this.agent.isInitialized) {
       await this.agent.initialize()
     }

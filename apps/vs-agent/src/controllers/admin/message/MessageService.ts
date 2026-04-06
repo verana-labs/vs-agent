@@ -34,9 +34,9 @@ import {
   RequestedCredential,
   CredentialRevocationMessage,
 } from '@verana-labs/vs-agent-model'
+import { didcommReceiptFromVsAgentReceipt, parsePictureData } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
-import { didcommReceiptFromVsAgentReceipt, parsePictureData } from '../../../utils'
 import { CredentialTypesService } from '../credentials'
 
 @Injectable()

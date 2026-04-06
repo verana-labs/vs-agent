@@ -1,6 +1,5 @@
-import type { VsAgent } from '../utils'
 import type { EventConfig } from '../utils/EventConfig'
-import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+import type { VsAgent, DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 
 import {
   DidCommConnectionEventTypes,

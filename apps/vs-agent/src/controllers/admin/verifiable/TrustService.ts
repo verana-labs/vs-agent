@@ -11,23 +11,22 @@ import {
 } from '@credo-ts/core'
 import { Logger, Inject, Injectable, HttpException, HttpStatus } from '@nestjs/common'
 import { CredentialIssuanceRequest, CredentialIssuanceResponse } from '@verana-labs/vs-agent-model'
+import { createInvitation, getEcsSchemas, VsAgent } from '@verana-labs/vs-agent-sdk'
 
+import { AGENT_INVITATION_BASE_URL } from '../../../config'
 import { UrlShorteningService } from '../../../services'
 import { VsAgentService } from '../../../services/VsAgentService'
 import {
   addDigestSRI,
   createCredential,
-  createInvitation,
   createJsonSchema,
   createJsonSubjectRef,
   createPresentation,
-  getEcsSchemas,
   getVerificationMethodId,
   mapToSelfTr,
   presentations,
   signerW3c,
   validateSchema,
-  VsAgent,
 } from '../../../utils'
 import { CredentialTypesService } from '../credentials'
 
@@ -304,6 +303,7 @@ export class TrustService {
           const { url: longUrl } = await createInvitation({
             agent,
             messages: [request.message],
+            invitationBaseUrl: AGENT_INVITATION_BASE_URL,
           })
 
           const shortUrlId = await this.urlShortenerService.createShortUrl({
