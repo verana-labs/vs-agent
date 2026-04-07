@@ -1,9 +1,14 @@
 import { JsonTransformer, W3cJsonLdVerifiableCredential } from '@credo-ts/core'
-import { Controller, HttpException, HttpStatus, Logger, Post, Body, Delete, Get, Query } from '@nestjs/common'
+import { Controller, Logger, Post, Body, Delete, Get, Query } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery } from '@nestjs/swagger'
 
 import { TrustService } from './TrustService'
-import { JsonSchemaCredentialDto, W3cCredentialDto, IssueCredentialRequestDto } from './dto'
+import {
+  JsonSchemaCredentialDto,
+  W3cCredentialDto,
+  IssueCredentialRequestDto,
+  RevokeCredentialRequestDto,
+} from './dto'
 
 @ApiTags('Verifiable Trust')
 @Controller({ path: 'vt', version: '1' })
@@ -69,8 +74,13 @@ export class TrustController {
   @ApiOperation({ summary: 'Revoke a verifiable credential' })
   @ApiBody({ schema: { example: { id: 'cred-1' } } })
   @ApiResponse({ status: 200, description: 'Credential revoked' })
-  async revokeCredential() {
-    throw new HttpException({ message: `This method is not implemented yet` }, HttpStatus.NOT_IMPLEMENTED)
+  async revokeCredential(@Body() body: RevokeCredentialRequestDto) {
+    const { format, anoncredsRevocationRegistryDefinitionId, anoncredsRevocationRegistryIndex } = body
+    return await this.trustService.revokeCredential({
+      format,
+      anoncredsRevocationRegistryDefinitionId,
+      anoncredsRevocationRegistryIndex,
+    })
   }
 
   @Get('linked-credentials')

@@ -44,6 +44,16 @@ export interface CredentialIssuanceResponse {
   credential?: Record<string, unknown>
 }
 
+export interface CredentialRevocationRequest {
+  format: 'jsonld' | 'anoncreds'
+  anoncredsRevocationRegistryDefinitionId?: string
+  anoncredsRevocationRegistryIndex?: number
+}
+
+export interface CredentialRevocationResponse {
+  status: number
+}
+
 export interface ImportCredentialTypeOptions {
   id: string
   data: {

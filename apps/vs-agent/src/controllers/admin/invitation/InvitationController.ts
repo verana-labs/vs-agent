@@ -221,7 +221,13 @@ export class InvitationController {
   ): Promise<CreateCredentialOfferResult> {
     const agent = await this.agentService.getAgent()
 
-    const { claims, credentialDefinitionId, useLegacyDid } = options
+    const {
+      claims,
+      credentialDefinitionId,
+      useLegacyDid,
+      revocationRegistryDefinitionId,
+      revocationRegistryIndex,
+    } = options
 
     if (claims && !Array.isArray(claims)) {
       throw new Error('Received claims is not an array')
@@ -258,6 +264,8 @@ export class InvitationController {
       protocolVersion: 'v2',
       credentialFormats: {
         anoncreds: {
+          revocationRegistryDefinitionId,
+          revocationRegistryIndex,
           credentialDefinitionId,
           attributes: claims.map(item => {
             return { name: item.name, mimeType: item.mimeType, value: item.value }
