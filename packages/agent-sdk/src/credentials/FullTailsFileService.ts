@@ -51,6 +51,7 @@ function fileHash(filePath: string, algorithm = 'sha256') {
       s.on('data', function (data) {
         shasum.update(data)
       })
+      // making digest
       s.on('end', function () {
         const hash = shasum.digest('hex')
         return resolve(hash)

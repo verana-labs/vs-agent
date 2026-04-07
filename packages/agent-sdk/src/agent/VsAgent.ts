@@ -1,3 +1,4 @@
+import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import {
   Agent,
   AgentDependencies,
@@ -14,10 +15,7 @@ import {
 } from '@credo-ts/core'
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
-import { defaultDocumentLoader } from '../did/CachedDocumentLoader'
-
-import { BaseAgentModules, DidCommAgentModules } from './types'
-import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
+import { BaseAgentModules } from './types'
 
 interface AgentOptions<TModules extends BaseAgentModules> {
   config: InitConfig
@@ -49,10 +47,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.label = options.label
   }
 
-  private get hasDidComm(): boolean {
-    return 'didcomm' in this.modules
-  }
-
   private get hasUserProfile(): boolean {
     return 'userProfile' in this.modules
   }
@@ -81,10 +75,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         if (parsedDid.method === 'web') {
           const didDocument = new DidDocument({ id: parsedDid.did })
 
-          if (this.hasDidComm) {
-            await this.createAndAddDidCommKeysAndServices(didDocument)
-          }
-
+          await this.createAndAddDidCommKeysAndServices(didDocument)
           await this.createAndAddLinkedVpServices(didDocument)
           await this.createAndAddAnonCredsServices(didDocument)
 
@@ -110,10 +101,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             process.exit(1)
           }
 
-          if (this.hasDidComm) {
-            await this.createAndAddDidCommKeysAndServices(didDocument)
-          }
-
+          await this.createAndAddDidCommKeysAndServices(didDocument)
           await this.createAndAddLinkedVpServices(didDocument)
           await this.createAndAddWebVhImplicitServices(didDocument)
 
@@ -149,9 +137,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       )
 
       const servicesChanged =
-        this.hasDidComm &&
         JSON.stringify(didDocument.didCommServices) !==
-          JSON.stringify(this.getDidCommServices(didDocument.id))
+        JSON.stringify(this.getDidCommServices(didDocument.id))
 
       if (hasLegacyMethods || servicesChanged) {
         if (servicesChanged) {
@@ -162,7 +149,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             ...this.getDidCommServices(didDocument.id),
           ]
         }
-        if (hasLegacyMethods && this.hasDidComm) await this.createAndAddDidCommKeysAndServices(didDocument)
+        if (hasLegacyMethods) await this.createAndAddDidCommKeysAndServices(didDocument)
 
         await this.dids.update({ did: didDocument.id, didDocument })
         this.logger?.debug('Public did record updated')
@@ -176,6 +163,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   private async findCreatedDid(parsedDid: ParsedDid) {
     const didRepository = this.dependencyManager.resolve(DidRepository)
 
+    // Particular case of webvh: parsedDid might not include the SCID, so we'll need to find it by domain
     if (parsedDid.method === 'webvh') {
       const domain = parsedDid.id.includes(':') ? parsedDid.id.split(':')[1] : parsedDid.id
       return await didRepository.findSingleByQuery(this.context, { method: 'webvh', domain })
@@ -186,14 +174,13 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
   private getDidCommServices(publicDid: string) {
     const keyAgreementId = `${publicDid}#key-agreement-1`
-    const didcommModules = this.modules as unknown as DidCommAgentModules
 
-    return didcommModules.didcomm.config.endpoints.map((endpoint, index) => {
+    return this.didcomm!.config.endpoints.map((endpoint, index) => {
       return new DidCommV1Service({
         id: `${publicDid}#did-communication`,
         serviceEndpoint: endpoint,
         priority: index,
-        routingKeys: [],
+        routingKeys: [], // TODO: Support mediation
         recipientKeys: [keyAgreementId],
         accept: ['didcomm/aip2;env=rfc19'],
       })
@@ -212,6 +199,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     const kms = this.agentContext.resolve(Kms.KeyManagementApi)
     const didRepository = this.agentContext.resolve(DidRepository)
 
+    // Create didcomm keys
     const key = await kms.createKey({ type: { kty: 'OKP', crv: 'Ed25519' } })
     const publicKeyBytes = Kms.PublicJwk.fromPublicJwk(key.publicJwk).publicKey.publicKey
     const publicKeyMultibase = multibaseEncode(
@@ -228,6 +216,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     const publicKeyX25519 = convertPublicKeyToX25519(publicKeyBytes)
     const x25519Key = Kms.PublicJwk.fromPublicKey({ kty: 'OKP', crv: 'X25519', publicKey: publicKeyX25519 })
 
+    // Remove legacy if exist
     const legacyContexts = ['https://w3id.org/security/suites/ed25519-2018/v1']
     const legacyAuthId = (didDocument.verificationMethod ?? []).find(vm =>
       ['Ed25519VerificationKey2018'].includes(vm.type),
@@ -305,6 +294,10 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     ]
   }
 
+  /**
+   * Basic implicit webvh services, for the moment pointing to the service VP
+   * and public base URL
+   */
   private async createAndAddWebVhImplicitServices(didDocument: DidDocument) {
     const publicDid = didDocument.id
     didDocument.service = [
@@ -336,9 +329,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     ]
   }
 }
-
-// Re-export defaultDocumentLoader for consumers
-export { defaultDocumentLoader }
 
 export interface VsAgentOptions {
   config: InitConfig

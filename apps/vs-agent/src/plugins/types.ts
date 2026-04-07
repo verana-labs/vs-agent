@@ -1,6 +1,6 @@
 import type { EventConfig } from '../utils/EventConfig'
 import type { DynamicModule, Provider, Type } from '@nestjs/common'
-import type { DidCommAgentModules, Plugin, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { BaseAgentModules, Plugin, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 /**
  * Represents a plugin that extends the VsAgent within a NestJS application.
@@ -14,5 +14,5 @@ export interface VsAgentNestPlugin {
   controllers?: Type<any>[]
   providers?: Provider[]
   imports?: DynamicModule[]
-  registerEvents?: (agent: VsAgent<DidCommAgentModules>, config: EventConfig) => void
+  registerEvents?: (agent: VsAgent<BaseAgentModules>, config: EventConfig) => void
 }

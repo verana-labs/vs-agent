@@ -1,5 +1,5 @@
 // Agent
-export { VsAgent, defaultDocumentLoader } from './agent/VsAgent'
+export { VsAgent } from './agent/VsAgent'
 export type { VsAgentOptions } from './agent/VsAgent'
 export { createVsAgent } from './agent/createVsAgent'
 export type { CreateVsAgentOptions, Plugin } from './agent/createVsAgent'
