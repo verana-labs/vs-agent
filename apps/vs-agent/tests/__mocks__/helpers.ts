@@ -1,4 +1,4 @@
-import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+import type { DidCommAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { ConnectionProfileUpdatedEvent } from '@2060.io/credo-ts-didcomm-user-profile'
 import { LogLevel } from '@credo-ts/core'
@@ -17,7 +17,7 @@ import { VsAgentModule } from '../../src/admin.module'
 import { messageEvents } from '../../src/events/MessageEvents'
 import { ChatPlugin } from '../../src/plugins/ChatPlugin'
 import { PublicModule } from '../../src/public.module'
-import { ServerConfig, TsLogger, VsAgent } from '../../src/utils'
+import { ServerConfig, TsLogger } from '../../src/utils'
 
 export async function makeConnection(
   agentA: VsAgent<DidCommAgentModules>,
@@ -98,7 +98,7 @@ export function waitForEvent<T>(
   })
 }
 
-export const startServersTesting = async (agent: VsAgent<DidCommAgentModules>): Promise<INestApplication> => {
+export const startServersTesting = async (agent: VsAgent): Promise<INestApplication> => {
   const moduleRef = await Test.createTestingModule({
     imports: [
       VsAgentModule.register(agent, 'http://localhost:3001', [ChatPlugin]),

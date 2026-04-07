@@ -93,6 +93,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   const httpServer = httpInboundTransport ? httpInboundTransport.server : await publicApp.listen(AGENT_PORT)
 
+  // Add WebSocket support if required
   if (enableWs) {
     httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
       webSocketServer?.handleUpgrade(request, socket as Socket, head, socketParam => {

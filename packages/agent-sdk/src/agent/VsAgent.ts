@@ -55,6 +55,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     await super.initialize()
 
     if (this.hasUserProfile) {
+      // Make sure default User Profile corresponds to settings in environment variables
       const imageUrl = this.displayPictureUrl
       const displayPicture = imageUrl ? { links: [imageUrl], mimeType: 'image/png' } : undefined
 
@@ -67,16 +68,23 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
     const parsedDid = this.did ? parseDid(this.did) : null
     if (parsedDid) {
+      // If a public did is specified, check if it's already stored in the wallet. If it's not the case,
+      // create a new one and generate keys for DIDComm (if there are endpoints configured)
+      // TODO: Make DIDComm version, keys, etc. configurable. Keys can also be imported
       const domain = parsedDid.id.includes(':') ? parsedDid.id.split(':')[1] : parsedDid.id
 
       const existingRecord = await this.findCreatedDid(parsedDid)
 
+      // DID has not been created yet. Let's do it
       if (!existingRecord) {
         if (parsedDid.method === 'web') {
           const didDocument = new DidDocument({ id: parsedDid.did })
-
           await this.createAndAddDidCommKeysAndServices(didDocument)
+
+          // Add Self TR
           await this.createAndAddLinkedVpServices(didDocument)
+
+          // Add AnonCreds Services
           await this.createAndAddAnonCredsServices(didDocument)
 
           await this.dids.create({
@@ -86,6 +94,10 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           })
           this.did = parsedDid.did
         } else if (parsedDid.method === 'webvh') {
+          // If there is an existing did:web with the same domain, this could be an
+          // upgrade. There should be no problem on removing did:web record since we
+          // can use newer keys for DIDComm bootstrapping, but we should at least warn
+          // about that
           const didRepository = this.dependencyManager.resolve(DidRepository)
           const existingDidWebRecord = await didRepository.findCreatedDid(this.context, `did:web:${domain}`)
           if (existingDidWebRecord) {
@@ -101,8 +113,13 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             process.exit(1)
           }
 
+          // Add DIDComm services and keys
           await this.createAndAddDidCommKeysAndServices(didDocument)
+
+          // Add Linked VP services
           await this.createAndAddLinkedVpServices(didDocument)
+
+          // Add implicit services
           await this.createAndAddWebVhImplicitServices(didDocument)
 
           didDocument.alsoKnownAs = [`did:web:${domain}`]

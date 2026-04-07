@@ -1,4 +1,4 @@
-import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+import type { DidCommAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { PictureData } from '@2060.io/credo-ts-didcomm-user-profile'
 import { DidCommBasicMessage, DidCommConnectionRecord } from '@credo-ts/didcomm'
@@ -8,7 +8,6 @@ import { Subject } from 'rxjs'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import { MessageService } from '../src/controllers'
-import { VsAgent } from '../src/utils'
 
 import {
   isAgentMessageProcessedEvent,

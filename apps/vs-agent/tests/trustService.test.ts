@@ -1,4 +1,4 @@
-import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+import type { DidCommAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
@@ -9,7 +9,6 @@ import request from 'supertest'
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 
 import { MessageService, TrustService } from '../src/controllers'
-import { VsAgent } from '../src/utils'
 
 import {
   isCredentialStateChangedEvent,
