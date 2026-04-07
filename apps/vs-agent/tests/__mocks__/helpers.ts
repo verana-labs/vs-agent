@@ -98,7 +98,7 @@ export function waitForEvent<T>(
   })
 }
 
-export const startServersTesting = async (agent: VsAgent): Promise<INestApplication> => {
+export const startServersTesting = async (agent: VsAgent<DidCommAgentModules>): Promise<INestApplication> => {
   const moduleRef = await Test.createTestingModule({
     imports: [
       VsAgentModule.register(agent, 'http://localhost:3001', [ChatPlugin]),
