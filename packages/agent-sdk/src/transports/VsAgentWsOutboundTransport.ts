@@ -59,7 +59,7 @@ export class VsAgentWsOutboundTransport implements DidCommOutboundTransport {
     this.logger = agentConfig.logger
     this.eventEmitter = this.agentContext.dependencyManager.resolve(EventEmitter)
     this.logger.debug('Starting WS outbound transport')
-    this.WebSocketClass = agentConfig.agentDependencies.WebSocketClass as unknown as typeof WebSocket
+    this.WebSocketClass = agentConfig.agentDependencies.WebSocketClass
   }
 
   public async stop() {

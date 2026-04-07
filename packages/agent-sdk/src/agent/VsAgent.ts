@@ -17,6 +17,7 @@ import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 import { defaultDocumentLoader } from '../did/CachedDocumentLoader'
 
 import { BaseAgentModules, DidCommAgentModules } from './types'
+import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 
 interface AgentOptions<TModules extends BaseAgentModules> {
   config: InitConfig
@@ -346,8 +347,8 @@ export interface VsAgentOptions {
   dependencies: AgentDependencies
   publicApiBaseUrl: string
   masterListCscaLocation?: string
-  endpoints?: string[]
-  walletConfig: import('@credo-ts/askar').AskarModuleConfigStoreOptions
+  endpoints: string[]
+  walletConfig: AskarModuleConfigStoreOptions
   displayPictureUrl?: string
   label: string
 }
