@@ -295,13 +295,20 @@ export class TrustService {
               HttpStatus.BAD_REQUEST,
             )
           }
+          const providedAttributes = Object.entries(claims)
+            .filter(([, v]) => v !== undefined && v !== null)
+            .map(([name, value]) => ({ name, mimeType: 'text/plain', value: String(value) }))
+
+          const attributes = this.credentialTypesService.buildAnonCredsAttributes(
+            attrNames,
+            providedAttributes,
+          )
+
           const request = await agent.didcomm.credentials.createOffer({
             protocolVersion: 'v2',
             credentialFormats: {
               anoncreds: {
-                attributes: attrNames.map(name => {
-                  return { name, mimeType: 'text/plain', value: String(claims[name]) }
-                }),
+                attributes,
                 credentialDefinitionId,
               },
             },

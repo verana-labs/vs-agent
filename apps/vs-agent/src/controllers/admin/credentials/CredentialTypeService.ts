@@ -341,6 +341,20 @@ export class CredentialTypesService {
     return id
   }
 
+  public buildAnonCredsAttributes(
+    attrNames: string[],
+    providedAttributes: Array<{ name: string; value: string; mimeType?: string }>,
+  ): Array<{ name: string; value: string; mimeType?: string }> {
+    const providedNames = providedAttributes.map(a => a.name)
+    const result = [...providedAttributes]
+    for (const name of attrNames) {
+      if (!providedNames.includes(name)) {
+        result.push({ name, value: '' })
+      }
+    }
+    return result
+  }
+
   public async parseJsonSchemaCredential(jsonSchemaCredentialId: string) {
     try {
       const jscData = await this.fetchJson<W3cCredential>(jsonSchemaCredentialId)
