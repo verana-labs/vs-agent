@@ -184,10 +184,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Corepack pnpm
-        # OIDC publishing requires a very up to date npm version
-        run: |
-          npm install -g npm@latest
-          corepack enable
+        run: corepack enable
           
       - name: Install dependencies
         run: |
