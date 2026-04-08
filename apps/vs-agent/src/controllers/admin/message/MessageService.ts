@@ -242,11 +242,20 @@ export class MessageService {
           }
 
           if (msg.claims) {
-            attributes = msg.claims.map(item => ({
+            const providedAttributes = msg.claims.map(item => ({
               name: item.name,
               mimeType: item.mimeType,
               value: item.value,
             }))
+
+            if (msg.jsonSchemaCredentialId) {
+              const { attrNames } = await this.credentialService.parseJsonSchemaCredential(
+                msg.jsonSchemaCredentialId,
+              )
+              attributes = this.credentialService.buildAnonCredsAttributes(attrNames, providedAttributes)
+            } else {
+              attributes = providedAttributes
+            }
           }
 
           if (attributes.length) {
