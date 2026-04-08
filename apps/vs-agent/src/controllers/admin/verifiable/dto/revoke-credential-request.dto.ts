@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { IsNotEmpty, IsString, Matches, IsOptional, IsNumber } from 'class-validator'
+import { IsNotEmpty, IsString, IsOptional, IsNumber } from 'class-validator'
 
 /**
  * DTO used to request the issuance of a Verifiable Credential.
@@ -14,16 +14,6 @@ export class RevokeCredentialRequestDto {
   @IsString()
   @IsNotEmpty()
   format!: 'jsonld' | 'anoncreds'
-
-  @ApiProperty({
-    description: 'DID of the credential subject (the holder)',
-    example: 'did:example:holder123',
-  })
-  @IsString()
-  @Matches(/^did:[a-z0-9]+:[a-zA-Z0-9.\-_:/%]+$/, {
-    message: 'Invalid DID format',
-  })
-  did?: string
 
   @ApiProperty({
     description:

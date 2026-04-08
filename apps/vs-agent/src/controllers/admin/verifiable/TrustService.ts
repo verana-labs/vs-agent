@@ -335,7 +335,6 @@ export class TrustService {
     anoncredsRevocationRegistryIndex,
   }: CredentialRevocationRequest): Promise<CredentialRevocationResponse> {
     try {
-      // Check schema for credential
       const { agent } = await this.getDidRecord()
 
       switch (format) {
@@ -348,7 +347,8 @@ export class TrustService {
         case 'anoncreds':
           if (!anoncredsRevocationRegistryDefinitionId || !anoncredsRevocationRegistryIndex) {
             throw new HttpException(
-              'Revocation registry definition ID and index are required for AnonCreds',
+              'Revocation registry definition ID and index are required for AnonCreds. Make sure to specify a valid ' +
+                'anoncredsRevocationRegistryDefinitionId and anoncredsRevocationRegistryIndex',
               HttpStatus.BAD_REQUEST,
             )
           }

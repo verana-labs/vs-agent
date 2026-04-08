@@ -71,7 +71,11 @@ export class TrustController {
   }
 
   @Post('revoke-credential')
-  @ApiOperation({ summary: 'Revoke a verifiable credential' })
+  @ApiOperation({
+    summary: 'Revoke a verifiable credential',
+    description:
+      'Revoke a verifiable credential by its format and revocation information. Currently, only AnonCreds format is supported. You must provide the revocation registry definition ID (anoncredsRevocationRegistryDefinitionId) and index (anoncredsRevocationRegistryIndex).',
+  })
   @ApiBody({ schema: { example: { id: 'cred-1' } } })
   @ApiResponse({ status: 200, description: 'Credential revoked' })
   async revokeCredential(@Body() body: RevokeCredentialRequestDto) {

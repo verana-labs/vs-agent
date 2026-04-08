@@ -1,5 +1,5 @@
 import { AnonCredsRequestedAttribute } from '@credo-ts/anoncreds'
-import { Controller, Get, Post, Body, Query, Inject } from '@nestjs/common'
+import { Controller, Get, Post, Body, Query, Inject, HttpException } from '@nestjs/common'
 import {
   ApiBadRequestResponse,
   ApiBody,
@@ -173,13 +173,11 @@ export class InvitationController {
 
   @Post('/credential-offer')
   @ApiOperation({
-    summary: 'Credential Offer',
+    summary: 'AnonCreds Credential Offer',
     description:
-      "### Credential Offer\n\nCredential offer invitation codes include a preview of the offered credential, meaning by that its `credentialDefinitionId` and claims.\n\nIt's a POST to `/invitation/credential-offer` which receives a JSON object in the body",
+      '### AnonCreds Credential Offer\n\nCredential offer invitation codes include a preview of the offered credential, meaning by that its `credentialDefinitionId` and claims.\n\nIf the credential is revocable, you must also provide the `revocationRegistryDefinitionId` and `revocationRegistryIndex` fields.',
   })
   @ApiBody({
-    description:
-      "### Credential Offer\n\nCredential offer invitation codes include a preview of the offered credential, meaning by that its `credentialDefinitionId` and claims.\n\nIt's a POST to `/invitation/credential-offer` which receives a JSON object in the body",
     type: CreateCredentialOfferDto,
     examples: {
       example: {
@@ -260,36 +258,39 @@ export class InvitationController {
       )
     }
 
-    const request = await agent.didcomm.credentials.createOffer({
-      protocolVersion: 'v2',
-      credentialFormats: {
-        anoncreds: {
-          revocationRegistryDefinitionId,
-          revocationRegistryIndex,
-          credentialDefinitionId,
-          attributes: claims.map(item => {
-            return { name: item.name, mimeType: item.mimeType, value: item.value }
-          }),
+    try {
+      const request = await agent.didcomm.credentials.createOffer({
+        protocolVersion: 'v2',
+        credentialFormats: {
+          anoncreds: {
+            revocationRegistryDefinitionId,
+            revocationRegistryIndex,
+            credentialDefinitionId,
+            attributes: claims.map(item => {
+              return { name: item.name, mimeType: item.mimeType, value: item.value }
+            }),
+          },
         },
-      },
-    })
+      })
 
-    const { url } = await createInvitation({
-      agent: await this.agentService.getAgent(),
-      messages: [request.message],
-      useLegacyDid,
-    })
+      const { url } = await createInvitation({
+        agent: await this.agentService.getAgent(),
+        messages: [request.message],
+        useLegacyDid,
+      })
 
-    const shortUrlId = await this.urlShortenerService.createShortUrl({
-      longUrl: url,
-      relatedFlowId: request.credentialExchangeRecord.id,
-    })
-    const shortUrl = `${this.publicApiBaseUrl}/s?id=${shortUrlId}`
-
-    return {
-      credentialExchangeId: request.credentialExchangeRecord.id,
-      url,
-      shortUrl,
+      const shortUrlId = await this.urlShortenerService.createShortUrl({
+        longUrl: url,
+        relatedFlowId: request.credentialExchangeRecord.id,
+      })
+      const shortUrl = `${this.publicApiBaseUrl}/s?id=${shortUrlId}`
+      return {
+        credentialExchangeId: request.credentialExchangeRecord.id,
+        url,
+        shortUrl,
+      }
+    } catch (error) {
+      throw new HttpException(`Failed to create invitation: ${error}`, 500)
     }
   }
 }
