@@ -36,7 +36,7 @@ import {
 } from '@verana-labs/vs-agent-model'
 
 import { VsAgentService } from '../../../services/VsAgentService'
-import { didcommReceiptFromVsAgentReceipt, parsePictureData } from '../../../utils'
+import { didcommReceiptFromVsAgentReceipt, parsePictureData, validateSchema } from '../../../utils'
 import { CredentialTypesService } from '../credentials'
 
 @Injectable()
@@ -249,9 +249,11 @@ export class MessageService {
             }))
 
             if (msg.jsonSchemaCredentialId) {
-              const { attrNames } = await this.credentialService.parseJsonSchemaCredential(
+              const { parsedSchema, attrNames } = await this.credentialService.parseJsonSchemaCredential(
                 msg.jsonSchemaCredentialId,
               )
+              const claimsRecord = Object.fromEntries(providedAttributes.map(a => [a.name, a.value]))
+              validateSchema(parsedSchema, claimsRecord)
               attributes = this.credentialService.buildAnonCredsAttributes(attrNames, providedAttributes)
             } else {
               attributes = providedAttributes
