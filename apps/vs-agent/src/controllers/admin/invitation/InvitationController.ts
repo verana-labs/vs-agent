@@ -18,7 +18,11 @@ import { UrlShorteningService } from '../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../services/VsAgentService'
 import { createInvitation } from '../../../utils'
 
-import { CreateCredentialOfferDto, CreatePresentationRequestDto } from './InvitationDto'
+import {
+  CreateCredentialOfferDto,
+  CreateInvitationDto,
+  CreatePresentationRequestDto,
+} from './InvitationDto'
 
 @ApiTags('invitation')
 @Controller({
@@ -32,11 +36,34 @@ export class InvitationController {
     @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
   ) {}
 
-  @Get('/')
+  @Post('/')
   @ApiOperation({
     summary: 'Connection Invitation',
     description:
-      '### Connection Invitation\n\nIt\'s a GET request to `/invitation`. It does not receive any parameter.\n\nResponse from VS Agent is a JSON object containing an URL-encoded invitation, ready to be rendered in a QR code or sent as a link for processing of an Aries-compatible DIDComm agent:\n\n```json\n{\n  "url": "string containing long form URL-encoded invitation"\n}\n```',
+      '### Connection Invitation\n\nIt\'s a POST request to `/invitation`. It does not receive any parameter.\n\nResponse from VS Agent is a JSON object containing an URL-encoded invitation, ready to be rendered in a QR code or sent as a link for processing of an Aries-compatible DIDComm agent:\n\n```json\n{\n  "url": "string containing long form URL-encoded invitation"\n}\n```',
+  })
+  @ApiOkResponse({
+    description: 'Out-of-band invitation payload',
+    schema: {
+      example: {
+        url: 'https://hologram.zone/?oob=eyJ0eXAiOiJKV1QiLCJhbGci...',
+      },
+    },
+  })
+  @ApiBody({ type: CreateInvitationDto, required: false })
+  public async createInvitation(@Body() options?: CreateInvitationDto): Promise<CreateInvitationResult> {
+    return await createInvitation({
+      agent: await this.agentService.getAgent(),
+      useLegacyDid: options?.useLegacyDid,
+    })
+  }
+
+  @Get('/')
+  @ApiOperation({
+    deprecated: true,
+    summary: 'Connection Invitation (deprecated)',
+    description:
+      '### Deprecated: use POST /v1/invitation instead\n\nReturns an out-of-band invitation URL. This endpoint is deprecated because it creates a record on the agent and should therefore use POST semantics.',
   })
   @ApiOkResponse({
     description: 'Out-of-band invitation payload',

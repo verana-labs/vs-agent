@@ -7,6 +7,15 @@ import {
 } from '@verana-labs/vs-agent-model'
 import { IsNotEmpty } from 'class-validator'
 
+export class CreateInvitationDto {
+  @ApiProperty({
+    description: 'Use legacy did:web in case of did:webvh',
+    example: 'false',
+    required: false,
+  })
+  useLegacyDid?: boolean
+}
+
 export class CreatePresentationRequestDto implements CreatePresentationRequestOptions {
   @ApiProperty({
     description: 'Optional reference',
