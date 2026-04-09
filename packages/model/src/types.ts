@@ -154,6 +154,11 @@ export interface OutOfBandInvitationSchema {
   imageUrl?: string
 }
 
+export interface ReceiveInvitationResult {
+  outOfBandId: string
+  connectionId?: string
+}
+
 export interface ConnectionInvitationSchema {
   id?: string
   '@type': string

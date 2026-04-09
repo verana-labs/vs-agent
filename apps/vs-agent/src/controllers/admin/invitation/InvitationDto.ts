@@ -16,6 +16,15 @@ export class CreateInvitationDto {
   useLegacyDid?: boolean
 }
 
+export class ReceiveInvitationDto {
+  @IsNotEmpty()
+  @ApiProperty({
+    description: 'OOB invitation URL (https://) or implicit invitation DID (did:...)',
+    example: 'https://example.com/?oob=eyJ0eXAiOiJKV1Qi...',
+  })
+  url!: string
+}
+
 export class CreatePresentationRequestDto implements CreatePresentationRequestOptions {
   @ApiProperty({
     description: 'Optional reference',
