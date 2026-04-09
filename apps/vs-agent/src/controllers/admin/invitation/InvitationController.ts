@@ -12,13 +12,19 @@ import {
   CreateCredentialOfferResult,
   CreatePresentationRequestResult,
   CreateInvitationResult,
+  ReceiveInvitationResult,
 } from '@verana-labs/vs-agent-model'
 
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../services/VsAgentService'
 import { createInvitation } from '../../../utils'
 
-import { CreateCredentialOfferDto, CreatePresentationRequestDto } from './InvitationDto'
+import {
+  CreateCredentialOfferDto,
+  CreateInvitationDto,
+  CreatePresentationRequestDto,
+  ReceiveInvitationDto,
+} from './InvitationDto'
 
 @ApiTags('invitation')
 @Controller({
@@ -32,11 +38,34 @@ export class InvitationController {
     @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
   ) {}
 
-  @Get('/')
+  @Post('/')
   @ApiOperation({
     summary: 'Connection Invitation',
     description:
-      '### Connection Invitation\n\nIt\'s a GET request to `/invitation`. It does not receive any parameter.\n\nResponse from VS Agent is a JSON object containing an URL-encoded invitation, ready to be rendered in a QR code or sent as a link for processing of an Aries-compatible DIDComm agent:\n\n```json\n{\n  "url": "string containing long form URL-encoded invitation"\n}\n```',
+      '### Connection Invitation\n\nIt\'s a POST request to `/invitation`. It does not receive any parameter.\n\nResponse from VS Agent is a JSON object containing an URL-encoded invitation, ready to be rendered in a QR code or sent as a link for processing of an Aries-compatible DIDComm agent:\n\n```json\n{\n  "url": "string containing long form URL-encoded invitation"\n}\n```',
+  })
+  @ApiOkResponse({
+    description: 'Out-of-band invitation payload',
+    schema: {
+      example: {
+        url: 'https://hologram.zone/?oob=eyJ0eXAiOiJKV1QiLCJhbGci...',
+      },
+    },
+  })
+  @ApiBody({ type: CreateInvitationDto, required: false })
+  public async createInvitation(@Body() options?: CreateInvitationDto): Promise<CreateInvitationResult> {
+    return await createInvitation({
+      agent: await this.agentService.getAgent(),
+      useLegacyDid: options?.useLegacyDid,
+    })
+  }
+
+  @Get('/')
+  @ApiOperation({
+    deprecated: true,
+    summary: 'Connection Invitation (deprecated)',
+    description:
+      '### Deprecated: use POST /v1/invitation instead\n\nReturns an out-of-band invitation URL. This endpoint is deprecated because it creates a record on the agent and should therefore use POST semantics.',
   })
   @ApiOkResponse({
     description: 'Out-of-band invitation payload',
@@ -49,6 +78,54 @@ export class InvitationController {
   @ApiQuery({ name: 'legacy', required: false, type: Boolean })
   public async getInvitation(@Query('legacy') useLegacyDid?: boolean): Promise<CreateInvitationResult> {
     return await createInvitation({ agent: await this.agentService.getAgent(), useLegacyDid })
+  }
+
+  @Post('/receive')
+  @ApiOperation({
+    summary: 'Receive Invitation',
+    description:
+      '### Receive Invitation\n\nProactively connects to another agent by processing an invitation. The `url` field accepts:\n\n- An explicit OOB invitation URL (`https://...` or `didcomm://...`)\n- An implicit invitation DID (`did:webvh:...`, `did:web:...`, etc.)\n\nVS Agent will automatically determine the invitation type based on the URL scheme.',
+  })
+  @ApiBody({
+    type: ReceiveInvitationDto,
+    examples: {
+      explicit: {
+        summary: 'Explicit OOB invitation URL',
+        value: { url: 'https://example.com/?oob=eyJ0eXAiOiJKV1Qi...' },
+      },
+      implicit: {
+        summary: 'Implicit invitation (DID)',
+        value: { url: 'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:example.com' },
+      },
+    },
+  })
+  @ApiOkResponse({
+    description: 'Invitation received; connection initiated',
+    schema: {
+      example: {
+        outOfBandId: '123e4567-e89b-12d3-a456-426614174000',
+        connectionId: '789a0123-e89b-12d3-a456-426614174000',
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid invitation URL or DID' })
+  public async receiveInvitation(@Body() options: ReceiveInvitationDto): Promise<ReceiveInvitationResult> {
+    const agent = await this.agentService.getAgent()
+    const { url } = options
+    const config = { label: agent.label }
+
+    try {
+      const { outOfBandRecord, connectionRecord } = url.startsWith('did:')
+        ? await agent.didcomm.oob.receiveImplicitInvitation({ did: url, ...config })
+        : await agent.didcomm.oob.receiveInvitationFromUrl(url, config)
+
+      return {
+        outOfBandId: outOfBandRecord.id,
+        connectionId: connectionRecord?.id,
+      }
+    } catch (error) {
+      throw new HttpException(`Failed to receive invitation: ${error}`, 500)
+    }
   }
 
   @Post('/presentation-request')
