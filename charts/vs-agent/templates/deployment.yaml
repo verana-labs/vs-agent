@@ -187,8 +187,14 @@ spec:
               value: {{ .Values.enablePublicApiSwagger | quote }}
             - name: AGENT_PUBLIC_DID
               value: "did:{{ default "webvh" .Values.publicDidMethod }}:{{ tpl .Values.ingress.host . }}"
-{{- with .Values.extraEnv }}
-{{ toYaml . | nindent 12 }}
+{{- range .Values.extraEnv }}
+            - name: {{ .name }}
+              {{- if .valueFrom }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+              {{- else }}
+              value: {{ tpl .value $ | quote }}
+              {{- end }}
 {{- end }}
             ports:
             -  containerPort: {{ .Values.adminPort }}
