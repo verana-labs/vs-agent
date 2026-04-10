@@ -158,7 +158,7 @@ export class InvitationController {
         value: {
           requestedCredentials: [
             {
-              relatedJsonSchemaCredentialId:
+              jsonSchemaCredentialId:
                 'https://dm.gov-id-tr.demos.dev.2060.io/vt/schemas-gov-id-jsc.json',
               attributes: [
                 'firstName',
