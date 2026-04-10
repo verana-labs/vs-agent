@@ -22,7 +22,7 @@ import {
 
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { createInvitation } from '../../../utils'
+import { createInvitation, fetchJson } from '../../../utils'
 import { CredentialTypesService } from '../credentials/CredentialTypeService'
 
 import {
@@ -221,9 +221,7 @@ export class InvitationController {
     let restrictions: AnonCredsProofRequestRestriction[]
 
     if (relatedJsonSchemaCredentialId) {
-      const jscData = await this.credentialTypesService.fetchJson<W3cCredential>(
-        relatedJsonSchemaCredentialId,
-      )
+      const jscData = await fetchJson<W3cCredential>(relatedJsonSchemaCredentialId)
       const issuerDid = typeof jscData.issuer === 'string' ? jscData.issuer : jscData.issuer.id
       const schemaResult = await this.credentialTypesService.findAnonCredsSchema({
         relatedJsonSchemaCredentialId,
