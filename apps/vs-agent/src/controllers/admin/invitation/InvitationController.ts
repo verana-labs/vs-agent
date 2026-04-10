@@ -175,14 +175,37 @@ export class InvitationController {
     if (!requestedCredentials?.length) {
       throw Error('You must specify a least a requested credential')
     }
-    const credentialDefinitionId = requestedCredentials[0].credentialDefinitionId
-    let attributes = requestedCredentials[0].attributes
 
-    if (!credentialDefinitionId) {
-      throw Error('Verifiable credential request must include credentialDefinitionId')
+    const { credentialDefinitionId: rawCredentialDefinitionId, relatedJsonSchemaCredentialId } =
+      requestedCredentials[0]
+    const rawAttributes = requestedCredentials[0].attributes
+
+    if (rawCredentialDefinitionId && relatedJsonSchemaCredentialId) {
+      throw new Error('Specify either credentialDefinitionId or relatedJsonSchemaCredentialId, not both')
     }
 
-    if (attributes && !Array.isArray(attributes)) {
+    if (!rawCredentialDefinitionId && !relatedJsonSchemaCredentialId) {
+      throw new Error('Either credentialDefinitionId or relatedJsonSchemaCredentialId must be provided')
+    }
+    let credentialDefinitionId: string
+
+    if (relatedJsonSchemaCredentialId) {
+      const [credDefRecord] = await agent.modules.anoncreds.getCreatedCredentialDefinitions({
+        relatedJsonSchemaCredentialId,
+      })
+
+      if (!credDefRecord?.credentialDefinitionId) {
+        throw new Error(
+          `Cannot find a credential definition for relatedJsonSchemaCredentialId: ${relatedJsonSchemaCredentialId}`,
+        )
+      }
+
+      credentialDefinitionId = credDefRecord.credentialDefinitionId
+    } else {
+      credentialDefinitionId = rawCredentialDefinitionId!
+    }
+
+    if (rawAttributes && !Array.isArray(rawAttributes)) {
       throw new Error('Received attributes is not an array')
     }
 
@@ -201,9 +224,7 @@ export class InvitationController {
     }
 
     // If no attributes are specified, request all of them
-    if (!attributes) {
-      attributes = schema.attrNames
-    }
+    const attributes = rawAttributes ?? schema.attrNames
 
     if (!attributes.every(item => schema.attrNames.includes(item))) {
       throw new Error(
@@ -230,7 +251,7 @@ export class InvitationController {
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { url } = await createInvitation({
-      agent: await this.agentService.getAgent(),
+      agent,
       messages: [request.message],
       useLegacyDid,
     })
