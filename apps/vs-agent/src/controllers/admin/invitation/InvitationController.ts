@@ -203,7 +203,7 @@ export class InvitationController {
 
     const { credentialDefinitionId, jsonSchemaCredentialId: relatedJsonSchemaCredentialId } =
       requestedCredentials[0]
-    const rawAttributes = requestedCredentials[0].attributes
+    let attributes = requestedCredentials[0].attributes
 
     if (credentialDefinitionId && relatedJsonSchemaCredentialId) {
       throw new Error('Specify either credentialDefinitionId or jsonSchemaCredentialId, not both')
@@ -213,7 +213,7 @@ export class InvitationController {
       throw new Error('Either credentialDefinitionId or jsonSchemaCredentialId must be provided')
     }
 
-    if (rawAttributes && !Array.isArray(rawAttributes)) {
+    if (attributes && !Array.isArray(attributes)) {
       throw new Error('Received attributes is not an array')
     }
 
@@ -258,7 +258,9 @@ export class InvitationController {
     }
 
     // If no attributes are specified, request all of them
-    const attributes = rawAttributes ?? schema.attrNames
+    if (!attributes) {
+      attributes = schema.attrNames
+    }
 
     if (!attributes.every(item => schema.attrNames.includes(item))) {
       throw new Error(
