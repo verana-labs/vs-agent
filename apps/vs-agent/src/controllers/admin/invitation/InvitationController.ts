@@ -1,4 +1,9 @@
-import { AnonCredsRequestedAttribute } from '@credo-ts/anoncreds'
+import {
+  AnonCredsProofRequestRestriction,
+  AnonCredsRequestedAttribute,
+  AnonCredsSchema,
+} from '@credo-ts/anoncreds'
+import { W3cCredential } from '@credo-ts/core'
 import { Controller, Get, Post, Body, Query, Inject, HttpException } from '@nestjs/common'
 import {
   ApiBadRequestResponse,
@@ -17,7 +22,8 @@ import {
 
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { createInvitation } from '../../../utils'
+import { createInvitation, fetchJson } from '../../../utils'
+import { CredentialTypesService } from '../credentials/CredentialTypeService'
 
 import {
   CreateCredentialOfferDto,
@@ -35,6 +41,7 @@ export class InvitationController {
   constructor(
     private readonly agentService: VsAgentService,
     private readonly urlShortenerService: UrlShorteningService,
+    private readonly credentialTypesService: CredentialTypesService,
     @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
   ) {}
 
@@ -139,8 +146,8 @@ export class InvitationController {
   @ApiBody({
     type: CreatePresentationRequestDto,
     examples: {
-      example: {
-        summary: 'Create Presentation Request',
+      withCredentialDefinitionId: {
+        summary: 'Using credentialDefinitionId',
         value: {
           ref: '1234-5678',
           callbackUrl: 'https://myhost/mycallbackurl',
@@ -149,6 +156,24 @@ export class InvitationController {
               credentialDefinitionId:
                 'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
               attributes: ['phoneNumber'],
+            },
+          ],
+        },
+      },
+      withRelatedJsonSchema: {
+        summary: 'Using jsonSchemaCredentialId',
+        value: {
+          requestedCredentials: [
+            {
+              jsonSchemaCredentialId: 'https://dm.gov-id-tr.demos.dev.2060.io/vt/schemas-gov-id-jsc.json',
+              attributes: [
+                'firstName',
+                'lastName',
+                'birthDate',
+                'documentNumber',
+                'documentType',
+                'nationality',
+              ],
             },
           ],
         },
@@ -175,29 +200,59 @@ export class InvitationController {
     if (!requestedCredentials?.length) {
       throw Error('You must specify a least a requested credential')
     }
-    const credentialDefinitionId = requestedCredentials[0].credentialDefinitionId
+
+    const { credentialDefinitionId, jsonSchemaCredentialId: relatedJsonSchemaCredentialId } =
+      requestedCredentials[0]
     let attributes = requestedCredentials[0].attributes
 
-    if (!credentialDefinitionId) {
-      throw Error('Verifiable credential request must include credentialDefinitionId')
+    if (credentialDefinitionId && relatedJsonSchemaCredentialId) {
+      throw new Error('Specify either credentialDefinitionId or jsonSchemaCredentialId, not both')
+    }
+
+    if (!credentialDefinitionId && !relatedJsonSchemaCredentialId) {
+      throw new Error('Either credentialDefinitionId or jsonSchemaCredentialId must be provided')
     }
 
     if (attributes && !Array.isArray(attributes)) {
       throw new Error('Received attributes is not an array')
     }
 
-    const { credentialDefinition } =
-      await agent.modules.anoncreds.getCredentialDefinition(credentialDefinitionId)
+    let schema: AnonCredsSchema
+    let restrictions: AnonCredsProofRequestRestriction[]
 
-    if (!credentialDefinition) {
-      throw Error(`Cannot find information about credential definition ${credentialDefinitionId}.`)
-    }
+    if (relatedJsonSchemaCredentialId) {
+      const jscData = await fetchJson<W3cCredential>(relatedJsonSchemaCredentialId)
+      const issuerDid = typeof jscData.issuer === 'string' ? jscData.issuer : jscData.issuer.id
+      const schemaResult = await this.credentialTypesService.findAnonCredsSchema({
+        relatedJsonSchemaCredentialId,
+        issuerDid,
+      })
 
-    // Verify that requested attributes are present in credential definition
-    const { schema } = await agent.modules.anoncreds.getSchema(credentialDefinition.schemaId)
+      if (!schemaResult) {
+        throw new Error(`Cannot find a schema for jsonSchemaCredentialId: ${relatedJsonSchemaCredentialId}`)
+      }
 
-    if (!schema) {
-      throw Error(`Cannot find information about schema ${credentialDefinition.schemaId}.`)
+      schema = schemaResult.schema
+      restrictions = [{ schema_id: schemaResult.schemaId }]
+    } else {
+      const { credentialDefinition } = await agent.modules.anoncreds.getCredentialDefinition(
+        credentialDefinitionId!,
+      )
+
+      if (!credentialDefinition) {
+        throw Error(`Cannot find information about credential definition ${credentialDefinitionId}.`)
+      }
+
+      const { schema: resolvedSchema } = await agent.modules.anoncreds.getSchema(
+        credentialDefinition.schemaId,
+      )
+
+      if (!resolvedSchema) {
+        throw Error(`Cannot find information about schema ${credentialDefinition.schemaId}.`)
+      }
+
+      schema = resolvedSchema
+      restrictions = [{ cred_def_id: credentialDefinitionId! }]
     }
 
     // If no attributes are specified, request all of them
@@ -215,7 +270,7 @@ export class InvitationController {
 
     requestedAttributes[schema.name] = {
       names: attributes,
-      restrictions: [{ cred_def_id: credentialDefinitionId }],
+      restrictions,
     }
 
     const request = await agent.didcomm.proofs.createRequest({
@@ -230,7 +285,7 @@ export class InvitationController {
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { url } = await createInvitation({
-      agent: await this.agentService.getAgent(),
+      agent,
       messages: [request.message],
       useLegacyDid,
     })
