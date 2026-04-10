@@ -139,8 +139,8 @@ export class InvitationController {
   @ApiBody({
     type: CreatePresentationRequestDto,
     examples: {
-      example: {
-        summary: 'Create Presentation Request',
+      withCredentialDefinitionId: {
+        summary: 'Using credentialDefinitionId',
         value: {
           ref: '1234-5678',
           callbackUrl: 'https://myhost/mycallbackurl',
@@ -149,6 +149,25 @@ export class InvitationController {
               credentialDefinitionId:
                 'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
               attributes: ['phoneNumber'],
+            },
+          ],
+        },
+      },
+      withRelatedJsonSchema: {
+        summary: 'Using relatedJsonSchemaCredentialId',
+        value: {
+          requestedCredentials: [
+            {
+              relatedJsonSchemaCredentialId:
+                'https://dm.gov-id-tr.demos.dev.2060.io/vt/schemas-gov-id-jsc.json',
+              attributes: [
+                'firstName',
+                'lastName',
+                'birthDate',
+                'documentNumber',
+                'documentType',
+                'nationality',
+              ],
             },
           ],
         },
