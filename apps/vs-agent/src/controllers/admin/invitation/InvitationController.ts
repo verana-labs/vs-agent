@@ -19,13 +19,19 @@ import {
   CreateInvitationResult,
   ReceiveInvitationResult,
 } from '@verana-labs/vs-agent-model'
-import { createInvitation } from '@verana-labs/vs-agent-sdk'
+import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
 
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../config'
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../services/VsAgentService'
+import { CredentialTypesService } from '../credentials'
 
-import { CreateCredentialOfferDto, CreatePresentationRequestDto } from './InvitationDto'
+import {
+  CreateCredentialOfferDto,
+  CreateInvitationDto,
+  CreatePresentationRequestDto,
+  ReceiveInvitationDto,
+} from './InvitationDto'
 
 @ApiTags('invitation')
 @Controller({
@@ -59,6 +65,7 @@ export class InvitationController {
     return await createInvitation({
       agent: await this.agentService.getAgent(),
       useLegacyDid: options?.useLegacyDid,
+      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
     })
   }
 
@@ -84,54 +91,6 @@ export class InvitationController {
       useLegacyDid,
       invitationBaseUrl: AGENT_INVITATION_BASE_URL,
     })
-  }
-
-  @Post('/receive')
-  @ApiOperation({
-    summary: 'Receive Invitation',
-    description:
-      '### Receive Invitation\n\nProactively connects to another agent by processing an invitation. The `url` field accepts:\n\n- An explicit OOB invitation URL (`https://...` or `didcomm://...`)\n- An implicit invitation DID (`did:webvh:...`, `did:web:...`, etc.)\n\nVS Agent will automatically determine the invitation type based on the URL scheme.',
-  })
-  @ApiBody({
-    type: ReceiveInvitationDto,
-    examples: {
-      explicit: {
-        summary: 'Explicit OOB invitation URL',
-        value: { url: 'https://example.com/?oob=eyJ0eXAiOiJKV1Qi...' },
-      },
-      implicit: {
-        summary: 'Implicit invitation (DID)',
-        value: { url: 'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:example.com' },
-      },
-    },
-  })
-  @ApiOkResponse({
-    description: 'Invitation received; connection initiated',
-    schema: {
-      example: {
-        outOfBandId: '123e4567-e89b-12d3-a456-426614174000',
-        connectionId: '789a0123-e89b-12d3-a456-426614174000',
-      },
-    },
-  })
-  @ApiBadRequestResponse({ description: 'Invalid invitation URL or DID' })
-  public async receiveInvitation(@Body() options: ReceiveInvitationDto): Promise<ReceiveInvitationResult> {
-    const agent = await this.agentService.getAgent()
-    const { url } = options
-    const config = { label: agent.label }
-
-    try {
-      const { outOfBandRecord, connectionRecord } = url.startsWith('did:')
-        ? await agent.didcomm.oob.receiveImplicitInvitation({ did: url, ...config })
-        : await agent.didcomm.oob.receiveInvitationFromUrl(url, config)
-
-      return {
-        outOfBandId: outOfBandRecord.id,
-        connectionId: connectionRecord?.id,
-      }
-    } catch (error) {
-      throw new HttpException(`Failed to receive invitation: ${error}`, 500)
-    }
   }
 
   @Post('/receive')
@@ -454,13 +413,13 @@ export class InvitationController {
         },
       })
 
-    const { url } = await createInvitation({
-      agent: await this.agentService.getAgent(),
-      messages: [request.message],
-      useLegacyDid,
-      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
-      imageUrl: AGENT_INVITATION_IMAGE_URL,
-    })
+      const { url } = await createInvitation({
+        agent: await this.agentService.getAgent(),
+        messages: [request.message],
+        useLegacyDid,
+        invitationBaseUrl: AGENT_INVITATION_BASE_URL,
+        imageUrl: AGENT_INVITATION_IMAGE_URL,
+      })
 
       const shortUrlId = await this.urlShortenerService.createShortUrl({
         longUrl: url,

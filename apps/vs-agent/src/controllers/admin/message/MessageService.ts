@@ -37,6 +37,7 @@ import {
 import { didcommReceiptFromVsAgentReceipt, parsePictureData } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
+import { validateSchema } from '../../../utils'
 import { CredentialTypesService } from '../credentials'
 
 @Injectable()
