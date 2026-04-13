@@ -1,5 +1,10 @@
-import { AnonCredsRequestedAttribute } from '@credo-ts/anoncreds'
-import { Controller, Get, Post, Body, Query, Inject } from '@nestjs/common'
+import {
+  AnonCredsProofRequestRestriction,
+  AnonCredsRequestedAttribute,
+  AnonCredsSchema,
+} from '@credo-ts/anoncreds'
+import { W3cCredential } from '@credo-ts/core'
+import { Controller, Get, Post, Body, Query, Inject, HttpException } from '@nestjs/common'
 import {
   ApiBadRequestResponse,
   ApiBody,
@@ -12,6 +17,7 @@ import {
   CreateCredentialOfferResult,
   CreatePresentationRequestResult,
   CreateInvitationResult,
+  ReceiveInvitationResult,
 } from '@verana-labs/vs-agent-model'
 import { createInvitation } from '@verana-labs/vs-agent-sdk'
 
@@ -30,14 +36,38 @@ export class InvitationController {
   constructor(
     private readonly agentService: VsAgentService,
     private readonly urlShortenerService: UrlShorteningService,
+    private readonly credentialTypesService: CredentialTypesService,
     @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
   ) {}
 
-  @Get('/')
+  @Post('/')
   @ApiOperation({
     summary: 'Connection Invitation',
     description:
-      '### Connection Invitation\n\nIt\'s a GET request to `/invitation`. It does not receive any parameter.\n\nResponse from VS Agent is a JSON object containing an URL-encoded invitation, ready to be rendered in a QR code or sent as a link for processing of an Aries-compatible DIDComm agent:\n\n```json\n{\n  "url": "string containing long form URL-encoded invitation"\n}\n```',
+      '### Connection Invitation\n\nIt\'s a POST request to `/invitation`. It does not receive any parameter.\n\nResponse from VS Agent is a JSON object containing an URL-encoded invitation, ready to be rendered in a QR code or sent as a link for processing of an Aries-compatible DIDComm agent:\n\n```json\n{\n  "url": "string containing long form URL-encoded invitation"\n}\n```',
+  })
+  @ApiOkResponse({
+    description: 'Out-of-band invitation payload',
+    schema: {
+      example: {
+        url: 'https://hologram.zone/?oob=eyJ0eXAiOiJKV1QiLCJhbGci...',
+      },
+    },
+  })
+  @ApiBody({ type: CreateInvitationDto, required: false })
+  public async createInvitation(@Body() options?: CreateInvitationDto): Promise<CreateInvitationResult> {
+    return await createInvitation({
+      agent: await this.agentService.getAgent(),
+      useLegacyDid: options?.useLegacyDid,
+    })
+  }
+
+  @Get('/')
+  @ApiOperation({
+    deprecated: true,
+    summary: 'Connection Invitation (deprecated)',
+    description:
+      '### Deprecated: use POST /v1/invitation instead\n\nReturns an out-of-band invitation URL. This endpoint is deprecated because it creates a record on the agent and should therefore use POST semantics.',
   })
   @ApiOkResponse({
     description: 'Out-of-band invitation payload',
@@ -56,6 +86,102 @@ export class InvitationController {
     })
   }
 
+  @Post('/receive')
+  @ApiOperation({
+    summary: 'Receive Invitation',
+    description:
+      '### Receive Invitation\n\nProactively connects to another agent by processing an invitation. The `url` field accepts:\n\n- An explicit OOB invitation URL (`https://...` or `didcomm://...`)\n- An implicit invitation DID (`did:webvh:...`, `did:web:...`, etc.)\n\nVS Agent will automatically determine the invitation type based on the URL scheme.',
+  })
+  @ApiBody({
+    type: ReceiveInvitationDto,
+    examples: {
+      explicit: {
+        summary: 'Explicit OOB invitation URL',
+        value: { url: 'https://example.com/?oob=eyJ0eXAiOiJKV1Qi...' },
+      },
+      implicit: {
+        summary: 'Implicit invitation (DID)',
+        value: { url: 'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:example.com' },
+      },
+    },
+  })
+  @ApiOkResponse({
+    description: 'Invitation received; connection initiated',
+    schema: {
+      example: {
+        outOfBandId: '123e4567-e89b-12d3-a456-426614174000',
+        connectionId: '789a0123-e89b-12d3-a456-426614174000',
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid invitation URL or DID' })
+  public async receiveInvitation(@Body() options: ReceiveInvitationDto): Promise<ReceiveInvitationResult> {
+    const agent = await this.agentService.getAgent()
+    const { url } = options
+    const config = { label: agent.label }
+
+    try {
+      const { outOfBandRecord, connectionRecord } = url.startsWith('did:')
+        ? await agent.didcomm.oob.receiveImplicitInvitation({ did: url, ...config })
+        : await agent.didcomm.oob.receiveInvitationFromUrl(url, config)
+
+      return {
+        outOfBandId: outOfBandRecord.id,
+        connectionId: connectionRecord?.id,
+      }
+    } catch (error) {
+      throw new HttpException(`Failed to receive invitation: ${error}`, 500)
+    }
+  }
+
+  @Post('/receive')
+  @ApiOperation({
+    summary: 'Receive Invitation',
+    description:
+      '### Receive Invitation\n\nProactively connects to another agent by processing an invitation. The `url` field accepts:\n\n- An explicit OOB invitation URL (`https://...` or `didcomm://...`)\n- An implicit invitation DID (`did:webvh:...`, `did:web:...`, etc.)\n\nVS Agent will automatically determine the invitation type based on the URL scheme.',
+  })
+  @ApiBody({
+    type: ReceiveInvitationDto,
+    examples: {
+      explicit: {
+        summary: 'Explicit OOB invitation URL',
+        value: { url: 'https://example.com/?oob=eyJ0eXAiOiJKV1Qi...' },
+      },
+      implicit: {
+        summary: 'Implicit invitation (DID)',
+        value: { url: 'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:example.com' },
+      },
+    },
+  })
+  @ApiOkResponse({
+    description: 'Invitation received; connection initiated',
+    schema: {
+      example: {
+        outOfBandId: '123e4567-e89b-12d3-a456-426614174000',
+        connectionId: '789a0123-e89b-12d3-a456-426614174000',
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid invitation URL or DID' })
+  public async receiveInvitation(@Body() options: ReceiveInvitationDto): Promise<ReceiveInvitationResult> {
+    const agent = await this.agentService.getAgent()
+    const { url } = options
+    const config = { label: agent.label }
+
+    try {
+      const { outOfBandRecord, connectionRecord } = url.startsWith('did:')
+        ? await agent.didcomm.oob.receiveImplicitInvitation({ did: url, ...config })
+        : await agent.didcomm.oob.receiveInvitationFromUrl(url, config)
+
+      return {
+        outOfBandId: outOfBandRecord.id,
+        connectionId: connectionRecord?.id,
+      }
+    } catch (error) {
+      throw new HttpException(`Failed to receive invitation: ${error}`, 500)
+    }
+  }
+
   @Post('/presentation-request')
   @ApiOperation({
     summary: 'Presentation Request',
@@ -67,8 +193,8 @@ export class InvitationController {
   @ApiBody({
     type: CreatePresentationRequestDto,
     examples: {
-      example: {
-        summary: 'Create Presentation Request',
+      withCredentialDefinitionId: {
+        summary: 'Using credentialDefinitionId',
         value: {
           ref: '1234-5678',
           callbackUrl: 'https://myhost/mycallbackurl',
@@ -77,6 +203,24 @@ export class InvitationController {
               credentialDefinitionId:
                 'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
               attributes: ['phoneNumber'],
+            },
+          ],
+        },
+      },
+      withRelatedJsonSchema: {
+        summary: 'Using jsonSchemaCredentialId',
+        value: {
+          requestedCredentials: [
+            {
+              jsonSchemaCredentialId: 'https://dm.gov-id-tr.demos.dev.2060.io/vt/schemas-gov-id-jsc.json',
+              attributes: [
+                'firstName',
+                'lastName',
+                'birthDate',
+                'documentNumber',
+                'documentType',
+                'nationality',
+              ],
             },
           ],
         },
@@ -103,29 +247,59 @@ export class InvitationController {
     if (!requestedCredentials?.length) {
       throw Error('You must specify a least a requested credential')
     }
-    const credentialDefinitionId = requestedCredentials[0].credentialDefinitionId
+
+    const { credentialDefinitionId, jsonSchemaCredentialId: relatedJsonSchemaCredentialId } =
+      requestedCredentials[0]
     let attributes = requestedCredentials[0].attributes
 
-    if (!credentialDefinitionId) {
-      throw Error('Verifiable credential request must include credentialDefinitionId')
+    if (credentialDefinitionId && relatedJsonSchemaCredentialId) {
+      throw new Error('Specify either credentialDefinitionId or jsonSchemaCredentialId, not both')
+    }
+
+    if (!credentialDefinitionId && !relatedJsonSchemaCredentialId) {
+      throw new Error('Either credentialDefinitionId or jsonSchemaCredentialId must be provided')
     }
 
     if (attributes && !Array.isArray(attributes)) {
       throw new Error('Received attributes is not an array')
     }
 
-    const { credentialDefinition } =
-      await agent.modules.anoncreds.getCredentialDefinition(credentialDefinitionId)
+    let schema: AnonCredsSchema
+    let restrictions: AnonCredsProofRequestRestriction[]
 
-    if (!credentialDefinition) {
-      throw Error(`Cannot find information about credential definition ${credentialDefinitionId}.`)
-    }
+    if (relatedJsonSchemaCredentialId) {
+      const jscData = await fetchJson<W3cCredential>(relatedJsonSchemaCredentialId)
+      const issuerDid = typeof jscData.issuer === 'string' ? jscData.issuer : jscData.issuer.id
+      const schemaResult = await this.credentialTypesService.findAnonCredsSchema({
+        relatedJsonSchemaCredentialId,
+        issuerDid,
+      })
 
-    // Verify that requested attributes are present in credential definition
-    const { schema } = await agent.modules.anoncreds.getSchema(credentialDefinition.schemaId)
+      if (!schemaResult) {
+        throw new Error(`Cannot find a schema for jsonSchemaCredentialId: ${relatedJsonSchemaCredentialId}`)
+      }
 
-    if (!schema) {
-      throw Error(`Cannot find information about schema ${credentialDefinition.schemaId}.`)
+      schema = schemaResult.schema
+      restrictions = [{ schema_id: schemaResult.schemaId }]
+    } else {
+      const { credentialDefinition } = await agent.modules.anoncreds.getCredentialDefinition(
+        credentialDefinitionId!,
+      )
+
+      if (!credentialDefinition) {
+        throw Error(`Cannot find information about credential definition ${credentialDefinitionId}.`)
+      }
+
+      const { schema: resolvedSchema } = await agent.modules.anoncreds.getSchema(
+        credentialDefinition.schemaId,
+      )
+
+      if (!resolvedSchema) {
+        throw Error(`Cannot find information about schema ${credentialDefinition.schemaId}.`)
+      }
+
+      schema = resolvedSchema
+      restrictions = [{ cred_def_id: credentialDefinitionId! }]
     }
 
     // If no attributes are specified, request all of them
@@ -143,7 +317,7 @@ export class InvitationController {
 
     requestedAttributes[schema.name] = {
       names: attributes,
-      restrictions: [{ cred_def_id: credentialDefinitionId }],
+      restrictions,
     }
 
     const request = await agent.didcomm.proofs.createRequest({
@@ -158,7 +332,7 @@ export class InvitationController {
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { url } = await createInvitation({
-      agent: await this.agentService.getAgent(),
+      agent,
       messages: [request.message],
       useLegacyDid,
       invitationBaseUrl: AGENT_INVITATION_BASE_URL,
@@ -180,13 +354,11 @@ export class InvitationController {
 
   @Post('/credential-offer')
   @ApiOperation({
-    summary: 'Credential Offer',
+    summary: 'AnonCreds Credential Offer',
     description:
-      "### Credential Offer\n\nCredential offer invitation codes include a preview of the offered credential, meaning by that its `credentialDefinitionId` and claims.\n\nIt's a POST to `/invitation/credential-offer` which receives a JSON object in the body",
+      '### AnonCreds Credential Offer\n\nCredential offer invitation codes include a preview of the offered credential, meaning by that its `credentialDefinitionId` and claims.\n\nIf the credential is revocable, you must also provide the `revocationRegistryDefinitionId` and `revocationRegistryIndex` fields.',
   })
   @ApiBody({
-    description:
-      "### Credential Offer\n\nCredential offer invitation codes include a preview of the offered credential, meaning by that its `credentialDefinitionId` and claims.\n\nIt's a POST to `/invitation/credential-offer` which receives a JSON object in the body",
     type: CreateCredentialOfferDto,
     examples: {
       example: {
@@ -228,7 +400,13 @@ export class InvitationController {
   ): Promise<CreateCredentialOfferResult> {
     const agent = await this.agentService.getAgent()
 
-    const { claims, credentialDefinitionId, useLegacyDid } = options
+    const {
+      claims,
+      credentialDefinitionId,
+      useLegacyDid,
+      revocationRegistryDefinitionId,
+      revocationRegistryIndex,
+    } = options
 
     if (claims && !Array.isArray(claims)) {
       throw new Error('Received claims is not an array')
@@ -261,17 +439,20 @@ export class InvitationController {
       )
     }
 
-    const request = await agent.didcomm.credentials.createOffer({
-      protocolVersion: 'v2',
-      credentialFormats: {
-        anoncreds: {
-          credentialDefinitionId,
-          attributes: claims.map(item => {
-            return { name: item.name, mimeType: item.mimeType, value: item.value }
-          }),
+    try {
+      const request = await agent.didcomm.credentials.createOffer({
+        protocolVersion: 'v2',
+        credentialFormats: {
+          anoncreds: {
+            revocationRegistryDefinitionId,
+            revocationRegistryIndex,
+            credentialDefinitionId,
+            attributes: claims.map(item => {
+              return { name: item.name, mimeType: item.mimeType, value: item.value }
+            }),
+          },
         },
-      },
-    })
+      })
 
     const { url } = await createInvitation({
       agent: await this.agentService.getAgent(),
@@ -281,16 +462,18 @@ export class InvitationController {
       imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
 
-    const shortUrlId = await this.urlShortenerService.createShortUrl({
-      longUrl: url,
-      relatedFlowId: request.credentialExchangeRecord.id,
-    })
-    const shortUrl = `${this.publicApiBaseUrl}/s?id=${shortUrlId}`
-
-    return {
-      credentialExchangeId: request.credentialExchangeRecord.id,
-      url,
-      shortUrl,
+      const shortUrlId = await this.urlShortenerService.createShortUrl({
+        longUrl: url,
+        relatedFlowId: request.credentialExchangeRecord.id,
+      })
+      const shortUrl = `${this.publicApiBaseUrl}/s?id=${shortUrlId}`
+      return {
+        credentialExchangeId: request.credentialExchangeRecord.id,
+        url,
+        shortUrl,
+      }
+    } catch (error) {
+      throw new HttpException(`Failed to create invitation: ${error}`, 500)
     }
   }
 }

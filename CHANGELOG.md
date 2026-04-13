@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.10.0](https://github.com/verana-labs/vs-agent/compare/v1.9.2...v1.10.0) (2026-04-09)
+
+
+### Features
+
+* add endpoint for receiving didcomm invitations ([#391](https://github.com/verana-labs/vs-agent/issues/391)) ([7ee7531](https://github.com/verana-labs/vs-agent/commit/7ee75317af3307f91eab1012afa1cfa079b168c1))
+* create anoncreds schema when creating json schema credential ([#382](https://github.com/verana-labs/vs-agent/issues/382)) ([27b1bee](https://github.com/verana-labs/vs-agent/commit/27b1bee1791aaf924ed14f9f4dedfbff1d5624be))
+* support anoncreds revocable credentials in credential offers and revocation ([#387](https://github.com/verana-labs/vs-agent/issues/387)) ([8362f14](https://github.com/verana-labs/vs-agent/commit/8362f14d9202d4c227b63225e368cb3061f85f8d))
+
+
+### Bug Fixes
+
+* include support to not send optional attributes ([#388](https://github.com/verana-labs/vs-agent/issues/388)) ([6ae1024](https://github.com/verana-labs/vs-agent/commit/6ae102419d2a2c1a883f24541e73dc62a24c31bd))
+* solve deployment to npm bug present ([#389](https://github.com/verana-labs/vs-agent/issues/389)) ([4e92c5b](https://github.com/verana-labs/vs-agent/commit/4e92c5ba24b855976bb7f849a642a82714c6f513))
+* use a fix node version for deployment ([#392](https://github.com/verana-labs/vs-agent/issues/392)) ([2686b4b](https://github.com/verana-labs/vs-agent/commit/2686b4bbde2b831a6ad72e32f1d2799b0f158ce2))
+
 ## [1.9.2](https://github.com/verana-labs/vs-agent/compare/v1.9.1...v1.9.2) (2026-03-25)
 
 

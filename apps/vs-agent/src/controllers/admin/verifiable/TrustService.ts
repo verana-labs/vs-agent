@@ -10,7 +10,12 @@ import {
   W3cJsonLdVerifiablePresentation,
 } from '@credo-ts/core'
 import { Logger, Inject, Injectable, HttpException, HttpStatus } from '@nestjs/common'
-import { CredentialIssuanceRequest, CredentialIssuanceResponse } from '@verana-labs/vs-agent-model'
+import {
+  CredentialIssuanceRequest,
+  CredentialIssuanceResponse,
+  CredentialRevocationRequest,
+  CredentialRevocationResponse,
+} from '@verana-labs/vs-agent-model'
 import { createInvitation, getEcsSchemas, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { AGENT_INVITATION_BASE_URL } from '../../../config'
@@ -289,13 +294,20 @@ export class TrustService {
               HttpStatus.BAD_REQUEST,
             )
           }
+          const providedAttributes = Object.entries(claims)
+            .filter(([, v]) => v !== undefined && v !== null)
+            .map(([name, value]) => ({ name, mimeType: 'text/plain', value: String(value) }))
+
+          const attributes = this.credentialTypesService.buildAnonCredsAttributes(
+            attrNames,
+            providedAttributes,
+          )
+
           const request = await agent.didcomm.credentials.createOffer({
             protocolVersion: 'v2',
             credentialFormats: {
               anoncreds: {
-                attributes: attrNames.map(name => {
-                  return { name, mimeType: 'text/plain', value: String(claims[name]) }
-                }),
+                attributes,
                 credentialDefinitionId,
               },
             },
@@ -315,6 +327,51 @@ export class TrustService {
             status: 200,
             didcommInvitationUrl,
             jsonSchemaCredentialId,
+          }
+        default:
+          throw new HttpException(`Invalid credential type: ${format}`, HttpStatus.BAD_REQUEST)
+      }
+    } catch (error) {
+      this.handleError(error, 'Failed to issue credential')
+    }
+  }
+
+  public async revokeCredential({
+    format,
+    anoncredsRevocationRegistryDefinitionId,
+    anoncredsRevocationRegistryIndex,
+  }: CredentialRevocationRequest): Promise<CredentialRevocationResponse> {
+    try {
+      const { agent } = await this.getDidRecord()
+
+      switch (format) {
+        case 'jsonld':
+          throw new HttpException(
+            'Revocation not currently supported for JSON-LD credentials',
+            HttpStatus.BAD_REQUEST,
+          )
+
+        case 'anoncreds':
+          if (!anoncredsRevocationRegistryDefinitionId || !anoncredsRevocationRegistryIndex) {
+            throw new HttpException(
+              'Revocation registry definition ID and index are required for AnonCreds. Make sure to specify a valid ' +
+                'anoncredsRevocationRegistryDefinitionId and anoncredsRevocationRegistryIndex',
+              HttpStatus.BAD_REQUEST,
+            )
+          }
+
+          const uptStatusListResult = await agent.modules.anoncreds.updateRevocationStatusList({
+            revocationStatusList: {
+              revocationRegistryDefinitionId: anoncredsRevocationRegistryDefinitionId,
+              revokedCredentialIndexes: [anoncredsRevocationRegistryIndex],
+            },
+            options: {},
+          })
+          if (!uptStatusListResult.revocationStatusListState.revocationStatusList) {
+            throw new Error(`Failed to update revocation status list`)
+          }
+          return {
+            status: 200,
           }
         default:
           throw new HttpException(`Invalid credential type: ${format}`, HttpStatus.BAD_REQUEST)

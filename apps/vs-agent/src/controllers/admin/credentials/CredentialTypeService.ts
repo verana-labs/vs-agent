@@ -324,14 +324,6 @@ export class CredentialTypesService {
     return credentialDefinitionRecord
   }
 
-  private async fetchJson<T>(url: string): Promise<T> {
-    const res = await fetch(url)
-    if (!res.ok) {
-      throw new Error(`Failed to fetch ${url}: ${res.statusText}`)
-    }
-    return res.json() as Promise<T>
-  }
-
   private getCredentialSubjectId(credentialSubject: any): string {
     const subject = Array.isArray(credentialSubject) ? credentialSubject[0] : credentialSubject
     const id = subject?.id
@@ -341,11 +333,25 @@ export class CredentialTypesService {
     return id
   }
 
+  public buildAnonCredsAttributes(
+    attrNames: string[],
+    providedAttributes: Array<{ name: string; value: string; mimeType?: string }>,
+  ): Array<{ name: string; value: string; mimeType?: string }> {
+    const providedNames = providedAttributes.map(a => a.name)
+    const result = [...providedAttributes]
+    for (const name of attrNames) {
+      if (!providedNames.includes(name)) {
+        result.push({ name, value: '' })
+      }
+    }
+    return result
+  }
+
   public async parseJsonSchemaCredential(jsonSchemaCredentialId: string) {
     try {
-      const jscData = await this.fetchJson<W3cCredential>(jsonSchemaCredentialId)
+      const jscData = await fetchJson<W3cCredential>(jsonSchemaCredentialId)
       const subjectId = this.getCredentialSubjectId(jscData.credentialSubject)
-      const schemaData = await this.fetchJson<JsonObject>(mapToEcosystem(subjectId))
+      const schemaData = await fetchJson<JsonObject>(mapToEcosystem(subjectId))
       const parsedSchema = schemaData as any
       const subjectProps = parsedSchema?.properties?.credentialSubject?.properties ?? {}
 

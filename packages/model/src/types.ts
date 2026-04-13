@@ -44,6 +44,16 @@ export interface CredentialIssuanceResponse {
   credential?: Record<string, unknown>
 }
 
+export interface CredentialRevocationRequest {
+  format: 'jsonld' | 'anoncreds'
+  anoncredsRevocationRegistryDefinitionId?: string
+  anoncredsRevocationRegistryIndex?: number
+}
+
+export interface CredentialRevocationResponse {
+  status: number
+}
+
 export interface ImportCredentialTypeOptions {
   id: string
   data: {
@@ -78,7 +88,7 @@ export interface CreatePresentationRequestOptions {
 
 export type RequestedCredential = {
   credentialDefinitionId?: string
-  relatedJsonSchemaCredentialId?: string
+  jsonSchemaCredentialId?: string
   attributes?: string[]
 }
 
@@ -142,6 +152,11 @@ export interface OutOfBandInvitationSchema {
   handshake_protocols?: DidCommHandshakeProtocol[]
   services: Array<OutOfBandDidCommService | string>
   imageUrl?: string
+}
+
+export interface ReceiveInvitationResult {
+  outOfBandId: string
+  connectionId?: string
 }
 
 export interface ConnectionInvitationSchema {
