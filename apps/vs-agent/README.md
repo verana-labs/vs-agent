@@ -180,6 +180,20 @@ MASTER_LIST_CSCA_LOCATION=/opt/vs-agent/icao/ML_ICAO_2025-07-10.ldif
 MASTER_LIST_CSCA_LOCATION=https://pkddownloadsg.icao.int/file?id=f6e328050fd481060e787569dd8e998c43f14230
 ```
 
+### Verana network integration (work in progress)
+
+> **Note:** This feature is currently under active development. The interface and behavior may change in future releases.
+
+VS Agent can connect to a Verana indexer to receive real-time on-chain notifications (trust registry changes, credential schema updates, permission state changes). When `VERANA_INDEXER` is set, the agent establishes a persistent WebSocket connection at startup.
+
+If the connection is lost, the agent automatically reconnects using exponential backoff (up to 5 minutes between attempts).
+
+| Variable        | Description                                           | Default value |
+| --------------- | ----------------------------------------------------- | ------------- |
+| VERANA_INDEXER  | WebSocket URL of the Verana indexer (e.g. `wss://...`) | none          |
+
+Additional Verana network variables (`VERANA_AUTHORITY`, `VERANA_RPC`, `VERANA_RESOLVER`, etc.) will be documented as their corresponding features are implemented.
+
 ## Deploy and run
 
 vs-agent can be run both locally or containerized.
