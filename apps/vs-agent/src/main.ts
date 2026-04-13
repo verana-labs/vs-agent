@@ -38,8 +38,10 @@ import {
   USER_PROFILE_AUTODISCLOSE,
   MASTER_LIST_CSCA_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
+  VERANA_INDEXER,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
+import { IndexerWebSocketService } from './events/IndexerWebSocketService'
 import { messageEvents } from './events/MessageEvents'
 import { PublicModule } from './public.module'
 import {
@@ -186,6 +188,16 @@ const run = async () => {
   // Listen to events emitted by the agent
   connectionEvents(agent, conf)
   messageEvents(agent, conf)
+
+  // Connect to Verana indexer for on-chain notifications
+  if (VERANA_INDEXER && agent.did) {
+    const indexerService = new IndexerWebSocketService({
+      indexerUrl: VERANA_INDEXER,
+      agentDid: agent.did,
+      logger: serverLogger,
+    })
+    indexerService.start()
+  }
 
   agent.config.logger.info(
     `VS Agent v${packageJson['version']} running in port ${AGENT_PORT}. Admin interface at port ${conf.port}`,

@@ -115,3 +115,6 @@ export const AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP =
   process.env.AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP !== 'false'
 
 export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFORE_STORAGE_UPDATE !== 'false' // removed on credo-ts v0.6.0
+
+// Verana network
+export const VERANA_INDEXER = process.env.VERANA_INDEXER
