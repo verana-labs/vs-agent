@@ -2,7 +2,10 @@ import { DidCommCallsModule } from '@2060.io/credo-ts-didcomm-calls'
 import { DidCommMediaSharingModule } from '@2060.io/credo-ts-didcomm-media-sharing'
 import { DidCommMrtdModule } from '@2060.io/credo-ts-didcomm-mrtd'
 import { DidCommReceiptsModule } from '@2060.io/credo-ts-didcomm-receipts'
-import { DidCommUserProfileModule, DidCommUserProfileModuleConfig } from '@2060.io/credo-ts-didcomm-user-profile'
+import {
+  DidCommUserProfileModule,
+  DidCommUserProfileModuleConfig,
+} from '@2060.io/credo-ts-didcomm-user-profile'
 import { ActionMenuModule } from '@credo-ts/action-menu'
 import {
   AnonCredsDidCommCredentialFormatService,
@@ -483,7 +486,9 @@ export const createVsAgent = (options: VsAgentOptions): VsAgent => {
       questionAnswer: new QuestionAnswerModule(),
       receipts: new DidCommReceiptsModule(),
       // Disable module's auto disclose feature, since we are going to manage it in MessageEvents
-      userProfile: new DidCommUserProfileModule(new DidCommUserProfileModuleConfig({ autoSendProfile: false })),
+      userProfile: new DidCommUserProfileModule(
+        new DidCommUserProfileModuleConfig({ autoSendProfile: false }),
+      ),
       w3cCredentials: new W3cCredentialsModule({
         documentLoader: defaultDocumentLoader,
       }),

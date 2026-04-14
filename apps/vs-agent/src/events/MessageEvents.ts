@@ -441,19 +441,22 @@ export const messageEvents = async (agent: VsAgent, config: ServerConfig) => {
   )
 
   // User profile events
-  agent.events.on(DidCommProfileEventTypes.UserProfileRequested, async ({ payload }: DidCommUserProfileRequestedEvent) => {
-    config.logger.debug(`UserProfileRequestedEvent received. Connection id: ${payload.connection.id} 
+  agent.events.on(
+    DidCommProfileEventTypes.UserProfileRequested,
+    async ({ payload }: DidCommUserProfileRequestedEvent) => {
+      config.logger.debug(`UserProfileRequestedEvent received. Connection id: ${payload.connection.id} 
       Query: ${JSON.stringify(payload.query)}`)
 
-    // Currently we only send the profile if we are using our "main" connection
-    const outOfBandRecordId = payload.connection.outOfBandId
-    if (outOfBandRecordId) {
-      const outOfBandRecord = await agent.didcomm.oob.findById(outOfBandRecordId)
-      const parentConnectionId = outOfBandRecord?.getTag('parentConnectionId') as string | undefined
-      if (!parentConnectionId && agent.autoDiscloseUserProfile)
-        await agent.modules.userProfile.sendUserProfile({ connectionId: payload.connection.id })
-    }
-  })
+      // Currently we only send the profile if we are using our "main" connection
+      const outOfBandRecordId = payload.connection.outOfBandId
+      if (outOfBandRecordId) {
+        const outOfBandRecord = await agent.didcomm.oob.findById(outOfBandRecordId)
+        const parentConnectionId = outOfBandRecord?.getTag('parentConnectionId') as string | undefined
+        if (!parentConnectionId && agent.autoDiscloseUserProfile)
+          await agent.modules.userProfile.sendUserProfile({ connectionId: payload.connection.id })
+      }
+    },
+  )
 
   agent.events.on(
     DidCommProfileEventTypes.ConnectionProfileUpdated,

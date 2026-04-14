@@ -1,13 +1,6 @@
 import type WebSocket from 'ws'
 
-import {
-  AgentConfig,
-  CredoError,
-  EventEmitter,
-  Logger,
-  AgentContext,
-  JsonEncoder,
-} from '@credo-ts/core'
+import { AgentConfig, CredoError, EventEmitter, Logger, AgentContext, JsonEncoder } from '@credo-ts/core'
 import {
   DidCommEventTypes,
   DidCommMessageReceivedEvent,
