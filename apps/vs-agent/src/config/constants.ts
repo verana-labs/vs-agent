@@ -116,9 +116,10 @@ export const AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP =
 
 export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFORE_STORAGE_UPDATE !== 'false' // removed on credo-ts v0.6.0
 
-// Active plugins: comma-separated list of plugin names (default: all)
-// Available: 'chat' (messaging, connections, presentations), 'mrtd' (eMRTD reading/verification)
-export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'chat')
+// Active plugins: comma-separated list of plugin names (default: messaging)
+// Available: 'messaging' (chat protocols + MessageController), 'mrtd' (eMRTD reading/verification)
+// Note: connections and presentations endpoints are always active (base module)
+export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'messaging')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean)

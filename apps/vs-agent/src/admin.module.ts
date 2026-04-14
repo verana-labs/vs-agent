@@ -2,10 +2,12 @@ import { DynamicModule, Module } from '@nestjs/common'
 import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
+  ConnectionController,
   CredentialTypesController,
   CredentialTypesService,
   HealthController,
   InvitationController,
+  PresentationsController,
   QrController,
   TrustController,
   TrustService,
@@ -31,6 +33,8 @@ export class VsAgentModule {
       InvitationController,
       QrController,
       TrustController,
+      ConnectionController,
+      PresentationsController,
     ]
 
     const baseProviders = [

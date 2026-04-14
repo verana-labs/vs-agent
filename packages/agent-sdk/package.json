@@ -9,7 +9,7 @@
       "default": "./build/index.js"
     }
   },
-  "version": "1.9.2",
+  "version": "1.10.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/verana-labs/vs-agent"

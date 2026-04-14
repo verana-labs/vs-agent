@@ -46,7 +46,8 @@ import {
   MASTER_LIST_CSCA_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
 } from './config'
-import { ChatPlugin, MrtdPlugin, VsAgentNestPlugin } from './plugins'
+import { connectionEvents } from './events/ConnectionEvents'
+import { MessagingPlugin, MrtdPlugin, VsAgentNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { commonAppConfig, type ServerConfig, setupAgent, setupSelfTr, TsLogger } from './utils'
 
@@ -144,7 +145,7 @@ const run = async () => {
 
   // Build the list of active NestJS plugins
   const nestPlugins: VsAgentNestPlugin[] = [
-    ...(ENABLED_PLUGINS.includes('chat') ? [ChatPlugin] : []),
+    ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
     ...(ENABLED_PLUGINS.includes('mrtd')
       ? [MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })]
       : []),
@@ -192,6 +193,9 @@ const run = async () => {
 
   // Initialize Self-Trust Registry
   if (agent.did) await setupSelfTr({ agent, publicApiBaseUrl })
+
+  // Register base events (always active)
+  connectionEvents(agent as any, conf)
 
   // Register plugin events after agent is initialized
   for (const plugin of nestPlugins) {
