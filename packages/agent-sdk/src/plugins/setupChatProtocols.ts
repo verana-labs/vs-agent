@@ -5,11 +5,11 @@ import { DidCommUserProfileModule, UserProfileModuleConfig } from '@2060.io/cred
 import { ActionMenuModule } from '@credo-ts/action-menu'
 import { QuestionAnswerModule } from '@credo-ts/question-answer'
 
-import { ChatAgentModules } from '../agent/types'
+import { MessagingAgentModules } from '../agent/types'
 
 export interface ChatPlugin {
   modules: Pick<
-    ChatAgentModules,
+    MessagingAgentModules,
     'actionMenu' | 'calls' | 'media' | 'questionAnswer' | 'receipts' | 'userProfile'
   >
 }

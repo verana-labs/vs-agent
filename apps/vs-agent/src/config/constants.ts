@@ -118,7 +118,6 @@ export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFOR
 
 // Active plugins: comma-separated list of plugin names (default: messaging)
 // Available: 'messaging' (chat protocols + MessageController), 'mrtd' (eMRTD reading/verification)
-// Note: connections and presentations endpoints are always active (base module)
 export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'messaging')
   .split(',')
   .map(s => s.trim())

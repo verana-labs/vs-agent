@@ -3,7 +3,7 @@ export { VsAgent } from './agent/VsAgent'
 export type { VsAgentOptions } from './agent/VsAgent'
 export { createVsAgent } from './agent/createVsAgent'
 export type { CreateVsAgentOptions, Plugin } from './agent/createVsAgent'
-export type { BaseAgentModules, ChatAgentModules, MrtdAgentModules, DidCommAgentModules } from './agent/types'
+export type { BaseAgentModules, MessagingAgentModules, MrtdAgentModules, DidCommAgentModules } from './agent/types'
 
 // Plugins
 export { setupBaseDidComm } from './plugins/setupBaseDidComm'

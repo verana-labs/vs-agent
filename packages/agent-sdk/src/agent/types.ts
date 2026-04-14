@@ -23,28 +23,35 @@ import {
 } from '@credo-ts/didcomm'
 import { QuestionAnswerModule } from '@credo-ts/question-answer'
 
+type VsAgentDidCommModule = DidCommModule<
+  DidCommModuleConfigOptions & {
+    credentials: DidCommCredentialsModuleConfigOptions<
+      [
+        DidCommCredentialV2Protocol<
+          [LegacyIndyDidCommCredentialFormatService, AnonCredsDidCommCredentialFormatService]
+        >,
+      ]
+    >
+    proofs: DidCommProofsModuleConfigOptions<
+      [DidCommProofV2Protocol<[LegacyIndyDidCommProofFormatService, AnonCredsDidCommProofFormatService]>]
+    >
+  }
+>
+
 export type BaseAgentModules = {
   askar: AskarModule
   anoncreds: AnonCredsModule
   dids: DidsModule
   w3cCredentials: W3cCredentialsModule
-  didcomm: DidCommModule<
-    DidCommModuleConfigOptions & {
-      credentials: DidCommCredentialsModuleConfigOptions<
-        [
-          DidCommCredentialV2Protocol<
-            [LegacyIndyDidCommCredentialFormatService, AnonCredsDidCommCredentialFormatService]
-          >,
-        ]
-      >
-      proofs: DidCommProofsModuleConfigOptions<
-        [DidCommProofV2Protocol<[LegacyIndyDidCommProofFormatService, AnonCredsDidCommProofFormatService]>]
-      >
-    }
-  >
+  didcomm: VsAgentDidCommModule
 }
 
-export type ChatAgentModules = BaseAgentModules & {
+export type MessagingAgentModules = {
+  askar: AskarModule
+  anoncreds: AnonCredsModule
+  dids: DidsModule
+  w3cCredentials: W3cCredentialsModule
+  didcomm: VsAgentDidCommModule
   actionMenu: ActionMenuModule
   calls: DidCommCallsModule
   media: DidCommMediaSharingModule
@@ -53,11 +60,21 @@ export type ChatAgentModules = BaseAgentModules & {
   userProfile: DidCommUserProfileModule
 }
 
-export type MrtdAgentModules = BaseAgentModules & {
+export type MrtdAgentModules = {
+  askar: AskarModule
+  anoncreds: AnonCredsModule
+  dids: DidsModule
+  w3cCredentials: W3cCredentialsModule
+  didcomm: VsAgentDidCommModule
   mrtd: DidCommMrtdModule
 }
 
-export type DidCommAgentModules = BaseAgentModules & {
+export type DidCommAgentModules = {
+  askar: AskarModule
+  anoncreds: AnonCredsModule
+  dids: DidsModule
+  w3cCredentials: W3cCredentialsModule
+  didcomm: VsAgentDidCommModule
   actionMenu: ActionMenuModule
   calls: DidCommCallsModule
   media: DidCommMediaSharingModule

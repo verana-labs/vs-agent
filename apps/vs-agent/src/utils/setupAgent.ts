@@ -56,7 +56,7 @@ export const setupAgent = async ({
   const agent = createVsAgent({
     plugins: [
       setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints }),
-      ...(ENABLED_PLUGINS.includes('chat') ? [setupChatProtocols()] : []),
+      ...(ENABLED_PLUGINS.includes('messaging') ? [setupChatProtocols()] : []),
       ...(ENABLED_PLUGINS.includes('mrtd') ? [setupMrtdProtocol({ masterListCscaLocation })] : []),
     ],
     config: {
