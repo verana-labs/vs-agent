@@ -1,4 +1,4 @@
-import { ConnectionProfileUpdatedEvent } from '@2060.io/credo-ts-didcomm-user-profile'
+import { DidCommConnectionProfileUpdatedEvent } from '@2060.io/credo-ts-didcomm-user-profile'
 import { LogLevel } from '@credo-ts/core'
 import {
   DidCommBasicMessage,
@@ -56,12 +56,12 @@ export function isAgentMessageProcessedEvent(arg: unknown): arg is DidCommMessag
   )
 }
 
-export function isConnectionProfileUpdatedEvent(arg: unknown): arg is ConnectionProfileUpdatedEvent {
+export function isConnectionProfileUpdatedEvent(arg: unknown): arg is DidCommConnectionProfileUpdatedEvent {
   const { type, payload } = arg as any
   return (
     typeof arg === 'object' &&
     arg !== null &&
-    type === 'ConnectionProfileUpdated' &&
+    type === 'DidCommConnectionProfileUpdated' &&
     !!payload?.profile &&
     !!payload?.connection
   )
@@ -104,7 +104,7 @@ export const startServersTesting = async (agent: VsAgent): Promise<INestApplicat
 
   const conf: ServerConfig = {
     port: 3000,
-    logger: new TsLogger(LogLevel.off, agent.label),
+    logger: new TsLogger(LogLevel.Off, agent.label),
     publicApiBaseUrl: 'http://localhost:3001',
     webhookUrl: 'http://localhost:5000',
     endpoints: agent.didcomm.config.endpoints,

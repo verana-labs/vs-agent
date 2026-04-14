@@ -38,7 +38,7 @@ export const setupAgent = async ({
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
 }) => {
-  const logger = new TsLogger(logLevel ?? LogLevel.warn, 'Agent')
+  const logger = new TsLogger(logLevel ?? LogLevel.Warn, 'Agent')
   const publicDid = parsedDid?.did
 
   if (endpoints.length === 0) {

@@ -9,7 +9,7 @@ import { createVsAgent, TsLogger } from '../../src/utils'
 export const startAgent = async ({ label, domain }: { label: string; domain: string }) => {
   const agent = createVsAgent({
     config: {
-      logger: new TsLogger(LogLevel.off, label),
+      logger: new TsLogger(LogLevel.Off, label),
     },
     walletConfig: getAskarStoreConfig(label, { inMemory: true }),
     endpoints: [`rxjs:${domain}`],

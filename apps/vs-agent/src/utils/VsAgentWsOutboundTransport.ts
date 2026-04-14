@@ -5,9 +5,8 @@ import {
   CredoError,
   EventEmitter,
   Logger,
-  JsonEncoder,
-  Buffer,
   AgentContext,
+  JsonEncoder,
 } from '@credo-ts/core'
 import {
   DidCommEventTypes,
@@ -124,7 +123,7 @@ export class VsAgentWsOutboundTransport implements DidCommOutboundTransport {
   private handleMessageEvent = (event: { type: string; data: any; target: WebSocket }) => {
     this.logger.trace('WebSocket message event received.', { url: event.target.url, data: event.data })
     ;(event.target as ExtWebSocket).lastActivity = new Date()
-    const payload = JsonEncoder.fromBuffer(event.data)
+    const payload = JsonEncoder.fromUint8Array(event.data)
     if (!isValidJweStructure(payload)) {
       throw new Error(
         `Received a response from the other agent but the structure of the
