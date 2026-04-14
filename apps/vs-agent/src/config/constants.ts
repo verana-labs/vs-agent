@@ -115,3 +115,13 @@ export const AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP =
   process.env.AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP !== 'false'
 
 export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFORE_STORAGE_UPDATE !== 'false' // removed on credo-ts v0.6.0
+
+// Verana network
+export const VERANA_INDEXER = process.env.VERANA_INDEXER
+export const AGENT_VERANA_MNEMONIC = process.env.AGENT_VERANA_MNEMONIC
+export const VERANA_RPC = process.env.VERANA_RPC
+export const VERANA_AUTHORITY = process.env.VERANA_AUTHORITY
+export const VERANA_RESOLVER = process.env.VERANA_RESOLVER
+export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID
+export const VS_AGENT_MODE = (process.env.VS_AGENT_MODE ?? 'standalone') as 'standalone' | 'delegated'
+export const VS_DELEGATED_ISSUER_DID = process.env.VS_DELEGATED_ISSUER_DID

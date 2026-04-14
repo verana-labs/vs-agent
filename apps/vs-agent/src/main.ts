@@ -38,9 +38,13 @@ import {
   USER_PROFILE_AUTODISCLOSE,
   MASTER_LIST_CSCA_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
+  AGENT_VERANA_MNEMONIC,
+  VERANA_INDEXER,
+  VERANA_RPC,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
 import { messageEvents } from './events/MessageEvents'
+import { resolveVeranaMnemonic, VeranaChainService } from './utils/VeranaChainService'
 import { PublicModule } from './public.module'
 import {
   commonAppConfig,
@@ -186,6 +190,13 @@ const run = async () => {
   // Listen to events emitted by the agent
   connectionEvents(agent, conf)
   messageEvents(agent, conf)
+
+  // Connect to Verana blockchain for on-chain queries
+  if (VERANA_RPC) {
+    const mnemonic = await resolveVeranaMnemonic(agent, AGENT_VERANA_MNEMONIC, serverLogger)
+    const veranaChain = new VeranaChainService(VERANA_RPC, mnemonic, serverLogger)
+    await veranaChain.start()
+  }
 
   agent.config.logger.info(
     `VS Agent v${packageJson['version']} running in port ${AGENT_PORT}. Admin interface at port ${conf.port}`,
