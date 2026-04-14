@@ -4,13 +4,11 @@ import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import {
-  BaseAgentModules,
   createVsAgent,
   HttpInboundTransport,
   setupBaseDidComm,
   setupChatProtocols,
   setupMrtdProtocol,
-  VsAgent,
   VsAgentWsInboundTransport,
 } from '@verana-labs/vs-agent-sdk'
 import express from 'express'
@@ -63,7 +61,6 @@ export const setupAgent = async ({
       logger,
       autoUpdateStorageOnStartup,
     },
-    label,
     walletConfig,
     did: publicDid,
     autoDiscloseUserProfile,
@@ -71,19 +68,19 @@ export const setupAgent = async ({
     publicApiBaseUrl,
     masterListCscaLocation,
     displayPictureUrl,
+    label,
   })
 
-  const didcommAgent = agent as unknown as VsAgent<BaseAgentModules>
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
   if (enableHttp) {
     logger.info('Inbound HTTP transport enabled')
-    didcommAgent.didcomm.registerInboundTransport(new HttpInboundTransport({ port }))
+    agent.didcomm.registerInboundTransport(new HttpInboundTransport({ port }))
   }
 
   const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
   if (enableWs) {
     logger.info('Inbound WebSocket transport enabled')
-    didcommAgent.didcomm.registerInboundTransport(
+    agent.didcomm.registerInboundTransport(
       new VsAgentWsInboundTransport({ server: new WebSocket.Server({ noServer: true }) }),
     )
   }

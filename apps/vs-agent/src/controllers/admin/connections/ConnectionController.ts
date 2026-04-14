@@ -1,5 +1,5 @@
 import { RecordNotFoundError } from '@credo-ts/core'
-import { type DidCommConnectionRecord, DidCommDidExchangeState } from '@credo-ts/didcomm'
+import { DidCommDidExchangeState } from '@credo-ts/didcomm'
 import {
   Controller,
   Delete,
@@ -83,7 +83,7 @@ export class ConnectionController {
       outOfBandId,
     })
 
-    return connections.map((record: DidCommConnectionRecord) => ({
+    return connections.map(record => ({
       id: record.id,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,

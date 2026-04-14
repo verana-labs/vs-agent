@@ -3,12 +3,7 @@ import 'reflect-metadata'
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
-import {
-  BaseAgentModules,
-  HttpInboundTransport,
-  VsAgent,
-  VsAgentWsInboundTransport,
-} from '@verana-labs/vs-agent-sdk'
+import { HttpInboundTransport, VsAgent, VsAgentWsInboundTransport } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
 import { IncomingMessage } from 'http'
@@ -77,16 +72,13 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   publicApp.use(express.static(publicDir))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
-  const didcommAgent = agent as unknown as VsAgent<BaseAgentModules>
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
   const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
 
-  const webSocketServer = didcommAgent.didcomm.inboundTransports
+  const webSocketServer = agent.didcomm.inboundTransports
     .find(x => x instanceof VsAgentWsInboundTransport)
     ?.getServer()
-  const httpInboundTransport = didcommAgent.didcomm.inboundTransports.find(
-    x => x instanceof HttpInboundTransport,
-  )
+  const httpInboundTransport = agent.didcomm.inboundTransports.find(x => x instanceof HttpInboundTransport)
 
   if (enableHttp) {
     httpInboundTransport?.setApp(publicApp.getHttpAdapter().getInstance())

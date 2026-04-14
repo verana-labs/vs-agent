@@ -55,7 +55,7 @@ export class PresentationsController {
     const records = await agent.didcomm.proofs.getAll()
 
     return Promise.all(
-      records.map(async (record: DidCommProofExchangeRecord) => {
+      records.map(async record => {
         return await this.getPresentationData(record)
       }),
     )
@@ -129,15 +129,14 @@ export class PresentationsController {
     const claims: Claim[] = []
     if (revealedAttributes) {
       for (const [name, value] of Object.entries(revealedAttributes)) {
-        claims.push(new Claim({ name, value: (value as { raw: string }).raw }))
+        claims.push(new Claim({ name, value: value.raw }))
       }
     }
 
     if (revealedAttributeGroups) {
       for (const [, groupAttributes] of Object.entries(revealedAttributeGroups)) {
-        const groupAttrs = groupAttributes as { values: Record<string, { raw: string }> }
-        for (const attrName in groupAttrs.values) {
-          claims.push(new Claim({ name: attrName, value: groupAttrs.values[attrName].raw }))
+        for (const attrName in groupAttributes.values) {
+          claims.push(new Claim({ name: attrName, value: groupAttributes.values[attrName].raw }))
         }
       }
     }

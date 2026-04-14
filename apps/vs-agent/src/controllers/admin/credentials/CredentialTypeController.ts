@@ -79,7 +79,7 @@ export class CredentialTypesController {
     const credentialDefinitions = await agent.modules.anoncreds.getCreatedCredentialDefinitions({})
 
     return Promise.all(
-      credentialDefinitions.map(async (record: AnonCredsCredentialDefinitionRecord) => {
+      credentialDefinitions.map(async record => {
         const schemaResult = await agent.modules.anoncreds.getSchema(record.credentialDefinition.schemaId)
 
         const schema = schemaResult.schema
