@@ -1,4 +1,4 @@
-import type { EventConfig } from '../utils/EventConfig'
+import type { ServerConfig } from '../utils/ServerConfig'
 import type { VsAgent, DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 
 import {
@@ -17,7 +17,7 @@ import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/v
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
 import { sendWebhookEvent } from './WebhookEvent'
 
-export const connectionEvents = async (agent: VsAgent<DidCommAgentModules>, config: EventConfig) => {
+export const connectionEvents = async (agent: VsAgent<DidCommAgentModules>, config: ServerConfig) => {
   // Get the first record matching agent's DID and obtain all alternatives for it
   const [agentPublicDidRecord] = await agent.dids.getCreatedDids({ did: agent.did })
   const alternativeDids = agentPublicDidRecord?.getTag('alternativeDids')

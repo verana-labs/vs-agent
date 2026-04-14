@@ -42,9 +42,16 @@ import {
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
-import { MessagingPlugin, MrtdPlugin, VsAgentNestPlugin } from './plugins'
+import { MessagingPlugin, MrtdPlugin } from './plugins'
 import { PublicModule } from './public.module'
-import { commonAppConfig, type ServerConfig, setupAgent, setupSelfTr, TsLogger } from './utils'
+import {
+  commonAppConfig,
+  type ServerConfig,
+  type VsAgentNestPlugin,
+  setupAgent,
+  setupSelfTr,
+  TsLogger,
+} from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig

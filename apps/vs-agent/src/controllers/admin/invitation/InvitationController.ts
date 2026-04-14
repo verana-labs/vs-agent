@@ -266,7 +266,7 @@ export class InvitationController {
       attributes = schema.attrNames
     }
 
-    if (!attributes!.every(item => schema.attrNames.includes(item))) {
+    if (!attributes.every(item => schema.attrNames.includes(item))) {
       throw new Error(
         `Some attributes are not present in the requested credential type: Requested: ${attributes}, Present: ${schema.attrNames}`,
       )

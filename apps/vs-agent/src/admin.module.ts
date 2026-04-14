@@ -13,9 +13,9 @@ import {
   TrustService,
   VsAgentController,
 } from './controllers'
-import { VsAgentNestPlugin } from './plugins'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
+import { VsAgentNestPlugin } from './utils'
 
 @Module({})
 export class VsAgentModule {

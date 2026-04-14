@@ -1,4 +1,4 @@
-import type { EventConfig } from '../utils/EventConfig'
+import type { ServerConfig } from '../utils/ServerConfig'
 
 import {
   EMrtdDataReceivedEvent,
@@ -27,7 +27,7 @@ const sendMrtdEvent = async (
   agent: VsAgent<any>,
   message: BaseMessage,
   timestamp: Date,
-  config: EventConfig,
+  config: ServerConfig,
 ) => {
   await sendWebhookEvent(
     config.webhookUrl + '/message-received',
@@ -36,7 +36,7 @@ const sendMrtdEvent = async (
   )
 }
 
-export const mrtdEvents = (agent: VsAgent<any>, config: EventConfig) => {
+export const mrtdEvents = (agent: VsAgent<any>, config: ServerConfig) => {
   agent.events.on(MrtdEventTypes.MrzDataReceived, async ({ payload }: MrzDataReceivedEvent) => {
     const { connection, mrzData, threadId } = payload
 

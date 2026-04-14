@@ -1,4 +1,4 @@
-import type { VsAgentNestPlugin } from './types'
+import type { VsAgentNestPlugin } from '../utils'
 
 import { setupMrtdProtocol } from '@verana-labs/vs-agent-sdk'
 

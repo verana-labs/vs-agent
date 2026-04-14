@@ -1,4 +1,4 @@
-import type { VsAgentNestPlugin } from './types'
+import type { VsAgentNestPlugin } from '../utils'
 
 import { setupChatProtocols } from '@verana-labs/vs-agent-sdk'
 

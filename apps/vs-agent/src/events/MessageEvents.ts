@@ -1,4 +1,4 @@
-import type { EventConfig } from '../utils/EventConfig'
+import type { ServerConfig } from '../utils/ServerConfig'
 import type { MessageReceiptsReceivedEvent, MessageState } from '@2060.io/credo-ts-didcomm-receipts'
 import type { DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 
@@ -60,7 +60,7 @@ import { sendWebhookEvent } from './WebhookEvent'
 
 // FIXME: timestamps are currently taken from reception date. They should be get from the originating DIDComm message
 // as soon as the corresponding extension is added to them
-export const messageEvents = async (agent: VsAgent<DidCommAgentModules>, config: EventConfig) => {
+export const messageEvents = async (agent: VsAgent<DidCommAgentModules>, config: ServerConfig) => {
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
     async ({ payload }: DidCommMessageProcessedEvent) => {
@@ -474,7 +474,7 @@ const sendMessageReceivedEvent = async (
   agent: VsAgent<DidCommAgentModules>,
   message: BaseMessage,
   timestamp: Date,
-  config: EventConfig,
+  config: ServerConfig,
 ) => {
   const body = new MessageReceived({
     timestamp,
@@ -490,7 +490,7 @@ const sendMessageStateUpdatedEvent = async (options: {
   connectionId: string
   state: MessageState
   timestamp: Date
-  config: EventConfig
+  config: ServerConfig
 }) => {
   const { agent, messageId, connectionId, state, timestamp, config } = options
   const recordId = await agent.genericRecords.findById(messageId)
