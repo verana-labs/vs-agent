@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/verana-labs/vs-agent/compare/v1.10.0...v1.10.1) (2026-04-10)
+
+
+### Bug Fixes
+
+* use related json schema presentation request ([#394](https://github.com/verana-labs/vs-agent/issues/394)) ([31caa43](https://github.com/verana-labs/vs-agent/commit/31caa4386b0cbaa2f3d3325713af9058528f68f2))
+
 ## [1.10.0](https://github.com/verana-labs/vs-agent/compare/v1.9.2...v1.10.0) (2026-04-09)
 
 
