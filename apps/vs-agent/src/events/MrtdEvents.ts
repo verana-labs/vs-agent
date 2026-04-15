@@ -1,4 +1,4 @@
-import type { ServerConfig } from '../utils/ServerConfig'
+import type { ServerConfig } from '../utils'
 
 import {
   EMrtdDataReceivedEvent,

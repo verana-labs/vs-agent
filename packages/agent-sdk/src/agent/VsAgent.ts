@@ -156,11 +156,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       const hasLegacyMethods = (didDocument.verificationMethod ?? []).some(vm =>
         ['Ed25519VerificationKey2018', 'X25519KeyAgreementKey2019'].includes(vm.type),
       )
-
       const servicesChanged =
         JSON.stringify(didDocument.didCommServices) !==
         JSON.stringify(this.getDidCommServices(didDocument.id))
-
       if (hasLegacyMethods || servicesChanged) {
         if (servicesChanged) {
           didDocument.service = [

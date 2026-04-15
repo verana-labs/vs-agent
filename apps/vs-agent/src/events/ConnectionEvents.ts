@@ -1,4 +1,4 @@
-import type { ServerConfig } from '../utils/ServerConfig'
+import type { ServerConfig } from '../utils'
 import type { VsAgent, DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
 
 import {

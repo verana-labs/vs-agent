@@ -14,8 +14,7 @@ import {
 import express from 'express'
 import WebSocket from 'ws'
 
-import { ENABLE_PUBLIC_API_SWAGGER } from '../config'
-import { ENABLED_PLUGINS } from '../config/constants'
+import { ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
 
 import { TsLogger } from './logger'
 
