@@ -18,11 +18,6 @@ overrides:
   '@credo-ts/anoncreds': 0.7.0-alpha-20260410113934
   libphonenumber-js: ^1.12.33
 
-patchedDependencies:
-  credo-ts-didweb-anoncreds@0.0.2-alpha.4:
-    hash: kukafar7v4jhbxkwpsk7kuqziu
-    path: patches/credo-ts-didweb-anoncreds@0.0.2-alpha.4.patch
-
 importers:
 
   .:
@@ -160,8 +155,8 @@ importers:
         specifier: ^4.16.2
         version: 4.16.5
       credo-ts-didweb-anoncreds:
-        specifier: 0.0.2-alpha.4
-        version: 0.0.2-alpha.4(patch_hash=kukafar7v4jhbxkwpsk7kuqziu)(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))
+        specifier: 0.0.2-alpha.5
+        version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))
       didwebvh-ts:
         specifier: ^2.5.6
         version: 2.5.6
@@ -2791,8 +2786,8 @@ packages:
   credentials-context@2.0.0:
     resolution: {integrity: sha512-/mFKax6FK26KjgV2KW2D4YqKgoJ5DVJpNt87X2Jc9IxT2HBMy7nEIlc+n7pEi+YFFe721XqrvZPd+jbyyBjsvQ==}
 
-  credo-ts-didweb-anoncreds@0.0.2-alpha.4:
-    resolution: {integrity: sha512-oDbmEd3RcEsenRrqBgqWZDhS2gffDX22QRI0ZdPQUJ0rVgbCdqdQf/P8dFAMJYR0N3TBrR7TZjFdM3+668BVYg==}
+  credo-ts-didweb-anoncreds@0.0.2-alpha.5:
+    resolution: {integrity: sha512-D+WpN6Tp4CHe81OyxJsnake0e42xUDDTaqFiCsN9Ppav7oLYs8RuToeh4uwzwa2LnThbdd7XGRjLRA9sv8YB3g==}
     peerDependencies:
       '@credo-ts/anoncreds': 0.7.0-alpha-20260410113934
       '@credo-ts/core': 0.7.0-alpha-20260410113934
@@ -8150,7 +8145,7 @@ snapshots:
 
   credentials-context@2.0.0: {}
 
-  credo-ts-didweb-anoncreds@0.0.2-alpha.4(patch_hash=kukafar7v4jhbxkwpsk7kuqziu)(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2)):
+  credo-ts-didweb-anoncreds@0.0.2-alpha.5(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2)):
     dependencies:
       '@credo-ts/anoncreds': 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
       '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)

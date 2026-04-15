@@ -69,9 +69,6 @@
       "@credo-ts/anoncreds": "0.7.0-alpha-20260410113934",
       "@credo-ts/askar": "0.7.0-alpha-20260410113934",
       "@hyperledger/anoncreds-shared": "0.4.0"
-    },
-    "patchedDependencies": {
-      "credo-ts-didweb-anoncreds@0.0.2-alpha.4": "patches/credo-ts-didweb-anoncreds@0.0.2-alpha.4.patch"
     }
   }
 }
