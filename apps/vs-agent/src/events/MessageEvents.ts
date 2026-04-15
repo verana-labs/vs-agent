@@ -22,9 +22,9 @@ import {
 } from '@2060.io/credo-ts-didcomm-mrtd'
 import { ReceiptsEventTypes } from '@2060.io/credo-ts-didcomm-receipts'
 import {
-  ConnectionProfileUpdatedEvent,
-  ProfileEventTypes,
-  UserProfileRequestedEvent,
+  DidCommConnectionProfileUpdatedEvent,
+  DidCommProfileEventTypes,
+  DidCommUserProfileRequestedEvent,
 } from '@2060.io/credo-ts-didcomm-user-profile'
 import { MenuRequestMessage, PerformMessage } from '@credo-ts/action-menu'
 import { DidCommPresentationV1Message, DidCommPresentationV1ProblemReportMessage } from '@credo-ts/anoncreds'
@@ -441,23 +441,26 @@ export const messageEvents = async (agent: VsAgent, config: ServerConfig) => {
   )
 
   // User profile events
-  agent.events.on(ProfileEventTypes.UserProfileRequested, async ({ payload }: UserProfileRequestedEvent) => {
-    config.logger.debug(`UserProfileRequestedEvent received. Connection id: ${payload.connection.id} 
+  agent.events.on(
+    DidCommProfileEventTypes.UserProfileRequested,
+    async ({ payload }: DidCommUserProfileRequestedEvent) => {
+      config.logger.debug(`UserProfileRequestedEvent received. Connection id: ${payload.connection.id} 
       Query: ${JSON.stringify(payload.query)}`)
 
-    // Currently we only send the profile if we are using our "main" connection
-    const outOfBandRecordId = payload.connection.outOfBandId
-    if (outOfBandRecordId) {
-      const outOfBandRecord = await agent.didcomm.oob.findById(outOfBandRecordId)
-      const parentConnectionId = outOfBandRecord?.getTag('parentConnectionId') as string | undefined
-      if (!parentConnectionId && agent.autoDiscloseUserProfile)
-        await agent.modules.userProfile.sendUserProfile({ connectionId: payload.connection.id })
-    }
-  })
+      // Currently we only send the profile if we are using our "main" connection
+      const outOfBandRecordId = payload.connection.outOfBandId
+      if (outOfBandRecordId) {
+        const outOfBandRecord = await agent.didcomm.oob.findById(outOfBandRecordId)
+        const parentConnectionId = outOfBandRecord?.getTag('parentConnectionId') as string | undefined
+        if (!parentConnectionId && agent.autoDiscloseUserProfile)
+          await agent.modules.userProfile.sendUserProfile({ connectionId: payload.connection.id })
+      }
+    },
+  )
 
   agent.events.on(
-    ProfileEventTypes.ConnectionProfileUpdated,
-    async ({ payload: { connection, profile } }: ConnectionProfileUpdatedEvent) => {
+    DidCommProfileEventTypes.ConnectionProfileUpdated,
+    async ({ payload: { connection, profile } }: DidCommConnectionProfileUpdatedEvent) => {
       const { displayName, displayPicture, displayIcon, description, preferredLanguage } = profile
       config.logger.debug(`ConnectionProfileUpdatedEvent received. Connection id: ${connection.id} 
         Profile: ${JSON.stringify(profile)}`)
