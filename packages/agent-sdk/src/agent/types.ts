@@ -1,6 +1,7 @@
 import { DidCommCallsModule } from '@2060.io/credo-ts-didcomm-calls'
 import { DidCommMediaSharingModule } from '@2060.io/credo-ts-didcomm-media-sharing'
 import { DidCommMrtdModule } from '@2060.io/credo-ts-didcomm-mrtd'
+import { DidCommReactionsModule } from '@2060.io/credo-ts-didcomm-reactions'
 import { DidCommReceiptsModule } from '@2060.io/credo-ts-didcomm-receipts'
 import { DidCommUserProfileModule } from '@2060.io/credo-ts-didcomm-user-profile'
 import { ActionMenuModule } from '@credo-ts/action-menu'
@@ -54,6 +55,7 @@ export type MessagingAgentModules = {
   didcomm: VsAgentDidCommModule
   actionMenu: ActionMenuModule
   calls: DidCommCallsModule
+  reactions: DidCommReactionsModule
   media: DidCommMediaSharingModule
   questionAnswer: QuestionAnswerModule
   receipts: DidCommReceiptsModule
@@ -77,6 +79,7 @@ export type DidCommAgentModules = {
   didcomm: VsAgentDidCommModule
   actionMenu: ActionMenuModule
   calls: DidCommCallsModule
+  reactions: DidCommReactionsModule
   media: DidCommMediaSharingModule
   mrtd: DidCommMrtdModule
   questionAnswer: QuestionAnswerModule

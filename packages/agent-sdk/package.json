@@ -31,29 +31,30 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@2060.io/credo-ts-didcomm-calls": "^0.0.11",
-    "@2060.io/credo-ts-didcomm-media-sharing": "0.0.6",
-    "@2060.io/credo-ts-didcomm-mrtd": "0.0.20",
-    "@2060.io/credo-ts-didcomm-receipts": "0.0.8",
-    "@2060.io/credo-ts-didcomm-user-profile": "0.0.8",
-    "@credo-ts/action-menu": "^0.6.3",
-    "@credo-ts/anoncreds": "^0.6.3",
-    "@credo-ts/askar": "^0.6.3",
-    "@credo-ts/core": "^0.6.3",
-    "@credo-ts/didcomm": "^0.6.3",
-    "@credo-ts/question-answer": "^0.6.3",
-    "@credo-ts/webvh": "^0.6.3",
-    "@hyperledger/anoncreds-nodejs": "^0.2.4",
-    "@openwallet-foundation/askar-nodejs": "^0.4.3",
-    "credo-ts-didweb-anoncreds": "^0.0.1-alpha.10",
+    "@2060.io/credo-ts-didcomm-calls": "0.1.0",
+    "@2060.io/credo-ts-didcomm-media-sharing": "0.1.1",
+    "@2060.io/credo-ts-didcomm-mrtd": "0.1.1",
+    "@2060.io/credo-ts-didcomm-reactions": "^0.1.1",
+    "@2060.io/credo-ts-didcomm-receipts": "0.1.1",
+    "@2060.io/credo-ts-didcomm-user-profile": "0.1.0",
+    "@credo-ts/action-menu": "0.7.0-alpha-20260410113934",
+    "@credo-ts/anoncreds": "0.7.0-alpha-20260410113934",
+    "@credo-ts/askar": "0.7.0-alpha-20260410113934",
+    "@credo-ts/core": "0.7.0-alpha-20260410113934",
+    "@credo-ts/didcomm": "0.7.0-alpha-20260410113934",
+    "@credo-ts/question-answer": "0.7.0-alpha-20260410113934",
+    "@credo-ts/webvh": "0.7.0-alpha-20260410113934",
+    "@hyperledger/anoncreds-nodejs": "^0.4.0",
+    "@openwallet-foundation/askar-nodejs": "^0.6.0",
+    "credo-ts-didweb-anoncreds": "0.0.2-alpha.5",
     "didwebvh-ts": "^2.5.6",
     "tsyringe": "4.8.0",
     "@verana-labs/vs-agent-model": "workspace:*",
     "express": "^4.18.1"
   },
   "peerDependencies": {
-    "@credo-ts/core": "^0.6.3",
-    "@credo-ts/node": "^0.6.3"
+    "@credo-ts/core": "0.7.0-alpha-20260410113934",
+    "@credo-ts/node": "0.7.0-alpha-20260410113934"
   },
   "devDependencies": {
     "ts-node-dev": "^2.0.0"

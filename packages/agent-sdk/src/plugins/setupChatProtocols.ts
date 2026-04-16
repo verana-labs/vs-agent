@@ -1,7 +1,11 @@
 import { DidCommCallsModule } from '@2060.io/credo-ts-didcomm-calls'
 import { DidCommMediaSharingModule } from '@2060.io/credo-ts-didcomm-media-sharing'
+import { DidCommReactionsModule } from '@2060.io/credo-ts-didcomm-reactions'
 import { DidCommReceiptsModule } from '@2060.io/credo-ts-didcomm-receipts'
-import { DidCommUserProfileModule, UserProfileModuleConfig } from '@2060.io/credo-ts-didcomm-user-profile'
+import {
+  DidCommUserProfileModule,
+  DidCommUserProfileModuleConfig,
+} from '@2060.io/credo-ts-didcomm-user-profile'
 import { ActionMenuModule } from '@credo-ts/action-menu'
 import { QuestionAnswerModule } from '@credo-ts/question-answer'
 
@@ -10,7 +14,7 @@ import { MessagingAgentModules } from '../agent/types'
 export interface ChatPlugin {
   modules: Pick<
     MessagingAgentModules,
-    'actionMenu' | 'calls' | 'media' | 'questionAnswer' | 'receipts' | 'userProfile'
+    'actionMenu' | 'calls' | 'reactions' | 'media' | 'questionAnswer' | 'receipts' | 'userProfile'
   >
 }
 
@@ -24,11 +28,14 @@ export function setupChatProtocols(): ChatPlugin {
     modules: {
       actionMenu: new ActionMenuModule({ strictStateChecking: false }),
       calls: new DidCommCallsModule(),
+      reactions: new DidCommReactionsModule(),
       media: new DidCommMediaSharingModule(),
       questionAnswer: new QuestionAnswerModule(),
       receipts: new DidCommReceiptsModule(),
       // Disable module's auto disclose feature, managed externally in ChatEvents
-      userProfile: new DidCommUserProfileModule(new UserProfileModuleConfig({ autoSendProfile: false })),
+      userProfile: new DidCommUserProfileModule(
+        new DidCommUserProfileModuleConfig({ autoSendProfile: false }),
+      ),
     },
   }
 }

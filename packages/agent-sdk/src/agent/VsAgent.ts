@@ -1,21 +1,4 @@
-import { DidCommCallsModule } from '@2060.io/credo-ts-didcomm-calls'
-import { DidCommMediaSharingModule } from '@2060.io/credo-ts-didcomm-media-sharing'
-import { DidCommMrtdModule } from '@2060.io/credo-ts-didcomm-mrtd'
-import { DidCommReactionsModule } from '@2060.io/credo-ts-didcomm-reactions'
-import { DidCommReceiptsModule } from '@2060.io/credo-ts-didcomm-receipts'
-import {
-  DidCommUserProfileModule,
-  DidCommUserProfileModuleConfig,
-} from '@2060.io/credo-ts-didcomm-user-profile'
-import { ActionMenuModule } from '@credo-ts/action-menu'
-import {
-  AnonCredsDidCommCredentialFormatService,
-  AnonCredsModule,
-  AnonCredsDidCommProofFormatService,
-  LegacyIndyDidCommCredentialFormatService,
-  LegacyIndyDidCommProofFormatService,
-} from '@credo-ts/anoncreds'
-import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
+import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import {
   Agent,
   AgentDependencies,
