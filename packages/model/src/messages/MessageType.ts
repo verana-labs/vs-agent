@@ -22,6 +22,7 @@ export enum MessageType {
   MenuDisplayMessage = 'menu-display',
   MenuSelectMessage = 'menu-select',
   ProfileMessage = 'profile',
+  ReactionMessage = 'reaction',
   ReceiptsMessage = 'receipts',
   TerminateConnectionMessage = 'terminate-connection',
   TextMessage = 'text',
