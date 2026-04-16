@@ -24,6 +24,7 @@ import {
   MediaMessage,
   MrtdSubmitState,
   CredentialReceptionMessage,
+  ReactionMessage,
 } from '@verana-labs/vs-agent-model'
 import cors from 'cors'
 import { randomUUID } from 'crypto'
@@ -566,6 +567,21 @@ expressHandler.messageReceived(async (req, res) => {
         connectionId: obj.connectionId,
         content: `For revocation, please provide the thread ID: ${obj.threadId}`,
       }))
+  } else if (obj.type === ReactionMessage.type) {
+    const first = obj.reactions?.[0]
+    if (first && first.action === 'react') {
+      const body = new ReactionMessage({
+        connectionId: obj.connectionId,
+        reactions: [
+          {
+            messageId: first.message_id,
+            emoji: '❤️',
+            action: 'react',
+          },
+        ],
+      })
+      await apiClient.messages.send(body)
+    }
   }
 })
 

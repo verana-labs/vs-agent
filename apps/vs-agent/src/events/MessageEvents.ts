@@ -20,6 +20,10 @@ import {
   MrtdProblemReportReason,
   MrzDataReceivedEvent,
 } from '@2060.io/credo-ts-didcomm-mrtd'
+import {
+  DidCommReactionsEventTypes,
+  DidCommMessageReactionsReceivedEvent,
+} from '@2060.io/credo-ts-didcomm-reactions'
 import { ReceiptsEventTypes } from '@2060.io/credo-ts-didcomm-receipts'
 import {
   DidCommConnectionProfileUpdatedEvent,
@@ -61,6 +65,7 @@ import {
   MessageReceived,
   MrtdSubmitState,
   CallAcceptRequestMessage,
+  ReactionMessage,
 } from '@verana-labs/vs-agent-model'
 
 import { createDataUrl, VsAgent } from '../utils'
@@ -437,6 +442,28 @@ export const messageEvents = async (agent: VsAgent, config: ServerConfig) => {
         const { messageId, timestamp, state } = receipt
         sendMessageStateUpdatedEvent({ agent, messageId, connectionId, state, timestamp, config })
       })
+    },
+  )
+
+  // Reactions protocol events
+  agent.events.on(
+    DidCommReactionsEventTypes.DidCommMessageReactionsReceived,
+    async ({ payload }: DidCommMessageReactionsReceivedEvent) => {
+      const { connectionId, reactions } = payload
+      config.logger.debug(`DidCommMessageReactionsReceivedEvent received. Connection id: ${connectionId}.
+    Reactions: ${JSON.stringify(reactions)}`)
+
+      const msg = new ReactionMessage({
+        connectionId,
+        reactions: reactions.map(r => ({
+          messageId: r.messageId,
+          emoji: r.emoji,
+          action: r.action,
+          timestamp: r.timestamp,
+        })),
+      })
+
+      await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
     },
   )
 

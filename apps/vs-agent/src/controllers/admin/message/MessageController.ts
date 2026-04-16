@@ -384,6 +384,21 @@ More info about the meaning of each field (and validity) can be found in [MRZ](h
           displayIconUrl: 'string',
         },
       },
+      reaction: {
+        summary: 'Reaction',
+        description:
+          '#### Reaction\n\nSends emoji reactions to previously received messages. Each reaction references a `message_id` and an `emoji`. Use `action: "react"` to add a reaction or `action: "unreact"` to remove it.',
+        value: {
+          type: 'reaction',
+          reactions: [
+            {
+              message_id: 'uuid-of-original-message',
+              emoji: '👍',
+              action: 'react',
+            },
+          ],
+        },
+      },
       receipts: {
         summary: 'Receipts',
         description: '#### Receipts\n\nSends message updates for a number of messages.',
