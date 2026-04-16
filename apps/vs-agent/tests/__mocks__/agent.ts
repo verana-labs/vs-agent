@@ -20,7 +20,7 @@ export const startAgent = async ({
       setupDidComm({ walletConfig, publicApiBaseUrl: `https://${domain}`, endpoints: [`rxjs:${domain}`] }),
     ],
     config: {
-      logger: new TsLogger(LogLevel.off, label),
+      logger: new TsLogger(LogLevel.Off, label),
     },
     walletConfig,
     did: `did:webvh:${domain}`,

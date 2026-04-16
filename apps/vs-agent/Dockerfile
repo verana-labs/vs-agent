@@ -1,10 +1,8 @@
-FROM node:22.19 AS build
+FROM node:22.19-slim AS build
 
 ENV COREPACK_INTEGRITY_KEYS=0
 
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && \
-    rm -rf /var/lib/apt/lists/* && \
-    corepack enable && \
+RUN corepack enable && \
     corepack prepare pnpm@9.15.3 --activate
 
 WORKDIR /www
