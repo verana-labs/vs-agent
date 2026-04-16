@@ -14,7 +14,7 @@
       "default": "./build/utils/ecs.js"
     }
   },
-  "version": "1.10.0",
+  "version": "1.10.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/verana-labs/vs-agent"
@@ -35,10 +35,11 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@2060.io/credo-ts-didcomm-mrtd": "0.0.20",
-    "@2060.io/credo-ts-didcomm-receipts": "0.0.8",
-    "@credo-ts/core": "^0.6.3",
-    "@credo-ts/didcomm": "^0.6.3",
+    "@2060.io/credo-ts-didcomm-mrtd": "0.1.1",
+    "@2060.io/credo-ts-didcomm-reactions": "0.1.1",
+    "@2060.io/credo-ts-didcomm-receipts": "0.1.1",
+    "@credo-ts/core": "0.7.0-alpha-20260410113934",
+    "@credo-ts/didcomm": "0.7.0-alpha-20260410113934",
     "class-transformer": "0.5.1",
     "class-validator": "0.14.1",
     "mrz": "^4.2.0"
@@ -48,6 +49,6 @@
     "ts-node-dev": "^2.0.0"
   },
   "peerDependencies": {
-    "@credo-ts/core": "^0.6.3"
+    "@credo-ts/core": "0.7.0-alpha-20260410113934"
   }
 }

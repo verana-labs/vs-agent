@@ -1,6 +1,6 @@
 {
   "name": "vs-agent",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "private": true,
   "license": "Apache-2.0",
   "description": "Verifiable Trust Agent SDK",
@@ -50,23 +50,25 @@
   "resolutions": {
     "@types/node": "20.11.19",
     "tsyringe": "4.8.0",
-    "@hyperledger/anoncreds-nodejs": "0.2.4",
-    "@hyperledger/anoncreds-shared": "0.2.4",
-    "@hyperledger/aries-askar-shared": "0.2.3",
-    "@credo-ts/action-menu": "^0.6.3",
-    "@credo-ts/core": "^0.6.3",
-    "@credo-ts/question-answer": "^0.6.3",
-    "@credo-ts/node": "^0.6.3",
-    "@credo-ts/askar": "^0.6.3",
-    "@credo-ts/anoncreds": "^0.6.3"
+    "@hyperledger/anoncreds-nodejs": "0.4.0",
+    "@hyperledger/anoncreds-shared": "0.4.0",
+    "@credo-ts/action-menu": "0.7.0-alpha-20260410113934",
+    "@credo-ts/core": "0.7.0-alpha-20260410113934",
+    "@credo-ts/didcomm": "0.7.0-alpha-20260410113934",
+    "@credo-ts/question-answer": "0.7.0-alpha-20260410113934",
+    "@credo-ts/node": "0.7.0-alpha-20260410113934",
+    "@credo-ts/askar": "0.7.0-alpha-20260410113934",
+    "@credo-ts/anoncreds": "0.7.0-alpha-20260410113934"
   },
   "packageManager": "pnpm@9.15.3",
   "pnpm": {
-    "patchedDependencies": {
-      "@credo-ts/action-menu": "patches/@credo-ts__action-menu.patch"
-    },
     "overrides": {
-      "libphonenumber-js": "^1.12.33"
+      "libphonenumber-js": "^1.12.33",
+      "@credo-ts/core": "0.7.0-alpha-20260410113934",
+      "@credo-ts/didcomm": "0.7.0-alpha-20260410113934",
+      "@credo-ts/anoncreds": "0.7.0-alpha-20260410113934",
+      "@credo-ts/askar": "0.7.0-alpha-20260410113934",
+      "@hyperledger/anoncreds-shared": "0.4.0"
     }
   }
 }

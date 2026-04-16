@@ -33,6 +33,7 @@ import {
   VerifiableCredentialRequestedProofItem,
   RequestedCredential,
   CredentialRevocationMessage,
+  ReactionMessage,
 } from '@verana-labs/vs-agent-model'
 
 import { VsAgentService } from '../../../services/VsAgentService'
@@ -97,6 +98,17 @@ export class MessageService {
         await agent.modules.receipts.send({
           connectionId: textMsg.connectionId,
           receipts: textMsg.receipts.map(didcommReceiptFromVsAgentReceipt),
+        })
+      } else if (messageType === ReactionMessage.type) {
+        const msg = JsonTransformer.fromJSON(message, ReactionMessage)
+        await agent.modules.reactions.send({
+          connectionId: msg.connectionId,
+          reactions: msg.reactions.map(r => ({
+            messageId: r.messageId,
+            emoji: r.emoji,
+            action: r.action,
+            timestamp: r.timestamp,
+          })),
         })
       } else if (messageType === MenuDisplayMessage.type) {
         const msg = JsonTransformer.fromJSON(message, MenuDisplayMessage)

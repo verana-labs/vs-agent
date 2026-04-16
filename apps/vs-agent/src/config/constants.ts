@@ -68,10 +68,10 @@ export const REDIS_PASSWORD = process.env.REDIS_PASSWORD
 // Dev/debugging settings
 export const AGENT_LOG_LEVEL = process.env.AGENT_LOG_LEVEL
   ? Number(process.env.AGENT_LOG_LEVEL)
-  : LogLevel.warn
+  : LogLevel.Warn
 export const ADMIN_LOG_LEVEL = process.env.ADMIN_LOG_LEVEL
   ? Number(process.env.ADMIN_LOG_LEVEL)
-  : LogLevel.debug
+  : LogLevel.Debug
 
 export const USE_CORS = Boolean(process.env.USE_CORS || false)
 export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER === 'false')
