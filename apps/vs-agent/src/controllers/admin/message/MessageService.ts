@@ -106,7 +106,7 @@ export class MessageService {
           reactions: msg.reactions.map(r => ({
             messageId: r.messageId,
             emoji: r.emoji,
-            action: r.action as any,
+            action: r.action,
             timestamp: r.timestamp,
           })),
         })

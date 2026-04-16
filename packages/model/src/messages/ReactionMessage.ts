@@ -1,5 +1,6 @@
+import { DidCommMessageReactionAction } from '@2060.io/credo-ts-didcomm-reactions'
 import { Expose, Type, Transform } from 'class-transformer'
-import { IsArray, IsDate, IsInstance, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsDate, IsEnum, IsInstance, IsString, ValidateNested } from 'class-validator'
 
 import { DateParser } from '../utils'
 
@@ -9,7 +10,7 @@ import { MessageType } from './MessageType'
 export interface VsAgentMessageReactionOptions {
   messageId: string
   emoji: string
-  action: string // 'react' | 'unreact'
+  action: string
   timestamp?: Date
 }
 
@@ -18,7 +19,7 @@ export class VsAgentMessageReaction {
     if (options) {
       this.messageId = options.messageId
       this.emoji = options.emoji
-      this.action = options.action
+      this.action = options.action as DidCommMessageReactionAction
       this.timestamp = options.timestamp ?? new Date()
     }
   }
@@ -30,8 +31,9 @@ export class VsAgentMessageReaction {
   @IsString()
   public emoji!: string
 
-  @IsString()
-  public action!: string
+  @Expose()
+  @IsEnum(DidCommMessageReactionAction)
+  public action!: DidCommMessageReactionAction
 
   @IsDate()
   @Transform(({ value }) => DateParser(value))
