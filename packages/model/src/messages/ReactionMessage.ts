@@ -42,7 +42,6 @@ export class VsAgentMessageReaction {
 
 export interface ReactionMessageOptions {
   id?: string
-  threadId?: string
   connectionId: string
   timestamp?: Date
   reactions: VsAgentMessageReactionOptions[]
@@ -54,7 +53,6 @@ export class ReactionMessage extends BaseMessage {
 
     if (options) {
       this.id = options.id ?? this.generateId()
-      this.threadId = options.threadId
       this.timestamp = options.timestamp ?? new Date()
       this.connectionId = options.connectionId
       this.reactions = options.reactions.map(r => new VsAgentMessageReaction(r))
