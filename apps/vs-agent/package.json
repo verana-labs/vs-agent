@@ -80,7 +80,7 @@
     "@nestjs/swagger": "^8.0.7",
     "@openwallet-foundation/askar-nodejs": "^0.6.0",
     "@types/qrcode": "^1.5.0",
-    "@verana-labs/verana-types": "0.9.4",
+    "@verana-labs/verana-types": "0.9.5",
     "@verana-labs/vs-agent-model": "workspace:*",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",

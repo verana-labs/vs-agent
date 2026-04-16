@@ -39,12 +39,11 @@ import {
   MASTER_LIST_CSCA_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
   AGENT_VERANA_MNEMONIC,
-  VERANA_INDEXER,
   VERANA_RPC,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
 import { messageEvents } from './events/MessageEvents'
-import { resolveVeranaMnemonic, VeranaChainService } from './utils/VeranaChainService'
+import { resolveVeranaMnemonic, VeranaChainService } from './services/VeranaChainService'
 import { PublicModule } from './public.module'
 import {
   commonAppConfig,

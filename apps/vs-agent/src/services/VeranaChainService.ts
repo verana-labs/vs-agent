@@ -13,8 +13,8 @@ interface TrQueryClientImpl {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { QueryClientImpl } = require('@verana-labs/verana-types/codec/verana/tr/v1/query.js') as { QueryClientImpl: TrQueryClientImpl }
 
-import { VsAgent } from './VsAgent'
-import { TsLogger } from './logger'
+import { VsAgent } from '../utils/VsAgent'
+import { TsLogger } from '../utils/logger'
 
 const VERANA_BECH32_PREFIX = 'verana'
 const MNEMONIC_RECORD_TAG = 'verana-operator-mnemonic'
