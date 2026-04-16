@@ -24,6 +24,7 @@ In addition, it supports a notification mechanism to subscribe to any event the 
       - [Identity Proof Result](#identity-proof-result)
       - [Text](#text)
       - [Media](#media)
+      - [Reaction](#reaction)
       - [Receipts](#receipts)
       - [Contextual Menu Request](#contextual-menu-request)
       - [Contextual Menu Update](#contextual-menu-update)
@@ -107,6 +108,7 @@ Currently, the following messages can be submitted and received:
 - Contextual Menu Update (`contextual-menu-update`)
 - Contextual Menu Select (`contextual-menu-select`)
 - Media (`media`)
+- Reaction (`reaction`)
 - Receipts (`receipts`)
 - Invitation (`invitation`)
 - Profile (`profile`)
@@ -358,6 +360,25 @@ There are some parameters used in Links (`text/html` mimeType):
 > **Note**:
 >
 > - At the moment, only a single media file per message is supported. The list format is kept for future compatibility
+
+#### Reaction
+
+Sends emoji reactions to previously received messages, following the [DIDComm Reactions 1.0](https://didcomm.org/reactions/1.0) protocol. Each reaction references a `message_id` and an `emoji`. Use `action: "react"` to add a reaction or `action: "unreact"` to remove it.
+
+```json
+{
+  "type": "reaction",
+  "reactions": [
+    {
+      "message_id": "UUID",
+      "emoji": "👍",
+      "action": "react"
+    }
+  ]
+}
+```
+
+> **Note**: Reactions are not plain text emoji messages. They are DIDComm protocol messages that explicitly reference a prior message by its `message_id`. A client sending a plain emoji character as a text message will still arrive as a `text` type, not as a `reaction`.
 
 #### Receipts
 
