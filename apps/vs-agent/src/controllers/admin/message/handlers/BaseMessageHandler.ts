@@ -11,7 +11,7 @@ import {
   DidCommOutOfBandInvitation,
   DidCommOutOfBandRepository,
 } from '@credo-ts/didcomm'
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import {
   CredentialIssuanceMessage,
   CredentialRevocationMessage,
@@ -31,7 +31,7 @@ import { CredentialTypesService } from '../../credentials'
 
 @Injectable()
 export class BaseMessageHandler implements MessageHandler {
-  constructor(private readonly credentialService: CredentialTypesService) {}
+  constructor(@Inject(CredentialTypesService) private readonly credentialService: CredentialTypesService) {}
 
   readonly supportedTypes: MessageType[] = [
     MessageType.InvitationMessage,

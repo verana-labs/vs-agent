@@ -14,7 +14,9 @@ import { Test } from '@nestjs/testing'
 import { vi } from 'vitest'
 
 import { VsAgentModule } from '../../src/admin.module'
-import { messageEvents } from '../../src/events/MessageEvents'
+import { baseMessageEvents } from '../../src/events/BaseMessageEvents'
+import { chatEvents } from '../../src/events/ChatEvents'
+import { ChatPlugin } from '../../src/plugins/ChatPlugin'
 import { MessagingPlugin } from '../../src/plugins/MessagingPlugin'
 import { PublicModule } from '../../src/public.module'
 import { ServerConfig, TsLogger } from '../../src/utils'
@@ -101,7 +103,7 @@ export function waitForEvent<T>(
 export const startServersTesting = async (agent: VsAgent<DidCommAgentModules>): Promise<INestApplication> => {
   const moduleRef = await Test.createTestingModule({
     imports: [
-      VsAgentModule.register(agent, 'http://localhost:3001', [MessagingPlugin]),
+      VsAgentModule.register(agent, 'http://localhost:3001', [MessagingPlugin, ChatPlugin]),
       PublicModule.register(agent, 'http://localhost:3001'),
     ],
   }).compile()
@@ -115,6 +117,7 @@ export const startServersTesting = async (agent: VsAgent<DidCommAgentModules>): 
     webhookUrl: 'http://localhost:5000',
     endpoints: agent.didcomm.config.endpoints,
   }
-  messageEvents(agent, conf)
+  baseMessageEvents(agent, conf)
+  chatEvents(agent as any, conf)
   return app
 }
