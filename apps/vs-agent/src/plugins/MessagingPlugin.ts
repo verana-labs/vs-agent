@@ -1,24 +1,29 @@
 import type { VsAgentNestPlugin } from '../utils'
 
-import { setupChatProtocols } from '@verana-labs/vs-agent-sdk'
-
 import {
   CoreMessageService,
   MessageController,
   MessageService,
   MessageServiceFactory,
   RedisMessageService,
+  BaseMessageHandler,
 } from '../controllers'
-import { chatEvents } from '../events/MessageEvents'
+import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { HandledRedisModule } from '../modules/redis.module'
 
 export const MessagingPlugin: VsAgentNestPlugin = {
   name: 'messaging',
-  credoPlugin: setupChatProtocols(),
   controllers: [MessageController],
-  providers: [MessageService, RedisMessageService, CoreMessageService, MessageServiceFactory],
+  providers: [
+    MessageService,
+    RedisMessageService,
+    CoreMessageService,
+    MessageServiceFactory,
+    BaseMessageHandler,
+  ],
+  messageHandlers: [BaseMessageHandler],
   imports: [HandledRedisModule.forRoot()],
   registerEvents: (agent, config) => {
-    chatEvents(agent as any, config)
+    baseMessageEvents(agent as any, config)
   },
 }

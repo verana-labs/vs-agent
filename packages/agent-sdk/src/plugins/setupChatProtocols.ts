@@ -9,11 +9,11 @@ import {
 import { ActionMenuModule } from '@credo-ts/action-menu'
 import { QuestionAnswerModule } from '@credo-ts/question-answer'
 
-import { MessagingAgentModules } from '../agent/types'
+import { ChatAgentModules } from '../agent/types'
 
 export interface ChatPlugin {
   modules: Pick<
-    MessagingAgentModules,
+    ChatAgentModules,
     'actionMenu' | 'calls' | 'reactions' | 'media' | 'questionAnswer' | 'receipts' | 'userProfile'
   >
 }

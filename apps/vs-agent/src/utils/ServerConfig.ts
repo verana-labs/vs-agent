@@ -1,3 +1,4 @@
+import type { MessageHandler } from '../controllers'
 import type { DynamicModule, Provider, Type } from '@nestjs/common'
 import type { BaseAgentModules, Plugin, VsAgent } from '@verana-labs/vs-agent-sdk'
 import type { Express } from 'express'
@@ -27,6 +28,7 @@ export interface VsAgentNestPlugin {
   credoPlugin?: Plugin
   controllers?: Type<any>[]
   providers?: Provider[]
+  messageHandlers?: Type<MessageHandler>[]
   imports?: DynamicModule[]
   registerEvents?: (agent: VsAgent<BaseAgentModules>, config: ServerConfig) => void
 }

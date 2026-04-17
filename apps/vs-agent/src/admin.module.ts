@@ -13,6 +13,7 @@ import {
   TrustService,
   VsAgentController,
 } from './controllers'
+import { MESSAGE_HANDLERS } from './controllers/admin/message/MessageHandler'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
 import { VsAgentNestPlugin } from './utils'
@@ -52,11 +53,19 @@ export class VsAgentModule {
       CredentialTypesService,
     ]
 
+    // Collect all handler classes declared by plugins and create ONE aggregate provider.
+    const allHandlerClasses = nestPlugins.flatMap(p => p.messageHandlers ?? [])
+    const handlersProvider = {
+      provide: MESSAGE_HANDLERS,
+      useFactory: (...handlers: any[]) => handlers,
+      inject: allHandlerClasses,
+    }
+
     return {
       module: VsAgentModule,
       imports: nestPlugins.flatMap(p => p.imports ?? []),
       controllers: [...baseControllers, ...nestPlugins.flatMap(p => p.controllers ?? [])],
-      providers: [...baseProviders, ...nestPlugins.flatMap(p => p.providers ?? [])],
+      providers: [...baseProviders, ...nestPlugins.flatMap(p => p.providers ?? []), handlersProvider],
       exports: [VsAgentService],
     }
   }

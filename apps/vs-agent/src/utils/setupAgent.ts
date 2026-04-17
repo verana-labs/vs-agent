@@ -15,6 +15,7 @@ import express from 'express'
 import WebSocket from 'ws'
 
 import { ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
+import { MessageService } from '../controllers/admin/message/MessageService'
 
 import { TsLogger } from './logger'
 
@@ -53,7 +54,7 @@ export const setupAgent = async ({
   const agent = createVsAgent({
     plugins: [
       setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints }),
-      ...(ENABLED_PLUGINS.includes('messaging') ? [setupChatProtocols()] : []),
+      ...(ENABLED_PLUGINS.includes('chat') ? [setupChatProtocols()] : []),
       ...(ENABLED_PLUGINS.includes('mrtd') ? [setupMrtdProtocol({ masterListCscaLocation })] : []),
     ],
     config: {
@@ -102,6 +103,18 @@ export function commonAppConfig(app: INestApplication, cors?: boolean, publicApp
     .setVersion('1.0')
     .build()
   const document = SwaggerModule.createDocument(app, config)
+
+  // Inject dynamic message examples from registered handlers
+  if (!publicApp) {
+    const messageService = app.get(MessageService)
+    for (const pathItem of Object.values(document.paths ?? {})) {
+      const postOp = (pathItem as any).post
+      if (postOp?.tags?.includes('message') && postOp?.requestBody?.content?.['application/json']) {
+        postOp.requestBody.content['application/json'].examples = messageService.openApiExamples
+      }
+    }
+  }
+
   if (!publicApp || (publicApp && ENABLE_PUBLIC_API_SWAGGER)) SwaggerModule.setup('api', app, document)
 
   // Pipes

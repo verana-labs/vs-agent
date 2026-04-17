@@ -42,7 +42,7 @@ import {
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
-import { MessagingPlugin, MrtdPlugin } from './plugins'
+import { ChatPlugin, MessagingPlugin, MrtdPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import {
   commonAppConfig,
@@ -145,6 +145,7 @@ const run = async () => {
   // Build the list of active NestJS plugins
   const nestPlugins: VsAgentNestPlugin[] = [
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
+    ...(ENABLED_PLUGINS.includes('chat') ? [ChatPlugin] : []),
     ...(ENABLED_PLUGINS.includes('mrtd')
       ? [MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })]
       : []),

@@ -47,7 +47,7 @@ export type BaseAgentModules = {
   didcomm: VsAgentDidCommModule
 }
 
-export type MessagingAgentModules = {
+export type ChatAgentModules = {
   askar: AskarModule
   anoncreds: AnonCredsModule
   dids: DidsModule

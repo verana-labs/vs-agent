@@ -1,4 +1,6 @@
 export * from './dto/base-message.dto'
+export * from './handlers'
 export * from './MessageController'
+export * from './MessageHandler'
 export * from './MessageService'
 export * from './services'
