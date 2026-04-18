@@ -27,7 +27,8 @@
     "clean": "rimraf -rf ./build",
     "compile": "tsc -p tsconfig.build.json",
     "prepublishOnly": "pnpm run build",
-    "version": "pnpm version --allow-same-version"
+    "version": "pnpm version --allow-same-version",
+    "test": "vitest"
   },
   "dependencies": {
     "@2060.io/credo-ts-didcomm-mrtd": "0.1.1",

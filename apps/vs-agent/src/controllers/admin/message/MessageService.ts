@@ -67,7 +67,7 @@ export class MessageService {
         }
       }
 
-      return { id: messageId ?? utils.uuid() }
+      return { id: messageId ?? utils.uuid() } // TODO: persistant mapping between AFJ records and Service Agent flows. Support external message id setting
     } catch (error) {
       this.logger.error(`Error: ${error.stack}`)
       throw new Error(`something went wrong: ${error}`)

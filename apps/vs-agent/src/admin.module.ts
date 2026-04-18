@@ -12,8 +12,8 @@ import {
   TrustController,
   TrustService,
   VsAgentController,
+  MESSAGE_HANDLERS,
 } from './controllers'
-import { MESSAGE_HANDLERS } from './controllers/admin/message/MessageHandler'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
 

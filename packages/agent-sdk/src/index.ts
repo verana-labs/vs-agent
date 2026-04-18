@@ -1,6 +1,7 @@
 // Agent
 export { VsAgent } from './agent/VsAgent'
 export { type VsAgentOptions, BaseAgentModules } from './agent/VsAgent'
+export type { BaseAgentModules as DidCommAgentModules } from './agent/VsAgent'
 export { createVsAgent } from './agent/createVsAgent'
 export type { CreateVsAgentOptions } from './agent/createVsAgent'
 export type { Plugin } from './types'
