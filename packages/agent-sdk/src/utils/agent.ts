@@ -42,6 +42,11 @@ export async function createInvitation(options: {
   }
 }
 
+export async function getRecordId(agent: VsAgent, id: string): Promise<string> {
+  const record = await agent.genericRecords.findById(id)
+  return (record?.getTag('messageId') as string) ?? id
+}
+
 export async function getWebDid(agent: VsAgent) {
   if (agent.did) {
     const parsedDid = parseDid(agent.did)

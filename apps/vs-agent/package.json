@@ -55,19 +55,11 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@2060.io/credo-ts-didcomm-calls": "0.1.0",
-    "@2060.io/credo-ts-didcomm-media-sharing": "0.1.1",
-    "@2060.io/credo-ts-didcomm-mrtd": "0.1.1",
-    "@2060.io/credo-ts-didcomm-reactions": "^0.1.1",
-    "@2060.io/credo-ts-didcomm-receipts": "0.1.1",
-    "@2060.io/credo-ts-didcomm-user-profile": "0.1.0",
-    "@credo-ts/action-menu": "0.7.0-alpha-20260410113934",
     "@credo-ts/anoncreds": "0.7.0-alpha-20260410113934",
     "@credo-ts/askar": "0.7.0-alpha-20260410113934",
     "@credo-ts/core": "0.7.0-alpha-20260410113934",
     "@credo-ts/didcomm": "0.7.0-alpha-20260410113934",
     "@credo-ts/node": "0.7.0-alpha-20260410113934",
-    "@credo-ts/question-answer": "0.7.0-alpha-20260410113934",
     "@credo-ts/webvh": "0.7.0-alpha-20260410113934",
     "@hyperledger/anoncreds-nodejs": "^0.4.0",
     "@nestjs/bull": "^10.2.1",
@@ -92,6 +84,10 @@
     "tsyringe": "4.8.0",
     "uuid": "^9.0.0",
     "yargs": "^17.3.1"
+  },
+  "optionalDependencies": {
+    "@verana-labs/vs-agent-plugin-chat": "workspace:*",
+    "@verana-labs/vs-agent-plugin-mrtd": "workspace:*"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

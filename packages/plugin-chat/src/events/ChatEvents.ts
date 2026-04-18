@@ -1,6 +1,6 @@
-import type { ServerConfig } from '../utils'
+import type { ChatAgentModules } from '../types'
 import type { MessageReceiptsReceivedEvent, MessageState } from '@2060.io/credo-ts-didcomm-receipts'
-import type { ChatAgentModules } from '@verana-labs/vs-agent-sdk'
+import type { VsAgentPluginConfig } from '@verana-labs/vs-agent-sdk'
 
 import {
   CallAcceptMessage,
@@ -28,7 +28,6 @@ import { MenuRequestMessage, PerformMessage } from '@credo-ts/action-menu'
 import { DidCommBasicMessage, DidCommEventTypes, DidCommMessageProcessedEvent } from '@credo-ts/didcomm'
 import { AnswerMessage, QuestionAnswerService } from '@credo-ts/question-answer'
 import {
-  BaseMessage,
   CallAcceptRequestMessage,
   CallEndRequestMessage,
   CallOfferRequestMessage,
@@ -37,19 +36,22 @@ import {
   ContextualMenuSelectMessage,
   MediaMessage,
   MenuSelectMessage,
-  MessageReceived,
   MessageStateUpdated,
   ProfileMessage,
   ReactionMessage,
   TextMessage,
 } from '@verana-labs/vs-agent-model'
-import { createDataUrl, VsAgent } from '@verana-labs/vs-agent-sdk'
-
-import { sendWebhookEvent } from './WebhookEvent'
+import {
+  createDataUrl,
+  getRecordId,
+  sendMessageReceivedEvent,
+  sendWebhookEvent,
+  VsAgent,
+} from '@verana-labs/vs-agent-sdk'
 
 // FIXME: timestamps are currently taken from reception date. They should be get from the originating DIDComm message
 // as soon as the corresponding extension is added to them
-export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: ServerConfig) => {
+export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAgentPluginConfig) => {
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
     async ({ payload }: DidCommMessageProcessedEvent) => {
@@ -74,7 +76,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: Serve
         })
 
         if (msg.threadId) msg.threadId = await getRecordId(agent, msg.threadId)
-        await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+        await sendMessageReceivedEvent(msg, msg.timestamp, config)
       }
 
       // Action Menu protocol messages
@@ -85,7 +87,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: Serve
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+        await sendMessageReceivedEvent(msg, msg.timestamp, config)
       }
 
       if (message.type === PerformMessage.type.messageTypeUri) {
@@ -96,7 +98,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: Serve
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+        await sendMessageReceivedEvent(msg, msg.timestamp, config)
       }
 
       // Question Answer protocol messages
@@ -122,7 +124,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: Serve
           id: message.id,
         })
 
-        await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+        await sendMessageReceivedEvent(msg, msg.timestamp, config)
       }
 
       if (message.type === CallOfferMessage.type.messageTypeUri) {
@@ -138,7 +140,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: Serve
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+        await sendMessageReceivedEvent(msg, msg.timestamp, config)
       }
 
       if (message.type === CallEndMessage.type.messageTypeUri) {
@@ -150,7 +152,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: Serve
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+        await sendMessageReceivedEvent(msg, msg.timestamp, config)
       }
 
       if (message.type === CallAcceptMessage.type.messageTypeUri) {
@@ -163,7 +165,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: Serve
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+        await sendMessageReceivedEvent(msg, msg.timestamp, config)
       }
 
       if (message.type === CallRejectMessage.type.messageTypeUri) {
@@ -175,7 +177,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: Serve
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+        await sendMessageReceivedEvent(msg, msg.timestamp, config)
       }
     },
   )
@@ -220,7 +222,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: Serve
           })
 
           if (message.threadId) message.threadId = await getRecordId(agent, message.threadId)
-          await sendMessageReceivedEvent(agent, message, message.timestamp, config)
+          await sendMessageReceivedEvent(message, message.timestamp, config)
         }
       }
     },
@@ -262,7 +264,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: Serve
         })),
       })
 
-      await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+      await sendMessageReceivedEvent(msg, msg.timestamp, config)
     },
   )
 
@@ -301,42 +303,25 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: Serve
         preferredLanguage,
       })
 
-      await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+      await sendMessageReceivedEvent(msg, msg.timestamp, config)
     },
   )
 }
 
-const sendMessageReceivedEvent = async (
-  agent: VsAgent<any>,
-  message: BaseMessage,
-  timestamp: Date,
-  config: ServerConfig,
-) => {
-  const body = new MessageReceived({ timestamp, message })
-  await sendWebhookEvent(config.webhookUrl + '/message-received', body, config.logger)
-}
-
 const sendMessageStateUpdatedEvent = async (options: {
-  agent: VsAgent<any>
+  agent: VsAgent<ChatAgentModules>
   messageId: string
   connectionId: string
   state: MessageState
   timestamp: Date
-  config: ServerConfig
+  config: VsAgentPluginConfig
 }) => {
   const { agent, messageId, connectionId, state, timestamp, config } = options
-  const recordId = await agent.genericRecords.findById(messageId)
-
   const body = new MessageStateUpdated({
-    messageId: (recordId?.getTag('messageId') as string) ?? messageId,
+    messageId: await getRecordId(agent, messageId),
     state,
     timestamp,
     connectionId,
   })
   await sendWebhookEvent(config.webhookUrl + '/message-state-updated', body, config.logger)
-}
-
-const getRecordId = async (agent: VsAgent<any>, id: string): Promise<string> => {
-  const record = await agent.genericRecords.findById(id)
-  return (record?.getTag('messageId') as string) ?? id
 }

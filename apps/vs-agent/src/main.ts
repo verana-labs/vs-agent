@@ -3,7 +3,12 @@ import 'reflect-metadata'
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
-import { HttpInboundTransport, VsAgent, VsAgentWsInboundTransport } from '@verana-labs/vs-agent-sdk'
+import {
+  HttpInboundTransport,
+  VsAgent,
+  VsAgentWsInboundTransport,
+  type VsAgentNestPlugin,
+} from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
 import { IncomingMessage } from 'http'
@@ -42,16 +47,9 @@ import {
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
-import { ChatPlugin, MessagingPlugin, MrtdPlugin } from './plugins'
+import { MessagingPlugin } from './plugins'
 import { PublicModule } from './public.module'
-import {
-  commonAppConfig,
-  type ServerConfig,
-  type VsAgentNestPlugin,
-  setupAgent,
-  setupSelfTr,
-  TsLogger,
-} from './utils'
+import { commonAppConfig, type ServerConfig, setupAgent, setupSelfTr, TsLogger } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
@@ -142,13 +140,17 @@ const run = async () => {
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
+  // Dynamically load optional plugin packages
+  const [chatModule, mrtdModule] = await Promise.all([
+    ENABLED_PLUGINS.includes('chat') ? import('@verana-labs/vs-agent-plugin-chat').catch(() => null) : null,
+    ENABLED_PLUGINS.includes('mrtd') ? import('@verana-labs/vs-agent-plugin-mrtd').catch(() => null) : null,
+  ])
+
   // Build the list of active NestJS plugins
   const nestPlugins: VsAgentNestPlugin[] = [
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
-    ...(ENABLED_PLUGINS.includes('chat') ? [ChatPlugin] : []),
-    ...(ENABLED_PLUGINS.includes('mrtd')
-      ? [MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })]
-      : []),
+    ...(chatModule ? [chatModule.ChatPlugin] : []),
+    ...(mrtdModule ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })] : []),
   ]
 
   const { agent } = await setupAgent({

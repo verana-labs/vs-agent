@@ -1,4 +1,4 @@
-import type { VsAgentNestPlugin } from '../utils'
+import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import {
   CoreMessageService,

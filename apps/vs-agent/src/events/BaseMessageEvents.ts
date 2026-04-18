@@ -1,5 +1,4 @@
-import type { ServerConfig } from '../utils'
-import type { BaseAgentModules } from '@verana-labs/vs-agent-sdk'
+import type { BaseAgentModules, VsAgentPluginConfig } from '@verana-labs/vs-agent-sdk'
 
 import { DidCommPresentationV1Message, DidCommPresentationV1ProblemReportMessage } from '@credo-ts/anoncreds'
 import {
@@ -12,20 +11,17 @@ import {
   DidCommPresentationV2ProblemReportMessage,
 } from '@credo-ts/didcomm'
 import {
-  BaseMessage,
   Claim,
   CredentialReceptionMessage,
   CredentialRequestMessage,
   IdentityProofSubmitMessage,
-  MessageReceived,
   VerifiableCredentialSubmittedProofItem,
 } from '@verana-labs/vs-agent-model'
-import { VsAgent } from '@verana-labs/vs-agent-sdk'
+import { getRecordId, sendMessageReceivedEvent, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
-import { sendWebhookEvent } from './WebhookEvent'
 
-export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config: ServerConfig) => {
+export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config: VsAgentPluginConfig) => {
   // Proofs protocol messages (proof presentation and problem reports)
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
@@ -82,7 +78,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
             })
           }
 
-          await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+          await sendMessageReceivedEvent(msg, msg.timestamp, config)
         } catch (error) {
           config.logger.error(`Error processing presentation problem report: ${error}`)
         }
@@ -156,7 +152,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
             timestamp: record.updatedAt,
           })
 
-          await sendMessageReceivedEvent(agent, msg, msg.timestamp, config)
+          await sendMessageReceivedEvent(msg, msg.timestamp, config)
         } catch (error) {
           config.logger.error(`Error processing presentation message: ${error}`)
         }
@@ -189,7 +185,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
         })
 
         if (message.threadId) message.threadId = await getRecordId(agent, message.threadId)
-        await sendMessageReceivedEvent(agent, message, message.timestamp, config)
+        await sendMessageReceivedEvent(message, message.timestamp, config)
       } else if (
         [
           DidCommCredentialState.Declined,
@@ -206,23 +202,8 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
               ? DidCommCredentialState.Declined
               : record.state,
         })
-        await sendMessageReceivedEvent(agent, message, message.timestamp, config)
+        await sendMessageReceivedEvent(message, message.timestamp, config)
       }
     },
   )
-}
-
-const sendMessageReceivedEvent = async (
-  agent: VsAgent<any>,
-  message: BaseMessage,
-  timestamp: Date,
-  config: ServerConfig,
-) => {
-  const body = new MessageReceived({ timestamp, message })
-  await sendWebhookEvent(config.webhookUrl + '/message-received', body, config.logger)
-}
-
-const getRecordId = async (agent: VsAgent<any>, id: string): Promise<string> => {
-  const record = await agent.genericRecords.findById(id)
-  return (record?.getTag('messageId') as string) ?? id
 }

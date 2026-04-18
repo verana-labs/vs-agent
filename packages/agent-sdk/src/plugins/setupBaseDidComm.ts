@@ -20,7 +20,7 @@ import { anoncreds } from '@hyperledger/anoncreds-nodejs'
 import { askar } from '@openwallet-foundation/askar-nodejs'
 import { DidWebAnonCredsRegistry } from 'credo-ts-didweb-anoncreds'
 
-import { BaseAgentModules } from '../agent/types'
+import { BaseAgentModules } from '../agent/VsAgent'
 import { FullTailsFileService } from '../credentials/FullTailsFileService'
 import { defaultDocumentLoader } from '../did/CachedDocumentLoader'
 import { CachedWebDidResolver } from '../did/CachedWebDidResolver'

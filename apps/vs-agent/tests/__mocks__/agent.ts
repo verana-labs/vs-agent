@@ -2,7 +2,7 @@ import { AskarSqliteStorageConfig } from '@credo-ts/askar'
 import { LogLevel, utils } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
-import { createVsAgent, setupDidComm, VsAgent, DidCommAgentModules } from '@verana-labs/vs-agent-sdk'
+import { createVsAgent, setupBaseDidComm, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { keyDerivationMethodMap } from '../../src/config'
 import { TsLogger } from '../../src/utils'
@@ -13,11 +13,23 @@ export const startAgent = async ({
 }: {
   label: string
   domain: string
-}): Promise<VsAgent<DidCommAgentModules>> => {
+}): Promise<VsAgent<any>> => {
   const walletConfig = getAskarStoreConfig(label, { inMemory: true })
+
+  const [chatSetup, mrtdSetup] = await Promise.all([
+    import('@verana-labs/vs-agent-plugin-chat').catch(() => null),
+    import('@verana-labs/vs-agent-plugin-mrtd').catch(() => null),
+  ])
+
   const agent = createVsAgent({
     plugins: [
-      setupDidComm({ walletConfig, publicApiBaseUrl: `https://${domain}`, endpoints: [`rxjs:${domain}`] }),
+      setupBaseDidComm({
+        walletConfig,
+        publicApiBaseUrl: `https://${domain}`,
+        endpoints: [`rxjs:${domain}`],
+      }),
+      ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
+      ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol()] : []),
     ],
     config: {
       logger: new TsLogger(LogLevel.Off, label),
@@ -28,7 +40,7 @@ export const startAgent = async ({
     publicApiBaseUrl: `https://${domain}`,
     label,
   })
-  return agent as unknown as VsAgent<DidCommAgentModules>
+  return agent as unknown as VsAgent<any>
 }
 
 export function getAskarStoreConfig(

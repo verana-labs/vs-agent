@@ -1,6 +1,4 @@
-import type { MessageHandler } from '../controllers'
-import type { DynamicModule, Provider, Type } from '@nestjs/common'
-import type { BaseAgentModules, Plugin, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 import type { Express } from 'express'
 
 import { DidCommFeatureQueryOptions } from '@credo-ts/didcomm'
@@ -21,14 +19,4 @@ export interface ServerConfig {
 
 export interface DidWebServerConfig extends ServerConfig {
   baseUrl: string
-}
-
-export interface VsAgentNestPlugin {
-  name: string
-  credoPlugin?: Plugin
-  controllers?: Type<any>[]
-  providers?: Provider[]
-  messageHandlers?: Type<MessageHandler>[]
-  imports?: DynamicModule[]
-  registerEvents?: (agent: VsAgent<BaseAgentModules>, config: ServerConfig) => void
 }

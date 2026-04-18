@@ -1,4 +1,4 @@
-import type { DidCommAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { DidCommConnectionProfileUpdatedEvent } from '@2060.io/credo-ts-didcomm-user-profile'
 import { LogLevel } from '@credo-ts/core'
@@ -11,20 +11,16 @@ import {
 } from '@credo-ts/didcomm'
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { chatEvents, ChatPlugin } from '@verana-labs/vs-agent-plugin-chat'
 import { vi } from 'vitest'
 
 import { VsAgentModule } from '../../src/admin.module'
 import { baseMessageEvents } from '../../src/events/BaseMessageEvents'
-import { chatEvents } from '../../src/events/ChatEvents'
-import { ChatPlugin } from '../../src/plugins/ChatPlugin'
 import { MessagingPlugin } from '../../src/plugins/MessagingPlugin'
 import { PublicModule } from '../../src/public.module'
 import { ServerConfig, TsLogger } from '../../src/utils'
 
-export async function makeConnection(
-  agentA: VsAgent<DidCommAgentModules>,
-  agentB: VsAgent<DidCommAgentModules>,
-) {
+export async function makeConnection(agentA: VsAgent<BaseAgentModules>, agentB: VsAgent<BaseAgentModules>) {
   const agentAOutOfBand = await agentA.didcomm.oob.createInvitation({
     handshakeProtocols: [DidCommHandshakeProtocol.Connections],
   })
@@ -100,7 +96,7 @@ export function waitForEvent<T>(
   })
 }
 
-export const startServersTesting = async (agent: VsAgent<DidCommAgentModules>): Promise<INestApplication> => {
+export const startServersTesting = async (agent: VsAgent<BaseAgentModules>): Promise<INestApplication> => {
   const moduleRef = await Test.createTestingModule({
     imports: [
       VsAgentModule.register(agent, 'http://localhost:3001', [MessagingPlugin, ChatPlugin]),

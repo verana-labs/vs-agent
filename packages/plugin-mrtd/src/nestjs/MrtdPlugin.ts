@@ -1,13 +1,8 @@
-import type { VsAgentNestPlugin } from '../utils'
+import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
-import { setupMrtdProtocol } from '@verana-labs/vs-agent-sdk'
-
-import { MrtdMessageHandler } from '../controllers'
 import { mrtdEvents } from '../events/MrtdEvents'
-
-export interface MrtdPluginOptions {
-  masterListCscaLocation?: string
-}
+import { MrtdMessageHandler } from '../handlers/MrtdMessageHandler'
+import { setupMrtdProtocol, MrtdPluginOptions } from '../sdk/setupMrtdProtocol'
 
 export const MrtdPlugin = (options?: MrtdPluginOptions): VsAgentNestPlugin => ({
   name: 'mrtd',

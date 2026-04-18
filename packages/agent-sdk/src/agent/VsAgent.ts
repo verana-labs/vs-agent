@@ -1,4 +1,11 @@
-import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
+import {
+  AnonCredsDidCommCredentialFormatService,
+  AnonCredsDidCommProofFormatService,
+  AnonCredsModule,
+  LegacyIndyDidCommCredentialFormatService,
+  LegacyIndyDidCommProofFormatService,
+} from '@credo-ts/anoncreds'
+import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import {
   Agent,
   AgentDependencies,
@@ -8,14 +15,45 @@ import {
   DidDocument,
   DidDocumentService,
   DidRepository,
+  DidsModule,
   InitConfig,
   Kms,
   ParsedDid,
   parseDid,
+  W3cCredentialsModule,
 } from '@credo-ts/core'
+import {
+  DidCommCredentialsModuleConfigOptions,
+  DidCommCredentialV2Protocol,
+  DidCommModule,
+  DidCommModuleConfigOptions,
+  DidCommProofsModuleConfigOptions,
+  DidCommProofV2Protocol,
+} from '@credo-ts/didcomm'
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
-import { BaseAgentModules } from './types'
+type VsAgentDidCommModule = DidCommModule<
+  DidCommModuleConfigOptions & {
+    credentials: DidCommCredentialsModuleConfigOptions<
+      [
+        DidCommCredentialV2Protocol<
+          [LegacyIndyDidCommCredentialFormatService, AnonCredsDidCommCredentialFormatService]
+        >,
+      ]
+    >
+    proofs: DidCommProofsModuleConfigOptions<
+      [DidCommProofV2Protocol<[LegacyIndyDidCommProofFormatService, AnonCredsDidCommProofFormatService]>]
+    >
+  }
+>
+
+export type BaseAgentModules = {
+  askar: AskarModule
+  anoncreds: AnonCredsModule
+  dids: DidsModule
+  w3cCredentials: W3cCredentialsModule
+  didcomm: VsAgentDidCommModule
+}
 
 interface AgentOptions<TModules extends BaseAgentModules> {
   config: InitConfig

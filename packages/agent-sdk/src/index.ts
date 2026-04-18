@@ -1,19 +1,17 @@
 // Agent
 export { VsAgent } from './agent/VsAgent'
-export type { VsAgentOptions } from './agent/VsAgent'
+export { type VsAgentOptions, BaseAgentModules } from './agent/VsAgent'
 export { createVsAgent } from './agent/createVsAgent'
-export type { CreateVsAgentOptions, Plugin } from './agent/createVsAgent'
-export type { BaseAgentModules, ChatAgentModules, MrtdAgentModules, DidCommAgentModules } from './agent/types'
+export type { CreateVsAgentOptions } from './agent/createVsAgent'
+export type { Plugin } from './types'
 
 // Plugins
 export { setupBaseDidComm } from './plugins/setupBaseDidComm'
 export type { BaseDidCommPlugin, BaseDidCommPluginOptions } from './plugins/setupBaseDidComm'
-export { setupChatProtocols } from './plugins/setupChatProtocols'
-export type { ChatPlugin } from './plugins/setupChatProtocols'
-export { setupMrtdProtocol } from './plugins/setupMrtdProtocol'
-export type { MrtdPlugin, MrtdPluginOptions } from './plugins/setupMrtdProtocol'
-export { setupDidComm } from './plugins/setupDidComm'
-export type { DidCommPlugin, DidCommPluginOptions } from './plugins/setupDidComm'
+
+// NestJS integration
+export type { VsAgentNestPlugin, VsAgentPluginConfig, MessageHandler } from './types'
+export { MESSAGE_HANDLERS } from './types'
 
 // DID utilities
 export { CachedWebDidResolver } from './did/CachedWebDidResolver'
@@ -29,7 +27,7 @@ export { VsAgentWsOutboundTransport } from './transports/VsAgentWsOutboundTransp
 export { FullTailsFileService, tailsIndex, baseFilePath } from './credentials/FullTailsFileService'
 
 // Utils
-export { createInvitation, getWebDid } from './utils/agent'
+export { createInvitation, getWebDid, getRecordId } from './utils/agent'
 export {
   parseDataUrl,
   parsePictureData,
@@ -40,4 +38,5 @@ export {
 export { getEcsSchemas } from './utils/data'
 export { webhookListener } from './utils/webhook'
 export type { WebhookData } from './utils/webhook'
+export { sendWebhookEvent, sendMessageReceivedEvent } from './utils/webhookEvent'
 export * from './utils/util'

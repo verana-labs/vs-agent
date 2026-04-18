@@ -1,4 +1,4 @@
-import type { MessageHandler } from '../MessageHandler'
+import type { MessageHandler } from '@verana-labs/vs-agent-sdk'
 
 import { ActionMenuOption, ActionMenuRole } from '@credo-ts/action-menu'
 import { JsonTransformer } from '@credo-ts/core'

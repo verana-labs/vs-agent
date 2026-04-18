@@ -7,8 +7,6 @@ import {
   createVsAgent,
   HttpInboundTransport,
   setupBaseDidComm,
-  setupChatProtocols,
-  setupMrtdProtocol,
   VsAgentWsInboundTransport,
 } from '@verana-labs/vs-agent-sdk'
 import express from 'express'
@@ -51,11 +49,16 @@ export const setupAgent = async ({
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
+  const [chatSetup, mrtdSetup] = await Promise.all([
+    ENABLED_PLUGINS.includes('chat') ? import('@verana-labs/vs-agent-plugin-chat').catch(() => null) : null,
+    ENABLED_PLUGINS.includes('mrtd') ? import('@verana-labs/vs-agent-plugin-mrtd').catch(() => null) : null,
+  ])
+
   const agent = createVsAgent({
     plugins: [
       setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints }),
-      ...(ENABLED_PLUGINS.includes('chat') ? [setupChatProtocols()] : []),
-      ...(ENABLED_PLUGINS.includes('mrtd') ? [setupMrtdProtocol({ masterListCscaLocation })] : []),
+      ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
+      ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol({ masterListCscaLocation })] : []),
     ],
     config: {
       logger,

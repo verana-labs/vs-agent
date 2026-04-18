@@ -1,9 +1,8 @@
-import type { VsAgentNestPlugin } from '../utils'
+import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
-import { setupChatProtocols } from '@verana-labs/vs-agent-sdk'
-
-import { ChatMessageHandler } from '../controllers/admin/message/handlers'
 import { chatEvents } from '../events/ChatEvents'
+import { ChatMessageHandler } from '../handlers/ChatMessageHandler'
+import { setupChatProtocols } from '../sdk/setupChatProtocols'
 
 export const ChatPlugin: VsAgentNestPlugin = {
   name: 'chat',

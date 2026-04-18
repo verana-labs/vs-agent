@@ -1,4 +1,4 @@
-import type { ServerConfig } from '../utils'
+import type { VsAgentPluginConfig } from '@verana-labs/vs-agent-sdk'
 
 import {
   EMrtdDataReceivedEvent,
@@ -7,16 +7,12 @@ import {
   MrtdProblemReportReason,
   MrzDataReceivedEvent,
 } from '@2060.io/credo-ts-didcomm-mrtd'
-import {
-  BaseMessage,
-  EMrtdDataSubmitMessage,
-  MessageReceived,
-  MrtdSubmitState,
-  MrzDataSubmitMessage,
-} from '@verana-labs/vs-agent-model'
-import { VsAgent } from '@verana-labs/vs-agent-sdk'
+import { BaseMessage, MessageReceived } from '@verana-labs/vs-agent-model'
+import { sendWebhookEvent, VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { sendWebhookEvent } from './WebhookEvent'
+import { EMrtdDataSubmitMessage } from '../model/EMrtdDataSubmitMessage'
+import { MrtdSubmitState } from '../model/MrtdSubmitState'
+import { MrzDataSubmitMessage } from '../model/MrzDataSubmitMessage'
 
 const getRecordId = async (agent: VsAgent<any>, id: string): Promise<string> => {
   const record = await agent.genericRecords.findById(id)
@@ -27,7 +23,7 @@ const sendMrtdEvent = async (
   agent: VsAgent<any>,
   message: BaseMessage,
   timestamp: Date,
-  config: ServerConfig,
+  config: VsAgentPluginConfig,
 ) => {
   await sendWebhookEvent(
     config.webhookUrl + '/message-received',
@@ -36,7 +32,7 @@ const sendMrtdEvent = async (
   )
 }
 
-export const mrtdEvents = (agent: VsAgent<any>, config: ServerConfig) => {
+export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => {
   agent.events.on(MrtdEventTypes.MrzDataReceived, async ({ payload }: MrzDataReceivedEvent) => {
     const { connection, mrzData, threadId } = payload
 

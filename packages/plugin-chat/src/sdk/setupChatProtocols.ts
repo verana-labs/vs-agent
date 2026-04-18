@@ -9,21 +9,16 @@ import {
 import { ActionMenuModule } from '@credo-ts/action-menu'
 import { QuestionAnswerModule } from '@credo-ts/question-answer'
 
-import { ChatAgentModules } from '../agent/types'
+import { ChatAgentModules } from '../types'
 
-export interface ChatPlugin {
+export interface ChatSdkPlugin {
   modules: Pick<
     ChatAgentModules,
     'actionMenu' | 'calls' | 'reactions' | 'media' | 'questionAnswer' | 'receipts' | 'userProfile'
   >
 }
 
-/**
- * Sets up social/chat DIDComm protocol modules.
- * Adds action menu, calls, media sharing, question-answer, receipts, and user profile exchange.
- * Must be used together with setupBaseDidComm().
- */
-export function setupChatProtocols(): ChatPlugin {
+export function setupChatProtocols(): ChatSdkPlugin {
   return {
     modules: {
       actionMenu: new ActionMenuModule({ strictStateChecking: false }),

@@ -1,15 +1,13 @@
-import type { MessageHandler } from '../MessageHandler'
+import type { MessageHandler } from '@verana-labs/vs-agent-sdk'
 
 import { JsonTransformer } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { Injectable } from '@nestjs/common'
-import {
-  EMrtdDataRequestMessage,
-  IBaseMessage,
-  MessageType,
-  MrzDataRequestMessage,
-} from '@verana-labs/vs-agent-model'
+import { IBaseMessage, MessageType } from '@verana-labs/vs-agent-model'
 import { VsAgent } from '@verana-labs/vs-agent-sdk'
+
+import { EMrtdDataRequestMessage } from '../model/EMrtdDataRequestMessage'
+import { MrzDataRequestMessage } from '../model/MrzDataRequestMessage'
 
 @Injectable()
 export class MrtdMessageHandler implements MessageHandler {

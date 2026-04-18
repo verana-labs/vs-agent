@@ -76,27 +76,6 @@ importers:
 
   apps/vs-agent:
     dependencies:
-      '@2060.io/credo-ts-didcomm-calls':
-        specifier: 0.1.0
-        version: 0.1.0(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))
-      '@2060.io/credo-ts-didcomm-media-sharing':
-        specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))
-      '@2060.io/credo-ts-didcomm-mrtd':
-        specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))(typescript@5.7.2)
-      '@2060.io/credo-ts-didcomm-reactions':
-        specifier: ^0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))
-      '@2060.io/credo-ts-didcomm-receipts':
-        specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))
-      '@2060.io/credo-ts-didcomm-user-profile':
-        specifier: 0.1.0
-        version: 0.1.0(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))
-      '@credo-ts/action-menu':
-        specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
       '@credo-ts/anoncreds':
         specifier: 0.7.0-alpha-20260410113934
         version: 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
@@ -110,9 +89,6 @@ importers:
         specifier: 0.7.0-alpha-20260410113934
         version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
       '@credo-ts/node':
-        specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/question-answer':
         specifier: 0.7.0-alpha-20260410113934
         version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
       '@credo-ts/webvh':
@@ -187,6 +163,13 @@ importers:
       yargs:
         specifier: ^17.3.1
         version: 17.7.2
+    optionalDependencies:
+      '@verana-labs/vs-agent-plugin-chat':
+        specifier: workspace:*
+        version: link:../../packages/plugin-chat
+      '@verana-labs/vs-agent-plugin-mrtd':
+        specifier: workspace:*
+        version: link:../../packages/plugin-mrtd
     devDependencies:
       '@nestjs/cli':
         specifier: ^10.0.0
@@ -249,6 +232,9 @@ importers:
       '@verana-labs/vs-agent-model':
         specifier: workspace:*
         version: link:../../packages/model
+      '@verana-labs/vs-agent-plugin-mrtd':
+        specifier: workspace:*
+        version: link:../../packages/plugin-mrtd
       body-parser:
         specifier: ^1.20.0
         version: 1.20.3
@@ -325,6 +311,9 @@ importers:
       '@verana-labs/vs-agent-nestjs-client':
         specifier: workspace:*
         version: link:../../packages/nestjs-client
+      '@verana-labs/vs-agent-plugin-mrtd':
+        specifier: workspace:*
+        version: link:../../packages/plugin-mrtd
       axios:
         specifier: ^1.7.7
         version: 1.9.0
@@ -459,27 +448,6 @@ importers:
 
   packages/agent-sdk:
     dependencies:
-      '@2060.io/credo-ts-didcomm-calls':
-        specifier: 0.1.0
-        version: 0.1.0(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
-      '@2060.io/credo-ts-didcomm-media-sharing':
-        specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
-      '@2060.io/credo-ts-didcomm-mrtd':
-        specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))(typescript@5.8.3)
-      '@2060.io/credo-ts-didcomm-reactions':
-        specifier: ^0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
-      '@2060.io/credo-ts-didcomm-receipts':
-        specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
-      '@2060.io/credo-ts-didcomm-user-profile':
-        specifier: 0.1.0
-        version: 0.1.0(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
-      '@credo-ts/action-menu':
-        specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
       '@credo-ts/anoncreds':
         specifier: 0.7.0-alpha-20260410113934
         version: 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
@@ -493,9 +461,6 @@ importers:
         specifier: 0.7.0-alpha-20260410113934
         version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
       '@credo-ts/node':
-        specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
-      '@credo-ts/question-answer':
         specifier: 0.7.0-alpha-20260410113934
         version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
       '@credo-ts/webvh':
@@ -560,9 +525,6 @@ importers:
 
   packages/model:
     dependencies:
-      '@2060.io/credo-ts-didcomm-mrtd':
-        specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))(typescript@5.8.3)
       '@2060.io/credo-ts-didcomm-reactions':
         specifier: 0.1.1
         version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
@@ -581,13 +543,7 @@ importers:
       class-validator:
         specifier: 0.14.1
         version: 0.14.1
-      mrz:
-        specifier: ^4.2.0
-        version: 4.2.1
     devDependencies:
-      '@types/node-tlv':
-        specifier: ^1.5.4
-        version: 1.5.4
       ts-node-dev:
         specifier: ^2.0.0
         version: 2.0.0(@types/node@20.11.19)(typescript@5.8.3)
@@ -658,6 +614,72 @@ importers:
       ts-loader:
         specifier: ^9.4.3
         version: 9.5.2(typescript@5.8.3)(webpack@5.97.1)
+
+  packages/plugin-chat:
+    dependencies:
+      '@2060.io/credo-ts-didcomm-calls':
+        specifier: 0.1.0
+        version: 0.1.0(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
+      '@2060.io/credo-ts-didcomm-media-sharing':
+        specifier: 0.1.1
+        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
+      '@2060.io/credo-ts-didcomm-reactions':
+        specifier: ^0.1.1
+        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
+      '@2060.io/credo-ts-didcomm-receipts':
+        specifier: 0.1.1
+        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
+      '@2060.io/credo-ts-didcomm-user-profile':
+        specifier: 0.1.0
+        version: 0.1.0(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
+      '@credo-ts/action-menu':
+        specifier: 0.7.0-alpha-20260410113934
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+      '@credo-ts/core':
+        specifier: 0.7.0-alpha-20260410113934
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+      '@credo-ts/didcomm':
+        specifier: 0.7.0-alpha-20260410113934
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+      '@credo-ts/question-answer':
+        specifier: 0.7.0-alpha-20260410113934
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+      '@nestjs/common':
+        specifier: ^10.0.0
+        version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@verana-labs/vs-agent-model':
+        specifier: workspace:*
+        version: link:../model
+      '@verana-labs/vs-agent-sdk':
+        specifier: workspace:*
+        version: link:../agent-sdk
+
+  packages/plugin-mrtd:
+    dependencies:
+      '@2060.io/credo-ts-didcomm-mrtd':
+        specifier: 0.1.1
+        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))(typescript@5.8.3)
+      '@credo-ts/core':
+        specifier: 0.7.0-alpha-20260410113934
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+      '@credo-ts/didcomm':
+        specifier: 0.7.0-alpha-20260410113934
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+      '@nestjs/common':
+        specifier: ^10.0.0
+        version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@types/node-tlv':
+        specifier: ^1.5.4
+        version: 1.5.4
+      '@verana-labs/vs-agent-model':
+        specifier: workspace:*
+        version: link:../model
+      '@verana-labs/vs-agent-sdk':
+        specifier: workspace:*
+        version: link:../agent-sdk
+      mrz:
+        specifier: ^4.2.0
+        version: 4.2.1
 
 packages:
 
@@ -5558,14 +5580,6 @@ packages:
 
 snapshots:
 
-  '@2060.io/credo-ts-didcomm-calls@0.1.0(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      class-transformer: 0.5.1
-      class-validator: 0.14.1
-      tsyringe: 4.8.0
-
   '@2060.io/credo-ts-didcomm-calls@0.1.0(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))':
     dependencies:
       '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.8.3)
@@ -5573,17 +5587,6 @@ snapshots:
       class-transformer: 0.5.1
       class-validator: 0.14.1
       tsyringe: 4.8.0
-
-  '@2060.io/credo-ts-didcomm-media-sharing@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      class-transformer: 0.5.1
-      class-validator: 0.14.1
-      reflect-metadata: 0.1.14
-      rxjs: 7.8.2
-      tsyringe: 4.8.0
-      uuid: 9.0.1
 
   '@2060.io/credo-ts-didcomm-media-sharing@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))':
     dependencies:
@@ -5595,26 +5598,6 @@ snapshots:
       rxjs: 7.8.2
       tsyringe: 4.8.0
       uuid: 9.0.1
-
-  '@2060.io/credo-ts-didcomm-mrtd@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))(typescript@5.7.2)':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@li0ard/tsemrtd': 0.3.4(typescript@5.7.2)
-      '@peculiar/asn1-x509': 2.6.1
-      '@peculiar/x509': 1.14.3
-      '@types/pkijs': 3.0.1
-      asn1js: 3.0.7
-      class-transformer: 0.5.1
-      class-validator: 0.14.1
-      esbuild: 0.24.2
-      mrz: 4.2.1
-      pkijs: 3.3.3
-      reflect-metadata: 0.1.14
-      rxjs: 7.8.2
-      tsyringe: 4.8.0
-    transitivePeerDependencies:
-      - typescript
 
   '@2060.io/credo-ts-didcomm-mrtd@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))(typescript@5.8.3)':
     dependencies:
@@ -5636,16 +5619,6 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@2060.io/credo-ts-didcomm-reactions@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      class-transformer: 0.5.1
-      class-validator: 0.14.1
-      reflect-metadata: 0.1.14
-      rxjs: 7.8.2
-      uuid: 9.0.1
-
   '@2060.io/credo-ts-didcomm-reactions@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))':
     dependencies:
       '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.8.3)
@@ -5654,17 +5627,6 @@ snapshots:
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
       rxjs: 7.8.2
-      uuid: 9.0.1
-
-  '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      class-transformer: 0.5.1
-      class-validator: 0.14.1
-      reflect-metadata: 0.1.14
-      rxjs: 7.8.2
-      tsyringe: 4.8.0
       uuid: 9.0.1
 
   '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))':
@@ -5677,16 +5639,6 @@ snapshots:
       rxjs: 7.8.2
       tsyringe: 4.8.0
       uuid: 9.0.1
-
-  '@2060.io/credo-ts-didcomm-user-profile@0.1.0(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      class-transformer: 0.5.1
-      class-validator: 0.14.1
-      reflect-metadata: 0.1.14
-      rxjs: 7.8.2
-      tsyringe: 4.8.0
 
   '@2060.io/credo-ts-didcomm-user-profile@0.1.0(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))':
     dependencies:
@@ -5906,18 +5858,6 @@ snapshots:
 
   '@colors/colors@1.5.0':
     optional: true
-
-  '@credo-ts/action-menu@0.7.0-alpha-20260410113934(typescript@5.7.2)':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      class-transformer: 0.5.1
-      class-validator: 0.14.3
-      rxjs: 7.8.2
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-      - typescript
 
   '@credo-ts/action-menu@0.7.0-alpha-20260410113934(typescript@5.8.3)':
     dependencies:
@@ -6142,18 +6082,6 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
-
-  '@credo-ts/question-answer@0.7.0-alpha-20260410113934(typescript@5.7.2)':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      class-transformer: 0.5.1
-      class-validator: 0.14.3
-      rxjs: 7.8.2
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-      - typescript
 
   '@credo-ts/question-answer@0.7.0-alpha-20260410113934(typescript@5.8.3)':
     dependencies:
@@ -6573,21 +6501,9 @@ snapshots:
     dependencies:
       '@js-joda/core': 5.6.3
 
-  '@li0ard/tinytlv@0.1.1(typescript@5.7.2)':
-    dependencies:
-      typescript: 5.7.2
-
   '@li0ard/tinytlv@0.1.1(typescript@5.8.3)':
     dependencies:
       typescript: 5.8.3
-
-  '@li0ard/tsemrtd@0.3.4(typescript@5.7.2)':
-    dependencies:
-      '@li0ard/tinytlv': 0.1.1(typescript@5.7.2)
-      '@peculiar/asn1-cms': 2.6.0
-      '@peculiar/asn1-schema': 2.6.0
-      '@peculiar/asn1-x509': 2.6.1
-      typescript: 5.7.2
 
   '@li0ard/tsemrtd@0.3.4(typescript@5.8.3)':
     dependencies:

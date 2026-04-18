@@ -1,15 +1,9 @@
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { AgentDependencies, InitConfig, LogLevel } from '@credo-ts/core'
 
-import { BaseDidCommPlugin } from '../plugins/setupBaseDidComm'
-import { ChatPlugin } from '../plugins/setupChatProtocols'
-import { DidCommPlugin } from '../plugins/setupDidComm'
-import { MrtdPlugin } from '../plugins/setupMrtdProtocol'
+import { Plugin } from '../types'
 
-import { VsAgent } from './VsAgent'
-import { BaseAgentModules } from './types'
-
-export type Plugin = BaseDidCommPlugin | ChatPlugin | MrtdPlugin | DidCommPlugin
+import { BaseAgentModules, VsAgent } from './VsAgent'
 
 type MergePluginModules<T extends Plugin[]> = T extends [infer First, ...infer Rest]
   ? First extends { modules: infer M }
@@ -41,19 +35,21 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
  * Creates a VsAgent from a set of composable plugins.
  *
  * @example
- * // Signer-only agent (no DIDComm)
+ * // Base DIDComm agent
  * const agent = createVsAgent({
- *   plugins: [setupDidComm({ walletConfig, publicApiBaseUrl. endpoints })],
+ *   plugins: [setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints })],
  *   label: 'My Agent',
  *   publicApiBaseUrl,
  *   dependencies: agentDependencies,
  * })
  *
  * @example
- * // Full DIDComm agent
+ * // Full-featured agent with optional plugins
  * const agent = createVsAgent({
  *   plugins: [
- *     setupDidComm({ walletConfig, publicApiBaseUrl. endpoints }),
+ *     setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints }),
+ *     setupChatProtocols(),   // from @verana-labs/vs-agent-plugin-chat
+ *     setupMrtdProtocol(),    // from @verana-labs/vs-agent-plugin-mrtd
  *   ],
  *   label: 'My Agent',
  *   publicApiBaseUrl,

@@ -1,12 +1,12 @@
 import { DidCommMrtdModule } from '@2060.io/credo-ts-didcomm-mrtd'
 
-import { MrtdAgentModules } from '../agent/types'
+import { MrtdAgentModules } from '../types'
 
 export interface MrtdPluginOptions {
   masterListCscaLocation?: string
 }
 
-export interface MrtdPlugin {
+export interface MrtdSdkPlugin {
   modules: Pick<MrtdAgentModules, 'mrtd'>
 }
 
@@ -15,7 +15,7 @@ export interface MrtdPlugin {
  * This is kept as a separate plugin because it introduces native binary dependencies.
  * Must be used together with setupBaseDidComm().
  */
-export function setupMrtdProtocol(options?: MrtdPluginOptions): MrtdPlugin {
+export function setupMrtdProtocol(options?: MrtdPluginOptions): MrtdSdkPlugin {
   return {
     modules: {
       mrtd: new DidCommMrtdModule({ masterListCscaLocation: options?.masterListCscaLocation }),

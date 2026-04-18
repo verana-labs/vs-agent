@@ -1,5 +1,5 @@
 import { DynamicModule, Module } from '@nestjs/common'
-import { VsAgent } from '@verana-labs/vs-agent-sdk'
+import { VsAgent, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import {
   ConnectionController,
@@ -16,7 +16,6 @@ import {
 import { MESSAGE_HANDLERS } from './controllers/admin/message/MessageHandler'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
-import { VsAgentNestPlugin } from './utils'
 
 @Module({})
 export class VsAgentModule {
