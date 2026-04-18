@@ -1,7 +1,7 @@
 import {
   AnonCredsDidCommCredentialFormatService,
-  AnonCredsDidCommProofFormatService,
   AnonCredsModule,
+  AnonCredsDidCommProofFormatService,
   LegacyIndyDidCommCredentialFormatService,
   LegacyIndyDidCommProofFormatService,
 } from '@credo-ts/anoncreds'

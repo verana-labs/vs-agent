@@ -13,6 +13,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json tsconf
 
 COPY packages/model/package.json packages/model/package.json
 COPY packages/agent-sdk/package.json packages/agent-sdk/package.json
+COPY packages/plugin-chat/package.json packages/plugin-chat/package.json
+COPY packages/plugin-mrtd/package.json packages/plugin-mrtd/package.json
 COPY apps/vs-agent/package.json apps/vs-agent/package.json
 COPY apps/vs-agent-ui/package.json apps/vs-agent-ui/package.json
 
