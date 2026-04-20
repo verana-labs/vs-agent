@@ -3,14 +3,18 @@ import { LogLevel, ParsedDid } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
+import {
+  createVsAgent,
+  HttpInboundTransport,
+  setupBaseDidComm,
+  VsAgentWsInboundTransport,
+} from '@verana-labs/vs-agent-sdk'
 import express from 'express'
 import WebSocket from 'ws'
 
-import { ENABLE_PUBLIC_API_SWAGGER } from '../config'
+import { ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
+import { MessageService } from '../controllers/admin/message/MessageService'
 
-import { HttpInboundTransport } from './HttpInboundTransport'
-import { createVsAgent } from './VsAgent'
-import { VsAgentWsInboundTransport } from './VsAgentWsInboundTransport'
 import { TsLogger } from './logger'
 
 export const setupAgent = async ({
@@ -45,12 +49,21 @@ export const setupAgent = async ({
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
+  const [chatSetup, mrtdSetup] = await Promise.all([
+    ENABLED_PLUGINS.includes('chat') ? import('@verana-labs/vs-agent-plugin-chat').catch(() => null) : null,
+    ENABLED_PLUGINS.includes('mrtd') ? import('@verana-labs/vs-agent-plugin-mrtd').catch(() => null) : null,
+  ])
+
   const agent = createVsAgent({
+    plugins: [
+      setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints }),
+      ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
+      ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol({ masterListCscaLocation })] : []),
+    ],
     config: {
       logger,
       autoUpdateStorageOnStartup,
     },
-    endpoints,
     walletConfig,
     did: publicDid,
     autoDiscloseUserProfile,
@@ -93,6 +106,18 @@ export function commonAppConfig(app: INestApplication, cors?: boolean, publicApp
     .setVersion('1.0')
     .build()
   const document = SwaggerModule.createDocument(app, config)
+
+  // Inject dynamic message examples from registered handlers
+  if (!publicApp) {
+    const messageService = app.get(MessageService)
+    for (const pathItem of Object.values(document.paths ?? {})) {
+      const postOp = (pathItem as any).post
+      if (postOp?.tags?.includes('message') && postOp?.requestBody?.content?.['application/json']) {
+        postOp.requestBody.content['application/json'].examples = messageService.openApiExamples
+      }
+    }
+  }
+
   if (!publicApp || (publicApp && ENABLE_PUBLIC_API_SWAGGER)) SwaggerModule.setup('api', app, document)
 
   // Pipes

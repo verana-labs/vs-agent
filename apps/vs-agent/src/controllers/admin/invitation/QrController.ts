@@ -1,10 +1,11 @@
 import { Controller, Get, HttpException, HttpStatus, Query, Res } from '@nestjs/common'
 import { ApiQuery, ApiTags } from '@nestjs/swagger'
+import { createInvitation } from '@verana-labs/vs-agent-sdk'
 import { Response } from 'express'
 import QRCode from 'qrcode'
 
+import { AGENT_INVITATION_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { createInvitation } from '../../../utils'
 
 @ApiTags('qr')
 @Controller({
@@ -33,6 +34,7 @@ export class QrController {
     const { url: invitationUrl } = await createInvitation({
       agent: await this.agentService.getAgent(),
       useLegacyDid,
+      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
     })
 
     function isQRCodeErrorCorrectionLevel(input?: string): input is QRCode.QRCodeErrorCorrectionLevel {

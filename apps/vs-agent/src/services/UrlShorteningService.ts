@@ -1,6 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common'
-
-import { VsAgent } from '../utils'
+import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 @Injectable()
 export class UrlShorteningService {

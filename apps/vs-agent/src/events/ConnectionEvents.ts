@@ -1,4 +1,5 @@
-import type { ServerConfig, VsAgent } from '../utils'
+import type { ServerConfig } from '../utils'
+import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
   DidCommConnectionEventTypes,
@@ -12,11 +13,11 @@ import {
   DidCommMessageProcessedEvent,
 } from '@credo-ts/didcomm'
 import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
+import { sendWebhookEvent } from '@verana-labs/vs-agent-sdk'
 
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
-import { sendWebhookEvent } from './WebhookEvent'
 
-export const connectionEvents = async (agent: VsAgent, config: ServerConfig) => {
+export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig) => {
   // Get the first record matching agent's DID and obtain all alternatives for it
   const [agentPublicDidRecord] = await agent.dids.getCreatedDids({ did: agent.did })
   const alternativeDids = agentPublicDidRecord?.getTag('alternativeDids')

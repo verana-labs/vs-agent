@@ -8,14 +8,13 @@ import {
   ContextualMenuUpdateMessage,
   CredentialReceptionMessage,
   CredentialService,
-  EMrtdDataSubmitMessage,
   EventHandler,
   MediaMessage,
   MenuSelectMessage,
-  MrzDataSubmitMessage,
   ProfileMessage,
   TextMessage,
 } from '@verana-labs/vs-agent-nestjs-client'
+import { EMrtdDataSubmitMessage, MrzDataSubmitMessage } from '@verana-labs/vs-agent-plugin-mrtd'
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { SessionEntity } from './models'
 import { JsonTransformer } from '@credo-ts/core'

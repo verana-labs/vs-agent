@@ -17,6 +17,7 @@ import {
 //@ts-ignore
 import { purposes } from '@digitalcredentials/jsonld-signatures'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
+import { VsAgent, getEcsSchemas } from '@verana-labs/vs-agent-sdk'
 import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
 import axios, { isAxiosError } from 'axios'
@@ -37,9 +38,6 @@ import {
   SELF_ISSUED_VTC_ORG_COUNTRYCODE,
   FALLBACK_BASE64,
 } from '../config'
-
-import { VsAgent } from './VsAgent'
-import { getEcsSchemas } from './data'
 
 const ajv = new Ajv({ strict: false })
 addFormats(ajv)

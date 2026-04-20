@@ -1,8 +1,8 @@
 import { Controller, Get, Param, Query, HttpException, HttpStatus, Logger, Inject } from '@nestjs/common'
 import { ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { getEcsSchemas } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
-import { getEcsSchemas } from '../../../utils'
 import { TrustService } from '../../admin/verifiable/TrustService'
 
 @ApiTags('Self Trust Registry')

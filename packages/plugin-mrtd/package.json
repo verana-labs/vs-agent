@@ -1,0 +1,46 @@
+{
+  "name": "@verana-labs/vs-agent-plugin-mrtd",
+  "main": "build/index",
+  "types": "build/index",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "require": "./build/index.js",
+      "default": "./build/index.js"
+    }
+  },
+  "version": "1.10.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/verana-labs/vs-agent"
+  },
+  "files": [
+    "build"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "Apache-2.0",
+  "description": "MRTD DIDComm plugin for VS Agent",
+  "scripts": {
+    "build": "pnpm run clean && pnpm run compile",
+    "clean": "rimraf -rf ./build",
+    "compile": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "version": "pnpm version --allow-same-version",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@2060.io/credo-ts-didcomm-mrtd": "0.1.1",
+    "@credo-ts/core": "0.7.0-alpha-20260410113934",
+    "@credo-ts/didcomm": "0.7.0-alpha-20260410113934",
+    "@nestjs/common": "^10.0.0",
+    "@types/node-tlv": "^1.5.4",
+    "@verana-labs/vs-agent-model": "workspace:*",
+    "@verana-labs/vs-agent-sdk": "workspace:*",
+    "mrz": "^4.2.0"
+  },
+  "peerDependencies": {
+    "@credo-ts/core": "0.7.0-alpha-20260410113934"
+  }
+}

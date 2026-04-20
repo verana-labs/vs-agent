@@ -12,6 +12,9 @@ COPY patches ./patches
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json tsconfig.build.json ./
 
 COPY packages/model/package.json packages/model/package.json
+COPY packages/agent-sdk/package.json packages/agent-sdk/package.json
+COPY packages/plugin-chat/package.json packages/plugin-chat/package.json
+COPY packages/plugin-mrtd/package.json packages/plugin-mrtd/package.json
 COPY apps/vs-agent/package.json apps/vs-agent/package.json
 COPY apps/vs-agent-ui/package.json apps/vs-agent-ui/package.json
 
@@ -20,6 +23,10 @@ RUN pnpm install --frozen-lockfile
 COPY packages/model/src ./packages/model/src
 COPY packages/model/tsconfig.json packages/model/tsconfig.json
 COPY packages/model/tsconfig.build.json packages/model/tsconfig.build.json
+
+COPY packages/agent-sdk/src ./packages/agent-sdk/src
+COPY packages/agent-sdk/tsconfig.json packages/agent-sdk/tsconfig.json
+COPY packages/agent-sdk/tsconfig.build.json packages/agent-sdk/tsconfig.build.json
 
 COPY apps/vs-agent/src ./apps/vs-agent/src
 COPY apps/vs-agent/discovery.json apps/vs-agent/discovery.json
@@ -33,6 +40,7 @@ COPY apps/vs-agent-ui/vite.config.js apps/vs-agent-ui/vite.config.js
 COPY apps/vs-agent-ui/tsconfig.json apps/vs-agent-ui/tsconfig.json
 
 RUN pnpm --filter @verana-labs/vs-agent-model build && \
+    pnpm --filter @verana-labs/vs-agent-sdk build && \
     pnpm --filter @verana-labs/vs-agent-ui build && \
     pnpm --filter @verana-labs/vs-agent build
 
@@ -88,6 +96,9 @@ ENV RUN_MODE="docker"
 COPY --from=build /www/node_modules ./node_modules
 COPY --from=build /www/packages/model/package.json ./packages/model/package.json
 COPY --from=build /www/packages/model/build ./packages/model/build
+COPY --from=build /www/packages/agent-sdk/package.json ./packages/agent-sdk/package.json
+COPY --from=build /www/packages/agent-sdk/build ./packages/agent-sdk/build
+COPY --from=build /www/packages/agent-sdk/node_modules ./packages/agent-sdk/node_modules
 COPY --from=build /www/apps/vs-agent/node_modules ./apps/vs-agent/node_modules
 COPY apps/vs-agent/package.json ./apps/vs-agent/package.json
 COPY --from=build /www/apps/vs-agent/build ./apps/vs-agent/build

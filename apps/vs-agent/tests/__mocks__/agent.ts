@@ -2,23 +2,45 @@ import { AskarSqliteStorageConfig } from '@credo-ts/askar'
 import { LogLevel, utils } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
+import { createVsAgent, setupBaseDidComm, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { keyDerivationMethodMap } from '../../src/config'
-import { createVsAgent, TsLogger } from '../../src/utils'
+import { TsLogger } from '../../src/utils'
 
-export const startAgent = async ({ label, domain }: { label: string; domain: string }) => {
+export const startAgent = async ({
+  label,
+  domain,
+}: {
+  label: string
+  domain: string
+}): Promise<VsAgent<any>> => {
+  const walletConfig = getAskarStoreConfig(label, { inMemory: true })
+
+  const [chatSetup, mrtdSetup] = await Promise.all([
+    import('@verana-labs/vs-agent-plugin-chat').catch(() => null),
+    import('@verana-labs/vs-agent-plugin-mrtd').catch(() => null),
+  ])
+
   const agent = createVsAgent({
+    plugins: [
+      setupBaseDidComm({
+        walletConfig,
+        publicApiBaseUrl: `https://${domain}`,
+        endpoints: [`rxjs:${domain}`],
+      }),
+      ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
+      ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol()] : []),
+    ],
     config: {
       logger: new TsLogger(LogLevel.Off, label),
     },
-    walletConfig: getAskarStoreConfig(label, { inMemory: true }),
-    endpoints: [`rxjs:${domain}`],
+    walletConfig,
     did: `did:webvh:${domain}`,
     dependencies: agentDependencies,
     publicApiBaseUrl: `https://${domain}`,
     label,
   })
-  return agent
+  return agent as unknown as VsAgent<any>
 }
 
 export function getAskarStoreConfig(
