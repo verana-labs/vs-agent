@@ -1,9 +1,7 @@
 import { parseDid } from '@credo-ts/core'
 import { DidCommHandshakeProtocol, DidCommMessage } from '@credo-ts/didcomm'
 
-import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../config/constants'
-
-import { VsAgent } from './VsAgent'
+import { VsAgent } from '../agent/VsAgent'
 
 /**
  * Creates an out of band invitation that will equal to the public DID in case the agent has one defined,
@@ -16,8 +14,10 @@ export async function createInvitation(options: {
   agent: VsAgent
   messages?: DidCommMessage[]
   useLegacyDid?: boolean
+  invitationBaseUrl: string
+  imageUrl?: string
 }) {
-  const { agent, messages, useLegacyDid } = options
+  const { agent, messages, useLegacyDid, invitationBaseUrl, imageUrl } = options
 
   // Use legacy did:web in case agent's did is webvh and using legacy did
   const invitationDid =
@@ -31,15 +31,20 @@ export async function createInvitation(options: {
       handshakeProtocols: [DidCommHandshakeProtocol.DidExchange, DidCommHandshakeProtocol.Connections],
       invitationDid,
       multiUseInvitation: !messages,
-      imageUrl: AGENT_INVITATION_IMAGE_URL,
+      imageUrl,
       messages,
     })
   ).outOfBandInvitation
   return {
     url: outOfBandInvitation.toUrl({
-      domain: AGENT_INVITATION_BASE_URL,
+      domain: invitationBaseUrl,
     }),
   }
+}
+
+export async function getRecordId(agent: VsAgent, id: string): Promise<string> {
+  const record = await agent.genericRecords.findById(id)
+  return (record?.getTag('messageId') as string) ?? id
 }
 
 export async function getWebDid(agent: VsAgent) {

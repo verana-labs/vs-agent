@@ -1,5 +1,4 @@
-import { BaseMessage, BaseMessageOptions } from '../BaseMessage'
-import { MessageType } from '../MessageType'
+import { BaseMessage, BaseMessageOptions, MessageType } from '@verana-labs/vs-agent-model'
 
 export class EMrtdDataRequestMessage extends BaseMessage {
   public constructor(options: BaseMessageOptions) {

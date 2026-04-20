@@ -107,6 +107,7 @@ These are variables that are updated only on specific use cases.
 | MASTER_LIST_CSCA_LOCATION              | **Enables the eMRTD verification module**. Location (URL or absolute path) of the CSCA Master List in **LDIF** format When set, VS Agent loads trust anchors at startup and activates ePassport verification capabilities. | none                     |
 | AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP   | Toggle automatic storage migration on startup. If true, the agent runs migrations and attempts to make a backup of the wallet on startup                                                                                   | false                    |
 | AGENT_BACKUP_BEFORE_STORAGE_UPDATE     | Toggle backup before storage update. If true, the agent creates a backup of the wallet using Askar's export before performing storage migrations                                                                           | false                    |
+| VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. See [Plugin system](#plugin-system) for available values.                                                                                                             | `messaging,chat`         |
 
 > **Note about Key derivation method**: By default, we use the strongest ARGON2I_MOD, but since this is the slowest one as well, depending on the security infrastructure you have, you might want to not derive the key at all (use RAW). However, in versions of VS Agent we are going to deprecate this setting, so we recommend to keep the default setting to make migration process easier.
 
@@ -179,6 +180,46 @@ Set the environment variable pointing to the Master List file:
 MASTER_LIST_CSCA_LOCATION=/opt/vs-agent/icao/ML_ICAO_2025-07-10.ldif
 MASTER_LIST_CSCA_LOCATION=https://pkddownloadsg.icao.int/file?id=f6e328050fd481060e787569dd8e998c43f14230
 ```
+
+## Plugin system
+
+VS Agent uses an opt-in plugin architecture. Each plugin is an independent package that brings its own Credo modules, NestJS controllers, message handlers, and event listeners. Plugins are loaded dynamically at startup based on the `VS_AGENT_PLUGINS` environment variable, so only the required dependencies are pulled into the process.
+
+### Available plugins
+
+| Plugin      | Package                              | Description                                                                                   |
+| ----------- | ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `messaging` | _(built-in)_                         | Base credential and proof handlers. Always loaded — cannot be disabled.                       |
+| `chat`      | `@verana-labs/vs-agent-plugin-chat`  | Chat protocols: text messages, media, reactions, receipts, calls, action menus, user profile. |
+| `mrtd`      | `@verana-labs/vs-agent-plugin-mrtd`  | eMRTD / ePassport verification. Automatically added when `MASTER_LIST_CSCA_LOCATION` is set.  |
+
+### Selecting plugins
+
+Set `VS_AGENT_PLUGINS` to a comma-separated list of the plugins you want active:
+
+```bash
+# Default: base messaging + chat
+VS_AGENT_PLUGINS=messaging,chat
+
+# Base only (no chat, no eMRTD)
+VS_AGENT_PLUGINS=messaging
+
+# All features
+VS_AGENT_PLUGINS=messaging,chat,mrtd
+```
+
+> **Note:** `messaging` is always required and will be prepended automatically if omitted. `mrtd` is added automatically when `MASTER_LIST_CSCA_LOCATION` is set, regardless of this list.
+
+### Optional dependencies
+
+`@verana-labs/vs-agent-plugin-chat` and `@verana-labs/vs-agent-plugin-mrtd` are declared as `optionalDependencies` in the Docker image. This makes it possible to build leaner images that only install the plugins you need:
+
+```bash
+# Install without mrtd plugin (no native binaries required)
+pnpm install --no-optional
+```
+
+---
 
 ## Deploy and run
 

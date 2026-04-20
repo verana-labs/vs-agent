@@ -5,7 +5,7 @@ import {
 } from '@li0ard/tsemrtd/dist/consts/interfaces'
 import { describe, it, expect } from 'vitest'
 
-import { EMrtdDataSubmitMessage, MrtdSubmitState } from '../src/messages'
+import { EMrtdDataSubmitMessage, MrtdSubmitState } from '../src'
 
 describe('EMrtdDataSubmitMessage', () => {
   const securityObjectOfDocument: DecodedSecurtyObjectOfDocument = {} as DecodedSecurtyObjectOfDocument

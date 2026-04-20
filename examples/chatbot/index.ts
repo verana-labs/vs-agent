@@ -5,16 +5,12 @@ import {
   ContextualMenuUpdateMessage,
   CredentialIssuanceMessage,
   CredentialRevocationMessage,
-  EMrtdDataRequestMessage,
-  EMrtdDataSubmitMessage,
   IdentityProofRequestMessage,
   IdentityProofSubmitMessage,
   InvitationMessage,
   MenuDisplayMessage,
   MenuItem,
   MenuSelectMessage,
-  MrzDataRequestMessage,
-  MrzDataSubmitMessage,
   ProfileMessage,
   ReceiptsMessage,
   TerminateConnectionMessage,
@@ -22,10 +18,16 @@ import {
   VerifiableCredentialRequestedProofItem,
   VerifiableCredentialSubmittedProofItem,
   MediaMessage,
-  MrtdSubmitState,
   CredentialReceptionMessage,
   ReactionMessage,
 } from '@verana-labs/vs-agent-model'
+import {
+  EMrtdDataRequestMessage,
+  EMrtdDataSubmitMessage,
+  MrzDataRequestMessage,
+  MrzDataSubmitMessage,
+  MrtdSubmitState,
+} from '@verana-labs/vs-agent-plugin-mrtd'
 import cors from 'cors'
 import { randomUUID } from 'crypto'
 import express from 'express'

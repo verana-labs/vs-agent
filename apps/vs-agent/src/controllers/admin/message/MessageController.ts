@@ -9,9 +9,9 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger'
 import { BaseMessage } from '@verana-labs/vs-agent-model'
+import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
-import { VsAgent } from '../../../utils'
 
 import { BaseMessageDto } from './dto/base-message.dto'
 import { MessageServiceFactory } from './services/MessageServiceFactory'
@@ -56,9 +56,13 @@ export class MessageController {
       '  "id": UUID (submitted message id)',
       '}',
       '```',
+      '',
+      'Available message types depend on the enabled plugins (see `VS_AGENT_PLUGINS` env var).',
     ].join('\n'),
 
     schema: { allOf: [{ $ref: getSchemaPath(BaseMessageDto) }] },
+    // Examples are injected dynamically at startup from registered MessageHandler instances.
+    // See commonAppConfig in setupAgent.ts.
     examples: {
       callAccept: {
         summary: 'Call Accept',

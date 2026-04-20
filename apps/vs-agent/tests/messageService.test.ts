@@ -1,3 +1,5 @@
+import type { DidCommAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+
 import { PictureData } from '@2060.io/credo-ts-didcomm-user-profile'
 import { DidCommBasicMessage, DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { INestApplication } from '@nestjs/common'
@@ -6,7 +8,6 @@ import { Subject } from 'rxjs'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import { MessageService } from '../src/controllers'
-import { VsAgent } from '../src/utils'
 
 import {
   isAgentMessageProcessedEvent,
@@ -31,8 +32,8 @@ describe('MessageService', () => {
     'rxjs:faber': faberMessages,
     'rxjs:alice': aliceMessages,
   }
-  let faberAgent: VsAgent
-  let aliceAgent: VsAgent
+  let faberAgent: VsAgent<DidCommAgentModules>
+  let aliceAgent: VsAgent<DidCommAgentModules>
   let faberConnection: DidCommConnectionRecord
   let aliceConnection: DidCommConnectionRecord
   let faberEvents: ReturnType<typeof vi.spyOn>

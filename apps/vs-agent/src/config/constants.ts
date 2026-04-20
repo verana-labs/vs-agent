@@ -125,3 +125,15 @@ export const VERANA_RESOLVER = process.env.VERANA_RESOLVER
 export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID
 export const VS_AGENT_MODE = (process.env.VS_AGENT_MODE ?? 'standalone') as 'standalone' | 'delegated'
 export const VS_DELEGATED_ISSUER_DID = process.env.VS_DELEGATED_ISSUER_DID
+// Active plugins: comma-separated list of plugin names (default: messaging,chat)
+// Available:
+//   'messaging' — base MessageController + credential/proof handlers (always required)
+//   'chat'      — chat Credo modules + chat message handlers
+//   'mrtd'      — eMRTD Credo module + MRTD message handlers
+export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'messaging,chat')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean)
+
+if (!ENABLED_PLUGINS.includes('messaging')) ENABLED_PLUGINS.unshift('messaging')
+if (MASTER_LIST_CSCA_LOCATION && !ENABLED_PLUGINS.includes('mrtd')) ENABLED_PLUGINS.push('mrtd')

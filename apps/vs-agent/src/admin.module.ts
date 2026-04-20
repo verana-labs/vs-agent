@@ -1,63 +1,70 @@
 import { DynamicModule, Module } from '@nestjs/common'
+import { VsAgent, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import {
   ConnectionController,
-  CoreMessageService,
   CredentialTypesController,
   CredentialTypesService,
   HealthController,
   InvitationController,
-  MessageController,
-  MessageService,
-  MessageServiceFactory,
   PresentationsController,
   QrController,
-  RedisMessageService,
   TrustController,
   TrustService,
   VsAgentController,
+  MESSAGE_HANDLERS,
 } from './controllers'
-import { HandledRedisModule } from './modules/redis.module'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
-import { VsAgent } from './utils'
 
 @Module({})
 export class VsAgentModule {
-  static register(agent: VsAgent, publicApiBaseUrl: string): DynamicModule {
+  static register(
+    agent: VsAgent,
+    publicApiBaseUrl: string,
+    nestPlugins: VsAgentNestPlugin[] = [],
+  ): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
+
+    const baseControllers = [
+      VsAgentController,
+      CredentialTypesController,
+      HealthController,
+      InvitationController,
+      QrController,
+      TrustController,
+      ConnectionController,
+      PresentationsController,
+    ]
+
+    const baseProviders = [
+      {
+        provide: 'VSAGENT',
+        useFactory: () => agentRef.get(),
+      },
+      {
+        provide: 'PUBLIC_API_BASE_URL',
+        useFactory: () => publicApiBaseUrl,
+      },
+      VsAgentService,
+      UrlShorteningService,
+      TrustService,
+      CredentialTypesService,
+    ]
+
+    // Collect all handler classes declared by plugins and create ONE aggregate provider.
+    const allHandlerClasses = nestPlugins.flatMap(p => p.messageHandlers ?? [])
+    const handlersProvider = {
+      provide: MESSAGE_HANDLERS,
+      useFactory: (...handlers: any[]) => handlers,
+      inject: allHandlerClasses,
+    }
+
     return {
       module: VsAgentModule,
-      imports: [HandledRedisModule.forRoot()],
-      controllers: [
-        VsAgentController,
-        ConnectionController,
-        CredentialTypesController,
-        HealthController,
-        MessageController,
-        PresentationsController,
-        InvitationController,
-        QrController,
-        TrustController,
-      ],
-      providers: [
-        {
-          provide: 'VSAGENT',
-          useFactory: () => agentRef.get(),
-        },
-        {
-          provide: 'PUBLIC_API_BASE_URL',
-          useFactory: () => publicApiBaseUrl,
-        },
-        VsAgentService,
-        UrlShorteningService,
-        MessageService,
-        RedisMessageService,
-        CoreMessageService,
-        MessageServiceFactory,
-        TrustService,
-        CredentialTypesService,
-      ],
+      imports: nestPlugins.flatMap(p => p.imports ?? []),
+      controllers: [...baseControllers, ...nestPlugins.flatMap(p => p.controllers ?? [])],
+      providers: [...baseProviders, ...nestPlugins.flatMap(p => p.providers ?? []), handlersProvider],
       exports: [VsAgentService],
     }
   }

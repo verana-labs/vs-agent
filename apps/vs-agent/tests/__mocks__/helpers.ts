@@ -1,3 +1,5 @@
+import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+
 import { DidCommConnectionProfileUpdatedEvent } from '@2060.io/credo-ts-didcomm-user-profile'
 import { LogLevel } from '@credo-ts/core'
 import {
@@ -9,14 +11,16 @@ import {
 } from '@credo-ts/didcomm'
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { chatEvents, ChatPlugin } from '@verana-labs/vs-agent-plugin-chat'
 import { vi } from 'vitest'
 
 import { VsAgentModule } from '../../src/admin.module'
-import { messageEvents } from '../../src/events/MessageEvents'
+import { baseMessageEvents } from '../../src/events/BaseMessageEvents'
+import { MessagingPlugin } from '../../src/plugins/MessagingPlugin'
 import { PublicModule } from '../../src/public.module'
-import { ServerConfig, TsLogger, VsAgent } from '../../src/utils'
+import { ServerConfig, TsLogger } from '../../src/utils'
 
-export async function makeConnection(agentA: VsAgent, agentB: VsAgent) {
+export async function makeConnection(agentA: VsAgent<BaseAgentModules>, agentB: VsAgent<BaseAgentModules>) {
   const agentAOutOfBand = await agentA.didcomm.oob.createInvitation({
     handshakeProtocols: [DidCommHandshakeProtocol.Connections],
   })
@@ -92,10 +96,10 @@ export function waitForEvent<T>(
   })
 }
 
-export const startServersTesting = async (agent: VsAgent): Promise<INestApplication> => {
+export const startServersTesting = async (agent: VsAgent<BaseAgentModules>): Promise<INestApplication> => {
   const moduleRef = await Test.createTestingModule({
     imports: [
-      VsAgentModule.register(agent, 'http://localhost:3001'),
+      VsAgentModule.register(agent, 'http://localhost:3001', [MessagingPlugin, ChatPlugin]),
       PublicModule.register(agent, 'http://localhost:3001'),
     ],
   }).compile()
@@ -109,6 +113,7 @@ export const startServersTesting = async (agent: VsAgent): Promise<INestApplicat
     webhookUrl: 'http://localhost:5000',
     endpoints: agent.didcomm.config.endpoints,
   }
-  messageEvents(agent, conf)
+  baseMessageEvents(agent, conf)
+  chatEvents(agent as any, conf)
   return app
 }

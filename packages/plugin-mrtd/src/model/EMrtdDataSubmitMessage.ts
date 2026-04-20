@@ -1,9 +1,6 @@
 import { EMrtdData, SodVerification } from '@2060.io/credo-ts-didcomm-mrtd'
+import { BaseMessage, BaseMessageOptions, convertShortDate, MessageType } from '@verana-labs/vs-agent-model'
 import * as Mrz from 'mrz'
-
-import { convertShortDate } from '../../utils'
-import { BaseMessage, BaseMessageOptions } from '../BaseMessage'
-import { MessageType } from '../MessageType'
 
 import { MrtdSubmitState } from './MrtdSubmitState'
 

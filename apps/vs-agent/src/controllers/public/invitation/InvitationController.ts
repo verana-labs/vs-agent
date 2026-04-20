@@ -1,11 +1,12 @@
 import { Controller, Get, Query, Res, HttpStatus, HttpException } from '@nestjs/common'
+import { createInvitation } from '@verana-labs/vs-agent-sdk'
 import { Response } from 'express'
 import QRCode from 'qrcode'
 
-import { REDIRECT_DEFAULT_URL_TO_INVITATION_URL } from '../../../config/constants'
+import { AGENT_INVITATION_BASE_URL, REDIRECT_DEFAULT_URL_TO_INVITATION_URL } from '../../../config/constants'
 import { PresentationStatus, sendPresentationCallbackEvent } from '../../../events/CallbackEvent'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { createInvitation, TsLogger } from '../../../utils'
+import { TsLogger } from '../../../utils'
 
 @Controller()
 export class InvitationRoutesController {
@@ -58,7 +59,11 @@ export class InvitationRoutesController {
   @Get('/invitation')
   async getInvitation(@Res() res: Response, @Query('legacy') legacy?: boolean) {
     const agent = await this.agentService.getAgent()
-    const { url: invitationUrl } = await createInvitation({ agent, useLegacyDid: legacy })
+    const { url: invitationUrl } = await createInvitation({
+      agent,
+      useLegacyDid: legacy,
+      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
+    })
 
     if (REDIRECT_DEFAULT_URL_TO_INVITATION_URL) res.redirect(invitationUrl)
     else res.send(invitationUrl)
@@ -75,7 +80,11 @@ export class InvitationRoutesController {
     @Query('legacy') legacy?: boolean,
   ) {
     const agent = await this.agentService.getAgent()
-    const { url: invitationUrl } = await createInvitation({ agent, useLegacyDid: legacy })
+    const { url: invitationUrl } = await createInvitation({
+      agent,
+      useLegacyDid: legacy,
+      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
+    })
 
     function isQRCodeErrorCorrectionLevel(input?: string): input is QRCode.QRCodeErrorCorrectionLevel {
       return input ? ['low', 'medium', 'quartile', 'high', 'L', 'M', 'Q', 'H'].includes(input) : false

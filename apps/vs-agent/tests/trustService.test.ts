@@ -1,3 +1,5 @@
+import type { DidCommAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { INestApplication } from '@nestjs/common'
@@ -7,7 +9,6 @@ import request from 'supertest'
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 
 import { MessageService, TrustService } from '../src/controllers'
-import { VsAgent } from '../src/utils'
 
 import {
   isCredentialStateChangedEvent,
@@ -30,8 +31,8 @@ describe('TrustService', () => {
     'rxjs:faber': faberMessages,
     'rxjs:alice': aliceMessages,
   }
-  let faberAgent: VsAgent
-  let aliceAgent: VsAgent
+  let faberAgent: VsAgent<DidCommAgentModules>
+  let aliceAgent: VsAgent<DidCommAgentModules>
   let faberConnection: DidCommConnectionRecord
   let aliceConnection: DidCommConnectionRecord
   let aliceEvents: ReturnType<typeof vi.spyOn>
@@ -39,7 +40,7 @@ describe('TrustService', () => {
   describe('JSC creation and DID document references', () => {
     let jscFaberApp: INestApplication
     let jscFaberService: TrustService
-    let jscFaberAgent: VsAgent
+    let jscFaberAgent: VsAgent<DidCommAgentModules>
 
     beforeEach(async () => {
       jscFaberAgent = await startAgent({ label: 'Faber JSC Test', domain: 'faber' })
