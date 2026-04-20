@@ -12,6 +12,8 @@ permissions:
 
 env:
   IMAGE_NAME: 'vs-agent'
+  CHAT_IMAGE_NAME: 'vs-agent-chat'
+  MRTD_IMAGE_NAME: 'vs-agent-mrtd'
   DEMO_CHATBOT_IMAGE_NAME: 'vs-agent-demo-chatbot-backend'
 
 jobs:
@@ -52,13 +54,14 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_LOGIN }}
           password: ${{ secrets.DOCKER_HUB_PWD }}
 
-      # VS Agent
+      # VS Agent (base — no plugins)
       - name: Build & push ${{ env.IMAGE_NAME }} dev tags
         if: env.RELEASE_TYPE == 'dev'
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./apps/vs-agent/Dockerfile
+          target: vs-agent
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
@@ -67,19 +70,79 @@ jobs:
             ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}.${{ env.RELEASE_PATCH_SHORT }}${{ env.SUFFIX }}
             ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
 
-      # Split stable and dev tag builds custom tags for each release type.
       - name: Build & push ${{ env.IMAGE_NAME }} stable release tags
         if: env.RELEASE_TYPE == 'stable'
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./apps/vs-agent/Dockerfile
+          target: vs-agent
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
             ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}${{ env.SUFFIX }}
             ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}${{ env.SUFFIX }}
             ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+
+      # VS Agent Chat (base + chat plugin)
+      - name: Build & push ${{ env.CHAT_IMAGE_NAME }} dev tags
+        if: env.RELEASE_TYPE == 'dev'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/vs-agent/Dockerfile
+          target: vs-agent-chat
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.CHAT_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.CHAT_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}${{ env.SUFFIX }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.CHAT_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}${{ env.SUFFIX }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.CHAT_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}.${{ env.RELEASE_PATCH_SHORT }}${{ env.SUFFIX }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.CHAT_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+
+      - name: Build & push ${{ env.CHAT_IMAGE_NAME }} stable release tags
+        if: env.RELEASE_TYPE == 'stable'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/vs-agent/Dockerfile
+          target: vs-agent-chat
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.CHAT_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.CHAT_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}${{ env.SUFFIX }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.CHAT_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}${{ env.SUFFIX }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.CHAT_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+
+      # VS Agent MRTD (base + chat + mrtd plugins)
+      - name: Build & push ${{ env.MRTD_IMAGE_NAME }} dev tags
+        if: env.RELEASE_TYPE == 'dev'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/vs-agent/Dockerfile
+          target: vs-agent-mrtd
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.MRTD_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.MRTD_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}${{ env.SUFFIX }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.MRTD_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}${{ env.SUFFIX }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.MRTD_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}.${{ env.RELEASE_PATCH_SHORT }}${{ env.SUFFIX }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.MRTD_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+
+      - name: Build & push ${{ env.MRTD_IMAGE_NAME }} stable release tags
+        if: env.RELEASE_TYPE == 'stable'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/vs-agent/Dockerfile
+          target: vs-agent-mrtd
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.MRTD_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.MRTD_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}${{ env.SUFFIX }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.MRTD_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}${{ env.SUFFIX }}
+            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.MRTD_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
 
       # Chatbot Demo (Split container build to vs agent dependency)
       - name: Build & push ${{ env.DEMO_CHATBOT_IMAGE_NAME }} dev tags

@@ -140,10 +140,11 @@ const run = async () => {
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
-  // Dynamically load optional plugin packages
+  // Dynamically load optional plugin packages.
+  const optImport = (name: string): Promise<any> => import(name).catch(() => null)
   const [chatModule, mrtdModule] = await Promise.all([
-    ENABLED_PLUGINS.includes('chat') ? import('@verana-labs/vs-agent-plugin-chat').catch(() => null) : null,
-    ENABLED_PLUGINS.includes('mrtd') ? import('@verana-labs/vs-agent-plugin-mrtd').catch(() => null) : null,
+    ENABLED_PLUGINS.includes('chat') ? optImport('@verana-labs/vs-agent-plugin-chat') : null,
+    ENABLED_PLUGINS.includes('mrtd') ? optImport('@verana-labs/vs-agent-plugin-mrtd') : null,
   ])
 
   // Build the list of active NestJS plugins
