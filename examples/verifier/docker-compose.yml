@@ -3,6 +3,7 @@ services:
     build: 
       context: ../..
       dockerfile: ./apps/vs-agent/Dockerfile
+      target: vs-agent-mrtd
     image: vs-agent
     container_name: verifier-vs-agent
     restart: always
