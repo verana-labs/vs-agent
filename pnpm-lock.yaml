@@ -681,6 +681,30 @@ importers:
         specifier: ^4.2.0
         version: 4.2.1
 
+  packages/plugin-vt-flow:
+    dependencies:
+      '@credo-ts/core':
+        specifier: 0.7.0-alpha-20260410113934
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+      '@credo-ts/didcomm':
+        specifier: 0.7.0-alpha-20260410113934
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+      '@nestjs/common':
+        specifier: ^10.0.0
+        version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@verana-labs/vs-agent-model':
+        specifier: workspace:*
+        version: link:../model
+      '@verana-labs/vs-agent-sdk':
+        specifier: workspace:*
+        version: link:../agent-sdk
+      class-transformer:
+        specifier: 0.5.1
+        version: 0.5.1
+      class-validator:
+        specifier: 0.14.1
+        version: 0.14.1
+
 packages:
 
   '@2060.io/credo-ts-didcomm-calls@0.1.0':

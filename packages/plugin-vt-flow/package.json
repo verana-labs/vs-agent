@@ -1,0 +1,45 @@
+{
+  "name": "@verana-labs/vs-agent-plugin-vt-flow",
+  "main": "build/index",
+  "types": "build/index",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "require": "./build/index.js",
+      "default": "./build/index.js"
+    }
+  },
+  "version": "1.10.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/verana-labs/vs-agent"
+  },
+  "files": [
+    "build"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "Apache-2.0",
+  "description": "Verifiable Trust Flow (vt-flow) DIDComm superprotocol plugin for VS Agent",
+  "scripts": {
+    "build": "pnpm run clean && pnpm run compile",
+    "clean": "rimraf -rf ./build",
+    "compile": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "version": "pnpm version --allow-same-version",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@credo-ts/core": "0.7.0-alpha-20260410113934",
+    "@credo-ts/didcomm": "0.7.0-alpha-20260410113934",
+    "@nestjs/common": "^10.0.0",
+    "@verana-labs/vs-agent-model": "workspace:*",
+    "@verana-labs/vs-agent-sdk": "workspace:*",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.14.1"
+  },
+  "peerDependencies": {
+    "@credo-ts/core": "0.7.0-alpha-20260410113934"
+  }
+}
