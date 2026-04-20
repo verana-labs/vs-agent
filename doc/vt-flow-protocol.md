@@ -7,12 +7,12 @@
 - **Start Date:** 2026-04-16
 - **Tags:** feature, protocol, verifiable-trust, credentials, verana
 - **Tracking Issue:** [verana-labs/vs-agent#404](https://github.com/verana-labs/vs-agent/issues/404)
-- **Target DIDComm Version:** v1 (Aries-style envelope with `@type`, `@id`, `~thread` decorators)
+- **DIDComm Envelope Compatibility:** Envelope-agnostic — a single v1.0 protocol carried by either DIDComm v1 (Aries-style) or DIDComm v2 envelopes. See [DIDComm Envelope Compatibility](#didcomm-envelope-compatibility).
 - **Companion Implementation Guide:** [vt-flow-implementation.md](./vt-flow-implementation.md) (Credo-TS specifics)
 
 ## Summary
 
-The **Verifiable Trust Flow Protocol** (`vt-flow`) is a DIDComm v1 superprotocol that orchestrates the acquisition of a Verifiable Trust Credential between an **Applicant** and a **Validator**. It carries Verana-specific state (`perm_id`, `session_uuid`, `agent_perm_id`, `wallet_agent_perm_id`) across a multi-step flow and delegates credential delivery to the [Issue Credential V2 protocol (RFC 0453)][rfc0453] as a subprotocol, linked via the `~thread.pthid` decorator.
+The **Verifiable Trust Flow Protocol** (`vt-flow`) is a DIDComm superprotocol that orchestrates the acquisition of a Verifiable Trust Credential between an **Applicant** and a **Validator**. It carries Verana-specific state (`perm_id`, `session_uuid`, `agent_perm_id`, `wallet_agent_perm_id`) across a multi-step flow and delegates credential delivery to the [Issue Credential V2 protocol (RFC 0453)][rfc0453] as a subprotocol, linked via the DIDComm thread / parent-thread mechanism (per [RFC 0008][rfc0008] in v1 envelopes, and equivalent `thid`/`pthid` fields in v2 envelopes).
 
 `vt-flow` covers two flow variants described in §5 of the [VS-Agent Core Specification][vs-core]:
 
@@ -594,27 +594,81 @@ Error codes are carried in the adopted `problem-report`'s `description.code` fie
 
 Errors during the Issue Credential V2 subprotocol use that protocol's own problem-report with codes like `issuance-abandoned` per [RFC 0453][rfc0453].
 
-### DIDComm v1 Thread Decorator Usage
+### Thread Correlation (`thid` / `pthid`)
 
-Every vt-flow message carries the `~thread` decorator per [RFC 0008][rfc0008]:
+Every vt-flow message **MUST** be associated with two logical identifiers:
 
+- `thid` — the vt-flow session's thread id (equals the message id of the initial `validation-request` or `issuance-request`).
+- `pthid` — optional parent thread id. Set only if vt-flow itself was nested inside a larger parent protocol.
+
+Every message inside the Issue Credential V2 subprotocol **MUST** carry:
+
+- Its own `thid` (the subprotocol's thread id).
+- `pthid` set to the parent vt-flow session's `thid`.
+
+The wire encoding of these identifiers depends on the DIDComm envelope version; see [DIDComm Envelope Compatibility](#didcomm-envelope-compatibility) for the concrete shapes.
+
+### DIDComm Envelope Compatibility
+
+`vt-flow` 1.0 is **envelope-agnostic**. The same protocol definition is carried unchanged by either:
+
+- **DIDComm v1** ([Aries RFC 0005][rfc0005], Aries-style envelope), using `@type` / `@id` / `~thread` decorators, or
+- **DIDComm v2** ([DIF DIDComm Messaging][didcomm-v2]), using top-level `type` / `id` / `thid` / `pthid` and a `body` envelope.
+
+Message type URIs, field names, state machine, error semantics, and subprotocol composition rules are identical across envelopes. Only the **outer wrapper** (decorator naming, field placement, attachment structure) differs.
+
+#### Mapping
+
+| Logical element | DIDComm v1 (Aries) encoding | DIDComm v2 encoding |
+|---|---|---|
+| Message type URI | `"@type": "https://didcomm.org/vt-flow/1.0/..."` | `"type": "https://didcomm.org/vt-flow/1.0/..."` |
+| Message id | `"@id": "<uuid>"` | `"id": "<uuid>"` |
+| Thread id | `"~thread": { "thid": "<uuid>" }` | top-level `"thid": "<uuid>"` |
+| Parent thread id | `"~thread": { "pthid": "<uuid>" }` | top-level `"pthid": "<uuid>"` |
+| Message body fields | Top-level alongside decorators | Nested in `body` object |
+| Attachments | `<field>~attach` suffix ([RFC 0017][rfc0017]) | top-level `attachments` array ([DIDComm v2 Attachments][didcomm-v2-attachments]) |
+
+#### Example: same `validation-request` in both envelopes
+
+**DIDComm v1 (Aries):**
 ```json
-"~thread": {
-  "thid": "<vt-flow session thread id>",
-  "pthid": "<optional, set only if vt-flow itself was nested in a parent protocol>"
+{
+  "@type": "https://didcomm.org/vt-flow/1.0/validation-request",
+  "@id": "8a3f7c2b-9e4d-4b1a-8f6c-2e5a7d3b9c1f",
+  "~thread": {
+    "thid": "8a3f7c2b-9e4d-4b1a-8f6c-2e5a7d3b9c1f"
+  },
+  "perm_id": "12345",
+  "session_uuid": "f7e9c8a2-4b6d-4e1f-9a3c-5d8b2e7f1a4c",
+  "agent_perm_id": "678",
+  "wallet_agent_perm_id": "910",
+  "claims": { "...": "..." }
 }
 ```
 
-The vt-flow session's `thid` equals the `@id` of the initial `validation-request` or `issuance-request` message.
-
-Every message inside the Issue Credential V2 subprotocol **MUST** include:
-
+**DIDComm v2 (equivalent):**
 ```json
-"~thread": {
-  "thid": "<subprotocol's own thid>",
-  "pthid": "<vt-flow session thid>"
+{
+  "type": "https://didcomm.org/vt-flow/1.0/validation-request",
+  "id": "8a3f7c2b-9e4d-4b1a-8f6c-2e5a7d3b9c1f",
+  "thid": "8a3f7c2b-9e4d-4b1a-8f6c-2e5a7d3b9c1f",
+  "body": {
+    "perm_id": "12345",
+    "session_uuid": "f7e9c8a2-4b6d-4e1f-9a3c-5d8b2e7f1a4c",
+    "agent_perm_id": "678",
+    "wallet_agent_perm_id": "910",
+    "claims": { "...": "..." }
+  }
 }
 ```
+
+#### Canonical examples in this specification
+
+All JSON message examples in [§Messages](#messages) use the DIDComm v1 (Aries) encoding as the canonical representation, because (a) it's what the initial implementations target, and (b) the transformation to v2 is mechanical and unambiguous per the table above.
+
+#### Negotiation
+
+The DIDComm envelope version is negotiated at the connection / transport layer, not at the vt-flow layer. Implementations **MUST NOT** branch protocol logic on envelope version; the same vt-flow state machine runs over either envelope.
 
 ### `proofs~attach` Format Registry
 
@@ -630,10 +684,9 @@ Additional format identifiers **MAY** be negotiated by mutual agreement.
 
 ## Drawbacks
 
-1. **DIDComm v1 envelope lock-in.** `vt-flow` v1.0 targets DIDComm v1 (Aries-style). Migration to DIDComm v2 will require a vt-flow v2.0 spec revision.
-2. **Cross-layer coupling.** The protocol couples DIDComm message flow with Verana on-chain transactions. Correct timing is implementation work and cannot be fully specified at the protocol layer.
-3. **Session persistence.** Because the connection is kept open after `COMPLETED` to receive `credential-state-change`, implementations must persist vt-flow state across restarts and reconnections.
-4. **Atomicity.** Credential delivery and `createOrUpdatePermissionSession` are not atomic. A malicious or faulty Validator could record the session but never deliver the credential, or vice-versa. Applicants **MUST** verify the digest against the on-chain session before accepting.
+1. **Cross-layer coupling.** The protocol couples DIDComm message flow with Verana on-chain transactions. Correct timing is implementation work and cannot be fully specified at the protocol layer.
+2. **Session persistence.** Because the connection is kept open after `COMPLETED` to receive `credential-state-change`, implementations must persist vt-flow state across restarts and reconnections.
+3. **Atomicity.** Credential delivery and `createOrUpdatePermissionSession` are not atomic. A malicious or faulty Validator could record the session but never deliver the credential, or vice-versa. Applicants **MUST** verify the digest against the on-chain session before accepting.
 
 ## Rationale and Alternatives
 
@@ -670,6 +723,8 @@ vt-flow uses implicit invitations (DID resolution) rather than explicit Out-of-B
 ## Prior Art
 
 - [Aries RFC 0003 Protocols][rfc0003] — superprotocol/subprotocol concepts.
+- [Aries RFC 0005 DIDComm][rfc0005] — DIDComm v1 envelope.
+- [DIF DIDComm Messaging v2.1][didcomm-v2] — DIDComm v2 envelope.
 - [Aries RFC 0008 Message ID and Threading][rfc0008] — `thid` / `pthid` mechanics.
 - [Aries RFC 0015 ACKs][rfc0015] — adopted Ack semantics.
 - [Aries RFC 0017 Attachments][rfc0017] — `~attach` decorator format.
@@ -716,9 +771,7 @@ Open protocol-semantic items for discussion before freezing v1.0.
 
 7. **Protocol URI namespace.** Current: `https://didcomm.org/vt-flow/1.0` (community convention). Alternative: `https://verana.io/vt-flow/1.0` (Verana-owned).
 
-8. **DIDComm v2 migration path.** v1.0 targets DIDComm v1. When DIDComm v2 envelope support is broadly available, a vt-flow v2.0 revision will translate messages to the DIDComm v2 envelope format.
-
-9. **Concurrency per connection.** Default: an Applicant MAY maintain multiple concurrent vt-flow sessions with the same Validator, each identified by its own `thid` and `session_uuid`. Confirm.
+8. **Concurrency per connection.** Default: an Applicant MAY maintain multiple concurrent vt-flow sessions with the same Validator, each identified by its own `thid` and `session_uuid`. Confirm.
 
 ---
 
@@ -735,6 +788,7 @@ Open protocol-semantic items for discussion before freezing v1.0.
 | Revocation states in v1.0 | `REVOKED` only; forward-compatible for future values. |
 | Reconnection | Applicant resends VR/IR; Validator matches by `session_uuid` + `perm_id`/`schema_id` (per [VS-Agent Core §5.5][vs-core]). |
 | `session_uuid` vs `thid` | Two identifiers, two purposes: `thid` is the DIDComm correlation; `session_uuid` is the VPR Permission Session identifier. |
+| DIDComm envelope version | Envelope-agnostic. vt-flow 1.0 runs unchanged on DIDComm v1 (Aries) and DIDComm v2 envelopes. See [DIDComm Envelope Compatibility](#didcomm-envelope-compatibility). |
 
 ---
 
@@ -743,6 +797,9 @@ Open protocol-semantic items for discussion before freezing v1.0.
 [rfc0015]: https://github.com/hyperledger/aries-rfcs/blob/main/features/0015-acks/README.md
 [rfc0017]: https://github.com/hyperledger/aries-rfcs/blob/main/concepts/0017-attachments/README.md
 [rfc0035]: https://github.com/hyperledger/aries-rfcs/blob/main/features/0035-report-problem/README.md
+[rfc0005]: https://github.com/hyperledger/aries-rfcs/blob/main/concepts/0005-didcomm/README.md
+[didcomm-v2]: https://identity.foundation/didcomm-messaging/spec/v2.1/
+[didcomm-v2-attachments]: https://identity.foundation/didcomm-messaging/spec/v2.1/#attachments
 [rfc0043]: https://github.com/hyperledger/aries-rfcs/blob/main/features/0043-l10n/README.md
 [rfc0183]: https://github.com/hyperledger/aries-rfcs/blob/main/features/0183-revocation-notification/README.md
 [rfc0453]: https://github.com/hyperledger/aries-rfcs/blob/main/features/0453-issue-credential-v2/README.md
