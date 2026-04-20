@@ -28,6 +28,13 @@ COPY packages/agent-sdk/src ./packages/agent-sdk/src
 COPY packages/agent-sdk/tsconfig.json packages/agent-sdk/tsconfig.json
 COPY packages/agent-sdk/tsconfig.build.json packages/agent-sdk/tsconfig.build.json
 
+COPY packages/plugin-chat/src ./packages/plugin-chat/src
+COPY packages/plugin-chat/tsconfig.build.json packages/plugin-chat/tsconfig.build.json
+
+COPY packages/plugin-mrtd/src ./packages/plugin-mrtd/src
+COPY packages/plugin-mrtd/tsconfig.json packages/plugin-mrtd/tsconfig.json
+COPY packages/plugin-mrtd/tsconfig.build.json packages/plugin-mrtd/tsconfig.build.json
+
 COPY apps/vs-agent/src ./apps/vs-agent/src
 COPY apps/vs-agent/discovery.json apps/vs-agent/discovery.json
 COPY apps/vs-agent/tsconfig.json apps/vs-agent/tsconfig.json
@@ -41,6 +48,8 @@ COPY apps/vs-agent-ui/tsconfig.json apps/vs-agent-ui/tsconfig.json
 
 RUN pnpm --filter @verana-labs/vs-agent-model build && \
     pnpm --filter @verana-labs/vs-agent-sdk build && \
+    pnpm --filter @verana-labs/vs-agent-plugin-chat build && \
+    pnpm --filter @verana-labs/vs-agent-plugin-mrtd build && \
     pnpm --filter @verana-labs/vs-agent-ui build && \
     pnpm --filter @verana-labs/vs-agent build
 
@@ -99,6 +108,12 @@ COPY --from=build /www/packages/model/build ./packages/model/build
 COPY --from=build /www/packages/agent-sdk/package.json ./packages/agent-sdk/package.json
 COPY --from=build /www/packages/agent-sdk/build ./packages/agent-sdk/build
 COPY --from=build /www/packages/agent-sdk/node_modules ./packages/agent-sdk/node_modules
+COPY --from=build /www/packages/plugin-chat/package.json ./packages/plugin-chat/package.json
+COPY --from=build /www/packages/plugin-chat/build ./packages/plugin-chat/build
+COPY --from=build /www/packages/plugin-chat/node_modules ./packages/plugin-chat/node_modules
+COPY --from=build /www/packages/plugin-mrtd/package.json ./packages/plugin-mrtd/package.json
+COPY --from=build /www/packages/plugin-mrtd/build ./packages/plugin-mrtd/build
+COPY --from=build /www/packages/plugin-mrtd/node_modules ./packages/plugin-mrtd/node_modules
 COPY --from=build /www/apps/vs-agent/node_modules ./apps/vs-agent/node_modules
 COPY apps/vs-agent/package.json ./apps/vs-agent/package.json
 COPY --from=build /www/apps/vs-agent/build ./apps/vs-agent/build
