@@ -23,9 +23,7 @@ import {
   VeranaChainConfig,
 } from './types'
 
-const {
-  QueryClientImpl: CsQueryClientImpl,
-} = require('@verana-labs/verana-types/codec/verana/cs/v1/query')
+const { QueryClientImpl: CsQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/cs/v1/query')
 const {
   QueryClientImpl: PermQueryClientImpl,
 } = require('@verana-labs/verana-types/codec/verana/perm/v1/query')
@@ -36,9 +34,7 @@ const {
   MsgCancelPermissionVPLastRequest,
   MsgCreateOrUpdatePermissionSession,
 } = require('@verana-labs/verana-types/codec/verana/perm/v1/tx')
-const {
-  QueryClientImpl: TrQueryClientImpl,
-} = require('@verana-labs/verana-types/codec/verana/tr/v1/query')
+const { QueryClientImpl: TrQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/tr/v1/query')
 
 export class VeranaChainService {
   private signingClient!: SigningStargateClient
@@ -98,16 +94,6 @@ export class VeranaChainService {
 
   async getPermissionSession(uuid: string): Promise<unknown> {
     return this.permQuery.GetPermissionSession({ id: uuid })
-  }
-
-  async listPermissions(params?: object): Promise<unknown[]> {
-    const result = await this.permQuery.ListPermissions(params ?? {})
-    return result.permissions ?? []
-  }
-
-  async listPermissionSessions(params?: object): Promise<unknown[]> {
-    const result = await this.permQuery.ListPermissionSessions(params ?? {})
-    return result.sessions ?? []
   }
 
   // Transaction API (Signed)
