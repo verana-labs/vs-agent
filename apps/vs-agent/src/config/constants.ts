@@ -120,7 +120,6 @@ export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFOR
 export const AGENT_VERANA_MNEMONIC = process.env.AGENT_VERANA_MNEMONIC
 export const VERANA_RPC = process.env.VERANA_RPC
 
-
 // Active plugins: comma-separated list of plugin names.
 // Available:
 //   'messaging' — base MessageController + credential/proof handlers (always required)

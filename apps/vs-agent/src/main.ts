@@ -9,7 +9,7 @@ import {
   VsAgentWsInboundTransport,
   type VsAgentNestPlugin,
   resolveVeranaMnemonic,
-  VeranaChainService
+  VeranaChainService,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'

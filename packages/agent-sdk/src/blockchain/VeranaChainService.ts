@@ -1,18 +1,22 @@
-import { BaseLogger } from '@credo-ts/core'
 import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing'
 import { QueryClient, createProtobufRpcClient } from '@cosmjs/stargate'
 import { connectComet } from '@cosmjs/tendermint-rpc'
+import { BaseLogger } from '@credo-ts/core'
 
 interface TrQueryClient {
   ListTrustRegistries(req: object): Promise<{ trustRegistry?: unknown[] }>
 }
 interface TrQueryClientImpl {
-  new (rpc: { request(service: string, method: string, data: Uint8Array): Promise<Uint8Array> }): TrQueryClient
+  new (rpc: {
+    request(service: string, method: string, data: Uint8Array): Promise<Uint8Array>
+  }): TrQueryClient
 }
 
 // Use require to bypass tsconfig paths mapping (which intercepts all @verana-labs/* to local packages)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { QueryClientImpl } = require('@verana-labs/verana-types/codec/verana/tr/v1/query.js') as { QueryClientImpl: TrQueryClientImpl }
+const { QueryClientImpl } = require('@verana-labs/verana-types/codec/verana/tr/v1/query.js') as {
+  QueryClientImpl: TrQueryClientImpl
+}
 
 import { VsAgent } from '../agent'
 
@@ -28,7 +32,9 @@ const MNEMONIC_RECORD_TAG = 'verana-operator-mnemonic'
 const logOperatorAddress = async (mnemonic: string, logger: BaseLogger): Promise<void> => {
   const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, { prefix: VERANA_BECH32_PREFIX })
   const [account] = await wallet.getAccounts()
-  logger.info(`[VeranaChain] vs_operator address: ${account.address} (fund this address with VNA to enable on-chain operations)`)
+  logger.info(
+    `[VeranaChain] vs_operator address: ${account.address} (fund this address with VNA to enable on-chain operations)`,
+  )
 }
 
 export const resolveVeranaMnemonic = async (
@@ -86,6 +92,6 @@ export class VeranaChainService {
       preferredLanguage: 'en',
       responseMaxSize: 1,
     })
-    this.logger.info(`[VeranaChain] Trust registries on chain: ${JSON.stringify(result,null,2)}`)
+    this.logger.info(`[VeranaChain] Trust registries on chain: ${JSON.stringify(result, null, 2)}`)
   }
 }
