@@ -1,3 +1,4 @@
+import { BaseLogger } from '@credo-ts/core'
 import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing'
 import { QueryClient, createProtobufRpcClient } from '@cosmjs/stargate'
 import { connectComet } from '@cosmjs/tendermint-rpc'
@@ -13,8 +14,7 @@ interface TrQueryClientImpl {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { QueryClientImpl } = require('@verana-labs/verana-types/codec/verana/tr/v1/query.js') as { QueryClientImpl: TrQueryClientImpl }
 
-import { VsAgent } from '../utils/VsAgent'
-import { TsLogger } from '../utils/logger'
+import { VsAgent } from '../agent'
 
 const VERANA_BECH32_PREFIX = 'verana'
 const MNEMONIC_RECORD_TAG = 'verana-operator-mnemonic'
@@ -25,7 +25,7 @@ const MNEMONIC_RECORD_TAG = 'verana-operator-mnemonic'
  * - Otherwise, looks for a previously generated mnemonic stored in the agent wallet.
  * - If none exists, generates a new one, persists it, and logs the derived address so it can be funded.
  */
-const logOperatorAddress = async (mnemonic: string, logger: TsLogger): Promise<void> => {
+const logOperatorAddress = async (mnemonic: string, logger: BaseLogger): Promise<void> => {
   const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, { prefix: VERANA_BECH32_PREFIX })
   const [account] = await wallet.getAccounts()
   logger.info(`[VeranaChain] vs_operator address: ${account.address} (fund this address with VNA to enable on-chain operations)`)
@@ -34,7 +34,7 @@ const logOperatorAddress = async (mnemonic: string, logger: TsLogger): Promise<v
 export const resolveVeranaMnemonic = async (
   agent: VsAgent,
   mnemonic: string | undefined,
-  logger: TsLogger,
+  logger: BaseLogger,
 ): Promise<string> => {
   if (mnemonic) {
     logger.info('[VeranaChain] Using mnemonic from AGENT_VERANA_MNEMONIC')
@@ -65,7 +65,7 @@ export class VeranaChainService {
   constructor(
     private readonly rpcUrl: string,
     private readonly mnemonic: string,
-    private readonly logger: TsLogger,
+    private readonly logger: BaseLogger,
   ) {}
 
   async start(): Promise<void> {

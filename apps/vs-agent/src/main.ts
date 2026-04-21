@@ -8,6 +8,8 @@ import {
   VsAgent,
   VsAgentWsInboundTransport,
   type VsAgentNestPlugin,
+  resolveVeranaMnemonic,
+  VeranaChainService
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -50,7 +52,6 @@ import {
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
 import { MessagingPlugin } from './plugins'
-import { resolveVeranaMnemonic, VeranaChainService } from './services/VeranaChainService'
 import { PublicModule } from './public.module'
 import { commonAppConfig, type ServerConfig, setupAgent, setupSelfTr, TsLogger } from './utils'
 
