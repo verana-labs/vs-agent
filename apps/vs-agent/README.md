@@ -210,7 +210,7 @@ VS_AGENT_PLUGINS=messaging,chat,mrtd
 
 > **Note:** `messaging` is always required and will be prepended automatically if omitted.
 >
-> In production, `VS_AGENT_PLUGINS` is pre-configured by the Docker image — override it only in development environments. Using a value that references a plugin not bundled in the current image will result in a startup warning and the plugin being skipped.
+> In production, `VS_AGENT_PLUGINS` is pre-configured by the Docker image, override it only in development environments. Using a value that references a plugin not bundled in the current image will result in a startup warning and the plugin being skipped.
 
 ### Optional dependencies
 
