@@ -8,7 +8,6 @@ import {
   VsAgent,
   VsAgentWsInboundTransport,
   type VsAgentNestPlugin,
-  resolveVeranaMnemonic,
   VeranaChainService,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
@@ -49,6 +48,7 @@ import {
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
   AGENT_VERANA_MNEMONIC,
   VERANA_RPC,
+  VERANA_CHAIN_ID,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
 import { MessagingPlugin } from './plugins'
@@ -105,6 +105,8 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
     })
   }
 }
+
+export let veranaChain: VeranaChainService | undefined = undefined
 
 const run = async () => {
   const serverLogger = new TsLogger(ADMIN_LOG_LEVEL, 'Server')
@@ -220,11 +222,20 @@ const run = async () => {
     plugin.registerEvents?.(agent, conf)
   }
 
-  // Connect to Verana blockchain for on-chain queries
-  if (VERANA_RPC) {
-    const mnemonic = await resolveVeranaMnemonic(agent, AGENT_VERANA_MNEMONIC, serverLogger)
-    const veranaChain = new VeranaChainService(VERANA_RPC, mnemonic, serverLogger)
+  // Connect to Verana blockchain for on-chain transactions
+  if (VERANA_RPC && AGENT_VERANA_MNEMONIC) {
+    veranaChain = new VeranaChainService({
+      rpcUrl: VERANA_RPC,
+      chainId: VERANA_CHAIN_ID,
+      mnemonic: AGENT_VERANA_MNEMONIC,
+      logger: serverLogger,
+    })
     await veranaChain.start()
+    // TODO: pass veranaChain instance on demands.
+  } else {
+    serverLogger.warn(
+      'VERANA_RPC or AGENT_VERANA_MNEMONIC not set. Verana blockchain features will be disabled. Set these environment variables to enable on-chain capabilities.',
+    )
   }
 
   agent.config.logger.info(

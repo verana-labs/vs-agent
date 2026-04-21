@@ -119,6 +119,7 @@ export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFOR
 // Verana network
 export const AGENT_VERANA_MNEMONIC = process.env.AGENT_VERANA_MNEMONIC
 export const VERANA_RPC = process.env.VERANA_RPC
+export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID
 
 // Active plugins: comma-separated list of plugin names.
 // Available:

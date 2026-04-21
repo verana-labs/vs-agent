@@ -78,22 +78,22 @@ importers:
     dependencies:
       '@credo-ts/anoncreds':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
+        version: 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
       '@credo-ts/askar':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.8.3)
+        version: 0.7.0-alpha-20260410113934(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.7.2)
       '@credo-ts/core':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
       '@credo-ts/didcomm':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
       '@credo-ts/node':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
       '@credo-ts/webvh':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
+        version: 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
       '@hyperledger/anoncreds-nodejs':
         specifier: 0.4.0
         version: 0.4.0
@@ -138,7 +138,7 @@ importers:
         version: 4.16.5
       credo-ts-didweb-anoncreds:
         specifier: 0.0.2-alpha.5
-        version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))
+        version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))
       didwebvh-ts:
         specifier: ^2.5.6
         version: 2.5.6
@@ -176,7 +176,7 @@ importers:
         version: 10.4.9
       '@nestjs/schematics':
         specifier: ^10.0.0
-        version: 10.2.3(chokidar@3.6.0)(typescript@5.8.3)
+        version: 10.2.3(chokidar@3.6.0)(typescript@5.7.2)
       '@nestjs/testing':
         specifier: ^10.0.0
         version: 10.4.18(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@10.4.18)(@nestjs/platform-express@10.4.18)
@@ -203,7 +203,7 @@ importers:
         version: 7.8.2
       ts-node-dev:
         specifier: ^2.0.0
-        version: 2.0.0(@types/node@20.11.19)(typescript@5.8.3)
+        version: 2.0.0(@types/node@20.11.19)(typescript@5.7.2)
 
   apps/vs-agent-ui:
     dependencies:
@@ -449,8 +449,8 @@ importers:
   packages/agent-sdk:
     dependencies:
       '@cosmjs/proto-signing':
-        specifier: ^0.29.5
-        version: 0.29.5
+        specifier: ^0.32.3
+        version: 0.32.4
       '@cosmjs/stargate':
         specifier: ^0.32.3
         version: 0.32.3
@@ -483,7 +483,7 @@ importers:
         version: 0.6.0
       '@verana-labs/verana-types':
         specifier: 0.9.5
-        version: 0.9.5(@cosmjs/proto-signing@0.29.5)(@cosmjs/stargate@0.32.3)
+        version: 0.9.5(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)
       '@verana-labs/vs-agent-model':
         specifier: workspace:*
         version: link:../model
@@ -564,13 +564,13 @@ importers:
     dependencies:
       '@2060.io/credo-ts-didcomm-mrtd':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))(typescript@5.7.2)
+        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))(typescript@5.8.3)
       '@credo-ts/core':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
       '@credo-ts/didcomm':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
       '@nestjs/common':
         specifier: ^10.0.0
         version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -582,7 +582,7 @@ importers:
         version: 10.4.18(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)
       '@nestjs/typeorm':
         specifier: ^10.0.2
-        version: 10.0.2(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.7.2)))
+        version: 10.0.2(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3)))
       '@verana-labs/vs-agent-client':
         specifier: workspace:*
         version: link:../client
@@ -600,17 +600,17 @@ importers:
         version: 7.8.2
       typeorm:
         specifier: ^0.3.20
-        version: 0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.7.2))
+        version: 0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3))
     devDependencies:
       '@2060.io/credo-ts-didcomm-receipts':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))
+        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
       '@nestjs/cli':
         specifier: ^10.0.0
         version: 10.4.9
       '@nestjs/schematics':
         specifier: ^10.0.0
-        version: 10.2.3(chokidar@3.6.0)(typescript@5.7.2)
+        version: 10.2.3(chokidar@3.6.0)(typescript@5.8.3)
       '@nestjs/swagger':
         specifier: ^8.0.7
         version: 8.1.1(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)
@@ -625,7 +625,7 @@ importers:
         version: 0.5.21
       ts-loader:
         specifier: ^9.4.3
-        version: 9.5.2(typescript@5.7.2)(webpack@5.97.1)
+        version: 9.5.2(typescript@5.8.3)(webpack@5.97.1)
 
   packages/plugin-chat:
     dependencies:
@@ -901,22 +901,12 @@ packages:
     resolution: {integrity: sha512-wB6uo+3A50m0sW/EWcU64xpV/8wShZ6bMTa7pF8eYsTrSkQA7oLUIJcs/wb8g4y2Oyq701BaGiO6n/ak5WXO1w==}
     deprecated: Unmaintained. The codebase for this package was moved to https://github.com/cosmos/ics23 but then the JS implementation was removed in https://github.com/cosmos/ics23/pull/353. Please consult the maintainers of https://github.com/cosmos for further assistance.
 
-  '@cosmjs/amino@0.29.5':
-    resolution: {integrity: sha512-Qo8jpC0BiziTSUqpkNatBcwtKNhCovUnFul9SlT/74JUCdLYaeG5hxr3q1cssQt++l4LvlcpF+OUXL48XjNjLw==}
-
   '@cosmjs/amino@0.32.4':
     resolution: {integrity: sha512-zKYOt6hPy8obIFtLie/xtygCkH9ZROiQ12UHfKsOkWaZfPQUvVbtgmu6R4Kn1tFLI/SRkw7eqhaogmW/3NYu/Q==}
-
-  '@cosmjs/crypto@0.29.5':
-    resolution: {integrity: sha512-2bKkaLGictaNL0UipQCL6C1afaisv6k8Wr/GCLx9FqiyFkh9ZgRHDyetD64ZsjnWV/N/D44s/esI+k6oPREaiQ==}
-    deprecated: This uses elliptic for cryptographic operations, which contains several security-relevant bugs. To what degree this affects your application is something you need to carefully investigate. See https://github.com/cosmos/cosmjs/issues/1708 for further pointers. Starting with version 0.34.0 the cryptographic library has been replaced. However, private keys might still be at risk.
 
   '@cosmjs/crypto@0.32.4':
     resolution: {integrity: sha512-zicjGU051LF1V9v7bp8p7ovq+VyC91xlaHdsFOTo2oVry3KQikp8L/81RkXmUIT8FxMwdx1T7DmFwVQikcSDIw==}
     deprecated: This uses elliptic for cryptographic operations, which contains several security-relevant bugs. To what degree this affects your application is something you need to carefully investigate. See https://github.com/cosmos/cosmjs/issues/1708 for further pointers. Starting with version 0.34.0 the cryptographic library has been replaced. However, private keys might still be at risk.
-
-  '@cosmjs/encoding@0.29.5':
-    resolution: {integrity: sha512-G4rGl/Jg4dMCw5u6PEZHZcoHnUBlukZODHbm/wcL4Uu91fkn5jVo5cXXZcvs4VCkArVGrEj/52eUgTZCmOBGWQ==}
 
   '@cosmjs/encoding@0.32.4':
     resolution: {integrity: sha512-tjvaEy6ZGxJchiizzTn7HVRiyTg1i4CObRRaTRPknm5EalE13SV+TCHq38gIDfyUeden4fCuaBVEdBR5+ti7Hw==}
@@ -924,14 +914,8 @@ packages:
   '@cosmjs/json-rpc@0.32.4':
     resolution: {integrity: sha512-/jt4mBl7nYzfJ2J/VJ+r19c92mUKF0Lt0JxM3MXEJl7wlwW5haHAWtzRujHkyYMXOwIR+gBqT2S0vntXVBRyhQ==}
 
-  '@cosmjs/math@0.29.5':
-    resolution: {integrity: sha512-2GjKcv+A9f86MAWYLUkjhw1/WpRl2R1BTb3m9qPG7lzMA7ioYff9jY5SPCfafKdxM4TIQGxXQlYGewQL16O68Q==}
-
   '@cosmjs/math@0.32.4':
     resolution: {integrity: sha512-++dqq2TJkoB8zsPVYCvrt88oJWsy1vMOuSOKcdlnXuOA/ASheTJuYy4+oZlTQ3Fr8eALDLGGPhJI02W2HyAQaw==}
-
-  '@cosmjs/proto-signing@0.29.5':
-    resolution: {integrity: sha512-QRrS7CiKaoETdgIqvi/7JC2qCwCR7lnWaUsTzh/XfRy3McLkEd+cXbKAW3cygykv7IN0VAEIhZd2lyIfT8KwNA==}
 
   '@cosmjs/proto-signing@0.32.4':
     resolution: {integrity: sha512-QdyQDbezvdRI4xxSlyM1rSVBO2st5sqtbEIl3IX03uJ7YiZIQHyv6vaHVf1V4mapusCqguiHJzm4N4gsFdLBbQ==}
@@ -947,9 +931,6 @@ packages:
 
   '@cosmjs/tendermint-rpc@0.32.4':
     resolution: {integrity: sha512-MWvUUno+4bCb/LmlMIErLypXxy7ckUuzEmpufYYYd9wgbdCXaTaO08SZzyFM5PI8UJ/0S2AmUrgWhldlbxO8mw==}
-
-  '@cosmjs/utils@0.29.5':
-    resolution: {integrity: sha512-m7h+RXDUxOzEOGt4P+3OVPX7PuakZT3GBmaM/Y2u+abN3xZkziykD/NvedYFvvCCdQo714XcGl33bwifS9FZPQ==}
 
   '@cosmjs/utils@0.32.4':
     resolution: {integrity: sha512-D1Yc+Zy8oL/hkUkFUL/bwxvuDBzRGpc4cF7/SkdhxX4iHpSLgdOuTt1mhCh9+kl6NQREy9t7SYZ6xeW5gFe60w==}
@@ -3004,9 +2985,6 @@ packages:
       typescript:
         optional: true
 
-  cosmjs-types@0.5.2:
-    resolution: {integrity: sha512-zxCtIJj8v3Di7s39uN4LNcN3HIE1z0B9Z0SPE8ZNQR0oSzsuSe1ACgxoFkvhkS7WBasCAFcglS11G2hyfd5tPg==}
-
   cosmjs-types@0.9.0:
     resolution: {integrity: sha512-MN/yUe6mkJwHnCFfsNPeCfXVhyxHYW6c/xDUzrSbBycYzw++XvWDMJArXp2pLdgD6FQ8DW79vkPjeNKVrXaHeQ==}
 
@@ -4061,12 +4039,6 @@ packages:
 
   libsodium-wrappers-sumo@0.7.16:
     resolution: {integrity: sha512-gR0JEFPeN3831lB9+ogooQk0KH4K5LSMIO5Prd5Q5XYR2wHFtZfPg0eP7t1oJIWq+UIzlU4WVeBxZ97mt28tXw==}
-
-  libsodium-wrappers@0.7.16:
-    resolution: {integrity: sha512-Gtr/WBx4dKjvRL1pvfwZqu7gO6AfrQ0u9vFL+kXihtHf6NfkROR8pjYWn98MFDI3jN19Ii1ZUfPR9afGiPyfHg==}
-
-  libsodium@0.7.16:
-    resolution: {integrity: sha512-3HrzSPuzm6Yt9aTYCDxYEG8x8/6C0+ag655Y7rhhWZM9PT4NpdnbqlzXhGZlDnkgR6MeSTnOt/VIyHLs9aSf+Q==}
 
   lightningcss-darwin-arm64@1.27.0:
     resolution: {integrity: sha512-Gl/lqIXY+d+ySmMbgDf0pgaWSqrWYxVHoc88q+Vhf2YNzZ8DwoRzGt5NZDVqqIW5ScpSnmmjcgXP87Dn2ylSSQ==}
@@ -5793,26 +5765,6 @@ snapshots:
       tsyringe: 4.8.0
       uuid: 9.0.1
 
-  '@2060.io/credo-ts-didcomm-mrtd@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))(typescript@5.7.2)':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@li0ard/tsemrtd': 0.3.4(typescript@5.7.2)
-      '@peculiar/asn1-x509': 2.6.1
-      '@peculiar/x509': 1.14.3
-      '@types/pkijs': 3.0.1
-      asn1js: 3.0.7
-      class-transformer: 0.5.1
-      class-validator: 0.14.1
-      esbuild: 0.24.2
-      mrz: 4.2.1
-      pkijs: 3.3.3
-      reflect-metadata: 0.1.14
-      rxjs: 7.8.2
-      tsyringe: 4.8.0
-    transitivePeerDependencies:
-      - typescript
-
   '@2060.io/credo-ts-didcomm-mrtd@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))(typescript@5.8.3)':
     dependencies:
       '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.8.3)
@@ -5841,17 +5793,6 @@ snapshots:
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
       rxjs: 7.8.2
-      uuid: 9.0.1
-
-  '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      class-transformer: 0.5.1
-      class-validator: 0.14.1
-      reflect-metadata: 0.1.14
-      rxjs: 7.8.2
-      tsyringe: 4.8.0
       uuid: 9.0.1
 
   '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))':
@@ -6089,29 +6030,12 @@ snapshots:
       '@noble/hashes': 1.8.0
       protobufjs: 6.11.4
 
-  '@cosmjs/amino@0.29.5':
-    dependencies:
-      '@cosmjs/crypto': 0.29.5
-      '@cosmjs/encoding': 0.29.5
-      '@cosmjs/math': 0.29.5
-      '@cosmjs/utils': 0.29.5
-
   '@cosmjs/amino@0.32.4':
     dependencies:
       '@cosmjs/crypto': 0.32.4
       '@cosmjs/encoding': 0.32.4
       '@cosmjs/math': 0.32.4
       '@cosmjs/utils': 0.32.4
-
-  '@cosmjs/crypto@0.29.5':
-    dependencies:
-      '@cosmjs/encoding': 0.29.5
-      '@cosmjs/math': 0.29.5
-      '@cosmjs/utils': 0.29.5
-      '@noble/hashes': 1.8.0
-      bn.js: 5.2.3
-      elliptic: 6.6.1
-      libsodium-wrappers: 0.7.16
 
   '@cosmjs/crypto@0.32.4':
     dependencies:
@@ -6122,12 +6046,6 @@ snapshots:
       bn.js: 5.2.3
       elliptic: 6.6.1
       libsodium-wrappers-sumo: 0.7.16
-
-  '@cosmjs/encoding@0.29.5':
-    dependencies:
-      base64-js: 1.5.1
-      bech32: 1.1.4
-      readonly-date: 1.0.0
 
   '@cosmjs/encoding@0.32.4':
     dependencies:
@@ -6140,23 +6058,9 @@ snapshots:
       '@cosmjs/stream': 0.32.4
       xstream: 11.14.0
 
-  '@cosmjs/math@0.29.5':
-    dependencies:
-      bn.js: 5.2.3
-
   '@cosmjs/math@0.32.4':
     dependencies:
       bn.js: 5.2.3
-
-  '@cosmjs/proto-signing@0.29.5':
-    dependencies:
-      '@cosmjs/amino': 0.29.5
-      '@cosmjs/crypto': 0.29.5
-      '@cosmjs/encoding': 0.29.5
-      '@cosmjs/math': 0.29.5
-      '@cosmjs/utils': 0.29.5
-      cosmjs-types: 0.5.2
-      long: 4.0.0
 
   '@cosmjs/proto-signing@0.32.4':
     dependencies:
@@ -6215,8 +6119,6 @@ snapshots:
       - debug
       - utf-8-validate
 
-  '@cosmjs/utils@0.29.5': {}
-
   '@cosmjs/utils@0.32.4': {}
 
   '@credo-ts/action-menu@0.7.0-alpha-20260410113934(typescript@5.8.3)':
@@ -6226,6 +6128,21 @@ snapshots:
       class-transformer: 0.5.1
       class-validator: 0.14.3
       rxjs: 7.8.2
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - typescript
+
+  '@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)':
+    dependencies:
+      '@astronautlabs/jsonpath': 1.1.2
+      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
+      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
+      '@hyperledger/anoncreds-shared': 0.4.0
+      '@sphereon/pex-models': 2.3.2
+      class-transformer: 0.5.1
+      class-validator: 0.14.3
+      reflect-metadata: 0.2.2
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -6241,6 +6158,19 @@ snapshots:
       class-transformer: 0.5.1
       class-validator: 0.14.3
       reflect-metadata: 0.2.2
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - typescript
+
+  '@credo-ts/askar@0.7.0-alpha-20260410113934(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.7.2)':
+    dependencies:
+      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
+      '@openwallet-foundation/askar-shared': 0.6.0
+      class-transformer: 0.5.1
+      class-validator: 0.14.3
+      rxjs: 7.8.2
+      tsyringe: 4.8.0
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -6385,6 +6315,21 @@ snapshots:
       - supports-color
       - typescript
 
+  '@credo-ts/node@0.7.0-alpha-20260410113934(typescript@5.7.2)':
+    dependencies:
+      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
+      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
+      '@types/express': 5.0.6
+      express: 5.2.1
+      rxjs: 7.8.2
+      ws: 8.19.0
+    transitivePeerDependencies:
+      - bufferutil
+      - encoding
+      - supports-color
+      - typescript
+      - utf-8-validate
+
   '@credo-ts/node@0.7.0-alpha-20260410113934(typescript@5.8.3)':
     dependencies:
       '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.8.3)
@@ -6408,6 +6353,21 @@ snapshots:
       class-validator: 0.14.3
       rxjs: 7.8.2
     transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - typescript
+
+  '@credo-ts/webvh@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)':
+    dependencies:
+      '@credo-ts/anoncreds': 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
+      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
+      class-transformer: 0.5.1
+      class-validator: 0.14.3
+      didwebvh-ts: 2.7.2
+      json-canonicalize: 2.0.0
+      tsyringe: 4.8.0
+    transitivePeerDependencies:
+      - '@hyperledger/anoncreds-shared'
       - encoding
       - supports-color
       - typescript
@@ -6803,21 +6763,9 @@ snapshots:
     dependencies:
       '@js-joda/core': 5.6.3
 
-  '@li0ard/tinytlv@0.1.1(typescript@5.7.2)':
-    dependencies:
-      typescript: 5.7.2
-
   '@li0ard/tinytlv@0.1.1(typescript@5.8.3)':
     dependencies:
       typescript: 5.8.3
-
-  '@li0ard/tsemrtd@0.3.4(typescript@5.7.2)':
-    dependencies:
-      '@li0ard/tinytlv': 0.1.1(typescript@5.7.2)
-      '@peculiar/asn1-cms': 2.6.0
-      '@peculiar/asn1-schema': 2.6.0
-      '@peculiar/asn1-x509': 2.6.1
-      typescript: 5.7.2
 
   '@li0ard/tsemrtd@0.3.4(typescript@5.8.3)':
     dependencies:
@@ -7166,13 +7114,13 @@ snapshots:
       typeorm: 0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3))
       uuid: 9.0.1
 
-  '@nestjs/typeorm@10.0.2(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.7.2)))':
+  '@nestjs/typeorm@10.0.2(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3)))':
     dependencies:
       '@nestjs/common': 10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 10.4.18(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@10.4.18)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       reflect-metadata: 0.2.2
       rxjs: 7.8.2
-      typeorm: 0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.7.2))
+      typeorm: 0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3))
       uuid: 9.0.1
 
   '@noble/curves@2.0.1':
@@ -7970,9 +7918,9 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.7.8':
     optional: true
 
-  '@verana-labs/verana-types@0.9.5(@cosmjs/proto-signing@0.29.5)(@cosmjs/stargate@0.32.3)':
+  '@verana-labs/verana-types@0.9.5(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)':
     dependencies:
-      '@cosmjs/proto-signing': 0.29.5
+      '@cosmjs/proto-signing': 0.32.4
       '@cosmjs/stargate': 0.32.3
       long: 5.3.2
       protobufjs: 7.2.6
@@ -8617,16 +8565,18 @@ snapshots:
     optionalDependencies:
       typescript: 5.7.2
 
-  cosmjs-types@0.5.2:
-    dependencies:
-      long: 4.0.0
-      protobufjs: 6.11.4
-
   cosmjs-types@0.9.0: {}
 
   create-require@1.1.1: {}
 
   credentials-context@2.0.0: {}
+
+  credo-ts-didweb-anoncreds@0.0.2-alpha.5(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2)):
+    dependencies:
+      '@credo-ts/anoncreds': 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
+      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
+      canonicalize: 2.1.0
+      query-string: 9.3.1
 
   credo-ts-didweb-anoncreds@0.0.2-alpha.5(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3)):
     dependencies:
@@ -9923,12 +9873,6 @@ snapshots:
     dependencies:
       libsodium-sumo: 0.7.16
 
-  libsodium-wrappers@0.7.16:
-    dependencies:
-      libsodium: 0.7.16
-
-  libsodium@0.7.16: {}
-
   lightningcss-darwin-arm64@1.27.0:
     optional: true
 
@@ -11123,16 +11067,6 @@ snapshots:
     dependencies:
       typescript: 5.8.3
 
-  ts-loader@9.5.2(typescript@5.7.2)(webpack@5.97.1):
-    dependencies:
-      chalk: 4.1.2
-      enhanced-resolve: 5.18.1
-      micromatch: 4.0.8
-      semver: 7.7.2
-      source-map: 0.7.4
-      typescript: 5.7.2
-      webpack: 5.97.1
-
   ts-loader@9.5.2(typescript@5.8.3)(webpack@5.97.1):
     dependencies:
       chalk: 4.1.2
@@ -11142,6 +11076,24 @@ snapshots:
       source-map: 0.7.4
       typescript: 5.8.3
       webpack: 5.97.1
+
+  ts-node-dev@2.0.0(@types/node@20.11.19)(typescript@5.7.2):
+    dependencies:
+      chokidar: 3.6.0
+      dynamic-dedupe: 0.3.0
+      minimist: 1.2.8
+      mkdirp: 1.0.4
+      resolve: 1.22.10
+      rimraf: 2.7.1
+      source-map-support: 0.5.21
+      tree-kill: 1.2.2
+      ts-node: 10.9.2(@types/node@20.11.19)(typescript@5.7.2)
+      tsconfig: 7.0.0
+      typescript: 5.7.2
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+      - '@types/node'
 
   ts-node-dev@2.0.0(@types/node@20.11.19)(typescript@5.8.3):
     dependencies:
@@ -11178,7 +11130,6 @@ snapshots:
       typescript: 5.7.2
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
-    optional: true
 
   ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3):
     dependencies:
@@ -11292,31 +11243,6 @@ snapshots:
       reflect.getprototypeof: 1.0.10
 
   typedarray@0.0.6: {}
-
-  typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.7.2)):
-    dependencies:
-      '@sqltools/formatter': 1.2.5
-      ansis: 3.17.0
-      app-root-path: 3.1.0
-      buffer: 6.0.3
-      dayjs: 1.11.13
-      debug: 4.4.1
-      dedent: 1.6.0
-      dotenv: 16.5.0
-      glob: 10.4.5
-      reflect-metadata: 0.2.2
-      sha.js: 2.4.11
-      sql-highlight: 6.0.0
-      tslib: 2.8.1
-      uuid: 11.1.0
-      yargs: 17.7.2
-    optionalDependencies:
-      ioredis: 5.6.1
-      pg: 8.16.0
-      ts-node: 10.9.2(@types/node@20.11.19)(typescript@5.7.2)
-    transitivePeerDependencies:
-      - babel-plugin-macros
-      - supports-color
 
   typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3)):
     dependencies:

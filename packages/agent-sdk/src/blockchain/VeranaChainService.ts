@@ -1,97 +1,185 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
 import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing'
-import { QueryClient, createProtobufRpcClient } from '@cosmjs/stargate'
+import {
+  SigningStargateClient,
+  GasPrice,
+  assertIsDeliverTxSuccess,
+  QueryClient,
+  createProtobufRpcClient,
+  type DeliverTxResponse,
+} from '@cosmjs/stargate'
 import { connectComet } from '@cosmjs/tendermint-rpc'
-import { BaseLogger } from '@credo-ts/core'
+import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
+import Long from 'long'
 
-interface TrQueryClient {
-  ListTrustRegistries(req: object): Promise<{ trustRegistry?: unknown[] }>
-}
-interface TrQueryClientImpl {
-  new (rpc: {
-    request(service: string, method: string, data: Uint8Array): Promise<Uint8Array>
-  }): TrQueryClient
-}
+import {
+  CreateOrUpdatePermissionSessionParams,
+  CsQueryClient,
+  PermQueryClient,
+  SetPermissionVPToValidatedParams,
+  StartPermissionVPParams,
+  TrQueryClient,
+  VERANA_BECH32_PREFIX,
+  VeranaChainConfig,
+} from './types'
 
-// Use require to bypass tsconfig paths mapping (which intercepts all @verana-labs/* to local packages)
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { QueryClientImpl } = require('@verana-labs/verana-types/codec/verana/tr/v1/query.js') as {
-  QueryClientImpl: TrQueryClientImpl
-}
-
-import { VsAgent } from '../agent'
-
-const VERANA_BECH32_PREFIX = 'verana'
-const MNEMONIC_RECORD_TAG = 'verana-operator-mnemonic'
-
-/**
- * Resolves the Verana operator mnemonic.
- * - If AGENT_VERANA_MNEMONIC env var is set, it is used directly.
- * - Otherwise, looks for a previously generated mnemonic stored in the agent wallet.
- * - If none exists, generates a new one, persists it, and logs the derived address so it can be funded.
- */
-const logOperatorAddress = async (mnemonic: string, logger: BaseLogger): Promise<void> => {
-  const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, { prefix: VERANA_BECH32_PREFIX })
-  const [account] = await wallet.getAccounts()
-  logger.info(
-    `[VeranaChain] vs_operator address: ${account.address} (fund this address with VNA to enable on-chain operations)`,
-  )
-}
-
-export const resolveVeranaMnemonic = async (
-  agent: VsAgent,
-  mnemonic: string | undefined,
-  logger: BaseLogger,
-): Promise<string> => {
-  if (mnemonic) {
-    logger.info('[VeranaChain] Using mnemonic from AGENT_VERANA_MNEMONIC')
-    await logOperatorAddress(mnemonic, logger)
-    return mnemonic
-  }
-
-  const existing = await agent.genericRecords.findAllByQuery({ type: MNEMONIC_RECORD_TAG })
-  if (existing.length > 0) {
-    logger.info('[VeranaChain] Using stored operator mnemonic from wallet')
-    const stored = existing[0].content.mnemonic as string
-    await logOperatorAddress(stored, logger)
-    return stored
-  }
-
-  logger.info('[VeranaChain] No mnemonic found — generating new operator wallet')
-  const newWallet = await DirectSecp256k1HdWallet.generate(12, { prefix: VERANA_BECH32_PREFIX })
-  await agent.genericRecords.save({
-    content: { mnemonic: newWallet.mnemonic },
-    tags: { type: MNEMONIC_RECORD_TAG },
-  })
-  logger.info('[VeranaChain] New operator mnemonic generated and saved to wallet')
-  await logOperatorAddress(newWallet.mnemonic, logger)
-  return newWallet.mnemonic
-}
+const {
+  QueryClientImpl: CsQueryClientImpl,
+} = require('@verana-labs/verana-types/codec/verana/cs/v1/query')
+const {
+  QueryClientImpl: PermQueryClientImpl,
+} = require('@verana-labs/verana-types/codec/verana/perm/v1/query')
+const {
+  MsgStartPermissionVP,
+  MsgRenewPermissionVP,
+  MsgSetPermissionVPToValidated,
+  MsgCancelPermissionVPLastRequest,
+  MsgCreateOrUpdatePermissionSession,
+} = require('@verana-labs/verana-types/codec/verana/perm/v1/tx')
+const {
+  QueryClientImpl: TrQueryClientImpl,
+} = require('@verana-labs/verana-types/codec/verana/tr/v1/query')
 
 export class VeranaChainService {
-  constructor(
-    private readonly rpcUrl: string,
-    private readonly mnemonic: string,
-    private readonly logger: BaseLogger,
-  ) {}
+  private signingClient!: SigningStargateClient
+  private operatorAddress!: string
+
+  private trQuery!: TrQueryClient
+  private permQuery!: PermQueryClient
+  private csQuery!: CsQueryClient
+
+  constructor(private readonly config: VeranaChainConfig) {}
+
+  get address(): string {
+    return this.operatorAddress
+  }
 
   async start(): Promise<void> {
-    // 1. Derive wallet and log operator address
-    await logOperatorAddress(this.mnemonic, this.logger)
+    const { rpcUrl, mnemonic, chainId, logger, gasPrice } = this.config
 
-    // 2. Connect to RPC (read-only)
-    const tmClient = await connectComet(this.rpcUrl)
-    const queryClient = new QueryClient(tmClient)
-    const rpc = createProtobufRpcClient(queryClient)
-
-    // 3. Connect to RPC and run simple query: list trust registries
-    const trQuery = new QueryClientImpl(rpc)
-    const result = await trQuery.ListTrustRegistries({
-      controller: '',
-      modifiedAfter: undefined,
-      activeGfOnly: false,
-      preferredLanguage: 'en',
-      responseMaxSize: 1,
+    const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
+      prefix: VERANA_BECH32_PREFIX,
     })
-    this.logger.info(`[VeranaChain] Trust registries on chain: ${JSON.stringify(result, null, 2)}`)
+    const [account] = await wallet.getAccounts()
+    this.operatorAddress = account.address
+    logger.info(
+      `[VeranaChain] vs_operator address: ${this.operatorAddress} (fund this address with VNA to enable on-chain operations)`,
+    )
+
+    const cometClient = await connectComet(rpcUrl)
+    this.signingClient = await SigningStargateClient.createWithSigner(cometClient, wallet, {
+      registry: createVeranaRegistry(),
+      aminoTypes: createVeranaAminoTypes(),
+      gasPrice: GasPrice.fromString(gasPrice ?? '0uvna'), // TODO: consider minium gas price
+    })
+
+    const onChainId = await this.signingClient.getChainId()
+    if (chainId && onChainId !== chainId) {
+      throw new Error(`[VeranaChain] Chain ID mismatch: expected "${chainId}", got "${onChainId}"`)
+    }
+    logger.info(`[VeranaChain] Connected to chain: ${onChainId}`)
+
+    const queryClient = new QueryClient(cometClient)
+    const rpc = createProtobufRpcClient(queryClient)
+    this.trQuery = new TrQueryClientImpl(rpc) as TrQueryClient
+    this.permQuery = new PermQueryClientImpl(rpc) as PermQueryClient
+    this.csQuery = new CsQueryClientImpl(rpc) as CsQueryClient
+  }
+
+  // Query API (No signed)
+  async getPermission(id: Long): Promise<unknown> {
+    return this.permQuery.GetPermission({ id })
+  }
+
+  async findPermissionsWithDID(params: object): Promise<unknown[]> {
+    const result = await this.permQuery.FindPermissionsWithDID(params)
+    return result.permissions ?? []
+  }
+
+  async getPermissionSession(uuid: string): Promise<unknown> {
+    return this.permQuery.GetPermissionSession({ id: uuid })
+  }
+
+  async listPermissions(params?: object): Promise<unknown[]> {
+    const result = await this.permQuery.ListPermissions(params ?? {})
+    return result.permissions ?? []
+  }
+
+  async listPermissionSessions(params?: object): Promise<unknown[]> {
+    const result = await this.permQuery.ListPermissionSessions(params ?? {})
+    return result.sessions ?? []
+  }
+
+  // Transaction API (Signed)
+  async startPermissionVP(params: StartPermissionVPParams): Promise<{ txHash: string }> {
+    const value = MsgStartPermissionVP.fromPartial({
+      creator: this.operatorAddress,
+      type: params.type,
+      validatorPermId: params.validatorPermId,
+      country: params.country,
+      did: params.did,
+      validationFees: params.validationFees,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgStartPermissionVP, value)
+    return { txHash: result.transactionHash }
+  }
+
+  async renewPermissionVP(id: Long): Promise<{ txHash: string }> {
+    const value = MsgRenewPermissionVP.fromPartial({
+      creator: this.operatorAddress,
+      id,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgRenewPermissionVP, value)
+    return { txHash: result.transactionHash }
+  }
+
+  async setPermissionVPToValidated(params: SetPermissionVPToValidatedParams): Promise<{ txHash: string }> {
+    const value = MsgSetPermissionVPToValidated.fromPartial({
+      creator: this.operatorAddress,
+      id: params.id,
+      effectiveUntil: params.effectiveUntil,
+      validationFees: params.validationFees,
+      issuanceFees: params.issuanceFees,
+      verificationFees: params.verificationFees,
+      country: params.country,
+      vpSummaryDigestSri: params.vpSummaryDigestSri,
+      issuanceFeeDiscount: params.issuanceFeeDiscount,
+      verificationFeeDiscount: params.verificationFeeDiscount,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgSetPermissionVPToValidated, value)
+    return { txHash: result.transactionHash }
+  }
+
+  async cancelPermissionVPLastRequest(id: Long): Promise<{ txHash: string }> {
+    const value = MsgCancelPermissionVPLastRequest.fromPartial({
+      creator: this.operatorAddress,
+      id,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgCancelPermissionVPLastRequest, value)
+    return { txHash: result.transactionHash }
+  }
+
+  async createOrUpdatePermissionSession(
+    params: CreateOrUpdatePermissionSessionParams,
+  ): Promise<{ txHash: string }> {
+    const value = MsgCreateOrUpdatePermissionSession.fromPartial({
+      creator: this.operatorAddress,
+      id: params.id,
+      issuerPermId: params.issuerPermId,
+      verifierPermId: params.verifierPermId,
+      agentPermId: params.agentPermId,
+      walletAgentPermId: params.walletAgentPermId,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateOrUpdatePermissionSession, value)
+    return { txHash: result.transactionHash }
+  }
+
+  private async broadcastMsg(typeUrl: string, value: object): Promise<DeliverTxResponse> {
+    const msg = { typeUrl, value }
+    this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl}`)
+    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], 'auto')
+    assertIsDeliverTxSuccess(result)
+    this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
+    return result
   }
 }
