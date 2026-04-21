@@ -244,19 +244,57 @@ This means that VS-A is up and running!
 
 ### Using docker
 
-First of all, a docker image must be created by doing:
+First
+
+The Dockerfile produces three images of different sizes depending on which plugins are included. Choose the one that matches your needs:
+
+| Target | Image | Plugins included |
+|--------|-------|-----------------|
+| `vs-agent` | `2060io/vs-agent` | messaging only |
+| `vs-agent-chat` | `2060io/vs-agent-chat` | messaging + chat |
+| `vs-agent-mrtd` | `2060io/vs-agent-mrtd` | messaging + chat + mrtd |
+
+#### Building locally
+
+The build context must be the **monorepo root**, not the `apps/vs-agent` directory:
 
 ```bash
-docker build -t vs-agent:[tag] .
+# From the repository root
+docker build --target vs-agent     -t vs-agent     -f apps/vs-agent/Dockerfile .
+docker build --target vs-agent-chat -t vs-agent-chat -f apps/vs-agent/Dockerfile .
+docker build --target vs-agent-mrtd -t vs-agent-mrtd -f apps/vs-agent/Dockerfile .
 ```
 
-Then, a container can be created and deployed:
+#### Running a container
 
 ```bash
-docker run -e AGENT_PUBLIC_DID=... -e AGENT_ENDPOINT=... -e AGENT_PORT=yyy -e USE_CORS=xxx -p yyy:xxx vs-agent:[tag]
+docker run \
+  -e AGENT_PUBLIC_DID=did:web:myagent.example.com \
+  -e EVENTS_BASE_URL=http://my-backend:5000 \
+  -p 3000:3000 -p 3001:3001 \
+  vs-agent-chat
 ```
 
-where yyy is an publicly accesible port from the host machine.
+#### Using Docker Compose
+
+When building the image as part of a Compose setup, set `context` to the repository root and specify the `target`:
+
+```yaml
+services:
+  vs-agent:
+    build:
+      context: ../..                          # repository root
+      dockerfile: ./apps/vs-agent/Dockerfile
+      target: vs-agent-chat                   # choose the appropriate target
+    environment:
+      - AGENT_PUBLIC_DID=did:web:myagent.example.com
+      - EVENTS_BASE_URL=http://my-backend:5000
+    ports:
+      - 3000:3000
+      - 3001:3001
+    volumes:
+      - ./afj:/root/.afj
+```
 
 ## API
 

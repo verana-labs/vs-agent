@@ -1,8 +1,9 @@
 services:
   vs-agent:
-    build: 
+    build:
       context: ../..
       dockerfile: ./apps/vs-agent/Dockerfile
+      target: vs-agent-mrtd
     image: vs-agent
     container_name: chatbot-vs-agent
     restart: always

@@ -30,6 +30,8 @@ image:
 # This section defines the configuration for the VS Agent chart that is used by the chatbot application
 vs-agent-chart:
   enabled: false # Indicates whether the VS Agent chart is enabled
+  image:
+    repository: veranalabs/vs-agent-mrtd
   name: chatbot # Name of the VS Agent chart
   didcommLabel: Chatbot Agent # Chatbot name to display on the invitation QR code
   eventsBaseUrl: http://chatbot-backend:5000 # Base URL for the chatbot backend service

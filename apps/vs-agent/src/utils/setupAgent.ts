@@ -49,9 +49,14 @@ export const setupAgent = async ({
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
+  const optImport = (name: string): Promise<any> => import(name).catch(() => null)
   const [chatSetup, mrtdSetup] = await Promise.all([
-    ENABLED_PLUGINS.includes('chat') ? import('@verana-labs/vs-agent-plugin-chat').catch(() => null) : null,
-    ENABLED_PLUGINS.includes('mrtd') ? import('@verana-labs/vs-agent-plugin-mrtd').catch(() => null) : null,
+    ENABLED_PLUGINS.includes('chat')
+      ? optImport('@verana-labs/vs-agent-plugin-chat').catch(() => null)
+      : null,
+    ENABLED_PLUGINS.includes('mrtd')
+      ? optImport('@verana-labs/vs-agent-plugin-mrtd').catch(() => null)
+      : null,
   ])
 
   const agent = createVsAgent({
