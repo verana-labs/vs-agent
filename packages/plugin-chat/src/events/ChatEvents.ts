@@ -9,11 +9,6 @@ import {
   CallRejectMessage,
 } from '@2060.io/credo-ts-didcomm-calls'
 import {
-  DidCommConnectionEventTypes,
-  DidCommConnectionStateChangedEvent,
-  DidCommDidExchangeState,
-} from '@credo-ts/didcomm'
-import {
   DidCommMediaSharingEventTypes,
   DidCommMediaSharingRole,
   DidCommMediaSharingState,
@@ -30,7 +25,14 @@ import {
   DidCommUserProfileRequestedEvent,
 } from '@2060.io/credo-ts-didcomm-user-profile'
 import { MenuRequestMessage, PerformMessage } from '@credo-ts/action-menu'
-import { DidCommBasicMessage, DidCommEventTypes, DidCommMessageProcessedEvent } from '@credo-ts/didcomm'
+import {
+  DidCommConnectionEventTypes,
+  DidCommConnectionStateChangedEvent,
+  DidCommDidExchangeState,
+  DidCommBasicMessage,
+  DidCommEventTypes,
+  DidCommMessageProcessedEvent,
+} from '@credo-ts/didcomm'
 import { AnswerMessage, QuestionAnswerService } from '@credo-ts/question-answer'
 import {
   CallAcceptRequestMessage,

@@ -107,7 +107,7 @@ These are variables that are updated only on specific use cases.
 | MASTER_LIST_CSCA_LOCATION              | **Enables the eMRTD verification module**. Location (URL or absolute path) of the CSCA Master List in **LDIF** format When set, VS Agent loads trust anchors at startup and activates ePassport verification capabilities. | none                     |
 | AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP   | Toggle automatic storage migration on startup. If true, the agent runs migrations and attempts to make a backup of the wallet on startup                                                                                   | false                    |
 | AGENT_BACKUP_BEFORE_STORAGE_UPDATE     | Toggle backup before storage update. If true, the agent creates a backup of the wallet using Askar's export before performing storage migrations                                                                           | false                    |
-| VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. See [Plugin system](#plugin-system) for available values.                                                                                                             | `messaging,chat`         |
+| VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. Set by the Docker image in production, only override in development. See [Plugin system](#plugin-system) for available values.                                       | `messaging,chat`         |
 
 > **Note about Key derivation method**: By default, we use the strongest ARGON2I_MOD, but since this is the slowest one as well, depending on the security infrastructure you have, you might want to not derive the key at all (use RAW). However, in versions of VS Agent we are going to deprecate this setting, so we recommend to keep the default setting to make migration process easier.
 
@@ -173,7 +173,7 @@ The **eMRTD verification module** allows VS Agent to verify the authenticity and
 
 #### Enabling the module
 
-Set the environment variable pointing to the Master List file:
+Use the `vs-agent-mrtd` Docker image (it bundles `@verana-labs/vs-agent-plugin-mrtd`) and set the environment variable pointing to the Master List file:
 
 ```bash
 # .env example
@@ -191,7 +191,7 @@ VS Agent uses an opt-in plugin architecture. Each plugin is an independent packa
 | ----------- | ------------------------------------ | --------------------------------------------------------------------------------------------- |
 | `messaging` | _(built-in)_                         | Base credential and proof handlers. Always loaded — cannot be disabled.                       |
 | `chat`      | `@verana-labs/vs-agent-plugin-chat`  | Chat protocols: text messages, media, reactions, receipts, calls, action menus, user profile. |
-| `mrtd`      | `@verana-labs/vs-agent-plugin-mrtd`  | eMRTD / ePassport verification. Automatically added when `MASTER_LIST_CSCA_LOCATION` is set.  |
+| `mrtd`      | `@verana-labs/vs-agent-plugin-mrtd`  | eMRTD / ePassport verification. Requires the `vs-agent-mrtd` Docker image.                    |
 
 ### Selecting plugins
 
@@ -208,7 +208,9 @@ VS_AGENT_PLUGINS=messaging
 VS_AGENT_PLUGINS=messaging,chat,mrtd
 ```
 
-> **Note:** `messaging` is always required and will be prepended automatically if omitted. `mrtd` is added automatically when `MASTER_LIST_CSCA_LOCATION` is set, regardless of this list.
+> **Note:** `messaging` is always required and will be prepended automatically if omitted.
+>
+> In production, `VS_AGENT_PLUGINS` is pre-configured by the Docker image, override it only in development environments. Using a value that references a plugin not bundled in the current image will result in a startup warning and the plugin being skipped.
 
 ### Optional dependencies
 

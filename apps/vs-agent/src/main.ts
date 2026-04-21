@@ -147,6 +147,17 @@ const run = async () => {
     ENABLED_PLUGINS.includes('mrtd') ? optImport('@verana-labs/vs-agent-plugin-mrtd') : null,
   ])
 
+  if (
+    (ENABLED_PLUGINS.includes('chat') && !chatModule) ||
+    (ENABLED_PLUGINS.includes('mrtd') && !mrtdModule)
+  ) {
+    serverLogger.warn('Some enabled plugins could not be loaded. Check installation.')
+  }
+  if (MASTER_LIST_CSCA_LOCATION && !mrtdModule)
+    serverLogger.warn(
+      'MASTER_LIST_CSCA_LOCATION is set but the MRTD plugin could not be loaded, eMRTD verification is disabled. Use the vs-agent-mrtd Docker image to enable it.',
+    )
+
   // Build the list of active NestJS plugins
   const nestPlugins: VsAgentNestPlugin[] = [
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
