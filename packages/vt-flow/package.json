@@ -1,5 +1,5 @@
 {
-  "name": "@verana-labs/vs-agent-plugin-vt-flow",
+  "name": "@verana-labs/credo-ts-didcomm-vt-flow",
   "main": "build/index",
   "types": "build/index",
   "exports": {
@@ -12,7 +12,8 @@
   "version": "1.10.1",
   "repository": {
     "type": "git",
-    "url": "https://github.com/verana-labs/vs-agent"
+    "url": "https://github.com/verana-labs/vs-agent",
+    "directory": "packages/vt-flow"
   },
   "files": [
     "build"
@@ -21,11 +22,16 @@
     "access": "public"
   },
   "license": "Apache-2.0",
-  "description": "Verifiable Trust Flow (vt-flow) DIDComm superprotocol plugin for VS Agent",
+  "description": "Credo-TS DIDComm extension module implementing the Verifiable Trust Flow (vt-flow) superprotocol",
   "scripts": {
     "build": "pnpm run clean && pnpm run compile",
     "clean": "rimraf -rf ./build",
     "compile": "tsc -p tsconfig.build.json",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint \"{src,tests}/**/*.ts\" --fix",
+    "check-format": "prettier -c \"{src,tests}/**/*.ts\"",
+    "format": "prettier \"{src,tests}/**/*.ts\" --write",
+    "validate": "pnpm lint && pnpm check-types && pnpm check-format",
     "prepublishOnly": "pnpm run build",
     "version": "pnpm version --allow-same-version",
     "test": "vitest"
@@ -33,13 +39,11 @@
   "dependencies": {
     "@credo-ts/core": "0.7.0-alpha-20260410113934",
     "@credo-ts/didcomm": "0.7.0-alpha-20260410113934",
-    "@nestjs/common": "^10.0.0",
-    "@verana-labs/vs-agent-model": "workspace:*",
-    "@verana-labs/vs-agent-sdk": "workspace:*",
     "class-transformer": "0.5.1",
     "class-validator": "0.14.1"
   },
   "peerDependencies": {
-    "@credo-ts/core": "0.7.0-alpha-20260410113934"
+    "@credo-ts/core": "0.7.0-alpha-20260410113934",
+    "@credo-ts/didcomm": "0.7.0-alpha-20260410113934"
   }
 }

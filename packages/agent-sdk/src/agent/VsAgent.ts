@@ -25,6 +25,7 @@ import {
 import {
   DidCommCredentialsModuleConfigOptions,
   DidCommCredentialV2Protocol,
+  DidCommJsonLdCredentialFormatService,
   DidCommModule,
   DidCommModuleConfigOptions,
   DidCommProofsModuleConfigOptions,
@@ -37,7 +38,11 @@ type VsAgentDidCommModule = DidCommModule<
     credentials: DidCommCredentialsModuleConfigOptions<
       [
         DidCommCredentialV2Protocol<
-          [LegacyIndyDidCommCredentialFormatService, AnonCredsDidCommCredentialFormatService]
+          [
+            LegacyIndyDidCommCredentialFormatService,
+            AnonCredsDidCommCredentialFormatService,
+            DidCommJsonLdCredentialFormatService,
+          ]
         >,
       ]
     >
@@ -264,11 +269,15 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       MultibaseEncoding.BASE58_BTC,
     )
     const [record] = await didRepository.findByQuery(this.agentContext, { did: publicDid })
-    record.keys?.push({
-      kmsKeyId: key.keyId,
-      didDocumentRelativeKeyId: `#${publicKeyMultibase}`,
-    })
-    await didRepository.update(this.agentContext, record)
+    // Fresh did:web bootstrap: `record` is undefined here; the later
+    // `dids.create({...didDocument})` call persists the keys.
+    if (record) {
+      record.keys?.push({
+        kmsKeyId: key.keyId,
+        didDocumentRelativeKeyId: `#${publicKeyMultibase}`,
+      })
+      await didRepository.update(this.agentContext, record)
+    }
     const verificationMethodId = `${publicDid}#${publicKeyMultibase}`
     const publicKeyX25519 = convertPublicKeyToX25519(publicKeyBytes)
     const x25519Key = Kms.PublicJwk.fromPublicKey({ kty: 'OKP', crv: 'X25519', publicKey: publicKeyX25519 })

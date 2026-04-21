@@ -164,6 +164,9 @@ importers:
         specifier: ^17.3.1
         version: 17.7.2
     optionalDependencies:
+      '@verana-labs/credo-ts-didcomm-vt-flow':
+        specifier: workspace:*
+        version: link:../../packages/vt-flow
       '@verana-labs/vs-agent-plugin-chat':
         specifier: workspace:*
         version: link:../../packages/plugin-chat
@@ -681,7 +684,7 @@ importers:
         specifier: ^4.2.0
         version: 4.2.1
 
-  packages/plugin-vt-flow:
+  packages/vt-flow:
     dependencies:
       '@credo-ts/core':
         specifier: 0.7.0-alpha-20260410113934
@@ -689,15 +692,6 @@ importers:
       '@credo-ts/didcomm':
         specifier: 0.7.0-alpha-20260410113934
         version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
-      '@nestjs/common':
-        specifier: ^10.0.0
-        version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      '@verana-labs/vs-agent-model':
-        specifier: workspace:*
-        version: link:../model
-      '@verana-labs/vs-agent-sdk':
-        specifier: workspace:*
-        version: link:../agent-sdk
       class-transformer:
         specifier: 0.5.1
         version: 0.5.1

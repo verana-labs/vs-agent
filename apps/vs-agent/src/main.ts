@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 
-import { parseDid, utils } from '@credo-ts/core'
+import { BaseLogger, parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import {
@@ -46,8 +46,10 @@ import {
   MASTER_LIST_CSCA_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
 } from './config'
+import { TrustService } from './controllers/admin/verifiable/TrustService'
 import { connectionEvents } from './events/ConnectionEvents'
-import { MessagingPlugin } from './plugins'
+import { vtFlowOnboardingEvents } from './events/VtFlowOnboardingEvents'
+import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { commonAppConfig, type ServerConfig, setupAgent, setupSelfTr, TsLogger } from './utils'
 
@@ -57,6 +59,17 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins))
   commonAppConfig(adminApp, cors)
   await adminApp.listen(port)
+
+  // Subscribe to vt-flow COMPLETED events after the admin app is up (we
+  // need Nest DI to resolve TrustService). Skipped when the plugin is off.
+  try {
+    const trustService = adminApp.get(TrustService, { strict: false })
+    vtFlowOnboardingEvents(agent, { logger: agent.config.logger as unknown as BaseLogger }, trustService)
+  } catch (error) {
+    agent.config.logger.debug(
+      `[vt-flow] TrustService not available; skipping auto-link wiring: ${(error as Error).message}`,
+    )
+  }
 
   // PublicModule-specific config
   const publicApp = await NestFactory.create(PublicModule.register(agent, publicApiBaseUrl))
@@ -163,6 +176,7 @@ const run = async () => {
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
     ...(chatModule ? [chatModule.ChatPlugin] : []),
     ...(mrtdModule ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })] : []),
+    ...(ENABLED_PLUGINS.includes('vt-flow') ? [VtFlowNestPlugin] : []),
   ]
 
   const { agent } = await setupAgent({

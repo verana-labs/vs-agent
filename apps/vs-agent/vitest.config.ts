@@ -13,6 +13,9 @@ export default mergeConfig(
       include: ['tests/**/*.test.ts'],
       reporters: ['verbose'],
       outputFile: './test-results.json',
+      // askar-nodejs native bindings race when multiple test files
+      // instantiate Credo agents concurrently; serialise test files.
+      fileParallelism: false,
     },
   }),
 )
