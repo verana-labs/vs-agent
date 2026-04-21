@@ -29,13 +29,6 @@ export { FullTailsFileService, tailsIndex, baseFilePath } from './credentials/Fu
 
 // Utils
 export { createInvitation, getWebDid, getRecordId } from './utils/agent'
-export {
-  parseDataUrl,
-  parsePictureData,
-  createDataUrl,
-  didcommReceiptFromVsAgentReceipt,
-  UriValidator,
-} from './utils/parsers'
 export { getEcsSchemas } from './utils/data'
 export { webhookListener } from './utils/webhook'
 export type { WebhookData } from './utils/webhook'
