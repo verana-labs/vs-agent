@@ -6,6 +6,7 @@ import {
   AnonCredsCredentialDefinitionRepository,
   AnonCredsKeyCorrectnessProofRecord,
   AnonCredsKeyCorrectnessProofRepository,
+  AnonCredsRevocationRegistryDefinitionPrivateRepository,
   AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchema,
   AnonCredsSchemaRecord,
@@ -216,6 +217,12 @@ export class CredentialTypesController {
     const keyCorrectnessProofRepository = agent.dependencyManager.resolve(
       AnonCredsKeyCorrectnessProofRepository,
     )
+    const revocationDefinitionRepository = agent.dependencyManager.resolve(
+      AnonCredsRevocationRegistryDefinitionRepository,
+    )
+    const revocationDefinitionPrivateRepository = agent.dependencyManager.resolve(
+      AnonCredsRevocationRegistryDefinitionPrivateRepository,
+    )
 
     const credentialDefinitionRecord = await credentialDefinitionRepository.findByCredentialDefinitionId(
       agent.context,
@@ -236,6 +243,41 @@ export class CredentialTypesController {
       credentialTypeId,
     )
     await keyCorrectnessProofRepository.delete(agent.context, keyCorrectnessProofRecord)
+
+    // Delete revocation registries associated with this credential definition, along with
+    // their attested resource GenericRecords (revocation definition and linked status lists)
+    const revocationDefs = await revocationDefinitionRepository.findAllByCredentialDefinitionId(
+      agent.context,
+      credentialTypeId,
+    )
+    for (const revDef of revocationDefs) {
+      const [revRegAttested] = await agent.genericRecords.findAllByQuery({
+        type: 'AttestedResource',
+        attestedResourceId: revDef.revocationRegistryDefinitionId,
+      })
+      if (revRegAttested) {
+        const links = (revRegAttested.content as { links?: Array<{ id: string; type: string }> })?.links
+        if (Array.isArray(links)) {
+          for (const link of links) {
+            if (link?.type === 'anonCredsStatusList' && link.id) {
+              const [statusListRecord] = await agent.genericRecords.findAllByQuery({
+                type: 'AttestedResource',
+                attestedResourceId: link.id,
+              })
+              if (statusListRecord) await agent.genericRecords.delete(statusListRecord)
+            }
+          }
+        }
+        await agent.genericRecords.delete(revRegAttested)
+      }
+
+      const revDefPrivate = await revocationDefinitionPrivateRepository.findByRevocationRegistryDefinitionId(
+        agent.context,
+        revDef.revocationRegistryDefinitionId,
+      )
+      if (revDefPrivate) await revocationDefinitionPrivateRepository.delete(agent.context, revDefPrivate)
+      await revocationDefinitionRepository.delete(agent.context, revDef)
+    }
 
     // Delete public data
     await credentialDefinitionRepository.delete(agent.context, credentialDefinitionRecord)
