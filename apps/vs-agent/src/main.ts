@@ -106,8 +106,6 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   }
 }
 
-export let veranaChain: VeranaChainService | undefined = undefined
-
 const run = async () => {
   const serverLogger = new TsLogger(ADMIN_LOG_LEVEL, 'Server')
 
@@ -224,7 +222,7 @@ const run = async () => {
 
   // Connect to Verana blockchain for on-chain transactions
   if (VERANA_RPC && AGENT_VERANA_MNEMONIC) {
-    veranaChain = new VeranaChainService({
+    const veranaChain = new VeranaChainService({
       rpcUrl: VERANA_RPC,
       chainId: VERANA_CHAIN_ID,
       mnemonic: AGENT_VERANA_MNEMONIC,
