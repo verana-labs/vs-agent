@@ -51,7 +51,9 @@ export interface CredentialRevocationRequest {
 }
 
 export interface CredentialRevocationResponse {
-  status: number
+  format: 'jsonld' | 'anoncreds'
+  anoncredsRevocationRegistryDefinitionId?: string
+  anoncredsRevocationRegistryIndex?: number
 }
 
 export interface ImportCredentialTypeOptions {
