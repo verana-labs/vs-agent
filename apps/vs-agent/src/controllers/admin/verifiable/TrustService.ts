@@ -371,9 +371,7 @@ export class TrustService {
             throw new Error(`Failed to update revocation status list`)
           }
           return {
-            format,
-            anoncredsRevocationRegistryDefinitionId,
-            anoncredsRevocationRegistryIndex,
+            status: 200,
           }
         default:
           throw new HttpException(`Invalid credential type: ${format}`, HttpStatus.BAD_REQUEST)
