@@ -78,22 +78,22 @@ importers:
     dependencies:
       '@credo-ts/anoncreds':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
+        version: 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
       '@credo-ts/askar':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.7.2)
+        version: 0.7.0-alpha-20260410113934(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.8.3)
       '@credo-ts/core':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
       '@credo-ts/didcomm':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
       '@credo-ts/node':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
       '@credo-ts/webvh':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
+        version: 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
       '@hyperledger/anoncreds-nodejs':
         specifier: 0.4.0
         version: 0.4.0
@@ -138,7 +138,7 @@ importers:
         version: 4.16.5
       credo-ts-didweb-anoncreds:
         specifier: 0.0.2-alpha.5
-        version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))
+        version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))
       didwebvh-ts:
         specifier: ^2.5.6
         version: 2.5.6
@@ -176,7 +176,7 @@ importers:
         version: 10.4.9
       '@nestjs/schematics':
         specifier: ^10.0.0
-        version: 10.2.3(chokidar@3.6.0)(typescript@5.7.2)
+        version: 10.2.3(chokidar@3.6.0)(typescript@5.8.3)
       '@nestjs/testing':
         specifier: ^10.0.0
         version: 10.4.18(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@10.4.18)(@nestjs/platform-express@10.4.18)
@@ -203,7 +203,7 @@ importers:
         version: 7.8.2
       ts-node-dev:
         specifier: ^2.0.0
-        version: 2.0.0(@types/node@20.11.19)(typescript@5.7.2)
+        version: 2.0.0(@types/node@20.11.19)(typescript@5.8.3)
 
   apps/vs-agent-ui:
     dependencies:
@@ -482,8 +482,8 @@ importers:
         specifier: ^0.6.0
         version: 0.6.0
       '@verana-labs/verana-types':
-        specifier: 0.9.5
-        version: 0.9.5(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)
+        specifier: 0.10.1-dev.10
+        version: 0.10.1-dev.10(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)
       '@verana-labs/vs-agent-model':
         specifier: workspace:*
         version: link:../model
@@ -564,13 +564,13 @@ importers:
     dependencies:
       '@2060.io/credo-ts-didcomm-mrtd':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))(typescript@5.8.3)
+        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))(typescript@5.7.2)
       '@credo-ts/core':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
       '@credo-ts/didcomm':
         specifier: 0.7.0-alpha-20260410113934
-        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+        version: 0.7.0-alpha-20260410113934(typescript@5.7.2)
       '@nestjs/common':
         specifier: ^10.0.0
         version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -582,7 +582,7 @@ importers:
         version: 10.4.18(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)
       '@nestjs/typeorm':
         specifier: ^10.0.2
-        version: 10.0.2(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3)))
+        version: 10.0.2(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.7.2)))
       '@verana-labs/vs-agent-client':
         specifier: workspace:*
         version: link:../client
@@ -600,17 +600,17 @@ importers:
         version: 7.8.2
       typeorm:
         specifier: ^0.3.20
-        version: 0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3))
+        version: 0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.7.2))
     devDependencies:
       '@2060.io/credo-ts-didcomm-receipts':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))
       '@nestjs/cli':
         specifier: ^10.0.0
         version: 10.4.9
       '@nestjs/schematics':
         specifier: ^10.0.0
-        version: 10.2.3(chokidar@3.6.0)(typescript@5.8.3)
+        version: 10.2.3(chokidar@3.6.0)(typescript@5.7.2)
       '@nestjs/swagger':
         specifier: ^8.0.7
         version: 8.1.1(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)
@@ -625,7 +625,7 @@ importers:
         version: 0.5.21
       ts-loader:
         specifier: ^9.4.3
-        version: 9.5.2(typescript@5.8.3)(webpack@5.97.1)
+        version: 9.5.2(typescript@5.7.2)(webpack@5.97.1)
 
   packages/plugin-chat:
     dependencies:
@@ -2423,8 +2423,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@verana-labs/verana-types@0.9.5':
-    resolution: {integrity: sha512-PkGOJqeq5eHs+kcD18C5vyfVpkMXMPHWNxcdM7zcRzvM6VH8fSr0ybFCYTmynnf8IF+e4UplTOi0SveWfu68xQ==}
+  '@verana-labs/verana-types@0.10.1-dev.10':
+    resolution: {integrity: sha512-L5+IPQxgwVhQu1RkTPqRE+XKQ6Bnb9WrridpMyAuQ1CP43B4/MYH6n+0X+WVJO9h1JG1FZ9MNyE7Sz3JoV6GVA==}
     peerDependencies:
       '@cosmjs/proto-signing': ^0.32.3
       '@cosmjs/stargate': ^0.32.3
@@ -2558,8 +2558,8 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  acorn@8.15.0:
-    resolution: {integrity: sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg==}
+  acorn@8.16.0:
+    resolution: {integrity: sha512-UVJyE9MttOsBQIDKw1skb9nAwQuR5wuGD3+82K6JgJlm/Y+KI92oNsMNGZCYdDsVtRHSak0pcV5Dno5+4jh9sw==}
     engines: {node: '>=0.4.0'}
     hasBin: true
 
@@ -4648,8 +4648,8 @@ packages:
   process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
 
-  protobufjs@6.11.4:
-    resolution: {integrity: sha512-5kQWPaJHi1WoCpjTGszzQ32PG2F4+wRY6BmAT4Vfw56Q2FZ4YZzK20xUYQH4YkfehY1e6QSICrJquM6xXZNcrw==}
+  protobufjs@6.11.5:
+    resolution: {integrity: sha512-OKjVH3hDoXdIZ/s5MLv8O2X0s+wOxGfV7ar6WFSKGaSAxi/6gYn3px5POS4vi+mc/0zCOdL7Jkwrj0oT1Yst2A==}
     hasBin: true
 
   protobufjs@7.2.6:
@@ -5765,6 +5765,26 @@ snapshots:
       tsyringe: 4.8.0
       uuid: 9.0.1
 
+  '@2060.io/credo-ts-didcomm-mrtd@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))(typescript@5.7.2)':
+    dependencies:
+      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
+      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
+      '@li0ard/tsemrtd': 0.3.4(typescript@5.7.2)
+      '@peculiar/asn1-x509': 2.6.1
+      '@peculiar/x509': 1.14.3
+      '@types/pkijs': 3.0.1
+      asn1js: 3.0.7
+      class-transformer: 0.5.1
+      class-validator: 0.14.1
+      esbuild: 0.24.2
+      mrz: 4.2.1
+      pkijs: 3.3.3
+      reflect-metadata: 0.1.14
+      rxjs: 7.8.2
+      tsyringe: 4.8.0
+    transitivePeerDependencies:
+      - typescript
+
   '@2060.io/credo-ts-didcomm-mrtd@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))(typescript@5.8.3)':
     dependencies:
       '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.8.3)
@@ -5793,6 +5813,17 @@ snapshots:
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
       rxjs: 7.8.2
+      uuid: 9.0.1
+
+  '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.7.2))':
+    dependencies:
+      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
+      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
+      class-transformer: 0.5.1
+      class-validator: 0.14.1
+      reflect-metadata: 0.1.14
+      rxjs: 7.8.2
+      tsyringe: 4.8.0
       uuid: 9.0.1
 
   '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3))(@credo-ts/didcomm@0.7.0-alpha-20260410113934(typescript@5.8.3))':
@@ -6028,7 +6059,7 @@ snapshots:
   '@confio/ics23@0.6.8':
     dependencies:
       '@noble/hashes': 1.8.0
-      protobufjs: 6.11.4
+      protobufjs: 6.11.5
 
   '@cosmjs/amino@0.32.4':
     dependencies:
@@ -6133,21 +6164,6 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)':
-    dependencies:
-      '@astronautlabs/jsonpath': 1.1.2
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@hyperledger/anoncreds-shared': 0.4.0
-      '@sphereon/pex-models': 2.3.2
-      class-transformer: 0.5.1
-      class-validator: 0.14.3
-      reflect-metadata: 0.2.2
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-      - typescript
-
   '@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)':
     dependencies:
       '@astronautlabs/jsonpath': 1.1.2
@@ -6158,19 +6174,6 @@ snapshots:
       class-transformer: 0.5.1
       class-validator: 0.14.3
       reflect-metadata: 0.2.2
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-      - typescript
-
-  '@credo-ts/askar@0.7.0-alpha-20260410113934(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.7.2)':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@openwallet-foundation/askar-shared': 0.6.0
-      class-transformer: 0.5.1
-      class-validator: 0.14.3
-      rxjs: 7.8.2
-      tsyringe: 4.8.0
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -6315,21 +6318,6 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/node@0.7.0-alpha-20260410113934(typescript@5.7.2)':
-    dependencies:
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      '@types/express': 5.0.6
-      express: 5.2.1
-      rxjs: 7.8.2
-      ws: 8.19.0
-    transitivePeerDependencies:
-      - bufferutil
-      - encoding
-      - supports-color
-      - typescript
-      - utf-8-validate
-
   '@credo-ts/node@0.7.0-alpha-20260410113934(typescript@5.8.3)':
     dependencies:
       '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.8.3)
@@ -6353,21 +6341,6 @@ snapshots:
       class-validator: 0.14.3
       rxjs: 7.8.2
     transitivePeerDependencies:
-      - encoding
-      - supports-color
-      - typescript
-
-  '@credo-ts/webvh@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)':
-    dependencies:
-      '@credo-ts/anoncreds': 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      class-transformer: 0.5.1
-      class-validator: 0.14.3
-      didwebvh-ts: 2.7.2
-      json-canonicalize: 2.0.0
-      tsyringe: 4.8.0
-    transitivePeerDependencies:
-      - '@hyperledger/anoncreds-shared'
       - encoding
       - supports-color
       - typescript
@@ -6763,9 +6736,21 @@ snapshots:
     dependencies:
       '@js-joda/core': 5.6.3
 
+  '@li0ard/tinytlv@0.1.1(typescript@5.7.2)':
+    dependencies:
+      typescript: 5.7.2
+
   '@li0ard/tinytlv@0.1.1(typescript@5.8.3)':
     dependencies:
       typescript: 5.8.3
+
+  '@li0ard/tsemrtd@0.3.4(typescript@5.7.2)':
+    dependencies:
+      '@li0ard/tinytlv': 0.1.1(typescript@5.7.2)
+      '@peculiar/asn1-cms': 2.6.0
+      '@peculiar/asn1-schema': 2.6.0
+      '@peculiar/asn1-x509': 2.6.1
+      typescript: 5.7.2
 
   '@li0ard/tsemrtd@0.3.4(typescript@5.8.3)':
     dependencies:
@@ -7114,13 +7099,13 @@ snapshots:
       typeorm: 0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3))
       uuid: 9.0.1
 
-  '@nestjs/typeorm@10.0.2(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3)))':
+  '@nestjs/typeorm@10.0.2(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.7.2)))':
     dependencies:
       '@nestjs/common': 10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 10.4.18(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@10.4.18)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       reflect-metadata: 0.2.2
       rxjs: 7.8.2
-      typeorm: 0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3))
+      typeorm: 0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.7.2))
       uuid: 9.0.1
 
   '@noble/curves@2.0.1':
@@ -7918,7 +7903,7 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.7.8':
     optional: true
 
-  '@verana-labs/verana-types@0.9.5(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)':
+  '@verana-labs/verana-types@0.10.1-dev.10(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)':
     dependencies:
       '@cosmjs/proto-signing': 0.32.4
       '@cosmjs/stargate': 0.32.3
@@ -8103,7 +8088,7 @@ snapshots:
 
   acorn@8.14.1: {}
 
-  acorn@8.15.0:
+  acorn@8.16.0:
     optional: true
 
   ajv-formats@2.1.1(ajv@8.12.0):
@@ -8570,13 +8555,6 @@ snapshots:
   create-require@1.1.1: {}
 
   credentials-context@2.0.0: {}
-
-  credo-ts-didweb-anoncreds@0.0.2-alpha.5(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.7.2)):
-    dependencies:
-      '@credo-ts/anoncreds': 0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
-      '@credo-ts/core': 0.7.0-alpha-20260410113934(typescript@5.7.2)
-      canonicalize: 2.1.0
-      query-string: 9.3.1
 
   credo-ts-didweb-anoncreds@0.0.2-alpha.5(@credo-ts/anoncreds@0.7.0-alpha-20260410113934(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.0-alpha-20260410113934(typescript@5.8.3)):
     dependencies:
@@ -10403,7 +10381,7 @@ snapshots:
 
   process-nextick-args@2.0.1: {}
 
-  protobufjs@6.11.4:
+  protobufjs@6.11.5:
     dependencies:
       '@protobufjs/aspromise': 1.1.2
       '@protobufjs/base64': 1.1.2
@@ -11015,7 +10993,7 @@ snapshots:
   terser@5.43.1:
     dependencies:
       '@jridgewell/source-map': 0.3.11
-      acorn: 8.15.0
+      acorn: 8.16.0
       commander: 2.20.3
       source-map-support: 0.5.21
     optional: true
@@ -11067,6 +11045,16 @@ snapshots:
     dependencies:
       typescript: 5.8.3
 
+  ts-loader@9.5.2(typescript@5.7.2)(webpack@5.97.1):
+    dependencies:
+      chalk: 4.1.2
+      enhanced-resolve: 5.18.1
+      micromatch: 4.0.8
+      semver: 7.7.2
+      source-map: 0.7.4
+      typescript: 5.7.2
+      webpack: 5.97.1
+
   ts-loader@9.5.2(typescript@5.8.3)(webpack@5.97.1):
     dependencies:
       chalk: 4.1.2
@@ -11076,24 +11064,6 @@ snapshots:
       source-map: 0.7.4
       typescript: 5.8.3
       webpack: 5.97.1
-
-  ts-node-dev@2.0.0(@types/node@20.11.19)(typescript@5.7.2):
-    dependencies:
-      chokidar: 3.6.0
-      dynamic-dedupe: 0.3.0
-      minimist: 1.2.8
-      mkdirp: 1.0.4
-      resolve: 1.22.10
-      rimraf: 2.7.1
-      source-map-support: 0.5.21
-      tree-kill: 1.2.2
-      ts-node: 10.9.2(@types/node@20.11.19)(typescript@5.7.2)
-      tsconfig: 7.0.0
-      typescript: 5.7.2
-    transitivePeerDependencies:
-      - '@swc/core'
-      - '@swc/wasm'
-      - '@types/node'
 
   ts-node-dev@2.0.0(@types/node@20.11.19)(typescript@5.8.3):
     dependencies:
@@ -11130,6 +11100,7 @@ snapshots:
       typescript: 5.7.2
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
+    optional: true
 
   ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3):
     dependencies:
@@ -11243,6 +11214,31 @@ snapshots:
       reflect.getprototypeof: 1.0.10
 
   typedarray@0.0.6: {}
+
+  typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.7.2)):
+    dependencies:
+      '@sqltools/formatter': 1.2.5
+      ansis: 3.17.0
+      app-root-path: 3.1.0
+      buffer: 6.0.3
+      dayjs: 1.11.13
+      debug: 4.4.1
+      dedent: 1.6.0
+      dotenv: 16.5.0
+      glob: 10.4.5
+      reflect-metadata: 0.2.2
+      sha.js: 2.4.11
+      sql-highlight: 6.0.0
+      tslib: 2.8.1
+      uuid: 11.1.0
+      yargs: 17.7.2
+    optionalDependencies:
+      ioredis: 5.6.1
+      pg: 8.16.0
+      ts-node: 10.9.2(@types/node@20.11.19)(typescript@5.7.2)
+    transitivePeerDependencies:
+      - babel-plugin-macros
+      - supports-color
 
   typeorm@0.3.24(ioredis@5.6.1)(pg@8.16.0)(reflect-metadata@0.2.2)(ts-node@10.9.2(@types/node@20.11.19)(typescript@5.8.3)):
     dependencies:
