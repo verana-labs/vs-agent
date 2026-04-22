@@ -164,9 +164,25 @@ export class CredentialTypesService {
         : undefined
       const schemaAttributes = options.attributes ?? parsedJsc?.attrNames
       const schemaName = options.name ?? parsedJsc?.title
+      const schemaVersion = options.version ?? '1.0'
 
       if (!schemaAttributes || !schemaName) {
         throw new Error('Schema must include both name and attributes (provided or derived from JSON Schema)')
+      }
+
+      const schemaRepository = agent.dependencyManager.resolve(AnonCredsSchemaRepository)
+      const equivalentSchemas = await schemaRepository.findByQuery(agent.context, {
+        issuerId: agent.did,
+        schemaName,
+        schemaVersion,
+      })
+      if (equivalentSchemas.length > 0) {
+        const [existing] = equivalentSchemas
+        if (options.relatedJsonSchemaCredentialId && !existing.getTag('relatedJsonSchemaCredentialId')) {
+          existing.setTag('relatedJsonSchemaCredentialId', options.relatedJsonSchemaCredentialId)
+          await schemaRepository.update(agent.context, existing)
+        }
+        return { schemaId: existing.schemaId, schema: existing.schema }
       }
 
       const schemaRegistrationOptions = {
@@ -194,7 +210,6 @@ export class CredentialTypesService {
       if (!schemaId || !schema) {
         throw new Error('Schema for the credential definition could not be created')
       }
-      const schemaRepository = agent.dependencyManager.resolve(AnonCredsSchemaRepository)
       const schemaRecord = (await schemaRepository.findBySchemaId(agent.context, schemaId)) ?? undefined
       if (!schemaRecord)
         throw new Error(`Schema record not found after registration for schemaId: ${schemaId}`)
@@ -235,6 +250,17 @@ export class CredentialTypesService {
       extraMetadata: {
         relatedJsonSchemaCredentialId,
       },
+    }
+
+    // The registry resolves the schema via findBySchemaId, which throws if more than
+    // one AnonCredsSchemaRecord matches. Collapse any duplicates before registering.
+    const schemaRepository = agent.dependencyManager.resolve(AnonCredsSchemaRepository)
+    const duplicateSchemas = await schemaRepository.findByQuery(agent.context, { schemaId })
+    if (duplicateSchemas.length > 1) {
+      this.logger.warn(
+        `Found ${duplicateSchemas.length} AnonCredsSchemaRecord entries for schemaId ${schemaId}; removing ${duplicateSchemas.length - 1} duplicate(s)`,
+      )
+      for (const extra of duplicateSchemas.slice(1)) await schemaRepository.delete(agent.context, extra)
     }
 
     const { credentialDefinitionState, registrationMetadata: credDefMetadata } =

@@ -201,7 +201,7 @@ export class CredentialTypesController {
   @ApiQuery({
     name: 'credentialTypeId',
     description: 'Identifier of the credential definition to delete',
-    example: 'VcDef:issuer:1234:TAG:1',
+    example: 'did:webvh:Qm...:issuer.example.com/resources/zQm...',
   })
   @ApiOkResponse({ description: 'Credential type deleted successfully (204 No Content)' })
   @ApiBadRequestResponse({ description: 'Invalid credentialTypeId' })
@@ -243,6 +243,11 @@ export class CredentialTypesController {
       credentialTypeId,
     )
     await keyCorrectnessProofRepository.delete(agent.context, keyCorrectnessProofRecord)
+    const [credDefAttested] = await agent.genericRecords.findAllByQuery({
+      type: 'AttestedResource',
+      attestedResourceId: credentialTypeId,
+    })
+    if (credDefAttested) await agent.genericRecords.delete(credDefAttested)
 
     // Delete revocation registries associated with this credential definition, along with
     // their attested resource GenericRecords (revocation definition and linked status lists)
