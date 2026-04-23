@@ -14,16 +14,13 @@ import Long from 'long'
 
 import {
   CreateOrUpdatePermissionSessionParams,
-  CsQueryClient,
   PermQueryClient,
   SetPermissionVPToValidatedParams,
   StartPermissionVPParams,
-  TrQueryClient,
   VERANA_BECH32_PREFIX,
   VeranaChainConfig,
 } from './types'
 
-const { QueryClientImpl: CsQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/cs/v1/query')
 const {
   QueryClientImpl: PermQueryClientImpl,
 } = require('@verana-labs/verana-types/codec/verana/perm/v1/query')
@@ -34,15 +31,12 @@ const {
   MsgCancelPermissionVPLastRequest,
   MsgCreateOrUpdatePermissionSession,
 } = require('@verana-labs/verana-types/codec/verana/perm/v1/tx')
-const { QueryClientImpl: TrQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/tr/v1/query')
 
 export class VeranaChainService {
   private signingClient!: SigningStargateClient
   private operatorAddress!: string
 
-  private trQuery!: TrQueryClient
   private permQuery!: PermQueryClient
-  private csQuery!: CsQueryClient
 
   constructor(private readonly config: VeranaChainConfig) {}
 
@@ -77,9 +71,7 @@ export class VeranaChainService {
 
     const queryClient = new QueryClient(cometClient)
     const rpc = createProtobufRpcClient(queryClient)
-    this.trQuery = new TrQueryClientImpl(rpc) as TrQueryClient
     this.permQuery = new PermQueryClientImpl(rpc) as PermQueryClient
-    this.csQuery = new CsQueryClientImpl(rpc) as CsQueryClient
   }
 
   // Query API (No signed)

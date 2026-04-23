@@ -169,6 +169,22 @@ const run = async () => {
     ...(mrtdModule ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })] : []),
   ]
 
+  // Connect to Verana blockchain for on-chain transactions
+  let veranaChain: VeranaChainService | undefined
+  if (VERANA_RPC && AGENT_VERANA_MNEMONIC) {
+    veranaChain = new VeranaChainService({
+      rpcUrl: VERANA_RPC,
+      chainId: VERANA_CHAIN_ID,
+      mnemonic: AGENT_VERANA_MNEMONIC,
+      logger: serverLogger,
+    })
+    await veranaChain.start()
+  } else {
+    serverLogger.warn(
+      'VERANA_RPC or AGENT_VERANA_MNEMONIC not set. Verana blockchain features will be disabled. Set these environment variables to enable on-chain capabilities.',
+    )
+  }
+
   const { agent } = await setupAgent({
     endpoints,
     port: AGENT_PORT,
@@ -186,6 +202,7 @@ const run = async () => {
     autoDiscloseUserProfile: USER_PROFILE_AUTODISCLOSE,
     masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
+    veranaChain,
   })
 
   const discoveryOptions = (() => {
@@ -218,22 +235,6 @@ const run = async () => {
   // Register plugin events after agent is initialized
   for (const plugin of nestPlugins) {
     plugin.registerEvents?.(agent, conf)
-  }
-
-  // Connect to Verana blockchain for on-chain transactions
-  if (VERANA_RPC && AGENT_VERANA_MNEMONIC) {
-    const veranaChain = new VeranaChainService({
-      rpcUrl: VERANA_RPC,
-      chainId: VERANA_CHAIN_ID,
-      mnemonic: AGENT_VERANA_MNEMONIC,
-      logger: serverLogger,
-    })
-    await veranaChain.start()
-    // TODO: pass veranaChain instance on demands.
-  } else {
-    serverLogger.warn(
-      'VERANA_RPC or AGENT_VERANA_MNEMONIC not set. Verana blockchain features will be disabled. Set these environment variables to enable on-chain capabilities.',
-    )
   }
 
   agent.config.logger.info(
