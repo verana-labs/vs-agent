@@ -113,6 +113,16 @@ These are variables that are updated only on specific use cases.
 
 > **Note about storage update and backup**: When migrating a wallet from SQLite to Postgres and restoring it in VS Agent with a new (sanitized) profile name, the agent may attempt to run a storage migration and create a backup of the Postgres wallet. Askar currently does not support exporting non‑SQLite wallets, so the default backup behaviour will cause a fatal error. To avoid this, set AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP=false and/or AGENT_BACKUP_BEFORE_STORAGE_UPDATE=false in your environment. This disables the automatic update and backup features and allows the agent to start successfully with the migrated wallet.
 
+### Verana network integration (work in progress)
+
+These variables enable on-chain features (permission management, trust registry notifications). If not set, the agent starts normally but blockchain functionality is disabled.
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `VERANA_RPC` | OPTIONAL | Verana blockchain RPC endpoint URL. |
+| `AGENT_VERANA_MNEMONIC` | OPTIONAL | BIP-39 mnemonic for the agent's Verana blockchain account. |
+| `VERANA_CHAIN_ID` | OPTIONAL | Chain ID (defaults to the network's chain ID if not set). |
+
 ### Agent feature discovery
 
 When connecting to other agents, VS-A tries to get information from them in order to know what capabilities they support and adapt the flow to it. For example, it can request for user's preferred language to send messages using their locale, or NFC reading capability, to ask users to tap NFC tags and read their content (or fall back to another method in case they don't support that).
