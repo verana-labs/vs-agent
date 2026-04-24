@@ -6,7 +6,6 @@ import {
   AnonCredsCredentialDefinitionRepository,
   AnonCredsKeyCorrectnessProofRecord,
   AnonCredsKeyCorrectnessProofRepository,
-  AnonCredsRevocationRegistryDefinitionPrivateRepository,
   AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchema,
   AnonCredsSchemaRecord,
@@ -191,6 +190,30 @@ export class CredentialTypesController {
   }
 
   /**
+   * Delete a revocation registry definition and its associated records
+   */
+  @Delete('/revocationRegistry')
+  @ApiOperation({ summary: 'Delete a revocation registry definition and its associated records' })
+  @ApiQuery({
+    name: 'revocationRegistryDefinitionId',
+    description: 'Identifier of the revocation registry definition to delete',
+    example: 'RevRegDef:issuer:1234:TAG:default',
+  })
+  @ApiOkResponse({ description: 'Revocation registry deleted successfully (204 No Content)' })
+  @ApiBadRequestResponse({ description: 'Invalid revocationRegistryDefinitionId' })
+  public async deleteRevocationRegistry(
+    @Query('revocationRegistryDefinitionId') revocationRegistryDefinitionId: string,
+  ): Promise<void> {
+    const agent = await this.agentService.getAgent()
+
+    const found = await this.service.deleteRevocationRegistry(agent, revocationRegistryDefinitionId)
+    if (!found)
+      throw new NotFoundException({
+        reason: `revocation registry with id "${revocationRegistryDefinitionId}" not found.`,
+      })
+  }
+
+  /**
    * Delete a credential type, including its underlying cryptographic data
    *
    * @param credentialTypeId Credential Type Id
@@ -205,7 +228,17 @@ export class CredentialTypesController {
   })
   @ApiOkResponse({ description: 'Credential type deleted successfully (204 No Content)' })
   @ApiBadRequestResponse({ description: 'Invalid credentialTypeId' })
-  public async deleteCredentialTypeById(@Query('credentialTypeId') credentialTypeId: string) {
+  @ApiQuery({
+    name: 'deleteAssociatedRevocationRegistries',
+    required: false,
+    description:
+      'Also delete all revocation registries and their status lists associated to this credential type',
+    example: false,
+  })
+  public async deleteCredentialTypeById(
+    @Query('credentialTypeId') credentialTypeId: string,
+    @Query('deleteAssociatedRevocationRegistries') deleteAssociatedRevocationRegistries?: string,
+  ) {
     const agent = await this.agentService.getAgent()
 
     const credentialDefinitionRepository = agent.dependencyManager.resolve(
@@ -220,10 +253,6 @@ export class CredentialTypesController {
     const revocationDefinitionRepository = agent.dependencyManager.resolve(
       AnonCredsRevocationRegistryDefinitionRepository,
     )
-    const revocationDefinitionPrivateRepository = agent.dependencyManager.resolve(
-      AnonCredsRevocationRegistryDefinitionPrivateRepository,
-    )
-
     const credentialDefinitionRecord = await credentialDefinitionRepository.findByCredentialDefinitionId(
       agent.context,
       credentialTypeId,
@@ -249,39 +278,14 @@ export class CredentialTypesController {
     })
     if (credDefAttested) await agent.genericRecords.delete(credDefAttested)
 
-    // Delete revocation registries associated with this credential definition, along with
-    // their attested resource GenericRecords (revocation definition and linked status lists)
-    const revocationDefs = await revocationDefinitionRepository.findAllByCredentialDefinitionId(
-      agent.context,
-      credentialTypeId,
-    )
-    for (const revDef of revocationDefs) {
-      const [revRegAttested] = await agent.genericRecords.findAllByQuery({
-        type: 'AttestedResource',
-        attestedResourceId: revDef.revocationRegistryDefinitionId,
-      })
-      if (revRegAttested) {
-        const links = (revRegAttested.content as { links?: Array<{ id: string; type: string }> })?.links
-        if (Array.isArray(links)) {
-          for (const link of links) {
-            if (link?.type === 'anonCredsStatusList' && link.id) {
-              const [statusListRecord] = await agent.genericRecords.findAllByQuery({
-                type: 'AttestedResource',
-                attestedResourceId: link.id,
-              })
-              if (statusListRecord) await agent.genericRecords.delete(statusListRecord)
-            }
-          }
-        }
-        await agent.genericRecords.delete(revRegAttested)
-      }
-
-      const revDefPrivate = await revocationDefinitionPrivateRepository.findByRevocationRegistryDefinitionId(
+    if (deleteAssociatedRevocationRegistries === 'true') {
+      const revocationDefs = await revocationDefinitionRepository.findAllByCredentialDefinitionId(
         agent.context,
-        revDef.revocationRegistryDefinitionId,
+        credentialTypeId,
       )
-      if (revDefPrivate) await revocationDefinitionPrivateRepository.delete(agent.context, revDefPrivate)
-      await revocationDefinitionRepository.delete(agent.context, revDef)
+      for (const revDef of revocationDefs) {
+        await this.service.deleteRevocationRegistry(agent, revDef.revocationRegistryDefinitionId)
+      }
     }
 
     // Delete public data

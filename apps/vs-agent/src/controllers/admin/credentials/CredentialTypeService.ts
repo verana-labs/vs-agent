@@ -1,5 +1,7 @@
 import {
   AnonCredsCredentialDefinitionRepository,
+  AnonCredsRevocationRegistryDefinitionPrivateRepository,
+  AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchema,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
@@ -19,6 +21,52 @@ export class CredentialTypesService {
   private readonly logger = new Logger(CredentialTypesService.name)
 
   constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
+
+  public async deleteRevocationRegistry(
+    agent: VsAgent,
+    revocationRegistryDefinitionId: string,
+  ): Promise<boolean> {
+    const revocationDefinitionRepository = agent.dependencyManager.resolve(
+      AnonCredsRevocationRegistryDefinitionRepository,
+    )
+    const revocationDefinitionPrivateRepository = agent.dependencyManager.resolve(
+      AnonCredsRevocationRegistryDefinitionPrivateRepository,
+    )
+
+    const revDef = await revocationDefinitionRepository.findByRevocationRegistryDefinitionId(
+      agent.context,
+      revocationRegistryDefinitionId,
+    )
+    if (!revDef) return false
+
+    const [revRegAttested] = await agent.genericRecords.findAllByQuery({
+      type: 'AttestedResource',
+      attestedResourceId: revocationRegistryDefinitionId,
+    })
+    if (revRegAttested) {
+      const links = (revRegAttested.content as { links?: Array<{ id: string; type: string }> })?.links
+      if (Array.isArray(links)) {
+        for (const link of links) {
+          if (link?.type === 'anonCredsStatusList' && link.id) {
+            const [statusListRecord] = await agent.genericRecords.findAllByQuery({
+              type: 'AttestedResource',
+              attestedResourceId: link.id,
+            })
+            if (statusListRecord) await agent.genericRecords.delete(statusListRecord)
+          }
+        }
+      }
+      await agent.genericRecords.delete(revRegAttested)
+    }
+
+    const revDefPrivate = await revocationDefinitionPrivateRepository.findByRevocationRegistryDefinitionId(
+      agent.context,
+      revocationRegistryDefinitionId,
+    )
+    if (revDefPrivate) await revocationDefinitionPrivateRepository.delete(agent.context, revDefPrivate)
+    await revocationDefinitionRepository.delete(agent.context, revDef)
+    return true
+  }
 
   public async saveAttestedResource(agent: VsAgent, resource: Record<string, unknown>, tags?: Tags) {
     if (!resource) return
