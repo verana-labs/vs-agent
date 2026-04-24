@@ -33,6 +33,8 @@ import {
 } from '@credo-ts/didcomm'
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
+import { VeranaChainService } from '../blockchain'
+
 type VsAgentDidCommModule = DidCommModule<
   DidCommModuleConfigOptions & {
     credentials: DidCommCredentialsModuleConfigOptions<
@@ -68,6 +70,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public publicApiBaseUrl: string
   public displayPictureUrl?: string
   public label: string
+  public veranaChain?: VeranaChainService
 
   public constructor(
     options: AgentOptions<TModules> & {
@@ -76,6 +79,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       publicApiBaseUrl: string
       displayPictureUrl?: string
       label: string
+      veranaChain?: VeranaChainService
     },
   ) {
     super(options)
@@ -84,6 +88,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.publicApiBaseUrl = options.publicApiBaseUrl
     this.displayPictureUrl = options.displayPictureUrl
     this.label = options.label
+    this.veranaChain = options.veranaChain
   }
 
   private get hasUserProfile(): boolean {
@@ -102,7 +107,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       await (this.modules as any).userProfile.updateUserProfileData({
         displayName: this.label,
         displayPicture,
-      })
+      }) // TODO: Move this logic to the ChatPlugin
     }
 
     const parsedDid = this.did ? parseDid(this.did) : null
