@@ -9,6 +9,7 @@ import {
   VsAgentWsInboundTransport,
   type VsAgentNestPlugin,
 } from '@verana-labs/vs-agent-sdk'
+import { IndexerWebSocketService } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
 import { IncomingMessage } from 'http'
@@ -48,8 +49,6 @@ import {
   VERANA_INDEXER,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
-import { IndexerWebSocketService } from './events/IndexerWebSocketService'
-import { messageEvents } from './events/MessageEvents'
 import { MessagingPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { commonAppConfig, type ServerConfig, setupAgent, setupSelfTr, TsLogger } from './utils'
@@ -221,12 +220,16 @@ const run = async () => {
 
   // Connect to Verana indexer for on-chain notifications
   if (VERANA_INDEXER && agent.did) {
-    const indexerService = new IndexerWebSocketService({
-      indexerUrl: VERANA_INDEXER,
-      agentDid: agent.did,
-      logger: serverLogger,
-    })
-    indexerService.start()
+    try {
+      const indexerService = new IndexerWebSocketService({
+        indexerUrl: VERANA_INDEXER,
+        agentDid: agent.did,
+        logger: serverLogger,
+      })
+      indexerService.start()
+    } catch (error) {
+      serverLogger.error(`Invalid VERANA_INDEXER URL: ${VERANA_INDEXER}`)
+    }
   }
 
   agent.config.logger.info(

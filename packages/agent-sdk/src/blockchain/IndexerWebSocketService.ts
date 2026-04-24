@@ -1,14 +1,18 @@
+import { Logger } from '@credo-ts/core'
 import WebSocket from 'ws'
 
-import { TsLogger } from '../utils'
+import { fetchJson } from '../utils/util'
+
+import { IndexerEventsResponse } from './types'
 
 export interface IndexerWebSocketServiceOptions {
   indexerUrl: string
   agentDid: string
-  logger: TsLogger
+  logger: Logger
 }
 
 const MAX_RECONNECT_DELAY_MS = 300_000 // 5 minutes
+const pathname = 'verana/indexer/v1/events'
 
 export class IndexerWebSocketService {
   private ws: WebSocket | null = null
@@ -28,12 +32,22 @@ export class IndexerWebSocketService {
     this.ws = null
   }
 
-  private connect() {
+  private async connect() {
     const { indexerUrl, agentDid, logger } = this.options
 
-    logger.info(`[IndexerWS] Connecting to ${indexerUrl}`)
+    // Fetch initial events
+    const initialData = await this.fetchInitialEvents()
+    initialData.events.forEach(event => {
+      logger.debug(`[IndexerWS] Initial event: ${JSON.stringify(event)}`)
+    })
 
-    const ws = new WebSocket(indexerUrl)
+    const url = new URL(indexerUrl)
+
+    const wsUrl = `wss://${url.host}/${pathname}?did=${encodeURIComponent(agentDid)}`
+
+    logger.info(`[IndexerWS] Connecting to ${wsUrl}`)
+
+    const ws = new WebSocket(wsUrl)
     this.ws = ws
 
     ws.on('open', () => {
@@ -41,7 +55,6 @@ export class IndexerWebSocketService {
       this.reconnectAttempt = 0
 
       // TODO: recieve events but, at the moment, we are not doing anything with them.
-      ws.send(JSON.stringify({ type: 'subscribe', did: agentDid }))
     })
 
     ws.on('message', (data: WebSocket.RawData) => {
@@ -72,5 +85,30 @@ export class IndexerWebSocketService {
     setTimeout(() => {
       if (!this.stopped) this.connect()
     }, delay)
+  }
+
+  private async fetchInitialEvents(): Promise<IndexerEventsResponse> {
+    const { logger } = this.options
+
+    try {
+      const url = this.buildHttpUrl()
+      logger.info(`[IndexerWS] Fetching initial events from ${url}`)
+
+      const response = await fetchJson<IndexerEventsResponse>(url)
+      logger.info(
+        `[IndexerWS] Initial events fetched: count=${response.count}, after_block_height=${response.after_block_height}`,
+      )
+      return response
+    } catch (error) {
+      logger.error(`[IndexerWS] Failed to fetch initial events: ${(error as Error).message}`)
+      throw error
+    }
+  }
+
+  private buildHttpUrl(afterBlockHeight = 0, limit = 100) {
+    const { indexerUrl, agentDid } = this.options
+    const url = new URL(indexerUrl)
+
+    return `https://${url.host}/${pathname}?did=${encodeURIComponent(agentDid)}&after_block_height=${afterBlockHeight}&limit=${limit}`
   }
 }
