@@ -231,6 +231,7 @@ export class CredentialTypesController {
   @ApiQuery({
     name: 'deleteAssociatedRevocationRegistries',
     required: false,
+    type: Boolean,
     description:
       'Also delete all revocation registries and their status lists associated to this credential type',
     example: false,
