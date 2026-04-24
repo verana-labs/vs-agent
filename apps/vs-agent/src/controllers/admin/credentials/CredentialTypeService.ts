@@ -8,7 +8,7 @@ import {
 import { JsonObject, parseDid, TagsBase, utils, W3cCredential } from '@credo-ts/core'
 import { Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
-import { fetchJson, VsAgent } from '@verana-labs/vs-agent-sdk'
+import { deleteTailsEntry, fetchJson, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
 
@@ -63,6 +63,11 @@ export class CredentialTypesService {
       agent.context,
       revocationRegistryDefinitionId,
     )
+
+    // Delete tails file and index entry if they exist
+    const tailsLocation = revDef.revocationRegistryDefinition.value.tailsLocation
+    if (tailsLocation) deleteTailsEntry(tailsLocation)
+
     if (revDefPrivate) await revocationDefinitionPrivateRepository.delete(agent.context, revDefPrivate)
     await revocationDefinitionRepository.delete(agent.context, revDef)
     return true
