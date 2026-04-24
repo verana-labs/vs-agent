@@ -120,7 +120,7 @@ These variables enable on-chain features (permission management, trust registry 
 | Variable | Required | Description |
 | --- | --- | --- |
 | `VERANA_RPC_ENDPOINT_URL` | OPTIONAL | Verana blockchain RPC endpoint URL. |
-| `AGENT_VERANA_MNEMONIC` | OPTIONAL | BIP-39 mnemonic for the agent's Verana blockchain account. |
+| `VERANA_ACCOUNT_MNEMONIC` | OPTIONAL | BIP-39 mnemonic for the agent's Verana blockchain account. |
 | `VERANA_CHAIN_ID` | OPTIONAL | Chain ID (defaults to the network's chain ID if not set). |
 
 ### Agent feature discovery
