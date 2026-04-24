@@ -10,10 +10,6 @@ permissions:
   issues: write
   pull-requests: write
 
-env:
-  IMAGE_NAME: 'vs-agent'
-  DEMO_CHATBOT_IMAGE_NAME: 'vs-agent-demo-chatbot-backend'
-
 jobs:
   resolve-version:
     uses: 2060-io/organization/.github/workflows/resolve-version-call.yml@main
@@ -22,6 +18,20 @@ jobs:
     needs: resolve-version
     if: needs.resolve-version.outputs.new-release-published == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: vs-agent
+            dockerfile: ./apps/vs-agent/Dockerfile
+            target: vs-agent
+          - image: vs-agent-chat
+            dockerfile: ./apps/vs-agent/Dockerfile
+            target: vs-agent-chat
+          - image: vs-agent-mrtd
+            dockerfile: ./apps/vs-agent/Dockerfile
+            target: vs-agent-mrtd
+          - image: vs-agent-demo-chatbot-backend
+            dockerfile: ./examples/chatbot/Dockerfile
 
     env:
       RELEASE_TYPE: ${{ needs.resolve-version.outputs.release-type }}
@@ -35,16 +45,27 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Compute tags
-        id: compute-tags
+        id: tags
         run: |
+          HUB="${{ secrets.DOCKER_HUB_LOGIN }}/${{ matrix.image }}"
           if [ "$RELEASE_TYPE" = "stable" ]; then
-            echo "IMAGE_TAG=latest" >> $GITHUB_ENV
-            echo "SUFFIX=" >> $GITHUB_ENV
+            TAGS="${HUB}:latest
+          ${HUB}:v${RELEASE_MAJOR}
+          ${HUB}:v${RELEASE_MAJOR}.${RELEASE_MINOR}
+          ${HUB}:${RELEASE_VERSION}"
           else
-            echo "IMAGE_TAG=dev" >> $GITHUB_ENV
-            echo "SUFFIX=-dev" >> $GITHUB_ENV
-            echo "RELEASE_PATCH_SHORT=${RELEASE_PATCH:0:1}" >> $GITHUB_ENV
+            P="${RELEASE_PATCH:0:1}"
+            TAGS="${HUB}:dev
+          ${HUB}:v${RELEASE_MAJOR}-dev
+          ${HUB}:v${RELEASE_MAJOR}.${RELEASE_MINOR}-dev
+          ${HUB}:v${RELEASE_MAJOR}.${RELEASE_MINOR}.${P}-dev
+          ${HUB}:${RELEASE_VERSION}"
           fi
+          {
+            echo "list<<EOF"
+            echo "$TAGS"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Docker login
         uses: docker/login-action@v2
@@ -52,63 +73,14 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_LOGIN }}
           password: ${{ secrets.DOCKER_HUB_PWD }}
 
-      # VS Agent
-      - name: Build & push ${{ env.IMAGE_NAME }} dev tags
-        if: env.RELEASE_TYPE == 'dev'
+      - name: Build & push ${{ matrix.image }}
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./apps/vs-agent/Dockerfile
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
           push: true
-          tags: |
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}${{ env.SUFFIX }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}${{ env.SUFFIX }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}.${{ env.RELEASE_PATCH_SHORT }}${{ env.SUFFIX }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
-
-      # Split stable and dev tag builds custom tags for each release type.
-      - name: Build & push ${{ env.IMAGE_NAME }} stable release tags
-        if: env.RELEASE_TYPE == 'stable'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./apps/vs-agent/Dockerfile
-          push: true
-          tags: |
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}${{ env.SUFFIX }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}${{ env.SUFFIX }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
-
-      # Chatbot Demo (Split container build to vs agent dependency)
-      - name: Build & push ${{ env.DEMO_CHATBOT_IMAGE_NAME }} dev tags
-        if: env.RELEASE_TYPE == 'dev'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./examples/chatbot/Dockerfile
-          push: true
-          tags: |
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.DEMO_CHATBOT_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.DEMO_CHATBOT_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}${{ env.SUFFIX }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.DEMO_CHATBOT_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}${{ env.SUFFIX }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.DEMO_CHATBOT_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}.${{ env.RELEASE_PATCH_SHORT }}${{ env.SUFFIX }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.DEMO_CHATBOT_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
-
-      # Split stable and dev tag builds custom tags for each release type.
-      - name: Build & push ${{ env.DEMO_CHATBOT_IMAGE_NAME }} stable release tags
-        if: env.RELEASE_TYPE == 'stable'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./examples/chatbot/Dockerfile
-          push: true
-          tags: |
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.DEMO_CHATBOT_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.DEMO_CHATBOT_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}${{ env.SUFFIX }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.DEMO_CHATBOT_IMAGE_NAME }}:v${{ env.RELEASE_MAJOR }}.${{ env.RELEASE_MINOR }}${{ env.SUFFIX }}
-            ${{ secrets.DOCKER_HUB_LOGIN }}/${{ env.DEMO_CHATBOT_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+          tags: ${{ steps.tags.outputs.list }}
 
   helm:
     needs: [resolve-version, docker]

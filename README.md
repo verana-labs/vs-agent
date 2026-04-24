@@ -10,6 +10,7 @@ VS Agent is a web application that can be used as a framework for building conve
 - Issue and verify AnonCreds credentials, with revocation support
 - Built-in [Verifiable Trust](https://verana.foundation/page/learn-vt-demystified/) implementation
 - Hands-on client for easy integrations in existing backends using NestJS
+- Plugin architecture: load only the features you need (`chat`, `mrtd`) via `VS_AGENT_PLUGINS`
 
 ---
 

@@ -76,7 +76,31 @@ export class TrustController {
     description:
       'Revoke a verifiable credential by its format and revocation information. Currently, only AnonCreds format is supported. You must provide the revocation registry definition ID (anoncredsRevocationRegistryDefinitionId) and index (anoncredsRevocationRegistryIndex).',
   })
-  @ApiBody({ schema: { example: { id: 'cred-1' } } })
+  @ApiBody({
+    type: RevokeCredentialRequestDto,
+    examples: {
+      anoncreds: {
+        summary: 'AnonCreds Credential Revocation',
+        description:
+          'Use this format to revoke AnonCreds credentials. ' +
+          'Requires both the revocation registry definition ID and the credential index within that registry. ' +
+          'These values are obtained when the credential is issued with revocation support enabled (supportRevocation: true).',
+        value: {
+          format: 'anoncreds',
+          anoncredsRevocationRegistryDefinitionId:
+            'did:webvh:QmQmBtfboNvDrs5SDaDDK3VmUq6ji4yUgLnYaMFo8furUe:2060.io/resources/zQmVXd5K7oTJGiXR88vzKoubQWbNxM5U8s4xBkRtCTgfmHq',
+          anoncredsRevocationRegistryIndex: 1,
+        },
+      },
+      jsonld: {
+        summary: 'JSON-LD Credential Revocation',
+        description: 'Revocation not currently supported for JSON-LD credentials',
+        value: {
+          format: 'jsonld',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 200, description: 'Credential revoked' })
   async revokeCredential(@Body() body: RevokeCredentialRequestDto) {
     const { format, anoncredsRevocationRegistryDefinitionId, anoncredsRevocationRegistryIndex } = body

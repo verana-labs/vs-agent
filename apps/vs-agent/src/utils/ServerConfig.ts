@@ -1,3 +1,4 @@
+import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 import type { Express } from 'express'
 
 import { DidCommFeatureQueryOptions } from '@credo-ts/didcomm'
@@ -13,6 +14,7 @@ export interface ServerConfig {
   webhookUrl?: string
   discoveryOptions?: DidCommFeatureQueryOptions[]
   endpoints: string[]
+  nestPlugins?: VsAgentNestPlugin[]
 }
 
 export interface DidWebServerConfig extends ServerConfig {

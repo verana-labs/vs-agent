@@ -118,3 +118,18 @@ export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFOR
 
 // Verana network
 export const VERANA_INDEXER = process.env.VERANA_INDEXER
+
+// Active plugins: comma-separated list of plugin names.
+// Available:
+//   'messaging' — base MessageController + credential/proof handlers (always required)
+//   'chat'      — chat Credo modules + chat message handlers
+//   'mrtd'      — eMRTD Credo module + MRTD message handlers
+//
+// In production this value is set by the Docker image (VS_AGENT_PLUGINS env in Dockerfile).
+// Only override it in development environments.
+export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'messaging,chat')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean)
+
+if (!ENABLED_PLUGINS.includes('messaging')) ENABLED_PLUGINS.unshift('messaging')

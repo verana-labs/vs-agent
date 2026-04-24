@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@verana-labs/vs-agent-nestjs-client": "workspace:*",
+    "@verana-labs/vs-agent-plugin-mrtd": "workspace:*",
     "@credo-ts/core": "^0.6.3",
     "@nestjs/axios": "^3.1.1",
     "@nestjs/common": "^10.0.0",

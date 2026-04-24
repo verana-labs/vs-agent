@@ -1,7 +1,7 @@
+import type { BaseLogger } from '@credo-ts/core'
+
 import { Claim } from '@verana-labs/vs-agent-model'
 import fetch from 'node-fetch'
-
-import { TsLogger } from '../utils'
 
 export enum PresentationStatus {
   OK = 'ok',
@@ -19,7 +19,7 @@ export const sendPresentationCallbackEvent = async (options: {
   status: PresentationStatus
   ref?: string
   claims?: Claim[]
-  logger: TsLogger
+  logger: BaseLogger
 }) => {
   const { callbackUrl, ref, claims, logger, status, proofExchangeId } = options
   try {

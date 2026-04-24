@@ -3,6 +3,12 @@ import 'reflect-metadata'
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
+import {
+  HttpInboundTransport,
+  VsAgent,
+  VsAgentWsInboundTransport,
+  type VsAgentNestPlugin,
+} from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
 import { IncomingMessage } from 'http'
@@ -30,6 +36,7 @@ import {
   askarPostgresConfig,
   DEFAULT_AGENT_ENDPOINTS,
   DEFAULT_PUBLIC_API_BASE_URL,
+  ENABLED_PLUGINS,
   EVENTS_BASE_URL,
   keyDerivationMethodMap,
   POSTGRES_HOST,
@@ -43,22 +50,14 @@ import {
 import { connectionEvents } from './events/ConnectionEvents'
 import { IndexerWebSocketService } from './events/IndexerWebSocketService'
 import { messageEvents } from './events/MessageEvents'
+import { MessagingPlugin } from './plugins'
 import { PublicModule } from './public.module'
-import {
-  commonAppConfig,
-  HttpInboundTransport,
-  type ServerConfig,
-  setupAgent,
-  setupSelfTr,
-  TsLogger,
-  VsAgent,
-  VsAgentWsInboundTransport,
-} from './utils'
+import { commonAppConfig, type ServerConfig, setupAgent, setupSelfTr, TsLogger } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
-  const { port, cors, endpoints, publicApiBaseUrl } = serverConfig
+  const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
 
-  const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl))
+  const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins))
   commonAppConfig(adminApp, cors)
   await adminApp.listen(port)
 
@@ -143,6 +142,32 @@ const run = async () => {
   if (!publicApiBaseUrl) publicApiBaseUrl = DEFAULT_PUBLIC_API_BASE_URL
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
+
+  // Dynamically load optional plugin packages.
+  const optImport = (name: string): Promise<any> => import(name).catch(() => null)
+  const [chatModule, mrtdModule] = await Promise.all([
+    ENABLED_PLUGINS.includes('chat') ? optImport('@verana-labs/vs-agent-plugin-chat') : null,
+    ENABLED_PLUGINS.includes('mrtd') ? optImport('@verana-labs/vs-agent-plugin-mrtd') : null,
+  ])
+
+  if (
+    (ENABLED_PLUGINS.includes('chat') && !chatModule) ||
+    (ENABLED_PLUGINS.includes('mrtd') && !mrtdModule)
+  ) {
+    serverLogger.warn('Some enabled plugins could not be loaded. Check installation.')
+  }
+  if (MASTER_LIST_CSCA_LOCATION && !mrtdModule)
+    serverLogger.warn(
+      'MASTER_LIST_CSCA_LOCATION is set but the MRTD plugin could not be loaded, eMRTD verification is disabled. Use the vs-agent-mrtd Docker image to enable it.',
+    )
+
+  // Build the list of active NestJS plugins
+  const nestPlugins: VsAgentNestPlugin[] = [
+    ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
+    ...(chatModule ? [chatModule.ChatPlugin] : []),
+    ...(mrtdModule ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })] : []),
+  ]
+
   const { agent } = await setupAgent({
     endpoints,
     port: AGENT_PORT,
@@ -178,6 +203,7 @@ const run = async () => {
     publicApiBaseUrl,
     discoveryOptions,
     endpoints,
+    nestPlugins,
   }
 
   await startServers(agent, conf)
@@ -185,9 +211,13 @@ const run = async () => {
   // Initialize Self-Trust Registry
   if (agent.did) await setupSelfTr({ agent, publicApiBaseUrl })
 
-  // Listen to events emitted by the agent
-  connectionEvents(agent, conf)
-  messageEvents(agent, conf)
+  // Register base events (always active)
+  connectionEvents(agent as any, conf)
+
+  // Register plugin events after agent is initialized
+  for (const plugin of nestPlugins) {
+    plugin.registerEvents?.(agent, conf)
+  }
 
   // Connect to Verana indexer for on-chain notifications
   if (VERANA_INDEXER && agent.did) {

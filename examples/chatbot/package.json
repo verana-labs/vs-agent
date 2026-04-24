@@ -27,6 +27,7 @@
   "dependencies": {
     "@verana-labs/vs-agent-client": "workspace:*",
     "@verana-labs/vs-agent-model": "workspace:*",
+    "@verana-labs/vs-agent-plugin-mrtd": "workspace:*",
     "body-parser": "^1.20.0",
     "cors": "^2.8.5",
     "express": "^4.18.1",

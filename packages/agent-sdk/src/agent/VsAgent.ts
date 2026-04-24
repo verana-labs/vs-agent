@@ -1,13 +1,3 @@
-import { DidCommCallsModule } from '@2060.io/credo-ts-didcomm-calls'
-import { DidCommMediaSharingModule } from '@2060.io/credo-ts-didcomm-media-sharing'
-import { DidCommMrtdModule } from '@2060.io/credo-ts-didcomm-mrtd'
-import { DidCommReactionsModule } from '@2060.io/credo-ts-didcomm-reactions'
-import { DidCommReceiptsModule } from '@2060.io/credo-ts-didcomm-receipts'
-import {
-  DidCommUserProfileModule,
-  DidCommUserProfileModuleConfig,
-} from '@2060.io/credo-ts-didcomm-user-profile'
-import { ActionMenuModule } from '@credo-ts/action-menu'
 import {
   AnonCredsDidCommCredentialFormatService,
   AnonCredsModule,
@@ -33,66 +23,45 @@ import {
   W3cCredentialsModule,
 } from '@credo-ts/core'
 import {
-  DidCommAutoAcceptCredential,
-  DidCommAutoAcceptProof,
   DidCommCredentialsModuleConfigOptions,
   DidCommCredentialV2Protocol,
-  DidCommHttpOutboundTransport,
   DidCommModule,
   DidCommModuleConfigOptions,
   DidCommProofsModuleConfigOptions,
   DidCommProofV2Protocol,
 } from '@credo-ts/didcomm'
-import { QuestionAnswerModule } from '@credo-ts/question-answer'
-import { WebVhDidResolver, WebVhAnonCredsRegistry, WebVhDidRegistrar } from '@credo-ts/webvh'
-import { anoncreds } from '@hyperledger/anoncreds-nodejs'
-import { askar } from '@openwallet-foundation/askar-nodejs'
-import { DidWebAnonCredsRegistry } from 'credo-ts-didweb-anoncreds'
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
-import { FullTailsFileService } from '../services/FullTailsFileService'
+type VsAgentDidCommModule = DidCommModule<
+  DidCommModuleConfigOptions & {
+    credentials: DidCommCredentialsModuleConfigOptions<
+      [
+        DidCommCredentialV2Protocol<
+          [LegacyIndyDidCommCredentialFormatService, AnonCredsDidCommCredentialFormatService]
+        >,
+      ]
+    >
+    proofs: DidCommProofsModuleConfigOptions<
+      [DidCommProofV2Protocol<[LegacyIndyDidCommProofFormatService, AnonCredsDidCommProofFormatService]>]
+    >
+  }
+>
 
-import { defaultDocumentLoader } from './CachedDocumentLoader'
-import { CachedWebDidResolver } from './CachedWebDidResolver'
-import { VsAgentWsOutboundTransport } from './VsAgentWsOutboundTransport'
-import { WebDidRegistrar } from './WebDidRegistrar'
-
-type VsAgentModules = {
+export type BaseAgentModules = {
   askar: AskarModule
   anoncreds: AnonCredsModule
-  actionMenu: ActionMenuModule
   dids: DidsModule
-  calls: DidCommCallsModule
-  didcomm: DidCommModule<
-    DidCommModuleConfigOptions & {
-      credentials: DidCommCredentialsModuleConfigOptions<
-        [
-          DidCommCredentialV2Protocol<
-            [LegacyIndyDidCommCredentialFormatService, AnonCredsDidCommCredentialFormatService]
-          >,
-        ]
-      >
-      proofs: DidCommProofsModuleConfigOptions<
-        [DidCommProofV2Protocol<[LegacyIndyDidCommProofFormatService, AnonCredsDidCommProofFormatService]>]
-      >
-    }
-  >
-  media: DidCommMediaSharingModule
-  mrtd: DidCommMrtdModule
-  reactions: DidCommReactionsModule
-  questionAnswer: QuestionAnswerModule
-  receipts: DidCommReceiptsModule
-  userProfile: DidCommUserProfileModule
   w3cCredentials: W3cCredentialsModule
+  didcomm: VsAgentDidCommModule
 }
 
-interface AgentOptions<VsAgentModules> {
+interface AgentOptions<TModules extends BaseAgentModules> {
   config: InitConfig
-  modules?: VsAgentModules
+  modules?: TModules
   dependencies: AgentDependencies
 }
 
-export class VsAgent extends Agent<VsAgentModules> {
+export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> extends Agent<TModules> {
   public did?: string
   public autoDiscloseUserProfile?: boolean
   public publicApiBaseUrl: string
@@ -100,7 +69,7 @@ export class VsAgent extends Agent<VsAgentModules> {
   public label: string
 
   public constructor(
-    options: AgentOptions<VsAgentModules> & {
+    options: AgentOptions<TModules> & {
       did?: string
       autoDiscloseUserProfile?: boolean
       publicApiBaseUrl: string
@@ -116,17 +85,24 @@ export class VsAgent extends Agent<VsAgentModules> {
     this.label = options.label
   }
 
+  private get hasUserProfile(): boolean {
+    return 'userProfile' in this.modules
+  }
+
   public async initialize() {
     await super.initialize()
 
-    // Make sure default User Profile corresponds to settings in environment variables
-    const imageUrl = this.displayPictureUrl
-    const displayPicture = imageUrl ? { links: [imageUrl], mimeType: 'image/png' } : undefined
+    if (this.hasUserProfile) {
+      // Make sure default User Profile corresponds to settings in environment variables
+      const imageUrl = this.displayPictureUrl
+      const displayPicture = imageUrl ? { links: [imageUrl], mimeType: 'image/png' } : undefined
 
-    await this.modules.userProfile.updateUserProfileData({
-      displayName: this.label,
-      displayPicture,
-    })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (this.modules as any).userProfile.updateUserProfileData({
+        displayName: this.label,
+        displayPicture,
+      })
+    }
 
     const parsedDid = this.did ? parseDid(this.did) : null
     if (parsedDid) {
@@ -256,7 +232,7 @@ export class VsAgent extends Agent<VsAgentModules> {
   private getDidCommServices(publicDid: string) {
     const keyAgreementId = `${publicDid}#key-agreement-1`
 
-    return this.didcomm.config.endpoints.map((endpoint, index) => {
+    return this.didcomm!.config.endpoints.map((endpoint, index) => {
       return new DidCommV1Service({
         id: `${publicDid}#did-communication`,
         serviceEndpoint: endpoint,
@@ -422,84 +398,4 @@ export interface VsAgentOptions {
   walletConfig: AskarModuleConfigStoreOptions
   displayPictureUrl?: string
   label: string
-}
-
-export const createVsAgent = (options: VsAgentOptions): VsAgent => {
-  return new VsAgent({
-    config: options.config,
-    dependencies: options.dependencies,
-    modules: {
-      askar: new AskarModule({
-        askar,
-        store: options.walletConfig,
-      }),
-      anoncreds: new AnonCredsModule({
-        anoncreds,
-        tailsFileService: new FullTailsFileService({
-          tailsServerBaseUrl: `${options.publicApiBaseUrl}/anoncreds/v1/tails`,
-        }),
-        registries: [
-          new DidWebAnonCredsRegistry({
-            cacheOptions: { allowCaching: true, cacheDurationInSeconds: 24 * 60 * 60 },
-          }),
-          new WebVhAnonCredsRegistry(),
-        ],
-      }),
-      actionMenu: new ActionMenuModule({ strictStateChecking: false }),
-      calls: new DidCommCallsModule(),
-      reactions: new DidCommReactionsModule(),
-      dids: new DidsModule({
-        resolvers: [
-          new CachedWebDidResolver({ publicApiBaseUrl: options.publicApiBaseUrl }),
-          new WebVhDidResolver(),
-        ],
-        registrars: [new WebDidRegistrar(), new WebVhDidRegistrar()],
-      }),
-      mrtd: new DidCommMrtdModule({ masterListCscaLocation: options.masterListCscaLocation }),
-      didcomm: new DidCommModule({
-        endpoints: options.endpoints,
-        transports: {
-          outbound: [new DidCommHttpOutboundTransport(), new VsAgentWsOutboundTransport()],
-        },
-        connections: { autoAcceptConnections: true },
-        credentials: {
-          autoAcceptCredentials: DidCommAutoAcceptCredential.ContentApproved,
-          credentialProtocols: [
-            new DidCommCredentialV2Protocol({
-              credentialFormats: [
-                new LegacyIndyDidCommCredentialFormatService(),
-                new AnonCredsDidCommCredentialFormatService(),
-              ],
-            }),
-          ],
-        },
-        proofs: {
-          autoAcceptProofs: DidCommAutoAcceptProof.ContentApproved,
-          proofProtocols: [
-            new DidCommProofV2Protocol({
-              proofFormats: [
-                new LegacyIndyDidCommProofFormatService(),
-                new AnonCredsDidCommProofFormatService(),
-              ],
-            }),
-          ],
-        },
-      }),
-      media: new DidCommMediaSharingModule(),
-      questionAnswer: new QuestionAnswerModule(),
-      receipts: new DidCommReceiptsModule(),
-      // Disable module's auto disclose feature, since we are going to manage it in MessageEvents
-      userProfile: new DidCommUserProfileModule(
-        new DidCommUserProfileModuleConfig({ autoSendProfile: false }),
-      ),
-      w3cCredentials: new W3cCredentialsModule({
-        documentLoader: defaultDocumentLoader,
-      }),
-    },
-    did: options.did,
-    autoDiscloseUserProfile: options.autoDiscloseUserProfile,
-    publicApiBaseUrl: options.publicApiBaseUrl,
-    displayPictureUrl: options.displayPictureUrl,
-    label: options.label,
-  })
 }

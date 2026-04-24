@@ -1,14 +1,16 @@
 import {
   AnonCredsCredentialDefinitionRepository,
+  AnonCredsRevocationRegistryDefinitionPrivateRepository,
+  AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchema,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
 import { JsonObject, parseDid, TagsBase, utils, W3cCredential } from '@credo-ts/core'
 import { Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
+import { deleteTailsEntry, fetchJson, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
-import { fetchJson, VsAgent } from '../../../utils'
 
 type Tags = TagsBase & {
   type?: never
@@ -19,6 +21,57 @@ export class CredentialTypesService {
   private readonly logger = new Logger(CredentialTypesService.name)
 
   constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
+
+  public async deleteRevocationRegistry(
+    agent: VsAgent,
+    revocationRegistryDefinitionId: string,
+  ): Promise<boolean> {
+    const revocationDefinitionRepository = agent.dependencyManager.resolve(
+      AnonCredsRevocationRegistryDefinitionRepository,
+    )
+    const revocationDefinitionPrivateRepository = agent.dependencyManager.resolve(
+      AnonCredsRevocationRegistryDefinitionPrivateRepository,
+    )
+
+    const revDef = await revocationDefinitionRepository.findByRevocationRegistryDefinitionId(
+      agent.context,
+      revocationRegistryDefinitionId,
+    )
+    if (!revDef) return false
+
+    const [revRegAttested] = await agent.genericRecords.findAllByQuery({
+      type: 'AttestedResource',
+      attestedResourceId: revocationRegistryDefinitionId,
+    })
+    if (revRegAttested) {
+      const links = (revRegAttested.content as { links?: Array<{ id: string; type: string }> })?.links
+      if (Array.isArray(links)) {
+        for (const link of links) {
+          if (link?.type === 'anonCredsStatusList' && link.id) {
+            const [statusListRecord] = await agent.genericRecords.findAllByQuery({
+              type: 'AttestedResource',
+              attestedResourceId: link.id,
+            })
+            if (statusListRecord) await agent.genericRecords.delete(statusListRecord)
+          }
+        }
+      }
+      await agent.genericRecords.delete(revRegAttested)
+    }
+
+    const revDefPrivate = await revocationDefinitionPrivateRepository.findByRevocationRegistryDefinitionId(
+      agent.context,
+      revocationRegistryDefinitionId,
+    )
+
+    // Delete tails file and index entry if they exist
+    const tailsLocation = revDef.revocationRegistryDefinition.value.tailsLocation
+    if (tailsLocation) deleteTailsEntry(tailsLocation)
+
+    if (revDefPrivate) await revocationDefinitionPrivateRepository.delete(agent.context, revDefPrivate)
+    await revocationDefinitionRepository.delete(agent.context, revDef)
+    return true
+  }
 
   public async saveAttestedResource(agent: VsAgent, resource: Record<string, unknown>, tags?: Tags) {
     if (!resource) return
@@ -164,9 +217,25 @@ export class CredentialTypesService {
         : undefined
       const schemaAttributes = options.attributes ?? parsedJsc?.attrNames
       const schemaName = options.name ?? parsedJsc?.title
+      const schemaVersion = options.version ?? '1.0'
 
       if (!schemaAttributes || !schemaName) {
         throw new Error('Schema must include both name and attributes (provided or derived from JSON Schema)')
+      }
+
+      const schemaRepository = agent.dependencyManager.resolve(AnonCredsSchemaRepository)
+      const equivalentSchemas = await schemaRepository.findByQuery(agent.context, {
+        issuerId: agent.did,
+        schemaName,
+        schemaVersion,
+      })
+      if (equivalentSchemas.length > 0) {
+        const [existing] = equivalentSchemas
+        if (options.relatedJsonSchemaCredentialId && !existing.getTag('relatedJsonSchemaCredentialId')) {
+          existing.setTag('relatedJsonSchemaCredentialId', options.relatedJsonSchemaCredentialId)
+          await schemaRepository.update(agent.context, existing)
+        }
+        return { schemaId: existing.schemaId, schema: existing.schema }
       }
 
       const schemaRegistrationOptions = {
@@ -194,7 +263,6 @@ export class CredentialTypesService {
       if (!schemaId || !schema) {
         throw new Error('Schema for the credential definition could not be created')
       }
-      const schemaRepository = agent.dependencyManager.resolve(AnonCredsSchemaRepository)
       const schemaRecord = (await schemaRepository.findBySchemaId(agent.context, schemaId)) ?? undefined
       if (!schemaRecord)
         throw new Error(`Schema record not found after registration for schemaId: ${schemaId}`)
@@ -235,6 +303,17 @@ export class CredentialTypesService {
       extraMetadata: {
         relatedJsonSchemaCredentialId,
       },
+    }
+
+    // The registry resolves the schema via findBySchemaId, which throws if more than
+    // one AnonCredsSchemaRecord matches. Collapse any duplicates before registering.
+    const schemaRepository = agent.dependencyManager.resolve(AnonCredsSchemaRepository)
+    const duplicateSchemas = await schemaRepository.findByQuery(agent.context, { schemaId })
+    if (duplicateSchemas.length > 1) {
+      this.logger.warn(
+        `Found ${duplicateSchemas.length} AnonCredsSchemaRecord entries for schemaId ${schemaId}; removing ${duplicateSchemas.length - 1} duplicate(s)`,
+      )
+      for (const extra of duplicateSchemas.slice(1)) await schemaRepository.delete(agent.context, extra)
     }
 
     const { credentialDefinitionState, registrationMetadata: credDefMetadata } =

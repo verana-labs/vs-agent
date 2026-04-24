@@ -19,11 +19,12 @@ import {
   CreateInvitationResult,
   ReceiveInvitationResult,
 } from '@verana-labs/vs-agent-model'
+import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
 
+import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../config'
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { createInvitation, fetchJson } from '../../../utils'
-import { CredentialTypesService } from '../credentials/CredentialTypeService'
+import { CredentialTypesService } from '../credentials'
 
 import {
   CreateCredentialOfferDto,
@@ -64,6 +65,7 @@ export class InvitationController {
     return await createInvitation({
       agent: await this.agentService.getAgent(),
       useLegacyDid: options?.useLegacyDid,
+      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
     })
   }
 
@@ -84,7 +86,11 @@ export class InvitationController {
   })
   @ApiQuery({ name: 'legacy', required: false, type: Boolean })
   public async getInvitation(@Query('legacy') useLegacyDid?: boolean): Promise<CreateInvitationResult> {
-    return await createInvitation({ agent: await this.agentService.getAgent(), useLegacyDid })
+    return await createInvitation({
+      agent: await this.agentService.getAgent(),
+      useLegacyDid,
+      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
+    })
   }
 
   @Post('/receive')
@@ -288,6 +294,8 @@ export class InvitationController {
       agent,
       messages: [request.message],
       useLegacyDid,
+      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
+      imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({
@@ -409,6 +417,8 @@ export class InvitationController {
         agent: await this.agentService.getAgent(),
         messages: [request.message],
         useLegacyDid,
+        invitationBaseUrl: AGENT_INVITATION_BASE_URL,
+        imageUrl: AGENT_INVITATION_IMAGE_URL,
       })
 
       const shortUrlId = await this.urlShortenerService.createShortUrl({
