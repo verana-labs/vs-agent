@@ -5,9 +5,7 @@ import { IsArray, IsInstance, IsObject, IsOptional, IsString, IsUUID, ValidateNe
 import { VT_FLOW_ISSUANCE_REQUEST_TYPE } from './VtFlowProtocol'
 
 export interface IssuanceRequestMessageOptions {
-  /** Defaults to a fresh UUIDv4. */
   id?: string
-  /** VPR Credential Schema ID. */
   schemaId: string
   sessionUuid: string
   agentPermId: string
@@ -16,7 +14,7 @@ export interface IssuanceRequestMessageOptions {
   proofsAttach?: DidCommAttachment[]
 }
 
-/** `issuance-request` — opens a §5.2 session. The message's `@id` is the session `thid`. */
+/** Spec v4 §5.2 `issuance-request`; opens a DirectIssuance session and its `@id` becomes the session `thid`. */
 export class IssuanceRequestMessage extends DidCommMessage {
   public constructor(options: IssuanceRequestMessageOptions) {
     super()

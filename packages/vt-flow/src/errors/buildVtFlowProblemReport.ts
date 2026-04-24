@@ -2,18 +2,16 @@ import { DidCommProblemReportMessage, ImpactStatus, WhoRetriesStatus } from '@cr
 
 import { VT_FLOW_ERROR_INFO, VtFlowErrorCode } from './VtFlowErrorCode'
 
+/** Inputs to `buildVtFlowProblemReport`; `enDescription`/`whoRetries`/`impact` default to per-code values from `VT_FLOW_ERROR_INFO`. */
 export interface BuildVtFlowProblemReportOptions {
   code: VtFlowErrorCode
   threadId: string
-  /** Defaults to {@link defaultEnglishDescription}. */
   enDescription?: string
   fixHintEn?: string
-  /** Overrides the defaults from {@link VT_FLOW_ERROR_INFO}. */
   whoRetries?: WhoRetriesStatus
   impact?: ImpactStatus
 }
 
-// RFC 0035 lowercase => Credo UPPER-CASE.
 const whoRetriesMap: Record<'you' | 'me' | 'both' | 'none', WhoRetriesStatus> = {
   you: WhoRetriesStatus.You,
   me: WhoRetriesStatus.Me,
@@ -27,12 +25,7 @@ const impactMap: Record<'message' | 'thread' | 'connection', ImpactStatus> = {
   connection: ImpactStatus.Connection,
 }
 
-/**
- * Build a problem-report whose `description.code` is a `VtFlowErrorCode`
- * and whose `who_retries` / `impact` are pulled from
- * {@link VT_FLOW_ERROR_INFO}. The caller drives dispatch and the
- * associated record's terminal-state transition.
- */
+/** Build a problem-report with a `VtFlowErrorCode` description and `who_retries`/`impact` pulled from `VT_FLOW_ERROR_INFO`; caller drives dispatch and terminal-state transition. */
 export function buildVtFlowProblemReport(
   options: BuildVtFlowProblemReportOptions,
 ): DidCommProblemReportMessage {

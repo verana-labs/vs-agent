@@ -4,13 +4,12 @@ import { IsOptional, IsString } from 'class-validator'
 import { VT_FLOW_VALIDATING_TYPE } from './VtFlowProtocol'
 
 export interface ValidatingMessageOptions {
-  /** Defaults to a fresh UUIDv4. */
   id?: string
   threadId: string
   comment?: string
 }
 
-/** `validating` — informational Validator status update. No state change. */
+/** Spec v4 §5.4 `validating`; informational Validator status update that causes no state change. */
 export class ValidatingMessage extends DidCommMessage {
   public constructor(options: ValidatingMessageOptions) {
     super()

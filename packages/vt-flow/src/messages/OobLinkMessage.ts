@@ -5,18 +5,14 @@ import { IsDate, IsOptional, IsString, IsUrl } from 'class-validator'
 import { VT_FLOW_OOB_LINK_TYPE } from './VtFlowProtocol'
 
 export interface OobLinkMessageOptions {
-  /** Defaults to a fresh UUIDv4. */
   id?: string
-  /** vt-flow session `thid`. */
   threadId: string
-  /** Absolute HTTPS URL where the Applicant completes the OOB step. */
   url: string
-  /** Human-readable explanation. */
   description: string
   expiresTime?: Date
 }
 
-/** `oob-link` — Validator asks the Applicant to complete an action outside DIDComm. */
+/** Spec v4 §5.5 `oob-link`; Validator asks the Applicant to complete an action outside DIDComm, threaded on the vt-flow session `thid`. */
 export class OobLinkMessage extends DidCommMessage {
   public constructor(options: OobLinkMessageOptions) {
     super()
@@ -27,7 +23,6 @@ export class OobLinkMessage extends DidCommMessage {
       this.description = options.description
       this.expiresTime = options.expiresTime
 
-      // Mid-session: `~thread.thid` points at the vt-flow session thread.
       this.setThread({ threadId: options.threadId })
     }
   }
@@ -37,7 +32,6 @@ export class OobLinkMessage extends DidCommMessage {
   @IsValidMessageType(OobLinkMessage.type)
   public readonly type = OobLinkMessage.type.messageTypeUri
 
-  // `require_tld: false` allows `https://example.test/...` URLs in tests.
   @IsUrl({ require_tld: false, protocols: ['https'] })
   public url!: string
 

@@ -2,12 +2,11 @@ import type { VtFlowModuleConfigOptions } from './VtFlowModuleConfig'
 
 import { VtFlowModule } from './VtFlowModule'
 
-/** Plugin shape for `createVsAgent({ plugins: [...] })`. */
+/** Plugin shape consumed by `createVsAgent({ plugins: [...] })` to compose the vt-flow module. */
 export interface VtFlowSetup {
   modules: { vtFlow: VtFlowModule }
 }
 
-/** Compose the vt-flow module into the vs-agent plugin pipeline. */
 export function setupVtFlow(options?: VtFlowModuleConfigOptions): VtFlowSetup {
   return { modules: { vtFlow: new VtFlowModule(options) } }
 }

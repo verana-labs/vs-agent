@@ -29,10 +29,7 @@ import { VT_FLOW_PROTOCOL_URI } from './messages'
 import { VtFlowRepository } from './repository'
 import { VtFlowService } from './services'
 
-/**
- * Credo-TS module implementing the vt-flow superprotocol
- * (`https://didcomm.org/vt-flow/1.0`).
- */
+/** Credo-TS module implementing the vt-flow superprotocol (`https://didcomm.org/vt-flow/1.0`); wires handlers, feature registry, and subprotocol correlation on `~thread.pthid`. */
 export class VtFlowModule implements Module {
   public readonly api = VtFlowApi
   public readonly config: VtFlowModuleConfig
@@ -41,29 +38,13 @@ export class VtFlowModule implements Module {
     this.config = new VtFlowModuleConfig(options)
   }
 
-  /** DI wiring — called during agent construction. */
   public register(dependencyManager: DependencyManager): void {
     dependencyManager.registerInstance(VtFlowModuleConfig, this.config)
+    dependencyManager.registerContextScoped(VtFlowApi)
     dependencyManager.registerSingleton(VtFlowRepository)
     dependencyManager.registerSingleton(VtFlowService)
   }
 
-  /**
-   * Runtime wiring — called once the root agent context is initialised.
-   *
-   * Registers:
-   *  - the five vt-flow message handlers on the DIDComm message-handler
-   *    registry;
-   *  - the `https://didcomm.org/vt-flow/1.0` protocol on the DIDComm
-   *    feature registry;
-   *  - a listener on `DidCommCredentialStateChanged` that maps
-   *    subprotocol transitions onto the vt-flow session via
-   *    `~thread.pthid` => `VtFlowRecord.threadId` (see
-   *    `doc/vt-flow-implementation.md`
-   *    §Superprotocol/Subprotocol Event Correlation);
-   *  - a listener on our own `VtFlowStateChanged` event so the
-   *    `onCompleted` callback fires exactly once per session.
-   */
   public async initialize(agentContext: AgentContext): Promise<void> {
     const messageHandlerRegistry = agentContext.dependencyManager.resolve(DidCommMessageHandlerRegistry)
     const featureRegistry = agentContext.dependencyManager.resolve(DidCommFeatureRegistry)
@@ -85,8 +66,6 @@ export class VtFlowModule implements Module {
       }),
     )
 
-    // Map Issue Credential V2 state changes onto the parent vt-flow session
-    // via `~thread.pthid`.
     eventEmitter.on<DidCommCredentialStateChangedEvent>(
       DidCommCredentialEventTypes.DidCommCredentialStateChanged,
       async ({ payload: { credentialExchangeRecord } }) => {
@@ -97,7 +76,6 @@ export class VtFlowModule implements Module {
 
         await service.onSubprotocolStateChanged(agentContext, record, credentialExchangeRecord)
 
-        // Applicant: run the optional pre-Ack verifier and auto-Ack on success.
         const config = service.getModuleConfig()
         if (
           credentialExchangeRecord.state === DidCommCredentialState.CredentialReceived &&
@@ -123,8 +101,6 @@ export class VtFlowModule implements Module {
           }
         }
 
-        // Validator: auto-issue when opted in. Credo's `ContentApproved` policy
-        // skips issuer-initiated offers (no matching proposal).
         if (
           credentialExchangeRecord.state === DidCommCredentialState.RequestReceived &&
           record.role === VtFlowRole.Validator &&
@@ -147,7 +123,6 @@ export class VtFlowModule implements Module {
       },
     )
 
-    // Fire the onCompleted hook exactly once per session.
     eventEmitter.on<VtFlowStateChangedEvent>(VtFlowEventTypes.VtFlowStateChanged, async ({ payload }) => {
       if (payload.state !== VtFlowState.Completed) return
       if (payload.previousState === VtFlowState.Completed) return
@@ -174,8 +149,6 @@ export class VtFlowModule implements Module {
       }
     })
 
-    // Per-flag opt-in auto-chain for demo / unattended deployments. Each
-    // branch is gated independently so production can keep manual control.
     eventEmitter.on<VtFlowStateChangedEvent>(VtFlowEventTypes.VtFlowStateChanged, async ({ payload }) => {
       const config = service.getModuleConfig()
 
@@ -183,8 +156,6 @@ export class VtFlowModule implements Module {
       if (!record) return
 
       try {
-        // Applicant: auto-accept issuer-initiated offers (Credo's
-        // `ContentApproved` only matches proposal-first flows).
         if (
           record.role === VtFlowRole.Applicant &&
           payload.state === VtFlowState.CredOffered &&
@@ -229,7 +200,6 @@ export class VtFlowModule implements Module {
           return
         }
 
-        // §5.1 only: VALIDATING => VALIDATED.
         if (
           payload.state === VtFlowState.Validating &&
           config.autoMarkValidated &&
@@ -240,7 +210,6 @@ export class VtFlowModule implements Module {
           return
         }
 
-        // §5.1 dispatches on VALIDATED; §5.2 on VALIDATING.
         const readyToOffer =
           (record.variant === VtFlowVariant.ValidationProcess && payload.state === VtFlowState.Validated) ||
           (record.variant === VtFlowVariant.DirectIssuance && payload.state === VtFlowState.Validating)

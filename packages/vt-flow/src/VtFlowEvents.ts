@@ -6,10 +6,7 @@ export enum VtFlowEventTypes {
   VtFlowStateChanged = 'VtFlowStateChanged',
 }
 
-/**
- * Fired every time a `VtFlowRecord` state changes. `previousState` and
- * `previousConnectionState` are `null` on the first write.
- */
+/** Emitted every time a VtFlowRecord's Flow State or Connection State changes; previous fields are null on first write. */
 export interface VtFlowStateChangedEvent extends BaseEvent {
   type: typeof VtFlowEventTypes.VtFlowStateChanged
   payload: {

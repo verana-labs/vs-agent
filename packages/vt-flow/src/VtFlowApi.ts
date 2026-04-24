@@ -8,7 +8,7 @@ import {
   DidCommAutoAcceptCredential,
   DidCommConnectionService,
   DidCommCredentialExchangeRepository,
-  // biome-ignore lint/correctness/noUnusedImports: used as a DI token at runtime
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   DidCommCredentialsApi,
   DidCommCredentialsModuleConfig,
   DidCommMessageSender,
@@ -22,7 +22,6 @@ import { VtFlowService } from './services'
 
 export interface SendValidationRequestOptions {
   connectionId: string
-  /** Defaults to a fresh UUIDv4. */
   sessionUuid?: string
   permId: string
   agentPermId: string
@@ -41,8 +40,7 @@ export interface SendIssuanceRequestOptions {
 
 export interface OfferCredentialForSessionOptions {
   vtFlowRecordId: string
-  /** Passed through to DidCommCredentialV2Protocol.createOffer. */
-  // biome-ignore lint/suspicious/noExplicitAny: format payload depends on host agent registrations.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   credentialFormats: any
   comment?: string
   goal?: string
@@ -66,15 +64,11 @@ export interface ProblemReportDispatchOptions {
 export interface NotifyCredentialStateChangeOptions {
   vtFlowRecordId: string
   state: VtCredentialState | string
-  /** Defaults to the record's captured `subprotocolThid`. */
   subprotocolThid?: string
   reason?: string
 }
 
-/**
- * Public API for vt-flow. Each method performs a single state transition
- * so the caller can gate each one on its own on-chain work.
- */
+/** Public API for vt-flow; each method performs a single state transition so callers can gate each one on its own on-chain work. */
 @injectable()
 export class VtFlowApi {
   public constructor(
@@ -83,16 +77,13 @@ export class VtFlowApi {
     private readonly connectionService: DidCommConnectionService,
     private readonly agentContext: AgentContext,
     private readonly config: VtFlowModuleConfig,
-    // biome-ignore lint/suspicious/noExplicitAny: vt-flow is credential-format-agnostic
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private readonly credentialsModuleConfig: DidCommCredentialsModuleConfig<any>,
     private readonly credentialExchangeRepository: DidCommCredentialExchangeRepository,
   ) {
     void this.config
   }
 
-  // Applicant — send side
-
-  /** Open a §5.1 Validation Process session. */
   public async sendValidationRequest(options: SendValidationRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
     connection.assertReady()
@@ -118,7 +109,6 @@ export class VtFlowApi {
     return record
   }
 
-  /** Open a §5.2 Direct Issuance session. */
   public async sendIssuanceRequest(options: SendIssuanceRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
     connection.assertReady()
@@ -144,10 +134,6 @@ export class VtFlowApi {
     return record
   }
 
-  /**
-   * Ack the received credential. Applicant side; advances vt-flow to
-   * COMPLETED once the subprotocol reaches `done`.
-   */
   public async acceptReceivedCredential(vtFlowRecordId: string): Promise<VtFlowRecord> {
     const record = await this.vtFlowService.getById(this.agentContext, vtFlowRecordId)
     record.assertRole(VtFlowRole.Applicant)
@@ -165,7 +151,6 @@ export class VtFlowApi {
     return record
   }
 
-  /** Applicant-side termination. Sends a problem-report. */
   public async terminateSession(options: ProblemReportDispatchOptions): Promise<VtFlowRecord> {
     const { record, problemReport } = await this.vtFlowService.terminateByApplicant(
       this.agentContext,
@@ -180,19 +165,14 @@ export class VtFlowApi {
     return record
   }
 
-  // Validator — accept / reject / oob / validating / validated / offer
-
-  /** AWAITING_VR => VALIDATING. */
   public acceptValidationRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
     return this.vtFlowService.acceptValidationRequest(this.agentContext, vtFlowRecordId)
   }
 
-  /** AWAITING_IR => VALIDATING (§5.2). */
   public acceptIssuanceRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
     return this.vtFlowService.acceptIssuanceRequest(this.agentContext, vtFlowRecordId)
   }
 
-  /** Reject the session with a problem-report and transition to the terminal state. */
   public async rejectRequest(options: ProblemReportDispatchOptions): Promise<VtFlowRecord> {
     const { record, problemReport } = await this.vtFlowService.rejectRequest(
       this.agentContext,
@@ -207,7 +187,6 @@ export class VtFlowApi {
     return record
   }
 
-  /** Send an `oob-link`. Transitions Validator record to `OOB_PENDING`. */
   public async sendOobLink(options: SendOobLinkOptions): Promise<VtFlowRecord> {
     const { record, message } = await this.vtFlowService.sendOobLinkForSession(
       this.agentContext,
@@ -222,7 +201,6 @@ export class VtFlowApi {
     return record
   }
 
-  /** Send an informational `validating` message. No state change. */
   public async sendValidating(
     vtFlowRecordId: string,
     options: { comment?: string } = {},
@@ -236,16 +214,10 @@ export class VtFlowApi {
     return record
   }
 
-  /** VALIDATING => VALIDATED. Call after `set-perm-vp-validated` succeeds on-chain. */
   public markValidated(vtFlowRecordId: string): Promise<VtFlowRecord> {
     return this.vtFlowService.markValidated(this.agentContext, vtFlowRecordId)
   }
 
-  /**
-   * Send an `offer-credential` bound to this session via `~thread.pthid`.
-   * Subprotocol is configured with `autoAcceptCredential: Never`; the
-   * Applicant must Ack via {@link acceptReceivedCredential}.
-   */
   public async offerCredentialForSession(
     options: OfferCredentialForSessionOptions,
   ): Promise<{ record: VtFlowRecord; credentialExchangeRecord: DidCommCredentialExchangeRecord }> {
@@ -266,8 +238,6 @@ export class VtFlowApi {
       goalCode: options.goalCode,
     })
 
-    // Stamp the parent thread on both the record and the outbound message
-    // so inbound credential events correlate to this vt-flow session.
     credentialExchangeRecord.parentThreadId = record.threadId
     await this.credentialExchangeRepository.update(this.agentContext, credentialExchangeRecord)
 
@@ -295,7 +265,6 @@ export class VtFlowApi {
     }
   }
 
-  /** Send a post-issuance `credential-state-change` (v1.0: `REVOKED`). */
   public async notifyCredentialStateChange(
     options: NotifyCredentialStateChangeOptions,
   ): Promise<VtFlowRecord> {
@@ -321,8 +290,6 @@ export class VtFlowApi {
     return record
   }
 
-  // Lookups
-
   public getById(vtFlowRecordId: string): Promise<VtFlowRecord> {
     return this.vtFlowService.getById(this.agentContext, vtFlowRecordId)
   }
@@ -343,11 +310,8 @@ export class VtFlowApi {
     return this.vtFlowService.findAllByQuery(this.agentContext, query, queryOptions)
   }
 
-  // Internal helpers
-
-  /** Credo doesn't register V2Protocol as a standalone DI token; pull it from config. */
   private resolveCredentialV2Protocol(): DidCommCredentialProtocol & {
-    // biome-ignore lint/suspicious/noExplicitAny: format-agnostic offer payload
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     createOffer: (agentContext: AgentContext, options: any) => Promise<any>
   } {
     const protocols = this.credentialsModuleConfig.credentialProtocols
@@ -358,19 +322,19 @@ export class VtFlowApi {
       )
     }
     return v2 as DidCommCredentialProtocol & {
-      // biome-ignore lint/suspicious/noExplicitAny: see above
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       createOffer: (agentContext: AgentContext, options: any) => Promise<any>
     }
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: Api generics depend on host agent format services.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private resolveCredentialsApi(): any {
     return this.agentContext.dependencyManager.resolve(DidCommCredentialsApi)
   }
 
   private async dispatchMessage(
     connectionId: string,
-    // biome-ignore lint/suspicious/noExplicitAny: any DidCommMessage subclass
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     message: any,
     associatedRecord: VtFlowRecord,
   ): Promise<void> {

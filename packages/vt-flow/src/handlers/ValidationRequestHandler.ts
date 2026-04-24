@@ -3,6 +3,7 @@ import type { DidCommMessageHandler, DidCommMessageHandlerInboundMessage } from 
 
 import { ValidationRequestMessage } from '../messages'
 
+/** Validator-side inbound handler for `validation-request`; delegates to `VtFlowService.processReceiveValidationRequest`. */
 export class ValidationRequestHandler implements DidCommMessageHandler {
   public supportedMessages = [ValidationRequestMessage]
 

@@ -55,11 +55,7 @@ export interface RejectRequestParams {
   fixHintEn?: string
 }
 
-/**
- * Core state machine for vt-flow. One method per state transition so the
- * caller can gate each on on-chain work. Methods return the wire message
- * without dispatching; dispatch lives in {@link VtFlowApi}.
- */
+/** Core state machine for vt-flow; each method performs one transition and returns the wire message without dispatching (dispatch lives in `VtFlowApi`). */
 @injectable()
 export class VtFlowService {
   private readonly repository: VtFlowRepository
@@ -79,9 +75,7 @@ export class VtFlowService {
     this.config = config
   }
 
-  // Applicant — outbound VR / IR
-
-  /** Build the outbound `validation-request` and persist a §5.1 record in `VR_SENT`. */
+  /** Applicant-side §5.1: build the outbound `validation-request` and persist a record in `VR_SENT`. */
   public async createValidationProcessRecord(
     agentContext: AgentContext,
     params: CreateValidationRequestParams,
@@ -113,7 +107,7 @@ export class VtFlowService {
     return { message, record }
   }
 
-  /** Build the outbound `issuance-request` and persist a §5.2 record in `IR_SENT`. */
+  /** Applicant-side §5.2: build the outbound `issuance-request` and persist a record in `IR_SENT`. */
   public async createDirectIssuanceRecord(
     agentContext: AgentContext,
     params: CreateIssuanceRequestParams,
@@ -145,19 +139,13 @@ export class VtFlowService {
     return { message, record }
   }
 
-  // Validator — inbound message processing
-
-  /**
-   * Create or re-attach (by `session_uuid`) a Validator-side record in
-   * `AWAITING_VR` from an inbound `validation-request`.
-   */
+  /** Validator-side §5.1: create or re-attach (by `session_uuid`) a record in `AWAITING_VR` from an inbound `validation-request`. */
   public async processReceiveValidationRequest(
     messageContext: DidCommInboundMessageContext<ValidationRequestMessage>,
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
 
-    // Reconnection: re-attach by `session_uuid`.
     const existing = await this.repository.findBySessionUuid(
       agentContext,
       message.sessionUuid,
@@ -188,7 +176,7 @@ export class VtFlowService {
     return record
   }
 
-  /** §5.2 counterpart of {@link processReceiveValidationRequest}. */
+  /** Validator-side §5.2 counterpart of `processReceiveValidationRequest`, landing the record in `AWAITING_IR`. */
   public async processReceiveIssuanceRequest(
     messageContext: DidCommInboundMessageContext<IssuanceRequestMessage>,
   ): Promise<VtFlowRecord> {
@@ -225,7 +213,7 @@ export class VtFlowService {
     return record
   }
 
-  /** Applicant-side `oob-link`: transition to `OOB_PENDING`. */
+  /** Applicant-side inbound `oob-link`; transitions the session to `OOB_PENDING`. */
   public async processReceiveOobLink(
     messageContext: DidCommInboundMessageContext<OobLinkMessage>,
   ): Promise<VtFlowRecord> {
@@ -238,7 +226,7 @@ export class VtFlowService {
     return record
   }
 
-  /** Applicant-side `validating`: informational, no state change. */
+  /** Applicant-side inbound `validating`; informational only, no state change. */
   public async processReceiveValidating(
     messageContext: DidCommInboundMessageContext<ValidatingMessage>,
   ): Promise<VtFlowRecord> {
@@ -252,7 +240,7 @@ export class VtFlowService {
     return record
   }
 
-  /** Applicant-side `credential-state-change`. v1.0: `REVOKED` only. */
+  /** Applicant-side inbound `credential-state-change`; v1.0 handles `REVOKED` only. */
   public async processReceiveCredentialStateChange(
     messageContext: DidCommInboundMessageContext<CredentialStateChangeMessage>,
   ): Promise<VtFlowRecord | null> {
@@ -274,12 +262,7 @@ export class VtFlowService {
     return record
   }
 
-  // Validator — application-driven transitions
-
-  /**
-   * `AWAITING_VR => VALIDATING`. Caller is expected to have verified
-   * `perm_id` / `agent_perm_id` / `wallet_agent_perm_id` on-chain.
-   */
+  /** `AWAITING_VR => VALIDATING`; caller is expected to have verified perm/agent/wallet IDs on-chain. */
   public async acceptValidationRequest(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
@@ -290,7 +273,7 @@ export class VtFlowService {
     return record
   }
 
-  /** §5.2: `AWAITING_IR => VALIDATING`. Transient before `CRED_OFFERED`. */
+  /** §5.2: `AWAITING_IR => VALIDATING`; transient before `CRED_OFFERED`. */
   public async acceptIssuanceRequest(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
@@ -301,11 +284,7 @@ export class VtFlowService {
     return record
   }
 
-  /**
-   * Reject with a problem-report. Transitions to `TERMINATED_BY_{role}`
-   * and flips the connection state to `TERMINATED` if the error has
-   * `impact: connection`.
-   */
+  /** Reject with a problem-report; transitions to `TERMINATED_BY_{role}` and marks the connection as `TERMINATED`. */
   public async rejectRequest(
     agentContext: AgentContext,
     recordId: string,
@@ -334,7 +313,7 @@ export class VtFlowService {
     return { record, problemReport }
   }
 
-  /** Applicant-side termination => `TERMINATED_BY_APPLICANT`. */
+  /** Applicant-side termination producing a problem-report and landing in `TERMINATED_BY_APPLICANT`. */
   public async terminateByApplicant(
     agentContext: AgentContext,
     recordId: string,
@@ -360,7 +339,7 @@ export class VtFlowService {
     return { record, problemReport }
   }
 
-  /** Build `oob-link`. Transitions non-terminal records to `OOB_PENDING`. */
+  /** Build an `oob-link`; non-terminal records transition to `OOB_PENDING`. */
   public async sendOobLinkForSession(
     agentContext: AgentContext,
     recordId: string,
@@ -368,7 +347,6 @@ export class VtFlowService {
   ): Promise<{ record: VtFlowRecord; message: OobLinkMessage }> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    // Valid from AWAITING_*, VALIDATING, or COMPLETED (re-validation).
     record.assertState([
       VtFlowState.AwaitingVr,
       VtFlowState.AwaitingIr,
@@ -390,7 +368,7 @@ export class VtFlowService {
     return { record, message }
   }
 
-  /** Build a `validating` informational message. No state change. */
+  /** Build a `validating` informational message; no state change. */
   public async sendValidatingForSession(
     agentContext: AgentContext,
     recordId: string,
@@ -407,7 +385,7 @@ export class VtFlowService {
     return { record, message }
   }
 
-  /** `VALIDATING => VALIDATED`. Call after `set-perm-vp-validated` on-chain. */
+  /** `VALIDATING => VALIDATED`; call after `set-perm-vp-validated` lands on-chain. */
   public async markValidated(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
@@ -418,7 +396,7 @@ export class VtFlowService {
     return record
   }
 
-  /** Link a Credo exchange record and transition to `CRED_OFFERED`. */
+  /** Link a Credo exchange record to the session and transition to `CRED_OFFERED`. */
   public async attachCredentialExchangeRecord(
     agentContext: AgentContext,
     recordId: string,
@@ -426,8 +404,6 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    // Launching states: §5.1 VALIDATED, §5.2 VALIDATING, OOB_PENDING, or
-    // COMPLETED (follow-up offer for revalidation/renewal).
     record.assertState([
       VtFlowState.Validated,
       VtFlowState.Validating,
@@ -442,7 +418,7 @@ export class VtFlowService {
     return record
   }
 
-  /** Build `credential-state-change`. Validator-side `COMPLETED => CRED_REVOKED`. */
+  /** Validator-side `credential-state-change`; `COMPLETED => CRED_REVOKED`. */
   public async notifyCredentialStateChange(
     agentContext: AgentContext,
     recordId: string,
@@ -466,16 +442,12 @@ export class VtFlowService {
     return { record, message }
   }
 
-  // Subprotocol correlation (Issue Credential V2 ↔ vt-flow)
-
-  /** Map a Credo credential-exchange state change onto the vt-flow session. */
+  /** Map a Credo credential-exchange state change onto the vt-flow session via `~thread.pthid`. */
   public async onSubprotocolStateChanged(
     agentContext: AgentContext,
     record: VtFlowRecord,
     credentialExchangeRecord: DidCommCredentialExchangeRecord,
   ): Promise<void> {
-    // Persist the linkage on first sighting (applicant learns of the
-    // Credo record only when the offer arrives).
     if (
       !record.credentialExchangeRecordId ||
       record.credentialExchangeRecordId !== credentialExchangeRecord.id
@@ -487,8 +459,6 @@ export class VtFlowService {
 
     switch (credentialExchangeRecord.state) {
       case DidCommCredentialState.OfferSent:
-        // §5.1 has already moved to CRED_OFFERED via attachCredentialExchangeRecord;
-        // only pick up the §5.2 tail here where state was VALIDATED.
         if (record.state !== VtFlowState.CredOffered && record.state === VtFlowState.Validated) {
           await this.updateState(agentContext, record, VtFlowState.CredOffered)
         }
@@ -499,7 +469,6 @@ export class VtFlowService {
         }
         break
       case DidCommCredentialState.CredentialReceived:
-        // Applicant must verify before Ack; Api layer drives the Ack.
         this.logger.debug(
           `[vt-flow] credential received for session ${record.threadId}; awaiting application Ack`,
         )
@@ -521,8 +490,6 @@ export class VtFlowService {
         break
     }
   }
-
-  // Lookups
 
   public getById(agentContext: AgentContext, id: string): Promise<VtFlowRecord> {
     return this.repository.getById(agentContext, id)
@@ -559,9 +526,7 @@ export class VtFlowService {
     return this.repository.findByQuery(agentContext, query, queryOptions)
   }
 
-  // State transition primitives
-
-  /** Transition, persist and emit `VtFlowStateChanged`. */
+  /** Transition the record, persist it, and emit `VtFlowStateChanged`. */
   public async updateState(
     agentContext: AgentContext,
     record: VtFlowRecord,

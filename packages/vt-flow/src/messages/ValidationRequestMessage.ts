@@ -5,7 +5,6 @@ import { IsArray, IsInstance, IsObject, IsOptional, IsString, IsUUID, ValidateNe
 import { VT_FLOW_VALIDATION_REQUEST_TYPE } from './VtFlowProtocol'
 
 export interface ValidationRequestMessageOptions {
-  /** Defaults to a fresh UUIDv4. */
   id?: string
   permId: string
   sessionUuid: string
@@ -15,7 +14,7 @@ export interface ValidationRequestMessageOptions {
   proofsAttach?: DidCommAttachment[]
 }
 
-/** `validation-request` — opens a §5.1 session. The message's `@id` is the session `thid`. */
+/** Spec v4 §5.1 `validation-request`; opens a ValidationProcess session and its `@id` becomes the session `thid`. */
 export class ValidationRequestMessage extends DidCommMessage {
   public constructor(options: ValidationRequestMessageOptions) {
     super()

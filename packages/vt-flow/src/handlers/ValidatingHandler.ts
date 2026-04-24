@@ -3,6 +3,7 @@ import type { DidCommMessageHandler, DidCommMessageHandlerInboundMessage } from 
 
 import { ValidatingMessage } from '../messages'
 
+/** Applicant-side inbound handler for `validating`; delegates to `VtFlowService.processReceiveValidating`. */
 export class ValidatingHandler implements DidCommMessageHandler {
   public supportedMessages = [ValidatingMessage]
 

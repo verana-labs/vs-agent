@@ -6,7 +6,7 @@ import { VtFlowRole } from '../VtFlowRole'
 import { VtFlowState } from '../VtFlowState'
 import { VtFlowVariant } from '../VtFlowVariant'
 
-/** Indexed storage tags. Each field here is queryable via `VtFlowRepository`. */
+/** Indexed storage tags queryable through `VtFlowRepository`; `permId` is §5.1-only and `schemaId` is §5.2-only. */
 export type DefaultVtFlowTags = {
   threadId: string
   sessionUuid: string
@@ -14,9 +14,7 @@ export type DefaultVtFlowTags = {
   role: VtFlowRole
   flowState: VtFlowState
   flowVariant: VtFlowVariant
-  /** §5.1 only. */
   permId?: string
-  /** §5.2 only. */
   schemaId?: string
   credentialExchangeRecordId?: string
   subprotocolThid?: string
@@ -52,7 +50,7 @@ export interface VtFlowStorageProps {
   tags?: CustomVtFlowTags
 }
 
-/** One record per (connection, thread). Written on both sides. */
+/** Persistent record for a vt-flow session; one per (connection, thread) and written on both sides. */
 export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags> {
   public static readonly type = 'VtFlowRecord'
   public readonly type = VtFlowRecord.type
@@ -67,9 +65,7 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
   public agentPermId!: string
   public walletAgentPermId!: string
 
-  /** §5.1 only. */
   public permId?: string
-  /** §5.2 only. */
   public schemaId?: string
 
   public claims?: Record<string, unknown>

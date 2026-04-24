@@ -1,45 +1,34 @@
-/**
- * Wire `description.code` values for vt-flow problem-reports.
- * See `doc/vt-flow-protocol.md` §Error Codes.
- */
+/** Wire `description.code` values for vt-flow problem-reports (see spec §Error Codes). */
 export enum VtFlowErrorCode {
-  /** Expected `validation-request`. */
   VrRequired = 'vt-flow.vr-required',
-  /** Expected `issuance-request`. */
   IrRequired = 'vt-flow.ir-required',
-  /** Message type not supported in the current state. */
   UnsupportedMessage = 'vt-flow.unsupported-message',
-  /** `perm_id` invalid, unrelated to the Validator, or in the wrong `vp_state`. */
   InvalidPermId = 'vt-flow.invalid-perm-id',
-  /** `schema_id` does not exist or is not supported. */
   InvalidSchemaId = 'vt-flow.invalid-schema-id',
   InvalidAgentPermId = 'vt-flow.invalid-agent-perm-id',
   InvalidWalletAgentPermId = 'vt-flow.invalid-wallet-agent-perm-id',
   InvalidClaims = 'vt-flow.invalid-claims',
   InvalidSessionUuid = 'vt-flow.invalid-session-uuid',
-  /** Applicant's DID does not satisfy VS-CONN-VS. */
   NotAVerifiableService = 'vt-flow.not-a-verifiable-service',
-  /** Off-chain documentation validation failed. */
   ValidationFailed = 'vt-flow.validation-failed',
   OobExpired = 'vt-flow.oob-expired',
   SessionTerminated = 'vt-flow.session-terminated',
   InternalError = 'vt-flow.internal-error',
 }
 
-/** RFC 0035 `who_retries`. Wire form is lowercase; Credo emits UPPER-CASE. */
+/** RFC 0035 `who_retries`; wire form is lowercase but Credo emits UPPER-CASE on the wire. */
 export type WhoRetries = 'you' | 'me' | 'both' | 'none'
 
-/** RFC 0035 `impact`. Same casing note as {@link WhoRetries}. */
+/** RFC 0035 `impact`; same casing note as `WhoRetries`. */
 export type ErrorImpact = 'message' | 'thread' | 'connection'
 
+/** Per-code metadata mirroring the spec's Error Codes table; `retryable` is false when impact is `connection` or `whoRetries` is `none`. */
 export interface VtFlowErrorInfo {
   whoRetries: WhoRetries
   impact: ErrorImpact
-  /** `false` when `impact === 'connection'` or `whoRetries === 'none'`. */
   retryable: boolean
 }
 
-/** Metadata per error code. Mirrors the spec's Error Codes table. */
 export const VT_FLOW_ERROR_INFO: Readonly<Record<VtFlowErrorCode, VtFlowErrorInfo>> = {
   [VtFlowErrorCode.VrRequired]: { whoRetries: 'you', impact: 'thread', retryable: true },
   [VtFlowErrorCode.IrRequired]: { whoRetries: 'you', impact: 'thread', retryable: true },
@@ -82,7 +71,6 @@ export const VT_FLOW_ERROR_INFO: Readonly<Record<VtFlowErrorCode, VtFlowErrorInf
     impact: 'thread',
     retryable: false,
   },
-  // Spec says "varies"; default to non-retryable so fall-through stays safe.
   [VtFlowErrorCode.InternalError]: { whoRetries: 'none', impact: 'thread', retryable: false },
 }
 

@@ -4,22 +4,20 @@ import { IsOptional, IsString } from 'class-validator'
 
 import { VT_FLOW_CREDENTIAL_STATE_CHANGE_TYPE } from './VtFlowProtocol'
 
-/** Open enum. v1.0 defines `REVOKED`; receivers must accept unknown values. */
+/** Open enum of credential states carried by `credential-state-change`; v1.0 defines `REVOKED` and receivers must tolerate unknown values. */
 export enum VtCredentialState {
   Revoked = 'REVOKED',
 }
 
 export interface CredentialStateChangeMessageOptions {
-  /** Defaults to a fresh UUIDv4. */
   id?: string
   threadId: string
-  /** `thid` of the Issue Credential V2 exchange that issued the credential. */
   subprotocolThid: string
   state: VtCredentialState | string
   reason?: string
 }
 
-/** `credential-state-change` — post-issuance Validator => Applicant notification. */
+/** Spec v4 §5.3 `credential-state-change`; Validator => Applicant post-issuance notification referencing the IC V2 subprotocol `thid`. */
 export class CredentialStateChangeMessage extends DidCommMessage {
   public constructor(options: CredentialStateChangeMessageOptions) {
     super()

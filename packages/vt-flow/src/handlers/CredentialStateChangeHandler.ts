@@ -3,6 +3,7 @@ import type { DidCommMessageHandler, DidCommMessageHandlerInboundMessage } from 
 
 import { CredentialStateChangeMessage } from '../messages'
 
+/** Applicant-side inbound handler for `credential-state-change`; delegates to `VtFlowService.processReceiveCredentialStateChange`. */
 export class CredentialStateChangeHandler implements DidCommMessageHandler {
   public supportedMessages = [CredentialStateChangeMessage]
 

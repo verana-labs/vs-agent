@@ -6,6 +6,7 @@ import { VtFlowRole } from '../VtFlowRole'
 
 import { VtFlowRecord } from './VtFlowRecord'
 
+/** Credo repository for `VtFlowRecord`; exposes typed lookups by thread, session UUID, subprotocol `thid`, credential exchange, and connection. */
 @injectable()
 export class VtFlowRepository extends Repository<VtFlowRecord> {
   public constructor(

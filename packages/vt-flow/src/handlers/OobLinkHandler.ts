@@ -3,6 +3,7 @@ import type { DidCommMessageHandler, DidCommMessageHandlerInboundMessage } from 
 
 import { OobLinkMessage } from '../messages'
 
+/** Applicant-side inbound handler for `oob-link`; delegates to `VtFlowService.processReceiveOobLink`. */
 export class OobLinkHandler implements DidCommMessageHandler {
   public supportedMessages = [OobLinkMessage]
 

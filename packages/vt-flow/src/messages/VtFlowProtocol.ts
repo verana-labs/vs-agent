@@ -1,5 +1,4 @@
-// Canonical URIs for the vt-flow superprotocol messages.
-
+/** Canonical URIs for the five vt-flow superprotocol messages. */
 export const VT_FLOW_PROTOCOL_URI = 'https://didcomm.org/vt-flow/1.0' as const
 
 export const VT_FLOW_VALIDATION_REQUEST_TYPE = `${VT_FLOW_PROTOCOL_URI}/validation-request` as const

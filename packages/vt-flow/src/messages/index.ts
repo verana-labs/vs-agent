@@ -1,6 +1,3 @@
-// Wire message classes for the vt-flow superprotocol. See
-// `doc/vt-flow-protocol.md` §Messages for the canonical message inventory.
-
 export {
   VT_FLOW_PROTOCOL_URI,
   VT_FLOW_VALIDATION_REQUEST_TYPE,

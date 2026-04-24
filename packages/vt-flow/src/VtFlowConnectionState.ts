@@ -1,12 +1,9 @@
 import { DidCommDidExchangeState } from '@credo-ts/didcomm'
 
-/** 3-value abstraction over Credo's DID Exchange state. */
+/** Spec v4 §5.6: 3-value Connection State (NOT_CONNECTED / ESTABLISHED / TERMINATED) derived from Credo's DID Exchange state. */
 export enum VtFlowConnectionState {
-  /** Handshake in progress or connection closed but record retained. */
   NotConnected = 'NOT_CONNECTED',
-  /** DIDComm connection fully open. */
   Established = 'ESTABLISHED',
-  /** Connection permanently closed. */
   Terminated = 'TERMINATED',
 }
 
@@ -25,7 +22,6 @@ export function connectionStateFromDidExchangeState(state: DidCommDidExchangeSta
     case DidCommDidExchangeState.ResponseReceived:
       return VtFlowConnectionState.NotConnected
     default: {
-      // Future-proof: default to NOT_CONNECTED if Credo adds a new state.
       const _exhaustive: never = state
       void _exhaustive
       return VtFlowConnectionState.NotConnected

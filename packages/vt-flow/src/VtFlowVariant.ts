@@ -1,6 +1,5 @@
+/** Spec v4 (§5.1, §5.2): ValidationProcess (validation-request, GRANTOR/ECOSYSTEM) and DirectIssuance (issuance-request, HOLDER/ISSUER), ensuring type-safe flow handling. */
 export enum VtFlowVariant {
-  /** §5.1 — Schema management mode `GRANTOR` or `ECOSYSTEM`; opened by `validation-request`. */
   ValidationProcess = 'validation-process',
-  /** §5.2 — Direct issuance (HOLDER/ISSUER); opened by `issuance-request`. */
   DirectIssuance = 'direct-issuance',
 }
