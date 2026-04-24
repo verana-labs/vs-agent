@@ -807,7 +807,7 @@ Open protocol-semantic items for discussion before freezing v1.0.
 [rfc0519]: https://github.com/hyperledger/aries-rfcs/tree/main/concepts/0519-goal-codes
 [rfc0593]: https://github.com/hyperledger/aries-rfcs/blob/main/features/0593-json-ld-cred-attach/README.md
 [vs-agent-repo]: https://github.com/verana-labs/vs-agent
-[vs-core]: https://github.com/verana-labs/vs-agent/blob/feat/spec-v4-vs-agent-core/spec/vs-agent-core.md
+[vs-core]: https://github.com/verana-labs/vs-agent/issues/402
 [vpr-v4]: https://verana-labs.github.io/verifiable-trust-vpr-spec/
 [vt-spec]: https://verana-labs.github.io/verifiable-trust-spec/
 [vt-spec-conn-vs]: https://verana-labs.github.io/verifiable-trust-spec/#vs-conn-vs
