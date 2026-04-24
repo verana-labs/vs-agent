@@ -16,7 +16,6 @@ import { ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
 import { MessageService } from '../controllers/admin/message/MessageService'
 
 import { TsLogger } from './logger'
-import { vtFlowOptions } from './vtFlowCredentialOffer'
 
 export const setupAgent = async ({
   port,
@@ -50,12 +49,14 @@ export const setupAgent = async ({
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
-  const [chatSetup, mrtdSetup, vtFlowSetup] = await Promise.all([
-    ENABLED_PLUGINS.includes('chat') ? optImport('@verana-labs/vs-agent-plugin-chat') : null,
-    ENABLED_PLUGINS.includes('mrtd') ? optImport('@verana-labs/vs-agent-plugin-mrtd') : null,
-    ENABLED_PLUGINS.includes('vt-flow') ? optImport('@verana-labs/credo-ts-didcomm-vt-flow') : null,
+  const [chatSetup, mrtdSetup] = await Promise.all([
+    ENABLED_PLUGINS.includes('chat')
+      ? optImport('@verana-labs/vs-agent-plugin-chat').catch(() => null)
+      : null,
+    ENABLED_PLUGINS.includes('mrtd')
+      ? optImport('@verana-labs/vs-agent-plugin-mrtd').catch(() => null)
+      : null,
   ])
 
   const agent = createVsAgent({
@@ -63,7 +64,6 @@ export const setupAgent = async ({
       setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol({ masterListCscaLocation })] : []),
-      ...(vtFlowSetup ? [vtFlowSetup.setupVtFlow(vtFlowOptions())] : []),
     ],
     config: {
       logger,

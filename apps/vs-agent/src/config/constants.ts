@@ -121,7 +121,6 @@ export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFOR
 //   'messaging' — base MessageController + credential/proof handlers (always required)
 //   'chat'      — chat Credo modules + chat message handlers
 //   'mrtd'      — eMRTD Credo module + MRTD message handlers
-//   'vt-flow'   — Verifiable Trust Flow (vt-flow) superprotocol module
 //
 // In production this value is set by the Docker image (VS_AGENT_PLUGINS env in Dockerfile).
 // Only override it in development environments.
@@ -131,6 +130,3 @@ export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'messa
   .filter(Boolean)
 
 if (!ENABLED_PLUGINS.includes('messaging')) ENABLED_PLUGINS.unshift('messaging')
-
-// Optional ECS Trust Registry DID. Unset => require explicit POST /v1/vt/onboard.
-export const ECS_TRUST_REGISTRY_DID = process.env.ECS_TRUST_REGISTRY_DID
