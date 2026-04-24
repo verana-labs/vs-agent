@@ -1,6 +1,7 @@
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { AgentDependencies, InitConfig, LogLevel } from '@credo-ts/core'
 
+import { VeranaChainService } from '../blockchain'
 import { Plugin } from '../types'
 
 import { BaseAgentModules, VsAgent } from './VsAgent'
@@ -29,6 +30,7 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
   autoUpdateStorageOnStartup?: boolean
   dependencies: AgentDependencies
   logLevel?: LogLevel
+  veranaChain?: VeranaChainService
 }
 
 /**
@@ -76,5 +78,6 @@ export function createVsAgent<T extends Plugin[]>(
     publicApiBaseUrl: options.publicApiBaseUrl,
     displayPictureUrl: options.displayPictureUrl,
     label: options.label,
+    veranaChain: options.veranaChain,
   })
 }

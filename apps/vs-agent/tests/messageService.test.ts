@@ -1,4 +1,4 @@
-import type { DidCommAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { PictureData } from '@2060.io/credo-ts-didcomm-user-profile'
 import { DidCommBasicMessage, DidCommConnectionRecord } from '@credo-ts/didcomm'
@@ -32,8 +32,8 @@ describe('MessageService', () => {
     'rxjs:faber': faberMessages,
     'rxjs:alice': aliceMessages,
   }
-  let faberAgent: VsAgent<DidCommAgentModules>
-  let aliceAgent: VsAgent<DidCommAgentModules>
+  let faberAgent: VsAgent<BaseAgentModules>
+  let aliceAgent: VsAgent<BaseAgentModules>
   let faberConnection: DidCommConnectionRecord
   let aliceConnection: DidCommConnectionRecord
   let faberEvents: ReturnType<typeof vi.spyOn>
