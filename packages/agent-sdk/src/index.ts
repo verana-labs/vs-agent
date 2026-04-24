@@ -21,7 +21,12 @@ export { VsAgentWsInboundTransport, WebSocketTransportSession } from './transpor
 export { VsAgentWsOutboundTransport } from './transports/VsAgentWsOutboundTransport'
 
 // Credentials
-export { FullTailsFileService, tailsIndex, baseFilePath } from './credentials/FullTailsFileService'
+export {
+  FullTailsFileService,
+  tailsIndex,
+  baseFilePath,
+  deleteTailsEntry,
+} from './credentials/FullTailsFileService'
 
 // Utils
 export { createInvitation, getWebDid, getRecordId } from './utils/agent'
