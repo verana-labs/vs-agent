@@ -107,7 +107,10 @@ export class WebDidRegistrar implements DidRegistrar {
       if (options.keys?.length) {
         const existingKeys = didRecord.keys ?? []
         const existingIds = new Set(existingKeys.map(k => k.didDocumentRelativeKeyId))
-        didRecord.keys = [...existingKeys, ...options.keys.filter(k => !existingIds.has(k.didDocumentRelativeKeyId))]
+        didRecord.keys = [
+          ...existingKeys,
+          ...options.keys.filter(k => !existingIds.has(k.didDocumentRelativeKeyId)),
+        ]
       }
 
       await didRepository.update(agentContext, didRecord)
