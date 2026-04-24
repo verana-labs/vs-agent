@@ -25,7 +25,14 @@ import {
   DidCommUserProfileRequestedEvent,
 } from '@2060.io/credo-ts-didcomm-user-profile'
 import { MenuRequestMessage, PerformMessage } from '@credo-ts/action-menu'
-import { DidCommBasicMessage, DidCommEventTypes, DidCommMessageProcessedEvent } from '@credo-ts/didcomm'
+import {
+  DidCommConnectionEventTypes,
+  DidCommConnectionStateChangedEvent,
+  DidCommDidExchangeState,
+  DidCommBasicMessage,
+  DidCommEventTypes,
+  DidCommMessageProcessedEvent,
+} from '@credo-ts/didcomm'
 import { AnswerMessage, QuestionAnswerService } from '@credo-ts/question-answer'
 import {
   CallAcceptRequestMessage,
@@ -41,17 +48,22 @@ import {
   ReactionMessage,
   TextMessage,
 } from '@verana-labs/vs-agent-model'
-import {
-  createDataUrl,
-  getRecordId,
-  sendMessageReceivedEvent,
-  sendWebhookEvent,
-  VsAgent,
-} from '@verana-labs/vs-agent-sdk'
+import { getRecordId, sendMessageReceivedEvent, sendWebhookEvent, VsAgent } from '@verana-labs/vs-agent-sdk'
 
-// FIXME: timestamps are currently taken from reception date. They should be get from the originating DIDComm message
-// as soon as the corresponding extension is added to them
+import { createDataUrl } from '../utils/parsers'
+
 export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAgentPluginConfig) => {
+  agent.events.on(
+    DidCommConnectionEventTypes.DidCommConnectionStateChanged,
+    async ({ payload }: DidCommConnectionStateChangedEvent) => {
+      if (payload.connectionRecord.state === DidCommDidExchangeState.Completed) {
+        await agent.modules.userProfile.requestUserProfile({ connectionId: payload.connectionRecord.id })
+      }
+    },
+  )
+
+  // FIXME: timestamps are currently taken from reception date. They should be get from the originating DIDComm message
+  // as soon as the corresponding extension is added to them
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
     async ({ payload }: DidCommMessageProcessedEvent) => {

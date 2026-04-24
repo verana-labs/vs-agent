@@ -42,7 +42,6 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
       }
 
       if (record.state === DidCommDidExchangeState.Completed) {
-        await agent.modules.userProfile.requestUserProfile({ connectionId: record.id })
         if (config.discoveryOptions)
           await agent.didcomm.discovery.queryFeatures({
             connectionId: record.id,

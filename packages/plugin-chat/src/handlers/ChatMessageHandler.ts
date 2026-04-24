@@ -18,7 +18,9 @@ import {
   ReceiptsMessage,
   TextMessage,
 } from '@verana-labs/vs-agent-model'
-import { didcommReceiptFromVsAgentReceipt, parsePictureData, VsAgent } from '@verana-labs/vs-agent-sdk'
+import { VsAgent } from '@verana-labs/vs-agent-sdk'
+
+import { didcommReceiptFromVsAgentReceipt, parsePictureData } from '../utils/parsers'
 
 @Injectable()
 export class ChatMessageHandler implements MessageHandler {
