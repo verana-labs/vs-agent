@@ -46,8 +46,8 @@ import {
   USER_PROFILE_AUTODISCLOSE,
   MASTER_LIST_CSCA_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
-  AGENT_VERANA_MNEMONIC,
-  VERANA_RPC,
+  VERANA_ACCOUNT_MNEMONIC,
+  VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
@@ -171,17 +171,17 @@ const run = async () => {
 
   // Connect to Verana blockchain for on-chain transactions
   let veranaChain: VeranaChainService | undefined
-  if (VERANA_RPC && AGENT_VERANA_MNEMONIC) {
+  if (VERANA_RPC_ENDPOINT_URL && VERANA_ACCOUNT_MNEMONIC) {
     veranaChain = new VeranaChainService({
-      rpcUrl: VERANA_RPC,
+      rpcUrl: VERANA_RPC_ENDPOINT_URL,
       chainId: VERANA_CHAIN_ID,
-      mnemonic: AGENT_VERANA_MNEMONIC,
+      mnemonic: VERANA_ACCOUNT_MNEMONIC,
       logger: serverLogger,
     })
     await veranaChain.start()
   } else {
     serverLogger.warn(
-      'VERANA_RPC or AGENT_VERANA_MNEMONIC not set. Verana blockchain features will be disabled. Set these environment variables to enable on-chain capabilities.',
+      'VERANA_RPC_ENDPOINT_URL or VERANA_ACCOUNT_MNEMONIC not set. Verana blockchain features will be disabled. Set these environment variables to enable on-chain capabilities.',
     )
   }
 
