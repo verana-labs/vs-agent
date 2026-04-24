@@ -4,6 +4,7 @@ import {
   DidCreateResult,
   DidDeactivateOptions,
   DidDeactivateResult,
+  DidDocumentKey,
   DidRegistrar,
   DidRepository,
   DidUpdateOptions,
@@ -16,11 +17,13 @@ import {
 
 interface WebDidCreateOptions extends DidCreateOptions {
   domain: string
+  keys?: DidDocumentKey[]
 }
 
 interface WebDidUpdateOptions extends DidUpdateOptions {
   didDocument: DidDocument
   domain?: string
+  keys?: DidDocumentKey[]
 }
 
 /**
@@ -56,6 +59,7 @@ export class WebDidRegistrar implements DidRegistrar {
         did,
         didDocument,
         role: DidDocumentRole.Created,
+        keys: options.keys,
       })
       didRecord.setTags({ domain })
       await didRepository.save(agentContext, didRecord)
@@ -99,6 +103,12 @@ export class WebDidRegistrar implements DidRegistrar {
       if (!didRecord) return this.handleError('Did not found')
 
       didRecord.didDocument = inputDidDocument
+
+      if (options.keys?.length) {
+        const existingKeys = didRecord.keys ?? []
+        const existingIds = new Set(existingKeys.map(k => k.didDocumentRelativeKeyId))
+        didRecord.keys = [...existingKeys, ...options.keys.filter(k => !existingIds.has(k.didDocumentRelativeKeyId))]
+      }
 
       await didRepository.update(agentContext, didRecord)
 
