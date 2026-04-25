@@ -144,6 +144,7 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
+    await this.assertVerifiableService(agentContext, connection.id)
 
     const existing = await this.repository.findBySessionUuid(
       agentContext,
@@ -181,6 +182,7 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
+    await this.assertVerifiableService(agentContext, connection.id)
 
     const existing = await this.repository.findBySessionUuid(
       agentContext,
@@ -561,5 +563,29 @@ export class VtFlowService {
 
   public buildProblemReport(options: BuildVtFlowProblemReportOptions) {
     return buildVtFlowProblemReport(options)
+  }
+
+  /** Spec v4 §Verifiable Service Identity Check: invokes the caller-provided VS-CONN-VS hook. Throws `vt-flow.not-a-verifiable-service` when the peer fails the check. When no hook is configured, logs a warning and permits. */
+  public async assertVerifiableService(agentContext: AgentContext, connectionId: string): Promise<void> {
+    const hook = this.config.assertVerifiableService
+    if (!hook) {
+      this.logger.warn(
+        `[vt-flow] assertVerifiableService hook not configured; skipping VS-CONN-VS check for connection '${connectionId}'. Configure VtFlowModuleConfig.assertVerifiableService for spec-conformant trust resolution.`,
+      )
+      return
+    }
+    let permitted = false
+    try {
+      permitted = await hook({ agentContext, connectionId })
+    } catch (error) {
+      throw new CredoError(
+        `vt-flow.not-a-verifiable-service: peer connection '${connectionId}' failed VS-CONN-VS check (${(error as Error).message})`,
+      )
+    }
+    if (!permitted) {
+      throw new CredoError(
+        `vt-flow.not-a-verifiable-service: peer connection '${connectionId}' failed VS-CONN-VS check`,
+      )
+    }
   }
 }

@@ -32,6 +32,16 @@ export type VtFlowBuildCredentialOfferHook = (
   ctx: VtFlowBuildCredentialOfferContext,
 ) => Promise<VtFlowCredentialOfferPayload | null>
 
+export interface VtFlowAssertVerifiableServiceContext {
+  agentContext: AgentContext
+  connectionId: string
+}
+
+/** Spec v4 §Verifiable Service Identity Check: caller-provided VS-CONN-VS gate invoked at session start (Applicant before sending VR/IR, Validator on receipt of VR/IR). Return `false` (or throw) to reject the peer; the module then aborts the operation with a `vt-flow.not-a-verifiable-service` error. When the hook is undefined, the module logs a warning and permits — production callers MUST configure this for spec-conformant trust resolution. */
+export type VtFlowAssertVerifiableServiceHook = (
+  ctx: VtFlowAssertVerifiableServiceContext,
+) => Promise<boolean>
+
 /** Options accepted by VtFlowModule; all flags default to false, `oobExpirationDays` defaults to 7, `terminalRetentionDays` to 90. */
 export interface VtFlowModuleConfigOptions {
   oobExpirationDays?: number
@@ -45,6 +55,7 @@ export interface VtFlowModuleConfigOptions {
   buildCredentialOffer?: VtFlowBuildCredentialOfferHook
   autoAcceptCredentialOffer?: boolean
   autoIssueCredentialOnRequest?: boolean
+  assertVerifiableService?: VtFlowAssertVerifiableServiceHook
 }
 
 /** Read-only view over VtFlowModuleConfigOptions with defaults applied. */
@@ -97,5 +108,9 @@ export class VtFlowModuleConfig {
 
   public get autoIssueCredentialOnRequest(): boolean {
     return this.options.autoIssueCredentialOnRequest ?? false
+  }
+
+  public get assertVerifiableService(): VtFlowAssertVerifiableServiceHook | undefined {
+    return this.options.assertVerifiableService
   }
 }

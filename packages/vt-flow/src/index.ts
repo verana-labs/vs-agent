@@ -54,6 +54,8 @@ export {
 // Module surface
 export { VtFlowModuleConfig } from './VtFlowModuleConfig'
 export type {
+  VtFlowAssertVerifiableServiceContext,
+  VtFlowAssertVerifiableServiceHook,
   VtFlowBuildCredentialOfferContext,
   VtFlowBuildCredentialOfferHook,
   VtFlowCredentialLifecycleContext,

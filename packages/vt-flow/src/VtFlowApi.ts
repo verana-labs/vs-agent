@@ -87,6 +87,7 @@ export class VtFlowApi {
   public async sendValidationRequest(options: SendValidationRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
     connection.assertReady()
+    await this.vtFlowService.assertVerifiableService(this.agentContext, connection.id)
 
     const sessionUuid = options.sessionUuid ?? utils.uuid()
 
@@ -112,6 +113,7 @@ export class VtFlowApi {
   public async sendIssuanceRequest(options: SendIssuanceRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
     connection.assertReady()
+    await this.vtFlowService.assertVerifiableService(this.agentContext, connection.id)
 
     const sessionUuid = options.sessionUuid ?? utils.uuid()
 
