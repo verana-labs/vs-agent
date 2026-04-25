@@ -1,7 +1,12 @@
 import type { VtFlowErrorCode } from './errors'
 import type { VtFlowRecord } from './repository'
 import type { Query, QueryOptions } from '@credo-ts/core'
-import type { DidCommCredentialExchangeRecord, DidCommCredentialProtocol } from '@credo-ts/didcomm'
+import type {
+  DidCommCredentialExchangeRecord,
+  DidCommCredentialProtocol,
+  DidCommJsonLdCredentialDetailFormat,
+  DidCommMessage,
+} from '@credo-ts/didcomm'
 
 import { AgentContext, CredoError, injectable, utils } from '@credo-ts/core'
 import {
@@ -39,8 +44,7 @@ export interface SendIssuanceRequestOptions {
 
 export interface OfferCredentialForSessionOptions {
   vtFlowRecordId: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  credentialFormats: any
+  credentialFormats: { jsonld: DidCommJsonLdCredentialDetailFormat }
   comment?: string
   goal?: string
   goalCode?: string
@@ -76,8 +80,7 @@ export class VtFlowApi {
     private readonly connectionService: DidCommConnectionService,
     private readonly agentContext: AgentContext,
     private readonly config: VtFlowModuleConfig,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private readonly credentialsModuleConfig: DidCommCredentialsModuleConfig<any>,
+    private readonly credentialsModuleConfig: DidCommCredentialsModuleConfig<DidCommCredentialProtocol[]>,
     private readonly credentialExchangeRepository: DidCommCredentialExchangeRepository,
   ) {
     void this.config
@@ -228,7 +231,12 @@ export class VtFlowApi {
     const connection = await this.connectionService.getById(this.agentContext, record.connectionId)
     connection.assertReady()
 
-    const v2Protocol = this.resolveCredentialV2Protocol()
+    const v2Protocol = this.credentialsModuleConfig.credentialProtocols.find(p => p.version === 'v2')
+    if (!v2Protocol) {
+      throw new CredoError(
+        'DidCommCredentialV2Protocol is not registered on the agent. vt-flow requires it for Issue Credential V2 offers.',
+      )
+    }
 
     const { credentialExchangeRecord, message } = await v2Protocol.createOffer(this.agentContext, {
       connectionRecord: connection,
@@ -311,27 +319,9 @@ export class VtFlowApi {
     return this.vtFlowService.findAllByQuery(this.agentContext, query, queryOptions)
   }
 
-  private resolveCredentialV2Protocol(): DidCommCredentialProtocol & {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createOffer: (agentContext: AgentContext, options: any) => Promise<any>
-  } {
-    const protocols = this.credentialsModuleConfig.credentialProtocols
-    const v2 = protocols.find((p: DidCommCredentialProtocol) => p.version === 'v2')
-    if (!v2) {
-      throw new CredoError(
-        'DidCommCredentialV2Protocol is not registered on the agent. vt-flow requires it for Issue Credential V2 offers.',
-      )
-    }
-    return v2 as DidCommCredentialProtocol & {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      createOffer: (agentContext: AgentContext, options: any) => Promise<any>
-    }
-  }
-
   private async dispatchMessage(
     connectionId: string,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    message: any,
+    message: DidCommMessage,
     associatedRecord: VtFlowRecord,
   ): Promise<void> {
     const connection = await this.connectionService.getById(this.agentContext, connectionId)

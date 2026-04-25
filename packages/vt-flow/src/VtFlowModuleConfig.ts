@@ -1,6 +1,6 @@
 import type { VtFlowRecord } from './repository/VtFlowRecord'
 import type { AgentContext } from '@credo-ts/core'
-import type { DidCommCredentialExchangeRecord } from '@credo-ts/didcomm'
+import type { DidCommCredentialExchangeRecord, DidCommJsonLdCredentialDetailFormat } from '@credo-ts/didcomm'
 
 export interface VtFlowCredentialLifecycleContext {
   agentContext: AgentContext
@@ -20,8 +20,7 @@ export interface VtFlowBuildCredentialOfferContext {
 }
 
 export interface VtFlowCredentialOfferPayload {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  credentialFormats: any
+  credentialFormats: { jsonld: DidCommJsonLdCredentialDetailFormat }
   comment?: string
   goal?: string
   goalCode?: string
