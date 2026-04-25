@@ -1,9 +1,5 @@
 // Agent
-export { VsAgent } from './agent/VsAgent'
-export { type VsAgentOptions, BaseAgentModules } from './agent/VsAgent'
-export type { BaseAgentModules as DidCommAgentModules } from './agent/VsAgent'
-export { createVsAgent } from './agent/createVsAgent'
-export type { CreateVsAgentOptions } from './agent/createVsAgent'
+export * from './agent'
 export type { Plugin } from './types'
 
 // Plugins
@@ -25,7 +21,12 @@ export { VsAgentWsInboundTransport, WebSocketTransportSession } from './transpor
 export { VsAgentWsOutboundTransport } from './transports/VsAgentWsOutboundTransport'
 
 // Credentials
-export { FullTailsFileService, tailsIndex, baseFilePath } from './credentials/FullTailsFileService'
+export {
+  FullTailsFileService,
+  tailsIndex,
+  baseFilePath,
+  deleteTailsEntry,
+} from './credentials/FullTailsFileService'
 
 // Utils
 export { createInvitation, getWebDid, getRecordId } from './utils/agent'
@@ -34,3 +35,5 @@ export { webhookListener } from './utils/webhook'
 export type { WebhookData } from './utils/webhook'
 export { sendWebhookEvent, sendMessageReceivedEvent } from './utils/webhookEvent'
 export * from './utils/util'
+
+export * from './blockchain'

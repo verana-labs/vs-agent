@@ -62,6 +62,21 @@ function fileHash(filePath: string, algorithm = 'sha256') {
   })
 }
 
+export function deleteTailsEntry(tailsFileUrl: string): void {
+  const tailsFileId = decodeURIComponent(tailsFileUrl.split('/').pop() ?? '')
+  if (!tailsFileId || !tailsIndex[tailsFileId]) return
+
+  const hash = tailsIndex[tailsFileId]
+  delete tailsIndex[tailsFileId]
+  fs.writeFileSync(indexFilePath, JSON.stringify(tailsIndex))
+
+  const stillReferenced = Object.values(tailsIndex).includes(hash)
+  if (!stillReferenced) {
+    const filePath = `${baseFilePath}/${hash}`
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+  }
+}
+
 async function saveTailsFile(localFilePath: string, tailsFileId: string, logger: Logger) {
   logger.info(`Processing tails file: ${tailsFileId}`)
 
