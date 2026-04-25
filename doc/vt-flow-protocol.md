@@ -8,7 +8,6 @@
 - **Tags:** feature, protocol, verifiable-trust, credentials, verana
 - **Tracking Issue:** [verana-labs/vs-agent#404](https://github.com/verana-labs/vs-agent/issues/404)
 - **DIDComm Envelope Compatibility:** Envelope-agnostic — a single v1.0 protocol carried by either DIDComm v1 (Aries-style) or DIDComm v2 envelopes. See [DIDComm Envelope Compatibility](#didcomm-envelope-compatibility).
-- **Companion Implementation Guide:** [vt-flow-implementation.md](./vt-flow-implementation.md) (Credo-TS specifics)
 
 ## Summary
 
