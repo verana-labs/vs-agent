@@ -8,7 +8,6 @@ import {
   DidCommAutoAcceptCredential,
   DidCommConnectionService,
   DidCommCredentialExchangeRepository,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   DidCommCredentialsApi,
   DidCommCredentialsModuleConfig,
   DidCommMessageSender,
@@ -146,7 +145,7 @@ export class VtFlowApi {
       )
     }
 
-    const credentialsApi = this.resolveCredentialsApi()
+    const credentialsApi = this.agentContext.dependencyManager.resolve(DidCommCredentialsApi)
     await credentialsApi.acceptCredential({
       credentialExchangeRecordId: record.credentialExchangeRecordId,
     })
@@ -327,11 +326,6 @@ export class VtFlowApi {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       createOffer: (agentContext: AgentContext, options: any) => Promise<any>
     }
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private resolveCredentialsApi(): any {
-    return this.agentContext.dependencyManager.resolve(DidCommCredentialsApi)
   }
 
   private async dispatchMessage(
