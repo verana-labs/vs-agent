@@ -7,6 +7,7 @@ import {
   createVsAgent,
   HttpInboundTransport,
   setupBaseDidComm,
+  VeranaChainService,
   VsAgentWsInboundTransport,
 } from '@verana-labs/vs-agent-sdk'
 import express from 'express'
@@ -29,6 +30,7 @@ export const setupAgent = async ({
   autoDiscloseUserProfile,
   masterListCscaLocation,
   autoUpdateStorageOnStartup,
+  veranaChain,
 }: {
   port: number
   walletConfig: AskarModuleConfigStoreOptions
@@ -41,6 +43,7 @@ export const setupAgent = async ({
   parsedDid?: ParsedDid
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
+  veranaChain?: VeranaChainService
 }) => {
   const logger = new TsLogger(logLevel ?? LogLevel.Warn, 'Agent')
   const publicDid = parsedDid?.did
@@ -77,6 +80,7 @@ export const setupAgent = async ({
     masterListCscaLocation,
     displayPictureUrl,
     label,
+    veranaChain,
   })
 
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
