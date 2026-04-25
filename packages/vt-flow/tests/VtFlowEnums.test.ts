@@ -1,15 +1,6 @@
-import { DidCommDidExchangeState } from '@credo-ts/didcomm'
 import { describe, expect, it } from 'vitest'
 
-import {
-  VtFlowConnectionState,
-  VtFlowRole,
-  VtFlowState,
-  VtFlowTerminalStates,
-  VtFlowVariant,
-  connectionStateFromDidExchangeState,
-  isVtFlowTerminalState,
-} from '../src'
+import { VtFlowRole, VtFlowState, VtFlowTerminalStates, VtFlowVariant, isVtFlowTerminalState } from '../src'
 
 describe('VtFlowRole', () => {
   it('defines the two party roles from the spec', () => {
@@ -82,41 +73,5 @@ describe('VtFlowState', () => {
     [VtFlowState.CredRevoked, false],
   ])('isVtFlowTerminalState(%s) === %s', (state, expected) => {
     expect(isVtFlowTerminalState(state)).toBe(expected)
-  })
-})
-
-describe('VtFlowConnectionState', () => {
-  it('defines the three-value abstraction from the spec', () => {
-    expect(Object.values(VtFlowConnectionState).sort()).toEqual([
-      'ESTABLISHED',
-      'NOT_CONNECTED',
-      'TERMINATED',
-    ])
-  })
-
-  // The mapping table below mirrors `doc/vt-flow-implementation.md` §Connection
-  // state mapping. Any divergence between this test and that document is a
-  // spec bug in one or the other — fix them together.
-  const cases: Array<[DidCommDidExchangeState, VtFlowConnectionState]> = [
-    [DidCommDidExchangeState.Start, VtFlowConnectionState.NotConnected],
-    [DidCommDidExchangeState.InvitationSent, VtFlowConnectionState.NotConnected],
-    [DidCommDidExchangeState.InvitationReceived, VtFlowConnectionState.NotConnected],
-    [DidCommDidExchangeState.RequestSent, VtFlowConnectionState.NotConnected],
-    [DidCommDidExchangeState.RequestReceived, VtFlowConnectionState.NotConnected],
-    [DidCommDidExchangeState.ResponseSent, VtFlowConnectionState.NotConnected],
-    [DidCommDidExchangeState.ResponseReceived, VtFlowConnectionState.NotConnected],
-    [DidCommDidExchangeState.Abandoned, VtFlowConnectionState.Terminated],
-    [DidCommDidExchangeState.Completed, VtFlowConnectionState.Established],
-  ]
-
-  it.each(cases)('maps %s to %s', (didExchange, expected) => {
-    expect(connectionStateFromDidExchangeState(didExchange)).toBe(expected)
-  })
-
-  it('covers every DidCommDidExchangeState value (forward-compat audit)', () => {
-    const covered = new Set(cases.map(([state]) => state))
-    for (const state of Object.values(DidCommDidExchangeState)) {
-      expect(covered.has(state)).toBe(true)
-    }
   })
 })

@@ -1,7 +1,6 @@
 // Enums + value objects
 export { VtFlowRole } from './VtFlowRole'
 export { VtFlowState, VtFlowTerminalStates, isVtFlowTerminalState } from './VtFlowState'
-export { VtFlowConnectionState, connectionStateFromDidExchangeState } from './VtFlowConnectionState'
 export { VtFlowVariant } from './VtFlowVariant'
 
 // Events

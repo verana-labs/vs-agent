@@ -4,7 +4,6 @@ import type { DidCommCredentialExchangeRecord, DidCommInboundMessageContext } fr
 import { CredoError, EventEmitter, InjectionSymbols, inject, injectable } from '@credo-ts/core'
 import { DidCommCredentialState } from '@credo-ts/didcomm'
 
-import { VtFlowConnectionState } from '../VtFlowConnectionState'
 import { VtFlowEventTypes, type VtFlowStateChangedEvent } from '../VtFlowEvents'
 import { VtFlowModuleConfig } from '../VtFlowModuleConfig'
 import { VtFlowRole } from '../VtFlowRole'
@@ -103,7 +102,7 @@ export class VtFlowService {
     })
 
     await this.repository.save(agentContext, record)
-    this.emitStateChanged(agentContext, record, null, null)
+    this.emitStateChanged(agentContext, record, null)
     return { message, record }
   }
 
@@ -135,7 +134,7 @@ export class VtFlowService {
     })
 
     await this.repository.save(agentContext, record)
-    this.emitStateChanged(agentContext, record, null, null)
+    this.emitStateChanged(agentContext, record, null)
     return { message, record }
   }
 
@@ -172,7 +171,7 @@ export class VtFlowService {
     })
 
     await this.repository.save(agentContext, record)
-    this.emitStateChanged(agentContext, record, null, null)
+    this.emitStateChanged(agentContext, record, null)
     return record
   }
 
@@ -209,7 +208,7 @@ export class VtFlowService {
     })
 
     await this.repository.save(agentContext, record)
-    this.emitStateChanged(agentContext, record, null, null)
+    this.emitStateChanged(agentContext, record, null)
     return record
   }
 
@@ -306,9 +305,7 @@ export class VtFlowService {
 
     record.errorMessage = params.enDescription ?? params.code
 
-    await this.updateState(agentContext, record, nextState, {
-      connectionState: VtFlowConnectionState.Terminated,
-    })
+    await this.updateState(agentContext, record, nextState)
 
     return { record, problemReport }
   }
@@ -332,9 +329,7 @@ export class VtFlowService {
 
     record.errorMessage = params.enDescription ?? code
 
-    await this.updateState(agentContext, record, VtFlowState.TerminatedByApplicant, {
-      connectionState: VtFlowConnectionState.Terminated,
-    })
+    await this.updateState(agentContext, record, VtFlowState.TerminatedByApplicant)
 
     return { record, problemReport }
   }
@@ -481,9 +476,7 @@ export class VtFlowService {
       case DidCommCredentialState.Abandoned:
         if (record.state !== VtFlowState.Error) {
           record.errorMessage = record.errorMessage ?? 'Subprotocol abandoned'
-          await this.updateState(agentContext, record, VtFlowState.Error, {
-            connectionState: VtFlowConnectionState.Terminated,
-          })
+          await this.updateState(agentContext, record, VtFlowState.Error)
         }
         break
       default:
@@ -531,28 +524,20 @@ export class VtFlowService {
     agentContext: AgentContext,
     record: VtFlowRecord,
     newState: VtFlowState,
-    options: { connectionState?: VtFlowConnectionState } = {},
   ): Promise<void> {
     const previousState = record.state
-    const previousConnectionState = VtFlowConnectionState.Established
-    const connectionState = options.connectionState ?? previousConnectionState
-
-    if (previousState === newState && previousConnectionState === connectionState) {
-      return
-    }
+    if (previousState === newState) return
 
     record.state = newState
     await this.repository.update(agentContext, record)
 
-    this.emitStateChanged(agentContext, record, previousState, previousConnectionState, connectionState)
+    this.emitStateChanged(agentContext, record, previousState)
   }
 
   private emitStateChanged(
     agentContext: AgentContext,
     record: VtFlowRecord,
     previousState: VtFlowState | null,
-    previousConnectionState: VtFlowConnectionState | null,
-    connectionState: VtFlowConnectionState = VtFlowConnectionState.Established,
   ): void {
     this.eventEmitter.emit<VtFlowStateChangedEvent>(agentContext, {
       type: VtFlowEventTypes.VtFlowStateChanged,
@@ -562,8 +547,6 @@ export class VtFlowService {
         sessionUuid: record.sessionUuid,
         state: record.state,
         previousState,
-        connectionState,
-        previousConnectionState,
       },
     })
   }
