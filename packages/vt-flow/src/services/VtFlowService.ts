@@ -4,11 +4,7 @@ import type { DidCommCredentialExchangeRecord, DidCommInboundMessageContext } fr
 import { CredoError, EventEmitter, InjectionSymbols, inject, injectable } from '@credo-ts/core'
 import { DidCommCredentialState } from '@credo-ts/didcomm'
 
-import { VtFlowEventTypes, type VtFlowStateChangedEvent } from '../VtFlowEvents'
 import { VtFlowModuleConfig } from '../VtFlowModuleConfig'
-import { VtFlowRole } from '../VtFlowRole'
-import { VtFlowState } from '../VtFlowState'
-import { VtFlowVariant } from '../VtFlowVariant'
 import { type BuildVtFlowProblemReportOptions, VtFlowErrorCode, buildVtFlowProblemReport } from '../errors'
 import {
   CredentialStateChangeMessage,
@@ -22,6 +18,13 @@ import {
   VtCredentialState,
 } from '../messages'
 import { VtFlowRecord, VtFlowRepository } from '../repository'
+import {
+  VtFlowEventTypes,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowVariant,
+  type VtFlowStateChangedEvent,
+} from '../types'
 
 export interface CreateValidationRequestParams {
   connectionId: string

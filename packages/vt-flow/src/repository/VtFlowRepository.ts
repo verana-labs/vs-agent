@@ -2,7 +2,7 @@ import type { AgentContext, StorageService } from '@credo-ts/core'
 
 import { EventEmitter, InjectionSymbols, Repository, inject, injectable } from '@credo-ts/core'
 
-import { VtFlowRole } from '../VtFlowRole'
+import { VtFlowRole } from '../types'
 
 import { VtFlowRecord } from './VtFlowRecord'
 

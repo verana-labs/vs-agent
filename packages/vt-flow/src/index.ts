@@ -1,11 +1,21 @@
-// Enums + value objects
-export { VtFlowRole } from './VtFlowRole'
-export { VtFlowState, VtFlowTerminalStates, isVtFlowTerminalState } from './VtFlowState'
-export { VtFlowVariant } from './VtFlowVariant'
-
-// Events
-export { VtFlowEventTypes } from './VtFlowEvents'
-export type { VtFlowStateChangedEvent } from './VtFlowEvents'
+// Types: enums, events, API option interfaces
+export {
+  VtFlowEventTypes,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowTerminalStates,
+  VtFlowVariant,
+  isVtFlowTerminalState,
+} from './types'
+export type {
+  NotifyCredentialStateChangeOptions,
+  OfferCredentialForSessionOptions,
+  ProblemReportDispatchOptions,
+  SendIssuanceRequestOptions,
+  SendOobLinkOptions,
+  SendValidationRequestOptions,
+  VtFlowStateChangedEvent,
+} from './types'
 
 // Wire messages
 export {
@@ -67,14 +77,6 @@ export type {
 
 export { VtFlowModule } from './VtFlowModule'
 export { VtFlowApi } from './VtFlowApi'
-export type {
-  NotifyCredentialStateChangeOptions,
-  OfferCredentialForSessionOptions,
-  ProblemReportDispatchOptions,
-  SendIssuanceRequestOptions,
-  SendOobLinkOptions,
-  SendValidationRequestOptions,
-} from './VtFlowApi'
 
 export { setupVtFlow } from './setupVtFlow'
 export type { VtFlowSetup } from './setupVtFlow'

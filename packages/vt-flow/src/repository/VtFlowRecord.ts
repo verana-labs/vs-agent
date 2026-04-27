@@ -2,9 +2,7 @@ import type { RecordTags, TagsBase } from '@credo-ts/core'
 
 import { BaseRecord, CredoError, utils } from '@credo-ts/core'
 
-import { VtFlowRole } from '../VtFlowRole'
-import { VtFlowState } from '../VtFlowState'
-import { VtFlowVariant } from '../VtFlowVariant'
+import { VtFlowRole, VtFlowState, VtFlowVariant } from '../types'
 
 /** Indexed storage tags queryable through `VtFlowRepository`; `permId` is §5.1-only and `schemaId` is §5.2-only. */
 export type DefaultVtFlowTags = {

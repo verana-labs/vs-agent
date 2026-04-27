@@ -13,11 +13,7 @@ import {
 } from '@credo-ts/didcomm'
 
 import { VtFlowApi } from './VtFlowApi'
-import { VtFlowEventTypes, type VtFlowStateChangedEvent } from './VtFlowEvents'
 import { VtFlowModuleConfig, type VtFlowModuleConfigOptions } from './VtFlowModuleConfig'
-import { VtFlowRole } from './VtFlowRole'
-import { VtFlowState } from './VtFlowState'
-import { VtFlowVariant } from './VtFlowVariant'
 import {
   CredentialStateChangeHandler,
   IssuanceRequestHandler,
@@ -28,6 +24,13 @@ import {
 import { VT_FLOW_PROTOCOL_URI } from './messages'
 import { VtFlowRepository } from './repository'
 import { VtFlowService } from './services'
+import {
+  VtFlowEventTypes,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowVariant,
+  type VtFlowStateChangedEvent,
+} from './types'
 
 /** Credo-TS module implementing the vt-flow superprotocol (`https://didcomm.org/vt-flow/1.0`); wires handlers, feature registry, and subprotocol correlation on `~thread.pthid`. */
 export class VtFlowModule implements Module {

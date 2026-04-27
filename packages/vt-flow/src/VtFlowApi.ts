@@ -1,10 +1,16 @@
-import type { VtFlowErrorCode } from './errors'
 import type { VtFlowRecord } from './repository'
+import type {
+  NotifyCredentialStateChangeOptions,
+  OfferCredentialForSessionOptions,
+  ProblemReportDispatchOptions,
+  SendIssuanceRequestOptions,
+  SendOobLinkOptions,
+  SendValidationRequestOptions,
+} from './types'
 import type { Query, QueryOptions } from '@credo-ts/core'
 import type {
   DidCommCredentialExchangeRecord,
   DidCommCredentialProtocol,
-  DidCommJsonLdCredentialDetailFormat,
   DidCommMessage,
 } from '@credo-ts/didcomm'
 
@@ -20,56 +26,8 @@ import {
 } from '@credo-ts/didcomm'
 
 import { VtFlowModuleConfig } from './VtFlowModuleConfig'
-import { VtFlowRole } from './VtFlowRole'
-import { VtCredentialState } from './messages'
 import { VtFlowService } from './services'
-
-export interface SendValidationRequestOptions {
-  connectionId: string
-  sessionUuid?: string
-  permId: string
-  agentPermId: string
-  walletAgentPermId: string
-  claims?: Record<string, unknown>
-}
-
-export interface SendIssuanceRequestOptions {
-  connectionId: string
-  sessionUuid?: string
-  schemaId: string
-  agentPermId: string
-  walletAgentPermId: string
-  claims?: Record<string, unknown>
-}
-
-export interface OfferCredentialForSessionOptions {
-  vtFlowRecordId: string
-  credentialFormats: { jsonld: DidCommJsonLdCredentialDetailFormat }
-  comment?: string
-  goal?: string
-  goalCode?: string
-}
-
-export interface SendOobLinkOptions {
-  vtFlowRecordId: string
-  url: string
-  description: string
-  expiresTime?: Date
-}
-
-export interface ProblemReportDispatchOptions {
-  vtFlowRecordId: string
-  code: VtFlowErrorCode
-  enDescription?: string
-  fixHintEn?: string
-}
-
-export interface NotifyCredentialStateChangeOptions {
-  vtFlowRecordId: string
-  state: VtCredentialState | string
-  subprotocolThid?: string
-  reason?: string
-}
+import { VtFlowRole } from './types'
 
 /** Public API for vt-flow; each method performs a single state transition so callers can gate each one on its own on-chain work. */
 @injectable()
