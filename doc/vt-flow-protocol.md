@@ -2,17 +2,16 @@
 
 - **Authors:** Tarun Vadde (<vaddeofficial@gmail.com>)
 - **Status:** DRAFT
-- **Status Note:** This document is a draft intended to kick off design discussion. Items flagged *(open)* are expected to change based on community review. See [Unresolved Questions](#unresolved-questions).
+- **Status Note:** This document is a draft intended to kick off design discussion.
 - **Supersedes:** None
 - **Start Date:** 2026-04-16
 - **Tags:** feature, protocol, verifiable-trust, credentials, verana
 - **Tracking Issue:** [verana-labs/vs-agent#404](https://github.com/verana-labs/vs-agent/issues/404)
 - **DIDComm Envelope Compatibility:** Envelope-agnostic — a single v1.0 protocol carried by either DIDComm v1 (Aries-style) or DIDComm v2 envelopes. See [DIDComm Envelope Compatibility](#didcomm-envelope-compatibility).
-- **Companion Implementation Guide:** [vt-flow-implementation.md](./vt-flow-implementation.md) (Credo-TS specifics)
 
 ## Summary
 
-The **Verifiable Trust Flow Protocol** (`vt-flow`) is a DIDComm superprotocol that orchestrates the acquisition of a Verifiable Trust Credential between an **Applicant** and a **Validator**. It carries Verana-specific state (`perm_id`, `session_uuid`, `agent_perm_id`, `wallet_agent_perm_id`) across a multi-step flow and delegates credential delivery to the [Issue Credential V2 protocol (RFC 0453)][rfc0453] as a subprotocol, linked via the DIDComm thread / parent-thread mechanism (per [RFC 0008][rfc0008] in v1 envelopes, and equivalent `thid`/`pthid` fields in v2 envelopes).
+The **Verifiable Trust Flow Protocol** (`vt-flow`) is a DIDComm superprotocol that orchestrates the acquisition of a Verifiable Trust Credential between an **Applicant** and a **Validator**. It carries VPR-specific state (`perm_id`, `session_uuid`, `agent_perm_id`, `wallet_agent_perm_id`) across a multi-step flow and delegates credential delivery to the [Issue Credential V2 protocol (RFC 0453)][rfc0453] as a subprotocol, linked via the DIDComm thread / parent-thread mechanism (per [RFC 0008][rfc0008] in v1 envelopes, and equivalent `thid`/`pthid` fields in v2 envelopes).
 
 `vt-flow` covers two flow variants described in §5 of the [VS-Agent Core Specification][vs-core]:
 
@@ -50,9 +49,9 @@ Message type URIs follow the pattern:
 https://didcomm.org/vt-flow/1.0/<message-name>
 ```
 
-### Protocol Identification (no goal codes)
+### Protocol Identification
 
-VS Agents establish DIDComm v1 connections via **implicit invitations** (resolving the peer's DID Document to discover `did-communication` service endpoints). There is no Out-of-Band invitation object and therefore no `goalCode` field is carried at the invitation level. The protocol is identified by the message type URI of the first vt-flow message received on the connection (`validation-request` or `issuance-request`).
+The protocol is identified by the message type URI of the first vt-flow message received on the connection (`validation-request` or `issuance-request`).
 
 ### Key Concepts
 
@@ -84,7 +83,18 @@ Two roles participate in `vt-flow`:
 
 The valid Applicant/Validator pairings are enumerated in §5.1 of the [VS-Agent Core Specification][vs-core].
 
-Per [VS-Agent Core Specification][vs-core] §5.1 step 2 and §5.2 step 1, the Validator **MUST** verify that the connecting Applicant is a Verifiable Service per [VS-CONN-VS][vt-spec-conn-vs] **before accepting the connection** (before sending the DID Exchange response). On check failure, the Validator **MUST** reject the connection with `problem-report` code `vt-flow.not-a-verifiable-service`.
+### Verifiable Service Identity Check
+
+Per [VS-Agent Core Specification][vs-core] §5.1 step 2 and §5.2 step 1, both parties **MUST** verify the peer is a Verifiable Service per [VS-CONN-VS][vt-spec-conn-vs] at the protocol level:
+
+- The **Validator MUST** perform the check **on receipt of the first vt-flow message** (`validation-request` or `issuance-request`).
+- The **Applicant MUST** perform the check **before sending** the first vt-flow message.
+
+On check failure, the failing party **MUST** terminate the session with `problem-report` code `vt-flow.not-a-verifiable-service` (Flow State transitions to `ERROR`).
+
+Implementations MAY cache VS-CONN-VS results to avoid redundant trust resolution if the result was obtained recently.
+
+The DIDComm-version-specific binding mechanism (e.g., DID Exchange Request DID under v1, `from_prior` header under v2) is independent of vt-flow itself and is not normative for this protocol. Under DIDComm v1, a Validator MAY perform the VS-CONN-VS check earlier (before sending the DID Exchange response) as an optimisation to avoid establishing a connection that will be terminated immediately.
 
 ### States
 
@@ -144,11 +154,11 @@ Applicant                          VPR (Chain)                    Validator
     │ 2. DIDComm implicit invitation   │                              │
     │ ───────────────────────────────────────────────────────────────>│
     │                                  │                              │
-    │    Validator MUST verify Applicant is a VS                      │
-    │    per [VS-CONN-VS] before accepting the connection             │
+    │ ─── vt-flow protocol begins ─────────────────────────────────── │
     │                                  │                              │
     │ 3. validation-request            │                              │
     │ ───────────────────────────────────────────────────────────────>│
+    │    (Validator runs VS-CONN-VS check on receipt)                 │
     │                                  │                              │
     │   (optional) oob-link            │                              │
     │ <───────────────────────────────────────────────────────────────│
@@ -201,10 +211,11 @@ Applicant                          VPR (Chain)                    Validator
     │ 1. DIDComm implicit invitation   │                              │
     │ ───────────────────────────────────────────────────────────────>│
     │                                  │                              │
-    │    VS-CONN-VS check (Validator) before accepting the connection │
+    │ ─── vt-flow protocol begins ─────────────────────────────────── │
     │                                  │                              │
     │ 2. issuance-request              │                              │
     │ ───────────────────────────────────────────────────────────────>│
+    │    (Validator runs VS-CONN-VS check on receipt)                 │
     │                                  │                              │
     │   (optional) oob-link            │                              │
     │ <───────────────────────────────────────────────────────────────│
@@ -381,7 +392,7 @@ Sent by the Validator to notify the Applicant of a post-issuance change to the c
 
 **Forward compatibility:** Receivers **MUST** accept messages with unknown `state` values without error and **MAY** ignore them. This allows future versions to extend the enum (e.g., `REACTIVATED`, `SUSPENDED`, `UNSUSPENDED`, `RENEWED`) without breaking v1.0 parsers.
 
-Per [VS-Agent Core Specification §5.3][vs-core], `REVOKED` is the only state defined in v1.0. Additional states are future work; see [Unresolved Questions](#unresolved-questions).
+Per [VS-Agent Core Specification §5.3][vs-core], `REVOKED` is the only state defined in v1.0. Additional states are future work.
 
 #### problem-report (adopted)
 
@@ -692,11 +703,11 @@ Additional format identifiers **MAY** be negotiated by mutual agreement.
 
 ### Why a superprotocol instead of extending Issue Credential V2?
 
-The Verana-specific fields and on-chain coordination points are not generic to credential issuance. Shoehorning them into Issue Credential V2 would pollute a widely-adopted standard with Verana-only concerns and would not provide control over the order of operations. A superprotocol lets vt-flow keep Verana-specific state in its own messages, delegate generic credential delivery to Issue Credential V2 unchanged, and advance the vt-flow state machine via the subprotocol's existing state-changed events.
+The VPR-specific fields and on-chain coordination points are not generic to credential issuance. Shoehorning them into Issue Credential V2 would pollute a widely-adopted standard with VPR-only concerns and would not provide control over the order of operations. A superprotocol lets vt-flow keep VPR-specific state in its own messages, delegate generic credential delivery to Issue Credential V2 unchanged, and advance the vt-flow state machine via the subprotocol's existing state-changed events.
 
 ### Why `pthid` linking?
 
-`pthid` is the standard mechanism defined in [RFC 0008][rfc0008]. Any conformant DIDComm agent can read and correlate it. Inventing a Verana-specific correlation ID would duplicate functionality and fracture tooling.
+`pthid` is the standard mechanism defined in [RFC 0008][rfc0008]. Any conformant DIDComm agent can read and correlate it. Inventing a VPR-specific correlation ID would duplicate functionality and fracture tooling.
 
 ### Why adopt `problem-report` instead of a custom `ERROR` message?
 
@@ -713,10 +724,6 @@ The Issue Credential V2 protocol already defines an Ack message ([RFC 0015][rfc0
 ### Single protocol with two entry points vs. two separate protocols
 
 The two flows share approximately 90% of their state machine and all non-initial messages. A single protocol with two entry points is simpler to implement, test, and document.
-
-### Why no goal code?
-
-vt-flow uses implicit invitations (DID resolution) rather than explicit Out-of-Band invitations. Goal codes are a property of OOB invitations. The protocol is identified by the message type URI of the first vt-flow message.
 
 ---
 
@@ -741,57 +748,6 @@ vt-flow uses implicit invitations (DID resolution) rather than explicit Out-of-B
 
 ---
 
-## Unresolved Questions
-
-Open protocol-semantic items for discussion before freezing v1.0.
-
-1. **VS-CONN-VS check timing.** [VS-Agent Core §5.1 step 2][vs-core] and §5.2 step 1 mandate the check "before accepting the connection". The current spec interprets this as "before sending the DID Exchange response" because most DIDComm frameworks (including Credo-TS) only expose a hook between `request-received` and `response-sent`; rejecting earlier would require agent-level changes. Alternatives and trade-offs:
-
-   - **(a) Current default — during DID Exchange, before response sent.** Normative in this draft. Sufficient for rejecting non-VS connecting parties before any vt-flow message is exchanged. Requires frameworks to expose a pre-response hook (e.g., `autoAcceptConnection: false` + manual `acceptRequest`/rejection).
-   - **(b) On receipt of the first vt-flow message (`validation-request`/`issuance-request`).** Weaker — the DIDComm connection has already completed handshake. Simpler to implement on any framework. The check failure would return a vt-flow `problem-report` instead of a DID Exchange `problem-report`.
-   - **(c) Both — connection-layer check when possible, vt-flow-message-layer check as a fallback.** Defence in depth but effectively makes (b) mandatory.
-
-   Current spec: (a). Confirm whether Verana accepts (a) as the normative requirement, or whether the spec should relax to (b)/(c) to accommodate frameworks without a pre-response hook.
-
-2. **`agent_perm_id` / `wallet_agent_perm_id` on-chain validation timing.** Default: Validator validates on-chain on receipt of VR/IR (fail-fast), and re-validates at `createOrUpdatePermissionSession` time. Confirm this is the intended defensive behaviour.
-
-3. **`proofs~attach` format registry extensions.** Default in v1.0: `aries/ld-proof-vp@v1.0`. Confirm whether Verana requires additional formats (SD-JWT, mdoc, Verana-native) at spec level.
-
-4. **Present Proof V2 as a subprotocol.** Default: NOT in v1.0 scope. Confirm whether proof presentation as a distinct subprotocol (e.g., Validator requesting fresh proofs mid-session) is required for v1.0 or deferred to v1.1.
-
-5. **Additional `credential-state-change` states.** v1.0 defines only `REVOKED` per [VS-Agent Core §5.3][vs-core]. Identified future states for discussion:
-   - `REACTIVATED` — previously revoked credential restored.
-   - `SUSPENDED` / `UNSUSPENDED` — temporary hold without full revocation.
-   - `RENEWED` — new credential supersedes this one.
-
-6. **Timeouts and session retention.** Default proposal:
-   - `OOB_PENDING` auto-terminates if the Applicant does not complete the OOB step within **7 days** of `oob-link` receipt.
-   - Records in terminal states retained for **90 days** for audit.
-   - No hard timeout on `COMPLETED` (connection stays open indefinitely to receive `credential-state-change`).
-
-7. **Protocol URI namespace.** Current: `https://didcomm.org/vt-flow/1.0` (community convention). Alternative: `https://verana.io/vt-flow/1.0` (Verana-owned).
-
-8. **Concurrency per connection.** Default: an Applicant MAY maintain multiple concurrent vt-flow sessions with the same Validator, each identified by its own `thid` and `session_uuid`. Confirm.
-
----
-
-## Resolved Questions (for reference)
-
-| Resolved | Answer |
-|---|---|
-| Protocol URI | `https://didcomm.org/vt-flow/1.0` |
-| Goal code | Not used (implicit invitations do not carry `goalCode`). |
-| Single vs multiple protocols | Single protocol with two entry messages. |
-| `CRED_ACCEPT` vs native Ack | Use Issue Credential V2 native Ack. Applicant MUST verify on-chain digest before sending the Ack. |
-| Subprotocol activation sequencing | Only `issue-credential` blocked on `createOrUpdatePermissionSession`; `offer-credential` / `request-credential` MAY precede. |
-| `credential-state-change` vs Revocation Notification V2 | vt-flow-native with forward-compatible open enum. |
-| Revocation states in v1.0 | `REVOKED` only; forward-compatible for future values. |
-| Reconnection | Applicant resends VR/IR; Validator matches by `session_uuid` + `perm_id`/`schema_id` (per [VS-Agent Core §5.5][vs-core]). |
-| `session_uuid` vs `thid` | Two identifiers, two purposes: `thid` is the DIDComm correlation; `session_uuid` is the VPR Permission Session identifier. |
-| DIDComm envelope version | Envelope-agnostic. vt-flow 1.0 runs unchanged on DIDComm v1 (Aries) and DIDComm v2 envelopes. See [DIDComm Envelope Compatibility](#didcomm-envelope-compatibility). |
-
----
-
 [rfc0003]: https://github.com/hyperledger/aries-rfcs/blob/main/concepts/0003-protocols/README.md
 [rfc0008]: https://github.com/hyperledger/aries-rfcs/blob/main/concepts/0008-message-id-and-threading/README.md
 [rfc0015]: https://github.com/hyperledger/aries-rfcs/blob/main/features/0015-acks/README.md
@@ -807,7 +763,7 @@ Open protocol-semantic items for discussion before freezing v1.0.
 [rfc0519]: https://github.com/hyperledger/aries-rfcs/tree/main/concepts/0519-goal-codes
 [rfc0593]: https://github.com/hyperledger/aries-rfcs/blob/main/features/0593-json-ld-cred-attach/README.md
 [vs-agent-repo]: https://github.com/verana-labs/vs-agent
-[vs-core]: https://github.com/verana-labs/vs-agent/blob/feat/spec-v4-vs-agent-core/spec/vs-agent-core.md
+[vs-core]: https://github.com/verana-labs/vs-agent/issues/402
 [vpr-v4]: https://verana-labs.github.io/verifiable-trust-vpr-spec/
 [vt-spec]: https://verana-labs.github.io/verifiable-trust-spec/
 [vt-spec-conn-vs]: https://verana-labs.github.io/verifiable-trust-spec/#vs-conn-vs
