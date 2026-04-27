@@ -9,8 +9,8 @@ import {
   VsAgentWsInboundTransport,
   type VsAgentNestPlugin,
   VeranaChainService,
+  IndexerWebSocketService,
 } from '@verana-labs/vs-agent-sdk'
-import { IndexerWebSocketService } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
 import { IncomingMessage } from 'http'

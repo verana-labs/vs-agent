@@ -13,3 +13,5 @@ examples/**/.yarn/install-state.gz
 
 *.tgz
 Chart.lock
+
+CLAUDE.md
