@@ -11,6 +11,11 @@ import {
 } from '@credo-ts/didcomm'
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import {
+  VtFlowEventTypes,
+  type VtFlowState,
+  type VtFlowStateChangedEvent,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { chatEvents, ChatPlugin } from '@verana-labs/vs-agent-plugin-chat'
 import { vi } from 'vitest'
 
@@ -69,6 +74,18 @@ export function isConnectionProfileUpdatedEvent(arg: unknown): arg is DidCommCon
     !!payload?.profile &&
     !!payload?.connection
   )
+}
+
+export function isVtFlowStateChangedEvent(state: VtFlowState) {
+  return (arg: unknown): arg is VtFlowStateChangedEvent => {
+    const { type, payload } = arg as any
+    return (
+      typeof arg === 'object' &&
+      arg !== null &&
+      type === VtFlowEventTypes.VtFlowStateChanged &&
+      payload?.state === state
+    )
+  }
 }
 
 export function waitForEvent<T>(

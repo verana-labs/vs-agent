@@ -1,22 +1,17 @@
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { DidCommConnectionRecord, DidCommHandshakeProtocol } from '@credo-ts/didcomm'
-import {
-  VtFlowEventTypes,
-  VtFlowRole,
-  VtFlowState,
-  VtFlowVariant,
-  type VtFlowStateChangedEvent,
-} from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { firstValueFrom, Subject } from 'rxjs'
-import { filter, take, timeout as rxTimeout } from 'rxjs/operators'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { Subject } from 'rxjs'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  isVtFlowStateChangedEvent,
   startAgent,
   SubjectInboundTransport,
   type SubjectMessage,
   SubjectOutboundTransport,
+  waitForEvent,
 } from './__mocks__'
 
 /**
@@ -29,6 +24,7 @@ describe('vt-flow: two-agent integration', () => {
   let applicant: VsAgent<any>
   let validator: VsAgent<any>
   let applicantConnection: DidCommConnectionRecord
+  let validatorEvents: ReturnType<typeof vi.spyOn>
 
   beforeEach(async () => {
     const applicantMessages = new Subject<SubjectMessage>()
@@ -38,7 +34,7 @@ describe('vt-flow: two-agent integration', () => {
       'rxjs:validator': validatorMessages,
     }
 
-    // Applicant only initiates VR/IR — no auto-chain flags needed.
+    // Applicant only initiates VR/IR; no auto-chain flags needed.
     applicant = await startAgent({
       label: 'Applicant',
       domain: 'applicant',
@@ -61,16 +57,18 @@ describe('vt-flow: two-agent integration', () => {
     validator.didcomm.registerInboundTransport(new SubjectInboundTransport(validatorMessages))
     validator.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
     await validator.initialize()
+    validatorEvents = vi.spyOn(validator.events, 'emit')
     ;[applicantConnection] = await makeConnection(applicant, validator)
   }, 30_000)
 
   afterEach(async () => {
     await applicant?.shutdown()
     await validator?.shutdown()
+    vi.restoreAllMocks()
   })
 
   it('§5.2 issuance-request: Applicant IR_SENT, Validator auto-accepts to VALIDATING', async () => {
-    const validatingReached = waitForState(validator, VtFlowState.Validating)
+    const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
     const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
       connectionId: applicantConnection.id,
@@ -98,7 +96,7 @@ describe('vt-flow: two-agent integration', () => {
   })
 
   it('§5.1 validation-request: Applicant VR_SENT, Validator auto-accepts + auto-marks-validated', async () => {
-    const validatedReached = waitForState(validator, VtFlowState.Validated)
+    const validatedReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validated))
 
     const applicantRecord = await applicant.modules.vtFlow.sendValidationRequest({
       connectionId: applicantConnection.id,
@@ -124,7 +122,7 @@ describe('vt-flow: two-agent integration', () => {
   })
 
   it('threadId lookup on the Validator side matches the Applicant', async () => {
-    const validatingReached = waitForState(validator, VtFlowState.Validating)
+    const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
     const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
       connectionId: applicantConnection.id,
@@ -161,24 +159,4 @@ async function makeConnection(
   const [validatorRaw] = await validatorAgent.didcomm.connections.findAllByOutOfBandId(validatorOutOfBand.id)
   const validatorCompleted = await validatorAgent.didcomm.connections.returnWhenIsConnected(validatorRaw!.id)
   return [applicantCompleted, validatorCompleted]
-}
-
-function waitForState(
-  agent: VsAgent<any>,
-  state: VtFlowState,
-  timeoutMs = 10_000,
-): Promise<VtFlowStateChangedEvent> {
-  return firstValueFrom(
-    agent.events.observable<VtFlowStateChangedEvent>(VtFlowEventTypes.VtFlowStateChanged).pipe(
-      filter(e => e.payload.state === state),
-      take(1),
-      rxTimeout({
-        each: timeoutMs,
-        with: () =>
-          new Promise<never>((_, reject) =>
-            reject(new Error(`[vt-flow test] timed out waiting for state=${state} within ${timeoutMs}ms`)),
-          ),
-      }),
-    ),
-  )
 }
