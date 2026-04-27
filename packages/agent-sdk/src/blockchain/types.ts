@@ -1,13 +1,12 @@
-import { BaseLogger } from '@credo-ts/core'
+import { BaseLogger, JsonObject } from '@credo-ts/core'
 
 export const VERANA_BECH32_PREFIX = 'verana'
-
-import { JsonObject } from '@credo-ts/core'
 
 export interface IndexerEventsResponse {
   events: JsonObject[]
   count: number
   after_block_height: number
+}
 
 export interface PermQueryClient {
   GetPermission(req: { id: Long }): Promise<{ permission?: unknown }>
