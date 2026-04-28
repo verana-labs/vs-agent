@@ -20,7 +20,7 @@ export class VeranaIndexerService {
     }
   }
 
-  async getEvents(agentDid: string, afterBlockHeight = 0, limit = 100): Promise<IndexerEventsResponse> {
+  async getEvents(agentDid: string, afterBlockHeight = 0, limit = 500): Promise<IndexerEventsResponse> {
     this.config.logger.debug(`[VeranaIndexer] getEvents after_block=${afterBlockHeight}`)
     const url = `${this.baseUrl}/verana/indexer/v1/events?did=${encodeURIComponent(agentDid)}&after_block_height=${afterBlockHeight}&limit=${limit}`
     return fetchJson<IndexerEventsResponse>(url)
