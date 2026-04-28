@@ -35,7 +35,7 @@ export function applyActivity(state: VeranaSyncState, activity: IndexerActivity)
           : existing?.verifierMode,
         archived:
           activity.msg === 'ArchiveCredentialSchema'
-            ? Boolean(c['archived'] ?? true)
+            ? !(existing?.archived ?? false)
             : (existing?.archived ?? false),
         lastModifiedBlock: block,
       }
@@ -43,15 +43,34 @@ export function applyActivity(state: VeranaSyncState, activity: IndexerActivity)
     }
 
     case 'Permission': {
+      const existing = state.permissions[id]
+      const isRevoked = activity.msg === 'RevokePermission' ? true : (existing?.revoked ?? false)
+      const isSlashed = activity.msg === 'SlashPermissionTrustDeposit' ? true : (existing?.slashed ?? false)
+
       state.permissions[id] = {
         id: Number(id),
         schemaId: Number(c['schema_id']),
         did: String(c['did'] ?? ''),
         type: Number(c['type']),
-        vpState: String(c['vp_state'] ?? ''),
-        effectiveUntil: String(c['effective_until'] ?? ''),
-        revoked: Boolean(c['revoked']),
-        slashed: Boolean(c['slashed']),
+        vpState: (() => {
+          switch (activity.msg) {
+            case 'SetPermissionVPToValidated':
+              return 'VALIDATED'
+            case 'StartPermissionVP':
+            case 'RenewPermissionVP':
+              return 'IN_PROGRESS'
+            case 'CancelPermissionVPLastRequest':
+              return 'CANCELLED'
+            default:
+              return String(c['vp_state'] ?? existing?.vpState ?? '')
+          }
+        })(),
+        effectiveUntil:
+          activity.msg === 'AdjustPermission'
+            ? String(c['effective_until'] ?? '')
+            : (existing?.effectiveUntil ?? ''),
+        revoked: isRevoked,
+        slashed: isSlashed,
         lastModifiedBlock: block,
       }
       break
