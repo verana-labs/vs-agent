@@ -67,7 +67,8 @@ export class IndexerWebSocketService {
 
   private openWebSocket(): void {
     const url = new URL(this.options.indexerUrl)
-    const wsUrl = `wss://${url.host}/${WS_PATHNAME}?did=${encodeURIComponent(this.agentDid)}`
+    const wsProto = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${wsProto}//${url.host}/${WS_PATHNAME}?did=${encodeURIComponent(this.agentDid)}`
 
     this.logger.info(`[IndexerWS] Connecting to ${wsUrl}`)
     const ws = new WebSocket(wsUrl)
