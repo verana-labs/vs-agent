@@ -11,6 +11,7 @@ COPY patches ./patches
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json tsconfig.build.json ./
 COPY packages/model/package.json packages/model/package.json
 COPY packages/agent-sdk/package.json packages/agent-sdk/package.json
+COPY packages/vt-flow/package.json packages/vt-flow/package.json
 COPY apps/vs-agent/package.json apps/vs-agent/package.json
 COPY apps/vs-agent-ui/package.json apps/vs-agent-ui/package.json
 
@@ -21,6 +22,8 @@ COPY packages/model/src packages/model/src
 COPY packages/model/tsconfig.json packages/model/tsconfig.build.json packages/model/
 COPY packages/agent-sdk/src packages/agent-sdk/src
 COPY packages/agent-sdk/tsconfig.json packages/agent-sdk/tsconfig.build.json packages/agent-sdk/
+COPY packages/vt-flow/src packages/vt-flow/src
+COPY packages/vt-flow/tsconfig.json packages/vt-flow/tsconfig.build.json packages/vt-flow/
 COPY apps/vs-agent/src apps/vs-agent/src
 COPY apps/vs-agent/discovery.json apps/vs-agent/tsconfig.json apps/vs-agent/tsconfig.build.json apps/vs-agent/nest-cli.json apps/vs-agent/
 COPY apps/vs-agent-ui/src apps/vs-agent-ui/src
@@ -28,6 +31,7 @@ COPY apps/vs-agent-ui/index.html apps/vs-agent-ui/vite.config.js apps/vs-agent-u
 
 RUN pnpm --filter @verana-labs/vs-agent-model build && \
     pnpm --filter @verana-labs/vs-agent-sdk build && \
+    pnpm --filter @verana-labs/credo-ts-didcomm-vt-flow build && \
     pnpm --filter @verana-labs/vs-agent-ui build && \
     pnpm --filter @verana-labs/vs-agent build
 
@@ -43,6 +47,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json tsconf
 COPY packages/model/package.json packages/model/package.json
 COPY packages/agent-sdk/package.json packages/agent-sdk/package.json
 COPY packages/plugin-chat/package.json packages/plugin-chat/package.json
+COPY packages/vt-flow/package.json packages/vt-flow/package.json
 COPY apps/vs-agent/package.json apps/vs-agent/package.json
 COPY apps/vs-agent-ui/package.json apps/vs-agent-ui/package.json
 
@@ -55,6 +60,8 @@ COPY packages/agent-sdk/src packages/agent-sdk/src
 COPY packages/agent-sdk/tsconfig.json packages/agent-sdk/tsconfig.build.json packages/agent-sdk/
 COPY packages/plugin-chat/src packages/plugin-chat/src
 COPY packages/plugin-chat/tsconfig.build.json packages/plugin-chat/
+COPY packages/vt-flow/src packages/vt-flow/src
+COPY packages/vt-flow/tsconfig.json packages/vt-flow/tsconfig.build.json packages/vt-flow/
 COPY apps/vs-agent/src apps/vs-agent/src
 COPY apps/vs-agent/discovery.json apps/vs-agent/tsconfig.json apps/vs-agent/tsconfig.build.json apps/vs-agent/nest-cli.json apps/vs-agent/
 COPY apps/vs-agent-ui/src apps/vs-agent-ui/src
@@ -62,6 +69,7 @@ COPY apps/vs-agent-ui/index.html apps/vs-agent-ui/vite.config.js apps/vs-agent-u
 
 RUN pnpm --filter @verana-labs/vs-agent-model build && \
     pnpm --filter @verana-labs/vs-agent-sdk build && \
+    pnpm --filter @verana-labs/credo-ts-didcomm-vt-flow build && \
     pnpm --filter @verana-labs/vs-agent-plugin-chat build && \
     pnpm --filter @verana-labs/vs-agent-ui build && \
     pnpm --filter @verana-labs/vs-agent build
@@ -79,6 +87,7 @@ COPY packages/model/package.json packages/model/package.json
 COPY packages/agent-sdk/package.json packages/agent-sdk/package.json
 COPY packages/plugin-chat/package.json packages/plugin-chat/package.json
 COPY packages/plugin-mrtd/package.json packages/plugin-mrtd/package.json
+COPY packages/vt-flow/package.json packages/vt-flow/package.json
 COPY apps/vs-agent/package.json apps/vs-agent/package.json
 COPY apps/vs-agent-ui/package.json apps/vs-agent-ui/package.json
 
@@ -92,6 +101,8 @@ COPY packages/plugin-chat/src ./packages/plugin-chat/src
 COPY packages/plugin-chat/tsconfig.build.json ./packages/plugin-chat/
 COPY packages/plugin-mrtd/src ./packages/plugin-mrtd/src
 COPY packages/plugin-mrtd/tsconfig.json ./packages/plugin-mrtd/tsconfig.build.json packages/plugin-mrtd/
+COPY packages/vt-flow/src ./packages/vt-flow/src
+COPY packages/vt-flow/tsconfig.json ./packages/vt-flow/tsconfig.build.json packages/vt-flow/
 COPY apps/vs-agent/src ./apps/vs-agent/src
 COPY apps/vs-agent/discovery.json ./apps/vs-agent/tsconfig.json apps/vs-agent/tsconfig.build.json apps/vs-agent/nest-cli.json apps/vs-agent/
 COPY apps/vs-agent-ui/src ./apps/vs-agent-ui/src
@@ -99,6 +110,7 @@ COPY apps/vs-agent-ui/index.html ./apps/vs-agent-ui/vite.config.js apps/vs-agent
 
 RUN pnpm --filter @verana-labs/vs-agent-model build && \
     pnpm --filter @verana-labs/vs-agent-sdk build && \
+    pnpm --filter @verana-labs/credo-ts-didcomm-vt-flow build && \
     pnpm --filter @verana-labs/vs-agent-plugin-chat build && \
     pnpm --filter @verana-labs/vs-agent-plugin-mrtd build && \
     pnpm --filter @verana-labs/vs-agent-ui build && \
@@ -118,6 +130,8 @@ COPY --from=build-base /www/packages/model/build ./packages/model/build
 COPY --from=build-base /www/packages/agent-sdk/package.json ./packages/agent-sdk/package.json
 COPY --from=build-base /www/packages/agent-sdk/build ./packages/agent-sdk/build
 COPY --from=build-base /www/packages/agent-sdk/node_modules ./packages/agent-sdk/node_modules
+COPY --from=build-base /www/packages/vt-flow/package.json ./packages/vt-flow/package.json
+COPY --from=build-base /www/packages/vt-flow/build ./packages/vt-flow/build
 COPY --from=build-base /www/apps/vs-agent/node_modules ./apps/vs-agent/node_modules
 COPY apps/vs-agent/package.json ./apps/vs-agent/package.json
 COPY --from=build-base /www/apps/vs-agent/build ./apps/vs-agent/build
@@ -141,6 +155,8 @@ COPY --from=build-chat /www/packages/agent-sdk/node_modules ./packages/agent-sdk
 COPY --from=build-chat /www/packages/plugin-chat/package.json ./packages/plugin-chat/package.json
 COPY --from=build-chat /www/packages/plugin-chat/build ./packages/plugin-chat/build
 COPY --from=build-chat /www/packages/plugin-chat/node_modules ./packages/plugin-chat/node_modules
+COPY --from=build-chat /www/packages/vt-flow/package.json ./packages/vt-flow/package.json
+COPY --from=build-chat /www/packages/vt-flow/build ./packages/vt-flow/build
 COPY --from=build-chat /www/apps/vs-agent/node_modules ./apps/vs-agent/node_modules
 COPY apps/vs-agent/package.json ./apps/vs-agent/package.json
 COPY --from=build-chat /www/apps/vs-agent/build ./apps/vs-agent/build
@@ -167,6 +183,8 @@ COPY --from=build-mrtd /www/packages/plugin-chat/node_modules ./packages/plugin-
 COPY --from=build-mrtd /www/packages/plugin-mrtd/package.json ./packages/plugin-mrtd/package.json
 COPY --from=build-mrtd /www/packages/plugin-mrtd/build ./packages/plugin-mrtd/build
 COPY --from=build-mrtd /www/packages/plugin-mrtd/node_modules ./packages/plugin-mrtd/node_modules
+COPY --from=build-mrtd /www/packages/vt-flow/package.json ./packages/vt-flow/package.json
+COPY --from=build-mrtd /www/packages/vt-flow/build ./packages/vt-flow/build
 COPY --from=build-mrtd /www/apps/vs-agent/node_modules ./apps/vs-agent/node_modules
 COPY apps/vs-agent/package.json ./apps/vs-agent/package.json
 COPY --from=build-mrtd /www/apps/vs-agent/build ./apps/vs-agent/build
