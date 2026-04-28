@@ -2,7 +2,6 @@ import { JsonObject } from '@credo-ts/core'
 import WebSocket from 'ws'
 
 import { VsAgent } from '../agent/VsAgent'
-import { fetchJson } from '../utils/util'
 
 import { applyActivity, loadSyncState, saveSyncState } from './VeranaHelpers'
 import { VeranaIndexerService } from './VeranaIndexerService'
@@ -190,18 +189,11 @@ export class IndexerWebSocketService {
   }
 
   private async fetchInitialEvents(afterBlockHeight: number): Promise<IndexerEventsResponse> {
-    const url = this.buildHttpUrl(afterBlockHeight)
-    this.logger.info(`[IndexerWS] Fetching initial events from ${url}`)
-    const response = await fetchJson<IndexerEventsResponse>(url)
+    this.logger.info(`[IndexerWS] Fetching initial events after block ${afterBlockHeight}`)
+    const response = await this.indexer.getEvents(this.agentDid, afterBlockHeight)
     this.logger.info(
       `[IndexerWS] Fetched: count=${response.count}, after_block_height=${response.after_block_height}`,
     )
     return response
-  }
-
-  private buildHttpUrl(afterBlockHeight = 0, limit = 100): string {
-    const { indexerUrl } = this.options
-    const url = new URL(indexerUrl)
-    return `https://${url.host}/${WS_PATHNAME}?did=${encodeURIComponent(this.agentDid)}&after_block_height=${afterBlockHeight}&limit=${limit}`
   }
 }
