@@ -118,6 +118,9 @@ importers:
       '@types/qrcode':
         specifier: ^1.5.0
         version: 1.5.5
+      '@verana-labs/credo-ts-didcomm-vt-flow':
+        specifier: workspace:*
+        version: link:../../packages/vt-flow
       '@verana-labs/vs-agent-model':
         specifier: workspace:*
         version: link:../../packages/model
@@ -692,6 +695,21 @@ importers:
       mrz:
         specifier: ^4.2.0
         version: 4.2.1
+
+  packages/vt-flow:
+    dependencies:
+      '@credo-ts/core':
+        specifier: 0.7.0-alpha-20260410113934
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+      '@credo-ts/didcomm':
+        specifier: 0.7.0-alpha-20260410113934
+        version: 0.7.0-alpha-20260410113934(typescript@5.8.3)
+      class-transformer:
+        specifier: 0.5.1
+        version: 0.5.1
+      class-validator:
+        specifier: 0.14.1
+        version: 0.14.1
 
 packages:
 

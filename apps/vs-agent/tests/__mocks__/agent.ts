@@ -2,6 +2,7 @@ import { AskarSqliteStorageConfig } from '@credo-ts/askar'
 import { LogLevel, utils } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
+import { setupVtFlow, type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { createVsAgent, setupBaseDidComm, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { keyDerivationMethodMap } from '../../src/config'
@@ -10,9 +11,12 @@ import { TsLogger } from '../../src/utils'
 export const startAgent = async ({
   label,
   domain,
+  vtFlowOptions,
 }: {
   label: string
   domain: string
+  /** Load the vt-flow module with these options. Omit to skip loading. */
+  vtFlowOptions?: VtFlowModuleConfigOptions
 }): Promise<VsAgent<any>> => {
   const walletConfig = getAskarStoreConfig(label, { inMemory: true })
 
@@ -30,6 +34,7 @@ export const startAgent = async ({
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol()] : []),
+      ...(vtFlowOptions !== undefined ? [setupVtFlow(vtFlowOptions)] : []),
     ],
     config: {
       logger: new TsLogger(LogLevel.Off, label),

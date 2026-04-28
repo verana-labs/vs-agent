@@ -5,10 +5,9 @@
     "files": true
   },
   "compilerOptions": {
-    "skipLibCheck": true,   
-    "baseUrl": ".",
+    "skipLibCheck": true,
     "paths": {
-      "@verana-labs/*": ["packages/*/src"]
+      "@verana-labs/*": ["./packages/*/src"]
     },
     "types": ["vitest", "node"]
   },
