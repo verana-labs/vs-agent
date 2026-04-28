@@ -85,7 +85,9 @@ export class IndexerWebSocketService {
         const blockHeight = (event['block_height'] as number | undefined) ?? 0
         if (blockHeight <= 0) return
 
-        const sender = (event.payload as { sender: string }).sender
+        const payload = event['payload'] as { sender?: string } | undefined
+        if (!payload?.sender) return
+        const sender = payload.sender
 
         if (this.syncing) {
           this.pendingEvents.push({ blockHeight, sender })
