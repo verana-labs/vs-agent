@@ -69,6 +69,7 @@
     "@nestjs/swagger": "^8.0.7",
     "@openwallet-foundation/askar-nodejs": "^0.6.0",
     "@types/qrcode": "^1.5.0",
+    "@verana-labs/credo-ts-didcomm-vt-flow": "workspace:*",
     "@verana-labs/vs-agent-model": "workspace:*",
     "@verana-labs/vs-agent-sdk": "workspace:*",
     "ajv": "^8.17.1",
