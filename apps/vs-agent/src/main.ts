@@ -240,16 +240,15 @@ const run = async () => {
   }
 
   // Connect to Verana indexer for on-chain notifications
-  if (VERANA_INDEXER && agent.did) {
+  if (VERANA_INDEXER && agent.did && veranaChain) {
     try {
-      const indexerService = new IndexerWebSocketService({
+      const indexerWs = new IndexerWebSocketService({
         indexerUrl: VERANA_INDEXER,
-        agentDid: agent.did,
-        logger: serverLogger,
+        agent,
       })
-      indexerService.start()
+      await indexerWs.start()
     } catch (error) {
-      serverLogger.error(`Invalid VERANA_INDEXER URL: ${VERANA_INDEXER}`)
+      serverLogger.error(`Failed to start Verana indexer connection: ${(error as Error).message}`)
     }
   }
 
