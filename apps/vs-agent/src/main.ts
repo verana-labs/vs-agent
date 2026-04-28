@@ -240,7 +240,7 @@ const run = async () => {
   }
 
   // Connect to Verana indexer for on-chain notifications
-  if (VERANA_INDEXER && agent.did && veranaChain) {
+  if (VERANA_INDEXER) {
     try {
       const indexerWs = new IndexerWebSocketService({
         indexerUrl: VERANA_INDEXER,
