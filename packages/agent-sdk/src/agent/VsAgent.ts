@@ -13,6 +13,7 @@ import {
   CredoError,
   DidCommV1Service,
   DidDocument,
+  DidDocumentKey,
   DidDocumentService,
   DidRepository,
   DidsModule,
@@ -122,7 +123,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       if (!existingRecord) {
         if (parsedDid.method === 'web') {
           const didDocument = new DidDocument({ id: parsedDid.did })
-          await this.createAndAddDidCommKeysAndServices(didDocument)
+          const didCommKey = await this.createAndAddDidCommKeysAndServices(didDocument)
 
           // Add Self TR
           await this.createAndAddLinkedVpServices(didDocument)
@@ -134,6 +135,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             method: 'web',
             domain,
             didDocument,
+            keys: [didCommKey],
           })
           this.did = parsedDid.did
         } else if (parsedDid.method === 'webvh') {
@@ -157,7 +159,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           }
 
           // Add DIDComm services and keys
-          await this.createAndAddDidCommKeysAndServices(didDocument)
+          const didCommKey = await this.createAndAddDidCommKeysAndServices(didDocument)
 
           // Add Linked VP services
           await this.createAndAddLinkedVpServices(didDocument)
@@ -166,6 +168,10 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           await this.createAndAddWebVhImplicitServices(didDocument)
 
           didDocument.alsoKnownAs = [`did:web:${domain}`]
+
+          // The webvh registrar doesn't merge new keys into the DidRecord on update,
+          // so persist the DIDComm key mapping directly on the existing record.
+          await this.persistDidDocumentKey(publicDid, didCommKey)
 
           const result = await this.dids.update({ did: publicDid, didDocument })
           if (result.didState.state !== 'finished') {
@@ -211,9 +217,21 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             ...this.getDidCommServices(didDocument.id),
           ]
         }
-        if (hasLegacyMethods) await this.createAndAddDidCommKeysAndServices(didDocument)
+        const newKeys: DidDocumentKey[] = []
+        if (hasLegacyMethods) {
+          newKeys.push(await this.createAndAddDidCommKeysAndServices(didDocument))
+        }
 
-        await this.dids.update({ did: didDocument.id, didDocument })
+        if (newKeys.length && parsedDid.method === 'webvh') {
+          // webvh registrar doesn't accept keys in update options; persist directly
+          for (const key of newKeys) await this.persistDidDocumentKey(didDocument.id, key)
+        }
+
+        await this.dids.update({
+          did: didDocument.id,
+          didDocument,
+          ...(newKeys.length && parsedDid.method === 'web' ? { keys: newKeys } : {}),
+        })
         this.logger?.debug('Public did record updated')
       } else {
         this.logger?.debug('Existing DID record found. No updates')
@@ -249,7 +267,17 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     })
   }
 
-  private async createAndAddDidCommKeysAndServices(didDocument: DidDocument) {
+  private async persistDidDocumentKey(did: string, key: DidDocumentKey) {
+    const didRepository = this.agentContext.resolve(DidRepository)
+    const [record] = await didRepository.findByQuery(this.agentContext, { did })
+    if (!record) return
+    const existing = record.keys ?? []
+    if (existing.some(k => k.didDocumentRelativeKeyId === key.didDocumentRelativeKeyId)) return
+    record.keys = [...existing, key]
+    await didRepository.update(this.agentContext, record)
+  }
+
+  private async createAndAddDidCommKeysAndServices(didDocument: DidDocument): Promise<DidDocumentKey> {
     const publicDid = didDocument.id
 
     const context = [
@@ -259,7 +287,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     ]
     const keyAgreementId = `${publicDid}#key-agreement-1`
     const kms = this.agentContext.resolve(Kms.KeyManagementApi)
-    const didRepository = this.agentContext.resolve(DidRepository)
 
     // Create didcomm keys
     const key = await kms.createKey({ type: { kty: 'OKP', crv: 'Ed25519' } })
@@ -268,12 +295,10 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       new Uint8Array([0xed, 0x01, ...publicKeyBytes]),
       MultibaseEncoding.BASE58_BTC,
     )
-    const [record] = await didRepository.findByQuery(this.agentContext, { did: publicDid })
-    record.keys?.push({
+    const didDocumentKey: DidDocumentKey = {
       kmsKeyId: key.keyId,
       didDocumentRelativeKeyId: `#${publicKeyMultibase}`,
-    })
-    await didRepository.update(this.agentContext, record)
+    }
     const verificationMethodId = `${publicDid}#${publicKeyMultibase}`
     const publicKeyX25519 = convertPublicKeyToX25519(publicKeyBytes)
     const x25519Key = Kms.PublicJwk.fromPublicKey({ kty: 'OKP', crv: 'X25519', publicKey: publicKeyX25519 })
@@ -330,6 +355,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         : []),
       ...didcommServices,
     ]
+
+    return didDocumentKey
   }
 
   private async createAndAddLinkedVpServices(didDocument: DidDocument) {
