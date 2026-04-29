@@ -122,7 +122,7 @@ These variables enable on-chain features (permission management, trust registry 
 | `VERANA_RPC_ENDPOINT_URL` | REQUIRED* | Verana blockchain RPC endpoint URL.                                                                                                                           |
 | `VERANA_ACCOUNT_MNEMONIC` | REQUIRED* | BIP-39 mnemonic for the agent's Verana blockchain account.                                                                                                    |
 | `VERANA_CHAIN_ID`         | OPTIONAL  | Chain ID (defaults to the network's chain ID if not set).                                                                                                     |
-| `VERANA_INDEXER`          | REQUIRED* | Verana indexer URL (e.g. `https://...`). Used to establish a WebSocket connection for subscribing to real-time ledger notifications related to the agent DID. |
+| `VERANA_INDEXER_BASE_URL` | REQUIRED* | Verana indexer URL (e.g. `https://...`). Used to establish a WebSocket connection for subscribing to real-time ledger notifications related to the agent DID. |
 
 * Required only if on-chain features are enabled.
 

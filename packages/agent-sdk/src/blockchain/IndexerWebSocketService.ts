@@ -1,4 +1,4 @@
-import { JsonObject } from '@credo-ts/core'
+import { BaseLogger, JsonObject } from '@credo-ts/core'
 import WebSocket from 'ws'
 
 import { VsAgent } from '../agent/VsAgent'
@@ -31,7 +31,7 @@ export class IndexerWebSocketService {
   constructor(private readonly options: IndexerWebSocketServiceOptions) {
     this.indexer = new VeranaIndexerService({
       baseUrl: options.indexerUrl,
-      logger: options.agent.config.logger as never,
+      logger: options.agent.config.logger as BaseLogger,
     })
   }
 
