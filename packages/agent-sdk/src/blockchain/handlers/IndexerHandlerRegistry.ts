@@ -13,6 +13,10 @@ export interface IndexerEventHandler<TMsg extends string = string> {
   handle(activity: IndexerActivity, ctx: IndexerHandlerContext): Promise<void>
 }
 
+/**
+ * Registry for handlers of indexer events. Handlers can be registered/unregistered at runtime
+ * and are looked up by the `msg` field of indexer activities.
+ */
 export class IndexerHandlerRegistry {
   private handlers = new Map<string, IndexerEventHandler>()
 

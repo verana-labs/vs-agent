@@ -6,6 +6,9 @@ import {
   upsertTrustRegistry,
 } from './stateMutations'
 
+/**
+ * Based on spec 7.2, these are the "default" handlers for indexer events emitted by the Verana blockchain.
+ */
 export const defaultHandlers: IndexerEventHandler[] = [
   {
     msg: 'CreateNewTrustRegistry',
