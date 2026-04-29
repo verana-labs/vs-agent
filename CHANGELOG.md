@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.11.0](https://github.com/verana-labs/vs-agent/compare/v1.10.1...v1.11.0) (2026-04-29)
+
+
+### Features
+
+* include cosmos sdk to list registries ([#397](https://github.com/verana-labs/vs-agent/issues/397)) ([94f45f3](https://github.com/verana-labs/vs-agent/commit/94f45f3ff6743b80efa3606bde0f02dae89db76e))
+* split docker image to one based on plugins ([#410](https://github.com/verana-labs/vs-agent/issues/410)) ([e32ee02](https://github.com/verana-labs/vs-agent/commit/e32ee02c8bb2617cf55d80c18ebbfd23e66a2f9e))
+* support reactions module ([#399](https://github.com/verana-labs/vs-agent/issues/399)) ([9079eb2](https://github.com/verana-labs/vs-agent/commit/9079eb2eef7f375e11870d048c6e7d3814b8bf5a))
+* use verana indexer websocket ([#401](https://github.com/verana-labs/vs-agent/issues/401)) ([429370d](https://github.com/verana-labs/vs-agent/commit/429370dfa16c4de897e25bf1f598ef6469f5cab1))
+* vs agent sdk and plug-ins ([#383](https://github.com/verana-labs/vs-agent/issues/383)) ([d818ad9](https://github.com/verana-labs/vs-agent/commit/d818ad9817b5b4cbe9c92d55612c7efa930f81e9))
+* **vt-flow:** add Credo-TS superprotocol module ([#411](https://github.com/verana-labs/vs-agent/issues/411)) ([d045633](https://github.com/verana-labs/vs-agent/commit/d0456331b8787285787c1e9e7f260a5d84e0e49f))
+
+
+### Bug Fixes
+
+* docker images ([#409](https://github.com/verana-labs/vs-agent/issues/409)) ([a463ffb](https://github.com/verana-labs/vs-agent/commit/a463ffb9aafa7228b8c7257513b5954554e11d4c))
+* **docker:** include packages/vt-flow in all build stages ([#421](https://github.com/verana-labs/vs-agent/issues/421)) ([ab00f0d](https://github.com/verana-labs/vs-agent/commit/ab00f0d9e07f7586914a848fec7b64126894379b))
+* remove mrtd auto-enable logic and add plugin load warnings ([#413](https://github.com/verana-labs/vs-agent/issues/413)) ([43a5d62](https://github.com/verana-labs/vs-agent/commit/43a5d624aefdedcc3f5d20c42abcf523bb2d417c))
+* remove revocation registry on Delete credential types ([#415](https://github.com/verana-labs/vs-agent/issues/415)) ([9f6463e](https://github.com/verana-labs/vs-agent/commit/9f6463e14d74d081cbcb730bec2f5503e798e578))
+* solve problem creating credential types with the same schema ([#414](https://github.com/verana-labs/vs-agent/issues/414)) ([b9ae09d](https://github.com/verana-labs/vs-agent/commit/b9ae09d0487f7703857bfa7dbe1d1e090109c005))
+* update Credential Revocation swagger ([#416](https://github.com/verana-labs/vs-agent/issues/416)) ([41d0040](https://github.com/verana-labs/vs-agent/commit/41d0040f3889b73a592d71272d649b35f3145291))
+* update DID Document keys in did:web ([#418](https://github.com/verana-labs/vs-agent/issues/418)) ([a12904c](https://github.com/verana-labs/vs-agent/commit/a12904cf30124ef1d21344d9e31a57f61bb34544))
+
 ## [1.10.1](https://github.com/verana-labs/vs-agent/compare/v1.10.0...v1.10.1) (2026-04-10)
 
 
