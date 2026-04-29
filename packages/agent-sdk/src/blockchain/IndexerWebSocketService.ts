@@ -3,13 +3,16 @@ import WebSocket from 'ws'
 
 import { VsAgent } from '../agent/VsAgent'
 
-import { applyActivity, loadSyncState, saveSyncState } from './VeranaHelpers'
+import { loadSyncState, saveSyncState } from './VeranaHelpers'
 import { VeranaIndexerService } from './VeranaIndexerService'
+import { buildDefaultIndexerHandlerRegistry } from './handlers'
+import { IndexerHandlerRegistry } from './handlers/IndexerHandlerRegistry'
 import { IndexerActivity, IndexerEventsResponse } from './types'
 
 export interface IndexerWebSocketServiceOptions {
   indexerUrl: string
   agent: VsAgent
+  handlerRegistry?: IndexerHandlerRegistry
 }
 
 const MAX_RECONNECT_DELAY_MS = 300_000
@@ -27,12 +30,14 @@ export class IndexerWebSocketService {
   private syncing = false
   private pendingEvents: PendingEvent[] = []
   private readonly indexer: VeranaIndexerService
+  private readonly handlerRegistry: IndexerHandlerRegistry
 
   constructor(private readonly options: IndexerWebSocketServiceOptions) {
     this.indexer = new VeranaIndexerService({
       baseUrl: options.indexerUrl,
       logger: options.agent.config.logger as never,
     })
+    this.handlerRegistry = options.handlerRegistry ?? buildDefaultIndexerHandlerRegistry()
   }
 
   async start(): Promise<void> {
@@ -174,8 +179,23 @@ export class IndexerWebSocketService {
     )
 
     if (mine.length === 0) return
-    for (const a of mine) applyActivity(state, a)
 
+    for (const a of mine) {
+      try {
+        await this.handlerRegistry.dispatch(a, {
+          agent: this.options.agent,
+          blockHeight,
+          operatorAddress,
+          state,
+        })
+      } catch (err) {
+        this.logger.error(
+          `[IndexerWS] Handler ${a.msg} failed at block ${blockHeight}: ${(err as Error).message}`,
+        )
+      }
+    }
+
+    state.lastBlockHeight = Math.max(state.lastBlockHeight, blockHeight)
     await saveSyncState(this.options.agent, state)
     this.logger.debug(`[IndexerWS] Block ${blockHeight}: applied ${mine.length} activity item(s)`)
   }
