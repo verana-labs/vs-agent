@@ -240,16 +240,13 @@ const run = async () => {
   }
 
   // Connect to Verana indexer for on-chain notifications
+  // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
   if (VERANA_INDEXER_BASE_URL) {
-    try {
-      const indexerWs = new IndexerWebSocketService({
-        indexerUrl: VERANA_INDEXER_BASE_URL,
-        agent,
-      })
-      await indexerWs.start()
-    } catch (error) {
-      serverLogger.error(`Failed to start Verana indexer connection: ${(error as Error).message}`)
-    }
+    const indexerWs = new IndexerWebSocketService({
+      indexerUrl: VERANA_INDEXER_BASE_URL,
+      agent,
+    })
+    await indexerWs.start()
   }
 
   agent.config.logger.info(
