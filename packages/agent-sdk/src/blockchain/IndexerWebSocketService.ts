@@ -1,4 +1,4 @@
-import { JsonObject } from '@credo-ts/core'
+import { BaseLogger, JsonObject } from '@credo-ts/core'
 import WebSocket from 'ws'
 
 import { VsAgent } from '../agent/VsAgent'
@@ -21,6 +21,7 @@ const WS_PATHNAME = 'verana/indexer/v1/events'
 interface PendingEvent {
   blockHeight: number
   sender: string
+  did: string
 }
 
 export class IndexerWebSocketService {
@@ -35,7 +36,7 @@ export class IndexerWebSocketService {
   constructor(private readonly options: IndexerWebSocketServiceOptions) {
     this.indexer = new VeranaIndexerService({
       baseUrl: options.indexerUrl,
-      logger: options.agent.config.logger as never,
+      logger: options.agent.config.logger as BaseLogger,
     })
     this.handlerRegistry = options.handlerRegistry ?? buildDefaultIndexerHandlerRegistry()
   }
@@ -53,10 +54,6 @@ export class IndexerWebSocketService {
 
   private get logger() {
     return this.options.agent.config.logger
-  }
-
-  private get agentDid(): string {
-    return this.options.agent.did ?? ''
   }
 
   /**
@@ -77,7 +74,8 @@ export class IndexerWebSocketService {
   private openWebSocket(): void {
     const url = new URL(this.options.indexerUrl)
     const wsProto = url.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${wsProto}//${url.host}/${WS_PATHNAME}?did=${encodeURIComponent(this.agentDid)}`
+    if (!this.options.agent.did) throw new Error('Agent does not have any defined public DID')
+    const wsUrl = `${wsProto}//${url.host}/${WS_PATHNAME}?did=${encodeURIComponent(this.options.agent.did)}`
 
     this.logger.info(`[IndexerWS] Connecting to ${wsUrl}`)
     const ws = new WebSocket(wsUrl)
@@ -99,9 +97,9 @@ export class IndexerWebSocketService {
         const sender = payload.sender
 
         if (this.syncing) {
-          this.pendingEvents.push({ blockHeight, sender })
+          this.pendingEvents.push({ blockHeight, sender, did: event.did as string })
         } else {
-          this.processBlock(blockHeight, sender).catch(err =>
+          this.processBlock(blockHeight, sender, event.did as string).catch(err =>
             this.logger.error(`[IndexerWS] Handler error: ${(err as Error).message}`),
           )
         }
@@ -128,7 +126,7 @@ export class IndexerWebSocketService {
       for (const event of data.events) {
         const blockHeight = event.block_height as number
         const sender = (event.payload as { sender: string }).sender
-        await this.processBlock(blockHeight, sender)
+        await this.processBlock(blockHeight, sender, event.did as string)
       }
 
       this.logger.info(`[IndexerWS] Initial sync complete: ${data.events.length} event(s)`)
@@ -143,12 +141,12 @@ export class IndexerWebSocketService {
     let processed = 0
     let skipped = 0
 
-    for (const { blockHeight, sender } of events) {
+    for (const { blockHeight, sender, did } of events) {
       if (blockHeight <= lastBlockHeight) {
         skipped++
         continue
       }
-      await this.processBlock(blockHeight, sender)
+      await this.processBlock(blockHeight, sender, did)
       processed++
     }
 
@@ -157,11 +155,11 @@ export class IndexerWebSocketService {
     }
   }
 
-  private async processBlock(blockHeight: number, sender: string): Promise<void> {
+  private async processBlock(blockHeight: number, sender: string, did: string): Promise<void> {
     try {
       const changes = await this.indexer.getChanges(blockHeight)
       if (changes.activity.length > 0) {
-        await this.applyChanges(blockHeight, changes.activity, sender)
+        await this.applyChanges(blockHeight, changes.activity, sender, did)
       }
     } catch (error) {
       this.logger.error(
@@ -174,13 +172,10 @@ export class IndexerWebSocketService {
     blockHeight: number,
     activity: IndexerActivity[],
     operatorAddress: string,
+    did: string,
   ): Promise<void> {
     const state = await loadSyncState(this.options.agent)
-    const mine = activity.filter(
-      a =>
-        a.account === operatorAddress ||
-        (typeof a.changes['did'] === 'string' && a.changes['did'] === this.agentDid),
-    )
+    const mine = activity.filter(a => a.account === operatorAddress || did === this.options.agent.did)
 
     if (mine.length === 0) return
 
@@ -215,7 +210,8 @@ export class IndexerWebSocketService {
 
   private async fetchInitialEvents(afterBlockHeight: number): Promise<IndexerEventsResponse> {
     this.logger.info(`[IndexerWS] Fetching initial events after block ${afterBlockHeight}`)
-    const response = await this.indexer.getEvents(this.agentDid, afterBlockHeight)
+    if (!this.options.agent.did) throw new Error('Agent does not have any defined public DID')
+    const response = await this.indexer.getEvents(this.options.agent.did, afterBlockHeight)
     this.logger.info(
       `[IndexerWS] Fetched: count=${response.count}, after_block_height=${response.after_block_height}`,
     )

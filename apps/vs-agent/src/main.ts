@@ -47,7 +47,7 @@ import {
   USER_PROFILE_AUTODISCLOSE,
   MASTER_LIST_CSCA_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
-  VERANA_INDEXER,
+  VERANA_INDEXER_BASE_URL,
   VERANA_ACCOUNT_MNEMONIC,
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
@@ -240,16 +240,13 @@ const run = async () => {
   }
 
   // Connect to Verana indexer for on-chain notifications
-  if (VERANA_INDEXER) {
-    try {
-      const indexerWs = new IndexerWebSocketService({
-        indexerUrl: VERANA_INDEXER,
-        agent,
-      })
-      await indexerWs.start()
-    } catch (error) {
-      serverLogger.error(`Failed to start Verana indexer connection: ${(error as Error).message}`)
-    }
+  // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
+  if (VERANA_INDEXER_BASE_URL) {
+    const indexerWs = new IndexerWebSocketService({
+      indexerUrl: VERANA_INDEXER_BASE_URL,
+      agent,
+    })
+    await indexerWs.start()
   }
 
   agent.config.logger.info(
