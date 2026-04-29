@@ -1,7 +1,7 @@
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { AgentDependencies, InitConfig, LogLevel } from '@credo-ts/core'
 
-import { VeranaChainService } from '../blockchain'
+import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { Plugin } from '../types'
 
 import { BaseAgentModules, VsAgent } from './VsAgent'

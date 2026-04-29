@@ -1,2 +1,5 @@
+export * from './IndexerWebSocketService'
+export * from './VeranaHelpers'
 export * from './VeranaChainService'
+export * from './VeranaIndexerService'
 export * from './types'

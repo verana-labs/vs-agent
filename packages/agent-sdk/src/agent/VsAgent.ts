@@ -34,7 +34,7 @@ import {
 } from '@credo-ts/didcomm'
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
-import { VeranaChainService } from '../blockchain'
+import { VeranaChainService } from '../blockchain/VeranaChainService'
 
 type VsAgentDidCommModule = DidCommModule<
   DidCommModuleConfigOptions & {

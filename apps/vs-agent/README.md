@@ -117,13 +117,18 @@ These are variables that are updated only on specific use cases.
 
 These variables enable on-chain features (permission management, trust registry notifications). If not set, the agent starts normally but blockchain functionality is disabled.
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `VERANA_RPC_ENDPOINT_URL` | REQUIRED* | Verana blockchain RPC endpoint URL. |
-| `VERANA_ACCOUNT_MNEMONIC` | REQUIRED* | BIP-39 mnemonic for the agent's Verana blockchain account. |
-| `VERANA_CHAIN_ID` | OPTIONAL | Chain ID (defaults to the network's chain ID if not set). |
+| Variable                  | Required  | Description                                                                                                                                                   |
+| ------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VERANA_RPC_ENDPOINT_URL` | REQUIRED* | Verana blockchain RPC endpoint URL.                                                                                                                           |
+| `VERANA_ACCOUNT_MNEMONIC` | REQUIRED* | BIP-39 mnemonic for the agent's Verana blockchain account.                                                                                                    |
+| `VERANA_CHAIN_ID`         | OPTIONAL  | Chain ID (defaults to the network's chain ID if not set).                                                                                                     |
+| `VERANA_INDEXER_BASE_URL` | REQUIRED* | Verana indexer URL (e.g. `https://...`). Used to establish a WebSocket connection for subscribing to real-time ledger notifications related to the agent DID. |
 
-\* Required only if on-chain features are enabled.
+* Required only if on-chain features are enabled.
+
+> The agent maintains a persistent WebSocket connection to the indexer to receive updates about permissions, trust registries, and credential schemas. These events are used to keep the agent state in sync with the ledger.
+
+> **Note:** This feature is currently under active development. The interface and behavior may change in future releases.
 
 ### Agent feature discovery
 

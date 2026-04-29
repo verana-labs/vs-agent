@@ -9,6 +9,7 @@ import {
   VsAgentWsInboundTransport,
   type VsAgentNestPlugin,
   VeranaChainService,
+  IndexerWebSocketService,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -46,6 +47,7 @@ import {
   USER_PROFILE_AUTODISCLOSE,
   MASTER_LIST_CSCA_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
+  VERANA_INDEXER_BASE_URL,
   VERANA_ACCOUNT_MNEMONIC,
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
@@ -235,6 +237,16 @@ const run = async () => {
   // Register plugin events after agent is initialized
   for (const plugin of nestPlugins) {
     plugin.registerEvents?.(agent, conf)
+  }
+
+  // Connect to Verana indexer for on-chain notifications
+  // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
+  if (VERANA_INDEXER_BASE_URL) {
+    const indexerWs = new IndexerWebSocketService({
+      indexerUrl: VERANA_INDEXER_BASE_URL,
+      agent,
+    })
+    await indexerWs.start()
   }
 
   agent.config.logger.info(
