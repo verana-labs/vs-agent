@@ -54,6 +54,10 @@ export class IndexerWebSocketService {
     return this.options.agent.did ?? ''
   }
 
+  /**
+   * Connects to the indexer WebSocket, performs an initial sync via REST (use /events endpoint because it returns historical events in a single request)
+   * Finally, processes pending events received during the initial sync.
+   */
   private async connect(): Promise<void> {
     this.syncing = true
     this.pendingEvents = []
