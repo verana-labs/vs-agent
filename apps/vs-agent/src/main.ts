@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import {
   HttpInboundTransport,
+  setupSelfTr,
   VsAgent,
   VsAgentWsInboundTransport,
   type VsAgentNestPlugin,
@@ -27,6 +28,17 @@ import {
   AGENT_ENDPOINTS,
   AGENT_INVITATION_IMAGE_URL,
   AGENT_LABEL,
+  FALLBACK_BASE64,
+  SELF_ISSUED_VTC_ORG_ADDRESS,
+  SELF_ISSUED_VTC_ORG_COUNTRYCODE,
+  SELF_ISSUED_VTC_ORG_REGISTRYID,
+  SELF_ISSUED_VTC_ORG_REGISTRYURL,
+  SELF_ISSUED_VTC_ORG_TYPE,
+  SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
+  SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
+  SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
+  SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
+  SELF_ISSUED_VTC_SERVICE_TYPE,
   UI_WELCOME_MESSAGE,
   AGENT_LOG_LEVEL,
   AGENT_NAME,
@@ -55,7 +67,7 @@ import {
 import { connectionEvents } from './events/ConnectionEvents'
 import { MessagingPlugin } from './plugins'
 import { PublicModule } from './public.module'
-import { commonAppConfig, type ServerConfig, setupAgent, setupSelfTr, TsLogger } from './utils'
+import { commonAppConfig, type ServerConfig, setupAgent, TsLogger } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
@@ -229,7 +241,26 @@ const run = async () => {
   await startServers(agent, conf)
 
   // Initialize Self-Trust Registry
-  if (agent.did) await setupSelfTr({ agent, publicApiBaseUrl })
+  if (agent.did)
+    await setupSelfTr({
+      agent,
+      publicApiBaseUrl,
+      defaults: {
+        agentLabel: AGENT_LABEL,
+        agentInvitationImageUrl: AGENT_INVITATION_IMAGE_URL,
+        fallbackBase64: FALLBACK_BASE64,
+        serviceType: SELF_ISSUED_VTC_SERVICE_TYPE,
+        serviceDescription: SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
+        serviceMinimumAgeRequired: SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
+        serviceTermsAndConditions: SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
+        servicePrivacyPolicy: SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
+        orgRegistryId: SELF_ISSUED_VTC_ORG_REGISTRYID,
+        orgRegistryUrl: SELF_ISSUED_VTC_ORG_REGISTRYURL,
+        orgAddress: SELF_ISSUED_VTC_ORG_ADDRESS,
+        orgType: SELF_ISSUED_VTC_ORG_TYPE,
+        orgCountryCode: SELF_ISSUED_VTC_ORG_COUNTRYCODE,
+      },
+    })
 
   // Register base events (always active)
   connectionEvents(agent as any, conf)

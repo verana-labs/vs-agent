@@ -1,6 +1,8 @@
 import { IndexerEventHandler, IndexerHandlerRegistry } from './IndexerHandlerRegistry'
 import {
   bumpActiveGfVersion,
+  publishVtjscIfOwner,
+  removeVtcOnPermissionRevoke,
   upsertCredentialSchema,
   upsertPermission,
   upsertTrustRegistry,
@@ -51,8 +53,9 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertCredentialSchema(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] CreateNewCredentialSchema entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §6: generate VTJSC + publish Linked VP`,
+        `[IndexerWS] CreateNewCredentialSchema entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
+      await publishVtjscIfOwner(ctx.state, ctx.agent, String(activity.entity_id))
     },
   },
   {
@@ -116,8 +119,9 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, { revoked: true })
       ctx.agent.config.logger.info(
-        `[IndexerWS] RevokePermission entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §7.2: remove linked VP from DID doc + delete credential`,
+        `[IndexerWS] RevokePermission entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
+      await removeVtcOnPermissionRevoke(ctx.state, ctx.agent, String(activity.entity_id))
     },
   },
   {

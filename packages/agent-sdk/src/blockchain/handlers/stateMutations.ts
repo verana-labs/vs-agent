@@ -1,4 +1,11 @@
+import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
+
+import { VsAgent } from '../../agent/VsAgent'
+import { getEcsSchemas } from '../../utils/data'
+import { createJsc, findVtcEntriesBySchemaRef, removeTrustCredential } from '../../utils/trustCredentialStore'
 import { IndexerActivity, VeranaSyncState } from '../types'
+
+const DEFAULT_CHAIN_ID = 'vna-testnet-1'
 
 export function upsertTrustRegistry(state: VeranaSyncState, activity: IndexerActivity): void {
   const block = Number(activity.block_height) || 0
@@ -81,5 +88,92 @@ export function upsertPermission(
     revoked: overrides.revoked ?? existing?.revoked ?? false,
     slashed: overrides.slashed ?? existing?.slashed ?? false,
     lastModifiedBlock: block,
+  }
+}
+
+/**
+ * Spec §6 — Publishes a VTJSC + Linked VP for a Credential Schema when the agent
+ * owns the Trust Registry that contains it (TrustRegistry.did === agent.did).
+ *
+ * TODO: read chainId from the agent's blockchain client instead of env var.
+ */
+export async function publishVtjscIfOwner(
+  state: VeranaSyncState,
+  agent: VsAgent,
+  schemaEntityId: string,
+): Promise<void> {
+  const schema = state.credentialSchemas[schemaEntityId]
+  if (!schema) {
+    agent.config.logger.warn(`[VTJSC] Schema ${schemaEntityId} not found in state`)
+    return
+  }
+
+  const tr = state.trustRegistries[String(schema.trId)]
+  if (!tr) {
+    agent.config.logger.warn(`[VTJSC] Trust Registry ${schema.trId} not found in state`)
+    return
+  }
+
+  if (tr.did !== agent.did) return
+
+  if (!schema.jsonSchema) {
+    agent.config.logger.warn(`[VTJSC] Schema ${schemaEntityId} has empty jsonSchema content`)
+    return
+  }
+
+  const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
+  const jsonSchemaRef = `vpr:verana:${chainId}/cs/v1/js/${schema.id}`
+
+  let digestSRI: string
+  try {
+    digestSRI = await computeSchemaDigest(JSON.parse(schema.jsonSchema))
+  } catch (e) {
+    agent.config.logger.error(`[VTJSC] Failed to parse/digest schema ${schemaEntityId}`, e as Error)
+    return
+  }
+
+  try {
+    await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
+      schemaBaseId: String(schema.id),
+      jsonSchemaRef,
+      precomputedDigestSRI: digestSRI,
+    })
+    agent.config.logger.info(
+      `[VTJSC] Published VTJSC for schema ${schema.id} (TR ${schema.trId}) at block ${state.lastBlockHeight}`,
+    )
+  } catch (e) {
+    agent.config.logger.error(`[VTJSC] Failed to publish VTJSC for schema ${schema.id}`, e as Error)
+  }
+}
+
+/**
+ * Spec §7.2 — When the agent's permission is revoked on-chain, remove the linked VP
+ * from the DID Document and delete the credential from the store.
+ */
+export async function removeVtcOnPermissionRevoke(
+  state: VeranaSyncState,
+  agent: VsAgent,
+  permissionEntityId: string,
+): Promise<void> {
+  const perm = state.permissions[permissionEntityId]
+  if (!perm) return
+
+  const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
+  const schemaRef = `vpr:verana:${chainId}/cs/v1/js/${perm.schemaId}`
+
+  const matches = await findVtcEntriesBySchemaRef(agent, schemaRef)
+  if (matches.length === 0) {
+    matches.push(...(await findVtcEntriesBySchemaRef(agent, `/cs/v1/js/${perm.schemaId}`)))
+  }
+
+  for (const { schemaId } of matches) {
+    try {
+      await removeTrustCredential(agent, agent.publicApiBaseUrl, schemaId, '_vt/jsc')
+      agent.config.logger.info(
+        `[VTJSC] Removed VTJSC for schema ${perm.schemaId} (perm ${permissionEntityId}) at block ${state.lastBlockHeight}`,
+      )
+    } catch (e) {
+      agent.config.logger.error(`[VTJSC] Failed to remove VTJSC ${schemaId}`, e as Error)
+    }
   }
 }
