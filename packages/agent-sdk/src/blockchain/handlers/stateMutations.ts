@@ -2,7 +2,7 @@ import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
-import { createJsc, findVtcEntriesBySchemaRef, removeTrustCredential } from '../../utils/trustCredentialStore'
+import { createJsc, findMetadataEntry, removeTrustCredential } from '../../utils/trustCredentialStore'
 import { IndexerActivity, VeranaSyncState } from '../types'
 
 const DEFAULT_CHAIN_ID = 'vna-testnet-1'
@@ -38,15 +38,15 @@ export function bumpActiveGfVersion(state: VeranaSyncState, activity: IndexerAct
   }
 }
 
-export function upsertCredentialSchema(
-  state: VeranaSyncState,
-  activity: IndexerActivity,
-  opts: { toggleArchived?: boolean } = {},
-): void {
+export function upsertCredentialSchema(state: VeranaSyncState, activity: IndexerActivity): void {
   const block = Number(activity.block_height) || 0
   const id = String(activity.entity_id)
   const c = activity.changes
   const existing = state.credentialSchemas[id]
+
+  const archivedRaw = c['archived']
+  const archived =
+    archivedRaw !== undefined ? archivedRaw !== null && archivedRaw !== false : (existing?.archived ?? false)
 
   state.credentialSchemas[id] = {
     id: Number(id),
@@ -58,7 +58,7 @@ export function upsertCredentialSchema(
     verifierMode: c['verifier_perm_management_mode']
       ? String(c['verifier_perm_management_mode'])
       : existing?.verifierMode,
-    archived: opts.toggleArchived ? !(existing?.archived ?? false) : (existing?.archived ?? false),
+    archived,
     lastModifiedBlock: block,
   }
 }
@@ -91,12 +91,6 @@ export function upsertPermission(
   }
 }
 
-/**
- * Spec §6 — Publishes a VTJSC + Linked VP for a Credential Schema when the agent
- * owns the Trust Registry that contains it (TrustRegistry.did === agent.did).
- *
- * TODO: read chainId from the agent's blockchain client instead of env var.
- */
 export async function publishVtjscIfOwner(
   state: VeranaSyncState,
   agent: VsAgent,
@@ -105,20 +99,11 @@ export async function publishVtjscIfOwner(
   const schema = state.credentialSchemas[schemaEntityId]
   if (!schema) {
     agent.config.logger.warn(`[VTJSC] Schema ${schemaEntityId} not found in state`)
-    return
   }
 
   const tr = state.trustRegistries[String(schema.trId)]
   if (!tr) {
     agent.config.logger.warn(`[VTJSC] Trust Registry ${schema.trId} not found in state`)
-    return
-  }
-
-  if (tr.did !== agent.did) return
-
-  if (!schema.jsonSchema) {
-    agent.config.logger.warn(`[VTJSC] Schema ${schemaEntityId} has empty jsonSchema content`)
-    return
   }
 
   const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
@@ -146,10 +131,6 @@ export async function publishVtjscIfOwner(
   }
 }
 
-/**
- * Spec §7.2 — When the agent's permission is revoked on-chain, remove the linked VP
- * from the DID Document and delete the credential from the store.
- */
 export async function removeVtcOnPermissionRevoke(
   state: VeranaSyncState,
   agent: VsAgent,
@@ -161,19 +142,15 @@ export async function removeVtcOnPermissionRevoke(
   const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
   const schemaRef = `vpr:verana:${chainId}/cs/v1/js/${perm.schemaId}`
 
-  const matches = await findVtcEntriesBySchemaRef(agent, schemaRef)
-  if (matches.length === 0) {
-    matches.push(...(await findVtcEntriesBySchemaRef(agent, `/cs/v1/js/${perm.schemaId}`)))
-  }
+  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
+  const { data } = await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
 
-  for (const { schemaId } of matches) {
-    try {
-      await removeTrustCredential(agent, agent.publicApiBaseUrl, schemaId, '_vt/jsc')
-      agent.config.logger.info(
-        `[VTJSC] Removed VTJSC for schema ${perm.schemaId} (perm ${permissionEntityId}) at block ${state.lastBlockHeight}`,
-      )
-    } catch (e) {
-      agent.config.logger.error(`[VTJSC] Failed to remove VTJSC ${schemaId}`, e as Error)
-    }
+  try {
+    await removeTrustCredential(agent, agent.publicApiBaseUrl, data.id, '_vt/jsc')
+    agent.config.logger.info(
+      `[VTJSC] Removed VTJSC for schema ${perm.schemaId} (perm ${permissionEntityId}) at block ${state.lastBlockHeight}`,
+    )
+  } catch (e) {
+    agent.config.logger.error(`[VTJSC] Failed to remove VTJSC ${perm.schemaId}`, e as Error)
   }
 }

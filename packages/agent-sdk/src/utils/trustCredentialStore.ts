@@ -48,7 +48,7 @@ export function findMetadataEntry(
 ) {
   const metadata = didRecord.metadata.get(key)
   if (!metadata) return null
-  if (!id) return { schemaId: '', data: metadata, didDocumentServiceId: '' }
+  if (!id && !jsonSchemaRef) return { schemaId: '', data: metadata, didDocumentServiceId: '' }
   for (const [schemaId, entry] of Object.entries(metadata)) {
     if (schemaId === jsonSchemaRef) {
       return { schemaId, ...entry, data: entry.verifiablePresentation }
@@ -304,22 +304,4 @@ export async function removeTrustCredential(
 
 export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc', schemaId?: string) {
   return findMetadataEntry(didRecord, key, schemaId)
-}
-
-export async function findVtcEntriesBySchemaRef(
-  agent: VsAgent,
-  schemaRefSubstring: string,
-): Promise<Array<{ schemaId: string; entry: TrustMetadataEntry }>> {
-  const didRecord = await getDidRecord(agent)
-  const metadata = (didRecord.metadata.get('_vt/vtc') ?? {}) as Record<string, TrustMetadataEntry>
-  const matches: Array<{ schemaId: string; entry: TrustMetadataEntry }> = []
-  for (const [schemaId, entry] of Object.entries(metadata)) {
-    const credSchemaId = entry.credential?.credentialSchema?.id
-    if (credSchemaId && credSchemaId.includes(schemaRefSubstring)) {
-      matches.push({ schemaId, entry })
-    } else if (schemaId.includes(schemaRefSubstring)) {
-      matches.push({ schemaId, entry })
-    }
-  }
-  return matches
 }
