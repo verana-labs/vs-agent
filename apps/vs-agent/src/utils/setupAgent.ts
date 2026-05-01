@@ -1,3 +1,5 @@
+import type { DidCommVersion } from '@credo-ts/didcomm'
+
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { LogLevel, ParsedDid } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
@@ -13,7 +15,7 @@ import {
 import express from 'express'
 import WebSocket from 'ws'
 
-import { ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
+import { DIDCOMM_V1_SUPPORT, DIDCOMM_V2_SUPPORT, ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
 import { MessageService } from '../controllers/admin/message/MessageService'
 
 import { TsLogger } from './logger'
@@ -52,6 +54,14 @@ export const setupAgent = async ({
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
+  if (!DIDCOMM_V1_SUPPORT && !DIDCOMM_V2_SUPPORT) {
+    throw new Error('Both DIDCOMM_V1_SUPPORT and DIDCOMM_V2_SUPPORT are disabled. Enable at least one.')
+  }
+  const didcommVersions: DidCommVersion[] = [
+    ...(DIDCOMM_V1_SUPPORT ? (['v1'] as const) : []),
+    ...(DIDCOMM_V2_SUPPORT ? (['v2'] as const) : []),
+  ]
+
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
   const [chatSetup, mrtdSetup] = await Promise.all([
     ENABLED_PLUGINS.includes('chat')
@@ -64,7 +74,12 @@ export const setupAgent = async ({
 
   const agent = createVsAgent({
     plugins: [
-      setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints }),
+      setupBaseDidComm({
+        walletConfig,
+        publicApiBaseUrl,
+        endpoints,
+        didcommVersions,
+      }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol({ masterListCscaLocation })] : []),
     ],

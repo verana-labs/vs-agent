@@ -37,8 +37,8 @@
   "dependencies": {
     "@2060.io/credo-ts-didcomm-reactions": "0.1.1",
     "@2060.io/credo-ts-didcomm-receipts": "0.1.1",
-    "@credo-ts/core": "0.7.0-alpha-20260410113934",
-    "@credo-ts/didcomm": "0.7.0-alpha-20260410113934",
+    "@credo-ts/core": "0.7.0-pr-2704-20260425132842",
+    "@credo-ts/didcomm": "0.7.0-pr-2704-20260425132842",
     "class-transformer": "0.5.1",
     "class-validator": "0.14.1"
   },
@@ -46,6 +46,6 @@
     "ts-node-dev": "^2.0.0"
   },
   "peerDependencies": {
-    "@credo-ts/core": "0.7.0-alpha-20260410113934"
+    "@credo-ts/core": "0.7.0-pr-2704-20260425132842"
   }
 }

@@ -19,6 +19,8 @@ import {
   DidsModule,
   InitConfig,
   Kms,
+  NewDidCommV2Service,
+  NewDidCommV2ServiceEndpoint,
   ParsedDid,
   parseDid,
   W3cCredentialsModule,
@@ -35,6 +37,8 @@ import {
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { VeranaChainService } from '../blockchain/VeranaChainService'
+
+const MANAGED_DIDCOMM_SERVICE_TYPES: readonly string[] = [DidCommV1Service.type, NewDidCommV2Service.type]
 
 type VsAgentDidCommModule = DidCommModule<
   DidCommModuleConfigOptions & {
@@ -217,7 +221,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         if (servicesChanged) {
           didDocument.service = [
             ...(didDocument.service
-              ? didDocument.service.filter(service => ![DidCommV1Service.type].includes(service.type))
+              ? didDocument.service.filter(service => !MANAGED_DIDCOMM_SERVICE_TYPES.includes(service.type))
               : []),
             ...this.getDidCommServices(didDocument.id),
           ]
@@ -259,17 +263,38 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
   private getDidCommServices(publicDid: string) {
     const keyAgreementId = `${publicDid}#key-agreement-1`
+    const didcommVersions = this.didcomm!.config.didcommVersions
+    const includeV1 = didcommVersions.includes('v1')
+    const includeV2 = didcommVersions.includes('v2')
+    const services: (DidCommV1Service | NewDidCommV2Service)[] = []
 
-    return this.didcomm!.config.endpoints.map((endpoint, index) => {
-      return new DidCommV1Service({
-        id: `${publicDid}#did-communication`,
-        serviceEndpoint: endpoint,
-        priority: index,
-        routingKeys: [], // TODO: Support mediation
-        recipientKeys: [keyAgreementId],
-        accept: ['didcomm/aip2;env=rfc19'],
-      })
+    this.didcomm!.config.endpoints.forEach((endpoint, index) => {
+      if (includeV1) {
+        services.push(
+          new DidCommV1Service({
+            id: `${publicDid}#did-communication`,
+            serviceEndpoint: endpoint,
+            priority: index,
+            routingKeys: [], // TODO: Support mediation
+            recipientKeys: [keyAgreementId],
+            accept: ['didcomm/aip2;env=rfc19'],
+          }),
+        )
+      }
+      if (includeV2) {
+        services.push(
+          new NewDidCommV2Service({
+            id: `${publicDid}#didcomm-messaging-${index}`,
+            serviceEndpoint: new NewDidCommV2ServiceEndpoint({
+              uri: endpoint,
+              accept: ['didcomm/v2'],
+            }),
+          }),
+        )
+      }
     })
+
+    return services
   }
 
   private async persistDidDocumentKey(did: string, key: DidDocumentKey) {
@@ -356,7 +381,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     didDocument.keyAgreement = [...new Set([...(didDocument.keyAgreement ?? []), keyAgreement])]
     didDocument.service = [
       ...(didDocument.service
-        ? didDocument.service.filter(service => ![DidCommV1Service.type].includes(service.type))
+        ? didDocument.service.filter(service => !MANAGED_DIDCOMM_SERVICE_TYPES.includes(service.type))
         : []),
       ...didcommServices,
     ]

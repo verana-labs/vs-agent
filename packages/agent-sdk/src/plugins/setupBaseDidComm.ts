@@ -1,3 +1,5 @@
+import type { DidCommVersion } from '@credo-ts/didcomm'
+
 import {
   AnonCredsDidCommCredentialFormatService,
   AnonCredsDidCommProofFormatService,
@@ -32,6 +34,12 @@ export interface BaseDidCommPluginOptions {
   walletConfig: AskarModuleConfigStoreOptions
   publicApiBaseUrl: string
   endpoints: string[]
+  /**
+   * DIDComm envelope versions the agent supports. Defaults to `['v1']`.
+   * Including `'v2'` makes the agent accept inbound V2 envelopes and prefer V2 when sending
+   * to a connection that supports it.
+   */
+  didcommVersions?: DidCommVersion[]
 }
 
 export interface BaseDidCommPlugin {
@@ -47,6 +55,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
     modules: {
       didcomm: new DidCommModule({
         endpoints: options.endpoints,
+        didcommVersions: options.didcommVersions,
         transports: {
           outbound: [new DidCommHttpOutboundTransport(), new VsAgentWsOutboundTransport()],
         },

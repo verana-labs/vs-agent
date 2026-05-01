@@ -34,11 +34,11 @@
     "@cosmjs/proto-signing": "^0.32.3",
     "@cosmjs/stargate": "^0.32.3",
     "@cosmjs/tendermint-rpc": "^0.32.4",
-    "@credo-ts/anoncreds": "0.7.0-alpha-20260410113934",
-    "@credo-ts/askar": "0.7.0-alpha-20260410113934",
-    "@credo-ts/core": "0.7.0-alpha-20260410113934",
-    "@credo-ts/didcomm": "0.7.0-alpha-20260410113934",
-    "@credo-ts/webvh": "0.7.0-alpha-20260410113934",
+    "@credo-ts/anoncreds": "0.7.0-pr-2704-20260425132842",
+    "@credo-ts/askar": "0.7.0-pr-2704-20260425132842",
+    "@credo-ts/core": "0.7.0-pr-2704-20260425132842",
+    "@credo-ts/didcomm": "0.7.0-pr-2704-20260425132842",
+    "@credo-ts/webvh": "0.7.0-pr-2704-20260425132842",
     "@hyperledger/anoncreds-nodejs": "^0.4.0",
     "@openwallet-foundation/askar-nodejs": "^0.6.0",
     "@verana-labs/verana-types": "0.10.1-dev.11",
@@ -49,8 +49,8 @@
     "tsyringe": "4.8.0"
   },
   "peerDependencies": {
-    "@credo-ts/core": "0.7.0-alpha-20260410113934",
-    "@credo-ts/node": "0.7.0-alpha-20260410113934"
+    "@credo-ts/core": "0.7.0-pr-2704-20260425132842",
+    "@credo-ts/node": "0.7.0-pr-2704-20260425132842"
   },
   "devDependencies": {
     "ts-node-dev": "^2.0.0"
