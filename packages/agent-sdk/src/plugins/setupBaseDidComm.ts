@@ -59,7 +59,10 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
         transports: {
           outbound: [new DidCommHttpOutboundTransport(), new VsAgentWsOutboundTransport()],
         },
-        connections: { autoAcceptConnections: true },
+        connections: {
+          autoAcceptConnections: true,
+          autoCreateConnectionOnFirstMessage: true,
+        },
         credentials: {
           autoAcceptCredentials: DidCommAutoAcceptCredential.ContentApproved,
           credentialProtocols: [
