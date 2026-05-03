@@ -2,7 +2,7 @@ import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
-import { createJsc, findMetadataEntry, removeTrustCredential } from '../../utils/trustCredentialStore'
+import { createJsc } from '../../utils/trustCredentialStore'
 import { IndexerActivity, VeranaSyncState } from '../types'
 
 const DEFAULT_CHAIN_ID = 'vna-testnet-1'
