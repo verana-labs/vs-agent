@@ -130,27 +130,3 @@ export async function publishVtjscIfOwner(
     agent.config.logger.error(`[VTJSC] Failed to publish VTJSC for schema ${schema.id}`, e as Error)
   }
 }
-
-export async function removeVtcOnPermissionRevoke(
-  state: VeranaSyncState,
-  agent: VsAgent,
-  permissionEntityId: string,
-): Promise<void> {
-  const perm = state.permissions[permissionEntityId]
-  if (!perm) return
-
-  const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
-  const schemaRef = `vpr:verana:${chainId}/cs/v1/js/${perm.schemaId}`
-
-  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
-  const { data } = await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
-
-  try {
-    await removeTrustCredential(agent, agent.publicApiBaseUrl, data.id, '_vt/jsc')
-    agent.config.logger.info(
-      `[VTJSC] Removed VTJSC for schema ${perm.schemaId} (perm ${permissionEntityId}) at block ${state.lastBlockHeight}`,
-    )
-  } catch (e) {
-    agent.config.logger.error(`[VTJSC] Failed to remove VTJSC ${perm.schemaId}`, e as Error)
-  }
-}
