@@ -17,7 +17,7 @@ export class CreateInvitationDto {
 
   @ApiProperty({
     description:
-      "DIDComm envelope version for the invitation. 'v2' requires DIDCOMM_V2_SUPPORT=true on the agent. " +
+      "DIDComm envelope version for the invitation. 'v2' requires AGENT_DIDCOMM_VERSIONS to include 'v2'. " +
       'When omitted, the agent infers the version from its configuration.',
     enum: ['v1', 'v2'],
     required: false,
