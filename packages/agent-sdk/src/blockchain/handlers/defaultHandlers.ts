@@ -1,6 +1,7 @@
 import { IndexerEventHandler, IndexerHandlerRegistry } from './IndexerHandlerRegistry'
 import {
   bumpActiveGfVersion,
+  publishVtjscIfOwner,
   upsertCredentialSchema,
   upsertPermission,
   upsertTrustRegistry,
@@ -15,7 +16,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertTrustRegistry(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] CreateNewTrustRegistry entity=${activity.entity_id} block=${ctx.blockHeight}`,
+        `[IndexerWS] CreateNewTrustRegistry entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
@@ -24,7 +25,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertTrustRegistry(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] UpdateTrustRegistry entity=${activity.entity_id} block=${ctx.blockHeight}`,
+        `[IndexerWS] UpdateTrustRegistry entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
@@ -33,7 +34,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertTrustRegistry(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] AddGovernanceFrameworkDocument entity=${activity.entity_id} block=${ctx.blockHeight}`,
+        `[IndexerWS] AddGovernanceFrameworkDocument entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
@@ -42,7 +43,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       bumpActiveGfVersion(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] IncreaseActiveGFVersion entity=${activity.entity_id} block=${ctx.blockHeight}`,
+        `[IndexerWS] IncreaseActiveGFVersion entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
@@ -51,8 +52,9 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertCredentialSchema(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] CreateNewCredentialSchema entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §6: generate VTJSC + publish Linked VP`,
+        `[IndexerWS] CreateNewCredentialSchema entity=${activity.entity_id} block=${ctx.block_height}`,
       )
+      await publishVtjscIfOwner(ctx.state, ctx.agent, String(activity.entity_id))
     },
   },
   {
@@ -60,16 +62,16 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertCredentialSchema(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] UpdateCredentialSchema entity=${activity.entity_id} block=${ctx.blockHeight}`,
+        `[IndexerWS] UpdateCredentialSchema entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
   {
     msg: 'ArchiveCredentialSchema',
     handle: async (activity, ctx) => {
-      upsertCredentialSchema(ctx.state, activity, { toggleArchived: true })
+      upsertCredentialSchema(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] ArchiveCredentialSchema entity=${activity.entity_id} block=${ctx.blockHeight}`,
+        `[IndexerWS] ArchiveCredentialSchema entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
@@ -78,7 +80,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, { vpState: 'PENDING' })
       ctx.agent.config.logger.info(
-        `[IndexerWS] StartPermissionVP entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §5.1: progress credential acquisition flow (applicant)`,
+        `[IndexerWS] StartPermissionVP entity=${activity.entity_id} block=${ctx.block_height} — TODO §5.1: progress credential acquisition flow (applicant)`,
       )
     },
   },
@@ -87,7 +89,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, { vpState: 'PENDING' })
       ctx.agent.config.logger.info(
-        `[IndexerWS] RenewPermissionVP entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §5.1: progress credential acquisition flow (applicant renewal)`,
+        `[IndexerWS] RenewPermissionVP entity=${activity.entity_id} block=${ctx.block_height} — TODO §5.1: progress credential acquisition flow (applicant renewal)`,
       )
     },
   },
@@ -96,7 +98,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, { vpState: 'VALIDATED' })
       ctx.agent.config.logger.info(
-        `[IndexerWS] SetPermissionVPToValidated entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §5.1: progress credential acquisition flow (validator)`,
+        `[IndexerWS] SetPermissionVPToValidated entity=${activity.entity_id} block=${ctx.block_height} — TODO §5.1: progress credential acquisition flow (validator)`,
       )
     },
   },
@@ -107,7 +109,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
         effectiveUntil: String(activity.changes['effective_until'] ?? ''),
       })
       ctx.agent.config.logger.info(
-        `[IndexerWS] AdjustPermission entity=${activity.entity_id} block=${ctx.blockHeight}`,
+        `[IndexerWS] AdjustPermission entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
@@ -116,7 +118,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, { revoked: true })
       ctx.agent.config.logger.info(
-        `[IndexerWS] RevokePermission entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §7.2: remove linked VP from DID doc + delete credential`,
+        `[IndexerWS] RevokePermission entity=${activity.entity_id} block=${ctx.block_height} — TODO §7.2: remove linked VP from DID doc + delete credential`,
       )
     },
   },
@@ -125,7 +127,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, { slashed: true })
       ctx.agent.config.logger.info(
-        `[IndexerWS] SlashPermissionTrustDeposit entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §7.2: clean up associated flow state`,
+        `[IndexerWS] SlashPermissionTrustDeposit entity=${activity.entity_id} block=${ctx.block_height} — TODO §7.2: clean up associated flow state`,
       )
     },
   },
@@ -134,7 +136,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, { slashed: false })
       ctx.agent.config.logger.info(
-        `[IndexerWS] RepayPermissionSlashedTrustDeposit entity=${activity.entity_id} block=${ctx.blockHeight}`,
+        `[IndexerWS] RepayPermissionSlashedTrustDeposit entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
@@ -143,7 +145,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, {})
       ctx.agent.config.logger.info(
-        `[IndexerWS] CancelPermissionVPLastRequest entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §7.2: clean up associated flow state`,
+        `[IndexerWS] CancelPermissionVPLastRequest entity=${activity.entity_id} block=${ctx.block_height} — TODO §7.2: clean up associated flow state`,
       )
     },
   },

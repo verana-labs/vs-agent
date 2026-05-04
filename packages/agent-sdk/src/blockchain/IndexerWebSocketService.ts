@@ -1,4 +1,4 @@
-import { BaseLogger, JsonObject } from '@credo-ts/core'
+import { BaseLogger } from '@credo-ts/core'
 import WebSocket from 'ws'
 
 import { VsAgent } from '../agent/VsAgent'
@@ -7,7 +7,7 @@ import { loadSyncState, saveSyncState } from './VeranaHelpers'
 import { VeranaIndexerService } from './VeranaIndexerService'
 import { buildDefaultIndexerHandlerRegistry } from './handlers'
 import { IndexerHandlerRegistry } from './handlers/IndexerHandlerRegistry'
-import { IndexerActivity, IndexerEventsResponse } from './types'
+import { IndexerActivity, IndexerEventRecord, IndexerEventsResponse } from './types'
 
 export interface IndexerWebSocketServiceOptions {
   indexerUrl: string
@@ -17,19 +17,14 @@ export interface IndexerWebSocketServiceOptions {
 
 const MAX_RECONNECT_DELAY_MS = 300_000
 const WS_PATHNAME = 'verana/indexer/v1/events'
-
-interface PendingEvent {
-  blockHeight: number
-  sender: string
-  did: string
-}
+const CREATES_WITHOUT_ID = new Set(['CreateNewTrustRegistry', 'CreateNewCredentialSchema'])
 
 export class IndexerWebSocketService {
   private ws: WebSocket | null = null
   private reconnectAttempt = 0
   private stopped = false
   private syncing = false
-  private pendingEvents: PendingEvent[] = []
+  private IndexerEventRecords: IndexerEventRecord[] = []
   private readonly indexer: VeranaIndexerService
   private readonly handlerRegistry: IndexerHandlerRegistry
 
@@ -62,13 +57,13 @@ export class IndexerWebSocketService {
    */
   private async connect(): Promise<void> {
     this.syncing = true
-    this.pendingEvents = []
+    this.IndexerEventRecords = []
     this.openWebSocket()
 
     await this.syncRest()
 
     this.syncing = false
-    await this.drainPendingEvents()
+    await this.drainIndexerEventRecords()
   }
 
   private openWebSocket(): void {
@@ -88,18 +83,15 @@ export class IndexerWebSocketService {
 
     ws.on('message', (data: WebSocket.RawData) => {
       try {
-        const event = JSON.parse(data.toString()) as JsonObject
-        const blockHeight = (event['block_height'] as number | undefined) ?? 0
-        if (blockHeight <= 0) return
-
-        const payload = event['payload'] as { sender?: string } | undefined
-        if (!payload?.sender) return
-        const sender = payload.sender
+        const event = JSON.parse(data.toString()) as IndexerEventRecord
+        if (event.type !== 'indexer-event') return
+        if (event.block_height <= 0) return
+        if (!event.payload?.sender) return
 
         if (this.syncing) {
-          this.pendingEvents.push({ blockHeight, sender, did: event.did as string })
+          this.IndexerEventRecords.push(event)
         } else {
-          this.processBlock(blockHeight, sender, event.did as string).catch(err =>
+          this.processBlock(event).catch(err =>
             this.logger.error(`[IndexerWS] Handler error: ${(err as Error).message}`),
           )
         }
@@ -124,9 +116,7 @@ export class IndexerWebSocketService {
       const data = await this.fetchInitialEvents(lastBlockHeight)
 
       for (const event of data.events) {
-        const blockHeight = event.block_height as number
-        const sender = (event.payload as { sender: string }).sender
-        await this.processBlock(blockHeight, sender, event.did as string)
+        await this.processBlock(event)
       }
 
       this.logger.info(`[IndexerWS] Initial sync complete: ${data.events.length} event(s)`)
@@ -135,18 +125,18 @@ export class IndexerWebSocketService {
     }
   }
 
-  private async drainPendingEvents(): Promise<void> {
+  private async drainIndexerEventRecords(): Promise<void> {
     const { lastBlockHeight } = await loadSyncState(this.options.agent)
-    const events = this.pendingEvents.splice(0)
+    const events = this.IndexerEventRecords.splice(0)
     let processed = 0
     let skipped = 0
 
-    for (const { blockHeight, sender, did } of events) {
-      if (blockHeight <= lastBlockHeight) {
+    for (const event of events) {
+      if (event.block_height <= lastBlockHeight) {
         skipped++
         continue
       }
-      await this.processBlock(blockHeight, sender, did)
+      await this.processBlock(event)
       processed++
     }
 
@@ -155,48 +145,88 @@ export class IndexerWebSocketService {
     }
   }
 
-  private async processBlock(blockHeight: number, sender: string, did: string): Promise<void> {
+  private async processBlock(event: IndexerEventRecord): Promise<void> {
     try {
-      const changes = await this.indexer.getChanges(blockHeight)
-      if (changes.activity.length > 0) {
-        await this.applyChanges(blockHeight, changes.activity, sender, did)
+      const activity = CREATES_WITHOUT_ID.has(event.event_type)
+        ? await this.resolveCreateActivity(event)
+        : await this.fetchActivity(event)
+
+      if (activity) {
+        await this.applyChanges(event, activity)
       }
     } catch (error) {
       this.logger.error(
-        `[IndexerWS] Failed to fetch changes for block ${blockHeight}: ${(error as Error).message}`,
+        `[IndexerWS] Failed to process event ${event.event_type} block=${event.block_height}: ${(error as Error).message}`,
       )
     }
   }
 
-  private async applyChanges(
-    blockHeight: number,
-    activity: IndexerActivity[],
-    operatorAddress: string,
-    did: string,
-  ): Promise<void> {
-    const state = await loadSyncState(this.options.agent)
-    const mine = activity.filter(a => a.account === operatorAddress || did === this.options.agent.did)
+  /**
+   * TODO: Once the indexer emits consistent event_id for create events, we can remove this workaround
+   */
+  private async resolveCreateActivity(event: IndexerEventRecord): Promise<IndexerActivity | undefined> {
+    const changes = await this.indexer.getChanges(event.block_height)
+    const expectedType = event.payload.entity_type
+    const expectedAccount = event.payload.sender
+    const matches = changes.activity.filter(
+      a => a.entity_type === expectedType && a.account === expectedAccount,
+    )
+    return matches.length > 0 ? { ...matches[0], msg: event.event_type } : undefined
+  }
 
-    if (mine.length === 0) return
-
-    for (const a of mine) {
-      try {
-        await this.handlerRegistry.dispatch(a, {
-          agent: this.options.agent,
-          blockHeight,
-          operatorAddress,
-          state,
-        })
-      } catch (err) {
-        this.logger.error(
-          `[IndexerWS] Handler ${a.msg} failed at block ${blockHeight}: ${(err as Error).message}`,
-        )
-      }
+  private async fetchActivity(event: IndexerEventRecord): Promise<IndexerActivity | undefined> {
+    const entity_id = event.payload.entity_id
+    if (!entity_id) {
+      this.logger.warn(`[IndexerWS] No entity_id for event ${event.event_type} — skipping`)
+      return undefined
     }
 
-    state.lastBlockHeight = Math.max(state.lastBlockHeight, blockHeight)
+    const changes = await this.fetchEntity(event.payload.entity_type, entity_id)
+
+    return {
+      timestamp: event.timestamp,
+      block_height: event.block_height,
+      entity_type: event.payload.entity_type ?? '',
+      entity_id,
+      msg: event.event_type,
+      changes,
+      account: event.payload.sender,
+    }
+  }
+
+  private async fetchEntity(entityType: string | undefined, id: string): Promise<Record<string, unknown>> {
+    switch (entityType) {
+      case 'TrustRegistry':
+        return (await this.indexer.getTrustRegistry(id)) as unknown as Record<string, unknown>
+      case 'CredentialSchema':
+        return (await this.indexer.getCredentialSchema(id)) as unknown as Record<string, unknown>
+      case 'Permission':
+        return (await this.indexer.getPermission(id)) as unknown as Record<string, unknown>
+      default:
+        return {}
+    }
+  }
+
+  private async applyChanges(event: IndexerEventRecord, activity: IndexerActivity): Promise<void> {
+    const state = await loadSyncState(this.options.agent)
+    const { block_height } = event
+
+    try {
+      await this.handlerRegistry.dispatch(activity, {
+        agent: this.options.agent,
+        block_height,
+        operatorAddress: event.payload.sender,
+        state,
+      })
+    } catch (err) {
+      this.logger.error(
+        `[IndexerWS] Handler ${event.event_type} failed at block ${event.block_height}: ${(err as Error).message}`,
+      )
+    }
+
+    state.lastBlockHeight = Math.max(state.lastBlockHeight, event.block_height)
     await saveSyncState(this.options.agent, state)
-    this.logger.debug(`[IndexerWS] Block ${blockHeight}: applied ${mine.length} activity item(s)`)
+    this.logger.debug(`[IndexerWS] Block ${event.block_height}: applied ${event.event_type}`)
   }
 
   private scheduleReconnect(): void {

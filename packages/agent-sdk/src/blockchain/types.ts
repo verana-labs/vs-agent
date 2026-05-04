@@ -1,10 +1,30 @@
-import { BaseLogger, JsonObject } from '@credo-ts/core'
+import { BaseLogger } from '@credo-ts/core'
 
 export const VERANA_BECH32_PREFIX = 'verana'
 export const RECORD_ID = 'verana-blockchain-sync-state'
 
+export type IndexerEventRecord = {
+  type: 'indexer-event'
+  event_type: string
+  did: string
+  block_height: number
+  tx_hash: string
+  timestamp: string
+  payload: {
+    module: string
+    action: string
+    message_type: string
+    tx_index: number
+    message_index: number
+    sender: string
+    related_dids: string[]
+    entity_type?: string
+    entity_id?: string
+  }
+}
+
 export interface IndexerEventsResponse {
-  events: JsonObject[]
+  events: IndexerEventRecord[]
   count: number
   after_block_height: number
 }
@@ -73,6 +93,38 @@ export interface VeranaSyncState {
   trustRegistries: Record<string, SyncedTrustRegistry>
   credentialSchemas: Record<string, SyncedCredentialSchema>
   permissions: Record<string, SyncedPermission>
+}
+
+export interface TrustRegistryDto {
+  id: number
+  did: string
+  controller: string
+  archived: string | null
+  active_gf_version?: number
+}
+
+export interface CredentialSchemaDto {
+  id: number
+  tr_id: number
+  json_schema: string
+  issuer_perm_management_mode?: string
+  verifier_perm_management_mode?: string
+  archived: string | null
+  created: string
+  modified: string
+}
+
+export interface PermissionDto {
+  id: number
+  schema_id: number
+  did: string | null
+  type: number
+  perm_state: 'ACTIVE' | 'REVOKED' | 'SLASHED' | 'REPAID' | 'EXPIRED' | 'FUTURE' | 'INACTIVE'
+  vp_state?: string
+  revoked: string | null
+  slashed: string | null
+  effective_until?: string
+  modified: string
 }
 
 export interface PermQueryClient {

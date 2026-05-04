@@ -24,9 +24,8 @@ import {
   TerminateConnectionMessage,
   VerifiableCredentialRequestedProofItem,
 } from '@verana-labs/vs-agent-model'
-import { VsAgent } from '@verana-labs/vs-agent-sdk'
+import { validateSchema, VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { validateSchema } from '../../../../utils'
 import { CredentialTypesService } from '../../credentials'
 
 @Injectable()

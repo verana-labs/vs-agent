@@ -1,7 +1,8 @@
 import { JsonTransformer, W3cJsonLdVerifiableCredential } from '@credo-ts/core'
-import { Controller, Logger, Post, Body, Delete, Get, Query } from '@nestjs/common'
+import { Controller, Logger, Post, Body, Delete, Get, Query, UseGuards } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery } from '@nestjs/swagger'
 
+import { IndexerDisabledGuard } from './IndexerDisabledGuard'
 import { TrustService } from './TrustService'
 import {
   JsonSchemaCredentialDto,
@@ -315,7 +316,8 @@ export class TrustController {
       'Deletes a stored Verifiable Trust Json Schema Credential (VTJSC) associated with the specified schema identifier (`schemaId`). ' +
       'A JSON Schema Credential defines the structure and validation rules for a Verifiable Trust Credential (VTC). ' +
       'Removing a JSC also invalidates any Verifiable Trust Credentials that rely on it. ' +
-      'This operation follows the [Verifiable Trust Specification](https://verana-labs.github.io/verifiable-trust-spec/#json-schema-credentials).',
+      'This operation follows the [Verifiable Trust Specification](https://verana-labs.github.io/verifiable-trust-spec/#json-schema-credentials).\n\n' +
+      '**Disabled when `VERANA_INDEXER_BASE_URL` is configured.** VTJSC lifecycle is managed automatically by the indexer.',
   })
   @ApiQuery({
     name: 'schemaId',
@@ -342,6 +344,7 @@ export class TrustController {
     status: 404,
     description: 'No Verifiable Trust Json Schema Credential (VTJSC) was found for the provided schema ID.',
   })
+  @UseGuards(IndexerDisabledGuard)
   async removeJsonSchemaCredential(@Query('schemaId') schemaId: string) {
     return await this.trustService.removeJsonSchemaCredential(schemaId)
   }
@@ -359,6 +362,7 @@ export class TrustController {
   The **issuer DID** of the VTJSC MUST be the **same DID** as the Ecosystem DID of the Trust Registry that created the referenced CredentialSchema in the ledger.
 
   VTJSCs issued by any other DID will be be considered invalid by trust resolvers.
+  **Disabled when \`VERANA_INDEXER_BASE_URL\` is configured.** VTJSC lifecycle is managed automatically by the indexer.
   `,
   })
   @ApiBody({
@@ -386,6 +390,7 @@ export class TrustController {
     status: 400,
     description: 'Invalid schema input or missing required parameters.',
   })
+  @UseGuards(IndexerDisabledGuard)
   async createJsc(@Body() body: JsonSchemaCredentialDto) {
     return await this.trustService.createJsc(body.schemaBaseId.toLocaleLowerCase(), body.jsonSchemaRef)
   }
