@@ -15,7 +15,7 @@ import {
 import express from 'express'
 import WebSocket from 'ws'
 
-import { DIDCOMM_V1_SUPPORT, DIDCOMM_V2_SUPPORT, ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
+import { AGENT_DIDCOMM_VERSIONS, ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
 import { MessageService } from '../controllers/admin/message/MessageService'
 
 import { TsLogger } from './logger'
@@ -54,13 +54,19 @@ export const setupAgent = async ({
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
-  if (!DIDCOMM_V1_SUPPORT && !DIDCOMM_V2_SUPPORT) {
-    throw new Error('Both DIDCOMM_V1_SUPPORT and DIDCOMM_V2_SUPPORT are disabled. Enable at least one.')
+  const allowedDidCommVersions: DidCommVersion[] = ['v1', 'v2']
+  const invalidDidCommVersions = AGENT_DIDCOMM_VERSIONS.filter(
+    v => !allowedDidCommVersions.includes(v as DidCommVersion),
+  )
+  if (invalidDidCommVersions.length > 0) {
+    throw new Error(
+      `Invalid AGENT_DIDCOMM_VERSIONS values: ${invalidDidCommVersions.join(', ')}. Allowed: ${allowedDidCommVersions.join(', ')}`,
+    )
   }
-  const didcommVersions: DidCommVersion[] = [
-    ...(DIDCOMM_V1_SUPPORT ? (['v1'] as const) : []),
-    ...(DIDCOMM_V2_SUPPORT ? (['v2'] as const) : []),
-  ]
+  if (AGENT_DIDCOMM_VERSIONS.length === 0) {
+    throw new Error('AGENT_DIDCOMM_VERSIONS must contain at least one of: v1, v2')
+  }
+  const didcommVersions = AGENT_DIDCOMM_VERSIONS as DidCommVersion[]
 
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
   const [chatSetup, mrtdSetup] = await Promise.all([
