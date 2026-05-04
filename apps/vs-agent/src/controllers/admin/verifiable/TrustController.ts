@@ -317,7 +317,7 @@ export class TrustController {
       'A JSON Schema Credential defines the structure and validation rules for a Verifiable Trust Credential (VTC). ' +
       'Removing a JSC also invalidates any Verifiable Trust Credentials that rely on it. ' +
       'This operation follows the [Verifiable Trust Specification](https://verana-labs.github.io/verifiable-trust-spec/#json-schema-credentials).\n\n' +
-      '**Disabled when `VERANA_INDEXER_BASE_URL` is configured.** VTJSC lifecycle is managed automatically by the indexer.',
+      '**Disabled when automatic lifecycle management is enabled.** VTJSC lifecycle is handled automatically.',
   })
   @ApiQuery({
     name: 'schemaId',
@@ -362,7 +362,7 @@ export class TrustController {
   The **issuer DID** of the VTJSC MUST be the **same DID** as the Ecosystem DID of the Trust Registry that created the referenced CredentialSchema in the ledger.
 
   VTJSCs issued by any other DID will be be considered invalid by trust resolvers.
-  **Disabled when \`VERANA_INDEXER_BASE_URL\` is configured.** VTJSC lifecycle is managed automatically by the indexer.
+  **Disabled when automatic lifecycle management is enabled.** VTJSC lifecycle is handled automatically.
   `,
   })
   @ApiBody({

@@ -7,7 +7,7 @@ export class IndexerDisabledGuard implements CanActivate {
   canActivate(): boolean {
     if (VERANA_INDEXER_BASE_URL) {
       throw new ForbiddenException(
-        'VTJSC lifecycle is managed automatically by the indexer. Manual create/delete is disabled.',
+        'VTJSC lifecycle is automatically managed by Verana VPR events.',
       )
     }
     return true
