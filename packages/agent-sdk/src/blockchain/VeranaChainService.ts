@@ -14,6 +14,7 @@ import Long from 'long'
 
 import {
   CreateOrUpdatePermissionSessionParams,
+  Permission,
   PermQueryClient,
   SetPermissionVPToValidatedParams,
   StartPermissionVPParams,
@@ -79,12 +80,13 @@ export class VeranaChainService {
     this.permQuery = new PermQueryClientImpl(rpc) as PermQueryClient
   }
 
-  // Query API (No signed)
-  async getPermission(id: Long): Promise<unknown> {
-    return this.permQuery.GetPermission({ id })
+  // Query API (unsigned)
+  async getPermission(id: number): Promise<Permission | undefined> {
+    const result = await this.permQuery.GetPermission({ id })
+    return result.permission
   }
 
-  async findPermissionsWithDID(params: object): Promise<unknown[]> {
+  async findPermissionsWithDID(params: object): Promise<Permission[]> {
     const result = await this.permQuery.FindPermissionsWithDID(params)
     return result.permissions ?? []
   }
@@ -93,15 +95,18 @@ export class VeranaChainService {
     return this.permQuery.GetPermissionSession({ id: uuid })
   }
 
-  // Transaction API (Signed)
+  // Transaction API (signed)
   async startPermissionVP(params: StartPermissionVPParams): Promise<{ txHash: string }> {
     const value = MsgStartPermissionVP.fromPartial({
-      creator: this.operatorAddress,
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      vsOperator: this.operatorAddress,
       type: params.type,
       validatorPermId: params.validatorPermId,
-      country: params.country,
       did: params.did,
       validationFees: params.validationFees,
+      issuanceFees: params.issuanceFees,
+      verificationFees: params.verificationFees,
     })
     const result = await this.broadcastMsg(veranaTypeUrls.MsgStartPermissionVP, value)
     return { txHash: result.transactionHash }
@@ -118,16 +123,16 @@ export class VeranaChainService {
 
   async setPermissionVPToValidated(params: SetPermissionVPToValidatedParams): Promise<{ txHash: string }> {
     const value = MsgSetPermissionVPToValidated.fromPartial({
-      creator: this.operatorAddress,
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
       id: params.id,
       effectiveUntil: params.effectiveUntil,
-      validationFees: params.validationFees,
-      issuanceFees: params.issuanceFees,
-      verificationFees: params.verificationFees,
-      country: params.country,
-      vpSummaryDigestSri: params.vpSummaryDigestSri,
-      issuanceFeeDiscount: params.issuanceFeeDiscount,
-      verificationFeeDiscount: params.verificationFeeDiscount,
+      validationFees: params.validationFees ?? 0,
+      issuanceFees: params.issuanceFees ?? 0,
+      verificationFees: params.verificationFees ?? 0,
+      vpSummaryDigest: params.vpSummaryDigest,
+      issuanceFeeDiscount: params.issuanceFeeDiscount ?? 0,
+      verificationFeeDiscount: params.verificationFeeDiscount ?? 0,
     })
     const result = await this.broadcastMsg(veranaTypeUrls.MsgSetPermissionVPToValidated, value)
     return { txHash: result.transactionHash }
@@ -146,12 +151,14 @@ export class VeranaChainService {
     params: CreateOrUpdatePermissionSessionParams,
   ): Promise<{ txHash: string }> {
     const value = MsgCreateOrUpdatePermissionSession.fromPartial({
-      creator: this.operatorAddress,
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
       id: params.id,
       issuerPermId: params.issuerPermId,
       verifierPermId: params.verifierPermId,
       agentPermId: params.agentPermId,
       walletAgentPermId: params.walletAgentPermId,
+      digest: params.digest,
     })
     const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateOrUpdatePermissionSession, value)
     return { txHash: result.transactionHash }

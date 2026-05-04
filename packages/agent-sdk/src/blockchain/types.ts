@@ -1,5 +1,33 @@
 import { BaseLogger } from '@credo-ts/core'
 
+/** Permission type values per `verana.perm.v1.PermissionType`. */
+export const PermissionType = {
+  UNSPECIFIED: 0,
+  ISSUER: 1,
+  VERIFIER: 2,
+  ISSUER_GRANTOR: 3,
+  VERIFIER_GRANTOR: 4,
+  ECOSYSTEM: 5,
+  HOLDER: 6,
+} as const
+export type PermissionType = (typeof PermissionType)[keyof typeof PermissionType]
+
+/**
+ * Subset of `verana.perm.v1.Permission` consumed at this SDK boundary. Mirrors
+ * the codec interface but is declared locally to keep imports off the
+ * `@verana-labs/verana-types` codec subpath.
+ */
+export interface Permission {
+  id: number
+  schemaId: number
+  type: PermissionType
+  did: string
+  validatorPermId: number
+  vpSummaryDigest: string
+  revoked: Date | undefined
+  slashed: Date | undefined
+}
+
 export const VERANA_BECH32_PREFIX = 'verana'
 export const RECORD_ID = 'verana-blockchain-sync-state'
 
@@ -128,8 +156,8 @@ export interface PermissionDto {
 }
 
 export interface PermQueryClient {
-  GetPermission(req: { id: Long }): Promise<{ permission?: unknown }>
-  FindPermissionsWithDID(req: object): Promise<{ permissions: unknown[] }>
+  GetPermission(req: { id: number }): Promise<{ permission?: Permission }>
+  FindPermissionsWithDID(req: object): Promise<{ permissions: Permission[] }>
   GetPermissionSession(req: { id: string }): Promise<{ session?: unknown }>
 }
 
@@ -141,30 +169,36 @@ export interface VeranaChainConfig {
   gasPrice?: string
 }
 
+/** Wrapper for optional uint64 values per `verana.perm.v1.OptionalUInt64`. */
+export interface OptionalUInt64 {
+  value: number
+}
+
 export interface StartPermissionVPParams {
   type: number
-  validatorPermId: Long
-  country: string
+  validatorPermId: number
   did: string
-  validationFees?: { value: Long }
+  validationFees?: OptionalUInt64
+  issuanceFees?: OptionalUInt64
+  verificationFees?: OptionalUInt64
 }
 
 export interface SetPermissionVPToValidatedParams {
-  id: Long
+  id: number
   effectiveUntil?: Date
-  validationFees: Long
-  issuanceFees: Long
-  verificationFees: Long
-  country: string
-  vpSummaryDigestSri: string
-  issuanceFeeDiscount: Long
-  verificationFeeDiscount: Long
+  validationFees?: number
+  issuanceFees?: number
+  verificationFees?: number
+  vpSummaryDigest: string
+  issuanceFeeDiscount?: number
+  verificationFeeDiscount?: number
 }
 
 export interface CreateOrUpdatePermissionSessionParams {
   id: string
-  issuerPermId: Long
-  verifierPermId: Long
-  agentPermId: Long
-  walletAgentPermId: Long
+  issuerPermId?: number
+  verifierPermId?: number
+  agentPermId: number
+  walletAgentPermId: number
+  digest?: string
 }
