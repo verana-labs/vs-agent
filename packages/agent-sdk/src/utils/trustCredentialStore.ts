@@ -22,13 +22,6 @@ import {
   signerW3c,
 } from './setupSelfTr'
 
-export interface TrustMetadataEntry {
-  credential: any
-  verifiablePresentation: any
-  didDocumentServiceId: string
-  attached?: boolean
-}
-
 async function getDidRecord(agent: VsAgent) {
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
   return didRecord
