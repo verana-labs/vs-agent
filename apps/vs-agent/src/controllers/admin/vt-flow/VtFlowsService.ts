@@ -1,5 +1,5 @@
 import type { JsonObject } from '@credo-ts/core'
-import type { Permission, VsAgent, VeranaChainService } from '@verana-labs/vs-agent-sdk'
+import type { VsAgent, VeranaChainService } from '@verana-labs/vs-agent-sdk'
 
 import { JsonTransformer, W3cCredential, utils } from '@credo-ts/core'
 import { DidCommHandshakeProtocol, type JsonCredential } from '@credo-ts/didcomm'
@@ -59,19 +59,11 @@ export class VtFlowsService {
       throw new BadRequestException(`Validator permission ${validatorPermId} has no DID`)
     }
 
-    await chain.startPermissionVP({
+    const { permissionId: holderPermId } = await chain.startPermissionVP({
       type: HOLDER_PERMISSION_TYPE,
       validatorPermId,
       did: agent.did,
     })
-
-    const holderPerm = await this.findHolderPermission(chain, agent.did, validatorPermId)
-    if (!holderPerm) {
-      throw new HttpException(
-        'HOLDER permission not found after start-perm-vp; chain indexing may be lagging',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      )
-    }
 
     const { connectionRecord } = await agent.didcomm.oob.receiveImplicitInvitation({
       did: validatorPerm.did,
@@ -90,7 +82,7 @@ export class VtFlowsService {
     const record = await vtFlowApi.sendValidationRequest({
       connectionId: ready.id,
       sessionUuid: input.sessionUuid ?? utils.uuid(),
-      permId: String(holderPerm.id),
+      permId: String(holderPermId),
       agentPermId: '0',
       walletAgentPermId: '0',
       claims: input.claims,
@@ -226,19 +218,6 @@ export class VtFlowsService {
       throw new BadRequestException(`Invalid ${field}: '${value}' is not a non-negative integer`)
     }
     return n
-  }
-
-  private async findHolderPermission(
-    chain: VeranaChainService,
-    did: string,
-    validatorPermId: number,
-  ): Promise<Permission | undefined> {
-    const perms = await chain.findPermissionsWithDID({ did })
-    const holders = perms.filter(
-      p => p.type === HOLDER_PERMISSION_TYPE && Number(p.validatorPermId) === validatorPermId,
-    )
-    holders.sort((a, b) => Number(b.id) - Number(a.id))
-    return holders[0]
   }
 }
 

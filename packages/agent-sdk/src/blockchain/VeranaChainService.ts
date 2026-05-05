@@ -27,6 +27,7 @@ const {
 } = require('@verana-labs/verana-types/codec/verana/perm/v1/query')
 const {
   MsgStartPermissionVP,
+  MsgStartPermissionVPResponse,
   MsgRenewPermissionVP,
   MsgSetPermissionVPToValidated,
   MsgCancelPermissionVPLastRequest,
@@ -96,7 +97,9 @@ export class VeranaChainService {
   }
 
   // Transaction API (signed)
-  async startPermissionVP(params: StartPermissionVPParams): Promise<{ txHash: string }> {
+  async startPermissionVP(
+    params: StartPermissionVPParams,
+  ): Promise<{ txHash: string; permissionId: number }> {
     const value = MsgStartPermissionVP.fromPartial({
       corporation: this.operatorAddress,
       operator: this.operatorAddress,
@@ -109,7 +112,12 @@ export class VeranaChainService {
       verificationFees: params.verificationFees,
     })
     const result = await this.broadcastMsg(veranaTypeUrls.MsgStartPermissionVP, value)
-    return { txHash: result.transactionHash }
+    const responseBytes = result.msgResponses[0]?.value
+    if (!responseBytes) {
+      throw new Error('[VeranaChain] start-perm-vp tx response missing msgResponses[0]')
+    }
+    const response = MsgStartPermissionVPResponse.decode(responseBytes)
+    return { txHash: result.transactionHash, permissionId: Number(response.permissionId) }
   }
 
   async renewPermissionVP(id: Long): Promise<{ txHash: string }> {
