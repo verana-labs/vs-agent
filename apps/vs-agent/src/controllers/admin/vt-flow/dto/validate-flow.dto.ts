@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator'
+import { IsNotEmpty, IsString } from 'class-validator'
 
 export class ValidateFlowDto {
   @ApiProperty({
@@ -10,16 +10,4 @@ export class ValidateFlowDto {
   @IsString()
   @IsNotEmpty()
   credentialSchemaCredentialId!: string
-
-  @ApiProperty({ required: false, type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  credentialContext?: string[]
-
-  @ApiProperty({ required: false, type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  credentialType?: string[]
 }

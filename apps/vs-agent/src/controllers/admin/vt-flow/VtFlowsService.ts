@@ -129,11 +129,10 @@ export class VtFlowsService {
     const claims = (record.claims ?? {}) as JsonObject
     const unsignedCredential = createCredential({
       id: `${agent.did}#${utils.uuid()}`,
-      type: input.credentialType ?? ['VerifiableCredential', 'VerifiableTrustCredential'],
+      type: ['VerifiableCredential', 'VerifiableTrustCredential'],
       issuer: agent.did,
       credentialSubject: { id: subjectDid, claims },
     })
-    if (input.credentialContext) unsignedCredential.context = input.credentialContext
     unsignedCredential.credentialSchema = {
       id: input.credentialSchemaCredentialId,
       type: 'JsonSchemaCredential',
