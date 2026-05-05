@@ -214,16 +214,18 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       const hasLegacyMethods = (didDocument.verificationMethod ?? []).some(vm =>
         ['Ed25519VerificationKey2018', 'X25519KeyAgreementKey2019'].includes(vm.type),
       )
+      const ed25519VerificationMethodId = this.findEd25519VerificationMethodId(didDocument)
       const servicesChanged =
+        !ed25519VerificationMethodId ||
         JSON.stringify(didDocument.didCommServices) !==
-        JSON.stringify(this.getDidCommServices(didDocument.id))
+          JSON.stringify(this.getDidCommServices(didDocument.id, ed25519VerificationMethodId))
       if (hasLegacyMethods || servicesChanged) {
-        if (servicesChanged) {
+        if (servicesChanged && ed25519VerificationMethodId) {
           didDocument.service = [
             ...(didDocument.service
               ? didDocument.service.filter(service => !MANAGED_DIDCOMM_SERVICE_TYPES.includes(service.type))
               : []),
-            ...this.getDidCommServices(didDocument.id),
+            ...this.getDidCommServices(didDocument.id, ed25519VerificationMethodId),
           ]
         }
         const newKeys: DidDocumentKey[] = []
@@ -261,8 +263,22 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     return await didRepository.findCreatedDid(this.context, parsedDid.did)
   }
 
-  private getDidCommServices(publicDid: string) {
-    const keyAgreementId = `${publicDid}#key-agreement-1`
+  // Prefer Ed25519VerificationKey2020 over Multikey: webvh's update Multikey is not ours to use.
+  private findEd25519VerificationMethodId(didDocument: DidDocument): string | undefined {
+    const vms = didDocument.verificationMethod ?? []
+    const preferred = vms.find(vm => vm.type === 'Ed25519VerificationKey2020')
+    if (preferred) return preferred.id
+    const fallback = vms.find(
+      vm =>
+        vm.type === 'Ed25519VerificationKey2018' ||
+        (vm.type === 'Multikey' &&
+          typeof vm.publicKeyMultibase === 'string' &&
+          vm.publicKeyMultibase.startsWith('z6Mk')),
+    )
+    return fallback?.id
+  }
+
+  private getDidCommServices(publicDid: string, ed25519VerificationMethodId: string) {
     const didcommVersions = this.didcomm!.config.didcommVersions
     const includeV1 = didcommVersions.includes('v1')
     const includeV2 = didcommVersions.includes('v2')
@@ -276,7 +292,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             serviceEndpoint: endpoint,
             priority: index,
             routingKeys: [], // TODO: Support mediation
-            recipientKeys: [keyAgreementId],
+            recipientKeys: [ed25519VerificationMethodId],
             accept: ['didcomm/aip2;env=rfc19'],
           }),
         )
@@ -365,7 +381,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     const assertionMethod = verificationMethodId
     const keyAgreement = keyAgreementId
 
-    const didcommServices = this.getDidCommServices(publicDid)
+    const didcommServices = this.getDidCommServices(publicDid, verificationMethodId)
 
     const currentContexts = Array.isArray(didDocument.context)
       ? didDocument.context

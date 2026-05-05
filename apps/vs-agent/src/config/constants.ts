@@ -76,8 +76,6 @@ export const ADMIN_LOG_LEVEL = process.env.ADMIN_LOG_LEVEL
 export const USE_CORS = Boolean(process.env.USE_CORS || false)
 export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER === 'false')
 
-// DIDComm envelope versions accepted and sent by the agent. Comma-separated list of 'v1' / 'v2'.
-// Defaults to 'v1,v2'.
 export const AGENT_DIDCOMM_VERSIONS = (process.env.AGENT_DIDCOMM_VERSIONS ?? 'v1,v2')
   .split(',')
   .map(v => v.trim().toLowerCase())

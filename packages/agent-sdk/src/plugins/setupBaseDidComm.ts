@@ -34,11 +34,6 @@ export interface BaseDidCommPluginOptions {
   walletConfig: AskarModuleConfigStoreOptions
   publicApiBaseUrl: string
   endpoints: string[]
-  /**
-   * DIDComm envelope versions the agent supports. Defaults to `['v1']`.
-   * Including `'v2'` makes the agent accept inbound V2 envelopes and prefer V2 when sending
-   * to a connection that supports it.
-   */
   didcommVersions?: DidCommVersion[]
 }
 
@@ -56,6 +51,8 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
       didcomm: new DidCommModule({
         endpoints: options.endpoints,
         didcommVersions: options.didcommVersions,
+        // BasicMessage protocols must be set separately, otherwise Credo rejects basicmessage/2.0.
+        basicMessages: { protocols: options.didcommVersions ?? ['v1'] },
         transports: {
           outbound: [new DidCommHttpOutboundTransport(), new VsAgentWsOutboundTransport()],
         },

@@ -29,8 +29,8 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
       const record = payload.connectionRecord
 
       if (record.outOfBandId && !record.getTag('parentConnectionId')) {
-        const outOfBandRecord = await agent.didcomm.oob.getById(record.outOfBandId)
-        const parentConnectionId = outOfBandRecord.getTag('parentConnectionId') as string
+        const outOfBandRecord = await agent.didcomm.oob.findById(record.outOfBandId)
+        const parentConnectionId = outOfBandRecord?.getTag('parentConnectionId') as string
 
         // Tag connection with its parent
         if (parentConnectionId) {
@@ -143,8 +143,10 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
   agent.events.on(
     DidCommConnectionEventTypes.DidCommConnectionStateChanged,
     async (data: DidCommConnectionStateChangedEvent) => {
-      config.logger.debug(`Incoming connection event: ${data.payload.connectionRecord.state}}`)
-      const oob = await agent.didcomm.oob.findById(data.payload.connectionRecord.outOfBandId!)
+      config.logger.debug(`Incoming connection event: ${data.payload.connectionRecord.state}`)
+      const outOfBandId = data.payload.connectionRecord.outOfBandId
+      if (!outOfBandId) return
+      const oob = await agent.didcomm.oob.findById(outOfBandId)
       if (
         agentPublicDids.includes(oob?.outOfBandInvitation.id) &&
         data.payload.connectionRecord.state === DidCommDidExchangeState.RequestReceived
