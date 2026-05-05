@@ -18,10 +18,15 @@ import {
   VtFlowState,
   VtFlowVariant,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { PermissionType } from '@verana-labs/vs-agent-sdk'
+import {
+  HOLDER_PERMISSION_TYPE,
+  createCredential,
+  generateDigestSRI,
+  getVerificationMethodId,
+  signerW3c,
+} from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
-import { createCredential, generateDigestSRI, getVerificationMethodId, signerW3c } from '../../../utils'
 
 import { StartValidationProcessDto } from './dto/start-validation-process.dto'
 import { ValidateFlowDto } from './dto/validate-flow.dto'
@@ -47,7 +52,7 @@ export class VtFlowsService {
     }
 
     await chain.startPermissionVP({
-      type: PermissionType.HOLDER,
+      type: HOLDER_PERMISSION_TYPE,
       validatorPermId,
       did: agent.did,
     })
@@ -207,7 +212,7 @@ export class VtFlowsService {
   ): Promise<Permission | undefined> {
     const perms = await chain.findPermissionsWithDID({ did })
     const holders = perms.filter(
-      p => p.type === PermissionType.HOLDER && Number(p.validatorPermId) === validatorPermId,
+      p => p.type === HOLDER_PERMISSION_TYPE && Number(p.validatorPermId) === validatorPermId,
     )
     holders.sort((a, b) => Number(b.id) - Number(a.id))
     return holders[0]

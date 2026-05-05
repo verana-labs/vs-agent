@@ -1,16 +1,7 @@
 import { BaseLogger } from '@credo-ts/core'
 
-/** Permission type values per `verana.perm.v1.PermissionType`. */
-export const PermissionType = {
-  UNSPECIFIED: 0,
-  ISSUER: 1,
-  VERIFIER: 2,
-  ISSUER_GRANTOR: 3,
-  VERIFIER_GRANTOR: 4,
-  ECOSYSTEM: 5,
-  HOLDER: 6,
-} as const
-export type PermissionType = (typeof PermissionType)[keyof typeof PermissionType]
+/** Permission type for a HOLDER permission per `verana.perm.v1.PermissionType.HOLDER`. */
+export const HOLDER_PERMISSION_TYPE = 6
 
 /**
  * Subset of `verana.perm.v1.Permission` consumed at this SDK boundary. Mirrors
@@ -20,7 +11,7 @@ export type PermissionType = (typeof PermissionType)[keyof typeof PermissionType
 export interface Permission {
   id: number
   schemaId: number
-  type: PermissionType
+  type: number
   did: string
   validatorPermId: number
   vpSummaryDigest: string
