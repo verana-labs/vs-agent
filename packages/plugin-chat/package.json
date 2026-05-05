@@ -35,15 +35,15 @@
     "@2060.io/credo-ts-didcomm-reactions": "^0.1.1",
     "@2060.io/credo-ts-didcomm-receipts": "0.1.1",
     "@2060.io/credo-ts-didcomm-user-profile": "0.1.0",
-    "@credo-ts/action-menu": "0.7.0-pr-2704-20260425132842",
-    "@credo-ts/core": "0.7.0-pr-2704-20260425132842",
-    "@credo-ts/didcomm": "0.7.0-pr-2704-20260425132842",
-    "@credo-ts/question-answer": "0.7.0-pr-2704-20260425132842",
+    "@credo-ts/action-menu": "0.7.1-pr-2704-20260504205328",
+    "@credo-ts/core": "0.7.1-pr-2704-20260504205328",
+    "@credo-ts/didcomm": "0.7.1-pr-2704-20260504205328",
+    "@credo-ts/question-answer": "0.7.1-pr-2704-20260504205328",
     "@nestjs/common": "^10.0.0",
     "@verana-labs/vs-agent-model": "workspace:*",
     "@verana-labs/vs-agent-sdk": "workspace:*"
   },
   "peerDependencies": {
-    "@credo-ts/core": "0.7.0-pr-2704-20260425132842"
+    "@credo-ts/core": "0.7.1-pr-2704-20260504205328"
   }
 }

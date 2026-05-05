@@ -20,13 +20,6 @@ export async function createInvitation(options: {
 }) {
   const { agent, messages, useLegacyDid, invitationBaseUrl, imageUrl, didCommVersion } = options
 
-  if (didCommVersion === 'v2' && messages && messages.length > 0) {
-    throw new Error(
-      'DIDComm v2 out-of-band invitations do not support attached messages. ' +
-        'Use v1 for credential-offer / presentation-request flows, or send the message after connection forms.',
-    )
-  }
-
   // Use legacy did:web in case agent's did is webvh and using legacy did
   const ourDid =
     agent.did && parseDid(agent.did).method === 'webvh' && useLegacyDid

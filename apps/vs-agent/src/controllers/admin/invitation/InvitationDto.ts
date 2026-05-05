@@ -64,7 +64,8 @@ export class CreatePresentationRequestDto implements CreatePresentationRequestOp
 
   @ApiProperty({
     description:
-      'DIDComm envelope version for the invitation. v2 is rejected here because the request is attached to the OOB.',
+      "DIDComm envelope version for the invitation. 'v2' requires AGENT_DIDCOMM_VERSIONS to include 'v2'. " +
+      'When omitted, the agent infers the version from its configuration.',
     enum: ['v1', 'v2'],
     required: false,
   })
@@ -111,7 +112,8 @@ export class CreateCredentialOfferDto implements CreateCredentialOfferOptions {
 
   @ApiProperty({
     description:
-      'DIDComm envelope version for the invitation. v2 is rejected here because the offer is attached to the OOB.',
+      "DIDComm envelope version for the invitation. 'v2' requires AGENT_DIDCOMM_VERSIONS to include 'v2'. " +
+      'When omitted, the agent infers the version from its configuration.',
     enum: ['v1', 'v2'],
     required: false,
   })
