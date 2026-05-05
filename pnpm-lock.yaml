@@ -118,9 +118,6 @@ importers:
       '@types/qrcode':
         specifier: ^1.5.0
         version: 1.5.5
-      '@verana-labs/credo-ts-didcomm-vt-flow':
-        specifier: workspace:*
-        version: link:../../packages/vt-flow
       '@verana-labs/vs-agent-model':
         specifier: workspace:*
         version: link:../../packages/model
@@ -475,6 +472,9 @@ importers:
       '@openwallet-foundation/askar-nodejs':
         specifier: ^0.6.0
         version: 0.6.0
+      '@verana-labs/credo-ts-didcomm-vt-flow':
+        specifier: workspace:*
+        version: link:../vt-flow
       '@verana-labs/verana-types':
         specifier: 0.10.1-dev.11
         version: 0.10.1-dev.11(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)
