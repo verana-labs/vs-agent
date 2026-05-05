@@ -59,11 +59,13 @@ export class VtFlowsService {
       throw new BadRequestException(`Validator permission ${validatorPermId} has no DID`)
     }
 
-    const { permissionId: holderPermId } = await chain.startPermissionVP({
-      type: HOLDER_PERMISSION_TYPE,
-      validatorPermId,
-      did: agent.did,
-    })
+    const { permissionId: holderPermId } = await this.runChainTx(agent, 'start-perm-vp', () =>
+      chain.startPermissionVP({
+        type: HOLDER_PERMISSION_TYPE,
+        validatorPermId,
+        did: agent.did!,
+      }),
+    )
 
     const { connectionRecord } = await agent.didcomm.oob.receiveImplicitInvitation({
       did: validatorPerm.did,
@@ -146,16 +148,20 @@ export class VtFlowsService {
     )
     const digest = generateDigestSRI(JSON.stringify(signed.jsonCredential))
 
-    await chain.setPermissionVPToValidated({
-      id: holderPermId,
-      vpSummaryDigest: digest,
-    })
-    await chain.createOrUpdatePermissionSession({
-      id: record.sessionUuid,
-      agentPermId: 0,
-      walletAgentPermId: 0,
-      digest,
-    })
+    await this.runChainTx(agent, 'set-perm-vp-validated', () =>
+      chain.setPermissionVPToValidated({
+        id: holderPermId,
+        vpSummaryDigest: digest,
+      }),
+    )
+    await this.runChainTx(agent, 'create-or-update-permission-session', () =>
+      chain.createOrUpdatePermissionSession({
+        id: record.sessionUuid,
+        agentPermId: 0,
+        walletAgentPermId: 0,
+        digest,
+      }),
+    )
 
     await vtFlowApi.acceptValidationRequest(record.id)
     await vtFlowApi.markValidated(record.id)
@@ -218,6 +224,20 @@ export class VtFlowsService {
       throw new BadRequestException(`Invalid ${field}: '${value}' is not a non-negative integer`)
     }
     return n
+  }
+
+  private async runChainTx<T>(agent: VsAgent, label: string, fn: () => Promise<T>): Promise<T> {
+    const logger = agent.config.logger
+    logger.debug(`[VtFlowsService] Broadcasting ${label}`)
+    try {
+      const result = await fn()
+      logger.info(`[VtFlowsService] ${label} broadcast OK`)
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      logger.error(`[VtFlowsService] ${label} broadcast failed: ${message}`)
+      throw new HttpException(`${label} failed: ${message}`, HttpStatus.INTERNAL_SERVER_ERROR)
+    }
   }
 }
 
