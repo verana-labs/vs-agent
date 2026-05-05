@@ -1,7 +1,7 @@
 import type { JsonObject } from '@credo-ts/core'
 import type { VsAgent, VeranaChainService } from '@verana-labs/vs-agent-sdk'
 
-import { JsonTransformer, W3cCredential, utils } from '@credo-ts/core'
+import { JsonTransformer, W3cCredential, W3cJsonLdVerifiableCredential, utils } from '@credo-ts/core'
 import { DidCommHandshakeProtocol, type JsonCredential } from '@credo-ts/didcomm'
 import {
   BadRequestException,
@@ -22,6 +22,7 @@ import {
   HOLDER_PERMISSION_TYPE,
   VeranaIndexerService,
   createCredential,
+  createVtc,
   generateDigestSRI,
   getVerificationMethodId,
   signerW3c,
@@ -187,7 +188,46 @@ export class VtFlowsService {
       throw new BadRequestException('This record is validator-side; accept-credential is an applicant action')
     }
     const updated = await vtFlowApi.acceptReceivedCredential(vtFlowRecordId)
+    await this.publishLinkedVpForEcs(agent, updated)
     return toDto(updated)
+  }
+
+  // VPR Integration Spec §5.1 step 12: Linked VP is required for ECS credentials.
+  // Best-effort: if anything goes wrong, log and proceed; the credential ack already shipped.
+  private async publishLinkedVpForEcs(agent: VsAgent, record: VtFlowRecord): Promise<void> {
+    if (!record.credentialExchangeRecordId) return
+    const logger = agent.config.logger
+    try {
+      const formatData = await agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
+      const credentialJson = formatData.credential?.jsonld
+      if (!credentialJson) {
+        logger.warn(`[VtFlowsService] Skipping Linked VP: no JSON-LD credential on ${record.id}`)
+        return
+      }
+      const schemaRef = (credentialJson.credentialSchema as { id?: string } | undefined)?.id
+      if (!schemaRef) {
+        logger.warn(`[VtFlowsService] Skipping Linked VP: credential has no credentialSchema.id`)
+        return
+      }
+      const schemaBaseId = this.extractSchemaBaseId(schemaRef)
+      if (!schemaBaseId) {
+        logger.warn(`[VtFlowsService] Skipping Linked VP: schema ${schemaRef} is not an ECS schema`)
+        return
+      }
+      const credential = JsonTransformer.fromJSON(credentialJson, W3cJsonLdVerifiableCredential)
+      await createVtc(agent, agent.publicApiBaseUrl, schemaBaseId, credential)
+      logger.info(`[VtFlowsService] Published Linked VP for schema "${schemaBaseId}"`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      logger.error(`[VtFlowsService] Failed to publish Linked VP: ${message}`)
+    }
+  }
+
+  // Extracts the ECS schema base id from a JSC URL.
+  // Matches `schemas-<base>-jsc.json` or `schemas-<base>-c-vp.json` (case-insensitive).
+  private extractSchemaBaseId(jscUrl: string): string | undefined {
+    const match = jscUrl.match(/schemas-([a-z0-9-]+?)-(?:jsc|c-vp)\.json/i)
+    return match?.[1]?.toLowerCase()
   }
 
   private resolveVtFlowApi(agent: VsAgent): VtFlowApi {
