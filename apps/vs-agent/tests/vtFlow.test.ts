@@ -1,18 +1,16 @@
-import type { VsAgent } from '@verana-labs/vs-agent-sdk'
-
 import { DidCommConnectionRecord, DidCommHandshakeProtocol } from '@credo-ts/didcomm'
 import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  SubjectInboundTransport,
+  SubjectOutboundTransport,
+  type BaseAgentModules,
+  type SubjectMessage,
+  type VsAgent,
+} from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  isVtFlowStateChangedEvent,
-  startAgent,
-  SubjectInboundTransport,
-  type SubjectMessage,
-  SubjectOutboundTransport,
-  waitForEvent,
-} from './__mocks__'
+import { isVtFlowStateChangedEvent, startAgent, waitForEvent } from './__mocks__'
 
 /**
  * Two-agent in-memory vt-flow round-trip covering thread-id correlation,
