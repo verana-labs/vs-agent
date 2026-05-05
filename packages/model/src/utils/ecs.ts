@@ -42,7 +42,7 @@ function canonicalize(value: unknown): string {
   )
 }
 
-async function computeSchemaDigest(schemaObj: Record<string, unknown>): Promise<string> {
+export async function computeSchemaDigest(schemaObj: Record<string, unknown>): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { $id: _, ...schemaWithoutId } = schemaObj
   const canonical = canonicalize(schemaWithoutId)

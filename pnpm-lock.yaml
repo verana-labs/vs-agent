@@ -127,15 +127,6 @@ importers:
       '@verana-labs/vs-agent-sdk':
         specifier: workspace:*
         version: link:../../packages/agent-sdk
-      ajv:
-        specifier: ^8.17.1
-        version: 8.17.1
-      ajv-formats:
-        specifier: ^3.0.1
-        version: 3.0.1(ajv@8.17.1)
-      axios:
-        specifier: ^1.7.9
-        version: 1.9.0
       bull:
         specifier: ^4.16.2
         version: 4.16.5
@@ -490,6 +481,15 @@ importers:
       '@verana-labs/vs-agent-model':
         specifier: workspace:*
         version: link:../model
+      ajv:
+        specifier: ^8.17.1
+        version: 8.17.1
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.17.1)
+      axios:
+        specifier: ^1.7.9
+        version: 1.9.0
       credo-ts-didweb-anoncreds:
         specifier: 0.0.2-alpha.5
         version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260504205328(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.1-pr-2704-20260504205328(typescript@5.8.3))

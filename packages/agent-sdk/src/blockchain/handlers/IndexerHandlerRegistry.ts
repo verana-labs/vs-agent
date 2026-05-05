@@ -3,7 +3,7 @@ import { IndexerActivity, VeranaSyncState } from '../types'
 
 interface IndexerHandlerContext {
   agent: VsAgent
-  blockHeight: number
+  block_height: number
   operatorAddress: string
   state: VeranaSyncState
 }

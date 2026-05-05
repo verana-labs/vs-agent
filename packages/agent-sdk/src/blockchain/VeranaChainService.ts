@@ -35,6 +35,7 @@ const {
 export class VeranaChainService {
   private signingClient!: SigningStargateClient
   private operatorAddress!: string
+  private chainId!: string
 
   private permQuery!: PermQueryClient
 
@@ -42,6 +43,10 @@ export class VeranaChainService {
 
   get address(): string {
     return this.operatorAddress
+  }
+
+  get getChainId(): string {
+    return this.chainId
   }
 
   async start(): Promise<void> {
@@ -63,11 +68,11 @@ export class VeranaChainService {
       gasPrice: GasPrice.fromString(gasPrice ?? '0uvna'), // TODO: consider minium gas price
     })
 
-    const onChainId = await this.signingClient.getChainId()
-    if (chainId && onChainId !== chainId) {
-      throw new Error(`[VeranaChain] Chain ID mismatch: expected "${chainId}", got "${onChainId}"`)
+    this.chainId = await this.signingClient.getChainId()
+    if (chainId && this.chainId !== chainId) {
+      throw new Error(`[VeranaChain] Chain ID mismatch: expected "${chainId}", got "${this.chainId}"`)
     }
-    logger.info(`[VeranaChain] Connected to chain: ${onChainId}`)
+    logger.info(`[VeranaChain] Connected to chain: ${this.chainId}`)
 
     const queryClient = new QueryClient(cometClient)
     const rpc = createProtobufRpcClient(queryClient)
