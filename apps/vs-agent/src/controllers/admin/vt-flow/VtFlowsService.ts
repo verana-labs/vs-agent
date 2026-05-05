@@ -20,13 +20,16 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
   HOLDER_PERMISSION_TYPE,
+  VeranaIndexerService,
   createCredential,
   generateDigestSRI,
   getVerificationMethodId,
   signerW3c,
 } from '@verana-labs/vs-agent-sdk'
 
+import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
+import { TsLogger } from '../../../utils'
 
 import { StartValidationProcessDto } from './dto/start-validation-process.dto'
 import { ValidateFlowDto } from './dto/validate-flow.dto'
@@ -34,18 +37,23 @@ import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
 @Injectable()
 export class VtFlowsService {
+  private indexerService?: VeranaIndexerService
+
   public constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
 
   public async startValidationProcess(input: StartValidationProcessDto): Promise<VtFlowRecordDto> {
     const agent = await this.agentService.getAgent()
     const chain = this.requireChain(agent)
+    const indexer = this.getIndexer()
     if (!agent.did) throw new BadRequestException('Agent has no public DID')
 
     const validatorPermId = this.parsePermId(input.validatorPermId, 'validatorPermId')
-    const validatorPerm = await chain.getPermission(validatorPermId)
+    const validatorPerm = await indexer.getPermission(validatorPermId)
     if (!validatorPerm) throw new NotFoundException(`Validator permission ${validatorPermId} not found`)
-    if (validatorPerm.revoked || validatorPerm.slashed) {
-      throw new BadRequestException(`Validator permission ${validatorPermId} is not active`)
+    if (validatorPerm.perm_state !== 'ACTIVE') {
+      throw new BadRequestException(
+        `Validator permission ${validatorPermId} is not active (perm_state=${validatorPerm.perm_state})`,
+      )
     }
     if (!validatorPerm.did) {
       throw new BadRequestException(`Validator permission ${validatorPermId} has no DID`)
@@ -115,9 +123,10 @@ export class VtFlowsService {
     }
     if (!record.permId) throw new BadRequestException('Record has no permId')
 
+    const indexer = this.getIndexer()
     const holderPermId = this.parsePermId(record.permId, 'record.permId')
-    const holderPerm = await chain.getPermission(holderPermId)
-    if (!holderPerm) throw new BadRequestException(`Holder permission ${holderPermId} not found on chain`)
+    const holderPerm = await indexer.getPermission(holderPermId)
+    if (!holderPerm) throw new BadRequestException(`Holder permission ${holderPermId} not found on indexer`)
     if (!holderPerm.did) throw new BadRequestException('Holder permission has no DID')
 
     const subjectDid = holderPerm.did
@@ -194,6 +203,21 @@ export class VtFlowsService {
       )
     }
     return agent.veranaChain
+  }
+
+  private getIndexer(): VeranaIndexerService {
+    if (!this.indexerService) {
+      if (!VERANA_INDEXER_BASE_URL) {
+        throw new BadRequestException(
+          'Indexer not configured (set VERANA_INDEXER_BASE_URL); required for vt-flow',
+        )
+      }
+      this.indexerService = new VeranaIndexerService({
+        baseUrl: VERANA_INDEXER_BASE_URL,
+        logger: new TsLogger(ADMIN_LOG_LEVEL, 'VeranaIndexer'),
+      })
+    }
+    return this.indexerService
   }
 
   private parsePermId(value: string, field: string): number {
