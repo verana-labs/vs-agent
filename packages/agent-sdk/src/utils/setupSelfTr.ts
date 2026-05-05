@@ -17,30 +17,33 @@ import {
 //@ts-ignore
 import { purposes } from '@digitalcredentials/jsonld-signatures'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
-import { VsAgent, getEcsSchemas } from '@verana-labs/vs-agent-sdk'
 import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
 import axios, { isAxiosError } from 'axios'
 import { createHash } from 'crypto'
 
-import {
-  AGENT_LABEL,
-  SELF_ISSUED_VTC_SERVICE_TYPE,
-  SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
-  AGENT_INVITATION_IMAGE_URL,
-  SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
-  SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
-  SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
-  SELF_ISSUED_VTC_ORG_REGISTRYID,
-  SELF_ISSUED_VTC_ORG_REGISTRYURL,
-  SELF_ISSUED_VTC_ORG_ADDRESS,
-  SELF_ISSUED_VTC_ORG_TYPE,
-  SELF_ISSUED_VTC_ORG_COUNTRYCODE,
-  FALLBACK_BASE64,
-} from '../config'
+import { VsAgent } from '../agent/VsAgent'
+
+import { getEcsSchemas } from './data'
 
 const ajv = new Ajv({ strict: false })
 addFormats(ajv)
+
+interface SelfTrDefaults {
+  agentLabel: string
+  agentInvitationImageUrl?: string
+  fallbackBase64?: string
+  serviceType: string
+  serviceDescription: string
+  serviceMinimumAgeRequired: number
+  serviceTermsAndConditions: string
+  servicePrivacyPolicy: string
+  orgRegistryId: string
+  orgRegistryUrl: string
+  orgAddress: string
+  orgType: string
+  orgCountryCode: string
+}
 
 // Helpers
 export const presentations = [
@@ -93,9 +96,11 @@ const buildIntegrityData = (data: Record<string, unknown>) => {
 export const setupSelfTr = async ({
   agent,
   publicApiBaseUrl,
+  defaults,
 }: {
   agent: VsAgent
   publicApiBaseUrl: string
+  defaults: SelfTrDefaults
 }) => {
   const ecsSchemas = getEcsSchemas(publicApiBaseUrl)
 
@@ -110,6 +115,7 @@ export const setupSelfTr = async ({
         id: mapToSelfTr(schemaUrl, publicApiBaseUrl),
         type: 'JsonSchemaCredential',
       },
+      defaults,
     )
   }
 
@@ -124,6 +130,7 @@ export const setupSelfTr = async ({
       ['VerifiableCredential', 'JsonSchemaCredential'],
       createJsonSubjectRef(ref),
       createJsonSchema,
+      defaults,
     )
   }
 }
@@ -156,6 +163,7 @@ async function generateVerifiableCredential(
   type: string[],
   subject: W3cCredentialSubject,
   credentialSchema: W3cCredentialSchema,
+  defaults: SelfTrDefaults,
   presentation?: W3cPresentation,
 ): Promise<any> {
   const logger = agent.config.logger
@@ -165,7 +173,7 @@ async function generateVerifiableCredential(
   let claims = subject.claims
 
   if (!claims) {
-    claims = await getClaims(logger, ecsSchemas, { id: subjectId }, schemaKey)
+    claims = await getClaims(logger, ecsSchemas, { id: subjectId }, schemaKey, defaults)
   }
   const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
   const record = didRecord.metadata.get('_vt/jsc') ?? {}
@@ -294,12 +302,13 @@ export async function generateVerifiablePresentation(
   schemaKey: string,
   type: string[],
   credentialSchema: W3cCredentialSchema,
+  defaults: SelfTrDefaults,
 ) {
   if (!agent.did) throw Error('The DID must be set up')
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
   const didDocument = didRecord.didDocument
   if (!didDocument) throw Error('The DID Document be set up')
-  const claims = await getClaims(agent.config.logger, ecsSchemas, { id: agent.did }, schemaKey)
+  const claims = await getClaims(agent.config.logger, ecsSchemas, { id: agent.did }, schemaKey, defaults)
   // Use full input for integrityData to ensure update detection
   const didDocumentServiceId = `${agent.did}#vpr-${schemaKey}-c-vp`
   const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
@@ -320,6 +329,7 @@ export async function generateVerifiablePresentation(
     type,
     { id: agent.did },
     credentialSchema,
+    defaults,
     presentation,
   )
   // Update linked VP when the presentation has changed
@@ -369,27 +379,36 @@ export async function getClaims(
   ecsSchemas: Record<string, string>,
   { id, claims }: W3cCredentialSubject,
   schemaKey: string,
+  defaults: SelfTrDefaults,
 ) {
   // Default claims fallback
   claims =
     schemaKey === 'ecs-service'
       ? {
-          name: claims?.name ?? AGENT_LABEL,
-          type: claims?.type ?? SELF_ISSUED_VTC_SERVICE_TYPE,
-          description: claims?.description ?? SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
-          logo: await urlToBase64(logger, (claims?.logo as string) ?? AGENT_INVITATION_IMAGE_URL),
-          minimumAgeRequired: claims?.minimumAgeRequired ?? SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
-          termsAndConditions: claims?.termsAndConditions ?? SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
-          privacyPolicy: claims?.privacyPolicy ?? SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
+          name: claims?.name ?? defaults.agentLabel,
+          type: claims?.type ?? defaults.serviceType,
+          description: claims?.description ?? defaults.serviceDescription,
+          logo: await urlToBase64(
+            logger,
+            (claims?.logo as string) ?? defaults.agentInvitationImageUrl,
+            defaults.fallbackBase64 ?? '',
+          ),
+          minimumAgeRequired: claims?.minimumAgeRequired ?? defaults.serviceMinimumAgeRequired,
+          termsAndConditions: claims?.termsAndConditions ?? defaults.serviceTermsAndConditions,
+          privacyPolicy: claims?.privacyPolicy ?? defaults.servicePrivacyPolicy,
         }
       : {
-          name: claims?.name ?? AGENT_LABEL,
-          logo: await urlToBase64(logger, (claims?.logo as string) ?? AGENT_INVITATION_IMAGE_URL),
-          registryId: claims?.registryId ?? SELF_ISSUED_VTC_ORG_REGISTRYID,
-          registryUrl: claims?.registryUrl ?? SELF_ISSUED_VTC_ORG_REGISTRYURL,
-          address: claims?.address ?? SELF_ISSUED_VTC_ORG_ADDRESS,
-          type: claims?.type ?? SELF_ISSUED_VTC_ORG_TYPE,
-          countryCode: claims?.countryCode ?? SELF_ISSUED_VTC_ORG_COUNTRYCODE,
+          name: claims?.name ?? defaults.agentLabel,
+          logo: await urlToBase64(
+            logger,
+            (claims?.logo as string) ?? defaults.agentInvitationImageUrl,
+            defaults.fallbackBase64 ?? '',
+          ),
+          registryId: claims?.registryId ?? defaults.orgRegistryId,
+          registryUrl: claims?.registryUrl ?? defaults.orgRegistryUrl,
+          address: claims?.address ?? defaults.orgAddress,
+          type: claims?.type ?? defaults.orgType,
+          countryCode: claims?.countryCode ?? defaults.orgCountryCode,
         }
 
   const ecsSchema = ecsSchemas[schemaKey]
@@ -497,10 +516,14 @@ export function generateDigestSRI(content: string, algorithm: string = 'sha384')
  * @param url - The image URL to convert.
  * @returns A Base64 data URI string, or a fallback placeholder if the image cannot be fetched or is invalid.
  */
-export async function urlToBase64(logger: Logger, url?: string): Promise<string> {
+export async function urlToBase64(
+  logger: Logger,
+  url: string | undefined,
+  fallback: string,
+): Promise<string> {
   if (!url) {
     logger.warn('No URL provided for image conversion.')
-    return FALLBACK_BASE64
+    return fallback
   }
 
   try {
@@ -509,7 +532,7 @@ export async function urlToBase64(logger: Logger, url?: string): Promise<string>
     const contentType = response.headers['content-type']
     if (!contentType || !contentType.startsWith('image/')) {
       logger.warn(`The fetched resource is not an image. Content-Type: ${contentType}`)
-      return FALLBACK_BASE64
+      return fallback
     }
 
     const base64 = Buffer.from(response.data).toString('base64')
@@ -524,7 +547,7 @@ export async function urlToBase64(logger: Logger, url?: string): Promise<string>
     } else {
       logger.error(`Unexpected error converting URL to Base64: ${error}`)
     }
-    return FALLBACK_BASE64
+    return fallback
   }
 }
 

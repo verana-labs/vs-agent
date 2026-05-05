@@ -35,5 +35,7 @@ export { webhookListener } from './utils/webhook'
 export type { WebhookData } from './utils/webhook'
 export { sendWebhookEvent, sendMessageReceivedEvent } from './utils/webhookEvent'
 export * from './utils/util'
+export * from './utils/setupSelfTr'
+export * from './utils/trustCredentialStore'
 
 export * from './blockchain'
