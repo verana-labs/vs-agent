@@ -11,6 +11,7 @@ import {
   type VsAgentNestPlugin,
   VeranaChainService,
   IndexerWebSocketService,
+  keyDerivationMethodMap,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -52,7 +53,6 @@ import {
   DEFAULT_PUBLIC_API_BASE_URL,
   ENABLED_PLUGINS,
   EVENTS_BASE_URL,
-  keyDerivationMethodMap,
   POSTGRES_HOST,
   PUBLIC_API_BASE_URL,
   USE_CORS,

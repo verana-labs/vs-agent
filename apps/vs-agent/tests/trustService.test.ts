@@ -3,8 +3,10 @@ import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { INestApplication } from '@nestjs/common'
 import { Claim, CredentialIssuanceMessage } from '@verana-labs/vs-agent-model'
 import {
+  makeConnection,
   SubjectInboundTransport,
   SubjectOutboundTransport,
+  waitForEvent,
   type BaseAgentModules,
   type SubjectMessage,
   type VsAgent,
@@ -15,13 +17,7 @@ import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 
 import { MessageService, TrustService } from '../src/controllers'
 
-import {
-  isCredentialStateChangedEvent,
-  makeConnection,
-  startAgent,
-  startServersTesting,
-  waitForEvent,
-} from './__mocks__'
+import { isCredentialStateChangedEvent, startAgent, startServersTesting } from './__mocks__'
 
 describe('TrustService', () => {
   let faberApp: INestApplication

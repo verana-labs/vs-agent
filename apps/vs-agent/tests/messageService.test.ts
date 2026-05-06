@@ -3,8 +3,10 @@ import { DidCommBasicMessage, DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { INestApplication } from '@nestjs/common'
 import { ProfileMessage, TextMessage } from '@verana-labs/vs-agent-model'
 import {
+  makeConnection,
   SubjectInboundTransport,
   SubjectOutboundTransport,
+  waitForEvent,
   type BaseAgentModules,
   type SubjectMessage,
   type VsAgent,
@@ -17,10 +19,8 @@ import { MessageService } from '../src/controllers'
 import {
   isAgentMessageProcessedEvent,
   isConnectionProfileUpdatedEvent,
-  makeConnection,
   startAgent,
   startServersTesting,
-  waitForEvent,
 } from './__mocks__'
 
 describe('MessageService', () => {
