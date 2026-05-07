@@ -41,6 +41,7 @@
     "@credo-ts/webvh": "0.7.0-alpha-20260410113934",
     "@hyperledger/anoncreds-nodejs": "^0.4.0",
     "@openwallet-foundation/askar-nodejs": "^0.6.0",
+    "@verana-labs/credo-ts-didcomm-vt-flow": "workspace:*",
     "@verana-labs/verana-types": "0.10.1-dev.11",
     "@verana-labs/vs-agent-model": "workspace:*",
     "ajv": "^8.17.1",

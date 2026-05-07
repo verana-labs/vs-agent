@@ -144,6 +144,11 @@ export interface PermissionDto {
   slashed: string | null
   effective_until?: string
   modified: string
+  validator_perm_id: number | null
+  is_active_now: boolean
+  // Please confirm if 'vp_summary_digest' is the right name for v4 spec.
+  // I'm assuming the vp_summary_digest_sri is for v3 spec as confirmed with the current onchain data here: https://idx.testnet.verana.network/verana/perm/v1/get/1
+  vp_summary_digest?: string
 }
 
 export interface PermQueryClient {
