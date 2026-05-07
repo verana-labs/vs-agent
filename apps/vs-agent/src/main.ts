@@ -29,16 +29,16 @@ import {
   AGENT_INVITATION_IMAGE_URL,
   AGENT_LABEL,
   FALLBACK_BASE64,
-  SELF_ISSUED_VTC_ORG_ADDRESS,
-  SELF_ISSUED_VTC_ORG_COUNTRYCODE,
-  SELF_ISSUED_VTC_ORG_REGISTRYID,
-  SELF_ISSUED_VTC_ORG_REGISTRYURL,
-  SELF_ISSUED_VTC_ORG_TYPE,
-  SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
-  SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
-  SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
-  SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
-  SELF_ISSUED_VTC_SERVICE_TYPE,
+  AGENT_ORG_COUNTRY_CODE,
+  AGENT_ORG_ADDRESS,
+  AGENT_ORG_REGISTRY_ID,
+  AGENT_ORG_REGISTRY_URL,
+  AGENT_ORG_TYPE,
+  AGENT_SERVICE_DESCRIPTION,
+  AGENT_SERVICE_MIN_AGE_REQUIRED,
+  AGENT_SERVICE_PRIVACY_URL,
+  AGENT_SERVICE_TERMS_URL,
+  AGENT_SERVICE_TYPE,
   UI_WELCOME_MESSAGE,
   AGENT_LOG_LEVEL,
   AGENT_NAME,
@@ -65,7 +65,7 @@ import {
   VERANA_CHAIN_ID,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
-import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
+import { MessagingPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { commonAppConfig, type ServerConfig, setupAgent, TsLogger } from './utils'
 
@@ -181,7 +181,6 @@ const run = async () => {
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
     ...(chatModule ? [chatModule.ChatPlugin] : []),
     ...(mrtdModule ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })] : []),
-    ...(ENABLED_PLUGINS.includes('vt-flow') ? [VtFlowNestPlugin] : []),
   ]
 
   // Connect to Verana blockchain for on-chain transactions
@@ -250,16 +249,16 @@ const run = async () => {
         agentLabel: AGENT_LABEL,
         agentInvitationImageUrl: AGENT_INVITATION_IMAGE_URL,
         fallbackBase64: FALLBACK_BASE64,
-        serviceType: SELF_ISSUED_VTC_SERVICE_TYPE,
-        serviceDescription: SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
-        serviceMinimumAgeRequired: SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
-        serviceTermsAndConditions: SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
-        servicePrivacyPolicy: SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
-        orgRegistryId: SELF_ISSUED_VTC_ORG_REGISTRYID,
-        orgRegistryUrl: SELF_ISSUED_VTC_ORG_REGISTRYURL,
-        orgAddress: SELF_ISSUED_VTC_ORG_ADDRESS,
-        orgType: SELF_ISSUED_VTC_ORG_TYPE,
-        orgCountryCode: SELF_ISSUED_VTC_ORG_COUNTRYCODE,
+        serviceType: AGENT_SERVICE_TYPE,
+        serviceDescription: AGENT_SERVICE_DESCRIPTION,
+        serviceMinimumAgeRequired: AGENT_SERVICE_MIN_AGE_REQUIRED,
+        serviceTermsAndConditions: AGENT_SERVICE_TERMS_URL,
+        servicePrivacyPolicy: AGENT_SERVICE_PRIVACY_URL,
+        orgRegistryId: AGENT_ORG_REGISTRY_ID,
+        orgRegistryUrl: AGENT_ORG_REGISTRY_URL,
+        orgAddress: AGENT_ORG_ADDRESS,
+        orgType: AGENT_ORG_TYPE,
+        orgCountryCode: AGENT_ORG_COUNTRY_CODE,
       },
     })
 
