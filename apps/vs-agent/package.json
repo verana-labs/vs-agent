@@ -55,12 +55,12 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@credo-ts/anoncreds": "0.7.1-pr-2704-20260504205328",
-    "@credo-ts/askar": "0.7.1-pr-2704-20260504205328",
-    "@credo-ts/core": "0.7.1-pr-2704-20260504205328",
-    "@credo-ts/didcomm": "0.7.1-pr-2704-20260504205328",
-    "@credo-ts/node": "0.7.1-pr-2704-20260504205328",
-    "@credo-ts/webvh": "0.7.1-pr-2704-20260504205328",
+    "@credo-ts/anoncreds": "0.7.1-pr-2704-20260507141408",
+    "@credo-ts/askar": "0.7.1-pr-2704-20260507141408",
+    "@credo-ts/core": "0.7.1-pr-2704-20260507141408",
+    "@credo-ts/didcomm": "0.7.1-pr-2704-20260507141408",
+    "@credo-ts/node": "0.7.1-pr-2704-20260507141408",
+    "@credo-ts/webvh": "0.7.1-pr-2704-20260507141408",
     "@hyperledger/anoncreds-nodejs": "^0.4.0",
     "@nestjs/bull": "^10.2.1",
     "@nestjs/common": "^10.0.0",
