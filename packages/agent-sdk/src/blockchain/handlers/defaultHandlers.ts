@@ -1,7 +1,11 @@
 import { IndexerEventHandler, IndexerHandlerRegistry } from './IndexerHandlerRegistry'
 import {
   bumpActiveGfVersion,
+  markVtFlowRecordsValidated,
   publishVtjscIfOwner,
+  setVtFlowRecordsPermRevoked,
+  setVtFlowRecordsPermSlashed,
+  terminateVtFlowRecordsByApplicant,
   upsertCredentialSchema,
   upsertPermission,
   upsertTrustRegistry,
@@ -98,8 +102,9 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, { vpState: 'VALIDATED' })
       ctx.agent.config.logger.info(
-        `[IndexerWS] SetPermissionVPToValidated entity=${activity.entity_id} block=${ctx.block_height} — TODO §5.1: progress credential acquisition flow (validator)`,
+        `[IndexerWS] SetPermissionVPToValidated perm=${activity.entity_id} block=${ctx.block_height}`,
       )
+      await markVtFlowRecordsValidated(ctx.agent, String(activity.entity_id))
     },
   },
   {
@@ -118,8 +123,9 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, { revoked: true })
       ctx.agent.config.logger.info(
-        `[IndexerWS] RevokePermission entity=${activity.entity_id} block=${ctx.block_height} — TODO §7.2: remove linked VP from DID doc + delete credential`,
+        `[IndexerWS] RevokePermission perm=${activity.entity_id} block=${ctx.block_height}`,
       )
+      await setVtFlowRecordsPermRevoked(ctx.agent, String(activity.entity_id))
     },
   },
   {
@@ -127,8 +133,9 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, { slashed: true })
       ctx.agent.config.logger.info(
-        `[IndexerWS] SlashPermissionTrustDeposit entity=${activity.entity_id} block=${ctx.block_height} — TODO §7.2: clean up associated flow state`,
+        `[IndexerWS] SlashPermissionTrustDeposit perm=${activity.entity_id} block=${ctx.block_height}`,
       )
+      await setVtFlowRecordsPermSlashed(ctx.agent, String(activity.entity_id))
     },
   },
   {
@@ -145,8 +152,9 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, {})
       ctx.agent.config.logger.info(
-        `[IndexerWS] CancelPermissionVPLastRequest entity=${activity.entity_id} block=${ctx.block_height} — TODO §7.2: clean up associated flow state`,
+        `[IndexerWS] CancelPermissionVPLastRequest perm=${activity.entity_id} block=${ctx.block_height}`,
       )
+      await terminateVtFlowRecordsByApplicant(ctx.agent, String(activity.entity_id))
     },
   },
 ]

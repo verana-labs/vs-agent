@@ -1,17 +1,20 @@
 import { AskarSqliteStorageConfig } from '@credo-ts/askar'
-import { BaseLogger, utils } from '@credo-ts/core'
+import { BaseLogger, DidResolver, utils } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
-import { VsAgentNestPlugin } from '@verana-labs/agent-sdk'
 import { type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { createVsAgent, setupBaseDidComm, VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { keyDerivationMethodMap } from '../../src/types'
+import { createVsAgent, VsAgent } from '../../src/agent'
+import { VeranaChainService } from '../../src/blockchain'
+import { setupBaseDidComm } from '../../src/plugins/setupBaseDidComm'
+import { keyDerivationMethodMap, VsAgentNestPlugin } from '../../src/types'
 
 type StartTestAgentParams = {
   label: string
   domain: string
   vtFlowOptions?: VtFlowModuleConfigOptions
+  veranaChain?: VeranaChainService
+  extraResolvers?: DidResolver[]
 
   inMemory?: boolean
   maxConnections?: number
@@ -24,6 +27,7 @@ export const startAgent = async ({
   label,
   domain,
   vtFlowOptions,
+  veranaChain,
   inMemory = true,
   maxConnections,
   autoInitialize = true,
@@ -49,6 +53,7 @@ export const startAgent = async ({
     dependencies: agentDependencies,
     publicApiBaseUrl: `https://${domain}`,
     label,
+    veranaChain,
   }) as unknown as VsAgent<any>
 
   if (autoInitialize) {

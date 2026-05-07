@@ -13,15 +13,33 @@ import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@v
 import Long from 'long'
 
 import {
+  ArchiveTrustRegistryParams,
+  CreateCredentialSchemaParams,
   CreateOrUpdatePermissionSessionParams,
+  CreateRootPermissionParams,
+  CreateTrustRegistryParams,
+  CredentialSchema,
+  CsQueryClient,
+  GrantOperatorAuthorizationParams,
+  ListCredentialSchemasParams,
+  ListTrustRegistriesParams,
   Permission,
   PermQueryClient,
+  SelfCreatePermissionParams,
   SetPermissionVPToValidatedParams,
   StartPermissionVPParams,
+  TrQueryClient,
+  TrustRegistry,
   VERANA_BECH32_PREFIX,
   VeranaChainConfig,
 } from './types'
 
+const { QueryClientImpl: CsQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/cs/v1/query')
+const {
+  MsgCreateCredentialSchema,
+  MsgCreateCredentialSchemaResponse,
+} = require('@verana-labs/verana-types/codec/verana/cs/v1/tx')
+const { MsgGrantOperatorAuthorization } = require('@verana-labs/verana-types/codec/verana/de/v1/tx')
 const {
   QueryClientImpl: PermQueryClientImpl,
 } = require('@verana-labs/verana-types/codec/verana/perm/v1/query')
@@ -32,7 +50,16 @@ const {
   MsgSetPermissionVPToValidated,
   MsgCancelPermissionVPLastRequest,
   MsgCreateOrUpdatePermissionSession,
+  MsgCreateRootPermission,
+  MsgCreateRootPermissionResponse,
+  MsgSelfCreatePermission,
+  MsgSelfCreatePermissionResponse,
 } = require('@verana-labs/verana-types/codec/verana/perm/v1/tx')
+const { QueryClientImpl: TrQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/tr/v1/query')
+const {
+  MsgArchiveTrustRegistry,
+  MsgCreateTrustRegistry,
+} = require('@verana-labs/verana-types/codec/verana/tr/v1/tx')
 
 export class VeranaChainService {
   private signingClient!: SigningStargateClient
@@ -40,6 +67,8 @@ export class VeranaChainService {
   private chainId!: string
 
   private permQuery!: PermQueryClient
+  private trQuery!: TrQueryClient
+  private csQuery!: CsQueryClient
 
   constructor(private readonly config: VeranaChainConfig) {}
 
@@ -67,7 +96,7 @@ export class VeranaChainService {
     this.signingClient = await SigningStargateClient.createWithSigner(cometClient, wallet, {
       registry: createVeranaRegistry(),
       aminoTypes: createVeranaAminoTypes(),
-      gasPrice: GasPrice.fromString(gasPrice ?? '0uvna'), // TODO: consider minium gas price
+      gasPrice: GasPrice.fromString(gasPrice ?? '1uvna'), // TODO: consider minium gas price
     })
 
     this.chainId = await this.signingClient.getChainId()
@@ -79,6 +108,8 @@ export class VeranaChainService {
     const queryClient = new QueryClient(cometClient)
     const rpc = createProtobufRpcClient(queryClient)
     this.permQuery = new PermQueryClientImpl(rpc) as PermQueryClient
+    this.trQuery = new TrQueryClientImpl(rpc) as TrQueryClient
+    this.csQuery = new CsQueryClientImpl(rpc) as CsQueryClient
   }
 
   // Query API (unsigned)
@@ -179,5 +210,154 @@ export class VeranaChainService {
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result
+  }
+
+  // Dev helpers
+  async grantOperatorAuthorization(params: GrantOperatorAuthorizationParams): Promise<{ txHash: string }> {
+    const value = MsgGrantOperatorAuthorization.fromPartial({
+      corporation: this.operatorAddress,
+      // operator: this.operatorAddress,
+      grantee: params.grantee,
+      msgTypes: params.msgTypes,
+      expiration: params.expiration,
+      authzSpendLimit: params.authzSpendLimit ?? [],
+      authzSpendLimitPeriod: params.authzSpendLimitPeriod,
+      withFeegrant: params.withFeegrant ?? false,
+      feegrantSpendLimit: params.feegrantSpendLimit ?? [],
+      feegrantSpendLimitPeriod: params.feegrantSpendLimitPeriod,
+      feeSpendLimit: params.feeSpendLimit ?? [],
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgGrantOperatorAuthorization, value)
+    return { txHash: result.transactionHash }
+  }
+
+  async createTrustRegistry(params: CreateTrustRegistryParams): Promise<{ txHash: string }> {
+    const value = MsgCreateTrustRegistry.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      did: params.did,
+      aka: params.aka ?? '',
+      language: params.language,
+      docUrl: params.docUrl,
+      docDigestSri: params.docDigestSri,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateTrustRegistry, value)
+    return { txHash: result.transactionHash }
+  }
+
+  async archiveTrustRegistry(params: ArchiveTrustRegistryParams): Promise<{ txHash: string }> {
+    const value = MsgArchiveTrustRegistry.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      trId: params.trId,
+      archive: params.archive,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgArchiveTrustRegistry, value)
+    return { txHash: result.transactionHash }
+  }
+
+  async listTrustRegistries(params: ListTrustRegistriesParams = {}): Promise<TrustRegistry[]> {
+    const result = await this.trQuery.ListTrustRegistries({
+      corporation: params.corporation ?? '',
+      modifiedAfter: params.modifiedAfter,
+      activeGfOnly: params.activeGfOnly ?? false,
+      preferredLanguage: params.preferredLanguage ?? '',
+      responseMaxSize: params.responseMaxSize ?? 0,
+    } as ListTrustRegistriesParams)
+    return result.trustRegistries ?? []
+  }
+
+  async createCredentialSchema(
+    params: CreateCredentialSchemaParams,
+  ): Promise<{ txHash: string; schemaId: number }> {
+    const value = MsgCreateCredentialSchema.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      trId: params.trId,
+      jsonSchema: params.jsonSchema,
+      issuerGrantorValidationValidityPeriod: params.issuerGrantorValidationValidityPeriod ?? { value: 0 },
+      verifierGrantorValidationValidityPeriod: params.verifierGrantorValidationValidityPeriod ?? { value: 0 },
+      issuerValidationValidityPeriod: params.issuerValidationValidityPeriod ?? { value: 365 },
+      verifierValidationValidityPeriod: params.verifierValidationValidityPeriod ?? { value: 0 },
+      holderValidationValidityPeriod: params.holderValidationValidityPeriod ?? { value: 0 },
+      issuerOnboardingMode: params.issuerOnboardingMode ?? 1,
+      verifierOnboardingMode: params.verifierOnboardingMode ?? 1,
+      holderOnboardingMode: params.holderOnboardingMode ?? 1,
+      pricingAssetType: params.pricingAssetType ?? 1,
+      pricingAsset: params.pricingAsset ?? 'tu',
+      digestAlgorithm: params.digestAlgorithm ?? 'sha384',
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateCredentialSchema, value)
+    const responseBytes = result.msgResponses[0]?.value
+    if (!responseBytes) {
+      throw new Error('[VeranaChain] create-credential-schema tx response missing msgResponses[0]')
+    }
+    const response = MsgCreateCredentialSchemaResponse.decode(responseBytes)
+    return { txHash: result.transactionHash, schemaId: Number(response.id) }
+  }
+
+  async listCredentialSchemas(params: ListCredentialSchemasParams = {}): Promise<CredentialSchema[]> {
+    const result = await this.csQuery.ListCredentialSchemas({
+      trId: params.trId ?? 0,
+      modifiedAfter: params.modifiedAfter,
+      responseMaxSize: params.responseMaxSize ?? 0,
+      onlyActive: params.onlyActive ?? false,
+      issuerOnboardingMode: params.issuerOnboardingMode ?? 0,
+      verifierOnboardingMode: params.verifierOnboardingMode ?? 0,
+      holderOnboardingMode: params.holderOnboardingMode ?? 0,
+    } as ListCredentialSchemasParams)
+    return result.schemas ?? []
+  }
+
+  async createRootPermission(
+    params: CreateRootPermissionParams,
+  ): Promise<{ txHash: string; permissionId: number }> {
+    const value = MsgCreateRootPermission.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      schemaId: params.schemaId,
+      did: params.did,
+      effectiveFrom: params.effectiveFrom,
+      effectiveUntil: params.effectiveUntil,
+      validationFees: params.validationFees ?? 0,
+      issuanceFees: params.issuanceFees ?? 0,
+      verificationFees: params.verificationFees ?? 0,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateRootPermission, value)
+    const responseBytes = result.msgResponses[0]?.value
+    if (!responseBytes) {
+      throw new Error('[VeranaChain] create-root-permission tx response missing msgResponses[0]')
+    }
+    const response = MsgCreateRootPermissionResponse.decode(responseBytes)
+    return { txHash: result.transactionHash, permissionId: Number(response.id) }
+  }
+
+  async selfCreatePermission(
+    params: SelfCreatePermissionParams,
+  ): Promise<{ txHash: string; permissionId: number }> {
+    const value = MsgSelfCreatePermission.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      type: params.type,
+      validatorPermId: params.validatorPermId,
+      did: params.did,
+      effectiveFrom: params.effectiveFrom,
+      effectiveUntil: params.effectiveUntil,
+      validationFees: params.validationFees ?? 0,
+      verificationFees: params.verificationFees ?? 0,
+      vsOperator: params.vsOperator ?? '',
+      vsOperatorAuthzEnabled: params.vsOperatorAuthzEnabled ?? false,
+      vsOperatorAuthzSpendLimit: params.vsOperatorAuthzSpendLimit ?? [],
+      vsOperatorAuthzWithFeegrant: params.vsOperatorAuthzWithFeegrant ?? false,
+      vsOperatorAuthzFeeSpendLimit: params.vsOperatorAuthzFeeSpendLimit ?? [],
+      vsOperatorAuthzSpendPeriod: params.vsOperatorAuthzSpendPeriod,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgSelfCreatePermission, value)
+    const responseBytes = result.msgResponses[0]?.value
+    if (!responseBytes) {
+      throw new Error('[VeranaChain] self-create-permission tx response missing msgResponses[0]')
+    }
+    const response = MsgSelfCreatePermissionResponse.decode(responseBytes)
+    return { txHash: result.transactionHash, permissionId: Number(response.id) }
   }
 }

@@ -152,6 +152,33 @@ export interface PermQueryClient {
   GetPermissionSession(req: { id: string }): Promise<{ session?: unknown }>
 }
 
+export interface TrustRegistry {
+  id: number
+  did: string
+  controller: string
+  archived?: Date
+  activeVersion?: number
+}
+
+export interface CredentialSchema {
+  id: number
+  trId: number
+  jsonSchema: string
+  issuerOnboardingMode: number
+  verifierOnboardingMode: number
+  holderOnboardingMode: number
+}
+
+export interface TrQueryClient {
+  ListTrustRegistries(req: ListTrustRegistriesParams): Promise<{ trustRegistries: TrustRegistry[] }>
+  GetTrustRegistry(req: { id: number }): Promise<{ trustRegistry?: TrustRegistry }>
+}
+
+export interface CsQueryClient {
+  ListCredentialSchemas(req: ListCredentialSchemasParams): Promise<{ schemas: CredentialSchema[] }>
+  GetCredentialSchema(req: { id: number }): Promise<{ schema?: CredentialSchema }>
+}
+
 export interface VeranaChainConfig {
   rpcUrl: string
   chainId?: string
@@ -192,4 +219,104 @@ export interface CreateOrUpdatePermissionSessionParams {
   agentPermId: number
   walletAgentPermId: number
   digest?: string
+}
+
+export interface Coin {
+  denom: string
+  amount: string
+}
+
+export interface DurationParam {
+  seconds: number
+  nanos?: number
+}
+
+export interface GrantOperatorAuthorizationParams {
+  grantee: string
+  msgTypes: string[]
+  expiration?: Date
+  authzSpendLimit?: Coin[]
+  authzSpendLimitPeriod?: DurationParam
+  withFeegrant?: boolean
+  feegrantSpendLimit?: Coin[]
+  feegrantSpendLimitPeriod?: DurationParam
+  feeSpendLimit?: Coin[]
+}
+
+export interface CreateTrustRegistryParams {
+  did: string
+  language: string
+  docUrl: string
+  docDigestSri: string
+  aka?: string
+}
+
+export interface ArchiveTrustRegistryParams {
+  trId: number;
+  archive: boolean;
+}
+
+export interface ListTrustRegistriesParams {
+  corporation?: string
+  modifiedAfter?: Date
+  activeGfOnly?: boolean
+  preferredLanguage?: string
+  responseMaxSize?: number
+}
+
+/** Wrapper for optional uint32 values per `verana.cs.v1.OptionalUInt32`. */
+export interface OptionalUInt32 {
+  value: number
+}
+
+export interface CreateCredentialSchemaParams {
+  trId: number
+  jsonSchema: string
+  issuerOnboardingMode?: number
+  verifierOnboardingMode?: number
+  holderOnboardingMode?: number
+  pricingAssetType?: number
+  pricingAsset?: string
+  digestAlgorithm?: string
+  issuerGrantorValidationValidityPeriod?: OptionalUInt32
+  verifierGrantorValidationValidityPeriod?: OptionalUInt32
+  issuerValidationValidityPeriod?: OptionalUInt32
+  verifierValidationValidityPeriod?: OptionalUInt32
+  holderValidationValidityPeriod?: OptionalUInt32
+}
+
+export interface ListCredentialSchemasParams {
+  trId?: number
+  modifiedAfter?: Date
+  responseMaxSize?: number
+  onlyActive?: boolean
+  issuerOnboardingMode?: number
+  verifierOnboardingMode?: number
+  holderOnboardingMode?: number
+}
+
+export interface CreateRootPermissionParams {
+  schemaId: number
+  did: string
+  effectiveFrom?: Date
+  effectiveUntil?: Date
+  validationFees?: number
+  issuanceFees?: number
+  verificationFees?: number
+}
+
+export interface SelfCreatePermissionParams {
+  type: number
+  validatorPermId: number
+  did: string
+  effectiveFrom?: Date
+  effectiveUntil?: Date
+  validationFees?: number
+  verificationFees?: number
+  vsOperator?: string
+  vsOperatorAuthzEnabled?: boolean
+  vsOperatorAuthzSpendLimit?: Coin[]
+  vsOperatorAuthzWithFeegrant?: boolean
+  vsOperatorAuthzFeeSpendLimit?: Coin[]
+  vsOperatorAuthzSpendPeriod?: DurationParam
 }
