@@ -65,6 +65,7 @@ export class InvitationController {
     return await createInvitation({
       agent: await this.agentService.getAgent(),
       useLegacyDid: options?.useLegacyDid,
+      didCommVersion: options?.didCommVersion,
       invitationBaseUrl: AGENT_INVITATION_BASE_URL,
     })
   }
@@ -201,7 +202,7 @@ export class InvitationController {
   ): Promise<CreatePresentationRequestResult> {
     const agent = await this.agentService.getAgent()
 
-    const { requestedCredentials, ref, callbackUrl, useLegacyDid } = options
+    const { requestedCredentials, ref, callbackUrl, useLegacyDid, didCommVersion } = options
 
     if (!requestedCredentials?.length) {
       throw Error('You must specify a least a requested credential')
@@ -294,6 +295,7 @@ export class InvitationController {
       agent,
       messages: [request.message],
       useLegacyDid,
+      didCommVersion,
       invitationBaseUrl: AGENT_INVITATION_BASE_URL,
       imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
@@ -363,6 +365,7 @@ export class InvitationController {
       claims,
       credentialDefinitionId,
       useLegacyDid,
+      didCommVersion,
       revocationRegistryDefinitionId,
       revocationRegistryIndex,
     } = options
@@ -417,6 +420,7 @@ export class InvitationController {
         agent: await this.agentService.getAgent(),
         messages: [request.message],
         useLegacyDid,
+        didCommVersion,
         invitationBaseUrl: AGENT_INVITATION_BASE_URL,
         imageUrl: AGENT_INVITATION_IMAGE_URL,
       })

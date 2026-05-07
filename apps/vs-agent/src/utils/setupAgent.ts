@@ -1,3 +1,5 @@
+import type { DidCommVersion } from '@credo-ts/didcomm'
+
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { LogLevel, ParsedDid } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
@@ -13,7 +15,7 @@ import {
 import express from 'express'
 import WebSocket from 'ws'
 
-import { ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
+import { AGENT_DIDCOMM_VERSIONS, ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
 import { MessageService } from '../controllers/admin/message/MessageService'
 
 import { TsLogger } from './logger'
@@ -52,6 +54,20 @@ export const setupAgent = async ({
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
+  const allowedDidCommVersions: DidCommVersion[] = ['v1', 'v2']
+  const invalidDidCommVersions = AGENT_DIDCOMM_VERSIONS.filter(
+    v => !allowedDidCommVersions.includes(v as DidCommVersion),
+  )
+  if (invalidDidCommVersions.length > 0) {
+    throw new Error(
+      `Invalid AGENT_DIDCOMM_VERSIONS values: ${invalidDidCommVersions.join(', ')}. Allowed: ${allowedDidCommVersions.join(', ')}`,
+    )
+  }
+  if (AGENT_DIDCOMM_VERSIONS.length === 0) {
+    throw new Error('AGENT_DIDCOMM_VERSIONS must contain at least one of: v1, v2')
+  }
+  const didcommVersions = AGENT_DIDCOMM_VERSIONS as DidCommVersion[]
+
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
   const [chatSetup, mrtdSetup] = await Promise.all([
     ENABLED_PLUGINS.includes('chat')
@@ -64,7 +80,12 @@ export const setupAgent = async ({
 
   const agent = createVsAgent({
     plugins: [
-      setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints }),
+      setupBaseDidComm({
+        walletConfig,
+        publicApiBaseUrl,
+        endpoints,
+        didcommVersions,
+      }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol({ masterListCscaLocation })] : []),
     ],
