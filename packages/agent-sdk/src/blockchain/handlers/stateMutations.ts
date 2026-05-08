@@ -5,6 +5,7 @@ import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
 import { createJsc } from '../../utils/trustCredentialStore'
+import { VtFlowOrchestrator } from '../../vtFlow'
 import { IndexerActivity, VeranaSyncState } from '../types'
 
 const DEFAULT_CHAIN_ID = 'vna-testnet-1'
@@ -179,6 +180,23 @@ export async function terminateVtFlowRecordsByApplicant(agent: VsAgent, permId: 
     },
     'Failed to terminate record',
   )
+}
+
+export async function startPermissionVPAutoFlow(agent: VsAgent, activity: IndexerActivity): Promise<void> {
+  const chain = agent.veranaChain
+  if (!chain) return
+  const applicantPermId = Number(activity.entity_id)
+  if (!Number.isFinite(applicantPermId)) return
+  const holderPerm = await chain.getPermission(applicantPermId)
+  if (!holderPerm || holderPerm.did !== agent.did) return
+  try {
+    const orchestrator = new VtFlowOrchestrator(agent)
+    await orchestrator.startValidationProcess({ applicantPermId })
+  } catch (err) {
+    agent.config.logger.error(
+      `[IndexerWS] StartPermissionVP auto-flow failed: ${(err as Error).message}\n${(err as Error).stack}`,
+    )
+  }
 }
 
 export async function publishVtjscIfOwner(

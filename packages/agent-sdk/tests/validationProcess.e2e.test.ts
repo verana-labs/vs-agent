@@ -1,15 +1,12 @@
 import { ConsoleLogger, LogLevel } from '@credo-ts/core'
+import { DidCommConnectionEventTypes, DidCommDidExchangeState } from '@credo-ts/didcomm'
 import { VtFlowApi, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { Subject } from 'rxjs'
 import { describe, it, vi, expect, beforeAll, afterAll } from 'vitest'
 
 import { type BaseAgentModules, type VsAgent } from '../src/agent'
-import {
-  IndexerWebSocketService,
-  ISSUER_PERMISSION_TYPE,
-  ValidationState,
-  VeranaChainService,
-} from '../src/blockchain'
+import { IndexerWebSocketService, ValidationState, VeranaChainService } from '../src/blockchain'
+import { ISSUER_PERMISSION_TYPE } from '../src/types'
 import { getEcsSchemas } from '../src/utils'
 import { type SubjectMessage, SubjectInboundTransport, SubjectOutboundTransport } from '../src/utils/testing'
 import { isVtFlowStateChangedEvent, waitForEvent } from '../src/utils/testing/helpers'
@@ -27,6 +24,21 @@ function mockWitnessFetch() {
     return original(input, init)
   })
   return () => spy.mockRestore()
+}
+
+async function retryUntilEffective<T>(fn: () => Promise<T>, attempts = 6, delayMs = 3_000): Promise<T> {
+  let lastErr: unknown
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn()
+    } catch (e) {
+      const msg = (e as Error).message ?? ''
+      if (!msg.includes('perm not yet effective')) throw e
+      lastErr = e
+      await new Promise(r => setTimeout(r, delayMs))
+    }
+  }
+  throw lastErr
 }
 
 const ENV = {
@@ -67,11 +79,8 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
   let trustRegistryId: number | undefined
   let credentialSchemaId: number | undefined
   let validatorPermId: number | undefined
-  let validatorPermEffectiveFrom: Date | undefined
   let applicantIndexerWs: IndexerWebSocketService | undefined
   let validatorIndexerWs: IndexerWebSocketService | undefined
-
-  const PERMISSION_ACTIVATION_DELAY_MS = 10_000
 
   beforeAll(async () => {
     restoreFetch = mockWitnessFetch()
@@ -98,6 +107,11 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
       label: 'Applicant Test',
       domain: 'applicant',
       veranaChain: applicantChain,
+      vtFlowOptions: {
+        autoAcceptCredentialOffer: true,
+        verifyCredential: async () => true,
+      },
+      logger,
     })
     applicantAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(applicantMessages))
     applicantAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
@@ -109,6 +123,8 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
       label: 'Validator Test',
       domain: 'validator',
       veranaChain: validatorChain,
+      vtFlowOptions: { autoIssueCredentialOnRequest: true },
+      logger,
     })
     validatorAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(validatorMessages))
     validatorAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
@@ -118,6 +134,18 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
 
     applicantEvents = vi.spyOn(applicantAgent.events, 'emit')
     validatorEvents = vi.spyOn(validatorAgent.events, 'emit')
+
+    // Auto-accept connection requests for testing
+    applicantAgent.events.on(DidCommConnectionEventTypes.DidCommConnectionStateChanged, async (e: any) => {
+      if (e.payload?.connectionRecord?.state === DidCommDidExchangeState.RequestReceived) {
+        await applicantAgent.didcomm.connections.acceptRequest(e.payload?.connectionRecord?.id)
+      }
+    })
+    validatorAgent.events.on(DidCommConnectionEventTypes.DidCommConnectionStateChanged, async (e: any) => {
+      if (e.payload?.connectionRecord?.state === DidCommDidExchangeState.RequestReceived) {
+        await validatorAgent.didcomm.connections.acceptRequest(e.payload?.connectionRecord?.id)
+      }
+    })
 
     applicantIndexerWs = new IndexerWebSocketService({
       indexerUrl: ENV.VERANA_INDEXER_BASE_URL,
@@ -129,6 +157,12 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
       agent: validatorAgent,
     })
     await validatorIndexerWs.start()
+
+    try {
+      await validatorChain.revokeOperatorAuthorization({ grantee: validatorChain.address })
+    } catch {
+      // ignore: no prior auth
+    }
 
     // Create credential on Verana Chain for testing
     await validatorChain.grantOperatorAuthorization({
@@ -153,11 +187,10 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
     })
     credentialSchemaId = csCreated.schemaId
 
-    validatorPermEffectiveFrom = new Date(Date.now() + PERMISSION_ACTIVATION_DELAY_MS)
     await validatorChain.createRootPermission({
       schemaId: credentialSchemaId!,
       did: validatorAgent.did!,
-      effectiveFrom: validatorPermEffectiveFrom,
+      effectiveFrom: new Date(Date.now() + 5_000),
     })
 
     const permissions = await validatorChain.findPermissionsWithDID({
@@ -185,8 +218,26 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
   it('happy path: VR → CRED_OFFER → CRED_ACCEPT → Completed → LinkedVP', async () => {
     if (!validatorPermId || !credentialSchemaId) throw new Error('Missing setup data')
 
-    const applicantRecord = await applicantOrchestrator.startValidationProcess({ validatorPermId })
-    expect(applicantRecord.state).toBe(VtFlowState.VrSent)
+    const applicantPublicApiBaseUrl = `https://${applicantAgent.did!.split(':')[2]}`
+    const validatorPublicApiBaseUrl = `https://${validatorAgent.did!.split(':')[2]}`
+    const applicantOrchestrator = new VtFlowOrchestrator(applicantAgent, {
+      publicApiBaseUrl: applicantPublicApiBaseUrl,
+    })
+    const validatorOrchestrator = new VtFlowOrchestrator(validatorAgent, {
+      publicApiBaseUrl: validatorPublicApiBaseUrl,
+    })
+
+    const { permissionId: applicantPermId } = await retryUntilEffective(() =>
+      applicantChain.startPermissionVP({
+        type: ISSUER_PERMISSION_TYPE,
+        validatorPermId: validatorPermId!,
+        did: applicantAgent.did!,
+        vsOperator: validatorChain.address,
+        vsOperatorAuthzEnabled: true,
+      }),
+    )
+    expect(applicantPermId).toBeGreaterThan(0)
+    await waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.VrSent))
 
     const validatorVrEvent = await waitForEvent(
       validatorEvents,
@@ -199,14 +250,12 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
       credentialSchemaId: credentialSchemaId.toString(),
     })
 
-    const applicantCredOfferEvent = await waitForEvent(
-      applicantEvents,
-      isVtFlowStateChangedEvent(VtFlowState.CredOffered),
-    )
-    const applicantRecordId = applicantCredOfferEvent.payload.vtFlowRecordId
-    await applicantOrchestrator.acceptCredential({ vtFlowRecordId: applicantRecordId })
     await waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Completed))
-    await waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.Completed))
+    const applicantCompletedEvent = await waitForEvent(
+      applicantEvents,
+      isVtFlowStateChangedEvent(VtFlowState.Completed),
+    )
+    const applicantRecordId = applicantCompletedEvent.payload.vtFlowRecordId
 
     const applicantVtFlowApi = applicantAgent.dependencyManager.resolve(VtFlowApi)
     const validatorVtFlowApi = validatorAgent.dependencyManager.resolve(VtFlowApi)
@@ -216,5 +265,21 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
 
     expect(finalApplicantRecord?.state).toBe(VtFlowState.Completed)
     expect(finalValidatorRecord?.state).toBe(VtFlowState.Completed)
+
+    await applicantOrchestrator.publishCredentialAsLinkedVp(applicantRecordId)
+    const [applicantDidRecord] = await applicantAgent.dids.getCreatedDids({ did: applicantAgent.did! })
+    const linkedVps =
+      applicantDidRecord?.didDocument?.service?.filter(s => s.type === 'LinkedVerifiablePresentation') ?? []
+    expect(linkedVps.length).toBeGreaterThan(0)
+    expect(
+      linkedVps.some(
+        vp =>
+          vp.id === `${applicantAgent.did}#whois` &&
+          vp.serviceEndpoint === 'https://applicant/vt/ecs-service-c-vp.json',
+      ),
+    ).toBe(true)
+
+    const onChainPerm = await applicantChain.getPermission(applicantPermId)
+    expect(onChainPerm?.vpState).toBe(ValidationState.VALIDATED)
   }, 120_000)
 })

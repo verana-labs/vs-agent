@@ -1,13 +1,5 @@
 import { BaseLogger } from '@credo-ts/core'
 
-export const ISSUER_PERMISSION_TYPE = 1
-
-/**
- * Subset of `verana.perm.v1.Permission` consumed at this SDK boundary. Mirrors
- * the codec interface but is declared locally to keep imports off the
- * `@verana-labs/verana-types` codec subpath.
- */
-/** Mirror of `verana.perm.v1.ValidationState`. */
 export enum ValidationState {
   UNSPECIFIED = 0,
   PENDING = 1,

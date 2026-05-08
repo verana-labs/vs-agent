@@ -5,6 +5,7 @@ import {
   publishVtjscIfOwner,
   setVtFlowRecordsPermRevoked,
   setVtFlowRecordsPermSlashed,
+  startPermissionVPAutoFlow,
   terminateVtFlowRecordsByApplicant,
   upsertCredentialSchema,
   upsertPermission,
@@ -84,8 +85,10 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertPermission(ctx.state, activity, { vpState: 'PENDING' })
       ctx.agent.config.logger.info(
-        `[IndexerWS] StartPermissionVP entity=${activity.entity_id} block=${ctx.block_height} — TODO §5.1: progress credential acquisition flow (applicant)`,
+        `[IndexerWS] StartPermissionVP entity=${activity.entity_id} block=${ctx.block_height}`,
       )
+
+      await startPermissionVPAutoFlow(ctx.agent, activity)
     },
   },
   {

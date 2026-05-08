@@ -253,9 +253,7 @@ export class VeranaChainService {
     return { txHash: result.transactionHash }
   }
 
-  async revokeOperatorAuthorization(
-    params: RevokeOperatorAuthorizationParams,
-  ): Promise<{ txHash: string }> {
+  async revokeOperatorAuthorization(params: RevokeOperatorAuthorizationParams): Promise<{ txHash: string }> {
     const value = MsgRevokeOperatorAuthorization.fromPartial({
       corporation: this.operatorAddress,
       operator: this.operatorAddress,

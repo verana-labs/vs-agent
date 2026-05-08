@@ -4,7 +4,6 @@ import {
   DidDocument,
   DidRepository,
   type AgentContext,
-  type DidResolutionOptions,
   type DidResolutionResult,
   type DidResolver,
 } from '@credo-ts/core'
@@ -30,12 +29,7 @@ export class FakeDidResolver implements DidResolver {
     for (const alt of altDids) this.didDocuments.set(alt, record.didDocument)
   }
 
-  async resolve(
-    agentContext: AgentContext,
-    did: string,
-    parsed: ParsedDID,
-    _options: DidResolutionOptions,
-  ): Promise<DidResolutionResult> {
+  async resolve(agentContext: AgentContext, did: string, parsed: ParsedDID): Promise<DidResolutionResult> {
     const direct = this.didDocuments.get(did)
     if (direct) return { didDocument: direct, didDocumentMetadata: {}, didResolutionMetadata: {} }
     const domain = parsed.id.includes(':') ? parsed.id.split(':')[1] : parsed.id

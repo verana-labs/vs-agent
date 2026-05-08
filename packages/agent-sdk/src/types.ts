@@ -42,3 +42,5 @@ export const keyDerivationMethodMap: {
   ARGON2I_MOD: KdfMethod.Argon2IMod,
   RAW: KdfMethod.Raw,
 }
+
+export const ISSUER_PERMISSION_TYPE = 1

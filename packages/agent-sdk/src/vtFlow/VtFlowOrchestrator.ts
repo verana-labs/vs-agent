@@ -11,7 +11,7 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { BaseAgentModules, VsAgent } from '../agent'
-import { ISSUER_PERMISSION_TYPE, VeranaChainService } from '../blockchain'
+import { ISSUER_PERMISSION_TYPE } from '../types'
 import {
   createCredential,
   createVtc,
@@ -199,7 +199,7 @@ export class VtFlowOrchestrator {
     return this.agent.dependencyManager.resolve(VtFlowApi)
   }
 
-  private requireChain(): VeranaChainService {
+  private requireChain() {
     if (!this.agent.veranaChain) {
       throw new Error('Agent has no veranaChain configured')
     }
