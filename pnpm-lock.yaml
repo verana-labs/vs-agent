@@ -139,8 +139,8 @@ importers:
         specifier: 0.0.2-alpha.5
         version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260508193405(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.1-pr-2704-20260508193405(typescript@5.7.2))
       didwebvh-ts:
-        specifier: ^2.5.6
-        version: 2.5.6
+        specifier: ^2.7.4
+        version: 2.7.4
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -499,8 +499,8 @@ importers:
         specifier: 0.0.2-alpha.5
         version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260508193405(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.1-pr-2704-20260508193405(typescript@5.8.3))
       didwebvh-ts:
-        specifier: ^2.5.6
-        version: 2.7.2
+        specifier: ^2.7.4
+        version: 2.7.4
       express:
         specifier: ^4.18.1
         version: 4.21.2
@@ -3152,12 +3152,8 @@ packages:
   did-resolver@4.1.0:
     resolution: {integrity: sha512-S6fWHvCXkZg2IhS4RcVHxwuyVejPR7c+a4Go0xbQ9ps5kILa8viiYQgrM4gfTyeTjJ0ekgJH9gk/BawTpmkbZA==}
 
-  didwebvh-ts@2.5.6:
-    resolution: {integrity: sha512-O9H6ZSrO1za+ot65ybfRU5FAOKuWZN5HzEJG9GFhNK7M3zV6SY3kfibAj1TJGKwzBnWocUXYfq2F7HNX0MC9Yg==}
-    hasBin: true
-
-  didwebvh-ts@2.7.2:
-    resolution: {integrity: sha512-aCv+VhsXvczn5qZ235Q6nvnEzwDxrPYTYC1pTioYM7LAit/RcQp6rtpI7H/MOAGwwTM/udxen2NYzgOVEd3rWg==}
+  didwebvh-ts@2.7.4:
+    resolution: {integrity: sha512-4AH4xITOgEQ7EfqGDm3ZgtzD8Rt44xj1z1mZ0YrWZnr5RUaNt30BSMn46HrOt58Ydd03EETNF+jCT4c9qNCy7g==}
     hasBin: true
 
   diff@4.0.2:
@@ -6391,7 +6387,7 @@ snapshots:
       '@credo-ts/core': 0.7.1-pr-2704-20260508193405(typescript@5.7.2)
       class-transformer: 0.5.1
       class-validator: 0.14.3
-      didwebvh-ts: 2.7.2
+      didwebvh-ts: 2.7.4
       json-canonicalize: 2.0.0
       tsyringe: 4.8.0
     transitivePeerDependencies:
@@ -6406,7 +6402,7 @@ snapshots:
       '@credo-ts/core': 0.7.1-pr-2704-20260508193405(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.3
-      didwebvh-ts: 2.7.2
+      didwebvh-ts: 2.7.4
       json-canonicalize: 2.0.0
       tsyringe: 4.8.0
     transitivePeerDependencies:
@@ -8724,12 +8720,7 @@ snapshots:
 
   did-resolver@4.1.0: {}
 
-  didwebvh-ts@2.5.6:
-    dependencies:
-      '@noble/hashes': 1.8.0
-      json-canonicalize: 1.2.0
-
-  didwebvh-ts@2.7.2:
+  didwebvh-ts@2.7.4:
     dependencies:
       '@noble/hashes': 1.8.0
       cookie: 1.1.1
