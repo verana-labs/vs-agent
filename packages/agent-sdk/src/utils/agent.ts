@@ -29,6 +29,14 @@ export async function createInvitation(options: {
   const effectiveVersion: DidCommVersion = didCommVersion ?? (agent.didcomm.config.sendsV2 ? 'v2' : 'v1')
   const isV2 = effectiveVersion === 'v2'
 
+  if (!agent.didcomm.config.didcommVersions.includes(effectiveVersion)) {
+    throw new Error(
+      `Cannot create ${effectiveVersion} invitation: agent is configured with ` +
+        `didcommVersions: [${agent.didcomm.config.didcommVersions.join(', ')}]. ` +
+        `Add "${effectiveVersion}" to AGENT_DIDCOMM_VERSIONS or omit didCommVersion from the request.`,
+    )
+  }
+
   const outOfBandInvitation = (
     await agent.didcomm.oob.createInvitation({
       label: agent.label,
