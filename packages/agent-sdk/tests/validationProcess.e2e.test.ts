@@ -231,8 +231,6 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
         type: ISSUER_PERMISSION_TYPE,
         validatorPermId: validatorPermId!,
         did: applicantAgent.did!,
-        vsOperator: validatorChain.address,
-        vsOperatorAuthzEnabled: true,
       }),
     )
     expect(applicantPermId).toBeGreaterThan(0)
