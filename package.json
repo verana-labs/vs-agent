@@ -69,6 +69,9 @@
       "@credo-ts/anoncreds": "0.7.1-pr-2704-20260508193405",
       "@credo-ts/askar": "0.7.1-pr-2704-20260508193405",
       "@hyperledger/anoncreds-shared": "0.4.0"
+    },
+    "patchedDependencies": {
+      "@credo-ts/webvh@0.7.1-pr-2704-20260508193405": "patches/@credo-ts__webvh@0.7.1-pr-2704-20260508193405.patch"
     }
   }
 }
