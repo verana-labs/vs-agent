@@ -5,7 +5,7 @@ import {
   CreatePresentationRequestOptions,
   RequestedCredential,
 } from '@verana-labs/vs-agent-model'
-import { IsNotEmpty } from 'class-validator'
+import { IsIn, IsNotEmpty, IsOptional } from 'class-validator'
 
 export class CreateInvitationDto {
   @ApiProperty({
@@ -14,6 +14,17 @@ export class CreateInvitationDto {
     required: false,
   })
   useLegacyDid?: boolean
+
+  @ApiProperty({
+    description:
+      "DIDComm envelope version for the invitation. 'v2' requires AGENT_DIDCOMM_VERSIONS to include 'v2'. " +
+      'When omitted, the agent infers the version from its configuration.',
+    enum: ['v1', 'v2'],
+    required: false,
+  })
+  @IsOptional()
+  @IsIn(['v1', 'v2'])
+  didCommVersion?: 'v1' | 'v2'
 }
 
 export class ReceiveInvitationDto {
@@ -50,6 +61,17 @@ export class CreatePresentationRequestDto implements CreatePresentationRequestOp
     example: 'true',
   })
   useLegacyDid?: boolean
+
+  @ApiProperty({
+    description:
+      "DIDComm envelope version for the invitation. 'v2' requires AGENT_DIDCOMM_VERSIONS to include 'v2'. " +
+      'When omitted, the agent infers the version from its configuration.',
+    enum: ['v1', 'v2'],
+    required: false,
+  })
+  @IsOptional()
+  @IsIn(['v1', 'v2'])
+  didCommVersion?: 'v1' | 'v2'
 }
 
 export class CreateCredentialOfferDto implements CreateCredentialOfferOptions {
@@ -87,4 +109,15 @@ export class CreateCredentialOfferDto implements CreateCredentialOfferOptions {
     example: 'true',
   })
   useLegacyDid?: boolean
+
+  @ApiProperty({
+    description:
+      "DIDComm envelope version for the invitation. 'v2' requires AGENT_DIDCOMM_VERSIONS to include 'v2'. " +
+      'When omitted, the agent infers the version from its configuration.',
+    enum: ['v1', 'v2'],
+    required: false,
+  })
+  @IsOptional()
+  @IsIn(['v1', 'v2'])
+  didCommVersion?: 'v1' | 'v2'
 }

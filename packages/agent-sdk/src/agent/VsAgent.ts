@@ -19,6 +19,8 @@ import {
   DidsModule,
   InitConfig,
   Kms,
+  NewDidCommV2Service,
+  NewDidCommV2ServiceEndpoint,
   ParsedDid,
   parseDid,
   W3cCredentialsModule,
@@ -35,6 +37,8 @@ import {
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { VeranaChainService } from '../blockchain/VeranaChainService'
+
+const MANAGED_DIDCOMM_SERVICE_TYPES: readonly string[] = [DidCommV1Service.type, NewDidCommV2Service.type]
 
 type VsAgentDidCommModule = DidCommModule<
   DidCommModuleConfigOptions & {
@@ -210,16 +214,18 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       const hasLegacyMethods = (didDocument.verificationMethod ?? []).some(vm =>
         ['Ed25519VerificationKey2018', 'X25519KeyAgreementKey2019'].includes(vm.type),
       )
+      const ed25519VerificationMethodId = this.findEd25519VerificationMethodId(didDocument)
       const servicesChanged =
+        !ed25519VerificationMethodId ||
         JSON.stringify(didDocument.didCommServices) !==
-        JSON.stringify(this.getDidCommServices(didDocument.id))
+          JSON.stringify(this.getDidCommServices(didDocument.id, ed25519VerificationMethodId))
       if (hasLegacyMethods || servicesChanged) {
-        if (servicesChanged) {
+        if (servicesChanged && ed25519VerificationMethodId) {
           didDocument.service = [
             ...(didDocument.service
-              ? didDocument.service.filter(service => ![DidCommV1Service.type].includes(service.type))
+              ? didDocument.service.filter(service => !MANAGED_DIDCOMM_SERVICE_TYPES.includes(service.type))
               : []),
-            ...this.getDidCommServices(didDocument.id),
+            ...this.getDidCommServices(didDocument.id, ed25519VerificationMethodId),
           ]
         }
         const newKeys: DidDocumentKey[] = []
@@ -257,19 +263,54 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     return await didRepository.findCreatedDid(this.context, parsedDid.did)
   }
 
-  private getDidCommServices(publicDid: string) {
-    const keyAgreementId = `${publicDid}#key-agreement-1`
+  // Prefer Ed25519VerificationKey2020 over Multikey: webvh's update Multikey is not ours to use.
+  private findEd25519VerificationMethodId(didDocument: DidDocument): string | undefined {
+    const vms = didDocument.verificationMethod ?? []
+    const preferred = vms.find(vm => vm.type === 'Ed25519VerificationKey2020')
+    if (preferred) return preferred.id
+    const fallback = vms.find(
+      vm =>
+        vm.type === 'Ed25519VerificationKey2018' ||
+        (vm.type === 'Multikey' &&
+          typeof vm.publicKeyMultibase === 'string' &&
+          vm.publicKeyMultibase.startsWith('z6Mk')),
+    )
+    return fallback?.id
+  }
 
-    return this.didcomm!.config.endpoints.map((endpoint, index) => {
-      return new DidCommV1Service({
-        id: `${publicDid}#did-communication`,
-        serviceEndpoint: endpoint,
-        priority: index,
-        routingKeys: [], // TODO: Support mediation
-        recipientKeys: [keyAgreementId],
-        accept: ['didcomm/aip2;env=rfc19'],
-      })
+  private getDidCommServices(publicDid: string, ed25519VerificationMethodId: string) {
+    const didcommVersions = this.didcomm!.config.didcommVersions
+    const includeV1 = didcommVersions.includes('v1')
+    const includeV2 = didcommVersions.includes('v2')
+    const services: (DidCommV1Service | NewDidCommV2Service)[] = []
+
+    this.didcomm!.config.endpoints.forEach((endpoint, index) => {
+      if (includeV1) {
+        services.push(
+          new DidCommV1Service({
+            id: `${publicDid}#did-communication`,
+            serviceEndpoint: endpoint,
+            priority: index,
+            routingKeys: [], // TODO: Support mediation
+            recipientKeys: [ed25519VerificationMethodId],
+            accept: ['didcomm/aip2;env=rfc19'],
+          }),
+        )
+      }
+      if (includeV2) {
+        services.push(
+          new NewDidCommV2Service({
+            id: `${publicDid}#didcomm-messaging-${index}`,
+            serviceEndpoint: new NewDidCommV2ServiceEndpoint({
+              uri: endpoint,
+              accept: ['didcomm/v2'],
+            }),
+          }),
+        )
+      }
     })
+
+    return services
   }
 
   private async persistDidDocumentKey(did: string, key: DidDocumentKey) {
@@ -340,7 +381,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     const assertionMethod = verificationMethodId
     const keyAgreement = keyAgreementId
 
-    const didcommServices = this.getDidCommServices(publicDid)
+    const didcommServices = this.getDidCommServices(publicDid, verificationMethodId)
 
     const currentContexts = Array.isArray(didDocument.context)
       ? didDocument.context
@@ -356,7 +397,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     didDocument.keyAgreement = [...new Set([...(didDocument.keyAgreement ?? []), keyAgreement])]
     didDocument.service = [
       ...(didDocument.service
-        ? didDocument.service.filter(service => ![DidCommV1Service.type].includes(service.type))
+        ? didDocument.service.filter(service => !MANAGED_DIDCOMM_SERVICE_TYPES.includes(service.type))
         : []),
       ...didcommServices,
     ]

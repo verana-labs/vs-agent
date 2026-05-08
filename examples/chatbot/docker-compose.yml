@@ -4,7 +4,7 @@ services:
       context: ../..
       dockerfile: ./apps/vs-agent/Dockerfile
       target: vs-agent-mrtd
-    image: vs-agent
+    image: vs-agent:dev
     container_name: chatbot-vs-agent
     restart: always
     networks:
@@ -13,9 +13,8 @@ services:
       - 3000:3000
       - 3001:3001
     environment:
-      - AGENT_ENDPOINT=ws://192.168.100.105:3001
-      - AGENT_INVITATION_IMAGE_URL=http://192.168.100.105:3001/avatar.png
-      - PUBLIC_API_BASE_URL=http://192.168.100.105:3001
+      - AGENT_PUBLIC_DID=did:webvh:ngrok-free.app
+      - AGENT_INVITATION_IMAGE_URL=https://did:webvh:ngrok-free.app/avatar.png
       - AGENT_LABEL=Chatbot Agent
       - USE_CORS=true
       - EVENTS_BASE_URL=http://chatbot-backend:5000

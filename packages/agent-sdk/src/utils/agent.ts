@@ -1,5 +1,5 @@
 import { parseDid } from '@credo-ts/core'
-import { DidCommHandshakeProtocol, DidCommMessage } from '@credo-ts/didcomm'
+import { DidCommHandshakeProtocol, DidCommMessage, type DidCommVersion } from '@credo-ts/didcomm'
 
 import { VsAgent } from '../agent/VsAgent'
 
@@ -16,23 +16,40 @@ export async function createInvitation(options: {
   useLegacyDid?: boolean
   invitationBaseUrl: string
   imageUrl?: string
+  didCommVersion?: DidCommVersion
 }) {
-  const { agent, messages, useLegacyDid, invitationBaseUrl, imageUrl } = options
+  const { agent, messages, useLegacyDid, invitationBaseUrl, imageUrl, didCommVersion } = options
 
   // Use legacy did:web in case agent's did is webvh and using legacy did
-  const invitationDid =
+  const ourDid =
     agent.did && parseDid(agent.did).method === 'webvh' && useLegacyDid
       ? `did:web:${parseDid(agent.did).id.split(':')[1]}`
       : agent.did
 
+  const effectiveVersion: DidCommVersion = didCommVersion ?? (agent.didcomm.config.sendsV2 ? 'v2' : 'v1')
+  const isV2 = effectiveVersion === 'v2'
+
+  if (!agent.didcomm.config.didcommVersions.includes(effectiveVersion)) {
+    throw new Error(
+      `Cannot create ${effectiveVersion} invitation: agent is configured with ` +
+        `didcommVersions: [${agent.didcomm.config.didcommVersions.join(', ')}]. ` +
+        `Add "${effectiveVersion}" to AGENT_DIDCOMM_VERSIONS or omit didCommVersion from the request.`,
+    )
+  }
+
   const outOfBandInvitation = (
     await agent.didcomm.oob.createInvitation({
       label: agent.label,
-      handshakeProtocols: [DidCommHandshakeProtocol.DidExchange, DidCommHandshakeProtocol.Connections],
-      invitationDid,
       multiUseInvitation: !messages,
       imageUrl,
       messages,
+      didCommVersion: effectiveVersion,
+      ...(isV2
+        ? { ourDid }
+        : {
+            handshakeProtocols: [DidCommHandshakeProtocol.DidExchange, DidCommHandshakeProtocol.Connections],
+            invitationDid: ourDid,
+          }),
     })
   ).outOfBandInvitation
   return {
