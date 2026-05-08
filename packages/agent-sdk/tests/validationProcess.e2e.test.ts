@@ -45,7 +45,7 @@ const ENV = {
   VERANA_RPC_ENDPOINT_URL: 'https://rpc.devnet.verana.network',
   VERANA_INDEXER_BASE_URL: 'https://idx.devnet.verana.network',
   CHAIN_ID: 'vna-devnet-1',
-  TEST_MNEMONIC: 'camp provide noodle speed wheel narrow soul fix jeans apple wine will',
+  TEST_MNEMONIC: process.env.TEST_MNEMONIC ?? '', // Provide a mnemonic with funds for testing
 }
 const MSG_TYPES = [
   '/verana.de.v1.MsgGrantOperatorAuthorization',
@@ -62,7 +62,8 @@ const MSG_TYPES = [
   '/verana.perm.v1.MsgSelfCreatePermission',
 ]
 
-describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
+const hasMnemonic = !!process.env.TEST_MNEMONIC
+describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
   let applicantAgent: VsAgent<BaseAgentModules>
   let validatorAgent: VsAgent<BaseAgentModules>
   const applicantMessages = new Subject<SubjectMessage>()

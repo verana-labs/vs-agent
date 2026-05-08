@@ -11,3 +11,5 @@ on:
 jobs:
   ci:
     uses: 2060-io/organization/.github/workflows/2060-linter-call.yml@main
+    secrets:
+      TEST_MNEMONIC: ${{ secrets.MNEMONIC }} # Check if the mnemonic have funds for testing
