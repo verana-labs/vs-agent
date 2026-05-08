@@ -18,28 +18,22 @@ import {
   CreateOrUpdatePermissionSessionParams,
   CreateRootPermissionParams,
   CreateTrustRegistryParams,
-  CredentialSchema,
-  CsQueryClient,
   GrantOperatorAuthorizationParams,
-  ListCredentialSchemasParams,
-  ListTrustRegistriesParams,
+  RevokeOperatorAuthorizationParams,
   Permission,
   PermQueryClient,
   SelfCreatePermissionParams,
   SetPermissionVPToValidatedParams,
   StartPermissionVPParams,
-  TrQueryClient,
-  TrustRegistry,
   VERANA_BECH32_PREFIX,
   VeranaChainConfig,
 } from './types'
 
-const { QueryClientImpl: CsQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/cs/v1/query')
+const { MsgCreateCredentialSchema } = require('@verana-labs/verana-types/codec/verana/cs/v1/tx')
 const {
-  MsgCreateCredentialSchema,
-  MsgCreateCredentialSchemaResponse,
-} = require('@verana-labs/verana-types/codec/verana/cs/v1/tx')
-const { MsgGrantOperatorAuthorization } = require('@verana-labs/verana-types/codec/verana/de/v1/tx')
+  MsgGrantOperatorAuthorization,
+  MsgRevokeOperatorAuthorization,
+} = require('@verana-labs/verana-types/codec/verana/de/v1/tx')
 const {
   QueryClientImpl: PermQueryClientImpl,
 } = require('@verana-labs/verana-types/codec/verana/perm/v1/query')
@@ -55,7 +49,6 @@ const {
   MsgSelfCreatePermission,
   MsgSelfCreatePermissionResponse,
 } = require('@verana-labs/verana-types/codec/verana/perm/v1/tx')
-const { QueryClientImpl: TrQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/tr/v1/query')
 const {
   MsgArchiveTrustRegistry,
   MsgCreateTrustRegistry,
@@ -67,8 +60,6 @@ export class VeranaChainService {
   private chainId!: string
 
   private permQuery!: PermQueryClient
-  private trQuery!: TrQueryClient
-  private csQuery!: CsQueryClient
 
   constructor(private readonly config: VeranaChainConfig) {}
 
@@ -108,8 +99,6 @@ export class VeranaChainService {
     const queryClient = new QueryClient(cometClient)
     const rpc = createProtobufRpcClient(queryClient)
     this.permQuery = new PermQueryClientImpl(rpc) as PermQueryClient
-    this.trQuery = new TrQueryClientImpl(rpc) as TrQueryClient
-    this.csQuery = new CsQueryClientImpl(rpc) as CsQueryClient
   }
 
   // Query API (unsigned)
@@ -212,6 +201,39 @@ export class VeranaChainService {
     return result
   }
 
+  async extractIdFromEvent(
+    txHashOrResult: string | DeliverTxResponse,
+    eventType: string,
+    attrKey: string,
+  ): Promise<number> {
+    let events: readonly { type: string; attributes: readonly { key: string; value: string }[] }[]
+    let txRef: string
+    if (typeof txHashOrResult === 'string') {
+      const tx = await this.signingClient.getTx(txHashOrResult)
+      if (!tx) {
+        throw new Error(`[VeranaChain] tx ${txHashOrResult} not found`)
+      }
+      events = tx.events
+      txRef = txHashOrResult
+    } else {
+      events = txHashOrResult.events
+      txRef = txHashOrResult.transactionHash
+    }
+    const event = events.find(e => e.type === eventType)
+    if (!event) {
+      throw new Error(`[VeranaChain] tx ${txRef} missing '${eventType}' event`)
+    }
+    const attr = event.attributes.find(a => a.key === attrKey)
+    if (!attr) {
+      throw new Error(`[VeranaChain] tx ${txRef} missing '${attrKey}' in '${eventType}' event`)
+    }
+    const id = Number(attr.value)
+    if (!Number.isFinite(id)) {
+      throw new Error(`[VeranaChain] tx ${txRef} has non-numeric ${attrKey}=${attr.value}`)
+    }
+    return id
+  }
+
   // Dev helpers
   async grantOperatorAuthorization(params: GrantOperatorAuthorizationParams): Promise<{ txHash: string }> {
     const value = MsgGrantOperatorAuthorization.fromPartial({
@@ -231,7 +253,21 @@ export class VeranaChainService {
     return { txHash: result.transactionHash }
   }
 
-  async createTrustRegistry(params: CreateTrustRegistryParams): Promise<{ txHash: string }> {
+  async revokeOperatorAuthorization(
+    params: RevokeOperatorAuthorizationParams,
+  ): Promise<{ txHash: string }> {
+    const value = MsgRevokeOperatorAuthorization.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      grantee: params.grantee,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgRevokeOperatorAuthorization, value)
+    return { txHash: result.transactionHash }
+  }
+
+  async createTrustRegistry(
+    params: CreateTrustRegistryParams,
+  ): Promise<{ txHash: string; trustRegistryId: number }> {
     const value = MsgCreateTrustRegistry.fromPartial({
       corporation: this.operatorAddress,
       operator: this.operatorAddress,
@@ -242,7 +278,12 @@ export class VeranaChainService {
       docDigestSri: params.docDigestSri,
     })
     const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateTrustRegistry, value)
-    return { txHash: result.transactionHash }
+    const trustRegistryId = await this.extractIdFromEvent(
+      result,
+      'create_trust_registry',
+      'trust_registry_id',
+    )
+    return { txHash: result.transactionHash, trustRegistryId }
   }
 
   async archiveTrustRegistry(params: ArchiveTrustRegistryParams): Promise<{ txHash: string }> {
@@ -254,17 +295,6 @@ export class VeranaChainService {
     })
     const result = await this.broadcastMsg(veranaTypeUrls.MsgArchiveTrustRegistry, value)
     return { txHash: result.transactionHash }
-  }
-
-  async listTrustRegistries(params: ListTrustRegistriesParams = {}): Promise<TrustRegistry[]> {
-    const result = await this.trQuery.ListTrustRegistries({
-      corporation: params.corporation ?? '',
-      modifiedAfter: params.modifiedAfter,
-      activeGfOnly: params.activeGfOnly ?? false,
-      preferredLanguage: params.preferredLanguage ?? '',
-      responseMaxSize: params.responseMaxSize ?? 0,
-    } as ListTrustRegistriesParams)
-    return result.trustRegistries ?? []
   }
 
   async createCredentialSchema(
@@ -288,25 +318,8 @@ export class VeranaChainService {
       digestAlgorithm: params.digestAlgorithm ?? 'sha384',
     })
     const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateCredentialSchema, value)
-    const responseBytes = result.msgResponses[0]?.value
-    if (!responseBytes) {
-      throw new Error('[VeranaChain] create-credential-schema tx response missing msgResponses[0]')
-    }
-    const response = MsgCreateCredentialSchemaResponse.decode(responseBytes)
-    return { txHash: result.transactionHash, schemaId: Number(response.id) }
-  }
-
-  async listCredentialSchemas(params: ListCredentialSchemasParams = {}): Promise<CredentialSchema[]> {
-    const result = await this.csQuery.ListCredentialSchemas({
-      trId: params.trId ?? 0,
-      modifiedAfter: params.modifiedAfter,
-      responseMaxSize: params.responseMaxSize ?? 0,
-      onlyActive: params.onlyActive ?? false,
-      issuerOnboardingMode: params.issuerOnboardingMode ?? 0,
-      verifierOnboardingMode: params.verifierOnboardingMode ?? 0,
-      holderOnboardingMode: params.holderOnboardingMode ?? 0,
-    } as ListCredentialSchemasParams)
-    return result.schemas ?? []
+    const schemaId = await this.extractIdFromEvent(result, 'create_credential_schema', 'credential_schema_id')
+    return { txHash: result.transactionHash, schemaId }
   }
 
   async createRootPermission(

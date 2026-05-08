@@ -12,7 +12,14 @@ import {
 
 import { BaseAgentModules, VsAgent } from '../agent'
 import { ISSUER_PERMISSION_TYPE, VeranaChainService } from '../blockchain'
-import { createCredential, createVtc, generateDigestSRI, getVerificationMethodId, signerW3c } from '../utils'
+import {
+  createCredential,
+  createVtc,
+  findMetadataEntry,
+  generateDigestSRI,
+  getVerificationMethodId,
+  signerW3c,
+} from '../utils'
 
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
@@ -29,6 +36,8 @@ export interface ValidateAndOfferCredentialInput {
   credentialType?: string[]
   credentialContext?: string[]
   credentialSchemaId: string
+  agentPermId?: number
+  walletAgentPermId?: number
 }
 
 export interface AcceptCredentialInput {
@@ -110,6 +119,8 @@ export class VtFlowOrchestrator {
     const didRecord = didRecords[0]
     if (!didRecord) throw new Error('Agent DID record not found')
     const verificationMethodId = getVerificationMethodId(this.agent.config.logger, didRecord)
+    const schemaRef = `vpr:verana:${chain.getChainId}/cs/v1/js/${input.credentialSchemaId}`
+    const { data } = await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
 
     const claims = (record.claims ?? {}) as JsonObject
     const unsignedCredential = createCredential({
@@ -120,24 +131,25 @@ export class VtFlowOrchestrator {
     })
     if (input.credentialContext) unsignedCredential.context = input.credentialContext
     unsignedCredential.credentialSchema = {
-      id: input.credentialSchemaId,
+      id: data.verifiableCredential?.[0]?.id,
       type: 'JsonSchemaCredential',
     }
 
+    const unsignedCredentialJson = JsonTransformer.toJSON(unsignedCredential) as JsonCredential
+
     const signed = await signerW3c(
       this.agent,
-      JsonTransformer.fromJSON(unsignedCredential, W3cCredential),
+      JsonTransformer.fromJSON(unsignedCredentialJson, W3cCredential),
       verificationMethodId,
     )
     const digest = generateDigestSRI(JSON.stringify(signed.jsonCredential))
 
-    await chain.setPermissionVPToValidated({ id: holderPermId, vpSummaryDigest: digest })
-    await chain.createOrUpdatePermissionSession({
-      id: record.sessionUuid,
-      agentPermId: 0,
-      walletAgentPermId: 0,
-      digest,
+    await chain.setPermissionVPToValidated({
+      id: holderPermId,
+      vpSummaryDigest: digest,
+      corporation: holderPerm.corporation,
     })
+    // TODO: include create or update session
 
     await vtFlowApi.acceptValidationRequest(record.id)
     await vtFlowApi.markValidated(record.id)
@@ -146,7 +158,7 @@ export class VtFlowOrchestrator {
       vtFlowRecordId: record.id,
       credentialFormats: {
         jsonld: {
-          credential: signed.jsonCredential as unknown as JsonCredential,
+          credential: unsignedCredentialJson,
           options: { proofType: 'Ed25519Signature2020', proofPurpose: 'assertionMethod' },
         },
       },

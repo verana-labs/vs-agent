@@ -1,18 +1,23 @@
 import { ConsoleLogger, LogLevel } from '@credo-ts/core'
 import { VtFlowApi, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { Subject } from 'rxjs'
-import { describe, it, beforeEach, afterEach, vi, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, vi, expect, beforeAll, afterAll } from 'vitest'
 
 import { type BaseAgentModules, type VsAgent } from '../src/agent'
-import { VeranaChainService } from '../src/blockchain'
+import {
+  IndexerWebSocketService,
+  ISSUER_PERMISSION_TYPE,
+  ValidationState,
+  VeranaChainService,
+} from '../src/blockchain'
+import { getEcsSchemas } from '../src/utils'
 import { type SubjectMessage, SubjectInboundTransport, SubjectOutboundTransport } from '../src/utils/testing'
 import { isVtFlowStateChangedEvent, waitForEvent } from '../src/utils/testing/helpers'
 import { VtFlowOrchestrator } from '../src/vtFlow'
 
 import { startAgent, FakeDidResolver } from './__mocks__'
-import { getEcsSchemas } from '../src/utils'
 
-export function mockWitnessFetch() {
+function mockWitnessFetch() {
   const original = globalThis.fetch
   const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
@@ -62,10 +67,15 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
   let trustRegistryId: number | undefined
   let credentialSchemaId: number | undefined
   let validatorPermId: number | undefined
+  let validatorPermEffectiveFrom: Date | undefined
+  let applicantIndexerWs: IndexerWebSocketService | undefined
+  let validatorIndexerWs: IndexerWebSocketService | undefined
+
+  const PERMISSION_ACTIVATION_DELAY_MS = 10_000
 
   beforeAll(async () => {
     restoreFetch = mockWitnessFetch()
-    const logger = new ConsoleLogger(LogLevel.Debug)
+    const logger = new ConsoleLogger(LogLevel.Off)
     const sharedResolver = new FakeDidResolver()
 
     applicantChain = new VeranaChainService({
@@ -88,28 +98,37 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
       label: 'Applicant Test',
       domain: 'applicant',
       veranaChain: applicantChain,
-      autoInitialize: false,
     })
     applicantAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(applicantMessages))
     applicantAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
-    applicantAgent.dids.config.addResolver(sharedResolver)
+    applicantAgent.dids.config.resolvers.unshift(sharedResolver)
     await applicantAgent.initialize()
-    sharedResolver.registerAgent(applicantAgent)
+    await sharedResolver.registerAgent(applicantAgent)
 
     validatorAgent = await startAgent({
       label: 'Validator Test',
       domain: 'validator',
       veranaChain: validatorChain,
-      autoInitialize: false,
     })
     validatorAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(validatorMessages))
     validatorAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
-    validatorAgent.dids.config.addResolver(sharedResolver)
+    validatorAgent.dids.config.resolvers.unshift(sharedResolver)
     await validatorAgent.initialize()
-    sharedResolver.registerAgent(validatorAgent)
+    await sharedResolver.registerAgent(validatorAgent)
 
     applicantEvents = vi.spyOn(applicantAgent.events, 'emit')
     validatorEvents = vi.spyOn(validatorAgent.events, 'emit')
+
+    applicantIndexerWs = new IndexerWebSocketService({
+      indexerUrl: ENV.VERANA_INDEXER_BASE_URL,
+      agent: applicantAgent,
+    })
+    await applicantIndexerWs.start()
+    validatorIndexerWs = new IndexerWebSocketService({
+      indexerUrl: ENV.VERANA_INDEXER_BASE_URL,
+      agent: validatorAgent,
+    })
+    await validatorIndexerWs.start()
 
     // Create credential on Verana Chain for testing
     await validatorChain.grantOperatorAuthorization({
@@ -117,46 +136,34 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
       msgTypes: MSG_TYPES,
     })
 
-    await validatorChain.createTrustRegistry({
+    const trCreated = await validatorChain.createTrustRegistry({
       did: validatorAgent.did!,
       aka: validatorAgent.did,
       language: 'en',
       docUrl: 'https://example.com/validator-doc',
       docDigestSri: 'sha256-+5HXWmu0MHh6YbCuxeN09YADDyh44WE+q1ymMQ97u5o=',
     })
-
-    const registries = await validatorChain.listTrustRegistries({
-      corporation: validatorChain.address,
-    })
-
-    trustRegistryId = registries.find(
-      r => r.did === validatorAgent.did && !r.archived
-    )?.id
-    console.log('Trust Registry:', JSON.stringify(trustRegistryId, null, 2))
+    trustRegistryId = trCreated.trustRegistryId
 
     const schemas = getEcsSchemas(`https://${validatorAgent.did?.split(':')[2]}`)
-    await validatorChain.createCredentialSchema({
+    const csCreated = await validatorChain.createCredentialSchema({
       trId: trustRegistryId!,
       jsonSchema: schemas['ecs-org'],
       issuerOnboardingMode: 2, // ECOSYSTEM_VALIDATION_PROCESS
     })
-    const credSchemas = await validatorChain.listCredentialSchemas({
-      trId: trustRegistryId!,
-      issuerOnboardingMode: 2,
-    })
-    credentialSchemaId = credSchemas[0]?.id
-    console.log('Credential Schema:', JSON.stringify(credentialSchemaId, null, 2))
+    credentialSchemaId = csCreated.schemaId
 
+    validatorPermEffectiveFrom = new Date(Date.now() + PERMISSION_ACTIVATION_DELAY_MS)
     await validatorChain.createRootPermission({
       schemaId: credentialSchemaId!,
       did: validatorAgent.did!,
-      effectiveFrom: new Date(Date.now() + 10 * 1000)
+      effectiveFrom: validatorPermEffectiveFrom,
     })
 
-    const permissions = await validatorChain.findPermissionsWithDID({ 
+    const permissions = await validatorChain.findPermissionsWithDID({
       did: validatorAgent.did!,
       type: 2,
-      schemaId: credentialSchemaId!
+      schemaId: credentialSchemaId!,
     })
     validatorPermId = permissions[0]?.id
     console.log('Permission:', JSON.stringify(validatorPermId, null, 2))
@@ -165,6 +172,8 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
   afterAll(async () => {
     restoreFetch?.()
     vi.restoreAllMocks()
+    applicantIndexerWs?.stop()
+    validatorIndexerWs?.stop()
     await applicantAgent?.shutdown()
     await validatorAgent?.shutdown()
     await validatorChain.archiveTrustRegistry({
@@ -172,12 +181,8 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
       archive: true,
     })
   })
-  it('should run setup', async () => {
-    expect(true).toBe(true)
-  })
-  it('happy path: VR → CRED_OFFER → CRED_ACCEPT → Completed', async () => {
-    const applicantOrchestrator = new VtFlowOrchestrator(applicantAgent)
-    const validatorOrchestrator = new VtFlowOrchestrator(validatorAgent)
+
+  it('happy path: VR → CRED_OFFER → CRED_ACCEPT → Completed → LinkedVP', async () => {
     if (!validatorPermId || !credentialSchemaId) throw new Error('Missing setup data')
 
     const applicantRecord = await applicantOrchestrator.startValidationProcess({ validatorPermId })
@@ -201,6 +206,7 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
     const applicantRecordId = applicantCredOfferEvent.payload.vtFlowRecordId
     await applicantOrchestrator.acceptCredential({ vtFlowRecordId: applicantRecordId })
     await waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Completed))
+    await waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.Completed))
 
     const applicantVtFlowApi = applicantAgent.dependencyManager.resolve(VtFlowApi)
     const validatorVtFlowApi = validatorAgent.dependencyManager.resolve(VtFlowApi)

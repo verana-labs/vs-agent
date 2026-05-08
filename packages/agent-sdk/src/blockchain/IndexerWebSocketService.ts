@@ -17,7 +17,11 @@ export interface IndexerWebSocketServiceOptions {
 
 const MAX_RECONNECT_DELAY_MS = 300_000
 const WS_PATHNAME = 'verana/indexer/v1/events'
-const CREATES_WITHOUT_ID = new Set(['CreateNewTrustRegistry', 'CreateNewCredentialSchema'])
+const CREATE_EVENT_ID_SOURCES: Record<string, { chainEventType: string; attrKey: string }> = {
+  CreateNewTrustRegistry: { chainEventType: 'create_trust_registry', attrKey: 'trust_registry_id' },
+  CreateNewCredentialSchema: { chainEventType: 'create_credential_schema', attrKey: 'credential_schema_id' },
+  StartPermissionVP: { chainEventType: 'start_permission_vp', attrKey: 'permission_id' },
+}
 
 export class IndexerWebSocketService {
   private ws: WebSocket | null = null
@@ -147,7 +151,7 @@ export class IndexerWebSocketService {
 
   private async processBlock(event: IndexerEventRecord): Promise<void> {
     try {
-      const activity = CREATES_WITHOUT_ID.has(event.event_type)
+      const activity = CREATE_EVENT_ID_SOURCES[event.event_type]
         ? await this.resolveCreateActivity(event)
         : await this.fetchActivity(event)
 
@@ -165,13 +169,23 @@ export class IndexerWebSocketService {
    * TODO: Once the indexer emits consistent event_id for create events, we can remove this workaround
    */
   private async resolveCreateActivity(event: IndexerEventRecord): Promise<IndexerActivity | undefined> {
-    const changes = await this.indexer.getChanges(event.block_height)
-    const expectedType = event.payload.entity_type
-    const expectedAccount = event.payload.sender
-    const matches = changes.activity.filter(
-      a => a.entity_type === expectedType && a.account === expectedAccount,
-    )
-    return matches.length > 0 ? { ...matches[0], msg: event.event_type } : undefined
+    const source = CREATE_EVENT_ID_SOURCES[event.event_type]
+    if (!source) return undefined
+
+    const entity_id = await this.resolveIdFromTx(event, source.chainEventType, source.attrKey)
+    if (!entity_id) return undefined
+
+    const changes = await this.fetchEntity(event.payload.entity_type, entity_id)
+
+    return {
+      timestamp: event.timestamp,
+      block_height: event.block_height,
+      entity_type: event.payload.entity_type ?? '',
+      entity_id,
+      msg: event.event_type,
+      changes,
+      account: event.payload.sender,
+    }
   }
 
   private async fetchActivity(event: IndexerEventRecord): Promise<IndexerActivity | undefined> {
@@ -191,6 +205,24 @@ export class IndexerWebSocketService {
       msg: event.event_type,
       changes,
       account: event.payload.sender,
+    }
+  }
+
+  private async resolveIdFromTx(
+    event: IndexerEventRecord,
+    chainEventType: string,
+    attrKey: string,
+  ): Promise<string | undefined> {
+    const chain = this.options.agent.veranaChain
+    if (!chain || !event.tx_hash) return undefined
+    try {
+      const id = await chain.extractIdFromEvent(event.tx_hash, chainEventType, attrKey)
+      return String(id)
+    } catch (err) {
+      this.logger.warn(
+        `[IndexerWS] Could not resolve ${attrKey} from tx ${event.tx_hash}: ${(err as Error).message}`,
+      )
+      return undefined
     }
   }
 
@@ -217,6 +249,7 @@ export class IndexerWebSocketService {
         block_height,
         operatorAddress: event.payload.sender,
         state,
+        txHash: event.tx_hash,
       })
     } catch (err) {
       this.logger.error(

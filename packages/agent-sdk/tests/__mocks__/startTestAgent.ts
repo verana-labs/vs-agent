@@ -18,7 +18,6 @@ type StartTestAgentParams = {
 
   inMemory?: boolean
   maxConnections?: number
-  autoInitialize?: boolean
   nestPlugin?: VsAgentNestPlugin
   logger?: BaseLogger
 }
@@ -30,7 +29,6 @@ export const startAgent = async ({
   veranaChain,
   inMemory = true,
   maxConnections,
-  autoInitialize = true,
   logger,
 }: StartTestAgentParams): Promise<VsAgent> => {
   const walletConfig = getAskarStoreConfig(label, {
@@ -55,10 +53,6 @@ export const startAgent = async ({
     label,
     veranaChain,
   }) as unknown as VsAgent<any>
-
-  if (autoInitialize) {
-    await agent.initialize()
-  }
 
   return agent
 }
