@@ -199,7 +199,6 @@ describe('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
       schemaId: credentialSchemaId!,
     })
     validatorPermId = permissions[0]?.id
-    console.log('Permission:', JSON.stringify(validatorPermId, null, 2))
   }, 60_000)
 
   afterAll(async () => {
