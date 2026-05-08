@@ -173,12 +173,6 @@ export interface StartPermissionVPParams {
   validationFees?: OptionalUInt64
   issuanceFees?: OptionalUInt64
   verificationFees?: OptionalUInt64
-  vsOperator?: string
-  vsOperatorAuthzEnabled?: boolean
-  vsOperatorAuthzSpendLimit?: Coin[]
-  vsOperatorAuthzWithFeegrant?: boolean
-  vsOperatorAuthzFeeSpendLimit?: Coin[]
-  vsOperatorAuthzSpendPeriod?: DurationParam
 }
 
 export interface SetPermissionVPToValidatedParams {
