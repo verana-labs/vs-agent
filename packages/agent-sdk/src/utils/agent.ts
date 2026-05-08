@@ -26,7 +26,8 @@ export async function createInvitation(options: {
       ? `did:web:${parseDid(agent.did).id.split(':')[1]}`
       : agent.did
 
-  const isV2 = didCommVersion === 'v2'
+  const effectiveVersion: DidCommVersion = didCommVersion ?? (agent.didcomm.config.sendsV2 ? 'v2' : 'v1')
+  const isV2 = effectiveVersion === 'v2'
 
   const outOfBandInvitation = (
     await agent.didcomm.oob.createInvitation({
@@ -34,7 +35,7 @@ export async function createInvitation(options: {
       multiUseInvitation: !messages,
       imageUrl,
       messages,
-      didCommVersion,
+      didCommVersion: effectiveVersion,
       ...(isV2
         ? { ourDid }
         : {

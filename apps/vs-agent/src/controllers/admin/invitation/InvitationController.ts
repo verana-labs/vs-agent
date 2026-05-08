@@ -158,6 +158,7 @@ export class InvitationController {
         value: {
           ref: '1234-5678',
           callbackUrl: 'https://myhost/mycallbackurl',
+          didCommVersion: 'v1',
           requestedCredentials: [
             {
               credentialDefinitionId:
@@ -170,6 +171,7 @@ export class InvitationController {
       withRelatedJsonSchema: {
         summary: 'Using jsonSchemaCredentialId',
         value: {
+          didCommVersion: 'v1',
           requestedCredentials: [
             {
               jsonSchemaCredentialId: 'https://dm.gov-id-tr.demos.dev.2060.io/vt/schemas-gov-id-jsc.json',
@@ -351,6 +353,7 @@ export class InvitationController {
         value: {
           credentialDefinitionId:
             'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
+          didCommVersion: 'v1',
           claims: [{ name: 'phoneNumber', value: '+57128348520' }],
         },
       },
