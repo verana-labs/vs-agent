@@ -153,23 +153,6 @@ export interface PermQueryClient {
   GetPermissionSession(req: { id: string }): Promise<{ session?: unknown }>
 }
 
-export interface TrustRegistry {
-  id: number
-  did: string
-  controller: string
-  archived?: Date
-  activeVersion?: number
-}
-
-export interface CredentialSchema {
-  id: number
-  trId: number
-  jsonSchema: string
-  issuerOnboardingMode: number
-  verifierOnboardingMode: number
-  holderOnboardingMode: number
-}
-
 export interface VeranaChainConfig {
   rpcUrl: string
   chainId?: string
