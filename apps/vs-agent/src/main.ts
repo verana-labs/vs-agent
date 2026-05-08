@@ -65,7 +65,7 @@ import {
   VERANA_CHAIN_ID,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
-import { MessagingPlugin } from './plugins'
+import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { commonAppConfig, type ServerConfig, setupAgent, TsLogger } from './utils'
 
@@ -181,6 +181,7 @@ const run = async () => {
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
     ...(chatModule ? [chatModule.ChatPlugin] : []),
     ...(mrtdModule ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })] : []),
+    ...(ENABLED_PLUGINS.includes('vt-flow') ? [VtFlowNestPlugin] : []),
   ]
 
   // Connect to Verana blockchain for on-chain transactions
