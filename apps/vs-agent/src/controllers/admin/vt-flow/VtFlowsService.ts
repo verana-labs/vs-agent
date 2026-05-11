@@ -19,7 +19,7 @@ import {
   VtFlowVariant,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
-  HOLDER_PERMISSION_TYPE,
+  ISSUER_PERMISSION_TYPE,
   VeranaIndexerService,
   createCredential,
   createVtc,
@@ -62,7 +62,7 @@ export class VtFlowsService {
 
     const { permissionId: holderPermId } = await this.runChainTx(agent, 'start-perm-vp', () =>
       chain.startPermissionVP({
-        type: HOLDER_PERMISSION_TYPE,
+        type: ISSUER_PERMISSION_TYPE,
         validatorPermId,
         did: agent.did!,
       }),

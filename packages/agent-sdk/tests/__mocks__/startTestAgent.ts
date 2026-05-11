@@ -1,28 +1,40 @@
 import { AskarSqliteStorageConfig } from '@credo-ts/askar'
-import { LogLevel, utils } from '@credo-ts/core'
+import { BaseLogger, DidResolver, utils } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import { type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { createVsAgent, setupBaseDidComm, VsAgent, keyDerivationMethodMap } from '@verana-labs/vs-agent-sdk'
 
-import { TsLogger } from '../../src/utils'
+import { createVsAgent, VsAgent } from '../../src/agent'
+import { VeranaChainService } from '../../src/blockchain'
+import { setupBaseDidComm } from '../../src/plugins/setupBaseDidComm'
+import { keyDerivationMethodMap, VsAgentNestPlugin } from '../../src/types'
+
+type StartTestAgentParams = {
+  label: string
+  domain: string
+  vtFlowOptions?: VtFlowModuleConfigOptions
+  veranaChain?: VeranaChainService
+  extraResolvers?: DidResolver[]
+
+  inMemory?: boolean
+  maxConnections?: number
+  nestPlugin?: VsAgentNestPlugin
+  logger?: BaseLogger
+}
 
 export const startAgent = async ({
   label,
   domain,
   vtFlowOptions,
-}: {
-  label: string
-  domain: string
-  /** Load the vt-flow module with these options. Omit to skip loading. */
-  vtFlowOptions?: VtFlowModuleConfigOptions
-}): Promise<VsAgent<any>> => {
-  const walletConfig = getAskarStoreConfig(label, { inMemory: true })
-
-  const [chatSetup, mrtdSetup] = await Promise.all([
-    import('@verana-labs/vs-agent-plugin-chat').catch(() => null),
-    import('@verana-labs/vs-agent-plugin-mrtd').catch(() => null),
-  ])
+  veranaChain,
+  inMemory = true,
+  maxConnections,
+  logger,
+}: StartTestAgentParams): Promise<VsAgent> => {
+  const walletConfig = getAskarStoreConfig(label, {
+    inMemory,
+    maxConnections,
+  })
 
   const agent = createVsAgent({
     plugins: [
@@ -32,19 +44,17 @@ export const startAgent = async ({
         endpoints: [`rxjs:${domain}`],
         vtFlow: vtFlowOptions,
       }),
-      ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
-      ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol()] : []),
     ],
-    config: {
-      logger: new TsLogger(LogLevel.Off, label),
-    },
+    config: { logger },
     walletConfig,
     did: `did:webvh:${domain}`,
     dependencies: agentDependencies,
     publicApiBaseUrl: `https://${domain}`,
     label,
-  })
-  return agent as unknown as VsAgent<any>
+    veranaChain,
+  }) as unknown as VsAgent<any>
+
+  return agent
 }
 
 export function getAskarStoreConfig(

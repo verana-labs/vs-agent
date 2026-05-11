@@ -1,8 +1,11 @@
+import { AgentContext } from '@credo-ts/core'
+import { VtFlowRecord, VtFlowService, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
 import { createJsc } from '../../utils/trustCredentialStore'
+import { VtFlowOrchestrator } from '../../vtFlow'
 import { IndexerActivity, VeranaSyncState } from '../types'
 
 const DEFAULT_CHAIN_ID = 'vna-testnet-1'
@@ -88,6 +91,111 @@ export function upsertPermission(
     revoked: overrides.revoked ?? existing?.revoked ?? false,
     slashed: overrides.slashed ?? existing?.slashed ?? false,
     lastModifiedBlock: block,
+  }
+}
+
+export async function reconcileVtFlowRecordsForPermission(
+  agent: VsAgent,
+  permId: string,
+  reconcile: (
+    record: VtFlowRecord,
+    service: VtFlowService,
+    agentContext: AgentContext,
+  ) => Promise<string | null>,
+  errorLabel: string,
+): Promise<void> {
+  const agentContext = agent.context
+  const service = agentContext.dependencyManager.resolve(VtFlowService)
+  const records = await service.findAllByQuery(agentContext, { permId })
+
+  for (const record of records) {
+    try {
+      const transitionedTo = await reconcile(record, service, agentContext)
+      if (transitionedTo) {
+        agent.config.logger.info(
+          `[IndexerWS] VtFlowRecord ${record.id} transitioned to ${transitionedTo} (perm=${permId})`,
+        )
+      }
+    } catch (e) {
+      agent.config.logger.error(
+        `[IndexerWS] ${errorLabel} for record ${record.id}`,
+        e as Record<string, unknown>,
+      )
+    }
+  }
+}
+
+export async function markVtFlowRecordsValidated(agent: VsAgent, permId: string): Promise<void> {
+  await reconcileVtFlowRecordsForPermission(
+    agent,
+    permId,
+    async (record, service, agentContext) => {
+      if (record.state !== VtFlowState.Validating && record.state !== VtFlowState.OobPending) {
+        return null
+      }
+      await service.markValidated(agentContext, record.id)
+      return 'VALIDATED'
+    },
+    'Failed to markValidated',
+  )
+}
+
+export async function setVtFlowRecordsPermRevoked(agent: VsAgent, permId: string): Promise<void> {
+  await reconcileVtFlowRecordsForPermission(
+    agent,
+    permId,
+    async (record, service, agentContext) => {
+      if (record.state === VtFlowState.PermRevoked || record.state === VtFlowState.PermSlashed) {
+        return null
+      }
+      await service.updateState(agentContext, record, VtFlowState.PermRevoked)
+      return 'PERM_REVOKED'
+    },
+    'Failed to set PERM_REVOKED',
+  )
+}
+
+export async function setVtFlowRecordsPermSlashed(agent: VsAgent, permId: string): Promise<void> {
+  await reconcileVtFlowRecordsForPermission(
+    agent,
+    permId,
+    async (record, service, agentContext) => {
+      if (record.state === VtFlowState.PermSlashed || record.state === VtFlowState.PermRevoked) {
+        return null
+      }
+      await service.updateState(agentContext, record, VtFlowState.PermSlashed)
+      return 'PERM_SLASHED'
+    },
+    'Failed to set PERM_SLASHED',
+  )
+}
+
+export async function terminateVtFlowRecordsByApplicant(agent: VsAgent, permId: string): Promise<void> {
+  await reconcileVtFlowRecordsForPermission(
+    agent,
+    permId,
+    async (record, service, agentContext) => {
+      await service.updateState(agentContext, record, VtFlowState.TerminatedByApplicant)
+      return 'TERMINATED_BY_APPLICANT'
+    },
+    'Failed to terminate record',
+  )
+}
+
+export async function startPermissionVPAutoFlow(agent: VsAgent, activity: IndexerActivity): Promise<void> {
+  const chain = agent.veranaChain
+  if (!chain) return
+  const applicantPermId = Number(activity.entity_id)
+  if (!Number.isFinite(applicantPermId)) return
+  const holderPerm = await chain.getPermission(applicantPermId)
+  if (!holderPerm || holderPerm.did !== agent.did) return
+  try {
+    const orchestrator = new VtFlowOrchestrator(agent)
+    await orchestrator.startValidationProcess({ applicantPermId })
+  } catch (err) {
+    agent.config.logger.error(
+      `[IndexerWS] StartPermissionVP auto-flow failed: ${(err as Error).message}\n${(err as Error).stack}`,
+    )
   }
 }
 

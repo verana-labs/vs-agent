@@ -13,15 +13,27 @@ import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@v
 import Long from 'long'
 
 import {
+  ArchiveTrustRegistryParams,
+  CreateCredentialSchemaParams,
   CreateOrUpdatePermissionSessionParams,
+  CreateRootPermissionParams,
+  CreateTrustRegistryParams,
+  GrantOperatorAuthorizationParams,
+  RevokeOperatorAuthorizationParams,
   Permission,
   PermQueryClient,
+  SelfCreatePermissionParams,
   SetPermissionVPToValidatedParams,
   StartPermissionVPParams,
   VERANA_BECH32_PREFIX,
   VeranaChainConfig,
 } from './types'
 
+const { MsgCreateCredentialSchema } = require('@verana-labs/verana-types/codec/verana/cs/v1/tx')
+const {
+  MsgGrantOperatorAuthorization,
+  MsgRevokeOperatorAuthorization,
+} = require('@verana-labs/verana-types/codec/verana/de/v1/tx')
 const {
   QueryClientImpl: PermQueryClientImpl,
 } = require('@verana-labs/verana-types/codec/verana/perm/v1/query')
@@ -32,7 +44,15 @@ const {
   MsgSetPermissionVPToValidated,
   MsgCancelPermissionVPLastRequest,
   MsgCreateOrUpdatePermissionSession,
+  MsgCreateRootPermission,
+  MsgCreateRootPermissionResponse,
+  MsgSelfCreatePermission,
+  MsgSelfCreatePermissionResponse,
 } = require('@verana-labs/verana-types/codec/verana/perm/v1/tx')
+const {
+  MsgArchiveTrustRegistry,
+  MsgCreateTrustRegistry,
+} = require('@verana-labs/verana-types/codec/verana/tr/v1/tx')
 
 export class VeranaChainService {
   private signingClient!: SigningStargateClient
@@ -67,7 +87,7 @@ export class VeranaChainService {
     this.signingClient = await SigningStargateClient.createWithSigner(cometClient, wallet, {
       registry: createVeranaRegistry(),
       aminoTypes: createVeranaAminoTypes(),
-      gasPrice: GasPrice.fromString(gasPrice ?? '0uvna'), // TODO: consider minium gas price
+      gasPrice: GasPrice.fromString(gasPrice ?? '1uvna'), // TODO: consider minium gas price
     })
 
     this.chainId = await this.signingClient.getChainId()
@@ -179,5 +199,176 @@ export class VeranaChainService {
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result
+  }
+
+  async extractIdFromEvent(
+    txHashOrResult: string | DeliverTxResponse,
+    eventType: string,
+    attrKey: string,
+  ): Promise<number> {
+    let events: readonly { type: string; attributes: readonly { key: string; value: string }[] }[]
+    let txRef: string
+    if (typeof txHashOrResult === 'string') {
+      const tx = await this.signingClient.getTx(txHashOrResult)
+      if (!tx) {
+        throw new Error(`[VeranaChain] tx ${txHashOrResult} not found`)
+      }
+      events = tx.events
+      txRef = txHashOrResult
+    } else {
+      events = txHashOrResult.events
+      txRef = txHashOrResult.transactionHash
+    }
+    const event = events.find(e => e.type === eventType)
+    if (!event) {
+      throw new Error(`[VeranaChain] tx ${txRef} missing '${eventType}' event`)
+    }
+    const attr = event.attributes.find(a => a.key === attrKey)
+    if (!attr) {
+      throw new Error(`[VeranaChain] tx ${txRef} missing '${attrKey}' in '${eventType}' event`)
+    }
+    const id = Number(attr.value)
+    if (!Number.isFinite(id)) {
+      throw new Error(`[VeranaChain] tx ${txRef} has non-numeric ${attrKey}=${attr.value}`)
+    }
+    return id
+  }
+
+  // Dev helpers
+  async grantOperatorAuthorization(params: GrantOperatorAuthorizationParams): Promise<{ txHash: string }> {
+    const value = MsgGrantOperatorAuthorization.fromPartial({
+      corporation: this.operatorAddress,
+      // operator: this.operatorAddress,
+      grantee: params.grantee,
+      msgTypes: params.msgTypes,
+      expiration: params.expiration,
+      authzSpendLimit: params.authzSpendLimit ?? [],
+      authzSpendLimitPeriod: params.authzSpendLimitPeriod,
+      withFeegrant: params.withFeegrant ?? false,
+      feegrantSpendLimit: params.feegrantSpendLimit ?? [],
+      feegrantSpendLimitPeriod: params.feegrantSpendLimitPeriod,
+      feeSpendLimit: params.feeSpendLimit ?? [],
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgGrantOperatorAuthorization, value)
+    return { txHash: result.transactionHash }
+  }
+
+  async revokeOperatorAuthorization(params: RevokeOperatorAuthorizationParams): Promise<{ txHash: string }> {
+    const value = MsgRevokeOperatorAuthorization.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      grantee: params.grantee,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgRevokeOperatorAuthorization, value)
+    return { txHash: result.transactionHash }
+  }
+
+  async createTrustRegistry(
+    params: CreateTrustRegistryParams,
+  ): Promise<{ txHash: string; trustRegistryId: number }> {
+    const value = MsgCreateTrustRegistry.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      did: params.did,
+      aka: params.aka ?? '',
+      language: params.language,
+      docUrl: params.docUrl,
+      docDigestSri: params.docDigestSri,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateTrustRegistry, value)
+    const trustRegistryId = await this.extractIdFromEvent(
+      result,
+      'create_trust_registry',
+      'trust_registry_id',
+    )
+    return { txHash: result.transactionHash, trustRegistryId }
+  }
+
+  async archiveTrustRegistry(params: ArchiveTrustRegistryParams): Promise<{ txHash: string }> {
+    const value = MsgArchiveTrustRegistry.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      trId: params.trId,
+      archive: params.archive,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgArchiveTrustRegistry, value)
+    return { txHash: result.transactionHash }
+  }
+
+  async createCredentialSchema(
+    params: CreateCredentialSchemaParams,
+  ): Promise<{ txHash: string; schemaId: number }> {
+    const value = MsgCreateCredentialSchema.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      trId: params.trId,
+      jsonSchema: params.jsonSchema,
+      issuerGrantorValidationValidityPeriod: params.issuerGrantorValidationValidityPeriod ?? { value: 0 },
+      verifierGrantorValidationValidityPeriod: params.verifierGrantorValidationValidityPeriod ?? { value: 0 },
+      issuerValidationValidityPeriod: params.issuerValidationValidityPeriod ?? { value: 365 },
+      verifierValidationValidityPeriod: params.verifierValidationValidityPeriod ?? { value: 0 },
+      holderValidationValidityPeriod: params.holderValidationValidityPeriod ?? { value: 0 },
+      issuerOnboardingMode: params.issuerOnboardingMode ?? 1,
+      verifierOnboardingMode: params.verifierOnboardingMode ?? 1,
+      holderOnboardingMode: params.holderOnboardingMode ?? 1,
+      pricingAssetType: params.pricingAssetType ?? 1,
+      pricingAsset: params.pricingAsset ?? 'tu',
+      digestAlgorithm: params.digestAlgorithm ?? 'sha384',
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateCredentialSchema, value)
+    const schemaId = await this.extractIdFromEvent(result, 'create_credential_schema', 'credential_schema_id')
+    return { txHash: result.transactionHash, schemaId }
+  }
+
+  async createRootPermission(
+    params: CreateRootPermissionParams,
+  ): Promise<{ txHash: string; permissionId: number }> {
+    const value = MsgCreateRootPermission.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      schemaId: params.schemaId,
+      did: params.did,
+      effectiveFrom: params.effectiveFrom,
+      effectiveUntil: params.effectiveUntil,
+      validationFees: params.validationFees ?? 0,
+      issuanceFees: params.issuanceFees ?? 0,
+      verificationFees: params.verificationFees ?? 0,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateRootPermission, value)
+    const responseBytes = result.msgResponses[0]?.value
+    if (!responseBytes) {
+      throw new Error('[VeranaChain] create-root-permission tx response missing msgResponses[0]')
+    }
+    const response = MsgCreateRootPermissionResponse.decode(responseBytes)
+    return { txHash: result.transactionHash, permissionId: Number(response.id) }
+  }
+
+  async selfCreatePermission(
+    params: SelfCreatePermissionParams,
+  ): Promise<{ txHash: string; permissionId: number }> {
+    const value = MsgSelfCreatePermission.fromPartial({
+      corporation: this.operatorAddress,
+      operator: this.operatorAddress,
+      type: params.type,
+      validatorPermId: params.validatorPermId,
+      did: params.did,
+      effectiveFrom: params.effectiveFrom,
+      effectiveUntil: params.effectiveUntil,
+      validationFees: params.validationFees ?? 0,
+      verificationFees: params.verificationFees ?? 0,
+      vsOperator: params.vsOperator ?? '',
+      vsOperatorAuthzEnabled: params.vsOperatorAuthzEnabled ?? false,
+      vsOperatorAuthzSpendLimit: params.vsOperatorAuthzSpendLimit ?? [],
+      vsOperatorAuthzWithFeegrant: params.vsOperatorAuthzWithFeegrant ?? false,
+      vsOperatorAuthzFeeSpendLimit: params.vsOperatorAuthzFeeSpendLimit ?? [],
+      vsOperatorAuthzSpendPeriod: params.vsOperatorAuthzSpendPeriod,
+    })
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgSelfCreatePermission, value)
+    const responseBytes = result.msgResponses[0]?.value
+    if (!responseBytes) {
+      throw new Error('[VeranaChain] self-create-permission tx response missing msgResponses[0]')
+    }
+    const response = MsgSelfCreatePermissionResponse.decode(responseBytes)
+    return { txHash: result.transactionHash, permissionId: Number(response.id) }
   }
 }
