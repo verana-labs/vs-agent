@@ -1,3 +1,5 @@
+import type { DidCommVersion } from '@credo-ts/didcomm'
+
 import {
   AnonCredsDidCommCredentialFormatService,
   AnonCredsDidCommProofFormatService,
@@ -34,6 +36,7 @@ export interface BaseDidCommPluginOptions {
   publicApiBaseUrl: string
   endpoints: string[]
   vtFlow?: VtFlowModuleConfigOptions
+  didcommVersions?: DidCommVersion[]
 }
 
 export interface BaseDidCommPlugin {
@@ -49,10 +52,16 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
     modules: {
       didcomm: new DidCommModule({
         endpoints: options.endpoints,
+        didcommVersions: options.didcommVersions,
+        // BasicMessage protocols must be set separately, otherwise Credo rejects basicmessage/2.0.
+        basicMessages: { protocols: options.didcommVersions ?? ['v1'] },
         transports: {
           outbound: [new DidCommHttpOutboundTransport(), new VsAgentWsOutboundTransport()],
         },
-        connections: { autoAcceptConnections: true },
+        connections: {
+          autoAcceptConnections: true,
+          autoCreateConnectionOnFirstMessage: true,
+        },
         credentials: {
           autoAcceptCredentials: DidCommAutoAcceptCredential.ContentApproved,
           credentialProtocols: [

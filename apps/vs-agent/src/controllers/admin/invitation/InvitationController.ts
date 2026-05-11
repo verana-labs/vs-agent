@@ -65,6 +65,7 @@ export class InvitationController {
     return await createInvitation({
       agent: await this.agentService.getAgent(),
       useLegacyDid: options?.useLegacyDid,
+      didCommVersion: options?.didCommVersion,
       invitationBaseUrl: AGENT_INVITATION_BASE_URL,
     })
   }
@@ -157,6 +158,7 @@ export class InvitationController {
         value: {
           ref: '1234-5678',
           callbackUrl: 'https://myhost/mycallbackurl',
+          didCommVersion: 'v1',
           requestedCredentials: [
             {
               credentialDefinitionId:
@@ -169,6 +171,7 @@ export class InvitationController {
       withRelatedJsonSchema: {
         summary: 'Using jsonSchemaCredentialId',
         value: {
+          didCommVersion: 'v1',
           requestedCredentials: [
             {
               jsonSchemaCredentialId: 'https://dm.gov-id-tr.demos.dev.2060.io/vt/schemas-gov-id-jsc.json',
@@ -201,7 +204,7 @@ export class InvitationController {
   ): Promise<CreatePresentationRequestResult> {
     const agent = await this.agentService.getAgent()
 
-    const { requestedCredentials, ref, callbackUrl, useLegacyDid } = options
+    const { requestedCredentials, ref, callbackUrl, useLegacyDid, didCommVersion } = options
 
     if (!requestedCredentials?.length) {
       throw Error('You must specify a least a requested credential')
@@ -294,6 +297,7 @@ export class InvitationController {
       agent,
       messages: [request.message],
       useLegacyDid,
+      didCommVersion,
       invitationBaseUrl: AGENT_INVITATION_BASE_URL,
       imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
@@ -349,6 +353,7 @@ export class InvitationController {
         value: {
           credentialDefinitionId:
             'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
+          didCommVersion: 'v1',
           claims: [{ name: 'phoneNumber', value: '+57128348520' }],
         },
       },
@@ -363,6 +368,7 @@ export class InvitationController {
       claims,
       credentialDefinitionId,
       useLegacyDid,
+      didCommVersion,
       revocationRegistryDefinitionId,
       revocationRegistryIndex,
     } = options
@@ -417,6 +423,7 @@ export class InvitationController {
         agent: await this.agentService.getAgent(),
         messages: [request.message],
         useLegacyDid,
+        didCommVersion,
         invitationBaseUrl: AGENT_INVITATION_BASE_URL,
         imageUrl: AGENT_INVITATION_IMAGE_URL,
       })

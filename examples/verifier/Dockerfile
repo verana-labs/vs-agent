@@ -44,6 +44,7 @@ WORKDIR /www
 ENV RUN_MODE="docker"
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY patches ./patches
 
 COPY --from=build /www/packages/model/package.json ./packages/model/package.json
 COPY --from=build /www/packages/model/build ./packages/model/build

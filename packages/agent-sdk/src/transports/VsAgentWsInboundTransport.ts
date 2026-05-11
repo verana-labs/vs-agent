@@ -112,7 +112,7 @@ export class VsAgentWsInboundTransport implements DidCommInboundTransport {
       ;(socket as ExtWebSocket).lastActivity = new Date()
       try {
         const messageReceiver = agentContext.dependencyManager.resolve(DidCommMessageReceiver)
-        await messageReceiver.receiveMessage(JSON.parse(event.data), session)
+        await messageReceiver.receiveMessage(JSON.parse(event.data), { session })
       } catch (error) {
         this.logger.error('Error processing message')
       }
