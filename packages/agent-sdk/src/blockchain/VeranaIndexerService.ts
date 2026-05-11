@@ -2,8 +2,6 @@ import { fetchJson } from '../utils/util'
 
 import {
   CredentialSchemaDto,
-  IndexerActivity,
-  IndexerChangesResponse,
   IndexerEventsResponse,
   PermissionDto,
   TrustRegistryDto,

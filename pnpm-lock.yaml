@@ -186,6 +186,9 @@ importers:
       '@types/uuid':
         specifier: ^8.3.4
         version: 8.3.4
+      '@verana-labs/credo-ts-didcomm-vt-flow':
+        specifier: workspace:*
+        version: link:../../packages/vt-flow
       postinstall-postinstall:
         specifier: ^2.1.0
         version: 2.1.0
