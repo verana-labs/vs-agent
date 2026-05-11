@@ -2,6 +2,7 @@ import type { ServerConfig } from '../utils'
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
+  DidCommConnectionDidRotatedEvent,
   DidCommConnectionEventTypes,
   DidCommConnectionRepository,
   DidCommConnectionStateChangedEvent,
@@ -106,6 +107,26 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
 
         await sendWebhookEvent(config.webhookUrl + '/connection-state-updated', body, config.logger)
       }
+    },
+  )
+
+  agent.events.on(
+    DidCommConnectionEventTypes.DidCommConnectionDidRotated,
+    async ({ payload }: DidCommConnectionDidRotatedEvent) => {
+      const record = payload.connectionRecord
+      const isV2TerminationByPeer =
+        record.didcommVersion === 'v2' &&
+        record.theirDid === undefined &&
+        (record.previousTheirDids?.length ?? 0) > 0
+      if (!isV2TerminationByPeer) return
+
+      const body = new ConnectionStateUpdated({
+        connectionId: record.id,
+        invitationId: record.outOfBandId,
+        state: 'terminated',
+      })
+
+      await sendWebhookEvent(config.webhookUrl + '/connection-state-updated', body, config.logger)
     },
   )
 
