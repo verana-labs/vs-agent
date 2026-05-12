@@ -46,7 +46,8 @@ export class InvitationRoutesController {
           }
         }
         const invitation = await agent.didcomm.oob.parseInvitation(longUrl)
-        res.send(invitation.toJSON()).end()
+        const invitationJson = invitation.v2Invitation?.toJSON() ?? invitation.toJSON()
+        res.send(invitationJson).end()
       } else {
         res.status(302).location(longUrl).end()
       }

@@ -67,7 +67,7 @@ export const ADMIN_LOG_LEVEL = process.env.ADMIN_LOG_LEVEL
 export const USE_CORS = Boolean(process.env.USE_CORS || false)
 export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER === 'false')
 
-export const AGENT_DIDCOMM_VERSIONS = (process.env.AGENT_DIDCOMM_VERSIONS ?? 'v1,v2')
+export const AGENT_DIDCOMM_VERSIONS = (process.env.AGENT_DIDCOMM_VERSIONS ?? 'v1')
   .split(',')
   .map(v => v.trim().toLowerCase())
   .filter(v => v.length > 0)
