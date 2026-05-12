@@ -392,7 +392,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       ...new Set([...currentContexts.filter(ctx => !legacyContexts.includes(ctx)), ...context]),
     ]
     didDocument.verificationMethod = [...filteredMethods, ...verificationMethods]
-    didDocument.authentication = [...new Set([...(didDocument.authentication ?? []), authentication])]
+    didDocument.authentication = [...new Set([authentication, ...(didDocument.authentication ?? [])])]
     didDocument.assertionMethod = [...new Set([...(didDocument.assertionMethod ?? []), assertionMethod])]
     didDocument.keyAgreement = [...new Set([...(didDocument.keyAgreement ?? []), keyAgreement])]
     didDocument.service = [

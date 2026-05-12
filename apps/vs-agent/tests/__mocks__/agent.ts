@@ -31,6 +31,7 @@ export const startAgent = async ({
         walletConfig,
         publicApiBaseUrl: `https://${domain}`,
         endpoints: [`rxjs:${domain}`],
+        didcommVersions: ['v1', 'v2'],
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol()] : []),
