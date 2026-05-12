@@ -14,14 +14,16 @@ import type {
   DidCommMessage,
 } from '@credo-ts/didcomm'
 
-import { AgentContext, CredoError, injectable, utils } from '@credo-ts/core'
+import { AgentContext, CredoError, DidRepository, injectable, utils } from '@credo-ts/core'
 import {
   DidCommAutoAcceptCredential,
   DidCommConnectionService,
+  DidCommConnectionsApi,
   DidCommCredentialExchangeRepository,
   DidCommCredentialsApi,
   DidCommCredentialsModuleConfig,
   DidCommMessageSender,
+  DidCommOutOfBandApi,
   getOutboundDidCommMessageContext,
 } from '@credo-ts/didcomm'
 
@@ -45,19 +47,20 @@ export class VtFlowApi {
   }
 
   public async sendValidationRequest(options: SendValidationRequestOptions): Promise<VtFlowRecord> {
-    const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
-    connection.assertReady()
-    await this.vtFlowService.assertVerifiableService(this.agentContext, connection.id)
+    const { connection } = await this.bootstrapConnection(options.recipientDid)
+    const peerDid = connection.theirDid ?? options.recipientDid
+    await this.vtFlowService.assertVerifiableService(this.agentContext, peerDid, connection.id)
 
     const sessionUuid = options.sessionUuid ?? utils.uuid()
 
     const { message, record } = await this.vtFlowService.createValidationProcessRecord(this.agentContext, {
-      connectionId: options.connectionId,
+      connectionId: connection.id,
       sessionUuid,
       permId: options.permId,
       agentPermId: options.agentPermId,
       walletAgentPermId: options.walletAgentPermId,
       claims: options.claims,
+      peerPublicDid: peerDid,
     })
 
     const outboundMessageContext = await getOutboundDidCommMessageContext(this.agentContext, {
@@ -71,19 +74,20 @@ export class VtFlowApi {
   }
 
   public async sendIssuanceRequest(options: SendIssuanceRequestOptions): Promise<VtFlowRecord> {
-    const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
-    connection.assertReady()
-    await this.vtFlowService.assertVerifiableService(this.agentContext, connection.id)
+    const { connection } = await this.bootstrapConnection(options.recipientDid)
+    const peerDid = connection.theirDid ?? options.recipientDid
+    await this.vtFlowService.assertVerifiableService(this.agentContext, peerDid, connection.id)
 
     const sessionUuid = options.sessionUuid ?? utils.uuid()
 
     const { message, record } = await this.vtFlowService.createDirectIssuanceRecord(this.agentContext, {
-      connectionId: options.connectionId,
+      connectionId: connection.id,
       sessionUuid,
       schemaId: options.schemaId,
       agentPermId: options.agentPermId,
       walletAgentPermId: options.walletAgentPermId,
       claims: options.claims,
+      peerPublicDid: peerDid,
     })
 
     const outboundMessageContext = await getOutboundDidCommMessageContext(this.agentContext, {
@@ -105,6 +109,8 @@ export class VtFlowApi {
         `VtFlow record '${record.id}' has no linked credentialExchangeRecordId — did an offer arrive?`,
       )
     }
+
+    await this.ensureRotated(record)
 
     const credentialsApi = this.agentContext.dependencyManager.resolve(DidCommCredentialsApi)
     await credentialsApi.acceptCredential({
@@ -185,6 +191,8 @@ export class VtFlowApi {
   ): Promise<{ record: VtFlowRecord; credentialExchangeRecord: DidCommCredentialExchangeRecord }> {
     const record = await this.vtFlowService.getById(this.agentContext, options.vtFlowRecordId)
     record.assertRole(VtFlowRole.Validator)
+
+    await this.ensureRotated(record)
 
     const connection = await this.connectionService.getById(this.agentContext, record.connectionId)
     connection.assertReady()
@@ -277,11 +285,47 @@ export class VtFlowApi {
     return this.vtFlowService.findAllByQuery(this.agentContext, query, queryOptions)
   }
 
+  private async bootstrapConnection(
+    recipientDid: string,
+  ): Promise<{ connection: Awaited<ReturnType<DidCommConnectionService['getById']>> }> {
+    const oobApi = this.agentContext.dependencyManager.resolve(DidCommOutOfBandApi)
+    const connectionsApi = this.agentContext.dependencyManager.resolve(DidCommConnectionsApi)
+    const didRepository = this.agentContext.dependencyManager.resolve(DidRepository)
+
+    const [createdDidRecord] = await didRepository.getCreatedDids(this.agentContext, { method: 'webvh' })
+    const ourDid = createdDidRecord?.did
+
+    const { connectionRecord } = await oobApi.receiveImplicitInvitation({
+      did: recipientDid,
+      label: 'vs-agent',
+      didCommVersion: 'v2',
+      autoAcceptConnection: true,
+      ourDid,
+    })
+
+    if (!connectionRecord) {
+      throw new CredoError(
+        `vt-flow: receiveImplicitInvitation for '${recipientDid}' did not return a connection record`,
+      )
+    }
+
+    const connection = await connectionsApi.getById(connectionRecord.id)
+    return { connection }
+  }
+
+  private async ensureRotated(record: VtFlowRecord): Promise<void> {
+    if (record.hasRotated) return
+    await this.vtFlowService.rotateAndWait(this.agentContext, record.connectionId)
+    record.hasRotated = true
+    await this.vtFlowService.updateRecord(this.agentContext, record)
+  }
+
   private async dispatchMessage(
     connectionId: string,
     message: DidCommMessage,
     associatedRecord: VtFlowRecord,
   ): Promise<void> {
+    await this.ensureRotated(associatedRecord)
     const connection = await this.connectionService.getById(this.agentContext, connectionId)
     const outbound = await getOutboundDidCommMessageContext(this.agentContext, {
       message,
