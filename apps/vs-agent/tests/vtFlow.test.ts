@@ -1,11 +1,11 @@
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { DidCommConnectionRecord, DidCommHandshakeProtocol } from '@credo-ts/didcomm'
 import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { Subject } from 'rxjs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  FakeDidResolver,
   isVtFlowStateChangedEvent,
   startAgent,
   SubjectInboundTransport,
@@ -23,8 +23,8 @@ import {
 describe('vt-flow: two-agent integration', () => {
   let applicant: VsAgent<any>
   let validator: VsAgent<any>
-  let applicantConnection: DidCommConnectionRecord
   let validatorEvents: ReturnType<typeof vi.spyOn>
+  const sharedResolver = new FakeDidResolver()
 
   beforeEach(async () => {
     const applicantMessages = new Subject<SubjectMessage>()
@@ -42,7 +42,9 @@ describe('vt-flow: two-agent integration', () => {
     })
     applicant.didcomm.registerInboundTransport(new SubjectInboundTransport(applicantMessages))
     applicant.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+    applicant.dids.config.resolvers.unshift(sharedResolver)
     await applicant.initialize()
+    await sharedResolver.registerAgent(applicant)
 
     validator = await startAgent({
       label: 'Validator',
@@ -56,9 +58,10 @@ describe('vt-flow: two-agent integration', () => {
     })
     validator.didcomm.registerInboundTransport(new SubjectInboundTransport(validatorMessages))
     validator.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+    validator.dids.config.resolvers.unshift(sharedResolver)
     await validator.initialize()
+    await sharedResolver.registerAgent(validator)
     validatorEvents = vi.spyOn(validator.events, 'emit')
-    ;[applicantConnection] = await makeConnection(applicant, validator)
   }, 30_000)
 
   afterEach(async () => {
@@ -71,7 +74,7 @@ describe('vt-flow: two-agent integration', () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
     const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
-      connectionId: applicantConnection.id,
+      recipientDid: validator.did,
       schemaId: 'https://example.test/schemas/organization.json',
       agentPermId: 'agent-perm-1',
       walletAgentPermId: 'wallet-agent-perm-1',
@@ -83,6 +86,8 @@ describe('vt-flow: two-agent integration', () => {
     expect(applicantRecord.state).toBe(VtFlowState.IrSent)
     expect(applicantRecord.schemaId).toBe('https://example.test/schemas/organization.json')
     expect(applicantRecord.claims).toEqual({ name: 'Acme', country: 'CH' })
+    expect(applicantRecord.peerPublicDid).toBe(validator.did)
+    expect(applicantRecord.connectionId).toBeDefined()
 
     const validatingEvent = await validatingReached
     const validatorRecord = await validator.modules.vtFlow.findById(validatingEvent.payload.vtFlowRecordId)
@@ -93,13 +98,14 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.threadId).toBe(applicantRecord.threadId)
     expect(validatorRecord?.sessionUuid).toBe(applicantRecord.sessionUuid)
     expect(validatorRecord?.schemaId).toBe(applicantRecord.schemaId)
+    expect(validatorRecord?.peerPublicDid).toBe(applicant.did)
   })
 
   it('§5.1 validation-request: Applicant VR_SENT, Validator auto-accepts + auto-marks-validated', async () => {
     const validatedReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validated))
 
     const applicantRecord = await applicant.modules.vtFlow.sendValidationRequest({
-      connectionId: applicantConnection.id,
+      recipientDid: validator.did,
       permId: 'perm-42',
       agentPermId: 'agent-perm-2',
       walletAgentPermId: 'wallet-agent-perm-2',
@@ -110,6 +116,7 @@ describe('vt-flow: two-agent integration', () => {
     expect(applicantRecord.variant).toBe(VtFlowVariant.ValidationProcess)
     expect(applicantRecord.state).toBe(VtFlowState.VrSent)
     expect(applicantRecord.permId).toBe('perm-42')
+    expect(applicantRecord.peerPublicDid).toBe(validator.did)
 
     const validatedEvent = await validatedReached
     const validatorRecord = await validator.modules.vtFlow.findById(validatedEvent.payload.vtFlowRecordId)
@@ -125,7 +132,7 @@ describe('vt-flow: two-agent integration', () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
     const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
-      connectionId: applicantConnection.id,
+      recipientDid: validator.did,
       schemaId: 'https://example.test/schemas/service.json',
       agentPermId: 'agent-perm-3',
       walletAgentPermId: 'wallet-agent-perm-3',
@@ -139,24 +146,3 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.id).not.toBe(applicantRecord.id)
   })
 })
-
-async function makeConnection(
-  applicantAgent: VsAgent<any>,
-  validatorAgent: VsAgent<any>,
-): Promise<[DidCommConnectionRecord, DidCommConnectionRecord]> {
-  const validatorOutOfBand = await validatorAgent.didcomm.oob.createInvitation({
-    handshakeProtocols: [DidCommHandshakeProtocol.Connections],
-  })
-
-  const { connectionRecord: applicantConnection } = await applicantAgent.didcomm.oob.receiveInvitation(
-    validatorOutOfBand.outOfBandInvitation,
-    { label: applicantAgent.label },
-  )
-
-  const applicantCompleted = await applicantAgent.didcomm.connections.returnWhenIsConnected(
-    applicantConnection!.id,
-  )
-  const [validatorRaw] = await validatorAgent.didcomm.connections.findAllByOutOfBandId(validatorOutOfBand.id)
-  const validatorCompleted = await validatorAgent.didcomm.connections.returnWhenIsConnected(validatorRaw!.id)
-  return [applicantCompleted, validatorCompleted]
-}

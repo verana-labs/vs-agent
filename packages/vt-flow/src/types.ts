@@ -65,7 +65,7 @@ export interface VtFlowStateChangedEvent extends BaseEvent {
 }
 
 export interface SendValidationRequestOptions {
-  connectionId: string
+  recipientDid: string
   sessionUuid?: string
   permId: string
   agentPermId: string
@@ -74,7 +74,7 @@ export interface SendValidationRequestOptions {
 }
 
 export interface SendIssuanceRequestOptions {
-  connectionId: string
+  recipientDid: string
   sessionUuid?: string
   schemaId: string
   agentPermId: string
