@@ -23,6 +23,7 @@ import {
 describe('vt-flow: two-agent integration', () => {
   let applicant: VsAgent<any>
   let validator: VsAgent<any>
+  let applicantEvents: ReturnType<typeof vi.spyOn>
   let validatorEvents: ReturnType<typeof vi.spyOn>
   const sharedResolver = new FakeDidResolver()
 
@@ -45,6 +46,7 @@ describe('vt-flow: two-agent integration', () => {
     applicant.dids.config.resolvers.unshift(sharedResolver)
     await applicant.initialize()
     await sharedResolver.registerAgent(applicant)
+    applicantEvents = vi.spyOn(applicant.events, 'emit')
 
     validator = await startAgent({
       label: 'Validator',
@@ -65,6 +67,7 @@ describe('vt-flow: two-agent integration', () => {
   }, 30_000)
 
   afterEach(async () => {
+    applicantEvents.mockClear()
     await applicant?.shutdown()
     await validator?.shutdown()
     vi.restoreAllMocks()
@@ -144,5 +147,33 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.id).toBeDefined()
     // Distinct records on each side, same thread.
     expect(validatorRecord?.id).not.toBe(applicantRecord.id)
+  })
+
+  it('sendValidating rotates the Validator DID from webvh to peer', async () => {
+    const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+
+    await applicant.modules.vtFlow.sendIssuanceRequest({
+      recipientDid: validator.did,
+      schemaId: 'https://example.test/schemas/rotation.json',
+      agentPermId: 'agent-perm-4',
+      walletAgentPermId: 'wallet-agent-perm-4',
+    })
+
+    const validatingEvent = await validatingReached
+    const validatorRecord = await validator.modules.vtFlow.getById(validatingEvent.payload.vtFlowRecordId)
+    const webvhDid = validator.did
+
+    await validator.modules.vtFlow.sendValidating(validatorRecord.id)
+
+    // Ensure the applicant has fully processed the validating message before afterEach closes the wallet.
+    await waitForEvent(applicantEvents, (ev: unknown): ev is unknown => {
+      const e = ev as any
+      return e?.type === 'DidCommMessageProcessed' && String(e?.payload?.message?.type).includes('validating')
+    })
+
+    const conn = await validator.didcomm.connections.getById(validatorRecord.connectionId)
+    expect(conn.did).not.toContain('did:webvh:')
+    expect(conn.did).toContain('did:peer:')
+    expect(conn.previousDids).toContain(webvhDid)
   })
 })
