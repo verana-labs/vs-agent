@@ -293,7 +293,7 @@ export class VtFlowApi {
     const didRepository = this.agentContext.dependencyManager.resolve(DidRepository)
 
     const existing = await connectionsApi.findByInvitationDid(recipientDid)
-    const ready = existing.find((c) => c.isReady)
+    const ready = existing.find(c => c.isReady)
     if (ready) return { connection: ready }
 
     const [createdDidRecord] = await didRepository.getCreatedDids(this.agentContext, { method: 'webvh' })
