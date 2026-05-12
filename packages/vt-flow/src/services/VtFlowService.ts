@@ -156,7 +156,8 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    const peerDid = connection.theirDid ?? connection.id
+    const peerDid = connection.theirDid
+    if (!peerDid) throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
     await this.assertVerifiableService(agentContext, peerDid, connection.id)
 
     const existing = await this.repository.findBySessionUuid(
@@ -197,7 +198,8 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    const peerDid = connection.theirDid ?? connection.id
+    const peerDid = connection.theirDid
+    if (!peerDid) throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
     await this.assertVerifiableService(agentContext, peerDid, connection.id)
 
     const existing = await this.repository.findBySessionUuid(
