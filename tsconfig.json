@@ -11,5 +11,12 @@
     },
     "types": ["vitest", "node"]
   },
-  "exclude": ["node_modules", "build", "examples", "apps/vs-agent-ui"]
+  "exclude": [
+    "node_modules",
+    "build",
+    "examples",
+    "apps/vs-agent-ui",
+    "vitest.config.ts",
+    "vitest.globalSetup.ts"
+  ]
 }
