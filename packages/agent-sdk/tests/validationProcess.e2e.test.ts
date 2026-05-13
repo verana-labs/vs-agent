@@ -45,7 +45,9 @@ const ENV = {
   VERANA_RPC_ENDPOINT_URL: 'https://rpc.devnet.verana.network',
   VERANA_INDEXER_BASE_URL: 'https://idx.devnet.verana.network',
   CHAIN_ID: 'vna-devnet-1',
-  TEST_MNEMONIC: process.env.TEST_MNEMONIC ?? '', // Provide a mnemonic with funds for testing
+  TEST_MNEMONIC:
+    process.env.TEST_MNEMONIC ??
+    'peace escape gossip regret they permit hero abuse oxygen feature social any human manage seven nasty voice wealth law inherit tongue fatigue truck city', // Provide a mnemonic with funds for testing
 }
 const MSG_TYPES = [
   '/verana.de.v1.MsgGrantOperatorAuthorization',
@@ -63,6 +65,8 @@ const MSG_TYPES = [
 ]
 
 const hasMnemonic = !!process.env.TEST_MNEMONIC
+// eslint-disable-next-line no-console
+const log = (msg: string) => console.log(`[E2E] ${msg}`)
 describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
   let applicantAgent: VsAgent<BaseAgentModules>
   let validatorAgent: VsAgent<BaseAgentModules>
@@ -82,6 +86,7 @@ describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
   let validatorPermId: number | undefined
   let applicantIndexerWs: IndexerWebSocketService | undefined
   let validatorIndexerWs: IndexerWebSocketService | undefined
+  let applicantOrchestrator: VtFlowOrchestrator | undefined
 
   beforeAll(async () => {
     restoreFetch = mockWitnessFetch()
@@ -110,7 +115,17 @@ describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
       veranaChain: applicantChain,
       vtFlowOptions: {
         autoAcceptCredentialOffer: true,
-        verifyCredential: async () => true,
+        verifyCredential: async ({ record }) => {
+          if (!applicantOrchestrator) return true
+          try {
+            await applicantOrchestrator.verifyOfferedCredential(record.id)
+            log('hook: verifyOfferedCredential passed')
+            return true
+          } catch (err) {
+            log(`hook: verifyOfferedCredential rejected: ${(err as Error).message}`)
+            return false
+          }
+        },
       },
       logger,
     })
@@ -200,9 +215,13 @@ describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
       schemaId: credentialSchemaId!,
     })
     validatorPermId = permissions[0]?.id
+    log(
+      `setup ready: trustRegistry=${trustRegistryId} credentialSchema=${credentialSchemaId} validatorPerm=${validatorPermId}`,
+    )
   }, 60_000)
 
   afterAll(async () => {
+    applicantOrchestrator = undefined
     restoreFetch?.()
     vi.restoreAllMocks()
     applicantIndexerWs?.stop()
@@ -218,13 +237,11 @@ describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
   it('happy path: VR → CRED_OFFER → CRED_ACCEPT → Completed → LinkedVP', async () => {
     if (!validatorPermId || !credentialSchemaId) throw new Error('Missing setup data')
 
-    const applicantPublicApiBaseUrl = `https://${applicantAgent.did!.split(':')[2]}`
-    const validatorPublicApiBaseUrl = `https://${validatorAgent.did!.split(':')[2]}`
-    const applicantOrchestrator = new VtFlowOrchestrator(applicantAgent, {
-      publicApiBaseUrl: applicantPublicApiBaseUrl,
+    applicantOrchestrator = new VtFlowOrchestrator(applicantAgent, {
+      publicApiBaseUrl: applicantAgent.publicApiBaseUrl,
     })
     const validatorOrchestrator = new VtFlowOrchestrator(validatorAgent, {
-      publicApiBaseUrl: validatorPublicApiBaseUrl,
+      publicApiBaseUrl: validatorAgent.publicApiBaseUrl,
     })
 
     const { permissionId: applicantPermId } = await retryUntilEffective(() =>
@@ -235,8 +252,9 @@ describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
       }),
     )
     expect(applicantPermId).toBeGreaterThan(0)
-    await waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.VrSent))
+    log(`applicantPerm=${applicantPermId}`)
 
+    await waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.VrSent))
     const validatorVrEvent = await waitForEvent(
       validatorEvents,
       isVtFlowStateChangedEvent(VtFlowState.AwaitingVr),
@@ -257,10 +275,8 @@ describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
 
     const applicantVtFlowApi = applicantAgent.dependencyManager.resolve(VtFlowApi)
     const validatorVtFlowApi = validatorAgent.dependencyManager.resolve(VtFlowApi)
-
     const finalApplicantRecord = await applicantVtFlowApi.findById(applicantRecordId)
     const finalValidatorRecord = await validatorVtFlowApi.findById(validatorRecordId)
-
     expect(finalApplicantRecord?.state).toBe(VtFlowState.Completed)
     expect(finalValidatorRecord?.state).toBe(VtFlowState.Completed)
 
@@ -269,15 +285,22 @@ describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
     const linkedVps =
       applicantDidRecord?.didDocument?.service?.filter(s => s.type === 'LinkedVerifiablePresentation') ?? []
     expect(linkedVps.length).toBeGreaterThan(0)
+    const expectedLinkedVpServiceId = `${applicantAgent.did}#vpr-schemas-${credentialSchemaId}-c-vp`
+    const expectedLinkedVpEndpoint = `${applicantAgent.publicApiBaseUrl}/vt/schemas-${credentialSchemaId}-c-vp.json`
     expect(
       linkedVps.some(
-        vp =>
-          vp.id === `${applicantAgent.did}#whois` &&
-          vp.serviceEndpoint === 'https://applicant/vt/ecs-service-c-vp.json',
+        vp => vp.id === expectedLinkedVpServiceId && vp.serviceEndpoint === expectedLinkedVpEndpoint,
       ),
     ).toBe(true)
 
     const onChainPerm = await applicantChain.getPermission(applicantPermId)
     expect(onChainPerm?.vpState).toBe(ValidationState.VALIDATED)
+
+    const sessionUuid = finalValidatorRecord?.sessionUuid
+    expect(sessionUuid).toBeDefined()
+    log(
+      `completed: applicantRecord=${applicantRecordId} linkedVp=${expectedLinkedVpEndpoint} sessionUuid=${sessionUuid}`,
+    )
+    applicantOrchestrator = undefined
   }, 120_000)
 })

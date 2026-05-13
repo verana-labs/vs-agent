@@ -62,7 +62,7 @@ export class VtFlowOrchestrator {
       throw new Error(`Applicant permission ${input.applicantPermId} does not belong to this agent`)
     }
     if (holderPerm.type !== ISSUER_PERMISSION_TYPE) {
-      throw new Error(`Permission ${input.applicantPermId} is not a HOLDER permission`)
+      throw new Error(`Permission ${input.applicantPermId} is not an ISSUER permission`)
     }
     if (!holderPerm.validatorPermId) {
       throw new Error(`Applicant permission ${input.applicantPermId} has no validator_perm_id`)
@@ -149,7 +149,19 @@ export class VtFlowOrchestrator {
       vpSummaryDigest: digest,
       corporation: holderPerm.corporation,
     })
-    // TODO: include create or update session
+    if (input.agentPermId && input.agentPermId > 0) {
+      await chain.createOrUpdatePermissionSession({
+        id: record.sessionUuid,
+        issuerPermId: holderPermId,
+        agentPermId: input.agentPermId,
+        walletAgentPermId: input.walletAgentPermId ?? 0,
+        digest,
+      })
+    } else {
+      this.agent.config.logger.warn(
+        `[VtFlowOrchestrator] Skipping createOrUpdatePermissionSession: no agentPermId provided`,
+      )
+    }
 
     await vtFlowApi.acceptValidationRequest(record.id)
     await vtFlowApi.markValidated(record.id)
@@ -171,7 +183,53 @@ export class VtFlowOrchestrator {
     const record = await vtFlowApi.findById(input.vtFlowRecordId)
     if (!record) throw new Error(`vt-flow record ${input.vtFlowRecordId} not found`)
     if (record.role !== VtFlowRole.Applicant) throw new Error('Record is not applicant-side')
+    if (record.state !== VtFlowState.CredOffered) {
+      throw new Error(`Record state is '${record.state}', expected '${VtFlowState.CredOffered}'`)
+    }
+    await this.verifyOfferedCredential(input.vtFlowRecordId)
     return vtFlowApi.acceptReceivedCredential(input.vtFlowRecordId)
+  }
+
+  async verifyOfferedCredential(vtFlowRecordId: string): Promise<void> {
+    const chain = this.requireChain()
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(vtFlowRecordId)
+    if (!record) throw new Error(`vt-flow record ${vtFlowRecordId} not found`)
+    if (record.role !== VtFlowRole.Applicant) throw new Error('Record is not applicant-side')
+    if (!record.permId) throw new Error('Record has no permId')
+    if (!record.credentialExchangeRecordId) {
+      throw new Error('Record has no credentialExchangeRecordId; nothing to verify')
+    }
+
+    const holderPerm = await chain.getPermission(Number(record.permId))
+    if (!holderPerm) throw new Error(`Holder permission ${record.permId} not found on chain`)
+    if (!holderPerm.validatorPermId) throw new Error('Holder permission has no validator_perm_id')
+
+    const validatorPerm = await chain.getPermission(Number(holderPerm.validatorPermId))
+    if (!validatorPerm) {
+      throw new Error(`Validator permission ${holderPerm.validatorPermId} not found on chain`)
+    }
+    if (validatorPerm.revoked || validatorPerm.slashed) {
+      throw new Error(`Validator permission ${validatorPerm.id} is not active (revoked/slashed)`)
+    }
+
+    // Soft-check: Credo re-signs at issue, so the on-chain digest will not match bit-for-bit.
+    if (!holderPerm.vpSummaryDigest) return
+    try {
+      const formatData = await this.agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
+      const credentialJson = (formatData.credential as { jsonld?: unknown } | undefined)?.jsonld
+      if (!credentialJson) return
+      const computed = generateDigestSRI(JSON.stringify(credentialJson))
+      if (computed !== holderPerm.vpSummaryDigest) {
+        this.agent.config.logger.warn(
+          `[VtFlowOrchestrator] Digest mismatch: computed=${computed} on-chain=${holderPerm.vpSummaryDigest}`,
+        )
+      }
+    } catch (err) {
+      this.agent.config.logger.warn(
+        `[VtFlowOrchestrator] Digest soft-check skipped: ${(err as Error).message}`,
+      )
+    }
   }
 
   async publishCredentialAsLinkedVp(vtFlowRecordId: string): Promise<void> {
@@ -191,8 +249,20 @@ export class VtFlowOrchestrator {
     if (!jsonld) {
       throw new Error(`No jsonld credential in exchange ${record.credentialExchangeRecordId}`)
     }
+    const schemaRef = (jsonld as { credentialSchema?: { id?: string } }).credentialSchema?.id
+    const schemaBaseId = schemaRef ? this.extractSchemaBaseId(schemaRef) : undefined
+    if (!schemaBaseId) {
+      throw new Error(
+        `Cannot publish Linked VP: credential has no extractable schema base id (credentialSchema.id=${schemaRef ?? 'undefined'})`,
+      )
+    }
     const w3cCredential = JsonTransformer.fromJSON(jsonld, W3cJsonLdVerifiableCredential)
-    await createVtc(this.agent, this.options.publicApiBaseUrl, record.id, w3cCredential)
+    await createVtc(this.agent, this.options.publicApiBaseUrl, schemaBaseId, w3cCredential)
+  }
+
+  private extractSchemaBaseId(jscUrl: string): string | undefined {
+    const match = jscUrl.match(/schemas-([a-z0-9-]+?)-(?:jsc|c-vp)\.json/i)
+    return match?.[1]?.toLowerCase()
   }
 
   private resolveVtFlowApi(): VtFlowApi {
