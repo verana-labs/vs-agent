@@ -45,9 +45,7 @@ const ENV = {
   VERANA_RPC_ENDPOINT_URL: 'https://rpc.devnet.verana.network',
   VERANA_INDEXER_BASE_URL: 'https://idx.devnet.verana.network',
   CHAIN_ID: 'vna-devnet-1',
-  TEST_MNEMONIC:
-    process.env.TEST_MNEMONIC ??
-    'peace escape gossip regret they permit hero abuse oxygen feature social any human manage seven nasty voice wealth law inherit tongue fatigue truck city', // Provide a mnemonic with funds for testing
+  TEST_MNEMONIC: process.env.TEST_MNEMONIC ?? '', // Provide a mnemonic with funds for testing
 }
 const MSG_TYPES = [
   '/verana.de.v1.MsgGrantOperatorAuthorization',

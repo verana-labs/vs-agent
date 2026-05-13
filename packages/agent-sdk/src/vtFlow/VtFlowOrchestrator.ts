@@ -213,7 +213,6 @@ export class VtFlowOrchestrator {
       throw new Error(`Validator permission ${validatorPerm.id} is not active (revoked/slashed)`)
     }
 
-    // Soft-check: Credo re-signs at issue, so the on-chain digest will not match bit-for-bit.
     if (!holderPerm.vpSummaryDigest) return
     try {
       const formatData = await this.agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
