@@ -38,6 +38,7 @@ import { VtFlowModule } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { VeranaChainService } from '../blockchain/VeranaChainService'
+import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
 
 const MANAGED_DIDCOMM_SERVICE_TYPES: readonly string[] = [DidCommV1Service.type, NewDidCommV2Service.type]
 
@@ -196,6 +197,24 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         }
 
         return
+      }
+
+      // If this is a did:webvh record, ensure the stored log is resolvable under the
+      // current didwebvh-ts version. Logs created with didwebvh-ts <2.7.4 used the
+      // SCID placeholder when computing the entry hash for entries beyond #1, which
+      // newer resolvers (correctly) reject as a broken hash chain. We rebuild the
+      // log in-place, preserving entry #1 (and therefore the SCID and the public DID).
+      if (parsedDid.method === 'webvh') {
+        try {
+          await migrateWebVhLogIfBroken(this.agentContext, existingRecord, this.logger)
+        } catch (error) {
+          this.logger.error(
+            `Failed to migrate webvh DID log for ${existingRecord.did}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          )
+          throw error
+        }
       }
 
       // Make sure did:webvh record has the did:web form as an alternative, in order to support
