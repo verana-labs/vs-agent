@@ -5,7 +5,12 @@ import { Subject } from 'rxjs'
 import { describe, it, vi, expect, beforeAll, afterAll } from 'vitest'
 
 import { type BaseAgentModules, type VsAgent } from '../src/agent'
-import { IndexerWebSocketService, ValidationState, VeranaChainService } from '../src/blockchain'
+import {
+  IndexerWebSocketService,
+  ValidationState,
+  VeranaChainService,
+  VeranaIndexerService,
+} from '../src/blockchain'
 import { ISSUER_PERMISSION_TYPE } from '../src/types'
 import { getEcsSchemas } from '../src/utils'
 import { type SubjectMessage, SubjectInboundTransport, SubjectOutboundTransport } from '../src/utils/testing'
@@ -235,8 +240,13 @@ describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
   it('happy path: VR → CRED_OFFER → CRED_ACCEPT → Completed → LinkedVP', async () => {
     if (!validatorPermId || !credentialSchemaId) throw new Error('Missing setup data')
 
+    const indexer = new VeranaIndexerService({
+      baseUrl: ENV.VERANA_INDEXER_BASE_URL,
+      logger: new ConsoleLogger(LogLevel.Off),
+    })
     applicantOrchestrator = new VtFlowOrchestrator(applicantAgent, {
       publicApiBaseUrl: applicantAgent.publicApiBaseUrl,
+      indexer,
     })
     const validatorOrchestrator = new VtFlowOrchestrator(validatorAgent, {
       publicApiBaseUrl: validatorAgent.publicApiBaseUrl,

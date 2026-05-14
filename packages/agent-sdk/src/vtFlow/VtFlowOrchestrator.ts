@@ -11,6 +11,7 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { BaseAgentModules, VsAgent } from '../agent'
+import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { ISSUER_PERMISSION_TYPE } from '../types'
 import {
   createCredential,
@@ -23,6 +24,7 @@ import {
 
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
+  indexer?: VeranaIndexerService
 }
 
 export interface StartValidationProcessInput {
@@ -191,7 +193,6 @@ export class VtFlowOrchestrator {
   }
 
   async verifyOfferedCredential(vtFlowRecordId: string): Promise<void> {
-    const chain = this.requireChain()
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(vtFlowRecordId)
     if (!record) throw new Error(`vt-flow record ${vtFlowRecordId} not found`)
@@ -201,33 +202,55 @@ export class VtFlowOrchestrator {
       throw new Error('Record has no credentialExchangeRecordId; nothing to verify')
     }
 
-    const holderPerm = await chain.getPermission(Number(record.permId))
-    if (!holderPerm) throw new Error(`Holder permission ${record.permId} not found on chain`)
-    if (!holderPerm.validatorPermId) throw new Error('Holder permission has no validator_perm_id')
+    const { validatorPermActive, vpSummaryDigest } = await this.resolveHolderAndValidatorState(
+      Number(record.permId),
+    )
+    if (!validatorPermActive) throw new Error('Validator permission is not active')
 
-    const validatorPerm = await chain.getPermission(Number(holderPerm.validatorPermId))
-    if (!validatorPerm) {
-      throw new Error(`Validator permission ${holderPerm.validatorPermId} not found on chain`)
-    }
-    if (validatorPerm.revoked || validatorPerm.slashed) {
-      throw new Error(`Validator permission ${validatorPerm.id} is not active (revoked/slashed)`)
-    }
-
-    if (!holderPerm.vpSummaryDigest) return
+    if (!vpSummaryDigest) return
     try {
       const formatData = await this.agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
       const credentialJson = (formatData.credential as { jsonld?: unknown } | undefined)?.jsonld
       if (!credentialJson) return
       const computed = generateDigestSRI(JSON.stringify(credentialJson))
-      if (computed !== holderPerm.vpSummaryDigest) {
+      if (computed !== vpSummaryDigest) {
         this.agent.config.logger.warn(
-          `[VtFlowOrchestrator] Digest mismatch: computed=${computed} on-chain=${holderPerm.vpSummaryDigest}`,
+          `[VtFlowOrchestrator] Digest mismatch: computed=${computed} on-chain=${vpSummaryDigest}`,
         )
       }
     } catch (err) {
       this.agent.config.logger.warn(
         `[VtFlowOrchestrator] Digest soft-check skipped: ${(err as Error).message}`,
       )
+    }
+  }
+
+  private async resolveHolderAndValidatorState(
+    holderPermId: number,
+  ): Promise<{ validatorPermActive: boolean; vpSummaryDigest?: string }> {
+    const indexer = this.options.indexer
+    if (indexer) {
+      const holder = await indexer.getPermission(holderPermId)
+      if (!holder) throw new Error(`Holder permission ${holderPermId} not found on indexer`)
+      if (!holder.validator_perm_id) throw new Error('Holder permission has no validator_perm_id')
+      const validator = await indexer.getPermission(holder.validator_perm_id)
+      if (!validator) {
+        throw new Error(`Validator permission ${holder.validator_perm_id} not found on indexer`)
+      }
+      return {
+        validatorPermActive: validator.perm_state === 'ACTIVE',
+        vpSummaryDigest: holder.vp_summary_digest,
+      }
+    }
+    const chain = this.requireChain()
+    const holder = await chain.getPermission(holderPermId)
+    if (!holder) throw new Error(`Holder permission ${holderPermId} not found on chain`)
+    if (!holder.validatorPermId) throw new Error('Holder permission has no validator_perm_id')
+    const validator = await chain.getPermission(Number(holder.validatorPermId))
+    if (!validator) throw new Error(`Validator permission ${holder.validatorPermId} not found on chain`)
+    return {
+      validatorPermActive: !validator.revoked && !validator.slashed,
+      vpSummaryDigest: holder.vpSummaryDigest,
     }
   }
 
