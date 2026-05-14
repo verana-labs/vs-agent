@@ -33,7 +33,7 @@ diff --git a/build/dids/WebVhDidRegistrar.mjs b/build/dids/WebVhDidRegistrar.mjs
  				keys
  			});
  			didRecord.metadata.set("log", log);
-+			didRecord.metadata.set("_internal/webVhUpdateKeyKmsKeyIds", { [publicKeyMultibase]: keyId });
++			didRecord.metadata.set("_internal/webvhUpdateKeyKmsKeyIds", { [publicKeyMultibase]: keyId });
  			didRecord.setTags({ domain: domainKey });
  			await didRepository.save(agentContext, didRecord);
  			return {
@@ -46,7 +46,7 @@ diff --git a/build/dids/WebVhDidRegistrar.mjs b/build/dids/WebVhDidRegistrar.mjs
 +			const activeUpdateKey = log[log.length - 1]?.parameters?.updateKeys?.[0] ?? log[0]?.parameters?.updateKeys?.[0];
 +			const vm = didRecord.didDocument?.verificationMethod?.find((v) => v.publicKeyMultibase === activeUpdateKey);
 +			let keyId = vm ? getKmsKeyIdForVerifiacationMethod(vm, didRecord.keys) : undefined;
-+			if (!keyId) keyId = didRecord.metadata.get("_internal/webVhUpdateKeyKmsKeyIds")?.[activeUpdateKey];
++			if (!keyId) keyId = didRecord.metadata.get("_internal/webvhUpdateKeyKmsKeyIds")?.[activeUpdateKey];
  			if (!keyId) return this.handleError("The key ID must be present before the log can be edited.");
  			const { controller, authentication, assertionMethod, keyAgreement, service: services, verificationMethod: inputVerificationMethod } = inputDidDocument;
  			const verificationMethods = inputVerificationMethod ?? log[log.length - 1].state.verificationMethod;
