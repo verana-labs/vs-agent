@@ -1,4 +1,4 @@
-import { DidCommDidExchangeState } from '@credo-ts/didcomm'
+import { DidCommDidExchangeRole, DidCommDidExchangeState, DidCommVersion } from '@credo-ts/didcomm'
 import { ApiProperty } from '@nestjs/swagger'
 
 /**
@@ -43,8 +43,12 @@ export class ConnectionDto {
   })
   state!: DidCommDidExchangeState
 
-  @ApiProperty({ description: 'Role in the DID exchange', example: 'invitee' })
-  role!: string
+  @ApiProperty({
+    enum: DidCommDidExchangeRole,
+    description: 'Role in the DID exchange',
+    example: DidCommDidExchangeRole.Responder,
+  })
+  role!: DidCommDidExchangeRole
 
   @ApiProperty({ description: 'Optional alias for this connection', example: 'Work Chat' })
   alias?: string
@@ -66,4 +70,25 @@ export class ConnectionDto {
     example: 'did:web:forwarded.example.com',
   })
   invitationDid?: string
+
+  @ApiProperty({
+    enum: ['v1', 'v2'],
+    description: 'DIDComm version negotiated for this connection',
+    required: false,
+  })
+  didcommVersion?: DidCommVersion
+
+  @ApiProperty({
+    type: [String],
+    description: "Prior values of our DID (this connection's `did`) after rotations",
+    required: false,
+  })
+  previousDids?: string[]
+
+  @ApiProperty({
+    type: [String],
+    description: "Prior values of the peer's DID (`theirDid`) after rotations they announced",
+    required: false,
+  })
+  previousTheirDids?: string[]
 }

@@ -1,5 +1,5 @@
 import { RecordNotFoundError } from '@credo-ts/core'
-import { DidCommDidExchangeState } from '@credo-ts/didcomm'
+import { DidCommDidExchangeRole, DidCommDidExchangeState, DidCommVersion } from '@credo-ts/didcomm'
 import {
   Controller,
   Delete,
@@ -59,9 +59,28 @@ export class ConnectionController {
     description: 'Filter by connection state',
     enum: Object.values(DidCommDidExchangeState),
   })
+  @ApiQuery({
+    name: 'role',
+    required: false,
+    description: 'Filter by DID exchange role',
+    enum: Object.values(DidCommDidExchangeRole),
+  })
   @ApiQuery({ name: 'did', required: false, type: String, description: 'Filter by my DID' })
   @ApiQuery({ name: 'theirDid', required: false, type: String, description: 'Filter by their DID' })
   @ApiQuery({ name: 'threadId', required: false, type: String, description: 'Filter by thread ID' })
+  @ApiQuery({
+    name: 'invitationDid',
+    required: false,
+    type: String,
+    description: 'Filter by invitation DID',
+  })
+  @ApiQuery({ name: 'mediatorId', required: false, type: String, description: 'Filter by mediator id' })
+  @ApiQuery({
+    name: 'didcommVersion',
+    required: false,
+    description: 'Filter by negotiated DIDComm version',
+    enum: ['v1', 'v2'],
+  })
   @ApiOkResponse({
     description: 'Array of connection records',
     schema: { type: 'array', items: { $ref: getSchemaPath(ConnectionDto) } },
@@ -69,9 +88,12 @@ export class ConnectionController {
   public async getAllConnections(
     @Query('outOfBandId') outOfBandId?: string,
     @Query('state') state?: DidCommDidExchangeState,
+    @Query('role') role?: DidCommDidExchangeRole,
     @Query('did') did?: string,
     @Query('theirDid') theirDid?: string,
     @Query('threadId') threadId?: string,
+    @Query('invitationDid') invitationDid?: string,
+    @Query('didcommVersion') didcommVersion?: DidCommVersion,
   ) {
     const agent = await this.agentService.getAgent()
 
@@ -80,7 +102,10 @@ export class ConnectionController {
       theirDid,
       threadId,
       state,
+      role,
       outOfBandId,
+      invitationDid,
+      didcommVersion,
     })
 
     return connections.map(record => ({
@@ -97,6 +122,10 @@ export class ConnectionController {
       imageUrl: record.imageUrl,
       outOfBandId: record.outOfBandId,
       invitationDid: record.invitationDid,
+      didcommVersion: record.didcommVersion,
+      mediatorId: record.mediatorId,
+      previousDids: record.previousDids,
+      previousTheirDids: record.previousTheirDids,
     }))
   }
 
