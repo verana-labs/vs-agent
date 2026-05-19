@@ -2,10 +2,12 @@ import {
   DidRecord,
   JsonObject,
   JsonTransformer,
+  Proof,
   utils,
   W3cCredential,
   W3cJsonLdVerifiableCredential,
 } from '@credo-ts/core'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { Logger, Inject, Injectable, HttpException, HttpStatus } from '@nestjs/common'
 import {
   CredentialIssuanceRequest,
@@ -293,6 +295,52 @@ export class TrustService {
           if (!uptStatusListResult.revocationStatusListState.revocationStatusList) {
             throw new Error(`Failed to update revocation status list`)
           }
+
+          const statusRegistration = (
+            uptStatusListResult.registrationMetadata as { attestedResource?: Record<string, unknown> }
+          )?.attestedResource
+          if (!statusRegistration) {
+            throw new Error('Revocation status list attestedResource missing from registration metadata')
+          }
+
+          const [revRegDefRecord] = await agent.genericRecords.findAllByQuery({
+            attestedResourceId: anoncredsRevocationRegistryDefinitionId,
+            type: 'AttestedResource',
+          })
+          if (!revRegDefRecord) {
+            throw new Error(
+              `Revocation registry definition record not found for ${anoncredsRevocationRegistryDefinitionId}`,
+            )
+          }
+
+          const existingLinks =
+            (revRegDefRecord.content as { links?: Array<Record<string, unknown>> }).links ?? []
+          const timestamp = uptStatusListResult.revocationStatusListState.revocationStatusList.timestamp
+
+          const registry = new WebVhAnonCredsRegistry()
+          const { registrationMetadata: updatedRevRegDefMetadata } =
+            await registry.updateRevocationRegistryDefinition(
+              agent.context,
+              revRegDefRecord.content as { proof?: Proof } & Record<string, object>,
+              {
+                links: [
+                  ...existingLinks,
+                  {
+                    id: statusRegistration.id as string,
+                    type: 'anonCredsStatusList',
+                    timestamp,
+                  },
+                ],
+              },
+            )
+
+          await this.credentialTypesService.saveAttestedResource(agent, statusRegistration, {
+            resourceType: 'anonCredsStatusList',
+          })
+
+          revRegDefRecord.content = updatedRevRegDefMetadata
+          await agent.genericRecords.update(revRegDefRecord)
+
           return {
             status: 200,
           }
