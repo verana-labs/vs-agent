@@ -1,7 +1,9 @@
 import {
+  AnonCredsNonRevokedInterval,
   AnonCredsProofRequestRestriction,
   AnonCredsRequestedAttribute,
   AnonCredsSchema,
+  dateToTimestamp,
 } from '@credo-ts/anoncreds'
 import { W3cCredential } from '@credo-ts/core'
 import { Controller, Get, Post, Body, Query, Inject, HttpException } from '@nestjs/common'
@@ -204,7 +206,14 @@ export class InvitationController {
   ): Promise<CreatePresentationRequestResult> {
     const agent = await this.agentService.getAgent()
 
-    const { requestedCredentials, ref, callbackUrl, useLegacyDid, didCommVersion } = options
+    const {
+      requestedCredentials,
+      ref,
+      callbackUrl,
+      useLegacyDid,
+      didCommVersion,
+      requireNonRevocation = true,
+    } = options
 
     if (!requestedCredentials?.length) {
       throw Error('You must specify a least a requested credential')
@@ -282,10 +291,21 @@ export class InvitationController {
       restrictions,
     }
 
+    let nonRevoked: AnonCredsNonRevokedInterval | undefined
+    if (requireNonRevocation) {
+      const now = dateToTimestamp(new Date())
+      nonRevoked = { from: now, to: now }
+    }
+
     const request = await agent.didcomm.proofs.createRequest({
       protocolVersion: 'v2',
       proofFormats: {
-        anoncreds: { name: 'proof-request', version: '1.0', requested_attributes: requestedAttributes },
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: requestedAttributes,
+          non_revoked: nonRevoked,
+        },
       },
     })
 

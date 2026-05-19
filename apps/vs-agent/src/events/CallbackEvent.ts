@@ -19,9 +19,10 @@ export const sendPresentationCallbackEvent = async (options: {
   status: PresentationStatus
   ref?: string
   claims?: Claim[]
+  verified?: boolean
   logger: BaseLogger
 }) => {
-  const { callbackUrl, ref, claims, logger, status, proofExchangeId } = options
+  const { callbackUrl, ref, claims, verified, logger, status, proofExchangeId } = options
   try {
     logger.debug(`sending presentation callback event to ${callbackUrl}: ${JSON.stringify(options)}`)
     await fetch(callbackUrl, {
@@ -30,6 +31,7 @@ export const sendPresentationCallbackEvent = async (options: {
         ref,
         claims,
         status,
+        verified,
         proofExchangeId,
       }),
       headers: { 'Content-Type': 'application/json' },
