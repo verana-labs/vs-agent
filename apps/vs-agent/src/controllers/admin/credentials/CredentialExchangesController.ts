@@ -1,6 +1,5 @@
 import { DidCommCredentialExchangeRecord } from '@credo-ts/didcomm'
 import {
-  BadRequestException,
   Controller,
   Get,
   InternalServerErrorException,
@@ -16,6 +15,7 @@ import {
   ApiNotFoundResponse,
 } from '@nestjs/swagger'
 import { Claim } from '@verana-labs/vs-agent-model'
+import { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
 
@@ -48,9 +48,20 @@ export class CredentialExchangesController {
     isArray: true,
   })
   public async getAll(): Promise<CredentialExchangeDataDto[]> {
-    const agent = await this.agentService.getAgent()
-    const records = await agent.didcomm.credentials.getAll()
-    return Promise.all(records.map(record => this.toDto(record)))
+    try {
+      const agent = await this.agentService.getAgent()
+      const records = await agent.didcomm.credentials.getAll()
+      const results = await Promise.allSettled(records.map(record => this.toDto(agent, record)))
+      return results.flatMap((result, index) => {
+        if (result.status === 'fulfilled') return [result.value]
+        this.logger.warn(
+          `Skipping credential exchange ${records[index].id}: ${JSON.stringify(result.reason)}`,
+        )
+        return []
+      })
+    } catch (error) {
+      throw new InternalServerErrorException(error)
+    }
   }
 
   @Get('/:credentialExchangeId')
@@ -61,10 +72,6 @@ export class CredentialExchangesController {
   public async getById(
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<CredentialExchangeDataDto> {
-    if (!credentialExchangeId) {
-      throw new BadRequestException({ reason: 'credentialExchangeId is required' })
-    }
-
     const agent = await this.agentService.getAgent()
     const record = await agent.didcomm.credentials.findById(credentialExchangeId)
     if (!record) {
@@ -74,14 +81,16 @@ export class CredentialExchangesController {
     }
 
     try {
-      return await this.toDto(record)
+      return await this.toDto(agent, record)
     } catch (error) {
       throw new InternalServerErrorException(error)
     }
   }
 
-  private async toDto(agent: VSAgent, record: DidCommCredentialExchangeRecord): Promise<CredentialExchangeDataDto> {
-    const agent = await this.agentService.getAgent()
+  private async toDto(
+    agent: VsAgent<BaseAgentModules>,
+    record: DidCommCredentialExchangeRecord,
+  ): Promise<CredentialExchangeDataDto> {
     const anonCredsMetadata = record.metadata.get('_internal/anonCredsCredentialDefinitionMetadata') as
       | AnonCredsCredentialMetadata
       | undefined
