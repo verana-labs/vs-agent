@@ -95,7 +95,7 @@ export class CredentialExchangesController {
         )
       }
     } catch (error) {
-      this.logger.debug(`Could not load format data for ${record.id}: ${error}`)
+      this.logger.debug(`Could not load format data for ${record.id}: ${JSON.stringify(error)}`)
     }
 
     return {
