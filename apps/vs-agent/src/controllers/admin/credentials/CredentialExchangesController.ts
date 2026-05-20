@@ -80,7 +80,7 @@ export class CredentialExchangesController {
     }
   }
 
-  private async toDto(record: DidCommCredentialExchangeRecord): Promise<CredentialExchangeDataDto> {
+  private async toDto(agent: VSAgent, record: DidCommCredentialExchangeRecord): Promise<CredentialExchangeDataDto> {
     const agent = await this.agentService.getAgent()
     const anonCredsMetadata = record.metadata.get('_internal/anonCredsCredentialDefinitionMetadata') as
       | AnonCredsCredentialMetadata
