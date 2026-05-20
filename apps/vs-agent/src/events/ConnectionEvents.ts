@@ -9,9 +9,6 @@ import {
   DidCommDidExchangeState,
   DidCommDiscoverFeaturesDisclosureReceivedEvent,
   DidCommDiscoverFeaturesEventTypes,
-  DidCommEventTypes,
-  DidCommHangupMessage,
-  DidCommMessageProcessedEvent,
 } from '@credo-ts/didcomm'
 import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
 import { sendWebhookEvent } from '@verana-labs/vs-agent-sdk'
@@ -91,34 +88,12 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
     },
   )
 
-  // When a hangup message is received for a given connection, it will be effectively terminated. VS Agent controller
-  // will be notified about this 'termination' status
-  agent.events.on(
-    DidCommEventTypes.DidCommMessageProcessed,
-    async ({ payload }: DidCommMessageProcessedEvent) => {
-      const { message, connection } = payload
-
-      if (message.type === DidCommHangupMessage.type.messageTypeUri && connection) {
-        const body = new ConnectionStateUpdated({
-          connectionId: connection.id,
-          invitationId: connection.outOfBandId,
-          state: 'terminated',
-        })
-
-        await sendWebhookEvent(config.webhookUrl + '/connection-state-updated', body, config.logger)
-      }
-    },
-  )
-
   agent.events.on(
     DidCommConnectionEventTypes.DidCommConnectionDidRotated,
     async ({ payload }: DidCommConnectionDidRotatedEvent) => {
       const record = payload.connectionRecord
-      const isV2TerminationByPeer =
-        record.didcommVersion === 'v2' &&
-        record.theirDid === undefined &&
-        (record.previousTheirDids?.length ?? 0) > 0
-      if (!isV2TerminationByPeer) return
+      const isTerminationByPeer = record.theirDid === undefined && (record.previousTheirDids?.length ?? 0) > 0
+      if (!isTerminationByPeer) return
 
       const body = new ConnectionStateUpdated({
         connectionId: record.id,
