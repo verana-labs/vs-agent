@@ -2,15 +2,13 @@ import type { ServerConfig } from '../utils'
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
+  DidCommConnectionDidRotatedEvent,
   DidCommConnectionEventTypes,
   DidCommConnectionRepository,
   DidCommConnectionStateChangedEvent,
   DidCommDidExchangeState,
   DidCommDiscoverFeaturesDisclosureReceivedEvent,
   DidCommDiscoverFeaturesEventTypes,
-  DidCommEventTypes,
-  DidCommHangupMessage,
-  DidCommMessageProcessedEvent,
 } from '@credo-ts/didcomm'
 import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
 import { sendWebhookEvent } from '@verana-labs/vs-agent-sdk'
@@ -90,22 +88,20 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
     },
   )
 
-  // When a hangup message is received for a given connection, it will be effectively terminated. VS Agent controller
-  // will be notified about this 'termination' status
   agent.events.on(
-    DidCommEventTypes.DidCommMessageProcessed,
-    async ({ payload }: DidCommMessageProcessedEvent) => {
-      const { message, connection } = payload
+    DidCommConnectionEventTypes.DidCommConnectionDidRotated,
+    async ({ payload }: DidCommConnectionDidRotatedEvent) => {
+      const record = payload.connectionRecord
+      const isTerminationByPeer = record.theirDid === undefined && (record.previousTheirDids?.length ?? 0) > 0
+      if (!isTerminationByPeer) return
 
-      if (message.type === DidCommHangupMessage.type.messageTypeUri && connection) {
-        const body = new ConnectionStateUpdated({
-          connectionId: connection.id,
-          invitationId: connection.outOfBandId,
-          state: 'terminated',
-        })
+      const body = new ConnectionStateUpdated({
+        connectionId: record.id,
+        invitationId: record.outOfBandId,
+        state: 'terminated',
+      })
 
-        await sendWebhookEvent(config.webhookUrl + '/connection-state-updated', body, config.logger)
-      }
+      await sendWebhookEvent(config.webhookUrl + '/connection-state-updated', body, config.logger)
     },
   )
 
