@@ -2,12 +2,10 @@ import {
   DidRecord,
   JsonObject,
   JsonTransformer,
-  Proof,
   utils,
   W3cCredential,
   W3cJsonLdVerifiableCredential,
 } from '@credo-ts/core'
-import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { Logger, Inject, Injectable, HttpException, HttpStatus } from '@nestjs/common'
 import {
   CredentialIssuanceRequest,
@@ -313,33 +311,12 @@ export class TrustService {
             )
           }
 
-          const existingLinks =
-            (revRegDefRecord.content as { links?: Array<Record<string, unknown>> }).links ?? []
-          const timestamp = uptStatusListResult.revocationStatusListState.revocationStatusList.timestamp
-
-          const registry = new WebVhAnonCredsRegistry()
-          const { registrationMetadata: updatedRevRegDefMetadata } =
-            await registry.updateRevocationRegistryDefinition(
-              agent.context,
-              revRegDefRecord.content as { proof?: Proof } & Record<string, object>,
-              {
-                links: [
-                  ...existingLinks,
-                  {
-                    id: statusRegistration.id as string,
-                    type: 'anonCredsStatusList',
-                    timestamp,
-                  },
-                ],
-              },
-            )
-
-          await this.credentialTypesService.saveAttestedResource(agent, statusRegistration, {
-            resourceType: 'anonCredsStatusList',
-          })
-
-          revRegDefRecord.content = updatedRevRegDefMetadata
-          await agent.genericRecords.update(revRegDefRecord)
+          await this.credentialTypesService.appendStatusListToRevocationRegistry(
+            agent,
+            revRegDefRecord,
+            statusRegistration,
+            uptStatusListResult.revocationStatusListState.revocationStatusList.timestamp,
+          )
 
           return {
             status: 200,

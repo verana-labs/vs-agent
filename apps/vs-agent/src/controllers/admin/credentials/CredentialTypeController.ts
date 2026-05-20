@@ -11,8 +11,7 @@ import {
   AnonCredsSchemaRecord,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
-import { Proof, utils } from '@credo-ts/core'
-import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
+import { utils } from '@credo-ts/core'
 import {
   BadRequestException,
   Body,
@@ -582,27 +581,12 @@ export class CredentialTypesController {
 
       // Update revocation definition with revocation status list and registration metadata
       if (statusRegistration && revocationRecord) {
-        const timestamp = revocationStatusListState.revocationStatusList.timestamp
-        const registry = new WebVhAnonCredsRegistry()
-        const { registrationMetadata } = await registry.updateRevocationRegistryDefinition(
-          agent.context,
-          revocationRegistration as { proof?: Proof } & Record<string, object>,
-          {
-            links: [
-              {
-                id: statusRegistration.id as string,
-                type: 'anonCredsStatusList',
-                timestamp,
-              },
-            ],
-          },
+        await this.service.appendStatusListToRevocationRegistry(
+          agent,
+          revocationRecord,
+          statusRegistration,
+          revocationStatusListState.revocationStatusList.timestamp,
         )
-        await this.service.saveAttestedResource(agent, statusRegistration, {
-          resourceType: 'anonCredsStatusList',
-        })
-
-        revocationRecord.content = registrationMetadata
-        await agent.genericRecords.update(revocationRecord)
       }
 
       revocationDefinitionRecord.metadata.set('revStatusList', revocationStatusListState.revocationStatusList)
