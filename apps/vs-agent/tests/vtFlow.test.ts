@@ -1,5 +1,7 @@
+import type { ServerConfig } from '../src/utils'
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
+import { LogLevel } from '@credo-ts/core'
 import { DidCommConnectionRecord, DidCommHandshakeProtocol } from '@credo-ts/didcomm'
 import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { Subject } from 'rxjs'
@@ -138,6 +140,76 @@ describe('vt-flow: two-agent integration', () => {
     // Distinct records on each side, same thread.
     expect(validatorRecord?.id).not.toBe(applicantRecord.id)
   })
+
+  it('vtFlowEvents POSTs vt-flow-state-updated as the Validator transitions to VALIDATING', async () => {
+    const webhookUrl = 'http://localhost:5005'
+    // Imported lazily: pulling these (and their @credo-ts/askar dependency) at
+    // module load disturbs the askar-nodejs native binding initialisation order.
+    const { vtFlowEvents } = await import('../src/events/VtFlowEvents')
+    const { TsLogger } = await import('../src/utils/logger')
+
+    // Answer the webhook POSTs locally so nothing reaches the network: the flow
+    // keeps transitioning (VALIDATING -> VALIDATED) after our assertion and would
+    // otherwise leave dangling real fetches to webhookUrl. Other URLs (DID/witness
+    // resolution) still fall through to the global-setup mock.
+    const baseFetch = global.fetch
+    const fetchSpy = vi.fn((...args: Parameters<typeof fetch>) => {
+      const [input] = args
+      const url = typeof input === 'string' ? input : ((input as { url?: string })?.url ?? String(input))
+      if (url.startsWith(webhookUrl)) return Promise.resolve(new Response(null, { status: 200 }))
+      return (baseFetch as typeof fetch)(...args)
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    try {
+      const conf: ServerConfig = {
+        port: 3000,
+        logger: new TsLogger(LogLevel.Off, validator.label),
+        publicApiBaseUrl: 'https://validator',
+        webhookUrl,
+        endpoints: validator.didcomm.config.endpoints,
+      }
+      await vtFlowEvents(validator, conf)
+
+      await applicant.modules.vtFlow.sendIssuanceRequest({
+        connectionId: applicantConnection.id,
+        schemaId: 'https://example.test/schemas/organization.json',
+        agentPermId: 'agent-perm-4',
+        walletAgentPermId: 'wallet-agent-perm-4',
+        claims: { name: 'Acme', country: 'CH' },
+      })
+
+      const validatingCall = await vi.waitFor(
+        () => {
+          const call = fetchSpy.mock.calls.find(([, init]) => {
+            const parsed = JSON.parse((init as RequestInit).body as string)
+            return parsed.state === VtFlowState.Validating
+          })
+          expect(call).toBeDefined()
+          return call!
+        },
+        { timeout: 10_000, interval: 50 },
+      )
+
+      const [url, init] = validatingCall
+      expect(url).toBe(`${webhookUrl}/vt-flow-state-updated`)
+      expect((init as RequestInit).method).toBe('POST')
+
+      const body = JSON.parse((init as RequestInit).body as string)
+      expect(body.type).toBe('vt-flow-state-updated')
+      expect(body.state).toBe(VtFlowState.Validating)
+      expect(body.role).toBe(VtFlowRole.Validator)
+      expect(body.variant).toBe(VtFlowVariant.DirectIssuance)
+      expect(body.connectionId).toBeDefined()
+      expect(body.threadId).toBeDefined()
+      expect(body.sessionUuid).toBeDefined()
+      expect(body.vtFlowRecordId).toBeDefined()
+      expect(body.schemaId).toBe('https://example.test/schemas/organization.json')
+      expect(body.claims).toEqual({ name: 'Acme', country: 'CH' })
+    } finally {
+      vi.stubGlobal('fetch', baseFetch)
+    }
+  }, 30_000)
 })
 
 async function makeConnection(
