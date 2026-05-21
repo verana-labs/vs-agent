@@ -65,6 +65,7 @@ import {
   VERANA_CHAIN_ID,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
+import { vtFlowEvents } from './events/VtFlowEvents'
 import { MessagingPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { commonAppConfig, type ServerConfig, setupAgent, TsLogger } from './utils'
@@ -264,6 +265,7 @@ const run = async () => {
 
   // Register base events (always active)
   connectionEvents(agent as any, conf)
+  vtFlowEvents(agent as any, conf)
 
   // Register plugin events after agent is initialized
   for (const plugin of nestPlugins) {
