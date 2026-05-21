@@ -22,9 +22,10 @@ import { vi } from 'vitest'
 
 import { VsAgentModule } from '../../src/admin.module'
 import { baseMessageEvents } from '../../src/events/BaseMessageEvents'
+import { webhookEvent } from '../../src/events/webhookEvent'
 import { MessagingPlugin } from '../../src/plugins/MessagingPlugin'
 import { PublicModule } from '../../src/public.module'
-import { ServerConfig, TsLogger, webhookEvent } from '../../src/utils'
+import { ServerConfig, TsLogger } from '../../src/utils'
 
 export async function makeConnection(agentA: VsAgent<BaseAgentModules>, agentB: VsAgent<BaseAgentModules>) {
   const agentAOutOfBand = await agentA.didcomm.oob.createInvitation({

@@ -66,9 +66,10 @@ import {
   VERANA_CHAIN_ID,
 } from './config'
 import { connectionEvents } from './events/ConnectionEvents'
+import { webhookEvent } from './events/webhookEvent'
 import { MessagingPlugin } from './plugins'
 import { PublicModule } from './public.module'
-import { commonAppConfig, webhookEvent, type ServerConfig, setupAgent, TsLogger } from './utils'
+import { commonAppConfig, type ServerConfig, setupAgent, TsLogger } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
