@@ -1,0 +1,37 @@
+import type { ServerConfig } from '../utils'
+import type { VsAgent } from '@verana-labs/vs-agent-sdk'
+
+import {
+  VtFlowEventTypes,
+  type VtFlowRecord,
+  type VtFlowStateChangedEvent,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { EventType, VtFlowStateUpdated } from '@verana-labs/vs-agent-model'
+import { sendWebhookEvent } from '@verana-labs/vs-agent-sdk'
+
+export const vtFlowEvents = async (agent: VsAgent<any>, config: ServerConfig) => {
+  if (!agent.modules?.vtFlow || !config.webhookUrl) return
+
+  agent.events.on(VtFlowEventTypes.VtFlowStateChanged, async ({ payload }: VtFlowStateChangedEvent) => {
+    const record: VtFlowRecord | null = await agent.modules.vtFlow.findById(payload.vtFlowRecordId)
+    if (!record) return
+
+    const body = new VtFlowStateUpdated({
+      vtFlowRecordId: payload.vtFlowRecordId,
+      threadId: payload.threadId,
+      sessionUuid: payload.sessionUuid,
+      connectionId: record.connectionId,
+      role: record.role,
+      variant: record.variant,
+      state: payload.state,
+      previousState: payload.previousState,
+      permId: record.permId,
+      schemaId: record.schemaId,
+      claims: record.claims,
+      credentialExchangeRecordId: record.credentialExchangeRecordId,
+      timestamp: record.updatedAt,
+    })
+
+    await sendWebhookEvent(config.webhookUrl + '/' + EventType.VtFlowStateUpdated, body, config.logger)
+  })
+}
