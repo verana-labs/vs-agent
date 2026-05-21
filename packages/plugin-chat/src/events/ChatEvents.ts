@@ -48,7 +48,7 @@ import {
   ReactionMessage,
   TextMessage,
 } from '@verana-labs/vs-agent-model'
-import { getRecordId, sendMessageReceivedEvent, sendWebhookEvent, VsAgent } from '@verana-labs/vs-agent-sdk'
+import { getRecordId, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { createDataUrl } from '../utils/parsers'
 
@@ -88,7 +88,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
         })
 
         if (msg.threadId) msg.threadId = await getRecordId(agent, msg.threadId)
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        await config.events.emit(msg)
       }
 
       // Action Menu protocol messages
@@ -99,7 +99,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        await config.events.emit(msg)
       }
 
       if (message.type === PerformMessage.type.messageTypeUri) {
@@ -110,7 +110,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        await config.events.emit(msg)
       }
 
       // Question Answer protocol messages
@@ -136,7 +136,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           id: message.id,
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        await config.events.emit(msg)
       }
 
       if (message.type === CallOfferMessage.type.messageTypeUri) {
@@ -152,7 +152,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        await config.events.emit(msg)
       }
 
       if (message.type === CallEndMessage.type.messageTypeUri) {
@@ -164,7 +164,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        await config.events.emit(msg)
       }
 
       if (message.type === CallAcceptMessage.type.messageTypeUri) {
@@ -177,7 +177,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        await config.events.emit(msg)
       }
 
       if (message.type === CallRejectMessage.type.messageTypeUri) {
@@ -189,7 +189,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        await config.events.emit(msg)
       }
     },
   )
@@ -234,7 +234,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           })
 
           if (message.threadId) message.threadId = await getRecordId(agent, message.threadId)
-          await sendMessageReceivedEvent(message, message.timestamp, config)
+          await config.events.emit(message)
         }
       }
     },
@@ -276,7 +276,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
         })),
       })
 
-      await sendMessageReceivedEvent(msg, msg.timestamp, config)
+      await config.events.emit(msg)
     },
   )
 
@@ -315,7 +315,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
         preferredLanguage,
       })
 
-      await sendMessageReceivedEvent(msg, msg.timestamp, config)
+      await config.events.emit(msg)
     },
   )
 }
@@ -335,5 +335,5 @@ const sendMessageStateUpdatedEvent = async (options: {
     timestamp,
     connectionId,
   })
-  await sendWebhookEvent(config.webhookUrl + '/message-state-updated', body, config.logger)
+  await config.events.emit(body)
 }

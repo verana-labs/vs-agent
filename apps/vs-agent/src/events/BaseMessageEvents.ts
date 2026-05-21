@@ -17,7 +17,7 @@ import {
   IdentityProofSubmitMessage,
   VerifiableCredentialSubmittedProofItem,
 } from '@verana-labs/vs-agent-model'
-import { getRecordId, sendMessageReceivedEvent, VsAgent } from '@verana-labs/vs-agent-sdk'
+import { getRecordId, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
 
@@ -78,7 +78,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
             })
           }
 
-          await sendMessageReceivedEvent(msg, msg.timestamp, config)
+          await config.events.emit(msg)
         } catch (error) {
           config.logger.error(`Error processing presentation problem report: ${error}`)
         }
@@ -152,7 +152,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
             timestamp: record.updatedAt,
           })
 
-          await sendMessageReceivedEvent(msg, msg.timestamp, config)
+          await config.events.emit(msg)
         } catch (error) {
           config.logger.error(`Error processing presentation message: ${error}`)
         }
@@ -185,7 +185,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
         })
 
         if (message.threadId) message.threadId = await getRecordId(agent, message.threadId)
-        await sendMessageReceivedEvent(message, message.timestamp, config)
+        await config.events.emit(message)
       } else if (
         [
           DidCommCredentialState.Declined,
@@ -202,7 +202,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
               ? DidCommCredentialState.Declined
               : record.state,
         })
-        await sendMessageReceivedEvent(message, message.timestamp, config)
+        await config.events.emit(message)
       }
     },
   )

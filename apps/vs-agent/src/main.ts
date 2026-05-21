@@ -4,6 +4,7 @@ import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import {
+  EventEmitter,
   HttpInboundTransport,
   setupSelfTr,
   VsAgent,
@@ -67,7 +68,7 @@ import {
 import { connectionEvents } from './events/ConnectionEvents'
 import { MessagingPlugin } from './plugins'
 import { PublicModule } from './public.module'
-import { commonAppConfig, type ServerConfig, setupAgent, TsLogger } from './utils'
+import { commonAppConfig, webhookEvent, type ServerConfig, setupAgent, TsLogger } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
@@ -231,7 +232,7 @@ const run = async () => {
     port: ADMIN_PORT,
     cors: USE_CORS,
     logger: serverLogger,
-    webhookUrl: EVENTS_BASE_URL,
+    events: new EventEmitter(webhookEvent(EVENTS_BASE_URL, serverLogger)),
     publicApiBaseUrl,
     discoveryOptions,
     endpoints,

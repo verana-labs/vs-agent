@@ -11,7 +11,6 @@ import {
   DidCommDiscoverFeaturesEventTypes,
 } from '@credo-ts/didcomm'
 import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
-import { sendWebhookEvent } from '@verana-labs/vs-agent-sdk'
 
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
 
@@ -84,7 +83,7 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
         metadata: config.discoveryOptions ? {} : undefined,
       })
 
-      await sendWebhookEvent(config.webhookUrl + '/connection-state-updated', body, config.logger)
+      await config.events.emit(body)
     },
   )
 
@@ -101,7 +100,7 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
         state: 'terminated',
       })
 
-      await sendWebhookEvent(config.webhookUrl + '/connection-state-updated', body, config.logger)
+      await config.events.emit(body)
     },
   )
 
@@ -131,7 +130,7 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
         metadata,
       })
 
-      await sendWebhookEvent(config.webhookUrl + '/connection-state-updated', body, config.logger)
+      await config.events.emit(body)
     },
   )
 

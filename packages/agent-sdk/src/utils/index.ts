@@ -1,3 +1,4 @@
+export * from './EventEmitter'
 export * from './agent'
 export * from './data'
 export * from './setupSelfTr'

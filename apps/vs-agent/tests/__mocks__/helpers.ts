@@ -17,13 +17,14 @@ import {
   type VtFlowStateChangedEvent,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { chatEvents, ChatPlugin } from '@verana-labs/vs-agent-plugin-chat'
+import { EventEmitter } from '@verana-labs/vs-agent-sdk'
 import { vi } from 'vitest'
 
 import { VsAgentModule } from '../../src/admin.module'
 import { baseMessageEvents } from '../../src/events/BaseMessageEvents'
 import { MessagingPlugin } from '../../src/plugins/MessagingPlugin'
 import { PublicModule } from '../../src/public.module'
-import { ServerConfig, TsLogger } from '../../src/utils'
+import { ServerConfig, TsLogger, webhookEvent } from '../../src/utils'
 
 export async function makeConnection(agentA: VsAgent<BaseAgentModules>, agentB: VsAgent<BaseAgentModules>) {
   const agentAOutOfBand = await agentA.didcomm.oob.createInvitation({
@@ -123,11 +124,12 @@ export const startServersTesting = async (agent: VsAgent<BaseAgentModules>): Pro
   const app = moduleRef.createNestApplication()
   await app.init()
 
+  const logger = new TsLogger(LogLevel.Off, agent.label)
   const conf: ServerConfig = {
     port: 3000,
-    logger: new TsLogger(LogLevel.Off, agent.label),
+    logger,
     publicApiBaseUrl: 'http://localhost:3001',
-    webhookUrl: 'http://localhost:5000',
+    events: new EventEmitter(webhookEvent('http://localhost:5000', logger)),
     endpoints: agent.didcomm.config.endpoints,
   }
   baseMessageEvents(agent, conf)
