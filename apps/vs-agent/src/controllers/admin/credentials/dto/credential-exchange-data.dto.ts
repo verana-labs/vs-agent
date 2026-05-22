@@ -54,7 +54,7 @@ export class CredentialExchangeDataDto {
   })
   @IsOptional()
   @IsArray()
-  offerAttributes?: Claim[]
+  claims?: Claim[]
 
   @ApiProperty({
     description: 'Error message recorded on the exchange (set when state is abandoned/declined)',
