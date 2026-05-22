@@ -77,6 +77,3 @@ export type {
 
 export { VtFlowModule } from './VtFlowModule'
 export { VtFlowApi } from './VtFlowApi'
-
-export { setupVtFlow } from './setupVtFlow'
-export type { VtFlowSetup } from './setupVtFlow'

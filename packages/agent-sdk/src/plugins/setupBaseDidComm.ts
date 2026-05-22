@@ -21,6 +21,7 @@ import {
 import { WebVhAnonCredsRegistry, WebVhDidRegistrar, WebVhDidResolver } from '@credo-ts/webvh'
 import { anoncreds } from '@hyperledger/anoncreds-nodejs'
 import { askar } from '@openwallet-foundation/askar-nodejs'
+import { VtFlowModule, VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { DidWebAnonCredsRegistry } from 'credo-ts-didweb-anoncreds'
 
 import { BaseAgentModules } from '../agent/VsAgent'
@@ -34,6 +35,7 @@ export interface BaseDidCommPluginOptions {
   walletConfig: AskarModuleConfigStoreOptions
   publicApiBaseUrl: string
   endpoints: string[]
+  vtFlow?: VtFlowModuleConfigOptions
   didcommVersions?: DidCommVersion[]
 }
 
@@ -110,6 +112,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
       w3cCredentials: new W3cCredentialsModule({
         documentLoader: defaultDocumentLoader,
       }),
+      vtFlow: new VtFlowModule(options.vtFlow),
     },
   }
 }

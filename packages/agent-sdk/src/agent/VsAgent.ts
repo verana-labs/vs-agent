@@ -34,6 +34,7 @@ import {
   DidCommProofsModuleConfigOptions,
   DidCommProofV2Protocol,
 } from '@credo-ts/didcomm'
+import { VtFlowModule } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { VeranaChainService } from '../blockchain/VeranaChainService'
@@ -66,6 +67,7 @@ export type BaseAgentModules = {
   dids: DidsModule
   w3cCredentials: W3cCredentialsModule
   didcomm: VsAgentDidCommModule
+  vtFlow: VtFlowModule
 }
 
 interface AgentOptions<TModules extends BaseAgentModules> {
