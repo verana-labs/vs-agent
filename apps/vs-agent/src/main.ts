@@ -264,8 +264,8 @@ const run = async () => {
     })
 
   // Register base events (always active)
-  connectionEvents(agent as any, conf)
-  vtFlowEvents(agent as any, conf)
+  connectionEvents(agent, conf)
+  vtFlowEvents(agent, conf)
 
   // Register plugin events after agent is initialized
   for (const plugin of nestPlugins) {

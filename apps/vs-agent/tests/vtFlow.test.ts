@@ -143,15 +143,9 @@ describe('vt-flow: two-agent integration', () => {
 
   it('vtFlowEvents POSTs vt-flow-state-updated as the Validator transitions to VALIDATING', async () => {
     const webhookUrl = 'http://localhost:5005'
-    // Imported lazily: pulling these (and their @credo-ts/askar dependency) at
-    // module load disturbs the askar-nodejs native binding initialisation order.
     const { vtFlowEvents } = await import('../src/events/VtFlowEvents')
     const { TsLogger } = await import('../src/utils/logger')
 
-    // Answer the webhook POSTs locally so nothing reaches the network: the flow
-    // keeps transitioning (VALIDATING -> VALIDATED) after our assertion and would
-    // otherwise leave dangling real fetches to webhookUrl. Other URLs (DID/witness
-    // resolution) still fall through to the global-setup mock.
     const baseFetch = global.fetch
     const fetchSpy = vi.fn((...args: Parameters<typeof fetch>) => {
       const [input] = args
