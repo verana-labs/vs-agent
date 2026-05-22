@@ -552,7 +552,7 @@ export class CredentialTypesController {
       )
 
       // save registration metadata for webvh
-      const revocationRecord = await this.service.saveAttestedResource(agent, revocationRegistration, {
+      await this.service.saveAttestedResource(agent, revocationRegistration, {
         resourceType: 'anonCredsRevocRegDef',
       })
 
@@ -580,10 +580,10 @@ export class CredentialTypesController {
         )
 
       // Update revocation definition with revocation status list and registration metadata
-      if (statusRegistration && revocationRecord) {
+      if (statusRegistration) {
         await this.service.appendStatusListToRevocationRegistry(
           agent,
-          revocationRecord,
+          revocationRegistryDefinitionId,
           statusRegistration,
           revocationStatusListState.revocationStatusList.timestamp,
         )

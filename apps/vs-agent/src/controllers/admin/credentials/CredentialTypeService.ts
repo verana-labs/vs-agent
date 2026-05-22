@@ -5,7 +5,7 @@ import {
   AnonCredsSchema,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
-import { GenericRecord, JsonObject, parseDid, Proof, TagsBase, utils, W3cCredential } from '@credo-ts/core'
+import { JsonObject, parseDid, Proof, TagsBase, utils, W3cCredential } from '@credo-ts/core'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
@@ -75,17 +75,24 @@ export class CredentialTypesService {
   }
 
   /**
-   * Append a new status-list attestedResource to a revocation-registry-definition record:
-   * recomputes the rev-reg-def content with the appended link via WebVhAnonCredsRegistry,
-   * persists the status list, and updates the rev-reg-def record in place. Used by both
-   * the credDef creation flow (initial status list) and the revoke flow (new status list).
+   * Append a new status-list attestedResource to the rev-reg-def's links[] and persist
+   * the status list. Looks up the rev-reg-def AttestedResource by id, throws if missing.
+   * Used by both the credDef creation flow (first status list) and the revoke flow.
    */
   public async appendStatusListToRevocationRegistry(
     agent: VsAgent,
-    revRegDefRecord: GenericRecord,
+    revocationRegistryDefinitionId: string,
     statusRegistration: Record<string, unknown>,
     timestamp: number | undefined,
   ) {
+    const [revRegDefRecord] = await agent.genericRecords.findAllByQuery({
+      attestedResourceId: revocationRegistryDefinitionId,
+      type: 'AttestedResource',
+    })
+    if (!revRegDefRecord) {
+      throw new Error(`Revocation registry definition record not found for ${revocationRegistryDefinitionId}`)
+    }
+
     const existingLinks = (revRegDefRecord.content as { links?: Array<Record<string, unknown>> }).links ?? []
 
     const registry = new WebVhAnonCredsRegistry()

@@ -301,19 +301,9 @@ export class TrustService {
             throw new Error('Revocation status list attestedResource missing from registration metadata')
           }
 
-          const [revRegDefRecord] = await agent.genericRecords.findAllByQuery({
-            attestedResourceId: anoncredsRevocationRegistryDefinitionId,
-            type: 'AttestedResource',
-          })
-          if (!revRegDefRecord) {
-            throw new Error(
-              `Revocation registry definition record not found for ${anoncredsRevocationRegistryDefinitionId}`,
-            )
-          }
-
           await this.credentialTypesService.appendStatusListToRevocationRegistry(
             agent,
-            revRegDefRecord,
+            anoncredsRevocationRegistryDefinitionId,
             statusRegistration,
             uptStatusListResult.revocationStatusListState.revocationStatusList.timestamp,
           )
