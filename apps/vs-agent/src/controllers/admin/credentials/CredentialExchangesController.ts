@@ -28,7 +28,7 @@ interface AnonCredsCredentialMetadata {
 
 @ApiTags('credentials')
 @Controller({
-  path: 'credentials',
+  path: 'credential-exchanges',
   version: '1',
 })
 export class CredentialExchangesController {
