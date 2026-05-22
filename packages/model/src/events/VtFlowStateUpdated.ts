@@ -17,6 +17,10 @@ export interface VtFlowStateUpdatedOptions {
   schemaId?: string
   claims?: Record<string, unknown>
   credentialExchangeRecordId?: string
+  errorMessage?: string
+  subprotocolThid?: string
+  agentPermId?: string
+  walletAgentPermId?: string
   timestamp?: Date
 }
 
@@ -37,6 +41,10 @@ export class VtFlowStateUpdated extends Event {
       this.schemaId = options.schemaId
       this.claims = options.claims
       this.credentialExchangeRecordId = options.credentialExchangeRecordId
+      this.errorMessage = options.errorMessage
+      this.subprotocolThid = options.subprotocolThid
+      this.agentPermId = options.agentPermId
+      this.walletAgentPermId = options.walletAgentPermId
       this.timestamp = options.timestamp ?? new Date()
     }
   }
@@ -96,4 +104,24 @@ export class VtFlowStateUpdated extends Event {
   @IsOptional()
   @IsString()
   public credentialExchangeRecordId?: string
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  public errorMessage?: string
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  public subprotocolThid?: string
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  public agentPermId?: string
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  public walletAgentPermId?: string
 }

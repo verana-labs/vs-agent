@@ -23,6 +23,10 @@ export const vtFlowEvents = async (agent: VsAgent, config: ServerConfig) => {
       schemaId: record.schemaId,
       claims: record.claims,
       credentialExchangeRecordId: record.credentialExchangeRecordId,
+      errorMessage: record.errorMessage,
+      subprotocolThid: record.subprotocolThid,
+      agentPermId: record.agentPermId,
+      walletAgentPermId: record.walletAgentPermId,
       timestamp: record.updatedAt,
     })
 
