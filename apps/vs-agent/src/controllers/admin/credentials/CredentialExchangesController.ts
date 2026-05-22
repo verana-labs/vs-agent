@@ -26,7 +26,7 @@ interface AnonCredsCredentialMetadata {
   schemaId?: string
 }
 
-@ApiTags('credentials')
+@ApiTags('credential-exchanges')
 @Controller({
   path: 'credential-exchanges',
   version: '1',
