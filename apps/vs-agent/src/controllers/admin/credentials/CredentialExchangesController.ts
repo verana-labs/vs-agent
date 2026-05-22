@@ -87,7 +87,7 @@ export class CredentialExchangesController {
     }
   }
 
-  private async toDto(
+  private async getCredentialExchangeData(
     agent: VsAgent<BaseAgentModules>,
     record: DidCommCredentialExchangeRecord,
   ): Promise<CredentialExchangeDataDto> {
