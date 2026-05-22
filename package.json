@@ -52,26 +52,26 @@
     "tsyringe": "4.8.0",
     "@hyperledger/anoncreds-nodejs": "0.4.0",
     "@hyperledger/anoncreds-shared": "0.4.0",
-    "@credo-ts/action-menu": "0.7.1-pr-2704-20260508193405",
-    "@credo-ts/core": "0.7.1-pr-2704-20260508193405",
-    "@credo-ts/didcomm": "0.7.1-pr-2704-20260508193405",
-    "@credo-ts/question-answer": "0.7.1-pr-2704-20260508193405",
-    "@credo-ts/node": "0.7.1-pr-2704-20260508193405",
-    "@credo-ts/askar": "0.7.1-pr-2704-20260508193405",
-    "@credo-ts/anoncreds": "0.7.1-pr-2704-20260508193405"
+    "@credo-ts/action-menu": "0.7.1-pr-2704-20260519192541",
+    "@credo-ts/core": "0.7.1-pr-2704-20260519192541",
+    "@credo-ts/didcomm": "0.7.1-pr-2704-20260519192541",
+    "@credo-ts/question-answer": "0.7.1-pr-2704-20260519192541",
+    "@credo-ts/node": "0.7.1-pr-2704-20260519192541",
+    "@credo-ts/askar": "0.7.1-pr-2704-20260519192541",
+    "@credo-ts/anoncreds": "0.7.1-pr-2704-20260519192541"
   },
   "packageManager": "pnpm@9.15.3",
   "pnpm": {
     "overrides": {
       "libphonenumber-js": "^1.12.33",
-      "@credo-ts/core": "0.7.1-pr-2704-20260508193405",
-      "@credo-ts/didcomm": "0.7.1-pr-2704-20260508193405",
-      "@credo-ts/anoncreds": "0.7.1-pr-2704-20260508193405",
-      "@credo-ts/askar": "0.7.1-pr-2704-20260508193405",
+      "@credo-ts/core": "0.7.1-pr-2704-20260519192541",
+      "@credo-ts/didcomm": "0.7.1-pr-2704-20260519192541",
+      "@credo-ts/anoncreds": "0.7.1-pr-2704-20260519192541",
+      "@credo-ts/askar": "0.7.1-pr-2704-20260519192541",
       "@hyperledger/anoncreds-shared": "0.4.0"
     },
     "patchedDependencies": {
-      "@credo-ts/webvh@0.7.1-pr-2704-20260508193405": "patches/@credo-ts__webvh@0.7.1-pr-2704-20260508193405.patch"
+      "@credo-ts/webvh@0.7.1-pr-2704-20260519192541": "patches/@credo-ts__webvh@0.7.1-pr-2704-20260519192541.patch"
     }
   }
 }
