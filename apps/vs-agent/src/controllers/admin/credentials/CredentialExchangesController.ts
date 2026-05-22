@@ -51,7 +51,9 @@ export class CredentialExchangesController {
     try {
       const agent = await this.agentService.getAgent()
       const records = await agent.didcomm.credentials.getAll()
-      const results = await Promise.allSettled(records.map(record => this.toDto(agent, record)))
+      const results = await Promise.allSettled(
+        records.map(record => this.getCredentialExchangeData(agent, record)),
+      )
       return results.flatMap((result, index) => {
         if (result.status === 'fulfilled') return [result.value]
         this.logger.warn(
@@ -81,7 +83,7 @@ export class CredentialExchangesController {
     }
 
     try {
-      return await this.toDto(agent, record)
+      return await this.getCredentialExchangeData(agent, record)
     } catch (error) {
       throw new InternalServerErrorException(error)
     }
@@ -95,11 +97,11 @@ export class CredentialExchangesController {
       | AnonCredsCredentialMetadata
       | undefined
 
-    let offerAttributes: Claim[] | undefined
+    let claims: Claim[] | undefined
     try {
       const formatData = await agent.didcomm.credentials.getFormatData(record.id)
       if (formatData.offerAttributes?.length) {
-        offerAttributes = formatData.offerAttributes.map(
+        claims = formatData.offerAttributes.map(
           attr => new Claim({ name: attr.name, value: attr.value, mimeType: attr.mimeType }),
         )
       }
@@ -114,7 +116,7 @@ export class CredentialExchangesController {
       connectionId: record.connectionId,
       credentialDefinitionId: anonCredsMetadata?.credentialDefinitionId,
       schemaId: anonCredsMetadata?.schemaId,
-      offerAttributes,
+      claims,
       errorMessage: record.errorMessage,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt?.toISOString(),
