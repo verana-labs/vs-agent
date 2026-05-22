@@ -212,7 +212,7 @@ export class InvitationController {
       callbackUrl,
       useLegacyDid,
       didCommVersion,
-      requireNonRevocation = true,
+      requireNonRevocation = false,
     } = options
 
     if (!requestedCredentials?.length) {

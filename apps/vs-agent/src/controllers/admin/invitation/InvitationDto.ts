@@ -59,10 +59,11 @@ export class CreatePresentationRequestDto implements CreatePresentationRequestOp
   @ApiProperty({
     description:
       'Whether to request a non-revocation proof for the presented credential. ' +
-      'Defaults to true. Set to false to skip the revocation status check at verification time.',
-    example: true,
+      'Defaults to false. ' +
+      'Set to true to require a non-revocation proof at verification time.',
+    example: false,
     required: false,
-    default: true,
+    default: false,
   })
   @IsOptional()
   requireNonRevocation?: boolean
