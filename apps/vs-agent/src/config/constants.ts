@@ -28,7 +28,7 @@ export const AGENT_PUBLIC_DID = process.env.AGENT_PUBLIC_DID
 export const PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL
 export const DEFAULT_PUBLIC_API_BASE_URL = 'http://localhost:3001'
 
-export const EVENTS_BASE_URL = process.env.EVENTS_BASE_URL || 'http://localhost:5000'
+export const EVENTS_BASE_URL = (process.env.EVENTS_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '')
 
 // Wallet and Database
 export const AGENT_WALLET_ID = process.env.AGENT_WALLET_ID
