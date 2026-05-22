@@ -11,7 +11,7 @@ export interface ServerConfig {
   cors?: boolean
   app?: Express
   logger: TsLogger
-  events: EventPublisher
+  events?: EventPublisher
   discoveryOptions?: DidCommFeatureQueryOptions[]
   endpoints: string[]
   nestPlugins?: VsAgentNestPlugin[]

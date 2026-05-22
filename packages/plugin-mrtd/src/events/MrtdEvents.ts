@@ -30,7 +30,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
     })
 
     msg.id = await getRecordId(agent, msg.id)
-    await config.events.publish(msg)
+    await config.events?.publish(msg)
   })
 
   agent.events.on(MrtdEventTypes.EMrtdDataReceived, async ({ payload }: EMrtdDataReceivedEvent) => {
@@ -44,7 +44,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
     })
 
     msg.id = await getRecordId(agent, msg.id)
-    await config.events.publish(msg)
+    await config.events?.publish(msg)
   })
 
   // MRTD problem reports
@@ -69,7 +69,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
         state: stateMap[description.code as MrtdProblemReportReason],
       })
       msg.id = await getRecordId(agent, msg.id)
-      await config.events.publish(msg)
+      await config.events?.publish(msg)
     } else if (
       [MrtdProblemReportReason.MrzRefused, MrtdProblemReportReason.MrzTimeout].includes(
         description.code as MrtdProblemReportReason,
@@ -81,7 +81,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
         state: stateMap[description.code as MrtdProblemReportReason],
       })
       msg.id = await getRecordId(agent, msg.id)
-      await config.events.publish(msg)
+      await config.events?.publish(msg)
     }
   })
 }

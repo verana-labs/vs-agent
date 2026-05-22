@@ -10,7 +10,7 @@ export const MESSAGE_HANDLERS = 'MESSAGE_HANDLERS'
 
 export interface VsAgentPluginConfig {
   logger: BaseLogger
-  events: EventPublisher
+  events?: EventPublisher
 }
 
 export interface MessageHandler {

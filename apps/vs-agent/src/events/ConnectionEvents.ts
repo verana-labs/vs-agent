@@ -83,7 +83,7 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
         metadata: config.discoveryOptions ? {} : undefined,
       })
 
-      await config.events.publish(body)
+      await config.events?.publish(body)
     },
   )
 
@@ -100,7 +100,7 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
         state: 'terminated',
       })
 
-      await config.events.publish(body)
+      await config.events?.publish(body)
     },
   )
 
@@ -130,7 +130,7 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
         metadata,
       })
 
-      await config.events.publish(body)
+      await config.events?.publish(body)
     },
   )
 

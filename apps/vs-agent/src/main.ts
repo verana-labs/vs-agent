@@ -239,6 +239,7 @@ const run = async () => {
     endpoints,
     nestPlugins,
   }
+  if (!conf.events) serverLogger.debug('No EventPublisher configured: domain events will not be delivered')
 
   await startServers(agent, conf)
 
