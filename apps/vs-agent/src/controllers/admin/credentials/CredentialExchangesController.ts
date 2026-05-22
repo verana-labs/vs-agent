@@ -69,7 +69,7 @@ export class CredentialExchangesController {
   @ApiOkResponse({ description: 'Credential exchange data', type: CredentialExchangeDataDto })
   @ApiBadRequestResponse({ description: 'Invalid credentialExchangeId' })
   @ApiNotFoundResponse({ description: 'Credential exchange not found' })
-  public async getById(
+  public async getCredentialExchangeById(
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<CredentialExchangeDataDto> {
     const agent = await this.agentService.getAgent()
