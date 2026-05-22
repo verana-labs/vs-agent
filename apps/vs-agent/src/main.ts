@@ -4,7 +4,7 @@ import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import {
-  EventEmitter,
+  EventPublisher,
   HttpInboundTransport,
   setupSelfTr,
   VsAgent,
@@ -233,7 +233,7 @@ const run = async () => {
     port: ADMIN_PORT,
     cors: USE_CORS,
     logger: serverLogger,
-    events: new EventEmitter(webhookEvent(EVENTS_BASE_URL, serverLogger)),
+    events: new EventPublisher(webhookEvent(EVENTS_BASE_URL, serverLogger)),
     publicApiBaseUrl,
     discoveryOptions,
     endpoints,

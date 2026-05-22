@@ -1,4 +1,4 @@
-export * from './EventEmitter'
+export * from './EventPublisher'
 export * from './agent'
 export * from './data'
 export * from './setupSelfTr'

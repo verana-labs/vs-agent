@@ -14,12 +14,12 @@ export type EventSink = (event: Event) => void | Promise<void>
  * The concrete delivery mechanism is the {@link EventSink} injected by the app, keeping
  * plugins decoupled from webhooks/HTTP.
  */
-export class EventEmitter {
+export class EventPublisher {
   public constructor(private readonly sink: EventSink) {}
 
-  public emit(event: Event): Promise<void>
-  public emit(message: BaseMessage): Promise<void>
-  public async emit(eventOrMessage: Event | BaseMessage): Promise<void> {
+  public publish(event: Event): Promise<void>
+  public publish(message: BaseMessage): Promise<void>
+  public async publish(eventOrMessage: Event | BaseMessage): Promise<void> {
     const event =
       eventOrMessage instanceof Event
         ? eventOrMessage
