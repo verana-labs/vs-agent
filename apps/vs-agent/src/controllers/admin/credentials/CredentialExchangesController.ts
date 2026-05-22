@@ -47,7 +47,7 @@ export class CredentialExchangesController {
     type: CredentialExchangeDataDto,
     isArray: true,
   })
-  public async getAll(): Promise<CredentialExchangeDataDto[]> {
+  public async getAllCredentialExchanges(): Promise<CredentialExchangeDataDto[]> {
     try {
       const agent = await this.agentService.getAgent()
       const records = await agent.didcomm.credentials.getAll()
