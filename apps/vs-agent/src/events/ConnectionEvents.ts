@@ -1,5 +1,4 @@
 import type { ServerConfig } from '../utils'
-import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
   DidCommConnectionDidRotatedEvent,
@@ -11,6 +10,7 @@ import {
   DidCommDiscoverFeaturesEventTypes,
 } from '@credo-ts/didcomm'
 import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
+import { emitVsAgentEvent, type VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
 
@@ -83,7 +83,7 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
         metadata: config.discoveryOptions ? {} : undefined,
       })
 
-      await config.events?.publish(body)
+      emitVsAgentEvent(agent, body)
     },
   )
 
@@ -100,7 +100,7 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
         state: 'terminated',
       })
 
-      await config.events?.publish(body)
+      emitVsAgentEvent(agent, body)
     },
   )
 
@@ -130,7 +130,7 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
         metadata,
       })
 
-      await config.events?.publish(body)
+      emitVsAgentEvent(agent, body)
     },
   )
 

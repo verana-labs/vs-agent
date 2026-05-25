@@ -2,6 +2,9 @@
 export * from './agent'
 export type { Plugin } from './types'
 
+// Events
+export * from './events'
+
 // Plugins
 export { setupBaseDidComm } from './plugins/setupBaseDidComm'
 export type { BaseDidCommPlugin, BaseDidCommPluginOptions } from './plugins/setupBaseDidComm'

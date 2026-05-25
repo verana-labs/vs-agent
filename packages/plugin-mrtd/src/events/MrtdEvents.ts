@@ -7,7 +7,7 @@ import {
   MrtdProblemReportReason,
   MrzDataReceivedEvent,
 } from '@2060.io/credo-ts-didcomm-mrtd'
-import { VsAgent } from '@verana-labs/vs-agent-sdk'
+import { emitVsAgentEvent, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { EMrtdDataSubmitMessage } from '../model/EMrtdDataSubmitMessage'
 import { MrtdSubmitState } from '../model/MrtdSubmitState'
@@ -20,6 +20,7 @@ const getRecordId = async (agent: VsAgent<any>, id: string): Promise<string> => 
 
 export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => {
   agent.events.on(MrtdEventTypes.MrzDataReceived, async ({ payload }: MrzDataReceivedEvent) => {
+    config.logger.debug(`DidCommMessageProcessedEvent received: ${JSON.stringify(payload)}`)
     const { connection, mrzData, threadId } = payload
 
     const msg = new MrzDataSubmitMessage({
@@ -30,7 +31,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
     })
 
     msg.id = await getRecordId(agent, msg.id)
-    await config.events?.publish(msg)
+    emitVsAgentEvent(agent, msg)
   })
 
   agent.events.on(MrtdEventTypes.EMrtdDataReceived, async ({ payload }: EMrtdDataReceivedEvent) => {
@@ -44,7 +45,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
     })
 
     msg.id = await getRecordId(agent, msg.id)
-    await config.events?.publish(msg)
+    emitVsAgentEvent(agent, msg)
   })
 
   // MRTD problem reports
@@ -69,7 +70,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
         state: stateMap[description.code as MrtdProblemReportReason],
       })
       msg.id = await getRecordId(agent, msg.id)
-      await config.events?.publish(msg)
+      emitVsAgentEvent(agent, msg)
     } else if (
       [MrtdProblemReportReason.MrzRefused, MrtdProblemReportReason.MrzTimeout].includes(
         description.code as MrtdProblemReportReason,
@@ -81,7 +82,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
         state: stateMap[description.code as MrtdProblemReportReason],
       })
       msg.id = await getRecordId(agent, msg.id)
-      await config.events?.publish(msg)
+      emitVsAgentEvent(agent, msg)
     }
   })
 }

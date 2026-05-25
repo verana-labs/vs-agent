@@ -4,7 +4,6 @@ import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import {
-  EventPublisher,
   HttpInboundTransport,
   setupSelfTr,
   VsAgent,
@@ -233,14 +232,11 @@ const run = async () => {
     port: ADMIN_PORT,
     cors: USE_CORS,
     logger: serverLogger,
-    events: new EventPublisher(webhookEvent(EVENTS_BASE_URL, serverLogger)),
     publicApiBaseUrl,
     discoveryOptions,
     endpoints,
     nestPlugins,
   }
-  if (!conf.events) serverLogger.debug('No EventPublisher configured: domain events will not be delivered')
-
   await startServers(agent, conf)
 
   // Initialize Self-Trust Registry
@@ -264,6 +260,9 @@ const run = async () => {
         orgCountryCode: SELF_ISSUED_VTC_ORG_COUNTRYCODE,
       },
     })
+
+  // Deliver domain events emitted on the agent bus to the configured webhook endpoint
+  webhookEvent(agent, EVENTS_BASE_URL, serverLogger)
 
   // Register base events (always active)
   connectionEvents(agent as any, conf)

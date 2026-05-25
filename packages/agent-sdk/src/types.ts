@@ -4,13 +4,11 @@ import { BaseLogger } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 
 import { BaseAgentModules, VsAgent } from './agent/VsAgent'
-import { EventPublisher } from './utils/EventPublisher'
 
 export const MESSAGE_HANDLERS = 'MESSAGE_HANDLERS'
 
 export interface VsAgentPluginConfig {
   logger: BaseLogger
-  events?: EventPublisher
 }
 
 export interface MessageHandler {

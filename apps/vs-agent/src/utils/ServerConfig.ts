@@ -1,4 +1,4 @@
-import type { EventPublisher, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
+import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 import type { Express } from 'express'
 
 import { DidCommFeatureQueryOptions } from '@credo-ts/didcomm'
@@ -11,7 +11,6 @@ export interface ServerConfig {
   cors?: boolean
   app?: Express
   logger: TsLogger
-  events?: EventPublisher
   discoveryOptions?: DidCommFeatureQueryOptions[]
   endpoints: string[]
   nestPlugins?: VsAgentNestPlugin[]
