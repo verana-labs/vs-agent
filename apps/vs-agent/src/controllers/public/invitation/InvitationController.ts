@@ -1,10 +1,13 @@
 import { Controller, Get, Query, Res, HttpStatus, HttpException } from '@nestjs/common'
-import { createInvitation } from '@verana-labs/vs-agent-sdk'
+import {
+  createInvitation,
+  PresentationStatus,
+  sendPresentationCallbackEvent,
+} from '@verana-labs/vs-agent-sdk'
 import { Response } from 'express'
 import QRCode from 'qrcode'
 
 import { AGENT_INVITATION_BASE_URL, REDIRECT_DEFAULT_URL_TO_INVITATION_URL } from '../../../config/constants'
-import { PresentationStatus, sendPresentationCallbackEvent } from '../../../events/CallbackEvent'
 import { VsAgentService } from '../../../services/VsAgentService'
 import { TsLogger } from '../../../utils'
 

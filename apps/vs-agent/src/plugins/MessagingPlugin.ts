@@ -1,4 +1,4 @@
-import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
+import { baseMessageEvents, type VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import {
   CoreMessageService,
@@ -8,7 +8,6 @@ import {
   RedisMessageService,
   BaseMessageHandler,
 } from '../controllers'
-import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { HandledRedisModule } from '../modules/redis.module'
 
 export const MessagingPlugin: VsAgentNestPlugin = {

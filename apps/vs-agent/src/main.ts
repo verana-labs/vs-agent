@@ -11,6 +11,7 @@ import {
   type VsAgentNestPlugin,
   VeranaChainService,
   IndexerWebSocketService,
+  connectionEvents,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -64,7 +65,6 @@ import {
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
 } from './config'
-import { connectionEvents } from './events/ConnectionEvents'
 import { webhookEvent } from './events/webhookEvent'
 import { MessagingPlugin } from './plugins'
 import { PublicModule } from './public.module'

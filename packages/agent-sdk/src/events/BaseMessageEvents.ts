@@ -1,4 +1,5 @@
-import type { BaseAgentModules, VsAgentPluginConfig } from '@verana-labs/vs-agent-sdk'
+import type { BaseAgentModules, VsAgent } from '../agent/VsAgent'
+import type { BaseLogger } from '@credo-ts/core'
 
 import { DidCommPresentationV1Message, DidCommPresentationV1ProblemReportMessage } from '@credo-ts/anoncreds'
 import {
@@ -17,9 +18,12 @@ import {
   IdentityProofSubmitMessage,
   VerifiableCredentialSubmittedProofItem,
 } from '@verana-labs/vs-agent-model'
-import { emitVsAgentEvent, getRecordId, VsAgent } from '@verana-labs/vs-agent-sdk'
+
+import { VsAgentPluginConfig } from '../types'
+import { getRecordId } from '../utils/agent'
 
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
+import { emitVsAgentEvent } from './VsAgentEvents'
 
 export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config: VsAgentPluginConfig) => {
   // Proofs protocol messages (proof presentation and problem reports)
