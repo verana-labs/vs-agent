@@ -57,6 +57,18 @@ export class CreatePresentationRequestDto implements CreatePresentationRequestOp
   requestedCredentials!: RequestedCredential[]
 
   @ApiProperty({
+    description:
+      'Whether to request a non-revocation proof for the presented credential. ' +
+      'Defaults to false. ' +
+      'Set to true to require a non-revocation proof at verification time.',
+    example: false,
+    required: false,
+    default: false,
+  })
+  @IsOptional()
+  requireNonRevocation?: boolean
+
+  @ApiProperty({
     description: 'Use legacy did:web in case of did:webvh',
     example: 'true',
   })

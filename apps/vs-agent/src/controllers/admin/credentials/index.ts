@@ -1,4 +1,5 @@
 export * from './CreateRevocationRegistryDto'
+export * from './CredentialExchangesController'
 export * from './CredentialTypeController'
 export * from './CredentialTypeDto'
 export * from './CredentialTypeService'

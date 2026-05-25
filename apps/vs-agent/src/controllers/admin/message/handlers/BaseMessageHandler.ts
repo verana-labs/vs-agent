@@ -1,6 +1,6 @@
 import type { MessageHandler } from '../MessageHandler'
 
-import { AnonCredsRequestedAttribute } from '@credo-ts/anoncreds'
+import { AnonCredsRequestedAttribute, dateToTimestamp } from '@credo-ts/anoncreds'
 import { JsonTransformer, utils } from '@credo-ts/core'
 import {
   DidCommAutoAcceptCredential,
@@ -325,6 +325,8 @@ export class BaseMessageHandler implements MessageHandler {
             restrictions: [{ cred_def_id: credentialDefinitionId }],
           }
 
+          const now = dateToTimestamp(new Date())
+
           const record = await agent.didcomm.proofs.requestProof({
             comment: vcItem.description as string,
             connectionId: msg.connectionId,
@@ -333,6 +335,7 @@ export class BaseMessageHandler implements MessageHandler {
                 name: 'proof-request',
                 version: '1.0',
                 requested_attributes: requestedAttributes,
+                non_revoked: { from: now, to: now },
               },
             },
             protocolVersion: 'v2',
