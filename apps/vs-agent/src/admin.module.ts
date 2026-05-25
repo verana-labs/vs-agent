@@ -3,6 +3,7 @@ import { VsAgent, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import {
   ConnectionController,
+  CredentialExchangesController,
   CredentialTypesController,
   CredentialTypesService,
   HealthController,
@@ -29,6 +30,7 @@ export class VsAgentModule {
     const baseControllers = [
       VsAgentController,
       CredentialTypesController,
+      CredentialExchangesController,
       HealthController,
       InvitationController,
       QrController,

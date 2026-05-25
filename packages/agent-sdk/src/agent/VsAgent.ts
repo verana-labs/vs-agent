@@ -240,7 +240,16 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         !ed25519VerificationMethodId ||
         JSON.stringify(didDocument.didCommServices) !==
           JSON.stringify(this.getDidCommServices(didDocument.id, ed25519VerificationMethodId))
-      if (hasLegacyMethods || servicesChanged) {
+      // One-shot migration for did:webvh records published before authentication-replace
+      // landed, which still carry the didwebvh-ts update key in authentication.
+      const authHasUpdateKey =
+        parsedDid.method === 'webvh' &&
+        !!ed25519VerificationMethodId &&
+        (didDocument.authentication ?? []).some(a => {
+          const id = typeof a === 'string' ? a : a.id
+          return id !== ed25519VerificationMethodId
+        })
+      if (hasLegacyMethods || servicesChanged || authHasUpdateKey) {
         if (servicesChanged && ed25519VerificationMethodId) {
           didDocument.service = [
             ...(didDocument.service
@@ -253,6 +262,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         if (hasLegacyMethods) {
           newKeys.push(await this.createAndAddDidCommKeysAndServices(didDocument))
         }
+
+        if (authHasUpdateKey) didDocument.authentication = [ed25519VerificationMethodId!]
 
         if (newKeys.length && parsedDid.method === 'webvh') {
           // webvh registrar doesn't accept keys in update options; persist directly
@@ -413,9 +424,11 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       ...new Set([...currentContexts.filter(ctx => !legacyContexts.includes(ctx)), ...context]),
     ]
     didDocument.verificationMethod = [...filteredMethods, ...verificationMethods]
-    didDocument.authentication = [...new Set([...(didDocument.authentication ?? []), authentication])]
-    didDocument.assertionMethod = [...new Set([...(didDocument.assertionMethod ?? []), assertionMethod])]
-    didDocument.keyAgreement = [...new Set([...(didDocument.keyAgreement ?? []), keyAgreement])]
+    // Replace (not merge): keeps did:webvh's update key out of DIDComm relations.
+    // Same pattern as didcomm-mediator/src/agent/DidCommMediatorAgent.ts.
+    didDocument.authentication = [authentication]
+    didDocument.assertionMethod = [assertionMethod]
+    didDocument.keyAgreement = [keyAgreement]
     didDocument.service = [
       ...(didDocument.service
         ? didDocument.service.filter(service => !MANAGED_DIDCOMM_SERVICE_TYPES.includes(service.type))
