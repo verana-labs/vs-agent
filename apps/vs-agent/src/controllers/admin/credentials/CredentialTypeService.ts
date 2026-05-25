@@ -5,7 +5,8 @@ import {
   AnonCredsSchema,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
-import { JsonObject, parseDid, TagsBase, utils, W3cCredential } from '@credo-ts/core'
+import { JsonObject, parseDid, Proof, TagsBase, utils, W3cCredential } from '@credo-ts/core'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import { deleteTailsEntry, fetchJson, VsAgent } from '@verana-labs/vs-agent-sdk'
@@ -71,6 +72,45 @@ export class CredentialTypesService {
     if (revDefPrivate) await revocationDefinitionPrivateRepository.delete(agent.context, revDefPrivate)
     await revocationDefinitionRepository.delete(agent.context, revDef)
     return true
+  }
+
+  /**
+   * Append a new status-list attestedResource to the rev-reg-def's links[] and persist
+   * the status list. Looks up the rev-reg-def AttestedResource by id, throws if missing.
+   * Used by both the credDef creation flow (first status list) and the revoke flow.
+   */
+  public async appendStatusListToRevocationRegistry(
+    agent: VsAgent,
+    revocationRegistryDefinitionId: string,
+    statusRegistration: Record<string, unknown>,
+    timestamp: number | undefined,
+  ) {
+    const [revRegDefRecord] = await agent.genericRecords.findAllByQuery({
+      attestedResourceId: revocationRegistryDefinitionId,
+      type: 'AttestedResource',
+    })
+    if (!revRegDefRecord) {
+      throw new Error(`Revocation registry definition record not found for ${revocationRegistryDefinitionId}`)
+    }
+
+    const existingLinks = (revRegDefRecord.content as { links?: Array<Record<string, unknown>> }).links ?? []
+
+    const registry = new WebVhAnonCredsRegistry()
+    const { registrationMetadata } = await registry.updateRevocationRegistryDefinition(
+      agent.context,
+      revRegDefRecord.content as { proof?: Proof } & Record<string, object>,
+      {
+        links: [
+          ...existingLinks,
+          { id: statusRegistration.id as string, type: 'anonCredsStatusList', timestamp },
+        ],
+      },
+    )
+
+    await this.saveAttestedResource(agent, statusRegistration, { resourceType: 'anonCredsStatusList' })
+
+    revRegDefRecord.content = registrationMetadata
+    await agent.genericRecords.update(revRegDefRecord)
   }
 
   public async saveAttestedResource(agent: VsAgent, resource: Record<string, unknown>, tags?: Tags) {

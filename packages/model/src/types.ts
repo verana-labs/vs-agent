@@ -84,6 +84,7 @@ export interface CreatePresentationRequestOptions {
   ref?: string
   callbackUrl?: string
   requestedCredentials: RequestedCredential[]
+  requireNonRevocation?: boolean
 }
 
 export type RequestedCredential = {

@@ -1,7 +1,9 @@
 import {
+  AnonCredsNonRevokedInterval,
   AnonCredsProofRequestRestriction,
   AnonCredsRequestedAttribute,
   AnonCredsSchema,
+  dateToTimestamp,
 } from '@credo-ts/anoncreds'
 import { W3cCredential } from '@credo-ts/core'
 import { Controller, Get, Post, Body, Query, Inject, HttpException } from '@nestjs/common'
@@ -146,7 +148,7 @@ export class InvitationController {
   @ApiOperation({
     summary: 'Presentation Request',
     description: [
-      '### Presentation Request\n\nPresentation Request invitation codes are created by specifying details of the credentials required.\n\nThis means that a single presentation request can ask for a number of attributes present in a credential a holder might possess.\nAt the moment, credential requirements are only filtered by their `credentialDefinitionId`. If no `attributes` are specified,\nthen VS Agent will ask for all attributes in the credential.\n\nIt\'s a POST to `/invitation/presentation-request` which receives a JSON object in the body\n\n```json\n{\n  "callbackUrl": "https://myhost.com/presentation_callback ",\n  "ref": "1234-5678",\n  "requestedCredentials": [\n    {\n      "credentialDefinitionId": "full credential definition identifier",\n      "attributes": ["attribute-1", "attribute-2"]\n    }\n  ]\n}\n```',
+      '### Presentation Request\n\nPresentation Request invitation codes are created by specifying details of the credentials required.\n\nThis means that a single presentation request can ask for a number of attributes present in a credential a holder might possess.\nAt the moment, credential requirements are only filtered by their `credentialDefinitionId`. If no `attributes` are specified,\nthen VS Agent will ask for all attributes in the credential.\n\nSet `requireNonRevocation: true` to ask the holder for a non-revocation proof at verification time. Defaults to `false` for backward compatibility with credential definitions that don\'t support revocation.\n\nIt\'s a POST to `/invitation/presentation-request` which receives a JSON object in the body\n\n```json\n{\n  "callbackUrl": "https://myhost.com/presentation_callback ",\n  "ref": "1234-5678",\n  "requestedCredentials": [\n    {\n      "credentialDefinitionId": "full credential definition identifier",\n      "attributes": ["attribute-1", "attribute-2"]\n    }\n  ],\n  "requireNonRevocation": false\n}\n```',
       '#### Presentation Callback API\n\nWhen the presentation flow is completed (either successfully or not), VS Agent calls its `callbackUrl` as an HTTP POST with the following body:\n\n```json\n{\n  "ref": "1234-5678",\n  "presentationRequestId": "unique identifier for the flow",\n  "status": "PresentationStatus",\n  "claims": [\n    { "name": "attribute-1", "value": "value-1" },\n    { "name": "attribute-2", "value": "value-2" }\n  ]\n}\n```',
     ].join('\n\n'),
   })
@@ -166,6 +168,7 @@ export class InvitationController {
               attributes: ['phoneNumber'],
             },
           ],
+          requireNonRevocation: false,
         },
       },
       withRelatedJsonSchema: {
@@ -204,7 +207,14 @@ export class InvitationController {
   ): Promise<CreatePresentationRequestResult> {
     const agent = await this.agentService.getAgent()
 
-    const { requestedCredentials, ref, callbackUrl, useLegacyDid, didCommVersion } = options
+    const {
+      requestedCredentials,
+      ref,
+      callbackUrl,
+      useLegacyDid,
+      didCommVersion,
+      requireNonRevocation = false,
+    } = options
 
     if (!requestedCredentials?.length) {
       throw Error('You must specify a least a requested credential')
@@ -282,10 +292,21 @@ export class InvitationController {
       restrictions,
     }
 
+    let nonRevoked: AnonCredsNonRevokedInterval | undefined
+    if (requireNonRevocation) {
+      const now = dateToTimestamp(new Date())
+      nonRevoked = { from: now, to: now }
+    }
+
     const request = await agent.didcomm.proofs.createRequest({
       protocolVersion: 'v2',
       proofFormats: {
-        anoncreds: { name: 'proof-request', version: '1.0', requested_attributes: requestedAttributes },
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: requestedAttributes,
+          non_revoked: nonRevoked,
+        },
       },
     })
 

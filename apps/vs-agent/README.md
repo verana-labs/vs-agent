@@ -319,3 +319,14 @@ services:
 ## API
 
 For the moment, some details about VS-A API can be found in this [Document](./doc/vs-agent-api.md). There is some work in progress to make the API available within Swagger: when deployed, just go to [VS_AGENT_ADMIN_BASE_URL]/api.
+
+### Credential exchanges
+
+The Admin API exposes a `credential-exchanges` resource for inspecting the issuance pipeline:
+
+| Method | Path                                              | Description                                                                                 |
+| ------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| GET    | `/v1/credential-exchanges`                        | List every credential exchange record with anoncreds metadata, state, and offer attributes. |
+| GET    | `/v1/credential-exchanges/:credentialExchangeId`  | Fetch a single credential exchange by id.                                                   |
+
+Useful for backend integrations and during testing to inspect what was offered, issued, or revoked.

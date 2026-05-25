@@ -136,6 +136,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
               callbackUrl: callbackParameters.callbackUrl,
               claims,
               status: record.isVerified ? PresentationStatus.OK : PresentationStatus.VERIFICATION_ERROR,
+              verified: record.isVerified ?? false,
               logger: config.logger,
               ref: callbackParameters.ref,
             })
