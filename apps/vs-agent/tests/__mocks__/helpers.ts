@@ -15,7 +15,7 @@ import {
   type VtFlowStateChangedEvent,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { chatEvents, ChatPlugin } from '@verana-labs/vs-agent-plugin-chat'
-import { baseMessageEvents, type BaseAgentModules, type VsAgent } from '@verana-labs/vs-agent-sdk'
+import { type BaseAgentModules, type VsAgent } from '@verana-labs/vs-agent-sdk'
 import { vi } from 'vitest'
 
 import { VsAgentModule } from '../../src/admin.module'
@@ -128,7 +128,6 @@ export const startServersTesting = async (agent: VsAgent<BaseAgentModules>): Pro
     publicApiBaseUrl: 'http://localhost:3001',
     endpoints: agent.didcomm.config.endpoints,
   }
-  baseMessageEvents(agent, conf)
   chatEvents(agent as any, conf)
   return app
 }

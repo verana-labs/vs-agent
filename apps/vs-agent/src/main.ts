@@ -11,7 +11,6 @@ import {
   type VsAgentNestPlugin,
   VeranaChainService,
   IndexerWebSocketService,
-  connectionEvents,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -200,8 +199,18 @@ const run = async () => {
     )
   }
 
+  const discoveryOptions = (() => {
+    try {
+      return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'discovery.json'), 'utf-8'))
+    } catch (error) {
+      serverLogger.warn('Error reading discovery.json file:', error.message)
+      return undefined
+    }
+  })()
+
   const { agent } = await setupAgent({
     endpoints,
+    discoveryOptions,
     port: AGENT_PORT,
     walletConfig: {
       id: AGENT_WALLET_ID || 'test-vs-agent',
@@ -220,20 +229,11 @@ const run = async () => {
     veranaChain,
   })
 
-  const discoveryOptions = (() => {
-    try {
-      return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'discovery.json'), 'utf-8'))
-    } catch (error) {
-      agent.config.logger.warn('Error reading discovery.json file:', error.message)
-      return undefined
-    }
-  })()
   const conf: ServerConfig = {
     port: ADMIN_PORT,
     cors: USE_CORS,
     logger: serverLogger,
     publicApiBaseUrl,
-    discoveryOptions,
     endpoints,
     nestPlugins,
   }
@@ -263,9 +263,6 @@ const run = async () => {
 
   // Deliver domain events emitted on the agent bus to the configured webhook endpoint
   webhookEvent(agent, EVENTS_BASE_URL, serverLogger)
-
-  // Register base events (always active)
-  connectionEvents(agent as any, conf)
 
   // Register plugin events after agent is initialized
   for (const plugin of nestPlugins) {

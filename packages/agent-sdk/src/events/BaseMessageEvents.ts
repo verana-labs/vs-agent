@@ -1,5 +1,5 @@
 import type { BaseAgentModules, VsAgent } from '../agent/VsAgent'
-import type { BaseLogger } from '@credo-ts/core'
+import type { VsAgentPluginConfig } from '../types'
 
 import { DidCommPresentationV1Message, DidCommPresentationV1ProblemReportMessage } from '@credo-ts/anoncreds'
 import {
@@ -19,7 +19,6 @@ import {
   VerifiableCredentialSubmittedProofItem,
 } from '@verana-labs/vs-agent-model'
 
-import { VsAgentPluginConfig } from '../types'
 import { getRecordId } from '../utils/agent'
 
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'

@@ -1,7 +1,7 @@
+import type { VsAgent } from '../agent/VsAgent'
+
 import { parseDid } from '@credo-ts/core'
 import { DidCommHandshakeProtocol, DidCommMessage, type DidCommVersion } from '@credo-ts/didcomm'
-
-import { VsAgent } from '../agent/VsAgent'
 
 /**
  * Creates an out of band invitation that will equal to the public DID in case the agent has one defined,

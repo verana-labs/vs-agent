@@ -1,3 +1,5 @@
+import type { DidCommFeatureQueryOptions } from '@credo-ts/didcomm'
+
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { AgentDependencies, InitConfig, LogLevel } from '@credo-ts/core'
 
@@ -31,6 +33,7 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
   dependencies: AgentDependencies
   logLevel?: LogLevel
   veranaChain?: VeranaChainService
+  discoveryOptions?: DidCommFeatureQueryOptions[]
 }
 
 /**
@@ -79,5 +82,6 @@ export function createVsAgent<T extends Plugin[]>(
     displayPictureUrl: options.displayPictureUrl,
     label: options.label,
     veranaChain: options.veranaChain,
+    discoveryOptions: options.discoveryOptions,
   })
 }

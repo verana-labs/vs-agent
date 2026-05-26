@@ -1,9 +1,8 @@
+import type { BaseAgentModules, VsAgent } from './agent/VsAgent'
 import type { IBaseMessage, MessageType } from '@verana-labs/vs-agent-model'
 
 import { BaseLogger } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
-
-import { BaseAgentModules, VsAgent } from './agent/VsAgent'
 
 export const MESSAGE_HANDLERS = 'MESSAGE_HANDLERS'
 
