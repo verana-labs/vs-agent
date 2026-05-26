@@ -14,7 +14,7 @@ export const webhookEvent = (agent: VsAgent, webhookUrl: string, logger: BaseLog
   const sendWebhookEvent = async (body: Event) => {
     try {
       logger.debug(`sending webhook event to ${webhookUrl}: ${JSON.stringify(body)}`)
-      await fetch(webhookUrl, {
+      await fetch(`${webhookUrl}/${body.type}`, {
         method: 'POST',
         body: JSON.stringify(body),
         headers: { 'Content-Type': 'application/json' },
