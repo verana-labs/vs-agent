@@ -6,10 +6,6 @@ import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 
 export const MESSAGE_HANDLERS = 'MESSAGE_HANDLERS'
 
-export interface VsAgentPluginConfig {
-  logger: BaseLogger
-}
-
 export interface MessageHandler {
   readonly supportedTypes: MessageType[]
   readonly openApiExamples: Record<string, { summary: string; description: string; value: object }>
@@ -29,5 +25,5 @@ export interface VsAgentNestPlugin {
   providers?: any[]
   messageHandlers?: (new (...args: any[]) => MessageHandler)[]
   imports?: any[]
-  registerEvents?: (agent: VsAgent<BaseAgentModules>, config: VsAgentPluginConfig) => void
+  registerEvents?: (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => void
 }

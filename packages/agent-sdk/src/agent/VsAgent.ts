@@ -290,7 +290,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     // Initialize events
     const logger = this.config.logger as BaseLogger
     await connectionEvents(this, { discoveryOptions: this.discoveryOptions, logger })
-    await baseMessageEvents(this as VsAgent, { logger })
+    await baseMessageEvents(this as VsAgent, logger)
   }
 
   private async findCreatedDid(parsedDid: ParsedDid) {

@@ -121,13 +121,12 @@ export const startServersTesting = async (agent: VsAgent<BaseAgentModules>): Pro
   const app = moduleRef.createNestApplication()
   await app.init()
 
-  const logger = new TsLogger(LogLevel.Off, agent.label)
   const conf: ServerConfig = {
     port: 3000,
-    logger,
+    logger: new TsLogger(LogLevel.Off, agent.label),
     publicApiBaseUrl: 'http://localhost:3001',
     endpoints: agent.didcomm.config.endpoints,
   }
-  chatEvents(agent as any, conf)
+  chatEvents(agent as any, conf.logger)
   return app
 }

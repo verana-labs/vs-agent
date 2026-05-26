@@ -266,7 +266,7 @@ const run = async () => {
 
   // Register plugin events after agent is initialized
   for (const plugin of nestPlugins) {
-    plugin.registerEvents?.(agent, conf)
+    plugin.registerEvents?.(agent, conf.logger)
   }
 
   // Connect to Verana indexer for on-chain notifications

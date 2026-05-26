@@ -1,5 +1,3 @@
-import type { VsAgentPluginConfig } from '@verana-labs/vs-agent-sdk'
-
 import {
   EMrtdDataReceivedEvent,
   MrtdEventTypes,
@@ -7,6 +5,7 @@ import {
   MrtdProblemReportReason,
   MrzDataReceivedEvent,
 } from '@2060.io/credo-ts-didcomm-mrtd'
+import { BaseLogger } from '@credo-ts/core'
 import { emitVsAgentEvent, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { EMrtdDataSubmitMessage } from '../model/EMrtdDataSubmitMessage'
@@ -18,9 +17,9 @@ const getRecordId = async (agent: VsAgent<any>, id: string): Promise<string> => 
   return (record?.getTag('messageId') as string) ?? id
 }
 
-export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => {
+export const mrtdEvents = (agent: VsAgent<any>, logger: BaseLogger) => {
   agent.events.on(MrtdEventTypes.MrzDataReceived, async ({ payload }: MrzDataReceivedEvent) => {
-    config.logger.debug(`DidCommMessageProcessedEvent received: ${JSON.stringify(payload)}`)
+    logger.debug(`DidCommMessageProcessedEvent received: ${JSON.stringify(payload)}`)
     const { connection, mrzData, threadId } = payload
 
     const msg = new MrzDataSubmitMessage({

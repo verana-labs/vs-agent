@@ -1,6 +1,5 @@
 import type { ChatAgentModules } from '../types'
 import type { MessageReceiptsReceivedEvent, MessageState } from '@2060.io/credo-ts-didcomm-receipts'
-import type { VsAgentPluginConfig } from '@verana-labs/vs-agent-sdk'
 
 import {
   CallAcceptMessage,
@@ -25,6 +24,7 @@ import {
   DidCommUserProfileRequestedEvent,
 } from '@2060.io/credo-ts-didcomm-user-profile'
 import { MenuRequestMessage, PerformMessage } from '@credo-ts/action-menu'
+import { BaseLogger } from '@credo-ts/core'
 import {
   DidCommConnectionEventTypes,
   DidCommConnectionStateChangedEvent,
@@ -52,7 +52,7 @@ import { emitVsAgentEvent, getRecordId, VsAgent } from '@verana-labs/vs-agent-sd
 
 import { createDataUrl } from '../utils/parsers'
 
-export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAgentPluginConfig) => {
+export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseLogger) => {
   agent.events.on(
     DidCommConnectionEventTypes.DidCommConnectionStateChanged,
     async ({ payload }: DidCommConnectionStateChangedEvent) => {
@@ -67,13 +67,11 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
     async ({ payload }: DidCommMessageProcessedEvent) => {
-      config.logger.debug(`DidCommMessageProcessedEvent received: ${JSON.stringify(payload.message)}`)
+      logger.debug(`DidCommMessageProcessedEvent received: ${JSON.stringify(payload.message)}`)
       const { message, connection } = payload
 
       if (!connection) {
-        config.logger.warn(
-          `[chatEvents] Received contactless message of type ${message.type}. Not supported yet.`,
-        )
+        logger.warn(`[chatEvents] Received contactless message of type ${message.type}. Not supported yet.`)
         return
       }
 
@@ -122,7 +120,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
         const textIdMapping = record.metadata.get<Record<string, string>>('text-id-mapping')
 
         if (!textIdMapping) {
-          config.logger.warn(
+          logger.warn(
             `[chatEvents] No text-id mapping found for Menu message. Using responded text as identifier`,
           )
         }
@@ -200,7 +198,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
     async ({ payload }: DidCommMediaSharingStateChangedEvent) => {
       const record = payload.mediaSharingRecord
 
-      config.logger.debug(
+      logger.debug(
         `MediaSharingStateChangedEvent received. Role: ${record.role} Connection id: ${record.connectionId}. Items: ${JSON.stringify(record.items)}`,
       )
 
@@ -245,14 +243,14 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
     ReceiptsEventTypes.MessageReceiptsReceived,
     async ({ payload }: MessageReceiptsReceivedEvent) => {
       const connectionId = payload.connectionId
-      config.logger.debug(
+      logger.debug(
         `MessageReceiptsReceivedEvent received. Connection id: ${connectionId}. Receipts: ${JSON.stringify(payload.receipts)}`,
       )
       const receipts = payload.receipts
 
       receipts.forEach(receipt => {
         const { messageId, timestamp, state } = receipt
-        sendMessageStateUpdatedEvent({ agent, messageId, connectionId, state, timestamp, config })
+        sendMessageStateUpdatedEvent({ agent, messageId, connectionId, state, timestamp, logger })
       })
     },
   )
@@ -262,7 +260,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
     DidCommReactionsEventTypes.DidCommMessageReactionsReceived,
     async ({ payload }: DidCommMessageReactionsReceivedEvent) => {
       const { connectionId, reactions } = payload
-      config.logger.debug(
+      logger.debug(
         `DidCommMessageReactionsReceivedEvent received. Connection id: ${connectionId}. Reactions: ${JSON.stringify(reactions)}`,
       )
 
@@ -284,7 +282,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
   agent.events.on(
     DidCommProfileEventTypes.UserProfileRequested,
     async ({ payload }: DidCommUserProfileRequestedEvent) => {
-      config.logger.debug(
+      logger.debug(
         `UserProfileRequestedEvent received. Connection id: ${payload.connection.id} Query: ${JSON.stringify(payload.query)}`,
       )
 
@@ -302,7 +300,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
     DidCommProfileEventTypes.ConnectionProfileUpdated,
     async ({ payload: { connection, profile } }: DidCommConnectionProfileUpdatedEvent) => {
       const { displayName, displayPicture, displayIcon, description, preferredLanguage } = profile
-      config.logger.debug(
+      logger.debug(
         `ConnectionProfileUpdatedEvent received. Connection id: ${connection.id} Profile: ${JSON.stringify(profile)}`,
       )
 
@@ -326,7 +324,7 @@ const sendMessageStateUpdatedEvent = async (options: {
   connectionId: string
   state: MessageState
   timestamp: Date
-  config: VsAgentPluginConfig
+  logger: BaseLogger
 }) => {
   const { agent, messageId, connectionId, state, timestamp } = options
   const body = new MessageStateUpdated({

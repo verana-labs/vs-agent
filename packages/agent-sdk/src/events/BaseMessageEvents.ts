@@ -1,7 +1,7 @@
 import type { BaseAgentModules, VsAgent } from '../agent/VsAgent'
-import type { VsAgentPluginConfig } from '../types'
 
 import { DidCommPresentationV1Message, DidCommPresentationV1ProblemReportMessage } from '@credo-ts/anoncreds'
+import { BaseLogger } from '@credo-ts/core'
 import {
   DidCommCredentialEventTypes,
   DidCommCredentialState,
@@ -24,7 +24,7 @@ import { getRecordId } from '../utils/agent'
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
 import { emitVsAgentEvent } from './VsAgentEvents'
 
-export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config: VsAgentPluginConfig) => {
+export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => {
   // Proofs protocol messages (proof presentation and problem reports)
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
@@ -39,7 +39,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
           DidCommPresentationV1ProblemReportMessage.type.messageTypeUri,
         ].includes(message.type)
       ) {
-        config.logger.info('Presentation problem report received')
+        logger.info('Presentation problem report received')
         try {
           const record = await agent.didcomm.proofs.getByThreadAndConnectionId(
             message.threadId,
@@ -76,14 +76,14 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
               proofExchangeId: record.id,
               callbackUrl: callbackParameters.callbackUrl,
               status: errorMap[errorCode] ?? PresentationStatus.UNSPECIFIED_ERROR,
-              logger: config.logger,
+              logger,
               ref: callbackParameters.ref,
             })
           }
 
           emitVsAgentEvent(agent, msg)
         } catch (error) {
-          config.logger.error(`Error processing presentation problem report: ${error}`)
+          logger.error(`Error processing presentation problem report: ${error}`)
         }
       }
 
@@ -93,7 +93,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
           DidCommPresentationV2Message.type.messageTypeUri,
         ].includes(message.type)
       ) {
-        config.logger.info('Presentation received')
+        logger.info('Presentation received')
 
         try {
           const record = await agent.didcomm.proofs.getByThreadAndConnectionId(
@@ -136,7 +136,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
               claims,
               status: record.isVerified ? PresentationStatus.OK : PresentationStatus.VERIFICATION_ERROR,
               verified: record.isVerified ?? false,
-              logger: config.logger,
+              logger,
               ref: callbackParameters.ref,
             })
           }
@@ -158,7 +158,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
 
           emitVsAgentEvent(agent, msg)
         } catch (error) {
-          config.logger.error(`Error processing presentation message: ${error}`)
+          logger.error(`Error processing presentation message: ${error}`)
         }
       }
     },
@@ -168,7 +168,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, config
   agent.events.on(
     DidCommCredentialEventTypes.DidCommCredentialStateChanged,
     async ({ payload }: DidCommCredentialStateChangedEvent) => {
-      config.logger.debug(
+      logger.debug(
         `DidCommCredentialStateChangedEvent received. Record id: ${JSON.stringify(payload.credentialExchangeRecord.id)}, state: ${JSON.stringify(payload.credentialExchangeRecord.state)}`,
       )
       const record = payload.credentialExchangeRecord
