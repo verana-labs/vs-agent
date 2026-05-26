@@ -6,7 +6,7 @@ import {
   MrzDataReceivedEvent,
 } from '@2060.io/credo-ts-didcomm-mrtd'
 import { BaseLogger } from '@credo-ts/core'
-import { emitVsAgentEvent, VsAgent } from '@verana-labs/vs-agent-sdk'
+import { emitVsAgentEvent, msgToEvent, VsAgent, VsAgentEventTypes } from '@verana-labs/vs-agent-sdk'
 
 import { EMrtdDataSubmitMessage } from '../model/EMrtdDataSubmitMessage'
 import { MrtdSubmitState } from '../model/MrtdSubmitState'
@@ -30,7 +30,7 @@ export const mrtdEvents = (agent: VsAgent<any>, logger: BaseLogger) => {
     })
 
     msg.id = await getRecordId(agent, msg.id)
-    emitVsAgentEvent(agent, msg)
+    emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
   })
 
   agent.events.on(MrtdEventTypes.EMrtdDataReceived, async ({ payload }: EMrtdDataReceivedEvent) => {
@@ -44,7 +44,7 @@ export const mrtdEvents = (agent: VsAgent<any>, logger: BaseLogger) => {
     })
 
     msg.id = await getRecordId(agent, msg.id)
-    emitVsAgentEvent(agent, msg)
+    emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
   })
 
   // MRTD problem reports
@@ -69,7 +69,7 @@ export const mrtdEvents = (agent: VsAgent<any>, logger: BaseLogger) => {
         state: stateMap[description.code as MrtdProblemReportReason],
       })
       msg.id = await getRecordId(agent, msg.id)
-      emitVsAgentEvent(agent, msg)
+      emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
     } else if (
       [MrtdProblemReportReason.MrzRefused, MrtdProblemReportReason.MrzTimeout].includes(
         description.code as MrtdProblemReportReason,
@@ -81,7 +81,7 @@ export const mrtdEvents = (agent: VsAgent<any>, logger: BaseLogger) => {
         state: stateMap[description.code as MrtdProblemReportReason],
       })
       msg.id = await getRecordId(agent, msg.id)
-      emitVsAgentEvent(agent, msg)
+      emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
     }
   })
 }

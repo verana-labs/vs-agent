@@ -14,7 +14,7 @@ import {
 import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
 
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
-import { emitVsAgentEvent } from './VsAgentEvents'
+import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 
 export const connectionEvents = async (
   agent: VsAgent<any>,
@@ -88,7 +88,7 @@ export const connectionEvents = async (
         metadata: config.discoveryOptions ? {} : undefined,
       })
 
-      emitVsAgentEvent(agent, body)
+      emitVsAgentEvent(agent, VsAgentEventTypes.ConnectionStateUpdated, body)
     },
   )
 
@@ -105,7 +105,7 @@ export const connectionEvents = async (
         state: 'terminated',
       })
 
-      emitVsAgentEvent(agent, body)
+      emitVsAgentEvent(agent, VsAgentEventTypes.ConnectionStateUpdated, body)
     },
   )
 
@@ -135,7 +135,7 @@ export const connectionEvents = async (
         metadata,
       })
 
-      emitVsAgentEvent(agent, body)
+      emitVsAgentEvent(agent, VsAgentEventTypes.ConnectionStateUpdated, body)
     },
   )
 

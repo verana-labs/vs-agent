@@ -1,7 +1,7 @@
 import type { BaseLogger } from '@credo-ts/core'
 import type { Event } from '@verana-labs/vs-agent-model'
 
-import { VsAgent, VsAgentEventType, type VsAgentEvent } from '@verana-labs/vs-agent-sdk'
+import { VsAgent, VsAgentEventTypes } from '@verana-labs/vs-agent-sdk'
 
 /**
  * Listens to VS Agent domain events from the agent bus and forwards each to the webhook
@@ -23,7 +23,7 @@ export const webhookEvent = (agent: VsAgent, webhookUrl: string, logger: BaseLog
     }
   }
 
-  for (const type of Object.values(VsAgentEventType)) {
-    agent.events.on(type, ({ payload }: VsAgentEvent) => post(payload.event as Event))
+  for (const type of Object.values(VsAgentEventTypes)) {
+    agent.events.on(type, ({ payload }) => post(payload.event as Event))
   }
 }

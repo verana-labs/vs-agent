@@ -22,7 +22,7 @@ import {
 import { getRecordId } from '../utils/agent'
 
 import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
-import { emitVsAgentEvent } from './VsAgentEvents'
+import { emitVsAgentEvent, msgToEvent, VsAgentEventTypes } from './VsAgentEvents'
 
 export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => {
   // Proofs protocol messages (proof presentation and problem reports)
@@ -81,7 +81,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             })
           }
 
-          emitVsAgentEvent(agent, msg)
+          emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
         } catch (error) {
           logger.error(`Error processing presentation problem report: ${error}`)
         }
@@ -156,7 +156,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             timestamp: record.updatedAt,
           })
 
-          emitVsAgentEvent(agent, msg)
+          emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
         } catch (error) {
           logger.error(`Error processing presentation message: ${error}`)
         }
@@ -189,7 +189,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
         })
 
         if (message.threadId) message.threadId = await getRecordId(agent, message.threadId)
-        emitVsAgentEvent(agent, message)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(message))
       } else if (
         [
           DidCommCredentialState.Declined,
@@ -206,7 +206,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
               ? DidCommCredentialState.Declined
               : record.state,
         })
-        emitVsAgentEvent(agent, message)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(message))
       }
     },
   )

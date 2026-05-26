@@ -48,7 +48,13 @@ import {
   ReactionMessage,
   TextMessage,
 } from '@verana-labs/vs-agent-model'
-import { emitVsAgentEvent, getRecordId, VsAgent } from '@verana-labs/vs-agent-sdk'
+import {
+  emitVsAgentEvent,
+  getRecordId,
+  msgToEvent,
+  VsAgent,
+  VsAgentEventTypes,
+} from '@verana-labs/vs-agent-sdk'
 
 import { createDataUrl } from '../utils/parsers'
 
@@ -86,7 +92,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
         })
 
         if (msg.threadId) msg.threadId = await getRecordId(agent, msg.threadId)
-        emitVsAgentEvent(agent, msg)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       // Action Menu protocol messages
@@ -97,7 +103,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
           timestamp: new Date(),
         })
 
-        emitVsAgentEvent(agent, msg)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       if (message.type === PerformMessage.type.messageTypeUri) {
@@ -108,7 +114,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
           timestamp: new Date(),
         })
 
-        emitVsAgentEvent(agent, msg)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       // Question Answer protocol messages
@@ -134,7 +140,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
           id: message.id,
         })
 
-        emitVsAgentEvent(agent, msg)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       if (message.type === CallOfferMessage.type.messageTypeUri) {
@@ -150,7 +156,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
           timestamp: new Date(),
         })
 
-        emitVsAgentEvent(agent, msg)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       if (message.type === CallEndMessage.type.messageTypeUri) {
@@ -162,7 +168,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
           timestamp: new Date(),
         })
 
-        emitVsAgentEvent(agent, msg)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       if (message.type === CallAcceptMessage.type.messageTypeUri) {
@@ -175,7 +181,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
           timestamp: new Date(),
         })
 
-        emitVsAgentEvent(agent, msg)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       if (message.type === CallRejectMessage.type.messageTypeUri) {
@@ -187,7 +193,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
           timestamp: new Date(),
         })
 
-        emitVsAgentEvent(agent, msg)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
     },
   )
@@ -232,7 +238,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
           })
 
           if (message.threadId) message.threadId = await getRecordId(agent, message.threadId)
-          emitVsAgentEvent(agent, message)
+          emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(message))
         }
       }
     },
@@ -274,7 +280,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
         })),
       })
 
-      emitVsAgentEvent(agent, msg)
+      emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
     },
   )
 
@@ -313,7 +319,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
         preferredLanguage,
       })
 
-      emitVsAgentEvent(agent, msg)
+      emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
     },
   )
 }
@@ -333,5 +339,5 @@ const sendMessageStateUpdatedEvent = async (options: {
     timestamp,
     connectionId,
   })
-  emitVsAgentEvent(agent, body)
+  emitVsAgentEvent(agent, VsAgentEventTypes.MessageStateUpdated, body)
 }
