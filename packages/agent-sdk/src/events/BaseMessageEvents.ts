@@ -16,12 +16,13 @@ import {
   CredentialReceptionMessage,
   CredentialRequestMessage,
   IdentityProofSubmitMessage,
+  PresentationStatus,
+  PresentationStatusUpdated,
   VerifiableCredentialSubmittedProofItem,
 } from '@verana-labs/vs-agent-model'
 
 import { getRecordId } from '../utils/agent'
 
-import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
 import { emitVsAgentEvent, msgToEvent, VsAgentEventTypes } from './VsAgentEvents'
 
 export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => {
@@ -72,13 +73,16 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
               'Request declined': PresentationStatus.REFUSED,
               'e.req.no-compatible-credentials': PresentationStatus.NO_COMPATIBLE_CREDENTIALS,
             }
-            await sendPresentationCallbackEvent({
-              proofExchangeId: record.id,
-              callbackUrl: callbackParameters.callbackUrl,
-              status: errorMap[errorCode] ?? PresentationStatus.UNSPECIFIED_ERROR,
-              logger,
-              ref: callbackParameters.ref,
-            })
+            emitVsAgentEvent(
+              agent,
+              VsAgentEventTypes.PresentationStatusUpdated,
+              new PresentationStatusUpdated({
+                proofExchangeId: record.id,
+                callbackUrl: callbackParameters.callbackUrl,
+                status: errorMap[errorCode] ?? PresentationStatus.UNSPECIFIED_ERROR,
+                ref: callbackParameters.ref,
+              }),
+            )
           }
 
           emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
@@ -130,15 +134,18 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             | undefined
 
           if (callbackParameters && callbackParameters.callbackUrl) {
-            await sendPresentationCallbackEvent({
-              proofExchangeId: record.id,
-              callbackUrl: callbackParameters.callbackUrl,
-              claims,
-              status: record.isVerified ? PresentationStatus.OK : PresentationStatus.VERIFICATION_ERROR,
-              verified: record.isVerified ?? false,
-              logger,
-              ref: callbackParameters.ref,
-            })
+            emitVsAgentEvent(
+              agent,
+              VsAgentEventTypes.PresentationStatusUpdated,
+              new PresentationStatusUpdated({
+                proofExchangeId: record.id,
+                callbackUrl: callbackParameters.callbackUrl,
+                claims,
+                status: record.isVerified ? PresentationStatus.OK : PresentationStatus.VERIFICATION_ERROR,
+                verified: record.isVerified ?? false,
+                ref: callbackParameters.ref,
+              }),
+            )
           }
 
           const msg = new IdentityProofSubmitMessage({

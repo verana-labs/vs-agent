@@ -7,6 +7,7 @@ import {
   VsAgentEventTypes,
   VsAgentMessageReceivedEvent,
   VsAgentMessageStateUpdatedEvent,
+  VsAgentPresentationStatusUpdatedEvent,
 } from '@verana-labs/vs-agent-sdk'
 
 export const webhookEvent = (agent: VsAgent, webhookUrl: string, logger: BaseLogger) => {
@@ -33,5 +34,24 @@ export const webhookEvent = (agent: VsAgent, webhookUrl: string, logger: BaseLog
   )
   agent.events.on<VsAgentMessageStateUpdatedEvent>(VsAgentEventTypes.MessageStateUpdated, ({ payload }) =>
     sendWebhookEvent(payload.event),
+  )
+  agent.events.on<VsAgentPresentationStatusUpdatedEvent>(
+    VsAgentEventTypes.PresentationStatusUpdated,
+    async ({ payload }) => {
+      const { callbackUrl, ref, claims, status, verified, proofExchangeId } = payload.event
+      if (!callbackUrl) return
+
+      const body = { ref, claims, status, verified, proofExchangeId }
+      try {
+        logger.debug(`sending presentation callback event to ${callbackUrl}: ${JSON.stringify(body)}`)
+        await fetch(callbackUrl, {
+          method: 'POST',
+          body: JSON.stringify(body),
+          headers: { 'Content-Type': 'application/json' },
+        })
+      } catch (error) {
+        logger.error(`sending presentation callback event to ${callbackUrl}`, { cause: error })
+      }
+    },
   )
 }

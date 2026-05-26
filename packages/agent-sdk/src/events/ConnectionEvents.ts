@@ -11,9 +11,13 @@ import {
   DidCommDiscoverFeaturesDisclosureReceivedEvent,
   DidCommDiscoverFeaturesEventTypes,
 } from '@credo-ts/didcomm'
-import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
+import {
+  ConnectionStateUpdated,
+  ExtendedDidExchangeState,
+  PresentationStatus,
+  PresentationStatusUpdated,
+} from '@verana-labs/vs-agent-model'
 
-import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
 import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 
 export const connectionEvents = async (
@@ -69,13 +73,16 @@ export const connectionEvents = async (
             callbackParameters.callbackUrl &&
             record.state === DidCommDidExchangeState.RequestReceived
           ) {
-            await sendPresentationCallbackEvent({
-              proofExchangeId: proofRecord.id,
-              callbackUrl: callbackParameters.callbackUrl,
-              status: PresentationStatus.CONNECTED,
-              logger: config.logger,
-              ref: callbackParameters.ref,
-            })
+            emitVsAgentEvent(
+              agent,
+              VsAgentEventTypes.PresentationStatusUpdated,
+              new PresentationStatusUpdated({
+                proofExchangeId: proofRecord.id,
+                callbackUrl: callbackParameters.callbackUrl,
+                status: PresentationStatus.CONNECTED,
+                ref: callbackParameters.ref,
+              }),
+            )
           }
         })
       }
