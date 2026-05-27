@@ -17,7 +17,7 @@ import {
   CredentialRequestMessage,
   IdentityProofSubmitMessage,
   PresentationStatus,
-  PresentationStatusUpdated,
+  PresentationStateUpdated,
   VerifiableCredentialSubmittedProofItem,
 } from '@verana-labs/vs-agent-model'
 
@@ -76,7 +76,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             emitVsAgentEvent(
               agent,
               VsAgentEventTypes.PresentationStateUpdated,
-              new PresentationStatusUpdated({
+              new PresentationStateUpdated({
                 proofExchangeId: record.id,
                 callbackUrl: callbackParameters.callbackUrl,
                 status: errorMap[errorCode] ?? PresentationStatus.UNSPECIFIED_ERROR,
@@ -137,7 +137,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             emitVsAgentEvent(
               agent,
               VsAgentEventTypes.PresentationStateUpdated,
-              new PresentationStatusUpdated({
+              new PresentationStateUpdated({
                 proofExchangeId: record.id,
                 callbackUrl: callbackParameters.callbackUrl,
                 claims,

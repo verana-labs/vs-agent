@@ -7,7 +7,7 @@ import {
   Event,
   MessageReceived,
   MessageStateUpdated,
-  PresentationStatusUpdated,
+  PresentationStateUpdated,
 } from '@verana-labs/vs-agent-model'
 
 export enum VsAgentEventTypes {
@@ -38,7 +38,7 @@ export interface VsAgentMessageStateUpdatedEvent extends BaseEvent {
 export interface VsAgentPresentationStateUpdatedEvent extends BaseEvent {
   type: typeof VsAgentEventTypes.PresentationStateUpdated
   payload: {
-    event: PresentationStatusUpdated
+    event: PresentationStateUpdated
   }
 }
 

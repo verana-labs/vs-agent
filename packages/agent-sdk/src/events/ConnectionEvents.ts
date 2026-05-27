@@ -15,7 +15,7 @@ import {
   ConnectionStateUpdated,
   ExtendedDidExchangeState,
   PresentationStatus,
-  PresentationStatusUpdated,
+  PresentationStateUpdated,
 } from '@verana-labs/vs-agent-model'
 
 import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
@@ -76,7 +76,7 @@ export const connectionEvents = async (
             emitVsAgentEvent(
               agent,
               VsAgentEventTypes.PresentationStateUpdated,
-              new PresentationStatusUpdated({
+              new PresentationStateUpdated({
                 proofExchangeId: proofRecord.id,
                 callbackUrl: callbackParameters.callbackUrl,
                 status: PresentationStatus.CONNECTED,

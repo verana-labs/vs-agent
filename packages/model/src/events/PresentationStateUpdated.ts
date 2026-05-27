@@ -16,7 +16,7 @@ export enum PresentationStatus {
   UNSPECIFIED_ERROR = 'unspecified-error',
 }
 
-export interface PresentationStatusUpdatedOptions {
+export interface PresentationStateUpdatedOptions {
   proofExchangeId: string
   status: PresentationStatus
   callbackUrl: string
@@ -26,8 +26,8 @@ export interface PresentationStatusUpdatedOptions {
   timestamp?: Date
 }
 
-export class PresentationStatusUpdated extends Event {
-  public constructor(options: PresentationStatusUpdatedOptions) {
+export class PresentationStateUpdated extends Event {
+  public constructor(options: PresentationStateUpdatedOptions) {
     super()
 
     if (options) {
@@ -41,7 +41,7 @@ export class PresentationStatusUpdated extends Event {
     }
   }
 
-  public readonly type = PresentationStatusUpdated.type
+  public readonly type = PresentationStateUpdated.type
   public static readonly type = EventType.PresentationStateUpdated
 
   @Expose()
