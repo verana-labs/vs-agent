@@ -12,7 +12,7 @@ export class ConnectionsEventController {
 
   constructor(@Inject(ConnectionsEventService) private readonly service: ConnectionsEventService) {}
 
-  @Post(`/${EventType.ConnectionState}`)
+  @Post(`/${EventType.ConnectionStateUpdated}`)
   @ApiOperation({
     summary: 'Handle the ConnectionState event',
     description: 'Processes the ConnectionState event and updates the connection state.',

@@ -2,12 +2,15 @@
 export * from './agent'
 export type { Plugin } from './types'
 
+// Events
+export * from './events'
+
 // Plugins
 export { setupBaseDidComm } from './plugins/setupBaseDidComm'
 export type { BaseDidCommPlugin, BaseDidCommPluginOptions } from './plugins/setupBaseDidComm'
 
 // NestJS integration
-export type { VsAgentNestPlugin, VsAgentPluginConfig, MessageHandler } from './types'
+export type { VsAgentNestPlugin, MessageHandler } from './types'
 export { MESSAGE_HANDLERS } from './types'
 
 // DID utilities
@@ -29,13 +32,6 @@ export {
 } from './credentials/FullTailsFileService'
 
 // Utils
-export { createInvitation, getWebDid, getRecordId } from './utils/agent'
-export { getEcsSchemas } from './utils/data'
-export { webhookListener } from './utils/webhook'
-export type { WebhookData } from './utils/webhook'
-export { sendWebhookEvent, sendMessageReceivedEvent } from './utils/webhookEvent'
-export * from './utils/util'
-export * from './utils/setupSelfTr'
-export * from './utils/trustCredentialStore'
+export * from './utils'
 
 export * from './blockchain'

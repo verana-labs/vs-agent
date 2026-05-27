@@ -9,6 +9,7 @@ import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import {
   Agent,
   AgentDependencies,
+  BaseLogger,
   convertPublicKeyToX25519,
   CredoError,
   DidCommV1Service,
@@ -28,6 +29,7 @@ import {
 import {
   DidCommCredentialsModuleConfigOptions,
   DidCommCredentialV2Protocol,
+  DidCommFeatureQueryOptions,
   DidCommJsonLdCredentialFormatService,
   DidCommModule,
   DidCommModuleConfigOptions,
@@ -38,6 +40,8 @@ import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
+import { baseMessageEvents } from '../events/BaseMessageEvents'
+import { connectionEvents } from '../events/ConnectionEvents'
 
 const MANAGED_DIDCOMM_SERVICE_TYPES: readonly string[] = [DidCommV1Service.type, NewDidCommV2Service.type]
 
@@ -81,6 +85,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public displayPictureUrl?: string
   public label: string
   public veranaChain?: VeranaChainService
+  public discoveryOptions?: DidCommFeatureQueryOptions[]
 
   public constructor(
     options: AgentOptions<TModules> & {
@@ -90,6 +95,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       displayPictureUrl?: string
       label: string
       veranaChain?: VeranaChainService
+      discoveryOptions?: DidCommFeatureQueryOptions[]
     },
   ) {
     super(options)
@@ -99,6 +105,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.displayPictureUrl = options.displayPictureUrl
     this.label = options.label
     this.veranaChain = options.veranaChain
+    this.discoveryOptions = options.discoveryOptions
   }
 
   private get hasUserProfile(): boolean {
@@ -279,6 +286,11 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       }
       this.did = existingRecord.did
     }
+
+    // Initialize events
+    const logger = this.config.logger as BaseLogger
+    await connectionEvents(this, { discoveryOptions: this.discoveryOptions, logger })
+    await baseMessageEvents(this as VsAgent, logger)
   }
 
   private async findCreatedDid(parsedDid: ParsedDid) {

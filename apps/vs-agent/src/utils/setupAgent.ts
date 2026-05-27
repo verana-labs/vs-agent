@@ -1,4 +1,4 @@
-import type { DidCommVersion } from '@credo-ts/didcomm'
+import type { DidCommFeatureQueryOptions, DidCommVersion } from '@credo-ts/didcomm'
 
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { LogLevel, ParsedDid } from '@credo-ts/core'
@@ -33,6 +33,7 @@ export const setupAgent = async ({
   masterListCscaLocation,
   autoUpdateStorageOnStartup,
   veranaChain,
+  discoveryOptions,
 }: {
   port: number
   walletConfig: AskarModuleConfigStoreOptions
@@ -46,6 +47,7 @@ export const setupAgent = async ({
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
   veranaChain?: VeranaChainService
+  discoveryOptions?: DidCommFeatureQueryOptions[]
 }) => {
   const logger = new TsLogger(logLevel ?? LogLevel.Warn, 'Agent')
   const publicDid = parsedDid?.did
@@ -102,6 +104,7 @@ export const setupAgent = async ({
     displayPictureUrl,
     label,
     veranaChain,
+    discoveryOptions,
   })
 
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
