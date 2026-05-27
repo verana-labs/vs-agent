@@ -871,7 +871,7 @@ When the presentation flow is completed (either successfully or not), VS Agent c
 {
   "ref": "1234-5678",
   "presentationRequestId": "unique identifier for the flow",
-  "status": "PresentationStatus",
+  "state": "PresentationState",
   "claims": [
     { "name": "attribute-1", "value": "value-1" },
     { "name": "attribute-2", "value": "value-2" }
@@ -879,7 +879,7 @@ When the presentation flow is completed (either successfully or not), VS Agent c
 }
 ```
 
-Possible values for PresentationStatus are:
+Possible values for PresentationState are:
 
 - 'ok'
 - 'connected'

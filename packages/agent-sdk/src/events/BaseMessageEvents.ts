@@ -16,7 +16,7 @@ import {
   CredentialReceptionMessage,
   CredentialRequestMessage,
   IdentityProofSubmitMessage,
-  PresentationStatus,
+  PresentationState,
   PresentationStateUpdated,
   VerifiableCredentialSubmittedProofItem,
 } from '@verana-labs/vs-agent-model'
@@ -69,9 +69,9 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             | undefined
 
           if (callbackParameters && callbackParameters.callbackUrl) {
-            const errorMap: Record<string, PresentationStatus> = {
-              'Request declined': PresentationStatus.REFUSED,
-              'e.req.no-compatible-credentials': PresentationStatus.NO_COMPATIBLE_CREDENTIALS,
+            const errorMap: Record<string, PresentationState> = {
+              'Request declined': PresentationState.REFUSED,
+              'e.req.no-compatible-credentials': PresentationState.NO_COMPATIBLE_CREDENTIALS,
             }
             emitVsAgentEvent(
               agent,
@@ -79,7 +79,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
               new PresentationStateUpdated({
                 proofExchangeId: record.id,
                 callbackUrl: callbackParameters.callbackUrl,
-                status: errorMap[errorCode] ?? PresentationStatus.UNSPECIFIED_ERROR,
+                state: errorMap[errorCode] ?? PresentationState.UNSPECIFIED_ERROR,
                 ref: callbackParameters.ref,
               }),
             )
@@ -141,7 +141,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
                 proofExchangeId: record.id,
                 callbackUrl: callbackParameters.callbackUrl,
                 claims,
-                status: record.isVerified ? PresentationStatus.OK : PresentationStatus.VERIFICATION_ERROR,
+                state: record.isVerified ? PresentationState.OK : PresentationState.VERIFICATION_ERROR,
                 verified: record.isVerified ?? false,
                 ref: callbackParameters.ref,
               }),

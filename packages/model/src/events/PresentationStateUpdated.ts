@@ -6,7 +6,7 @@ import { Claim } from '../messages/CredentialIssuanceMessage'
 import { Event } from './Event'
 import { EventType } from './EventType'
 
-export enum PresentationStatus {
+export enum PresentationState {
   OK = 'ok',
   CONNECTED = 'connected',
   SCANNED = 'scanned',
@@ -18,7 +18,7 @@ export enum PresentationStatus {
 
 export interface PresentationStateUpdatedOptions {
   proofExchangeId: string
-  status: PresentationStatus
+  state: PresentationState
   callbackUrl: string
   ref?: string
   claims?: Claim[]
@@ -32,7 +32,7 @@ export class PresentationStateUpdated extends Event {
 
     if (options) {
       this.proofExchangeId = options.proofExchangeId
-      this.status = options.status
+      this.state = options.state
       this.callbackUrl = options.callbackUrl
       this.ref = options.ref
       this.claims = options.claims
@@ -50,7 +50,7 @@ export class PresentationStateUpdated extends Event {
 
   @Expose()
   @IsString()
-  public status!: PresentationStatus
+  public state!: PresentationState
 
   @Expose()
   @IsString()

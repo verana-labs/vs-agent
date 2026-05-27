@@ -38,10 +38,10 @@ export const webhookEvent = (agent: VsAgent, webhookUrl: string, logger: BaseLog
   agent.events.on<VsAgentPresentationStateUpdatedEvent>(
     VsAgentEventTypes.PresentationStateUpdated,
     async ({ payload }) => {
-      const { callbackUrl, ref, claims, status, verified, proofExchangeId } = payload.event
+      const { callbackUrl, ref, claims, state, verified, proofExchangeId } = payload.event
       if (!callbackUrl) return
 
-      const body = { ref, claims, status, verified, proofExchangeId }
+      const body = { ref, claims, state, verified, proofExchangeId }
       try {
         logger.debug(`sending presentation callback event to ${callbackUrl}: ${JSON.stringify(body)}`)
         await fetch(callbackUrl, {

@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Res, HttpStatus, HttpException } from '@nestjs/common'
-import { PresentationStatus, PresentationStateUpdated } from '@verana-labs/vs-agent-model'
+import { PresentationState, PresentationStateUpdated } from '@verana-labs/vs-agent-model'
 import { createInvitation, emitVsAgentEvent, VsAgentEventTypes } from '@verana-labs/vs-agent-sdk'
 import { Response } from 'express'
 import QRCode from 'qrcode'
@@ -41,7 +41,7 @@ export class InvitationRoutesController {
               new PresentationStateUpdated({
                 proofExchangeId: proofRecord.id,
                 callbackUrl: callbackParameters.callbackUrl,
-                status: PresentationStatus.SCANNED,
+                state: PresentationState.SCANNED,
                 ref: callbackParameters.ref,
               }),
             )
