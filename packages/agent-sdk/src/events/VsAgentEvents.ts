@@ -14,7 +14,7 @@ export enum VsAgentEventTypes {
   ConnectionStateUpdated = 'vs-agent-connection-state-updated',
   MessageReceived = 'vs-agent-message-received',
   MessageStateUpdated = 'vs-agent-message-state-updated',
-  PresentationStatusUpdated = 'vs-agent-presentation-status-updated',
+  PresentationStateUpdated = 'vs-agent-presentation-state-updated',
 }
 
 export interface VsAgentConnectionStateEvent extends BaseEvent {
@@ -35,8 +35,8 @@ export interface VsAgentMessageStateUpdatedEvent extends BaseEvent {
     event: MessageStateUpdated
   }
 }
-export interface VsAgentPresentationStatusUpdatedEvent extends BaseEvent {
-  type: typeof VsAgentEventTypes.PresentationStatusUpdated
+export interface VsAgentPresentationStateUpdatedEvent extends BaseEvent {
+  type: typeof VsAgentEventTypes.PresentationStateUpdated
   payload: {
     event: PresentationStatusUpdated
   }

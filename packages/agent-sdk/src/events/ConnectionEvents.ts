@@ -75,7 +75,7 @@ export const connectionEvents = async (
           ) {
             emitVsAgentEvent(
               agent,
-              VsAgentEventTypes.PresentationStatusUpdated,
+              VsAgentEventTypes.PresentationStateUpdated,
               new PresentationStatusUpdated({
                 proofExchangeId: proofRecord.id,
                 callbackUrl: callbackParameters.callbackUrl,

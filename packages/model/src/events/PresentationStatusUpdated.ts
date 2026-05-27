@@ -42,7 +42,7 @@ export class PresentationStatusUpdated extends Event {
   }
 
   public readonly type = PresentationStatusUpdated.type
-  public static readonly type = EventType.PresentationStatusUpdated
+  public static readonly type = EventType.PresentationStateUpdated
 
   @Expose()
   @IsString()

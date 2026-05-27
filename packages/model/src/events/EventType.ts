@@ -1,6 +1,6 @@
 export enum EventType {
-ConnectionStateUpdated = 'connection-state-updated',
-MessageStateUpdated = 'message-state-updated',
-MessageReceived = 'message-received',
+  ConnectionStateUpdated = 'connection-state-updated',
+  MessageStateUpdated = 'message-state-updated',
+  MessageReceived = 'message-received',
   PresentationStateUpdated = 'presentation-state-updated',
 }

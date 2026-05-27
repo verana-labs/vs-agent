@@ -7,7 +7,7 @@ import {
   VsAgentEventTypes,
   VsAgentMessageReceivedEvent,
   VsAgentMessageStateUpdatedEvent,
-  VsAgentPresentationStatusUpdatedEvent,
+  VsAgentPresentationStateUpdatedEvent,
 } from '@verana-labs/vs-agent-sdk'
 
 export const webhookEvent = (agent: VsAgent, webhookUrl: string, logger: BaseLogger) => {
@@ -35,8 +35,8 @@ export const webhookEvent = (agent: VsAgent, webhookUrl: string, logger: BaseLog
   agent.events.on<VsAgentMessageStateUpdatedEvent>(VsAgentEventTypes.MessageStateUpdated, ({ payload }) =>
     sendWebhookEvent(payload.event),
   )
-  agent.events.on<VsAgentPresentationStatusUpdatedEvent>(
-    VsAgentEventTypes.PresentationStatusUpdated,
+  agent.events.on<VsAgentPresentationStateUpdatedEvent>(
+    VsAgentEventTypes.PresentationStateUpdated,
     async ({ payload }) => {
       const { callbackUrl, ref, claims, status, verified, proofExchangeId } = payload.event
       if (!callbackUrl) return

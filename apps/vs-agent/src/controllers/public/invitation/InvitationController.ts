@@ -37,7 +37,7 @@ export class InvitationRoutesController {
           if (proofRecord && callbackParameters && callbackParameters.callbackUrl) {
             emitVsAgentEvent(
               agent,
-              VsAgentEventTypes.PresentationStatusUpdated,
+              VsAgentEventTypes.PresentationStateUpdated,
               new PresentationStatusUpdated({
                 proofExchangeId: proofRecord.id,
                 callbackUrl: callbackParameters.callbackUrl,

@@ -75,7 +75,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             }
             emitVsAgentEvent(
               agent,
-              VsAgentEventTypes.PresentationStatusUpdated,
+              VsAgentEventTypes.PresentationStateUpdated,
               new PresentationStatusUpdated({
                 proofExchangeId: record.id,
                 callbackUrl: callbackParameters.callbackUrl,
@@ -136,7 +136,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
           if (callbackParameters && callbackParameters.callbackUrl) {
             emitVsAgentEvent(
               agent,
-              VsAgentEventTypes.PresentationStatusUpdated,
+              VsAgentEventTypes.PresentationStateUpdated,
               new PresentationStatusUpdated({
                 proofExchangeId: record.id,
                 callbackUrl: callbackParameters.callbackUrl,
