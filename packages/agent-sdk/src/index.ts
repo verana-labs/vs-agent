@@ -2,12 +2,15 @@
 export * from './agent'
 export type { Plugin } from './types'
 
+// Events
+export * from './events'
+
 // Plugins
 export { setupBaseDidComm } from './plugins/setupBaseDidComm'
 export type { BaseDidCommPlugin, BaseDidCommPluginOptions } from './plugins/setupBaseDidComm'
 
 // NestJS integration
-export type { VsAgentNestPlugin, VsAgentPluginConfig, MessageHandler } from './types'
+export type { VsAgentNestPlugin, MessageHandler } from './types'
 export { MESSAGE_HANDLERS } from './types'
 
 // DID utilities

@@ -2,7 +2,7 @@
   "name": "@verana-labs/vs-agent-client",
   "main": "build/index",
   "types": "build/index",
-  "version": "1.10.1",
+  "version": "1.11.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/verana-labs/vs-agent"
@@ -35,6 +35,6 @@
     "ts-node-dev": "^2.0.0"
   },
   "peerDependencies": {
-    "@credo-ts/core": "0.7.1-pr-2704-20260508193405"
+    "@credo-ts/core": "0.7.1-pr-2704-20260519192541"
   }
 }

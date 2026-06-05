@@ -1,8 +1,6 @@
 import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 import type { Express } from 'express'
 
-import { DidCommFeatureQueryOptions } from '@credo-ts/didcomm'
-
 import { TsLogger } from './logger'
 
 export interface ServerConfig {
@@ -11,8 +9,6 @@ export interface ServerConfig {
   cors?: boolean
   app?: Express
   logger: TsLogger
-  webhookUrl?: string
-  discoveryOptions?: DidCommFeatureQueryOptions[]
   endpoints: string[]
   nestPlugins?: VsAgentNestPlugin[]
 }

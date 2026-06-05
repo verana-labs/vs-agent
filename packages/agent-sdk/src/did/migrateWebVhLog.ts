@@ -1,4 +1,6 @@
+import { AskarStoreManager } from '@credo-ts/askar'
 import { AgentContext, DidRecord, DidRepository, Kms, Logger } from '@credo-ts/core'
+import { KeyAlgorithm } from '@openwallet-foundation/askar-shared'
 import {
   DIDLog,
   DIDLogEntry,
@@ -175,6 +177,35 @@ export async function rebuildWebVhLog(
 }
 
 /**
+ * Scans all Ed25519 keys in the Askar store and returns the key name
+ * whose public key matches the given multibase fingerprint.
+ * Used to recover a lost kmsKeyId when didRecord.keys is empty after a schema upgrade.
+ */
+async function findKmsKeyIdForFingerprint(
+  agentContext: AgentContext,
+  fingerprint: string,
+): Promise<string | undefined> {
+  try {
+    const storeManager = agentContext.dependencyManager.resolve(AskarStoreManager)
+    return await storeManager.withSession(agentContext, async session => {
+      const entries = await session.fetchAllKeys({ algorithm: KeyAlgorithm.Ed25519 })
+      for (const entry of entries) {
+        const pubBytes = entry.key.publicBytes
+        const computed = multibaseEncode(new Uint8Array([237, 1, ...pubBytes]), MultibaseEncoding.BASE58_BTC)
+        entry.key.handle.free()
+        if (computed === fingerprint) return entry.name
+      }
+      return undefined
+    })
+  } catch {
+    agentContext.config.logger.warn(
+      `Failed to scan Askar keys, cannot recover controller key for webvh log migration`,
+    )
+    return undefined
+  }
+}
+
+/**
  * Detect a `did:webvh` log that became unresolvable because of the
  * `didwebvh-ts` <2.7.4 entry-hash bug (placeholder versionId used for entries
  * after the first). If so, rebuild the log preserving:
@@ -207,15 +238,25 @@ export async function migrateWebVhLogIfBroken(
     return false
   }
 
-  const kmsKeyId = didRecord.keys?.[0]?.kmsKeyId
-  if (!kmsKeyId) {
-    throw new Error(`Cannot migrate webvh log for ${didRecord.did}: no controller key on DID record`)
-  }
-
   const domain = didRecord.getTag('domain') as string | undefined
   const activeUpdateKey = log[log.length - 1].parameters.updateKeys?.[0] ?? log[0].parameters.updateKeys?.[0]
   if (!activeUpdateKey) {
     throw new Error(`Cannot migrate webvh log for ${didRecord.did}: no updateKeys present`)
+  }
+
+  let kmsKeyId = didRecord.keys?.[0]?.kmsKeyId
+  if (!kmsKeyId) {
+    // The key mapping may have been lost after a schema update.
+    // Try to recover the key from Askar using the update key fingerprint.
+    kmsKeyId = await findKmsKeyIdForFingerprint(agentContext, activeUpdateKey)
+    if (!kmsKeyId) {
+      throw new Error(`Cannot migrate webvh log for ${didRecord.did}: no controller key on DID record`)
+    }
+    logger.warn(`webvh DID ${didRecord.did}: controller key recovered from Askar scan`)
+    // Update the DID record with the recovered key.
+    const vm = didRecord.didDocument?.verificationMethod?.find(v => v.publicKeyMultibase === activeUpdateKey)
+    const relativeKeyId = vm?.id ? `#${vm.id.split('#')[1]}` : '#key-1'
+    didRecord.keys = [{ kmsKeyId, didDocumentRelativeKeyId: relativeKeyId }]
   }
 
   logger.warn(

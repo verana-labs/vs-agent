@@ -1,23 +1,29 @@
-import type { ServerConfig } from '../utils'
-import type { VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { VsAgent } from '../agent/VsAgent'
+import type { BaseLogger } from '@credo-ts/core'
+import type { DidCommFeatureQueryOptions } from '@credo-ts/didcomm'
 
 import {
+  DidCommConnectionDidRotatedEvent,
   DidCommConnectionEventTypes,
   DidCommConnectionRepository,
   DidCommConnectionStateChangedEvent,
   DidCommDidExchangeState,
   DidCommDiscoverFeaturesDisclosureReceivedEvent,
   DidCommDiscoverFeaturesEventTypes,
-  DidCommEventTypes,
-  DidCommHangupMessage,
-  DidCommMessageProcessedEvent,
 } from '@credo-ts/didcomm'
-import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
-import { sendWebhookEvent } from '@verana-labs/vs-agent-sdk'
+import {
+  ConnectionStateUpdated,
+  ExtendedDidExchangeState,
+  PresentationState,
+  PresentationStateUpdated,
+} from '@verana-labs/vs-agent-model'
 
-import { PresentationStatus, sendPresentationCallbackEvent } from './CallbackEvent'
+import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 
-export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig) => {
+export const connectionEvents = async (
+  agent: VsAgent<any>,
+  config: { discoveryOptions?: DidCommFeatureQueryOptions[]; logger: BaseLogger },
+) => {
   // Get the first record matching agent's DID and obtain all alternatives for it
   const [agentPublicDidRecord] = await agent.dids.getCreatedDids({ did: agent.did })
   const alternativeDids = agentPublicDidRecord?.getTag('alternativeDids')
@@ -67,13 +73,16 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
             callbackParameters.callbackUrl &&
             record.state === DidCommDidExchangeState.RequestReceived
           ) {
-            await sendPresentationCallbackEvent({
-              proofExchangeId: proofRecord.id,
-              callbackUrl: callbackParameters.callbackUrl,
-              status: PresentationStatus.CONNECTED,
-              logger: config.logger,
-              ref: callbackParameters.ref,
-            })
+            emitVsAgentEvent(
+              agent,
+              VsAgentEventTypes.PresentationStateUpdated,
+              new PresentationStateUpdated({
+                proofExchangeId: proofRecord.id,
+                callbackUrl: callbackParameters.callbackUrl,
+                state: PresentationState.CONNECTED,
+                ref: callbackParameters.ref,
+              }),
+            )
           }
         })
       }
@@ -86,26 +95,24 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
         metadata: config.discoveryOptions ? {} : undefined,
       })
 
-      await sendWebhookEvent(config.webhookUrl + '/connection-state-updated', body, config.logger)
+      emitVsAgentEvent(agent, VsAgentEventTypes.ConnectionStateUpdated, body)
     },
   )
 
-  // When a hangup message is received for a given connection, it will be effectively terminated. VS Agent controller
-  // will be notified about this 'termination' status
   agent.events.on(
-    DidCommEventTypes.DidCommMessageProcessed,
-    async ({ payload }: DidCommMessageProcessedEvent) => {
-      const { message, connection } = payload
+    DidCommConnectionEventTypes.DidCommConnectionDidRotated,
+    async ({ payload }: DidCommConnectionDidRotatedEvent) => {
+      const record = payload.connectionRecord
+      const isTerminationByPeer = record.theirDid === undefined && (record.previousTheirDids?.length ?? 0) > 0
+      if (!isTerminationByPeer) return
 
-      if (message.type === DidCommHangupMessage.type.messageTypeUri && connection) {
-        const body = new ConnectionStateUpdated({
-          connectionId: connection.id,
-          invitationId: connection.outOfBandId,
-          state: 'terminated',
-        })
+      const body = new ConnectionStateUpdated({
+        connectionId: record.id,
+        invitationId: record.outOfBandId,
+        state: 'terminated',
+      })
 
-        await sendWebhookEvent(config.webhookUrl + '/connection-state-updated', body, config.logger)
-      }
+      emitVsAgentEvent(agent, VsAgentEventTypes.ConnectionStateUpdated, body)
     },
   )
 
@@ -135,7 +142,7 @@ export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig
         metadata,
       })
 
-      await sendWebhookEvent(config.webhookUrl + '/connection-state-updated', body, config.logger)
+      emitVsAgentEvent(agent, VsAgentEventTypes.ConnectionStateUpdated, body)
     },
   )
 

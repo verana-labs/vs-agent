@@ -9,7 +9,7 @@
       "default": "./build/index.js"
     }
   },
-  "version": "1.10.1",
+  "version": "1.11.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/verana-labs/vs-agent"
@@ -35,15 +35,15 @@
     "@2060.io/credo-ts-didcomm-reactions": "^0.1.1",
     "@2060.io/credo-ts-didcomm-receipts": "0.1.1",
     "@2060.io/credo-ts-didcomm-user-profile": "0.1.0",
-    "@credo-ts/action-menu": "0.7.1-pr-2704-20260508193405",
-    "@credo-ts/core": "0.7.1-pr-2704-20260508193405",
-    "@credo-ts/didcomm": "0.7.1-pr-2704-20260508193405",
-    "@credo-ts/question-answer": "0.7.1-pr-2704-20260508193405",
+    "@credo-ts/action-menu": "0.7.1-pr-2704-20260519192541",
+    "@credo-ts/core": "0.7.1-pr-2704-20260519192541",
+    "@credo-ts/didcomm": "0.7.1-pr-2704-20260519192541",
+    "@credo-ts/question-answer": "0.7.1-pr-2704-20260519192541",
     "@nestjs/common": "^10.0.0",
     "@verana-labs/vs-agent-model": "workspace:*",
     "@verana-labs/vs-agent-sdk": "workspace:*"
   },
   "peerDependencies": {
-    "@credo-ts/core": "0.7.1-pr-2704-20260508193405"
+    "@credo-ts/core": "0.7.1-pr-2704-20260519192541"
   }
 }

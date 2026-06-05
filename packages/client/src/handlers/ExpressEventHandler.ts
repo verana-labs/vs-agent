@@ -37,7 +37,7 @@ export class ExpressEventHandler {
    * }
    */
   public connectionState(handler: Handler) {
-    this.app.post(`/${EventType.ConnectionState}`, async (req: Request, res: Response) => {
+    this.app.post(`/${EventType.ConnectionStateUpdated}`, async (req: Request, res: Response) => {
       try {
         await handler(req, res)
       } catch (error) {

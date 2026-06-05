@@ -293,6 +293,21 @@ export class TrustService {
           if (!uptStatusListResult.revocationStatusListState.revocationStatusList) {
             throw new Error(`Failed to update revocation status list`)
           }
+
+          const statusRegistration = (
+            uptStatusListResult.registrationMetadata as { attestedResource?: Record<string, unknown> }
+          )?.attestedResource
+          if (!statusRegistration) {
+            throw new Error('Revocation status list attestedResource missing from registration metadata')
+          }
+
+          await this.credentialTypesService.appendStatusListToRevocationRegistry(
+            agent,
+            anoncredsRevocationRegistryDefinitionId,
+            statusRegistration,
+            uptStatusListResult.revocationStatusListState.revocationStatusList.timestamp,
+          )
+
           return {
             status: 200,
           }

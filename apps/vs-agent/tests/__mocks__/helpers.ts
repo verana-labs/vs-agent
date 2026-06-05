@@ -1,5 +1,3 @@
-import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
-
 import { DidCommConnectionProfileUpdatedEvent } from '@2060.io/credo-ts-didcomm-user-profile'
 import { LogLevel } from '@credo-ts/core'
 import {
@@ -17,10 +15,10 @@ import {
   type VtFlowStateChangedEvent,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { chatEvents, ChatPlugin } from '@verana-labs/vs-agent-plugin-chat'
+import { type BaseAgentModules, type VsAgent } from '@verana-labs/vs-agent-sdk'
 import { vi } from 'vitest'
 
 import { VsAgentModule } from '../../src/admin.module'
-import { baseMessageEvents } from '../../src/events/BaseMessageEvents'
 import { MessagingPlugin } from '../../src/plugins/MessagingPlugin'
 import { PublicModule } from '../../src/public.module'
 import { ServerConfig, TsLogger } from '../../src/utils'
@@ -127,10 +125,8 @@ export const startServersTesting = async (agent: VsAgent<BaseAgentModules>): Pro
     port: 3000,
     logger: new TsLogger(LogLevel.Off, agent.label),
     publicApiBaseUrl: 'http://localhost:3001',
-    webhookUrl: 'http://localhost:5000',
     endpoints: agent.didcomm.config.endpoints,
   }
-  baseMessageEvents(agent, conf)
-  chatEvents(agent as any, conf)
+  chatEvents(agent as any, conf.logger)
   return app
 }
