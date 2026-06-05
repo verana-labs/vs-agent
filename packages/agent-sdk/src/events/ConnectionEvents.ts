@@ -20,7 +20,10 @@ import {
 
 import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 
-export const connectionEvents = async (agent: VsAgent<any>, config: ServerConfig) => {
+export const connectionEvents = async (
+  agent: VsAgent<any>,
+  config: { discoveryOptions?: DidCommFeatureQueryOptions[]; logger: BaseLogger },
+) => {
   // Get the first record matching agent's DID and obtain all alternatives for it
   const [agentPublicDidRecord] = await agent.dids.getCreatedDids({ did: agent.did })
   const alternativeDids = agentPublicDidRecord?.getTag('alternativeDids')

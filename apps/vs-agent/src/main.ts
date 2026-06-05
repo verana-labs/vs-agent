@@ -64,8 +64,6 @@ import {
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
 } from './config'
-import { connectionEvents } from './events/ConnectionEvents'
-import { vtFlowEvents } from './events/VtFlowEvents'
 import { MessagingPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { commonAppConfig, type ServerConfig, setupAgent, TsLogger, webhookEvent } from './utils'
