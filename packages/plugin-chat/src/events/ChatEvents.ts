@@ -1,6 +1,5 @@
 import type { ChatAgentModules } from '../types'
 import type { MessageReceiptsReceivedEvent, MessageState } from '@2060.io/credo-ts-didcomm-receipts'
-import type { VsAgentPluginConfig } from '@verana-labs/vs-agent-sdk'
 
 import {
   CallAcceptMessage,
@@ -25,6 +24,7 @@ import {
   DidCommUserProfileRequestedEvent,
 } from '@2060.io/credo-ts-didcomm-user-profile'
 import { MenuRequestMessage, PerformMessage } from '@credo-ts/action-menu'
+import { BaseLogger } from '@credo-ts/core'
 import {
   DidCommConnectionEventTypes,
   DidCommConnectionStateChangedEvent,
@@ -48,11 +48,17 @@ import {
   ReactionMessage,
   TextMessage,
 } from '@verana-labs/vs-agent-model'
-import { getRecordId, sendMessageReceivedEvent, sendWebhookEvent, VsAgent } from '@verana-labs/vs-agent-sdk'
+import {
+  emitVsAgentEvent,
+  getRecordId,
+  msgToEvent,
+  VsAgent,
+  VsAgentEventTypes,
+} from '@verana-labs/vs-agent-sdk'
 
 import { createDataUrl } from '../utils/parsers'
 
-export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAgentPluginConfig) => {
+export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseLogger) => {
   agent.events.on(
     DidCommConnectionEventTypes.DidCommConnectionStateChanged,
     async ({ payload }: DidCommConnectionStateChangedEvent) => {
@@ -67,13 +73,11 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
     async ({ payload }: DidCommMessageProcessedEvent) => {
-      config.logger.debug(`DidCommMessageProcessedEvent received: ${JSON.stringify(payload.message)}`)
+      logger.debug(`DidCommMessageProcessedEvent received: ${JSON.stringify(payload.message)}`)
       const { message, connection } = payload
 
       if (!connection) {
-        config.logger.warn(
-          `[chatEvents] Received contactless message of type ${message.type}. Not supported yet.`,
-        )
+        logger.warn(`[chatEvents] Received contactless message of type ${message.type}. Not supported yet.`)
         return
       }
 
@@ -88,7 +92,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
         })
 
         if (msg.threadId) msg.threadId = await getRecordId(agent, msg.threadId)
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       // Action Menu protocol messages
@@ -99,7 +103,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       if (message.type === PerformMessage.type.messageTypeUri) {
@@ -110,7 +114,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       // Question Answer protocol messages
@@ -122,7 +126,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
         const textIdMapping = record.metadata.get<Record<string, string>>('text-id-mapping')
 
         if (!textIdMapping) {
-          config.logger.warn(
+          logger.warn(
             `[chatEvents] No text-id mapping found for Menu message. Using responded text as identifier`,
           )
         }
@@ -136,7 +140,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           id: message.id,
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       if (message.type === CallOfferMessage.type.messageTypeUri) {
@@ -152,7 +156,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       if (message.type === CallEndMessage.type.messageTypeUri) {
@@ -164,7 +168,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       if (message.type === CallAcceptMessage.type.messageTypeUri) {
@@ -177,7 +181,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
       if (message.type === CallRejectMessage.type.messageTypeUri) {
@@ -189,7 +193,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           timestamp: new Date(),
         })
 
-        await sendMessageReceivedEvent(msg, msg.timestamp, config)
+        emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
     },
   )
@@ -200,7 +204,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
     async ({ payload }: DidCommMediaSharingStateChangedEvent) => {
       const record = payload.mediaSharingRecord
 
-      config.logger.debug(
+      logger.debug(
         `MediaSharingStateChangedEvent received. Role: ${record.role} Connection id: ${record.connectionId}. Items: ${JSON.stringify(record.items)}`,
       )
 
@@ -234,7 +238,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
           })
 
           if (message.threadId) message.threadId = await getRecordId(agent, message.threadId)
-          await sendMessageReceivedEvent(message, message.timestamp, config)
+          emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(message))
         }
       }
     },
@@ -245,14 +249,14 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
     ReceiptsEventTypes.MessageReceiptsReceived,
     async ({ payload }: MessageReceiptsReceivedEvent) => {
       const connectionId = payload.connectionId
-      config.logger.debug(
+      logger.debug(
         `MessageReceiptsReceivedEvent received. Connection id: ${connectionId}. Receipts: ${JSON.stringify(payload.receipts)}`,
       )
       const receipts = payload.receipts
 
       receipts.forEach(receipt => {
         const { messageId, timestamp, state } = receipt
-        sendMessageStateUpdatedEvent({ agent, messageId, connectionId, state, timestamp, config })
+        sendMessageStateUpdatedEvent({ agent, messageId, connectionId, state, timestamp, logger })
       })
     },
   )
@@ -262,7 +266,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
     DidCommReactionsEventTypes.DidCommMessageReactionsReceived,
     async ({ payload }: DidCommMessageReactionsReceivedEvent) => {
       const { connectionId, reactions } = payload
-      config.logger.debug(
+      logger.debug(
         `DidCommMessageReactionsReceivedEvent received. Connection id: ${connectionId}. Reactions: ${JSON.stringify(reactions)}`,
       )
 
@@ -276,7 +280,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
         })),
       })
 
-      await sendMessageReceivedEvent(msg, msg.timestamp, config)
+      emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
     },
   )
 
@@ -284,7 +288,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
   agent.events.on(
     DidCommProfileEventTypes.UserProfileRequested,
     async ({ payload }: DidCommUserProfileRequestedEvent) => {
-      config.logger.debug(
+      logger.debug(
         `UserProfileRequestedEvent received. Connection id: ${payload.connection.id} Query: ${JSON.stringify(payload.query)}`,
       )
 
@@ -302,7 +306,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
     DidCommProfileEventTypes.ConnectionProfileUpdated,
     async ({ payload: { connection, profile } }: DidCommConnectionProfileUpdatedEvent) => {
       const { displayName, displayPicture, displayIcon, description, preferredLanguage } = profile
-      config.logger.debug(
+      logger.debug(
         `ConnectionProfileUpdatedEvent received. Connection id: ${connection.id} Profile: ${JSON.stringify(profile)}`,
       )
 
@@ -315,7 +319,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, config: VsAge
         preferredLanguage,
       })
 
-      await sendMessageReceivedEvent(msg, msg.timestamp, config)
+      emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
     },
   )
 }
@@ -326,14 +330,14 @@ const sendMessageStateUpdatedEvent = async (options: {
   connectionId: string
   state: MessageState
   timestamp: Date
-  config: VsAgentPluginConfig
+  logger: BaseLogger
 }) => {
-  const { agent, messageId, connectionId, state, timestamp, config } = options
+  const { agent, messageId, connectionId, state, timestamp } = options
   const body = new MessageStateUpdated({
     messageId: await getRecordId(agent, messageId),
     state,
     timestamp,
     connectionId,
   })
-  await sendWebhookEvent(config.webhookUrl + '/message-state-updated', body, config.logger)
+  emitVsAgentEvent(agent, VsAgentEventTypes.MessageStateUpdated, body)
 }

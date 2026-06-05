@@ -8,7 +8,6 @@ import {
   RedisMessageService,
   BaseMessageHandler,
 } from '../controllers'
-import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { HandledRedisModule } from '../modules/redis.module'
 
 export const MessagingPlugin: VsAgentNestPlugin = {
@@ -23,7 +22,4 @@ export const MessagingPlugin: VsAgentNestPlugin = {
   ],
   messageHandlers: [BaseMessageHandler],
   imports: [HandledRedisModule.forRoot()],
-  registerEvents: (agent, config) => {
-    baseMessageEvents(agent as any, config)
-  },
 }

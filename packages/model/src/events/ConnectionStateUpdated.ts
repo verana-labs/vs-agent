@@ -36,7 +36,7 @@ export class ConnectionStateUpdated extends Event {
   }
 
   public readonly type = ConnectionStateUpdated.type
-  public static readonly type = EventType.ConnectionState
+  public static readonly type = EventType.ConnectionStateUpdated
 
   @Expose()
   @IsString()

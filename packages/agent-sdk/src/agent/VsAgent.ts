@@ -9,6 +9,7 @@ import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import {
   Agent,
   AgentDependencies,
+  BaseLogger,
   convertPublicKeyToX25519,
   CredoError,
   DidCommV1Service,
@@ -28,6 +29,7 @@ import {
 import {
   DidCommCredentialsModuleConfigOptions,
   DidCommCredentialV2Protocol,
+  DidCommFeatureQueryOptions,
   DidCommJsonLdCredentialFormatService,
   DidCommModule,
   DidCommModuleConfigOptions,
@@ -39,6 +41,8 @@ import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
+import { baseMessageEvents } from '../events/BaseMessageEvents'
+import { connectionEvents } from '../events/ConnectionEvents'
 
 const MANAGED_DIDCOMM_SERVICE_TYPES: readonly string[] = [DidCommV1Service.type, NewDidCommV2Service.type]
 
@@ -83,6 +87,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public displayPictureUrl?: string
   public label: string
   public veranaChain?: VeranaChainService
+  public discoveryOptions?: DidCommFeatureQueryOptions[]
 
   public constructor(
     options: AgentOptions<TModules> & {
@@ -92,6 +97,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       displayPictureUrl?: string
       label: string
       veranaChain?: VeranaChainService
+      discoveryOptions?: DidCommFeatureQueryOptions[]
     },
   ) {
     super(options)
@@ -101,6 +107,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.displayPictureUrl = options.displayPictureUrl
     this.label = options.label
     this.veranaChain = options.veranaChain
+    this.discoveryOptions = options.discoveryOptions
   }
 
   private get hasUserProfile(): boolean {
@@ -240,7 +247,16 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         !ed25519VerificationMethodId ||
         JSON.stringify(didDocument.didCommServices) !==
           JSON.stringify(this.getDidCommServices(didDocument.id, ed25519VerificationMethodId))
-      if (hasLegacyMethods || servicesChanged) {
+      // One-shot migration for did:webvh records published before authentication-replace
+      // landed, which still carry the didwebvh-ts update key in authentication.
+      const authHasUpdateKey =
+        parsedDid.method === 'webvh' &&
+        !!ed25519VerificationMethodId &&
+        (didDocument.authentication ?? []).some(a => {
+          const id = typeof a === 'string' ? a : a.id
+          return id !== ed25519VerificationMethodId
+        })
+      if (hasLegacyMethods || servicesChanged || authHasUpdateKey) {
         if (servicesChanged && ed25519VerificationMethodId) {
           didDocument.service = [
             ...(didDocument.service
@@ -253,6 +269,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         if (hasLegacyMethods) {
           newKeys.push(await this.createAndAddDidCommKeysAndServices(didDocument))
         }
+
+        if (authHasUpdateKey) didDocument.authentication = [ed25519VerificationMethodId!]
 
         if (newKeys.length && parsedDid.method === 'webvh') {
           // webvh registrar doesn't accept keys in update options; persist directly
@@ -270,6 +288,11 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       }
       this.did = existingRecord.did
     }
+
+    // Initialize events
+    const logger = this.config.logger as BaseLogger
+    await connectionEvents(this, { discoveryOptions: this.discoveryOptions, logger })
+    await baseMessageEvents(this as VsAgent, logger)
   }
 
   private async findCreatedDid(parsedDid: ParsedDid) {
@@ -413,9 +436,11 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       ...new Set([...currentContexts.filter(ctx => !legacyContexts.includes(ctx)), ...context]),
     ]
     didDocument.verificationMethod = [...filteredMethods, ...verificationMethods]
-    didDocument.authentication = [...new Set([...(didDocument.authentication ?? []), authentication])]
-    didDocument.assertionMethod = [...new Set([...(didDocument.assertionMethod ?? []), assertionMethod])]
-    didDocument.keyAgreement = [...new Set([...(didDocument.keyAgreement ?? []), keyAgreement])]
+    // Replace (not merge): keeps did:webvh's update key out of DIDComm relations.
+    // Same pattern as didcomm-mediator/src/agent/DidCommMediatorAgent.ts.
+    didDocument.authentication = [authentication]
+    didDocument.assertionMethod = [assertionMethod]
+    didDocument.keyAgreement = [keyAgreement]
     didDocument.service = [
       ...(didDocument.service
         ? didDocument.service.filter(service => !MANAGED_DIDCOMM_SERVICE_TYPES.includes(service.type))

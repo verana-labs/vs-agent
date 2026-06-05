@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.11.0](https://github.com/verana-labs/vs-agent/compare/v1.10.1...v1.11.0) (2026-05-25)
+
+
+### Features
+
+* **agent:** add DIDComm v2 support ([#431](https://github.com/verana-labs/vs-agent/issues/431)) ([e2f039b](https://github.com/verana-labs/vs-agent/commit/e2f039bbf1c63656864aa9ef386a51acbf2647fd))
+* **agent:** listen to DidCommConnectionDidRotated event so that we can listen to termination status of didcomm v2 connection ([#446](https://github.com/verana-labs/vs-agent/issues/446)) ([3b2d42e](https://github.com/verana-labs/vs-agent/commit/3b2d42e429d9f622886c21d3081e7a975e04bb73))
+* better filtering in getAllConnections API ([#444](https://github.com/verana-labs/vs-agent/issues/444)) ([529d2df](https://github.com/verana-labs/vs-agent/commit/529d2dfbca87f9654ea6125a8b56bbb16dfe0061))
+* include cosmos sdk to list registries ([#397](https://github.com/verana-labs/vs-agent/issues/397)) ([94f45f3](https://github.com/verana-labs/vs-agent/commit/94f45f3ff6743b80efa3606bde0f02dae89db76e))
+* indexer notification handlers ([#422](https://github.com/verana-labs/vs-agent/issues/422)) ([ad5c082](https://github.com/verana-labs/vs-agent/commit/ad5c08204c538193e245c85806097e59bbd8e55a))
+* split docker image to one based on plugins ([#410](https://github.com/verana-labs/vs-agent/issues/410)) ([e32ee02](https://github.com/verana-labs/vs-agent/commit/e32ee02c8bb2617cf55d80c18ebbfd23e66a2f9e))
+* support reactions module ([#399](https://github.com/verana-labs/vs-agent/issues/399)) ([9079eb2](https://github.com/verana-labs/vs-agent/commit/9079eb2eef7f375e11870d048c6e7d3814b8bf5a))
+* use verana indexer websocket ([#401](https://github.com/verana-labs/vs-agent/issues/401)) ([429370d](https://github.com/verana-labs/vs-agent/commit/429370dfa16c4de897e25bf1f598ef6469f5cab1))
+* vs agent sdk and plug-ins ([#383](https://github.com/verana-labs/vs-agent/issues/383)) ([d818ad9](https://github.com/verana-labs/vs-agent/commit/d818ad9817b5b4cbe9c92d55612c7efa930f81e9))
+* **vs-agent:** proof non-revocation support ([#445](https://github.com/verana-labs/vs-agent/issues/445)) ([e4f6e92](https://github.com/verana-labs/vs-agent/commit/e4f6e92a4c17e7163a7b6d49fac750384c0e05a6))
+* **vt-flow:** add Credo-TS superprotocol module ([#411](https://github.com/verana-labs/vs-agent/issues/411)) ([d045633](https://github.com/verana-labs/vs-agent/commit/d0456331b8787285787c1e9e7f260a5d84e0e49f))
+* VTJSC management from VPR events ([#423](https://github.com/verana-labs/vs-agent/issues/423)) ([03868a2](https://github.com/verana-labs/vs-agent/commit/03868a27c829bf96a33e28ebf90ff2d1f412b115))
+
+
+### Bug Fixes
+
+* create findKmsKeyIdForFingerprint for search kmsKeyId ([#443](https://github.com/verana-labs/vs-agent/issues/443)) ([50efeac](https://github.com/verana-labs/vs-agent/commit/50efeac955ba8e3746d49904cd9f2688fcbf4f4a))
+* did:webvh log hashes ([#437](https://github.com/verana-labs/vs-agent/issues/437)) ([069b980](https://github.com/verana-labs/vs-agent/commit/069b9807d6be716e6a877d4b6200d1bdbf063ed0))
+* docker images ([#409](https://github.com/verana-labs/vs-agent/issues/409)) ([a463ffb](https://github.com/verana-labs/vs-agent/commit/a463ffb9aafa7228b8c7257513b5954554e11d4c))
+* **docker:** include packages/vt-flow in all build stages ([#421](https://github.com/verana-labs/vs-agent/issues/421)) ([ab00f0d](https://github.com/verana-labs/vs-agent/commit/ab00f0d9e07f7586914a848fec7b64126894379b))
+* examples dockerfile ([e2d0cbd](https://github.com/verana-labs/vs-agent/commit/e2d0cbd2fc852208dbdb768f739ec7d4f76a0633))
+* remove mrtd auto-enable logic and add plugin load warnings ([#413](https://github.com/verana-labs/vs-agent/issues/413)) ([43a5d62](https://github.com/verana-labs/vs-agent/commit/43a5d624aefdedcc3f5d20c42abcf523bb2d417c))
+* remove revocation registry on Delete credential types ([#415](https://github.com/verana-labs/vs-agent/issues/415)) ([9f6463e](https://github.com/verana-labs/vs-agent/commit/9f6463e14d74d081cbcb730bec2f5503e798e578))
+* solve problem creating credential types with the same schema ([#414](https://github.com/verana-labs/vs-agent/issues/414)) ([b9ae09d](https://github.com/verana-labs/vs-agent/commit/b9ae09d0487f7703857bfa7dbe1d1e090109c005))
+* support DIDComm V1 only by default ([#441](https://github.com/verana-labs/vs-agent/issues/441)) ([4695b08](https://github.com/verana-labs/vs-agent/commit/4695b0891eed768c032175c9fc06382d657c8345))
+* update Credential Revocation swagger ([#416](https://github.com/verana-labs/vs-agent/issues/416)) ([41d0040](https://github.com/verana-labs/vs-agent/commit/41d0040f3889b73a592d71272d649b35f3145291))
+* update DID Document keys in did:web ([#418](https://github.com/verana-labs/vs-agent/issues/418)) ([a12904c](https://github.com/verana-labs/vs-agent/commit/a12904cf30124ef1d21344d9e31a57f61bb34544))
+* update getShortUrl to use v1 and v2 invitations ([#438](https://github.com/verana-labs/vs-agent/issues/438)) ([39caf3b](https://github.com/verana-labs/vs-agent/commit/39caf3ba348dfda73d1f77ccc63d33a9239744ed))
+
 ## [1.10.1](https://github.com/verana-labs/vs-agent/compare/v1.10.0...v1.10.1) (2026-04-10)
 
 
