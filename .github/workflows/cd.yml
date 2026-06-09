@@ -183,7 +183,7 @@ jobs:
 
 
   discord-notify:
-    needs: resolve-version
+    needs: [resolve-version, docker, helm]
     if: needs.resolve-version.outputs.new-release-published == 'true' && needs.resolve-version.outputs.release-type == 'stable'
     permissions:
       contents: read
