@@ -230,7 +230,7 @@ export class VtFlowService {
     return record
   }
 
-  /** Applicant-side inbound `validating`; informational only, no state change. */
+  /** Applicant-side inbound `validating`; OnboardingProcess applicant transitions `OR_SENT => VALIDATING`. */
   public async processReceiveValidating(
     messageContext: DidCommInboundMessageContext<ValidatingMessage>,
   ): Promise<VtFlowRecord> {
@@ -241,6 +241,15 @@ export class VtFlowService {
     this.logger.debug(
       `[vt-flow] validating received for session ${record.threadId}: ${message.comment ?? '(no comment)'}`,
     )
+
+    if (
+      record.role === VtFlowRole.Applicant &&
+      record.variant === VtFlowVariant.OnboardingProcess &&
+      record.state === VtFlowState.OrSent
+    ) {
+      await this.updateState(agentContext, record, VtFlowState.Validating)
+    }
+
     return record
   }
 

@@ -121,6 +121,35 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.participantId).toBe('participant-42')
   })
 
+  it('onboarding-request: Applicant transitions OR_SENT -> VALIDATING on `validating`', async () => {
+    const applicantEvents = vi.spyOn(applicant.events, 'emit')
+    const applicantValidating = waitForEvent(
+      applicantEvents,
+      isVtFlowStateChangedEvent(VtFlowState.Validating),
+    )
+    const validatorValidated = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validated))
+
+    const applicantRecord = await applicant.modules.vtFlow.sendOnboardingRequest({
+      connectionId: applicantConnection.id,
+      participantId: 'participant-77',
+      agentParticipantId: 'agent-participant-77',
+      walletAgentParticipantId: 'wallet-agent-participant-77',
+    })
+    expect(applicantRecord.state).toBe(VtFlowState.OrSent)
+
+    const validatedEvent = await validatorValidated
+    const validatorRecord = await validator.modules.vtFlow.findById(validatedEvent.payload.vtFlowRecordId)
+    expect(validatorRecord).not.toBeNull()
+
+    await validator.modules.vtFlow.sendValidating(validatorRecord!.id, {
+      comment: 'Validating applicant documentation.',
+    })
+
+    await applicantValidating
+    const updatedApplicant = await applicant.modules.vtFlow.findByThreadId(applicantRecord.threadId)
+    expect(updatedApplicant?.state).toBe(VtFlowState.Validating)
+  })
+
   it('threadId lookup on the Validator side matches the Applicant', async () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
