@@ -9,7 +9,7 @@ export interface ValidatingMessageOptions {
   comment?: string
 }
 
-/** Spec v4 §5.4 `validating`; informational Validator status update that causes no state change. */
+/** Spec `validating`; informational Validator status update sent while validation is in progress. */
 export class ValidatingMessage extends DidCommMessage {
   public constructor(options: ValidatingMessageOptions) {
     super()

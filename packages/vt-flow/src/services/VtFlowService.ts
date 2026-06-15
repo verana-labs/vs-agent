@@ -10,11 +10,11 @@ import {
   CredentialStateChangeMessage,
   type CredentialStateChangeMessageOptions,
   IssuanceRequestMessage,
+  OnboardingRequestMessage,
   OobLinkMessage,
   type OobLinkMessageOptions,
   ValidatingMessage,
   type ValidatingMessageOptions,
-  ValidationRequestMessage,
   VtCredentialState,
 } from '../messages'
 import { VtFlowRecord, VtFlowRepository } from '../repository'
@@ -26,21 +26,21 @@ import {
   type VtFlowStateChangedEvent,
 } from '../types'
 
-export interface CreateValidationRequestParams {
+export interface CreateOnboardingRequestParams {
   connectionId: string
-  sessionUuid: string
-  permId: string
-  agentPermId: string
-  walletAgentPermId: string
+  participantSessionId: string
+  participantId: string
+  agentParticipantId: string
+  walletAgentParticipantId: string
   claims?: Record<string, unknown>
 }
 
 export interface CreateIssuanceRequestParams {
   connectionId: string
-  sessionUuid: string
+  participantSessionId: string
   schemaId: string
-  agentPermId: string
-  walletAgentPermId: string
+  agentParticipantId: string
+  walletAgentParticipantId: string
   claims?: Record<string, unknown>
 }
 
@@ -77,30 +77,30 @@ export class VtFlowService {
     this.config = config
   }
 
-  /** Applicant-side §5.1: build the outbound `validation-request` and persist a record in `VR_SENT`. */
-  public async createValidationProcessRecord(
+  /** Applicant-side OnboardingProcess: build the outbound `onboarding-request` and persist a record in `OR_SENT`. */
+  public async createOnboardingProcessRecord(
     agentContext: AgentContext,
-    params: CreateValidationRequestParams,
-  ): Promise<{ message: ValidationRequestMessage; record: VtFlowRecord }> {
-    const message = new ValidationRequestMessage({
-      permId: params.permId,
-      sessionUuid: params.sessionUuid,
-      agentPermId: params.agentPermId,
-      walletAgentPermId: params.walletAgentPermId,
+    params: CreateOnboardingRequestParams,
+  ): Promise<{ message: OnboardingRequestMessage; record: VtFlowRecord }> {
+    const message = new OnboardingRequestMessage({
+      participantId: params.participantId,
+      participantSessionId: params.participantSessionId,
+      agentParticipantId: params.agentParticipantId,
+      walletAgentParticipantId: params.walletAgentParticipantId,
       claims: params.claims,
     })
     message.setThread({ threadId: message.id })
 
     const record = new VtFlowRecord({
       threadId: message.id,
-      sessionUuid: params.sessionUuid,
+      participantSessionId: params.participantSessionId,
       connectionId: params.connectionId,
       role: VtFlowRole.Applicant,
-      state: VtFlowState.VrSent,
-      variant: VtFlowVariant.ValidationProcess,
-      agentPermId: params.agentPermId,
-      walletAgentPermId: params.walletAgentPermId,
-      permId: params.permId,
+      state: VtFlowState.OrSent,
+      variant: VtFlowVariant.OnboardingProcess,
+      agentParticipantId: params.agentParticipantId,
+      walletAgentParticipantId: params.walletAgentParticipantId,
+      participantId: params.participantId,
       claims: params.claims,
     })
 
@@ -109,29 +109,29 @@ export class VtFlowService {
     return { message, record }
   }
 
-  /** Applicant-side §5.2: build the outbound `issuance-request` and persist a record in `IR_SENT`. */
+  /** Applicant-side DirectIssuance: build the outbound `issuance-request` and persist a record in `IR_SENT`. */
   public async createDirectIssuanceRecord(
     agentContext: AgentContext,
     params: CreateIssuanceRequestParams,
   ): Promise<{ message: IssuanceRequestMessage; record: VtFlowRecord }> {
     const message = new IssuanceRequestMessage({
       schemaId: params.schemaId,
-      sessionUuid: params.sessionUuid,
-      agentPermId: params.agentPermId,
-      walletAgentPermId: params.walletAgentPermId,
+      participantSessionId: params.participantSessionId,
+      agentParticipantId: params.agentParticipantId,
+      walletAgentParticipantId: params.walletAgentParticipantId,
       claims: params.claims,
     })
     message.setThread({ threadId: message.id })
 
     const record = new VtFlowRecord({
       threadId: message.id,
-      sessionUuid: params.sessionUuid,
+      participantSessionId: params.participantSessionId,
       connectionId: params.connectionId,
       role: VtFlowRole.Applicant,
       state: VtFlowState.IrSent,
       variant: VtFlowVariant.DirectIssuance,
-      agentPermId: params.agentPermId,
-      walletAgentPermId: params.walletAgentPermId,
+      agentParticipantId: params.agentParticipantId,
+      walletAgentParticipantId: params.walletAgentParticipantId,
       schemaId: params.schemaId,
       claims: params.claims,
     })
@@ -141,17 +141,17 @@ export class VtFlowService {
     return { message, record }
   }
 
-  /** Validator-side §5.1: create or re-attach (by `session_uuid`) a record in `AWAITING_VR` from an inbound `validation-request`. */
-  public async processReceiveValidationRequest(
-    messageContext: DidCommInboundMessageContext<ValidationRequestMessage>,
+  /** Validator-side OnboardingProcess: create or re-attach (by `participant_session_id`) a record in `AWAITING_OR` from an inbound `onboarding-request`. */
+  public async processReceiveOnboardingRequest(
+    messageContext: DidCommInboundMessageContext<OnboardingRequestMessage>,
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
     await this.assertVerifiableService(agentContext, connection.id)
 
-    const existing = await this.repository.findBySessionUuid(
+    const existing = await this.repository.findByParticipantSessionId(
       agentContext,
-      message.sessionUuid,
+      message.participantSessionId,
       VtFlowRole.Validator,
     )
     if (existing) {
@@ -163,14 +163,14 @@ export class VtFlowService {
 
     const record = new VtFlowRecord({
       threadId: message.threadId,
-      sessionUuid: message.sessionUuid,
+      participantSessionId: message.participantSessionId,
       connectionId: connection.id,
       role: VtFlowRole.Validator,
-      state: VtFlowState.AwaitingVr,
-      variant: VtFlowVariant.ValidationProcess,
-      agentPermId: message.agentPermId,
-      walletAgentPermId: message.walletAgentPermId,
-      permId: message.permId,
+      state: VtFlowState.AwaitingOr,
+      variant: VtFlowVariant.OnboardingProcess,
+      agentParticipantId: message.agentParticipantId,
+      walletAgentParticipantId: message.walletAgentParticipantId,
+      participantId: message.participantId,
       claims: message.claims,
     })
 
@@ -179,7 +179,7 @@ export class VtFlowService {
     return record
   }
 
-  /** Validator-side §5.2 counterpart of `processReceiveValidationRequest`, landing the record in `AWAITING_IR`. */
+  /** Validator-side DirectIssuance counterpart of `processReceiveOnboardingRequest`, landing the record in `AWAITING_IR`. */
   public async processReceiveIssuanceRequest(
     messageContext: DidCommInboundMessageContext<IssuanceRequestMessage>,
   ): Promise<VtFlowRecord> {
@@ -187,9 +187,9 @@ export class VtFlowService {
     const connection = messageContext.assertReadyConnection()
     await this.assertVerifiableService(agentContext, connection.id)
 
-    const existing = await this.repository.findBySessionUuid(
+    const existing = await this.repository.findByParticipantSessionId(
       agentContext,
-      message.sessionUuid,
+      message.participantSessionId,
       VtFlowRole.Validator,
     )
     if (existing) {
@@ -201,13 +201,13 @@ export class VtFlowService {
 
     const record = new VtFlowRecord({
       threadId: message.threadId,
-      sessionUuid: message.sessionUuid,
+      participantSessionId: message.participantSessionId,
       connectionId: connection.id,
       role: VtFlowRole.Validator,
       state: VtFlowState.AwaitingIr,
       variant: VtFlowVariant.DirectIssuance,
-      agentPermId: message.agentPermId,
-      walletAgentPermId: message.walletAgentPermId,
+      agentParticipantId: message.agentParticipantId,
+      walletAgentParticipantId: message.walletAgentParticipantId,
       schemaId: message.schemaId,
       claims: message.claims,
     })
@@ -266,18 +266,18 @@ export class VtFlowService {
     return record
   }
 
-  /** `AWAITING_VR => VALIDATING`; caller is expected to have verified perm/agent/wallet IDs on-chain. */
-  public async acceptValidationRequest(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
+  /** `AWAITING_OR => VALIDATING`; caller is expected to have verified participant/agent/wallet IDs on-chain. */
+  public async acceptOnboardingRequest(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    record.assertState(VtFlowState.AwaitingVr)
-    record.assertVariant(VtFlowVariant.ValidationProcess)
+    record.assertState(VtFlowState.AwaitingOr)
+    record.assertVariant(VtFlowVariant.OnboardingProcess)
 
     await this.updateState(agentContext, record, VtFlowState.Validating)
     return record
   }
 
-  /** §5.2: `AWAITING_IR => VALIDATING`; transient before `CRED_OFFERED`. */
+  /** DirectIssuance: `AWAITING_IR => VALIDATING`; transient before `CRED_OFFERED`. */
   public async acceptIssuanceRequest(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
@@ -348,7 +348,7 @@ export class VtFlowService {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
     record.assertState([
-      VtFlowState.AwaitingVr,
+      VtFlowState.AwaitingOr,
       VtFlowState.AwaitingIr,
       VtFlowState.Validating,
       VtFlowState.Completed,
@@ -368,7 +368,7 @@ export class VtFlowService {
     return { record, message }
   }
 
-  /** Build a `validating` informational message; no state change. */
+  /** Build a `validating` informational message; no state change on the Validator side. */
   public async sendValidatingForSession(
     agentContext: AgentContext,
     recordId: string,
@@ -385,12 +385,12 @@ export class VtFlowService {
     return { record, message }
   }
 
-  /** `VALIDATING => VALIDATED`; call after `set-perm-vp-validated` lands on-chain. */
+  /** `VALIDATING => VALIDATED`; call after `SetParticipantOPtoValidated` lands on-chain. */
   public async markValidated(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
     record.assertState([VtFlowState.Validating, VtFlowState.OobPending])
-    record.assertVariant(VtFlowVariant.ValidationProcess)
+    record.assertVariant(VtFlowVariant.OnboardingProcess)
 
     await this.updateState(agentContext, record, VtFlowState.Validated)
     return record
@@ -549,7 +549,7 @@ export class VtFlowService {
       payload: {
         vtFlowRecordId: record.id,
         threadId: record.threadId,
-        sessionUuid: record.sessionUuid,
+        participantSessionId: record.participantSessionId,
         state: record.state,
         previousState,
       },
@@ -568,7 +568,7 @@ export class VtFlowService {
     return buildVtFlowProblemReport(options)
   }
 
-  /** Spec v4 §Verifiable Service Identity Check: invokes the caller-provided VS-CONN-VS hook. Throws `vt-flow.not-a-verifiable-service` when the peer fails the check. When no hook is configured, logs a warning and permits. */
+  /** Spec Verifiable Service Identity Check: invokes the caller-provided VS-CONN-VS hook. Throws `vt-flow.not-a-verifiable-service` when the peer fails the check. When no hook is configured, logs a warning and permits. */
   public async assertVerifiableService(agentContext: AgentContext, connectionId: string): Promise<void> {
     const hook = this.config.assertVerifiableService
     if (!hook) {

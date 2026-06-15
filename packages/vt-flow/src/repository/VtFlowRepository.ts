@@ -6,7 +6,7 @@ import { VtFlowRole } from '../types'
 
 import { VtFlowRecord } from './VtFlowRecord'
 
-/** Credo repository for `VtFlowRecord`; exposes typed lookups by thread, session UUID, subprotocol `thid`, credential exchange, and connection. */
+/** Credo repository for `VtFlowRecord`; exposes typed lookups by thread, participant session id, subprotocol `thid`, credential exchange, and connection. */
 @injectable()
 export class VtFlowRepository extends Repository<VtFlowRecord> {
   public constructor(
@@ -20,9 +20,13 @@ export class VtFlowRepository extends Repository<VtFlowRecord> {
     return this.findSingleByQuery(agentContext, { threadId })
   }
 
-  public findBySessionUuid(agentContext: AgentContext, sessionUuid: string, role?: VtFlowRole) {
+  public findByParticipantSessionId(
+    agentContext: AgentContext,
+    participantSessionId: string,
+    role?: VtFlowRole,
+  ) {
     return this.findSingleByQuery(agentContext, {
-      sessionUuid,
+      participantSessionId,
       ...(role !== undefined ? { role } : {}),
     })
   }

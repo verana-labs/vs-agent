@@ -12,7 +12,7 @@ export interface OobLinkMessageOptions {
   expiresTime?: Date
 }
 
-/** Spec v4 §5.5 `oob-link`; Validator asks the Applicant to complete an action outside DIDComm, threaded on the vt-flow session `thid`. */
+/** Spec `oob-link`; Validator asks the Applicant to complete an action outside DIDComm, threaded on the vt-flow session `thid`. */
 export class OobLinkMessage extends DidCommMessage {
   public constructor(options: OobLinkMessageOptions) {
     super()

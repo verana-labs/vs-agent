@@ -2,11 +2,11 @@ import { DidCommAttachment, DidCommMessage, IsValidMessageType, parseMessageType
 import { Expose, Type } from 'class-transformer'
 import { IsArray, IsInstance, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator'
 
-import { VT_FLOW_ISSUANCE_REQUEST_TYPE } from './VtFlowProtocol'
+import { VT_FLOW_ONBOARDING_REQUEST_TYPE } from './VtFlowProtocol'
 
-export interface IssuanceRequestMessageOptions {
+export interface OnboardingRequestMessageOptions {
   id?: string
-  schemaId: string
+  participantId: string
   participantSessionId: string
   agentParticipantId: string
   walletAgentParticipantId: string
@@ -14,14 +14,14 @@ export interface IssuanceRequestMessageOptions {
   proofsAttach?: DidCommAttachment[]
 }
 
-/** Spec `issuance-request`; opens a DirectIssuance session and its `@id` becomes the session `thid`. */
-export class IssuanceRequestMessage extends DidCommMessage {
-  public constructor(options: IssuanceRequestMessageOptions) {
+/** Spec `onboarding-request`; opens an OnboardingProcess session and its `@id` becomes the session `thid`. */
+export class OnboardingRequestMessage extends DidCommMessage {
+  public constructor(options: OnboardingRequestMessageOptions) {
     super()
 
     if (options) {
       this.id = options.id ?? this.generateId()
-      this.schemaId = options.schemaId
+      this.participantId = options.participantId
       this.participantSessionId = options.participantSessionId
       this.agentParticipantId = options.agentParticipantId
       this.walletAgentParticipantId = options.walletAgentParticipantId
@@ -30,14 +30,14 @@ export class IssuanceRequestMessage extends DidCommMessage {
     }
   }
 
-  public static readonly type = parseMessageType(VT_FLOW_ISSUANCE_REQUEST_TYPE)
+  public static readonly type = parseMessageType(VT_FLOW_ONBOARDING_REQUEST_TYPE)
 
-  @IsValidMessageType(IssuanceRequestMessage.type)
-  public readonly type = IssuanceRequestMessage.type.messageTypeUri
+  @IsValidMessageType(OnboardingRequestMessage.type)
+  public readonly type = OnboardingRequestMessage.type.messageTypeUri
 
-  @Expose({ name: 'schema_id' })
+  @Expose({ name: 'participant_id' })
   @IsString()
-  public schemaId!: string
+  public participantId!: string
 
   @Expose({ name: 'participant_session_id' })
   @IsUUID('4')
