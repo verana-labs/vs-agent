@@ -40,7 +40,7 @@ export class VtFlowsService {
   public constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
 
   public async validateAndOfferCredential(
-    vtFlowRecordId: string,
+    participantSessionId: string,
     input: ValidateFlowDto,
   ): Promise<VtFlowRecordDto> {
     const agent = await this.agentService.getAgent()
@@ -48,8 +48,7 @@ export class VtFlowsService {
     if (!agent.did) throw new BadRequestException('Agent has no public DID')
 
     const vtFlowApi = this.resolveVtFlowApi(agent)
-    const record = await vtFlowApi.findById(vtFlowRecordId)
-    if (!record) throw new NotFoundException(`vt-flow record ${vtFlowRecordId} not found`)
+    const record = await this.findRecordBySession(vtFlowApi, participantSessionId)
     if (record.role !== VtFlowRole.Validator) {
       throw new BadRequestException('This record is applicant-side; validate is a validator action')
     }
@@ -126,6 +125,16 @@ export class VtFlowsService {
 
   private resolveVtFlowApi(agent: VsAgent): VtFlowApi {
     return agent.dependencyManager.resolve(VtFlowApi)
+  }
+
+  private async findRecordBySession(
+    vtFlowApi: VtFlowApi,
+    participantSessionId: string,
+  ): Promise<VtFlowRecord> {
+    const [record] = await vtFlowApi.findAllByQuery({ sessionUuid: participantSessionId })
+    if (!record)
+      throw new NotFoundException(`No vt-flow for participant_session_id '${participantSessionId}'`)
+    return record
   }
 
   private requireChain(agent: VsAgent): VeranaChainService {

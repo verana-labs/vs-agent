@@ -6,24 +6,24 @@ import { ValidateFlowDto } from './dto/validate-flow.dto'
 import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
 @ApiTags('vt-flow')
-@Controller({ path: 'vt-flows', version: '1' })
+@Controller({ path: 'vt/flows', version: '1' })
 export class VtFlowsController {
   public constructor(private readonly service: VtFlowsService) {}
 
-  @Post(':vtFlowRecordId/validate')
+  @Post(':participantSessionId/validate')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Validate a request and offer the credential',
     description:
       'Validator action. Signs the credential, broadcasts `set-perm-vp-validated` and `createOrUpdatePermissionSession`, then dispatches the Issue Credential V2 offer.',
   })
-  @ApiParam({ name: 'vtFlowRecordId', type: String })
+  @ApiParam({ name: 'participantSessionId', type: String })
   @ApiOkResponse({ type: VtFlowRecordDto })
   @ApiNotFoundResponse()
   public validate(
-    @Param('vtFlowRecordId') vtFlowRecordId: string,
+    @Param('participantSessionId') participantSessionId: string,
     @Body() body: ValidateFlowDto,
   ): Promise<VtFlowRecordDto> {
-    return this.service.validateAndOfferCredential(vtFlowRecordId, body)
+    return this.service.validateAndOfferCredential(participantSessionId, body)
   }
 }
