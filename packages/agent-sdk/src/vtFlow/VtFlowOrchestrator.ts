@@ -151,6 +151,7 @@ export class VtFlowOrchestrator {
       vpSummaryDigest: digest,
       corporation: holderPerm.corporation,
     })
+    // FIXME(verana#289): chain requires agent_perm_id > 0, so VS-to-VS sessions can't be created yet. Skipping.
     if (input.agentPermId && input.agentPermId > 0) {
       await chain.createOrUpdatePermissionSession({
         id: record.sessionUuid,
@@ -207,6 +208,8 @@ export class VtFlowOrchestrator {
     )
     if (!validatorPermActive) throw new Error('Validator permission is not active')
 
+    // FIXME(verana#289): soft-check only. Credo re-signs at issuance so the digest won't match the
+    // validated-tx value; hard-reject once the credential digest lives in the on-chain ParticipantSession.
     if (!vpSummaryDigest) return
     try {
       const formatData = await this.agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
