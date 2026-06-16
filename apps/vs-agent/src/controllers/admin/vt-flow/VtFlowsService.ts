@@ -2,7 +2,7 @@ import type { JsonObject } from '@credo-ts/core'
 import type { VsAgent, VeranaChainService } from '@verana-labs/vs-agent-sdk'
 
 import { JsonTransformer, W3cCredential, W3cJsonLdVerifiableCredential, utils } from '@credo-ts/core'
-import { DidCommHandshakeProtocol, type JsonCredential } from '@credo-ts/didcomm'
+import { type JsonCredential } from '@credo-ts/didcomm'
 import {
   BadRequestException,
   HttpException,
@@ -19,7 +19,6 @@ import {
   VtFlowVariant,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
-  ISSUER_PERMISSION_TYPE,
   VeranaIndexerService,
   createCredential,
   createVtc,
@@ -32,7 +31,6 @@ import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
 import { TsLogger } from '../../../utils'
 
-import { StartValidationProcessDto } from './dto/start-validation-process.dto'
 import { ValidateFlowDto } from './dto/validate-flow.dto'
 import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
@@ -41,58 +39,6 @@ export class VtFlowsService {
   private indexerService?: VeranaIndexerService
 
   public constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
-
-  public async startValidationProcess(input: StartValidationProcessDto): Promise<VtFlowRecordDto> {
-    const agent = await this.agentService.getAgent()
-    const chain = this.requireChain(agent)
-    const indexer = this.getIndexer()
-    if (!agent.did) throw new BadRequestException('Agent has no public DID')
-
-    const validatorPermId = this.parsePermId(input.validatorPermId, 'validatorPermId')
-    const validatorPerm = await indexer.getPermission(validatorPermId)
-    if (!validatorPerm) throw new NotFoundException(`Validator permission ${validatorPermId} not found`)
-    if (validatorPerm.perm_state !== 'ACTIVE') {
-      throw new BadRequestException(
-        `Validator permission ${validatorPermId} is not active (perm_state=${validatorPerm.perm_state})`,
-      )
-    }
-    if (!validatorPerm.did) {
-      throw new BadRequestException(`Validator permission ${validatorPermId} has no DID`)
-    }
-
-    const { permissionId: holderPermId } = await this.runChainTx(agent, 'start-perm-vp', () =>
-      chain.startPermissionVP({
-        type: ISSUER_PERMISSION_TYPE,
-        validatorPermId,
-        did: agent.did!,
-      }),
-    )
-
-    const { connectionRecord } = await agent.didcomm.oob.receiveImplicitInvitation({
-      did: validatorPerm.did,
-      label: agent.label,
-      handshakeProtocols: [DidCommHandshakeProtocol.Connections],
-    })
-    if (!connectionRecord) {
-      throw new HttpException(
-        'Failed to establish DIDComm connection to validator',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      )
-    }
-    const ready = await agent.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
-
-    const vtFlowApi = this.resolveVtFlowApi(agent)
-    const record = await vtFlowApi.sendValidationRequest({
-      connectionId: ready.id,
-      sessionUuid: input.sessionUuid ?? utils.uuid(),
-      permId: String(holderPermId),
-      agentPermId: '0',
-      walletAgentPermId: '0',
-      claims: input.claims,
-    })
-
-    return toDto(record)
-  }
 
   public async validateAndOfferCredential(
     vtFlowRecordId: string,

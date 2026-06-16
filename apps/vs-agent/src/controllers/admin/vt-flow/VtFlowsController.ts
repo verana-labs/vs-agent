@@ -1,15 +1,7 @@
 import { Body, Controller, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
-import {
-  ApiCreatedResponse,
-  ApiNotFoundResponse,
-  ApiOkResponse,
-  ApiOperation,
-  ApiParam,
-  ApiTags,
-} from '@nestjs/swagger'
+import { ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 
 import { VtFlowsService } from './VtFlowsService'
-import { StartValidationProcessDto } from './dto/start-validation-process.dto'
 import { ValidateFlowDto } from './dto/validate-flow.dto'
 import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
@@ -17,18 +9,6 @@ import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 @Controller({ path: 'vt-flows', version: '1' })
 export class VtFlowsController {
   public constructor(private readonly service: VtFlowsService) {}
-
-  @Post('/')
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({
-    summary: 'Start a §5.1 Validation Process',
-    description:
-      'Applicant action. Runs `start-perm-vp` on-chain, opens an implicit DIDComm connection to the validator, and dispatches the vt-flow `validation-request`.',
-  })
-  @ApiCreatedResponse({ type: VtFlowRecordDto })
-  public startValidationProcess(@Body() body: StartValidationProcessDto): Promise<VtFlowRecordDto> {
-    return this.service.startValidationProcess(body)
-  }
 
   @Post(':vtFlowRecordId/validate')
   @HttpCode(HttpStatus.OK)
