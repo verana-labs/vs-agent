@@ -145,6 +145,8 @@ export interface PermissionDto {
   slashed: string | null
   effective_until?: string
   modified: string
+  validator_perm_id?: number | null
+  vp_summary_digest?: string
 }
 
 export interface PermQueryClient {
