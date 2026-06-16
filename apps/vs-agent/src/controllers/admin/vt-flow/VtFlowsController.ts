@@ -26,17 +26,4 @@ export class VtFlowsController {
   ): Promise<VtFlowRecordDto> {
     return this.service.validateAndOfferCredential(vtFlowRecordId, body)
   }
-
-  @Post(':vtFlowRecordId/accept-credential')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Accept the offered credential',
-    description: 'Applicant action. Sends Issue Credential V2 ack to complete the flow.',
-  })
-  @ApiParam({ name: 'vtFlowRecordId', type: String })
-  @ApiOkResponse({ type: VtFlowRecordDto })
-  @ApiNotFoundResponse()
-  public acceptCredential(@Param('vtFlowRecordId') vtFlowRecordId: string): Promise<VtFlowRecordDto> {
-    return this.service.acceptCredential(vtFlowRecordId)
-  }
 }
