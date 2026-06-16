@@ -1,8 +1,7 @@
-import { Body, Controller, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
+import { Controller, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
 import { ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 
 import { VtFlowsService } from './VtFlowsService'
-import { ValidateFlowDto } from './dto/validate-flow.dto'
 import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
 @ApiTags('vt-flow')
@@ -15,15 +14,12 @@ export class VtFlowsController {
   @ApiOperation({
     summary: 'Validate a request and offer the credential',
     description:
-      'Validator action. Signs the credential, broadcasts `set-perm-vp-validated` and `createOrUpdatePermissionSession`, then dispatches the Issue Credential V2 offer.',
+      'Validator action. Marks the applicant validated and offers the credential over Issue Credential V2. The credential schema is derived from the flow state.',
   })
   @ApiParam({ name: 'participantSessionId', type: String })
   @ApiOkResponse({ type: VtFlowRecordDto })
   @ApiNotFoundResponse()
-  public validate(
-    @Param('participantSessionId') participantSessionId: string,
-    @Body() body: ValidateFlowDto,
-  ): Promise<VtFlowRecordDto> {
-    return this.service.validateAndOfferCredential(participantSessionId, body)
+  public validate(@Param('participantSessionId') participantSessionId: string): Promise<VtFlowRecordDto> {
+    return this.service.validateAndOfferCredential(participantSessionId)
   }
 }
