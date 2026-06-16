@@ -1,5 +1,3 @@
-import type { VsAgentPluginConfig } from '@verana-labs/vs-agent-sdk'
-
 import {
   EMrtdDataReceivedEvent,
   MrtdEventTypes,
@@ -7,8 +5,8 @@ import {
   MrtdProblemReportReason,
   MrzDataReceivedEvent,
 } from '@2060.io/credo-ts-didcomm-mrtd'
-import { BaseMessage, MessageReceived } from '@verana-labs/vs-agent-model'
-import { sendWebhookEvent, VsAgent } from '@verana-labs/vs-agent-sdk'
+import { BaseLogger } from '@credo-ts/core'
+import { emitVsAgentEvent, msgToEvent, VsAgent, VsAgentEventTypes } from '@verana-labs/vs-agent-sdk'
 
 import { EMrtdDataSubmitMessage } from '../model/EMrtdDataSubmitMessage'
 import { MrtdSubmitState } from '../model/MrtdSubmitState'
@@ -19,21 +17,9 @@ const getRecordId = async (agent: VsAgent<any>, id: string): Promise<string> => 
   return (record?.getTag('messageId') as string) ?? id
 }
 
-const sendMrtdEvent = async (
-  agent: VsAgent<any>,
-  message: BaseMessage,
-  timestamp: Date,
-  config: VsAgentPluginConfig,
-) => {
-  await sendWebhookEvent(
-    config.webhookUrl + '/message-received',
-    new MessageReceived({ timestamp, message }),
-    config.logger,
-  )
-}
-
-export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => {
+export const mrtdEvents = (agent: VsAgent<any>, logger: BaseLogger) => {
   agent.events.on(MrtdEventTypes.MrzDataReceived, async ({ payload }: MrzDataReceivedEvent) => {
+    logger.debug(`DidCommMessageProcessedEvent received: ${JSON.stringify(payload)}`)
     const { connection, mrzData, threadId } = payload
 
     const msg = new MrzDataSubmitMessage({
@@ -44,7 +30,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
     })
 
     msg.id = await getRecordId(agent, msg.id)
-    await sendMrtdEvent(agent, msg, msg.timestamp, config)
+    emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
   })
 
   agent.events.on(MrtdEventTypes.EMrtdDataReceived, async ({ payload }: EMrtdDataReceivedEvent) => {
@@ -58,7 +44,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
     })
 
     msg.id = await getRecordId(agent, msg.id)
-    await sendMrtdEvent(agent, msg, msg.timestamp, config)
+    emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
   })
 
   // MRTD problem reports
@@ -83,7 +69,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
         state: stateMap[description.code as MrtdProblemReportReason],
       })
       msg.id = await getRecordId(agent, msg.id)
-      await sendMrtdEvent(agent, msg, msg.timestamp, config)
+      emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
     } else if (
       [MrtdProblemReportReason.MrzRefused, MrtdProblemReportReason.MrzTimeout].includes(
         description.code as MrtdProblemReportReason,
@@ -95,7 +81,7 @@ export const mrtdEvents = (agent: VsAgent<any>, config: VsAgentPluginConfig) => 
         state: stateMap[description.code as MrtdProblemReportReason],
       })
       msg.id = await getRecordId(agent, msg.id)
-      await sendMrtdEvent(agent, msg, msg.timestamp, config)
+      emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
     }
   })
 }

@@ -2,6 +2,9 @@
 export * from './agent'
 export * from './types'
 
+// Events
+export * from './events'
+
 // Plugins
 export { setupBaseDidComm } from './plugins/setupBaseDidComm'
 export type { BaseDidCommPlugin, BaseDidCommPluginOptions } from './plugins/setupBaseDidComm'
@@ -24,6 +27,7 @@ export {
   deleteTailsEntry,
 } from './credentials/FullTailsFileService'
 
+// Utils
 export * from './utils'
 
 export * from './blockchain'

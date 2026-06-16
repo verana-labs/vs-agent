@@ -3,6 +3,12 @@ name: Continuous Deployment
 on:
   push:
     branches: [main, 'release/**']
+  workflow_dispatch:
+    inputs:
+      notify_tag:
+        description: "Release tag to (re)announce on Discord, e.g. v1.2.0"
+        required: true
+        type: string
 
 permissions:
   id-token: write   # Required for OIDC
@@ -12,6 +18,7 @@ permissions:
 
 jobs:
   resolve-version:
+    if: github.event_name == 'push'
     uses: 2060-io/organization/.github/workflows/resolve-version-call.yml@main
 
   docker:
@@ -174,3 +181,24 @@ jobs:
         run: |
           pnpm -r publish --no-git-checks --access public
 
+
+  discord-notify:
+    needs: [resolve-version, docker, helm]
+    if: needs.resolve-version.outputs.new-release-published == 'true' && needs.resolve-version.outputs.release-type == 'stable'
+    permissions:
+      contents: read
+    uses: 2060-io/organization/.github/workflows/discord-release-notify-call.yml@main
+    with:
+      tag_name: ${{ needs.resolve-version.outputs.release-version }}
+    secrets:
+      DISCORD_UPDATES_WEBHOOK_URL: ${{ secrets.DISCORD_UPDATES_WEBHOOK_URL }}
+
+  discord-notify-manual:
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+    uses: 2060-io/organization/.github/workflows/discord-release-notify-call.yml@main
+    with:
+      tag_name: ${{ inputs.notify_tag }}
+    secrets:
+      DISCORD_UPDATES_WEBHOOK_URL: ${{ secrets.DISCORD_UPDATES_WEBHOOK_URL }}

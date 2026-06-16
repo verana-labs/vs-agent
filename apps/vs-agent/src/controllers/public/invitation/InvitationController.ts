@@ -1,12 +1,11 @@
 import { Controller, Get, Query, Res, HttpStatus, HttpException } from '@nestjs/common'
-import { createInvitation } from '@verana-labs/vs-agent-sdk'
+import { PresentationState, PresentationStateUpdated } from '@verana-labs/vs-agent-model'
+import { createInvitation, emitVsAgentEvent, VsAgentEventTypes } from '@verana-labs/vs-agent-sdk'
 import { Response } from 'express'
 import QRCode from 'qrcode'
 
 import { AGENT_INVITATION_BASE_URL, REDIRECT_DEFAULT_URL_TO_INVITATION_URL } from '../../../config/constants'
-import { PresentationStatus, sendPresentationCallbackEvent } from '../../../events/CallbackEvent'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { TsLogger } from '../../../utils'
 
 @Controller()
 export class InvitationRoutesController {
@@ -36,13 +35,16 @@ export class InvitationRoutesController {
             | { ref?: string; callbackUrl?: string }
             | undefined
           if (proofRecord && callbackParameters && callbackParameters.callbackUrl) {
-            await sendPresentationCallbackEvent({
-              proofExchangeId: proofRecord.id,
-              callbackUrl: callbackParameters.callbackUrl,
-              status: PresentationStatus.SCANNED,
-              logger: agent.config.logger as TsLogger,
-              ref: callbackParameters.ref,
-            })
+            emitVsAgentEvent(
+              agent,
+              VsAgentEventTypes.PresentationStateUpdated,
+              new PresentationStateUpdated({
+                proofExchangeId: proofRecord.id,
+                callbackUrl: callbackParameters.callbackUrl,
+                state: PresentationState.SCANNED,
+                ref: callbackParameters.ref,
+              }),
+            )
           }
         }
         const invitation = await agent.didcomm.oob.parseInvitation(longUrl)
