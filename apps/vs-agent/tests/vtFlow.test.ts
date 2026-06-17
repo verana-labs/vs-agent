@@ -143,7 +143,7 @@ describe('vt-flow: two-agent integration', () => {
 
   it('vtFlowEvents POSTs vt-flow-state-updated as the Validator transitions to VALIDATING', async () => {
     const webhookUrl = 'http://localhost:5005'
-    const { vtFlowEvents } = await import('../src/events/VtFlowEvents')
+    const { vtFlowEvents } = await import('@verana-labs/vs-agent-sdk')
     const { TsLogger } = await import('../src/utils/logger')
 
     const baseFetch = global.fetch

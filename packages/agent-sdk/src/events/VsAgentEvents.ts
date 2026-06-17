@@ -15,6 +15,7 @@ export enum VsAgentEventTypes {
   MessageReceived = 'vs-agent-message-received',
   MessageStateUpdated = 'vs-agent-message-state-updated',
   PresentationStateUpdated = 'vs-agent-presentation-state-updated',
+  VtFlowStateUpdated = 'vs-agent-vt-flow-state-updated',
 }
 
 export interface VsAgentConnectionStateEvent extends BaseEvent {
