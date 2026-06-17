@@ -52,7 +52,8 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node build/src/main",
     "version": "pnpm version --allow-same-version",
-    "test": "vitest"
+    "test": "vitest",
+    "test:e2e": "RUN_FLOW_E2E=1 vitest run tests/verana-flow.test.ts"
   },
   "dependencies": {
     "@credo-ts/anoncreds": "0.7.1-pr-2704-20260610194233",
@@ -95,7 +96,10 @@
     "@types/express": "^4.17.13",
     "@types/multer": "^1.4.7",
     "@types/node-fetch": "^2.6.4",
+    "@types/pg": "^8.11.10",
     "@types/uuid": "^8.3.4",
+    "knex": "^3.1.0",
+    "pg": "^8.13.1",
     "postinstall-postinstall": "^2.1.0",
     "rxjs": "^7.8.1",
     "testcontainers": "^12.0.3",

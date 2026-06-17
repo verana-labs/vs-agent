@@ -8,4 +8,5 @@ logs.txt
 examples/**/afj
 tails/
 test/
+tests/.logs/
 .env
