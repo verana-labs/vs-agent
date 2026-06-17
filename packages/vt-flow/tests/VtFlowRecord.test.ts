@@ -7,14 +7,14 @@ import { VtFlowRecord } from '../src/repository'
 function makeRecord(overrides: Partial<ConstructorParameters<typeof VtFlowRecord>[0]> = {}) {
   return new VtFlowRecord({
     threadId: utils.uuid(),
-    sessionUuid: utils.uuid(),
+    participantSessionId: utils.uuid(),
     connectionId: utils.uuid(),
     role: VtFlowRole.Applicant,
-    state: VtFlowState.VrSent,
-    variant: VtFlowVariant.ValidationProcess,
-    agentPermId: 'agent-perm-1',
-    walletAgentPermId: 'wallet-agent-perm-1',
-    permId: 'perm-42',
+    state: VtFlowState.OrSent,
+    variant: VtFlowVariant.OnboardingProcess,
+    agentParticipantId: 'agent-participant-1',
+    walletAgentParticipantId: 'wallet-agent-participant-1',
+    participantId: 'participant-42',
     ...overrides,
   })
 }
@@ -29,14 +29,14 @@ describe('VtFlowRecord', () => {
     })
 
     expect(record.threadId).toBeDefined()
-    expect(record.sessionUuid).toBeDefined()
+    expect(record.participantSessionId).toBeDefined()
     expect(record.connectionId).toBeDefined()
     expect(record.role).toBe(VtFlowRole.Applicant)
-    expect(record.state).toBe(VtFlowState.VrSent)
-    expect(record.variant).toBe(VtFlowVariant.ValidationProcess)
-    expect(record.agentPermId).toBe('agent-perm-1')
-    expect(record.walletAgentPermId).toBe('wallet-agent-perm-1')
-    expect(record.permId).toBe('perm-42')
+    expect(record.state).toBe(VtFlowState.OrSent)
+    expect(record.variant).toBe(VtFlowVariant.OnboardingProcess)
+    expect(record.agentParticipantId).toBe('agent-participant-1')
+    expect(record.walletAgentParticipantId).toBe('wallet-agent-participant-1')
+    expect(record.participantId).toBe('participant-42')
     expect(record.claims).toEqual({ country: 'FR' })
     expect(record.subprotocolThid).toBe('sub-thid-xyz')
     expect(record.credentialExchangeRecordId).toBe('cred-xchg-1')
@@ -65,33 +65,33 @@ describe('VtFlowRecord', () => {
       const tags = record.getTags()
 
       expect(tags.threadId).toBe(record.threadId)
-      expect(tags.sessionUuid).toBe(record.sessionUuid)
+      expect(tags.participantSessionId).toBe(record.participantSessionId)
       expect(tags.connectionId).toBe(record.connectionId)
       expect(tags.role).toBe(VtFlowRole.Applicant)
-      expect(tags.flowState).toBe(VtFlowState.VrSent)
-      expect(tags.flowVariant).toBe(VtFlowVariant.ValidationProcess)
-      expect(tags.permId).toBe('perm-42')
+      expect(tags.flowState).toBe(VtFlowState.OrSent)
+      expect(tags.flowVariant).toBe(VtFlowVariant.OnboardingProcess)
+      expect(tags.participantId).toBe('participant-42')
       expect(tags.schemaId).toBeUndefined()
       expect(tags.credentialExchangeRecordId).toBe('cred-xchg-99')
       expect(tags.subprotocolThid).toBe('sub-thid-99')
     })
 
     it('surfaces variant-specific identifiers correctly', () => {
-      const valProc = makeRecord({
-        variant: VtFlowVariant.ValidationProcess,
-        permId: 'perm-abc',
+      const onboarding = makeRecord({
+        variant: VtFlowVariant.OnboardingProcess,
+        participantId: 'participant-abc',
         schemaId: undefined,
       })
-      expect(valProc.getTags().permId).toBe('perm-abc')
-      expect(valProc.getTags().schemaId).toBeUndefined()
+      expect(onboarding.getTags().participantId).toBe('participant-abc')
+      expect(onboarding.getTags().schemaId).toBeUndefined()
 
       const direct = makeRecord({
         variant: VtFlowVariant.DirectIssuance,
         state: VtFlowState.IrSent,
-        permId: undefined,
+        participantId: undefined,
         schemaId: 'vpr:schema:xyz',
       })
-      expect(direct.getTags().permId).toBeUndefined()
+      expect(direct.getTags().participantId).toBeUndefined()
       expect(direct.getTags().schemaId).toBe('vpr:schema:xyz')
     })
 
@@ -120,8 +120,8 @@ describe('VtFlowRecord', () => {
 
   describe('assertState', () => {
     it('accepts a single expected state', () => {
-      const record = makeRecord({ state: VtFlowState.VrSent })
-      expect(() => record.assertState(VtFlowState.VrSent)).not.toThrow()
+      const record = makeRecord({ state: VtFlowState.OrSent })
+      expect(() => record.assertState(VtFlowState.OrSent)).not.toThrow()
     })
 
     it('accepts an array of expected states', () => {
@@ -131,7 +131,7 @@ describe('VtFlowRecord', () => {
 
     it('throws when no expected state matches', () => {
       const record = makeRecord({ state: VtFlowState.Completed })
-      expect(() => record.assertState([VtFlowState.VrSent, VtFlowState.IrSent])).toThrowError(
+      expect(() => record.assertState([VtFlowState.OrSent, VtFlowState.IrSent])).toThrowError(
         /invalid state|valid states/i,
       )
     })
@@ -144,7 +144,7 @@ describe('VtFlowRecord', () => {
     })
 
     it('rejects a mismatched variant', () => {
-      const record = makeRecord({ variant: VtFlowVariant.ValidationProcess })
+      const record = makeRecord({ variant: VtFlowVariant.OnboardingProcess })
       expect(() => record.assertVariant(VtFlowVariant.DirectIssuance)).toThrow(CredoError)
     })
   })

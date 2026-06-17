@@ -9,17 +9,17 @@ export enum VtFlowRole {
   Validator = 'validator',
 }
 
-/** Spec v4 (§5.1, §5.2): ValidationProcess (validation-request, GRANTOR/ECOSYSTEM) and DirectIssuance (issuance-request, HOLDER/ISSUER), ensuring type-safe flow handling. */
+/** OnboardingProcess (onboarding-request, GRANTOR/ECOSYSTEM onboarding modes) and DirectIssuance (issuance-request, HOLDER PERMISSIONLESS), ensuring type-safe flow handling. */
 export enum VtFlowVariant {
-  ValidationProcess = 'validation-process',
+  OnboardingProcess = 'onboarding-process',
   DirectIssuance = 'direct-issuance',
 }
 
-/** Spec v4 §5.6: 16 Flow States covering both variants (AWAITING_*, *_SENT, OOB_PENDING, VALIDATING, VALIDATED, CRED_OFFERED, COMPLETED, CRED_REVOKED, TERMINATED_BY_*, ERROR, PERM_REVOKED, PERM_SLASHED). */
+/** 16 Flow States covering both variants (AWAITING_*, *_SENT, OOB_PENDING, VALIDATING, VALIDATED, CRED_OFFERED, COMPLETED, CRED_REVOKED, TERMINATED_BY_*, ERROR, PARTICIPANT_REVOKED, PARTICIPANT_SLASHED). */
 export enum VtFlowState {
-  AwaitingVp = 'AWAITING_VP',
-  VrSent = 'VR_SENT',
-  AwaitingVr = 'AWAITING_VR',
+  AwaitingOp = 'AWAITING_OP',
+  OrSent = 'OR_SENT',
+  AwaitingOr = 'AWAITING_OR',
   IrSent = 'IR_SENT',
   AwaitingIr = 'AWAITING_IR',
   OobPending = 'OOB_PENDING',
@@ -31,8 +31,8 @@ export enum VtFlowState {
   TerminatedByValidator = 'TERMINATED_BY_VALIDATOR',
   TerminatedByApplicant = 'TERMINATED_BY_APPLICANT',
   Error = 'ERROR',
-  PermRevoked = 'PERM_REVOKED',
-  PermSlashed = 'PERM_SLASHED',
+  ParticipantRevoked = 'PARTICIPANT_REVOKED',
+  ParticipantSlashed = 'PARTICIPANT_SLASHED',
 }
 
 /** Terminal states; Connection State is implicitly `TERMINATED` for each. */
@@ -40,8 +40,8 @@ export const VtFlowTerminalStates: ReadonlySet<VtFlowState> = new Set([
   VtFlowState.TerminatedByValidator,
   VtFlowState.TerminatedByApplicant,
   VtFlowState.Error,
-  VtFlowState.PermRevoked,
-  VtFlowState.PermSlashed,
+  VtFlowState.ParticipantRevoked,
+  VtFlowState.ParticipantSlashed,
 ])
 
 export function isVtFlowTerminalState(state: VtFlowState): boolean {
@@ -58,27 +58,27 @@ export interface VtFlowStateChangedEvent extends BaseEvent {
   payload: {
     vtFlowRecordId: string
     threadId: string
-    sessionUuid: string
+    participantSessionId: string
     state: VtFlowState
     previousState: VtFlowState | null
   }
 }
 
-export interface SendValidationRequestOptions {
+export interface SendOnboardingRequestOptions {
   connectionId: string
-  sessionUuid?: string
-  permId: string
-  agentPermId: string
-  walletAgentPermId: string
+  participantSessionId?: string
+  participantId: string
+  agentParticipantId: string
+  walletAgentParticipantId: string
   claims?: Record<string, unknown>
 }
 
 export interface SendIssuanceRequestOptions {
   connectionId: string
-  sessionUuid?: string
+  participantSessionId?: string
   schemaId: string
-  agentPermId: string
-  walletAgentPermId: string
+  agentParticipantId: string
+  walletAgentParticipantId: string
   claims?: Record<string, unknown>
 }
 

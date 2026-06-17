@@ -34,7 +34,7 @@ describe('vt-flow: two-agent integration', () => {
       'rxjs:validator': validatorMessages,
     }
 
-    // Applicant only initiates VR/IR; no auto-chain flags needed.
+    // Applicant only initiates OR/IR; no auto-chain flags needed.
     applicant = await startAgent({
       label: 'Applicant',
       domain: 'applicant',
@@ -48,7 +48,7 @@ describe('vt-flow: two-agent integration', () => {
       label: 'Validator',
       domain: 'validator',
       vtFlowOptions: {
-        autoAcceptValidationRequest: true,
+        autoAcceptOnboardingRequest: true,
         autoAcceptIssuanceRequest: true,
         autoMarkValidated: true,
         autoOfferCredential: false,
@@ -67,14 +67,14 @@ describe('vt-flow: two-agent integration', () => {
     vi.restoreAllMocks()
   })
 
-  it('§5.2 issuance-request: Applicant IR_SENT, Validator auto-accepts to VALIDATING', async () => {
+  it('issuance-request: Applicant IR_SENT, Validator auto-accepts to VALIDATING', async () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
     const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
       connectionId: applicantConnection.id,
       schemaId: 'https://example.test/schemas/organization.json',
-      agentPermId: 'agent-perm-1',
-      walletAgentPermId: 'wallet-agent-perm-1',
+      agentParticipantId: 'agent-participant-1',
+      walletAgentParticipantId: 'wallet-agent-participant-1',
       claims: { name: 'Acme', country: 'CH' },
     })
 
@@ -91,34 +91,63 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.variant).toBe(VtFlowVariant.DirectIssuance)
     expect(validatorRecord?.state).toBe(VtFlowState.Validating)
     expect(validatorRecord?.threadId).toBe(applicantRecord.threadId)
-    expect(validatorRecord?.sessionUuid).toBe(applicantRecord.sessionUuid)
+    expect(validatorRecord?.participantSessionId).toBe(applicantRecord.participantSessionId)
     expect(validatorRecord?.schemaId).toBe(applicantRecord.schemaId)
   })
 
-  it('§5.1 validation-request: Applicant VR_SENT, Validator auto-accepts + auto-marks-validated', async () => {
+  it('onboarding-request: Applicant OR_SENT, Validator auto-accepts + auto-marks-validated', async () => {
     const validatedReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validated))
 
-    const applicantRecord = await applicant.modules.vtFlow.sendValidationRequest({
+    const applicantRecord = await applicant.modules.vtFlow.sendOnboardingRequest({
       connectionId: applicantConnection.id,
-      permId: 'perm-42',
-      agentPermId: 'agent-perm-2',
-      walletAgentPermId: 'wallet-agent-perm-2',
+      participantId: 'participant-42',
+      agentParticipantId: 'agent-participant-2',
+      walletAgentParticipantId: 'wallet-agent-participant-2',
       claims: { role: 'issuer' },
     })
 
     expect(applicantRecord.role).toBe(VtFlowRole.Applicant)
-    expect(applicantRecord.variant).toBe(VtFlowVariant.ValidationProcess)
-    expect(applicantRecord.state).toBe(VtFlowState.VrSent)
-    expect(applicantRecord.permId).toBe('perm-42')
+    expect(applicantRecord.variant).toBe(VtFlowVariant.OnboardingProcess)
+    expect(applicantRecord.state).toBe(VtFlowState.OrSent)
+    expect(applicantRecord.participantId).toBe('participant-42')
 
     const validatedEvent = await validatedReached
     const validatorRecord = await validator.modules.vtFlow.findById(validatedEvent.payload.vtFlowRecordId)
     expect(validatorRecord).not.toBeNull()
     expect(validatorRecord?.role).toBe(VtFlowRole.Validator)
-    expect(validatorRecord?.variant).toBe(VtFlowVariant.ValidationProcess)
+    expect(validatorRecord?.variant).toBe(VtFlowVariant.OnboardingProcess)
     expect(validatorRecord?.state).toBe(VtFlowState.Validated)
     expect(validatorRecord?.threadId).toBe(applicantRecord.threadId)
-    expect(validatorRecord?.permId).toBe('perm-42')
+    expect(validatorRecord?.participantId).toBe('participant-42')
+  })
+
+  it('onboarding-request: Applicant transitions OR_SENT -> VALIDATING on `validating`', async () => {
+    const applicantEvents = vi.spyOn(applicant.events, 'emit')
+    const applicantValidating = waitForEvent(
+      applicantEvents,
+      isVtFlowStateChangedEvent(VtFlowState.Validating),
+    )
+    const validatorValidated = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validated))
+
+    const applicantRecord = await applicant.modules.vtFlow.sendOnboardingRequest({
+      connectionId: applicantConnection.id,
+      participantId: 'participant-77',
+      agentParticipantId: 'agent-participant-77',
+      walletAgentParticipantId: 'wallet-agent-participant-77',
+    })
+    expect(applicantRecord.state).toBe(VtFlowState.OrSent)
+
+    const validatedEvent = await validatorValidated
+    const validatorRecord = await validator.modules.vtFlow.findById(validatedEvent.payload.vtFlowRecordId)
+    expect(validatorRecord).not.toBeNull()
+
+    await validator.modules.vtFlow.sendValidating(validatorRecord!.id, {
+      comment: 'Validating applicant documentation.',
+    })
+
+    await applicantValidating
+    const updatedApplicant = await applicant.modules.vtFlow.findByThreadId(applicantRecord.threadId)
+    expect(updatedApplicant?.state).toBe(VtFlowState.Validating)
   })
 
   it('threadId lookup on the Validator side matches the Applicant', async () => {
@@ -127,8 +156,8 @@ describe('vt-flow: two-agent integration', () => {
     const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
       connectionId: applicantConnection.id,
       schemaId: 'https://example.test/schemas/service.json',
-      agentPermId: 'agent-perm-3',
-      walletAgentPermId: 'wallet-agent-perm-3',
+      agentParticipantId: 'agent-participant-3',
+      walletAgentParticipantId: 'wallet-agent-participant-3',
     })
     await validatingReached
 
