@@ -5,41 +5,41 @@ import { describe, expect, it } from 'vitest'
 import {
   CredentialStateChangeMessage,
   IssuanceRequestMessage,
+  OnboardingRequestMessage,
   OobLinkMessage,
   VT_FLOW_CREDENTIAL_STATE_CHANGE_TYPE,
   VT_FLOW_ISSUANCE_REQUEST_TYPE,
+  VT_FLOW_ONBOARDING_REQUEST_TYPE,
   VT_FLOW_OOB_LINK_TYPE,
   VT_FLOW_VALIDATING_TYPE,
-  VT_FLOW_VALIDATION_REQUEST_TYPE,
   ValidatingMessage,
-  ValidationRequestMessage,
   VtCredentialState,
 } from '../src'
 
-const SESSION_UUID = utils.uuid()
+const PARTICIPANT_SESSION_ID = utils.uuid()
 
-describe('ValidationRequestMessage', () => {
+describe('OnboardingRequestMessage', () => {
   const baseOptions = {
-    permId: 'perm-123',
-    sessionUuid: SESSION_UUID,
-    agentPermId: 'agent-perm-42',
-    walletAgentPermId: 'wallet-agent-perm-42',
+    participantId: 'participant-123',
+    participantSessionId: PARTICIPANT_SESSION_ID,
+    agentParticipantId: 'agent-participant-42',
+    walletAgentParticipantId: 'wallet-agent-participant-42',
   }
 
   it('carries the spec @type URI', () => {
-    expect(ValidationRequestMessage.type.messageTypeUri).toBe(VT_FLOW_VALIDATION_REQUEST_TYPE)
+    expect(OnboardingRequestMessage.type.messageTypeUri).toBe(VT_FLOW_ONBOARDING_REQUEST_TYPE)
   })
 
   it('serialises required fields with snake_case wire names', () => {
-    const msg = new ValidationRequestMessage(baseOptions)
+    const msg = new OnboardingRequestMessage(baseOptions)
     const json = JsonTransformer.toJSON(msg) as Record<string, unknown>
 
-    expect(json['@type']).toBe(VT_FLOW_VALIDATION_REQUEST_TYPE)
+    expect(json['@type']).toBe(VT_FLOW_ONBOARDING_REQUEST_TYPE)
     expect(json['@id']).toBe(msg.id)
-    expect(json.perm_id).toBe('perm-123')
-    expect(json.session_uuid).toBe(SESSION_UUID)
-    expect(json.agent_perm_id).toBe('agent-perm-42')
-    expect(json.wallet_agent_perm_id).toBe('wallet-agent-perm-42')
+    expect(json.participant_id).toBe('participant-123')
+    expect(json.participant_session_id).toBe(PARTICIPANT_SESSION_ID)
+    expect(json.agent_participant_id).toBe('agent-participant-42')
+    expect(json.wallet_agent_participant_id).toBe('wallet-agent-participant-42')
   })
 
   it('round-trips through JSON with optional claims + proofs~attach', () => {
@@ -49,7 +49,7 @@ describe('ValidationRequestMessage', () => {
       data: { base64: Buffer.from(JSON.stringify({ hello: 'world' })).toString('base64') },
     })
 
-    const original = new ValidationRequestMessage({
+    const original = new OnboardingRequestMessage({
       ...baseOptions,
       claims: { country: 'FR', legalName: 'Acme SAS' },
       proofsAttach: [proof],
@@ -61,52 +61,52 @@ describe('ValidationRequestMessage', () => {
     expect(json['proofs~attach']).toBeDefined()
     expect(Array.isArray(json['proofs~attach'])).toBe(true)
 
-    const parsed = JsonTransformer.fromJSON(json, ValidationRequestMessage)
-    expect(parsed).toBeInstanceOf(ValidationRequestMessage)
+    const parsed = JsonTransformer.fromJSON(json, OnboardingRequestMessage)
+    expect(parsed).toBeInstanceOf(OnboardingRequestMessage)
     expect(parsed.id).toBe(original.id)
-    expect(parsed.permId).toBe('perm-123')
-    expect(parsed.sessionUuid).toBe(SESSION_UUID)
-    expect(parsed.agentPermId).toBe('agent-perm-42')
-    expect(parsed.walletAgentPermId).toBe('wallet-agent-perm-42')
+    expect(parsed.participantId).toBe('participant-123')
+    expect(parsed.participantSessionId).toBe(PARTICIPANT_SESSION_ID)
+    expect(parsed.agentParticipantId).toBe('agent-participant-42')
+    expect(parsed.walletAgentParticipantId).toBe('wallet-agent-participant-42')
     expect(parsed.claims).toEqual({ country: 'FR', legalName: 'Acme SAS' })
     expect(parsed.proofsAttach).toHaveLength(1)
     expect(parsed.proofsAttach?.[0]).toBeInstanceOf(DidCommAttachment)
     expect(parsed.thread?.threadId).toBe(original.id)
   })
 
-  it('rejects a malformed session_uuid during validation', () => {
+  it('rejects a malformed participant_session_id during validation', () => {
     const json = {
-      '@type': VT_FLOW_VALIDATION_REQUEST_TYPE,
+      '@type': VT_FLOW_ONBOARDING_REQUEST_TYPE,
       '@id': utils.uuid(),
-      perm_id: 'perm-x',
-      session_uuid: 'not-a-uuid',
-      agent_perm_id: 'a',
-      wallet_agent_perm_id: 'w',
+      participant_id: 'participant-x',
+      participant_session_id: 'not-a-uuid',
+      agent_participant_id: 'a',
+      wallet_agent_participant_id: 'w',
     }
-    expect(() => JsonTransformer.fromJSON(json, ValidationRequestMessage)).toThrow()
+    expect(() => JsonTransformer.fromJSON(json, OnboardingRequestMessage)).toThrow()
   })
 })
 
 describe('IssuanceRequestMessage', () => {
   const baseOptions = {
     schemaId: 'vpr:schema:123',
-    sessionUuid: SESSION_UUID,
-    agentPermId: 'agent-perm-9',
-    walletAgentPermId: 'wallet-agent-perm-9',
+    participantSessionId: PARTICIPANT_SESSION_ID,
+    agentParticipantId: 'agent-participant-9',
+    walletAgentParticipantId: 'wallet-agent-participant-9',
   }
 
   it('carries the spec @type URI', () => {
     expect(IssuanceRequestMessage.type.messageTypeUri).toBe(VT_FLOW_ISSUANCE_REQUEST_TYPE)
   })
 
-  it('serialises schema_id instead of perm_id', () => {
+  it('serialises schema_id instead of participant_id', () => {
     const msg = new IssuanceRequestMessage(baseOptions)
     const json = JsonTransformer.toJSON(msg) as Record<string, unknown>
 
     expect(json['@type']).toBe(VT_FLOW_ISSUANCE_REQUEST_TYPE)
     expect(json.schema_id).toBe('vpr:schema:123')
-    expect(json).not.toHaveProperty('perm_id')
-    expect(json.session_uuid).toBe(SESSION_UUID)
+    expect(json).not.toHaveProperty('participant_id')
+    expect(json.participant_session_id).toBe(PARTICIPANT_SESSION_ID)
   })
 
   it('round-trips through JSON', () => {
@@ -206,14 +206,14 @@ describe('CredentialStateChangeMessage', () => {
       threadId,
       subprotocolThid,
       state: VtCredentialState.Revoked,
-      reason: 'Permission revoked on-chain.',
+      reason: 'Participant revoked on-chain.',
     })
 
     expect(CredentialStateChangeMessage.type.messageTypeUri).toBe(VT_FLOW_CREDENTIAL_STATE_CHANGE_TYPE)
     const json = JsonTransformer.toJSON(msg) as Record<string, unknown>
     expect(json.subprotocol_thid).toBe(subprotocolThid)
     expect(json.state).toBe('REVOKED')
-    expect(json.reason).toBe('Permission revoked on-chain.')
+    expect(json.reason).toBe('Participant revoked on-chain.')
   })
 
   it('round-trips a REVOKED message', () => {
@@ -239,7 +239,7 @@ describe('CredentialStateChangeMessage', () => {
       '@id': utils.uuid(),
       '~thread': { thid: threadId },
       subprotocol_thid: subprotocolThid,
-      // Per spec §Messages => credential-state-change, unknown values MUST
+      // Per spec Messages => credential-state-change, unknown values MUST
       // be accepted. This test guards against accidental tightening to a
       // closed enum.
       state: 'REACTIVATED',

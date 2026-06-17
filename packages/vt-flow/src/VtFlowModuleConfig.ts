@@ -36,7 +36,7 @@ export interface VtFlowAssertVerifiableServiceContext {
   connectionId: string
 }
 
-/** Spec v4 §Verifiable Service Identity Check: caller-provided VS-CONN-VS gate invoked at session start (Applicant before sending VR/IR, Validator on receipt of VR/IR). Return `false` (or throw) to reject the peer; the module then aborts the operation with a `vt-flow.not-a-verifiable-service` error. When the hook is undefined, the module logs a warning and permits — production callers MUST configure this for spec-conformant trust resolution. */
+/** Spec Verifiable Service Identity Check: caller-provided VS-CONN-VS gate invoked at session start (Applicant before sending OR/IR, Validator on receipt of OR/IR). Return `false` (or throw) to reject the peer; the module then aborts the operation with a `vt-flow.not-a-verifiable-service` error. When the hook is undefined, the module logs a warning and permits — production callers MUST configure this for spec-conformant trust resolution. */
 export type VtFlowAssertVerifiableServiceHook = (
   ctx: VtFlowAssertVerifiableServiceContext,
 ) => Promise<boolean>
@@ -45,7 +45,7 @@ export type VtFlowAssertVerifiableServiceHook = (
 export interface VtFlowModuleConfigOptions {
   oobExpirationDays?: number
   terminalRetentionDays?: number
-  autoAcceptValidationRequest?: boolean
+  autoAcceptOnboardingRequest?: boolean
   autoAcceptIssuanceRequest?: boolean
   verifyCredential?: VtFlowVerifyCredentialHook
   onCompleted?: VtFlowOnCompletedHook
@@ -73,8 +73,8 @@ export class VtFlowModuleConfig {
     return this.options.terminalRetentionDays ?? 90
   }
 
-  public get autoAcceptValidationRequest(): boolean {
-    return this.options.autoAcceptValidationRequest ?? false
+  public get autoAcceptOnboardingRequest(): boolean {
+    return this.options.autoAcceptOnboardingRequest ?? false
   }
 
   public get autoAcceptIssuanceRequest(): boolean {

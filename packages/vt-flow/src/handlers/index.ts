@@ -1,5 +1,5 @@
 export { CredentialStateChangeHandler } from './CredentialStateChangeHandler'
 export { IssuanceRequestHandler } from './IssuanceRequestHandler'
 export { OobLinkHandler } from './OobLinkHandler'
+export { OnboardingRequestHandler } from './OnboardingRequestHandler'
 export { ValidatingHandler } from './ValidatingHandler'
-export { ValidationRequestHandler } from './ValidationRequestHandler'
