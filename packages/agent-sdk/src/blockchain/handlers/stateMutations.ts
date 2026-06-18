@@ -145,7 +145,10 @@ export async function setVtFlowRecordsPermRevoked(agent: VsAgent, permId: string
     agent,
     permId,
     async (record, service, agentContext) => {
-      if (record.state === VtFlowState.ParticipantRevoked || record.state === VtFlowState.ParticipantSlashed) {
+      if (
+        record.state === VtFlowState.ParticipantRevoked ||
+        record.state === VtFlowState.ParticipantSlashed
+      ) {
         return null
       }
       await service.updateState(agentContext, record, VtFlowState.ParticipantRevoked)
@@ -160,7 +163,10 @@ export async function setVtFlowRecordsPermSlashed(agent: VsAgent, permId: string
     agent,
     permId,
     async (record, service, agentContext) => {
-      if (record.state === VtFlowState.ParticipantSlashed || record.state === VtFlowState.ParticipantRevoked) {
+      if (
+        record.state === VtFlowState.ParticipantSlashed ||
+        record.state === VtFlowState.ParticipantRevoked
+      ) {
         return null
       }
       await service.updateState(agentContext, record, VtFlowState.ParticipantSlashed)

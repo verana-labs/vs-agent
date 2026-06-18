@@ -49,7 +49,8 @@ export class VtFlowsService {
     if (!record.participantId) throw new BadRequestException('Record has no permId')
 
     const holderPerm = await this.getIndexer().getPermission(Number(record.participantId))
-    if (!holderPerm) throw new BadRequestException(`Holder permission ${record.participantId} not found on indexer`)
+    if (!holderPerm)
+      throw new BadRequestException(`Holder permission ${record.participantId} not found on indexer`)
     if (holderPerm.schema_id == null) throw new BadRequestException('Holder permission has no schema_id')
 
     const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
