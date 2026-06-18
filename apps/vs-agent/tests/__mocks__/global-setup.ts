@@ -1,5 +1,3 @@
-// Register askar's native binding in the ESM test context; the CJS built agent-sdk
-// registers a separate copy the ESM @credo-ts/askar KMS never sees. Removing this re-breaks agent init.
 import '@openwallet-foundation/askar-nodejs'
 import { vi } from 'vitest'
 

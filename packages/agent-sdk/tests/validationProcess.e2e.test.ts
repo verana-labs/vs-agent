@@ -262,10 +262,10 @@ describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
     expect(applicantPermId).toBeGreaterThan(0)
     log(`applicantPerm=${applicantPermId}`)
 
-    await waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.VrSent))
+    await waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.OrSent))
     const validatorVrEvent = await waitForEvent(
       validatorEvents,
-      isVtFlowStateChangedEvent(VtFlowState.AwaitingVr),
+      isVtFlowStateChangedEvent(VtFlowState.AwaitingOr),
     )
     const validatorRecordId = validatorVrEvent.payload.vtFlowRecordId
 
@@ -304,7 +304,7 @@ describe.skipIf(!hasMnemonic)('VSA-VTI-FLOW-VP-NEW (devnet E2E)', () => {
     const onChainPerm = await applicantChain.getPermission(applicantPermId)
     expect(onChainPerm?.vpState).toBe(ValidationState.VALIDATED)
 
-    const sessionUuid = finalValidatorRecord?.sessionUuid
+    const sessionUuid = finalValidatorRecord?.participantSessionId
     expect(sessionUuid).toBeDefined()
     log(
       `completed: applicantRecord=${applicantRecordId} linkedVp=${expectedLinkedVpEndpoint} sessionUuid=${sessionUuid}`,

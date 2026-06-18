@@ -38,18 +38,18 @@ export class VtFlowsService {
     if (record.role !== VtFlowRole.Validator) {
       throw new BadRequestException('This record is applicant-side; validate is a validator action')
     }
-    if (record.variant !== VtFlowVariant.ValidationProcess) {
+    if (record.variant !== VtFlowVariant.OnboardingProcess) {
       throw new BadRequestException(
-        `This record is variant '${record.variant}'; validate only applies to ValidationProcess`,
+        `This record is variant '${record.variant}'; validate only applies to OnboardingProcess`,
       )
     }
-    if (record.state !== VtFlowState.AwaitingVr) {
-      throw new BadRequestException(`Record state is '${record.state}', expected '${VtFlowState.AwaitingVr}'`)
+    if (record.state !== VtFlowState.AwaitingOr) {
+      throw new BadRequestException(`Record state is '${record.state}', expected '${VtFlowState.AwaitingOr}'`)
     }
-    if (!record.permId) throw new BadRequestException('Record has no permId')
+    if (!record.participantId) throw new BadRequestException('Record has no permId')
 
-    const holderPerm = await this.getIndexer().getPermission(Number(record.permId))
-    if (!holderPerm) throw new BadRequestException(`Holder permission ${record.permId} not found on indexer`)
+    const holderPerm = await this.getIndexer().getPermission(Number(record.participantId))
+    if (!holderPerm) throw new BadRequestException(`Holder permission ${record.participantId} not found on indexer`)
     if (holderPerm.schema_id == null) throw new BadRequestException('Holder permission has no schema_id')
 
     const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
@@ -73,7 +73,7 @@ export class VtFlowsService {
     vtFlowApi: VtFlowApi,
     participantSessionId: string,
   ): Promise<VtFlowRecord> {
-    const [record] = await vtFlowApi.findAllByQuery({ sessionUuid: participantSessionId })
+    const [record] = await vtFlowApi.findAllByQuery({ participantSessionId })
     if (!record)
       throw new NotFoundException(`No vt-flow for participant_session_id '${participantSessionId}'`)
     return record
@@ -108,14 +108,14 @@ function toDto(record: VtFlowRecord): VtFlowRecordDto {
   return {
     vtFlowRecordId: record.id,
     threadId: record.threadId,
-    sessionUuid: record.sessionUuid,
+    sessionUuid: record.participantSessionId,
     connectionId: record.connectionId,
     role: record.role,
     variant: record.variant,
     state: record.state,
-    agentPermId: record.agentPermId,
-    walletAgentPermId: record.walletAgentPermId,
-    permId: record.permId,
+    agentPermId: record.agentParticipantId,
+    walletAgentPermId: record.walletAgentParticipantId,
+    permId: record.participantId,
     schemaId: record.schemaId,
     claims: record.claims,
     credentialExchangeRecordId: record.credentialExchangeRecordId,

@@ -86,12 +86,12 @@ export class VtFlowOrchestrator {
     if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
     const ready = await this.agent.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
 
-    return this.resolveVtFlowApi().sendValidationRequest({
+    return this.resolveVtFlowApi().sendOnboardingRequest({
       connectionId: ready.id,
-      sessionUuid: input.sessionUuid ?? utils.uuid(),
-      permId: String(holderPerm.id),
-      agentPermId: '0',
-      walletAgentPermId: '0',
+      participantSessionId: input.sessionUuid ?? utils.uuid(),
+      participantId: String(holderPerm.id),
+      agentParticipantId: '0',
+      walletAgentParticipantId: '0',
       claims: input.claims,
     })
   }
@@ -104,15 +104,15 @@ export class VtFlowOrchestrator {
     const record = await vtFlowApi.findById(input.vtFlowRecordId)
     if (!record) throw new Error(`vt-flow record ${input.vtFlowRecordId} not found`)
     if (record.role !== VtFlowRole.Validator) throw new Error('Record is not validator-side')
-    if (record.variant !== VtFlowVariant.ValidationProcess) {
-      throw new Error(`Record variant is '${record.variant}', expected ValidationProcess`)
+    if (record.variant !== VtFlowVariant.OnboardingProcess) {
+      throw new Error(`Record variant is '${record.variant}', expected OnboardingProcess`)
     }
-    if (record.state !== VtFlowState.AwaitingVr) {
-      throw new Error(`Record state is '${record.state}', expected '${VtFlowState.AwaitingVr}'`)
+    if (record.state !== VtFlowState.AwaitingOr) {
+      throw new Error(`Record state is '${record.state}', expected '${VtFlowState.AwaitingOr}'`)
     }
-    if (!record.permId) throw new Error('Record has no permId')
+    if (!record.participantId) throw new Error('Record has no permId')
 
-    const holderPermId = Number(record.permId)
+    const holderPermId = Number(record.participantId)
     const holderPerm = await chain.getPermission(holderPermId)
     if (!holderPerm) throw new Error(`Holder permission ${holderPermId} not found on chain`)
     if (!holderPerm.did) throw new Error('Holder permission has no DID')
@@ -154,7 +154,7 @@ export class VtFlowOrchestrator {
     // FIXME(verana#289): chain requires agent_perm_id > 0, so VS-to-VS sessions can't be created yet. Skipping.
     if (input.agentPermId && input.agentPermId > 0) {
       await chain.createOrUpdatePermissionSession({
-        id: record.sessionUuid,
+        id: record.participantSessionId,
         issuerPermId: holderPermId,
         agentPermId: input.agentPermId,
         walletAgentPermId: input.walletAgentPermId ?? 0,
@@ -166,7 +166,7 @@ export class VtFlowOrchestrator {
       )
     }
 
-    await vtFlowApi.acceptValidationRequest(record.id)
+    await vtFlowApi.acceptOnboardingRequest(record.id)
     await vtFlowApi.markValidated(record.id)
 
     const { record: offered } = await vtFlowApi.offerCredentialForSession({
@@ -198,13 +198,13 @@ export class VtFlowOrchestrator {
     const record = await vtFlowApi.findById(vtFlowRecordId)
     if (!record) throw new Error(`vt-flow record ${vtFlowRecordId} not found`)
     if (record.role !== VtFlowRole.Applicant) throw new Error('Record is not applicant-side')
-    if (!record.permId) throw new Error('Record has no permId')
+    if (!record.participantId) throw new Error('Record has no permId')
     if (!record.credentialExchangeRecordId) {
       throw new Error('Record has no credentialExchangeRecordId; nothing to verify')
     }
 
     const { validatorPermActive, vpSummaryDigest } = await this.resolveHolderAndValidatorState(
-      Number(record.permId),
+      Number(record.participantId),
     )
     if (!validatorPermActive) throw new Error('Validator permission is not active')
 
