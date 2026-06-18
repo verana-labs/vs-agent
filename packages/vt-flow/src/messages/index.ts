@@ -1,14 +1,14 @@
 export {
   VT_FLOW_PROTOCOL_URI,
-  VT_FLOW_VALIDATION_REQUEST_TYPE,
+  VT_FLOW_ONBOARDING_REQUEST_TYPE,
   VT_FLOW_ISSUANCE_REQUEST_TYPE,
   VT_FLOW_OOB_LINK_TYPE,
   VT_FLOW_VALIDATING_TYPE,
   VT_FLOW_CREDENTIAL_STATE_CHANGE_TYPE,
 } from './VtFlowProtocol'
 
-export { ValidationRequestMessage } from './ValidationRequestMessage'
-export type { ValidationRequestMessageOptions } from './ValidationRequestMessage'
+export { OnboardingRequestMessage } from './OnboardingRequestMessage'
+export type { OnboardingRequestMessageOptions } from './OnboardingRequestMessage'
 
 export { IssuanceRequestMessage } from './IssuanceRequestMessage'
 export type { IssuanceRequestMessageOptions } from './IssuanceRequestMessage'

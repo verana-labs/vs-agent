@@ -48,24 +48,24 @@ export function buildVtFlowProblemReport(
 
 function defaultEnglishDescription(code: VtFlowErrorCode): string {
   switch (code) {
-    case VtFlowErrorCode.VrRequired:
-      return 'A validation-request was expected for this session.'
+    case VtFlowErrorCode.OrRequired:
+      return 'An onboarding-request was expected for this session.'
     case VtFlowErrorCode.IrRequired:
       return 'An issuance-request was expected for this session.'
     case VtFlowErrorCode.UnsupportedMessage:
       return 'The received message is not supported in the current state.'
-    case VtFlowErrorCode.InvalidPermId:
-      return 'The supplied perm_id is invalid for this Validator.'
+    case VtFlowErrorCode.InvalidParticipantId:
+      return 'The supplied participant_id is invalid for this Validator.'
     case VtFlowErrorCode.InvalidSchemaId:
       return 'The supplied schema_id is not supported by this Validator.'
-    case VtFlowErrorCode.InvalidAgentPermId:
-      return 'The supplied agent_perm_id did not resolve on-chain.'
-    case VtFlowErrorCode.InvalidWalletAgentPermId:
-      return 'The supplied wallet_agent_perm_id did not resolve on-chain.'
+    case VtFlowErrorCode.InvalidAgentParticipantId:
+      return 'The supplied agent_participant_id did not resolve on-chain.'
+    case VtFlowErrorCode.InvalidWalletAgentParticipantId:
+      return 'The supplied wallet_agent_participant_id did not resolve on-chain.'
     case VtFlowErrorCode.InvalidClaims:
       return 'The submitted claims do not satisfy the schema.'
-    case VtFlowErrorCode.InvalidSessionUuid:
-      return 'The supplied session_uuid is invalid or conflicts with an existing session.'
+    case VtFlowErrorCode.InvalidParticipantSessionId:
+      return 'The supplied participant_session_id is invalid or conflicts with an existing session.'
     case VtFlowErrorCode.NotAVerifiableService:
       return "The peer's DID does not identify a Verifiable Service."
     case VtFlowErrorCode.ValidationFailed:
