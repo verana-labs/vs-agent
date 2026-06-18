@@ -7,7 +7,14 @@ import { loadSyncState, saveSyncState } from './VeranaHelpers'
 import { VeranaIndexerService } from './VeranaIndexerService'
 import { buildDefaultIndexerHandlerRegistry } from './handlers'
 import { IndexerHandlerRegistry } from './handlers/IndexerHandlerRegistry'
-import { IndexerActivity, IndexerEventRecord, IndexerEventsResponse } from './types'
+import {
+  IndexerActivity,
+  IndexerBlockMessage,
+  IndexerEventRecord,
+  IndexerEventsResponse,
+  IndexerReadyMessage,
+  IndexerSubscribeMessage,
+} from './types'
 
 export interface IndexerWebSocketServiceOptions {
   indexerUrl: string
@@ -16,7 +23,7 @@ export interface IndexerWebSocketServiceOptions {
 }
 
 const MAX_RECONNECT_DELAY_MS = 300_000
-const WS_PATHNAME = 'verana/indexer/v1/events'
+const WS_PATHNAME = 'v4/indexer/subscribe'
 const CREATES_WITHOUT_ID = new Set(['CreateNewTrustRegistry', 'CreateNewCredentialSchema'])
 
 export class IndexerWebSocketService {
@@ -70,7 +77,7 @@ export class IndexerWebSocketService {
     const url = new URL(this.options.indexerUrl)
     const wsProto = url.protocol === 'https:' ? 'wss:' : 'ws:'
     if (!this.options.agent.did) throw new Error('Agent does not have any defined public DID')
-    const wsUrl = `${wsProto}//${url.host}/${WS_PATHNAME}?did=${encodeURIComponent(this.options.agent.did)}`
+    const wsUrl = `${wsProto}//${url.host}/${WS_PATHNAME}`
 
     this.logger.info(`[IndexerWS] Connecting to ${wsUrl}`)
     const ws = new WebSocket(wsUrl)
@@ -83,17 +90,15 @@ export class IndexerWebSocketService {
 
     ws.on('message', (data: WebSocket.RawData) => {
       try {
-        const event = JSON.parse(data.toString()) as IndexerEventRecord
-        if (event.type !== 'indexer-event') return
-        if (event.block_height <= 0) return
-        if (!event.payload?.sender) return
+        const message = JSON.parse(data.toString()) as
+          | IndexerReadyMessage
+          | IndexerBlockMessage
+          | IndexerEventRecord
 
-        if (this.syncing) {
-          this.IndexerEventRecords.push(event)
-        } else {
-          this.processBlock(event).catch(err =>
-            this.logger.error(`[IndexerWS] Handler error: ${(err as Error).message}`),
-          )
+        if (message.type === 'ready') {
+          this.sendSubscribe()
+        } else if (message.type === 'block') {
+          for (const event of message.events) this.ingestEvent(event)
         }
       } catch {
         this.logger.warn(`[IndexerWS] Failed to parse message: ${data}`)
@@ -107,6 +112,29 @@ export class IndexerWebSocketService {
     ws.on('error', (error: Error) => {
       this.logger.error(`[IndexerWS] Error: ${error.message}`)
     })
+  }
+
+  private sendSubscribe(): void {
+    if (!this.options.agent.did) throw new Error('Agent does not have any defined public DID')
+    const subscribe: IndexerSubscribeMessage = {
+      action: 'subscribe',
+      dids: [this.options.agent.did],
+    }
+    this.ws?.send(JSON.stringify(subscribe))
+  }
+
+  private ingestEvent(event: IndexerEventRecord): void {
+    if (event.type !== 'indexer-event') return
+    if (event.block_height <= 0) return
+    if (!event.payload?.sender) return
+
+    if (this.syncing) {
+      this.IndexerEventRecords.push(event)
+    } else {
+      this.processBlock(event).catch(err =>
+        this.logger.error(`[IndexerWS] Handler error: ${(err as Error).message}`),
+      )
+    }
   }
 
   private async syncRest(): Promise<void> {
