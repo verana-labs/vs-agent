@@ -28,7 +28,8 @@
     "compile": "tsc -p tsconfig.build.json",
     "prepublishOnly": "pnpm run build",
     "version": "pnpm version --allow-same-version",
-    "test": "vitest"
+    "test": "vitest",
+    "test:e2e": "RUN_FLOW_E2E=1 vitest run tests/e2e"
   },
   "dependencies": {
     "@cosmjs/proto-signing": "^0.32.3",
@@ -56,6 +57,8 @@
     "@credo-ts/node": "0.7.1-pr-2704-20260610194233"
   },
   "devDependencies": {
+    "@verana-labs/verana-types-next": "npm:@verana-labs/verana-types@0.10.1-dev.16",
+    "testcontainers": "^12.0.3",
     "ts-node-dev": "^2.0.0"
   }
 }

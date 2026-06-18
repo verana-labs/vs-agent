@@ -200,9 +200,6 @@ importers:
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
-      testcontainers:
-        specifier: ^12.0.3
-        version: 12.0.3
       ts-node-dev:
         specifier: ^2.0.0
         version: 2.0.0(@types/node@20.11.19)(typescript@5.7.2)
@@ -511,6 +508,12 @@ importers:
         specifier: 4.8.0
         version: 4.8.0
     devDependencies:
+      '@verana-labs/verana-types-next':
+        specifier: npm:@verana-labs/verana-types@0.10.1-dev.16
+        version: '@verana-labs/verana-types@0.10.1-dev.16(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)'
+      testcontainers:
+        specifier: ^12.0.3
+        version: 12.0.3
       ts-node-dev:
         specifier: ^2.0.0
         version: 2.0.0(@types/node@20.11.19)(typescript@5.8.3)
@@ -1886,20 +1889,11 @@ packages:
   '@protobufjs/base64@1.1.2':
     resolution: {integrity: sha512-AZkcAA5vnN/v4PDqKyMR5lx7hZttPDgClv83E//FMNhR2TMcLUhfRUBHCmSl0oi9zMgDDqRUJkSxO3wm85+XLg==}
 
-  '@protobufjs/codegen@2.0.4':
-    resolution: {integrity: sha512-YyFaikqM5sH0ziFZCN3xDC7zeGaB/d0IUb9CATugHWbd1FRFwWwt4ld4OYMPWu5a3Xe01mGAULCdqhMlPl29Jg==}
-
   '@protobufjs/codegen@2.0.5':
     resolution: {integrity: sha512-zgXFLzW3Ap33e6d0Wlj4MGIm6Ce8O89n/apUaGNB/jx+hw+ruWEp7EwGUshdLKVRCxZW12fp9r40E1mQrf/34g==}
 
-  '@protobufjs/eventemitter@1.1.0':
-    resolution: {integrity: sha512-j9ednRT81vYJ9OfVuXG6ERSTdEL1xVsNgqpkxMsbIabzSo3goCjDIveeGv5d03om39ML71RdmrGNjG5SReBP/Q==}
-
   '@protobufjs/eventemitter@1.1.1':
     resolution: {integrity: sha512-vW1GmwMZNnL+gMRaovlh9yZX74kc+TTU3FObkkurpMaRtBfLP3ldjS9KQWlwZgraRE0+dheEEoAxdzcJQ8eXZg==}
-
-  '@protobufjs/fetch@1.1.0':
-    resolution: {integrity: sha512-lljVXpqXebpsijW71PZaCYeIcE5on1w5DlQy5WH6GLbFryLUrBD4932W/E2BSpfRJWseIL4v/KPgBFxDOIdKpQ==}
 
   '@protobufjs/fetch@1.1.1':
     resolution: {integrity: sha512-GpptLrs57adMSuHi3VNj0mAF8dwh36LMaYF6XyJ6JMWlVsc+t42tm1HSEDmOs3A8fC9yyeisgLhsTVQokOZ0zw==}
@@ -1915,9 +1909,6 @@ packages:
 
   '@protobufjs/pool@1.1.0':
     resolution: {integrity: sha512-0kELaGSIDBKvcgS4zkjz1PeddatrjYcmMWOlAuAPwAeccUrPHdUqo/J6LiymHHEiJT5NrF1UVwxY14f+fy4WQw==}
-
-  '@protobufjs/utf8@1.1.0':
-    resolution: {integrity: sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw==}
 
   '@protobufjs/utf8@1.1.1':
     resolution: {integrity: sha512-oOAWABowe8EAbMyWKM0tYDKi8Yaox52D+HWZhAIJqQXbqe0xI/GV7FhLWqlEKreMkfDjshR5FKgi3mnle0h6Eg==}
@@ -2515,6 +2506,12 @@ packages:
 
   '@verana-labs/verana-types@0.10.1-dev.11':
     resolution: {integrity: sha512-Sq/QxSmplDZTnsRCMGETiQ0ZQxtn8NGuYHhV3teUr/Cq5YVoBylwkbxbvRHy1OsDXaSgQ6LH53heOMZ3B/LRkw==}
+    peerDependencies:
+      '@cosmjs/proto-signing': ^0.32.3
+      '@cosmjs/stargate': ^0.32.3
+
+  '@verana-labs/verana-types@0.10.1-dev.16':
+    resolution: {integrity: sha512-PI1c85W9SKxPHPYZP3RKmVwJQEM6pRSyWJ4JyXA6mPkXTm+QDpjs4FFNem90pCHYT/3G95khZt/aALXGZslXPw==}
     peerDependencies:
       '@cosmjs/proto-signing': ^0.32.3
       '@cosmjs/stargate': ^0.32.3
@@ -7679,18 +7676,9 @@ snapshots:
 
   '@protobufjs/base64@1.1.2': {}
 
-  '@protobufjs/codegen@2.0.4': {}
-
   '@protobufjs/codegen@2.0.5': {}
 
-  '@protobufjs/eventemitter@1.1.0': {}
-
   '@protobufjs/eventemitter@1.1.1': {}
-
-  '@protobufjs/fetch@1.1.0':
-    dependencies:
-      '@protobufjs/aspromise': 1.1.2
-      '@protobufjs/inquire': 1.1.0
 
   '@protobufjs/fetch@1.1.1':
     dependencies:
@@ -7703,8 +7691,6 @@ snapshots:
   '@protobufjs/path@1.1.2': {}
 
   '@protobufjs/pool@1.1.0': {}
-
-  '@protobufjs/utf8@1.1.0': {}
 
   '@protobufjs/utf8@1.1.1': {}
 
@@ -8352,6 +8338,13 @@ snapshots:
     optional: true
 
   '@verana-labs/verana-types@0.10.1-dev.11(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)':
+    dependencies:
+      '@cosmjs/proto-signing': 0.32.4
+      '@cosmjs/stargate': 0.32.3
+      long: 5.3.2
+      protobufjs: 7.2.6
+
+  '@verana-labs/verana-types@0.10.1-dev.16(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)':
     dependencies:
       '@cosmjs/proto-signing': 0.32.4
       '@cosmjs/stargate': 0.32.3
@@ -11016,14 +11009,14 @@ snapshots:
     dependencies:
       '@protobufjs/aspromise': 1.1.2
       '@protobufjs/base64': 1.1.2
-      '@protobufjs/codegen': 2.0.4
-      '@protobufjs/eventemitter': 1.1.0
-      '@protobufjs/fetch': 1.1.0
+      '@protobufjs/codegen': 2.0.5
+      '@protobufjs/eventemitter': 1.1.1
+      '@protobufjs/fetch': 1.1.1
       '@protobufjs/float': 1.0.2
       '@protobufjs/inquire': 1.1.0
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
-      '@protobufjs/utf8': 1.1.0
+      '@protobufjs/utf8': 1.1.1
       '@types/long': 4.0.2
       '@types/node': 20.11.19
       long: 4.0.0
@@ -11032,14 +11025,14 @@ snapshots:
     dependencies:
       '@protobufjs/aspromise': 1.1.2
       '@protobufjs/base64': 1.1.2
-      '@protobufjs/codegen': 2.0.4
-      '@protobufjs/eventemitter': 1.1.0
-      '@protobufjs/fetch': 1.1.0
+      '@protobufjs/codegen': 2.0.5
+      '@protobufjs/eventemitter': 1.1.1
+      '@protobufjs/fetch': 1.1.1
       '@protobufjs/float': 1.0.2
       '@protobufjs/inquire': 1.1.0
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
-      '@protobufjs/utf8': 1.1.0
+      '@protobufjs/utf8': 1.1.1
       '@types/node': 20.11.19
       long: 5.3.2
 
