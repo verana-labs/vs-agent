@@ -1,7 +1,11 @@
 import type { JsonObject } from '@credo-ts/core'
 
-import { JsonTransformer, W3cCredential, W3cJsonLdVerifiableCredential, utils } from '@credo-ts/core'
-import { DidCommHandshakeProtocol, type JsonCredential } from '@credo-ts/didcomm'
+import { JsonTransformer, W3cJsonLdVerifiableCredential, utils } from '@credo-ts/core'
+import {
+  DidCommHandshakeProtocol,
+  type JsonCredential,
+  type JsonLdFormatDataVerifiableCredential,
+} from '@credo-ts/didcomm'
 import {
   VtFlowApi,
   VtFlowRecord,
@@ -13,14 +17,9 @@ import {
 import { BaseAgentModules, VsAgent } from '../agent'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { ISSUER_PERMISSION_TYPE } from '../types'
-import {
-  createCredential,
-  createVtc,
-  findMetadataEntry,
-  generateDigestSRI,
-  getVerificationMethodId,
-  signerW3c,
-} from '../utils'
+import { createCredential, createVtc, findMetadataEntry } from '../utils'
+
+import { credentialContentDigest } from './credentialDigest'
 
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
@@ -120,7 +119,6 @@ export class VtFlowOrchestrator {
     const didRecords = await this.agent.dids.getCreatedDids({ did: this.agent.did })
     const didRecord = didRecords[0]
     if (!didRecord) throw new Error('Agent DID record not found')
-    const verificationMethodId = getVerificationMethodId(this.agent.config.logger, didRecord)
     const schemaRef = `vpr:verana:${chain.getChainId}/cs/v1/js/${input.credentialSchemaId}`
     const { data } = await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
 
@@ -139,32 +137,17 @@ export class VtFlowOrchestrator {
 
     const unsignedCredentialJson = JsonTransformer.toJSON(unsignedCredential) as JsonCredential
 
-    const signed = await signerW3c(
-      this.agent,
-      JsonTransformer.fromJSON(unsignedCredentialJson, W3cCredential),
-      verificationMethodId,
-    )
-    const digest = generateDigestSRI(JSON.stringify(signed.jsonCredential))
+    const digest = credentialContentDigest(unsignedCredentialJson)
 
     await chain.setPermissionVPToValidated({
       id: holderPermId,
       vpSummaryDigest: digest,
       corporation: holderPerm.corporation,
     })
-    // FIXME(verana#289): chain requires agent_perm_id > 0, so VS-to-VS sessions can't be created yet. Skipping.
-    if (input.agentPermId && input.agentPermId > 0) {
-      await chain.createOrUpdatePermissionSession({
-        id: record.participantSessionId,
-        issuerPermId: holderPermId,
-        agentPermId: input.agentPermId,
-        walletAgentPermId: input.walletAgentPermId ?? 0,
-        digest,
-      })
-    } else {
-      this.agent.config.logger.warn(
-        `[VtFlowOrchestrator] Skipping createOrUpdatePermissionSession: no agentPermId provided`,
-      )
-    }
+    // FIXME: we skip creating the on-chain session for now. Today the chain needs one kind of account
+    // permission to validate a participant (OperatorAuthorization) and a different, conflicting kind to
+    // create the session (VSOperatorAuthorization), so one account can't do both. The spec puts both under
+    // a single account (AUTHZ-CHECK-3), so this is temporary.
 
     await vtFlowApi.acceptOnboardingRequest(record.id)
     await vtFlowApi.markValidated(record.id)
@@ -208,23 +191,17 @@ export class VtFlowOrchestrator {
     )
     if (!validatorPermActive) throw new Error('Validator permission is not active')
 
-    // FIXME(verana#289): soft-check only. Credo re-signs at issuance so the digest won't match the
-    // validated-tx value; hard-reject once the credential digest lives in the on-chain ParticipantSession.
-    if (!vpSummaryDigest) return
-    try {
-      const formatData = await this.agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
-      const credentialJson = (formatData.credential as { jsonld?: unknown } | undefined)?.jsonld
-      if (!credentialJson) return
-      const computed = generateDigestSRI(JSON.stringify(credentialJson))
-      if (computed !== vpSummaryDigest) {
-        this.agent.config.logger.warn(
-          `[VtFlowOrchestrator] Digest mismatch: computed=${computed} on-chain=${vpSummaryDigest}`,
-        )
-      }
-    } catch (err) {
-      this.agent.config.logger.warn(
-        `[VtFlowOrchestrator] Digest soft-check skipped: ${(err as Error).message}`,
-      )
+    if (!vpSummaryDigest) {
+      throw new Error('No credential digest recorded in the on-chain ParticipantSession')
+    }
+    const formatData = await this.agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
+    const credentialJson = (
+      formatData.credential as { jsonld?: JsonLdFormatDataVerifiableCredential } | undefined
+    )?.jsonld
+    if (!credentialJson) throw new Error('Offered credential has no JSON-LD body to verify')
+    const computed = credentialContentDigest(credentialJson)
+    if (computed !== vpSummaryDigest) {
+      throw new Error(`Credential digest mismatch: computed=${computed} on-chain=${vpSummaryDigest}`)
     }
   }
 
