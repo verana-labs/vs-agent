@@ -144,10 +144,13 @@ export class VtFlowOrchestrator {
       vpSummaryDigest: digest,
       corporation: holderPerm.corporation,
     })
-    // FIXME: we skip creating the on-chain session for now. Today the chain needs one kind of account
-    // permission to validate a participant (OperatorAuthorization) and a different, conflicting kind to
-    // create the session (VSOperatorAuthorization), so one account can't do both. The spec puts both under
-    // a single account (AUTHZ-CHECK-3), so this is temporary.
+    await chain.createOrUpdatePermissionSession({
+      id: record.participantSessionId,
+      issuerPermId: holderPermId,
+      agentPermId: input.agentPermId ?? 0,
+      walletAgentPermId: input.walletAgentPermId ?? 0,
+      digest,
+    })
 
     await vtFlowApi.acceptOnboardingRequest(record.id)
     await vtFlowApi.markValidated(record.id)

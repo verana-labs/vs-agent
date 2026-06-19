@@ -197,6 +197,13 @@ export interface VeranaChainConfig {
   logger: BaseLogger
   gasPrice?: string
   corporationAddress?: string
+  /**
+   * FIXME(verana setValidated->AUTHZ-CHECK-3): temporary. On the current chain, validating a participant
+   * (OperatorAuthorization) and creating its session (VSOperatorAuthorization) need two mutually-exclusive
+   * account permissions, so one account cannot do both. When set, the session is signed by this second
+   * account. Remove once the chain authorizes both under one vs_operator (AUTHZ-CHECK-3).
+   */
+  sessionOperatorMnemonic?: string
 }
 
 /** Wrapper for optional uint64 values per `verana.perm.v1.OptionalUInt64`. */

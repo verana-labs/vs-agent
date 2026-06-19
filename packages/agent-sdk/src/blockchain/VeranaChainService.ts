@@ -9,7 +9,7 @@ import {
   type DeliverTxResponse,
 } from '@cosmjs/stargate'
 import { connectComet } from '@cosmjs/tendermint-rpc'
-import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types-next'
+import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
 
 import {
   CreateOrUpdatePermissionSessionParams,
@@ -21,13 +21,11 @@ import {
   VeranaChainConfig,
 } from './types'
 
-const {
-  QueryClientImpl: PpQueryClientImpl,
-} = require('@verana-labs/verana-types-next/codec/verana/pp/v1/query')
+const { QueryClientImpl: PpQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/pp/v1/query')
 const {
   MsgSetParticipantOPToValidated,
   MsgCreateOrUpdateParticipantSession,
-} = require('@verana-labs/verana-types-next/codec/verana/pp/v1/tx')
+} = require('@verana-labs/verana-types/codec/verana/pp/v1/tx')
 
 function mapParticipant(p: RawParticipant): Permission {
   return {
@@ -51,6 +49,10 @@ export class VeranaChainService {
   private corporationAddress!: string
 
   private ppQuery!: PermQueryClient
+
+  // FIXME(verana setValidated->AUTHZ-CHECK-3): temporary second account that signs the session only.
+  private sessionSigningClient?: SigningStargateClient
+  private sessionOperatorAddress?: string
 
   constructor(private readonly config: VeranaChainConfig) {}
 
@@ -92,6 +94,23 @@ export class VeranaChainService {
     }
     logger.info(`[VeranaChain] Connected to chain: ${this.chainId}`)
 
+    // FIXME(verana setValidated->AUTHZ-CHECK-3): validating needs an OperatorAuthorization and the session
+    // needs a mutually-exclusive VSOperatorAuthorization, so when configured the agent signs the session
+    // with a second account. Remove once both are authorized under one vs_operator.
+    if (this.config.sessionOperatorMnemonic) {
+      const sessionWallet = await DirectSecp256k1HdWallet.fromMnemonic(this.config.sessionOperatorMnemonic, {
+        prefix: VERANA_BECH32_PREFIX,
+      })
+      const [sessionAccount] = await sessionWallet.getAccounts()
+      this.sessionOperatorAddress = sessionAccount.address
+      this.sessionSigningClient = await SigningStargateClient.createWithSigner(cometClient, sessionWallet, {
+        registry: createVeranaRegistry(),
+        aminoTypes: createVeranaAminoTypes(),
+        gasPrice: GasPrice.fromString(gasPrice ?? '1uvna'),
+      })
+      logger.info(`[VeranaChain] session vs_operator: ${this.sessionOperatorAddress}`)
+    }
+
     const queryClient = new QueryClient(cometClient)
     const rpc = createProtobufRpcClient(queryClient)
     this.ppQuery = new PpQueryClientImpl(rpc) as PermQueryClient
@@ -124,9 +143,11 @@ export class VeranaChainService {
   async createOrUpdatePermissionSession(
     params: CreateOrUpdatePermissionSessionParams,
   ): Promise<{ txHash: string }> {
+    // FIXME(verana setValidated->AUTHZ-CHECK-3): sign the session with the VSOA account when configured.
+    const operator = this.sessionOperatorAddress ?? this.operatorAddress
     const value = MsgCreateOrUpdateParticipantSession.fromPartial({
       corporation: this.corporationAddress,
-      operator: this.operatorAddress,
+      operator,
       id: params.id,
       issuerParticipantId: params.issuerPermId,
       verifierParticipantId: params.verifierPermId,
@@ -134,14 +155,24 @@ export class VeranaChainService {
       walletAgentParticipantId: params.walletAgentPermId,
       digest: params.digest,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateOrUpdateParticipantSession, value)
+    const result = await this.broadcastMsg(
+      veranaTypeUrls.MsgCreateOrUpdateParticipantSession,
+      value,
+      this.sessionSigningClient ?? this.signingClient,
+      operator,
+    )
     return { txHash: result.transactionHash }
   }
 
-  private async broadcastMsg(typeUrl: string, value: object): Promise<DeliverTxResponse> {
+  private async broadcastMsg(
+    typeUrl: string,
+    value: object,
+    client: SigningStargateClient = this.signingClient,
+    signer: string = this.operatorAddress,
+  ): Promise<DeliverTxResponse> {
     const msg = { typeUrl, value }
     this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl}`)
-    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], 'auto')
+    const result = await client.signAndBroadcast(signer, [msg], 'auto')
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result
