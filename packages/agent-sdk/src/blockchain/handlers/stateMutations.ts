@@ -188,7 +188,7 @@ export async function terminateVtFlowRecordsByApplicant(agent: VsAgent, permId: 
   )
 }
 
-export async function startPermissionVPAutoFlow(agent: VsAgent, activity: IndexerActivity): Promise<void> {
+export async function startParticipantOPAutoFlow(agent: VsAgent, activity: IndexerActivity): Promise<void> {
   const chain = agent.veranaChain
   if (!chain) return
   const applicantPermId = Number(activity.entity_id)
