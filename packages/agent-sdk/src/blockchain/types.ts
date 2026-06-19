@@ -171,10 +171,23 @@ export interface PermissionDto {
   vp_summary_digest?: string
 }
 
+export interface RawParticipant {
+  id: number
+  schemaId: number
+  role: number
+  did: string
+  corporationId?: number
+  validatorParticipantId: number
+  opState?: number
+  opSummaryDigest?: string
+  revoked: Date | undefined
+  slashed: Date | undefined
+}
+
 export interface PermQueryClient {
-  GetPermission(req: { id: number }): Promise<{ permission?: Permission }>
-  FindPermissionsWithDID(req: object): Promise<{ permissions: Permission[] }>
-  GetPermissionSession(req: { id: string }): Promise<{ session?: unknown }>
+  GetParticipant(req: { id: number }): Promise<{ participant?: RawParticipant }>
+  FindParticipantsWithDID(req: object): Promise<{ participants: RawParticipant[] }>
+  GetParticipantSession(req: { id: string }): Promise<{ session?: unknown }>
 }
 
 export interface VeranaChainConfig {
@@ -183,6 +196,7 @@ export interface VeranaChainConfig {
   mnemonic: string
   logger: BaseLogger
   gasPrice?: string
+  corporationAddress?: string
 }
 
 /** Wrapper for optional uint64 values per `verana.perm.v1.OptionalUInt64`. */
