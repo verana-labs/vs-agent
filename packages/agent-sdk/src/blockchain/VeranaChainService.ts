@@ -12,11 +12,11 @@ import { connectComet } from '@cosmjs/tendermint-rpc'
 import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
 
 import {
-  CreateOrUpdatePermissionSessionParams,
-  Permission,
-  PermQueryClient,
+  CreateOrUpdateParticipantSessionParams,
+  Participant,
+  ParticipantQueryClient,
   RawParticipant,
-  SetPermissionVPToValidatedParams,
+  SetParticipantOPToValidatedParams,
   VERANA_BECH32_PREFIX,
   VeranaChainConfig,
 } from './types'
@@ -27,16 +27,16 @@ const {
   MsgCreateOrUpdateParticipantSession,
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/tx')
 
-function mapParticipant(p: RawParticipant): Permission {
+function mapParticipant(p: RawParticipant): Participant {
   return {
     id: p.id,
     schemaId: p.schemaId,
-    type: p.role,
+    role: p.role,
     did: p.did,
     corporation: p.corporationId != null ? String(p.corporationId) : '',
-    validatorPermId: p.validatorParticipantId,
-    vpState: p.opState as unknown as Permission['vpState'],
-    vpSummaryDigest: p.opSummaryDigest ?? '',
+    validatorParticipantId: p.validatorParticipantId,
+    opState: p.opState as unknown as Participant['opState'],
+    opSummaryDigest: p.opSummaryDigest ?? '',
     revoked: p.revoked,
     slashed: p.slashed,
   }
@@ -48,7 +48,7 @@ export class VeranaChainService {
   private chainId!: string
   private corporationAddress!: string
 
-  private ppQuery!: PermQueryClient
+  private ppQuery!: ParticipantQueryClient
 
   // FIXME(verana setValidated->AUTHZ-CHECK-3): temporary second account that signs the session only.
   private sessionSigningClient?: SigningStargateClient
@@ -113,17 +113,17 @@ export class VeranaChainService {
 
     const queryClient = new QueryClient(cometClient)
     const rpc = createProtobufRpcClient(queryClient)
-    this.ppQuery = new PpQueryClientImpl(rpc) as PermQueryClient
+    this.ppQuery = new PpQueryClientImpl(rpc) as ParticipantQueryClient
   }
 
   // Query API (unsigned)
-  async getPermission(id: number): Promise<Permission | undefined> {
+  async getParticipant(id: number): Promise<Participant | undefined> {
     const result = await this.ppQuery.GetParticipant({ id })
     return result.participant ? mapParticipant(result.participant) : undefined
   }
 
   // Transaction API (signed)
-  async setPermissionVPToValidated(params: SetPermissionVPToValidatedParams): Promise<{ txHash: string }> {
+  async setParticipantOPToValidated(params: SetParticipantOPToValidatedParams): Promise<{ txHash: string }> {
     const value = MsgSetParticipantOPToValidated.fromPartial({
       corporation: this.corporationAddress,
       operator: this.operatorAddress,
@@ -132,7 +132,7 @@ export class VeranaChainService {
       validationFees: params.validationFees ?? 0,
       issuanceFees: params.issuanceFees ?? 0,
       verificationFees: params.verificationFees ?? 0,
-      opSummaryDigest: params.vpSummaryDigest,
+      opSummaryDigest: params.opSummaryDigest,
       issuanceFeeDiscount: params.issuanceFeeDiscount ?? 0,
       verificationFeeDiscount: params.verificationFeeDiscount ?? 0,
     })
@@ -140,8 +140,8 @@ export class VeranaChainService {
     return { txHash: result.transactionHash }
   }
 
-  async createOrUpdatePermissionSession(
-    params: CreateOrUpdatePermissionSessionParams,
+  async createOrUpdateParticipantSession(
+    params: CreateOrUpdateParticipantSessionParams,
   ): Promise<{ txHash: string }> {
     // FIXME(verana setValidated->AUTHZ-CHECK-3): sign the session with the VSOA account when configured.
     const operator = this.sessionOperatorAddress ?? this.operatorAddress
@@ -149,10 +149,10 @@ export class VeranaChainService {
       corporation: this.corporationAddress,
       operator,
       id: params.id,
-      issuerParticipantId: params.issuerPermId,
-      verifierParticipantId: params.verifierPermId,
-      agentParticipantId: params.agentPermId,
-      walletAgentParticipantId: params.walletAgentPermId,
+      issuerParticipantId: params.issuerParticipantId,
+      verifierParticipantId: params.verifierParticipantId,
+      agentParticipantId: params.agentParticipantId,
+      walletAgentParticipantId: params.walletAgentParticipantId,
       digest: params.digest,
     })
     const result = await this.broadcastMsg(

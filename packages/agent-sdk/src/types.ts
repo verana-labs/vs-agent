@@ -37,4 +37,4 @@ export const keyDerivationMethodMap: {
   RAW: KdfMethod.Raw,
 }
 
-export const ISSUER_PERMISSION_TYPE = 1
+export const ISSUER_PARTICIPANT_TYPE = 1

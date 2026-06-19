@@ -2,9 +2,9 @@ import { fetchJson } from '../utils/util'
 
 import {
   CredentialSchemaDto,
+  EcosystemDto,
   IndexerEventsResponse,
-  PermissionDto,
-  TrustRegistryDto,
+  ParticipantDto,
   VeranaIdxConfig,
 } from './types'
 
@@ -21,12 +21,10 @@ export class VeranaIndexerService {
     return fetchJson<IndexerEventsResponse>(url)
   }
 
-  async getTrustRegistry(id: string | number): Promise<TrustRegistryDto> {
-    this.config.logger.debug(`[VeranaIndexer] getTrustRegistry id=${id}`)
-    const data = await fetchJson<{ trust_registry: TrustRegistryDto }>(
-      `${this.baseUrl}/verana/tr/v1/get/${id}`,
-    )
-    return data.trust_registry
+  async getEcosystem(id: string | number): Promise<EcosystemDto> {
+    this.config.logger.debug(`[VeranaIndexer] getEcosystem id=${id}`)
+    const data = await fetchJson<{ ecosystem: EcosystemDto }>(`${this.baseUrl}/verana/ec/v1/get/${id}`)
+    return data.ecosystem
   }
 
   async getCredentialSchema(id: string | number): Promise<CredentialSchemaDto> {
@@ -35,9 +33,9 @@ export class VeranaIndexerService {
     return data.schema
   }
 
-  async getPermission(id: string | number): Promise<PermissionDto> {
-    this.config.logger.debug(`[VeranaIndexer] getPermission id=${id}`)
-    const data = await fetchJson<{ permission: PermissionDto }>(`${this.baseUrl}/verana/perm/v1/get/${id}`)
-    return data.permission
+  async getParticipant(id: string | number): Promise<ParticipantDto> {
+    this.config.logger.debug(`[VeranaIndexer] getParticipant id=${id}`)
+    const data = await fetchJson<{ participant: ParticipantDto }>(`${this.baseUrl}/verana/pp/v1/get/${id}`)
+    return data.participant
   }
 }

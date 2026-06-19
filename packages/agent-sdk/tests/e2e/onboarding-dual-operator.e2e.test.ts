@@ -2,7 +2,7 @@ import { ConsoleLogger, LogLevel } from '@credo-ts/core'
 import { createHash, randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { ValidationState, VeranaChainService } from '../../src/blockchain'
+import { ValidationState, VeranaChainService, VeranaIndexerService } from '../../src/blockchain'
 
 import { PARTICIPANT_ROLE_ISSUER, VeranaTestChain } from './VeranaTestChain'
 import { COOLUSER_MNEMONIC, SETUP_TIMEOUT_MS, startStack, type StartedStack } from './helpers'
@@ -75,20 +75,37 @@ describeE2E('vt-flow onboarding chain integration: dual-operator validate + 0/0 
       await veranaChain.start()
 
       const digest = `sha384-${createHash('sha384').update(`cred-${RUN_ID}`).digest('base64')}`
-      await veranaChain.setPermissionVPToValidated({
+      await veranaChain.setParticipantOPToValidated({
         id: applicant.participantId,
-        vpSummaryDigest: digest,
+        opSummaryDigest: digest,
       })
-      await veranaChain.createOrUpdatePermissionSession({
+      await veranaChain.createOrUpdateParticipantSession({
         id: randomUUID(),
-        issuerPermId: applicant.participantId,
-        agentPermId: 0,
-        walletAgentPermId: 0,
+        issuerParticipantId: applicant.participantId,
+        agentParticipantId: 0,
+        walletAgentParticipantId: 0,
         digest,
       })
 
-      const onChain = await veranaChain.getPermission(applicant.participantId)
-      expect(onChain?.vpState).toBe(ValidationState.VALIDATED)
+      const onChain = await veranaChain.getParticipant(applicant.participantId)
+      expect(onChain?.opState).toBe(ValidationState.VALIDATED)
+
+      // V4 indexer REST: confirm the participant is indexed with the migrated wire fields
+      // (/verana/pp/v1/get/:id, {participant} wrapper, op_state/op_summary_digest/validator_participant_id).
+      const indexer = new VeranaIndexerService({
+        baseUrl: stack.indexerWsUrl.replace(/^ws/, 'http'),
+        logger: new ConsoleLogger(LogLevel.Warn),
+      })
+      let indexed: Awaited<ReturnType<VeranaIndexerService['getParticipant']>> | undefined
+      const deadline = Date.now() + 120_000
+      while (Date.now() < deadline) {
+        indexed = await indexer.getParticipant(applicant.participantId).catch(() => undefined)
+        if (indexed?.op_state === 'VALIDATED') break
+        await new Promise(resolve => setTimeout(resolve, 3_000))
+      }
+      expect(indexed?.op_state).toBe('VALIDATED')
+      expect(indexed?.op_summary_digest).toBe(digest)
+      expect(Number(indexed?.validator_participant_id)).toBe(root.participantId)
     },
     SETUP_TIMEOUT_MS,
   )

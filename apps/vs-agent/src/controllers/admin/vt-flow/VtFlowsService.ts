@@ -46,18 +46,19 @@ export class VtFlowsService {
     if (record.state !== VtFlowState.AwaitingOr) {
       throw new BadRequestException(`Record state is '${record.state}', expected '${VtFlowState.AwaitingOr}'`)
     }
-    if (!record.participantId) throw new BadRequestException('Record has no permId')
+    if (!record.participantId) throw new BadRequestException('Record has no participantId')
 
-    const holderPerm = await this.getIndexer().getPermission(Number(record.participantId))
-    if (!holderPerm)
-      throw new BadRequestException(`Holder permission ${record.participantId} not found on indexer`)
-    if (holderPerm.schema_id == null) throw new BadRequestException('Holder permission has no schema_id')
+    const holderParticipant = await this.getIndexer().getParticipant(Number(record.participantId))
+    if (!holderParticipant)
+      throw new BadRequestException(`Holder participant ${record.participantId} not found on indexer`)
+    if (holderParticipant.schema_id == null)
+      throw new BadRequestException('Holder participant has no schema_id')
 
     const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
     try {
       const offered = await orchestrator.validateAndOfferCredential({
         vtFlowRecordId: record.id,
-        credentialSchemaId: String(holderPerm.schema_id),
+        credentialSchemaId: String(holderParticipant.schema_id),
       })
       return toDto(offered)
     } catch (error) {
@@ -109,14 +110,14 @@ function toDto(record: VtFlowRecord): VtFlowRecordDto {
   return {
     vtFlowRecordId: record.id,
     threadId: record.threadId,
-    sessionUuid: record.participantSessionId,
+    participantSessionId: record.participantSessionId,
     connectionId: record.connectionId,
     role: record.role,
     variant: record.variant,
     state: record.state,
-    agentPermId: record.agentParticipantId,
-    walletAgentPermId: record.walletAgentParticipantId,
-    permId: record.participantId,
+    agentParticipantId: record.agentParticipantId,
+    walletAgentParticipantId: record.walletAgentParticipantId,
+    participantId: record.participantId,
     schemaId: record.schemaId,
     claims: record.claims,
     credentialExchangeRecordId: record.credentialExchangeRecordId,

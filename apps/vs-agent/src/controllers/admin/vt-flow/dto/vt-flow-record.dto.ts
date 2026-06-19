@@ -4,14 +4,14 @@ import { VtFlowRole, VtFlowVariant, type VtFlowState } from '@verana-labs/credo-
 export class VtFlowRecordDto {
   @ApiProperty() vtFlowRecordId!: string
   @ApiProperty() threadId!: string
-  @ApiProperty() sessionUuid!: string
+  @ApiProperty() participantSessionId!: string
   @ApiProperty() connectionId!: string
   @ApiProperty({ enum: VtFlowRole }) role!: VtFlowRole
   @ApiProperty({ enum: VtFlowVariant }) variant!: VtFlowVariant
   @ApiProperty() state!: VtFlowState
-  @ApiProperty() agentPermId!: string
-  @ApiProperty() walletAgentPermId!: string
-  @ApiProperty({ required: false }) permId?: string
+  @ApiProperty() agentParticipantId!: string
+  @ApiProperty() walletAgentParticipantId!: string
+  @ApiProperty({ required: false }) participantId?: string
   @ApiProperty({ required: false }) schemaId?: string
   @ApiProperty({ required: false, type: Object }) claims?: Record<string, unknown>
   @ApiProperty({ required: false }) credentialExchangeRecordId?: string

@@ -6,9 +6,9 @@ import { RECORD_ID, VeranaSyncState } from './types'
 
 const emptyState = (): VeranaSyncState => ({
   lastBlockHeight: 0,
-  trustRegistries: {},
+  ecosystems: {},
   credentialSchemas: {},
-  permissions: {},
+  participants: {},
 })
 
 export async function loadSyncState(agent: VsAgent): Promise<VeranaSyncState> {

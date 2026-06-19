@@ -7,15 +7,15 @@ export enum ValidationState {
   TERMINATED = 3,
 }
 
-export interface Permission {
+export interface Participant {
   id: number
   schemaId: number
-  type: number
+  role: number
   did: string
   corporation: string
-  validatorPermId: number
-  vpState?: ValidationState
-  vpSummaryDigest: string
+  validatorParticipantId: number
+  opState?: ValidationState
+  opSummaryDigest: string
   revoked: Date | undefined
   slashed: Date | undefined
 }
@@ -72,10 +72,10 @@ export interface IndexerEventsResponse {
 }
 
 export type IndexerEntityType =
-  | 'TrustRegistry'
+  | 'Ecosystem'
   | 'CredentialSchema'
-  | 'Permission'
-  | 'PermissionSession'
+  | 'Participant'
+  | 'ParticipantSession'
   | 'TrustDeposit'
 
 export interface IndexerActivity {
@@ -99,18 +99,18 @@ export interface VeranaIdxConfig {
   logger: BaseLogger
 }
 
-export interface SyncedTrustRegistry {
+export interface SyncedEcosystem {
   id: number
   did: string
-  controller: string
+  corporationId: number
   archived: boolean
-  activeGfVersion?: number
+  activeVersion?: number
   lastModifiedBlock: number
 }
 
 export interface SyncedCredentialSchema {
   id: number
-  trId: number
+  ecosystemId: number
   jsonSchema: string
   issuerMode?: string
   verifierMode?: string
@@ -118,12 +118,12 @@ export interface SyncedCredentialSchema {
   lastModifiedBlock: number
 }
 
-export interface SyncedPermission {
+export interface SyncedParticipant {
   id: number
   schemaId: number
   did: string
-  type: number
-  vpState?: string
+  role: number
+  opState?: string
   effectiveUntil?: string
   revoked: boolean
   slashed: boolean
@@ -132,43 +132,42 @@ export interface SyncedPermission {
 
 export interface VeranaSyncState {
   lastBlockHeight: number
-  trustRegistries: Record<string, SyncedTrustRegistry>
+  ecosystems: Record<string, SyncedEcosystem>
   credentialSchemas: Record<string, SyncedCredentialSchema>
-  permissions: Record<string, SyncedPermission>
+  participants: Record<string, SyncedParticipant>
 }
 
-export interface TrustRegistryDto {
+export interface EcosystemDto {
   id: number
   did: string
-  controller: string
+  corporation_id: number
   archived: string | null
-  active_gf_version?: number
+  active_version?: number
 }
 
 export interface CredentialSchemaDto {
   id: number
-  tr_id: number
+  ecosystem_id: number
   json_schema: string
-  issuer_perm_management_mode?: string
-  verifier_perm_management_mode?: string
+  issuer_onboarding_mode?: string
+  verifier_onboarding_mode?: string
   archived: string | null
   created: string
   modified: string
 }
 
-export interface PermissionDto {
+export interface ParticipantDto {
   id: number
   schema_id: number
   did: string | null
-  type: number
-  perm_state: 'ACTIVE' | 'REVOKED' | 'SLASHED' | 'REPAID' | 'EXPIRED' | 'FUTURE' | 'INACTIVE'
-  vp_state?: string
+  role: string
+  op_state?: string
   revoked: string | null
   slashed: string | null
   effective_until?: string
   modified: string
-  validator_perm_id?: number | null
-  vp_summary_digest?: string
+  validator_participant_id?: number | null
+  op_summary_digest?: string
 }
 
 export interface RawParticipant {
@@ -184,7 +183,7 @@ export interface RawParticipant {
   slashed: Date | undefined
 }
 
-export interface PermQueryClient {
+export interface ParticipantQueryClient {
   GetParticipant(req: { id: number }): Promise<{ participant?: RawParticipant }>
   FindParticipantsWithDID(req: object): Promise<{ participants: RawParticipant[] }>
   GetParticipantSession(req: { id: string }): Promise<{ session?: unknown }>
@@ -206,38 +205,38 @@ export interface VeranaChainConfig {
   sessionOperatorMnemonic?: string
 }
 
-/** Wrapper for optional uint64 values per `verana.perm.v1.OptionalUInt64`. */
+/** Wrapper for optional uint64 values per `verana.pp.v1.OptionalUInt64`. */
 export interface OptionalUInt64 {
   value: number
 }
 
-export interface StartPermissionVPParams {
-  type: number
-  validatorPermId: number
+export interface StartParticipantOPParams {
+  role: number
+  validatorParticipantId: number
   did: string
   validationFees?: OptionalUInt64
   issuanceFees?: OptionalUInt64
   verificationFees?: OptionalUInt64
 }
 
-export interface SetPermissionVPToValidatedParams {
+export interface SetParticipantOPToValidatedParams {
   id: number
   effectiveUntil?: Date
   validationFees?: number
   issuanceFees?: number
   verificationFees?: number
-  vpSummaryDigest: string
+  opSummaryDigest: string
   issuanceFeeDiscount?: number
   verificationFeeDiscount?: number
   corporation?: string
 }
 
-export interface CreateOrUpdatePermissionSessionParams {
+export interface CreateOrUpdateParticipantSessionParams {
   id: string
-  issuerPermId?: number
-  verifierPermId?: number
-  agentPermId: number
-  walletAgentPermId: number
+  issuerParticipantId?: number
+  verifierParticipantId?: number
+  agentParticipantId: number
+  walletAgentParticipantId: number
   digest?: string
   corporation?: string
 }
@@ -268,7 +267,7 @@ export interface RevokeOperatorAuthorizationParams {
   grantee: string
 }
 
-export interface CreateTrustRegistryParams {
+export interface CreateEcosystemParams {
   did: string
   language: string
   docUrl: string
@@ -276,8 +275,8 @@ export interface CreateTrustRegistryParams {
   aka?: string
 }
 
-export interface ArchiveTrustRegistryParams {
-  trId: number
+export interface ArchiveEcosystemParams {
+  ecosystemId: number
   archive: boolean
 }
 
@@ -287,7 +286,7 @@ export interface OptionalUInt32 {
 }
 
 export interface CreateCredentialSchemaParams {
-  trId: number
+  ecosystemId: number
   jsonSchema: string
   issuerOnboardingMode?: number
   verifierOnboardingMode?: number
@@ -302,7 +301,7 @@ export interface CreateCredentialSchemaParams {
   holderValidationValidityPeriod?: OptionalUInt32
 }
 
-export interface CreateRootPermissionParams {
+export interface CreateRootParticipantParams {
   schemaId: number
   did: string
   effectiveFrom?: Date
@@ -312,9 +311,9 @@ export interface CreateRootPermissionParams {
   verificationFees?: number
 }
 
-export interface SelfCreatePermissionParams {
-  type: number
-  validatorPermId: number
+export interface SelfCreateParticipantParams {
+  role: number
+  validatorParticipantId: number
   did: string
   effectiveFrom?: Date
   effectiveUntil?: Date
