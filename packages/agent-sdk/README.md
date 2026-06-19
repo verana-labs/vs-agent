@@ -95,23 +95,23 @@ import type { IndexerActivity, IndexerDispatchContext } from '@verana-labs/vs-ag
 
 const registry = new IndexerHandlerRegistry()
 
-// Handle trust registry changes
-registry.register('TrustRegistry', async (activity, context) => {
+// Handle ecosystem changes
+registry.register('Ecosystem', async (activity, context) => {
   const { id, did, archived } = activity.changes as any
-  await agent.config.logger.info(`[Block ${context.blockHeight}] TR ${id} ${archived ? 'archived' : 'activated'}`)
+  await agent.config.logger.info(`[Block ${context.blockHeight}] Ecosystem ${id} ${archived ? 'archived' : 'activated'}`)
 })
 
-// Handle permission changes with custom messages
-registry.register('Permission', async (activity, context) => {
+// Handle participant changes with custom messages
+registry.register('Participant', async (activity, context) => {
   const { id, did, revoked } = activity.changes as any
   const status = revoked ? 'revoked' : 'granted'
   
-  await agent.config.logger.info(`[Block ${context.blockHeight}] Permission ${status}: ${id}`)
+  await agent.config.logger.info(`[Block ${context.blockHeight}] Participant ${status}: ${id}`)
   
   // Emit to your service
-  await sendWebhookEvent('https://your-service.com/perms', {
-    type: 'permission_status_changed',
-    permissionId: id,
+  await sendWebhookEvent('https://your-service.com/participants', {
+    type: 'participant_status_changed',
+    participantId: id,
     did,
     status,
     blockHeight: context.blockHeight,
