@@ -197,7 +197,7 @@ export async function startParticipantOPAutoFlow(agent: VsAgent, activity: Index
   if (!holderPerm || holderPerm.did !== agent.did) return
   try {
     const orchestrator = new VtFlowOrchestrator(agent)
-    await orchestrator.startValidationProcess({ applicantPermId })
+    await orchestrator.startOnboardingProcess({ applicantPermId })
   } catch (err) {
     agent.config.logger.error(
       `[IndexerWS] StartPermissionVP auto-flow failed: ${(err as Error).message}\n${(err as Error).stack}`,
