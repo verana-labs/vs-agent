@@ -21,6 +21,7 @@
     "format": "prettier \"{packages,apps}/**/*.ts\" --write",
     "check-format": "prettier -c \"{packages,apps}/**/*.ts\"",
     "test": "pnpm -r run test",
+    "test:e2e": "pnpm --filter @verana-labs/vs-agent-sdk test:e2e",
     "lint": "eslint \"{packages,apps}/**/*.ts\" --fix",
     "validate": "pnpm lint && pnpm check-types && pnpm check-format",
     "prepare": "corepack enable"

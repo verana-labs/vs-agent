@@ -40,7 +40,29 @@ export type IndexerEventRecord = {
     related_dids: string[]
     entity_type?: string
     entity_id?: string
+    corporation_id?: number
+    related_corporation_ids?: number[]
   }
+}
+
+export interface IndexerReadyMessage {
+  type: 'ready'
+  block: number
+  blockTime: string
+  blockIntervalMs: number
+}
+
+export interface IndexerBlockMessage {
+  type: 'block'
+  block: number
+  blockTime: string
+  events: IndexerEventRecord[]
+}
+
+export interface IndexerSubscribeMessage {
+  action: 'subscribe'
+  dids?: string[]
+  corporationId?: number
 }
 
 export interface IndexerEventsResponse {
