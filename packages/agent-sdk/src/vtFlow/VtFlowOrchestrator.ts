@@ -51,7 +51,7 @@ export class VtFlowOrchestrator {
     private readonly options: VtFlowOrchestratorOptions = {},
   ) {}
 
-  async startValidationProcess(input: StartValidationProcessInput): Promise<VtFlowRecord> {
+  async startOnboardingProcess(input: StartValidationProcessInput): Promise<VtFlowRecord> {
     const chain = this.requireChain()
     if (!this.agent.did) throw new Error('Agent has no public DID')
 

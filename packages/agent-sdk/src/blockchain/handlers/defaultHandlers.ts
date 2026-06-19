@@ -5,7 +5,7 @@ import {
   publishVtjscIfOwner,
   setVtFlowRecordsPermRevoked,
   setVtFlowRecordsPermSlashed,
-  startPermissionVPAutoFlow,
+  startParticipantOPAutoFlow,
   terminateVtFlowRecordsByApplicant,
   upsertCredentialSchema,
   upsertPermission,
@@ -88,7 +88,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
         `[IndexerWS] StartPermissionVP entity=${activity.entity_id} block=${ctx.block_height}`,
       )
 
-      await startPermissionVPAutoFlow(ctx.agent, activity)
+      await startParticipantOPAutoFlow(ctx.agent, activity)
     },
   },
   {
