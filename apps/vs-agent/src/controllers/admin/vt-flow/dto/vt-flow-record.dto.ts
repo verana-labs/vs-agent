@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger'
 import { VtFlowRole, VtFlowVariant, type VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 export class VtFlowRecordDto {
-  @ApiProperty() vtFlowRecordId!: string
+  @ApiProperty() id!: string
   @ApiProperty() threadId!: string
   @ApiProperty() participantSessionId!: string
   @ApiProperty() connectionId!: string

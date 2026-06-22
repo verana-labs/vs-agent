@@ -108,7 +108,7 @@ export class VtFlowsService {
 
 function toDto(record: VtFlowRecord): VtFlowRecordDto {
   return {
-    vtFlowRecordId: record.id,
+    id: record.id,
     threadId: record.threadId,
     participantSessionId: record.participantSessionId,
     connectionId: record.connectionId,
