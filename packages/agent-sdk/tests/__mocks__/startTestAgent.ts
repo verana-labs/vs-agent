@@ -1,13 +1,12 @@
-import { AskarSqliteStorageConfig } from '@credo-ts/askar'
+import { AskarModuleConfigStoreOptions, AskarSqliteStorageConfig } from '@credo-ts/askar'
 import { BaseLogger, DidResolver, utils } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
-import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import { type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { createVsAgent, VsAgent } from '../../src/agent'
 import { VeranaChainService } from '../../src/blockchain'
 import { setupBaseDidComm } from '../../src/plugins/setupBaseDidComm'
-import { keyDerivationMethodMap, VsAgentNestPlugin } from '../../src/types'
+import { VsAgentNestPlugin } from '../../src/types'
 
 type StartTestAgentParams = {
   label: string
@@ -64,11 +63,11 @@ export function getAskarStoreConfig(
     random = utils.uuid().slice(0, 4),
     maxConnections,
   }: { inMemory?: boolean; random?: string; maxConnections?: number } = {},
-) {
+): AskarModuleConfigStoreOptions {
   return {
     id: `Wallet: ${name} - ${random}`,
     key: 'DZ9hPqFWTPxemcGea72C1X1nusqk5wFNLq6QPjwXGqAa',
-    keyDerivationMethod: keyDerivationMethodMap[KdfMethod.Raw],
+    keyDerivationMethod: 'raw',
     database: {
       type: 'sqlite',
       config: {
