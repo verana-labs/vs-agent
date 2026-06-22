@@ -103,20 +103,9 @@ registry.register('Ecosystem', async (activity, context) => {
 
 // Handle participant changes with custom messages
 registry.register('Participant', async (activity, context) => {
-  const { id, did, revoked } = activity.changes as any
+  const { id, revoked } = activity.changes as any
   const status = revoked ? 'revoked' : 'granted'
-  
   await agent.config.logger.info(`[Block ${context.blockHeight}] Participant ${status}: ${id}`)
-  
-  // Emit to your service
-  await sendWebhookEvent('https://your-service.com/participants', {
-    type: 'participant_status_changed',
-    participantId: id,
-    did,
-    status,
-    blockHeight: context.blockHeight,
-    timestamp: new Date().toISOString(),
-  })
 })
 
 const indexerWs = new IndexerWebSocketService({
@@ -155,14 +144,6 @@ import { createInvitation, getWebDid } from '@verana-labs/vs-agent-sdk'
 
 const did = await getWebDid(agent)
 const invitation = await createInvitation(agent)
-
-// Webhooks
-import { sendWebhookEvent } from '@verana-labs/vs-agent-sdk'
-
-await sendWebhookEvent('https://example.com/webhook', {
-  type: 'event_type',
-  data: { /* ... */ },
-})
 
 // Transports
 import {
