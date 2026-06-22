@@ -11,7 +11,6 @@ import {
   type VsAgentNestPlugin,
   VeranaChainService,
   IndexerWebSocketService,
-  keyDerivationMethodMap,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -49,6 +48,7 @@ import {
   AGENT_WALLET_KEY,
   AGENT_WALLET_KEY_DERIVATION_METHOD,
   askarPostgresConfig,
+  keyDerivationMethodMap,
   DEFAULT_AGENT_ENDPOINTS,
   DEFAULT_PUBLIC_API_BASE_URL,
   ENABLED_PLUGINS,
@@ -180,7 +180,7 @@ const run = async () => {
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
     ...(chatModule ? [chatModule.ChatPlugin] : []),
     ...(mrtdModule ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })] : []),
-    ...(ENABLED_PLUGINS.includes('vt-flow') ? [VtFlowNestPlugin] : []),
+    VtFlowNestPlugin,
   ]
 
   // Connect to Verana blockchain for on-chain transactions

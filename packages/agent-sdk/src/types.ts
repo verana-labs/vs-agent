@@ -3,7 +3,6 @@ import type { IBaseMessage, MessageType } from '@verana-labs/vs-agent-model'
 
 import { BaseLogger } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
-import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 
 export const MESSAGE_HANDLERS = 'MESSAGE_HANDLERS'
 
@@ -27,14 +26,6 @@ export interface VsAgentNestPlugin {
   messageHandlers?: (new (...args: any[]) => MessageHandler)[]
   imports?: any[]
   registerEvents?: (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => void
-}
-
-export const keyDerivationMethodMap: {
-  [key: string]: `${KdfMethod.Argon2IInt}` | `${KdfMethod.Argon2IMod}` | `${KdfMethod.Raw}`
-} = {
-  ARGON2I_INT: KdfMethod.Argon2IInt,
-  ARGON2I_MOD: KdfMethod.Argon2IMod,
-  RAW: KdfMethod.Raw,
 }
 
 export const ISSUER_PARTICIPANT_TYPE = 1
