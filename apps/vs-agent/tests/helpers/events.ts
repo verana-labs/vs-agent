@@ -4,9 +4,8 @@ import {
   type VtFlowState,
   type VtFlowStateChangedEvent,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { type BaseAgentModules, type VsAgent } from '@verana-labs/vs-agent-sdk'
 import { vi } from 'vitest'
-
-import { BaseAgentModules, VsAgent } from '../../agent'
 
 export async function makeConnection(agentA: VsAgent<BaseAgentModules>, agentB: VsAgent<BaseAgentModules>) {
   const agentAOutOfBand = await agentA.didcomm.oob.createInvitation({

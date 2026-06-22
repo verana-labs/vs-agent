@@ -2,15 +2,7 @@ import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { INestApplication } from '@nestjs/common'
 import { Claim, CredentialIssuanceMessage } from '@verana-labs/vs-agent-model'
-import {
-  makeConnection,
-  SubjectInboundTransport,
-  SubjectOutboundTransport,
-  waitForEvent,
-  type BaseAgentModules,
-  type SubjectMessage,
-  type VsAgent,
-} from '@verana-labs/vs-agent-sdk'
+import { type BaseAgentModules, type VsAgent } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import request from 'supertest'
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
@@ -18,6 +10,13 @@ import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 import { MessageService, TrustService } from '../src/controllers'
 
 import { isCredentialStateChangedEvent, startAgent, startServersTesting } from './__mocks__'
+import {
+  makeConnection,
+  SubjectInboundTransport,
+  SubjectOutboundTransport,
+  waitForEvent,
+  type SubjectMessage,
+} from './helpers'
 
 describe('TrustService', () => {
   let faberApp: INestApplication
