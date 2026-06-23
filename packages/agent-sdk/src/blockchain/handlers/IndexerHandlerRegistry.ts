@@ -6,6 +6,7 @@ interface IndexerHandlerContext {
   block_height: number
   operatorAddress: string
   state: VeranaSyncState
+  txHash: string
 }
 
 export interface IndexerEventHandler<TMsg extends string = string> {

@@ -11,6 +11,7 @@ examples/**/afj
 .yarn/install-state.gz
 examples/**/.yarn/cache
 examples/**/.yarn/install-state.gz
+packages/**/test/logs
 
 *.tgz
 Chart.lock

@@ -1,5 +1,3 @@
-export * from './SubjectInboundTransport'
-export * from './SubjectOutboundTransport'
 export * from './agent'
 export * from './helpers'
 export * from './object'
