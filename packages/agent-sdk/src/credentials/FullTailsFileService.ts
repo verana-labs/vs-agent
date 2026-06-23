@@ -5,6 +5,8 @@ import { BasicTailsFileService } from '@credo-ts/anoncreds'
 import { utils } from '@credo-ts/core'
 import { createHash } from 'crypto'
 import fs from 'fs'
+import os from 'os'
+import path from 'path'
 
 export class FullTailsFileService extends BasicTailsFileService {
   private tailsServerBaseUrl: string
@@ -23,18 +25,13 @@ export class FullTailsFileService extends BasicTailsFileService {
     const localTailsFilePath = revocationRegistryDefinition.value.tailsLocation
 
     const tailsFileId = utils.uuid()
-    try {
-      await saveTailsFile(localTailsFilePath, tailsFileId, agentContext.config.logger)
-      agentContext.config.logger.info('Tails file processed successfully!')
-    } catch (error) {
-      agentContext.config.logger.error(`Failed to process tails file: ${error.message}`)
-    }
+    await saveTailsFile(localTailsFilePath, tailsFileId, agentContext.config.logger)
     return { tailsFileUrl: `${this.tailsServerBaseUrl}/${encodeURIComponent(tailsFileId)}` }
   }
 }
 
-export const baseFilePath = './tails'
-const indexFilePath = `./${baseFilePath}/index.json`
+export const baseFilePath = process.env.TAILS_DIRECTORY_PATH || path.join(os.homedir(), '.afj', 'tails')
+const indexFilePath = path.join(baseFilePath, 'index.json')
 
 if (!fs.existsSync(baseFilePath)) {
   fs.mkdirSync(baseFilePath, { recursive: true })
@@ -51,7 +48,7 @@ function fileHash(filePath: string, algorithm = 'sha256') {
       s.on('data', function (data) {
         shasum.update(data)
       })
-      // making digest
+      s.on('error', reject)
       s.on('end', function () {
         const hash = shasum.digest('hex')
         return resolve(hash)
