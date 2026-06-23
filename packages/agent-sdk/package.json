@@ -42,7 +42,8 @@
     "@credo-ts/webvh": "0.7.1-pr-2704-20260610194233",
     "@hyperledger/anoncreds-nodejs": "^0.4.0",
     "@openwallet-foundation/askar-nodejs": "^0.6.0",
-    "@verana-labs/verana-types": "0.10.1-dev.11",
+    "@verana-labs/verana-types": "0.10.1-dev.16",
+    "@verana-labs/credo-ts-didcomm-vt-flow": "workspace:*",
     "@verana-labs/vs-agent-model": "workspace:*",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
@@ -57,7 +58,6 @@
     "@credo-ts/node": "0.7.1-pr-2704-20260610194233"
   },
   "devDependencies": {
-    "@verana-labs/verana-types-next": "npm:@verana-labs/verana-types@0.10.1-dev.16",
     "testcontainers": "^12.0.3",
     "ts-node-dev": "^2.0.0"
   }

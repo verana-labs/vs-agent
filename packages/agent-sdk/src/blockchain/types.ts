@@ -1,5 +1,25 @@
 import { BaseLogger } from '@credo-ts/core'
 
+export enum ValidationState {
+  UNSPECIFIED = 0,
+  PENDING = 1,
+  VALIDATED = 2,
+  TERMINATED = 3,
+}
+
+export interface Participant {
+  id: number
+  schemaId: number
+  role: number
+  did: string
+  corporation: string
+  validatorParticipantId: number
+  opState?: ValidationState
+  opSummaryDigest: string
+  revoked: Date | undefined
+  slashed: Date | undefined
+}
+
 export const VERANA_BECH32_PREFIX = 'verana'
 export const RECORD_ID = 'verana-blockchain-sync-state'
 
@@ -52,10 +72,10 @@ export interface IndexerEventsResponse {
 }
 
 export type IndexerEntityType =
-  | 'TrustRegistry'
+  | 'Ecosystem'
   | 'CredentialSchema'
-  | 'Permission'
-  | 'PermissionSession'
+  | 'Participant'
+  | 'ParticipantSession'
   | 'TrustDeposit'
 
 export interface IndexerActivity {
@@ -79,18 +99,18 @@ export interface VeranaIdxConfig {
   logger: BaseLogger
 }
 
-export interface SyncedTrustRegistry {
+export interface SyncedEcosystem {
   id: number
   did: string
-  controller: string
+  corporationId: number
   archived: boolean
-  activeGfVersion?: number
+  activeVersion?: number
   lastModifiedBlock: number
 }
 
 export interface SyncedCredentialSchema {
   id: number
-  trId: number
+  ecosystemId: number
   jsonSchema: string
   issuerMode?: string
   verifierMode?: string
@@ -98,12 +118,12 @@ export interface SyncedCredentialSchema {
   lastModifiedBlock: number
 }
 
-export interface SyncedPermission {
+export interface SyncedParticipant {
   id: number
   schemaId: number
   did: string
-  type: number
-  vpState?: string
+  role: number
+  opState?: string
   effectiveUntil?: string
   revoked: boolean
   slashed: boolean
@@ -112,47 +132,61 @@ export interface SyncedPermission {
 
 export interface VeranaSyncState {
   lastBlockHeight: number
-  trustRegistries: Record<string, SyncedTrustRegistry>
+  ecosystems: Record<string, SyncedEcosystem>
   credentialSchemas: Record<string, SyncedCredentialSchema>
-  permissions: Record<string, SyncedPermission>
+  participants: Record<string, SyncedParticipant>
 }
 
-export interface TrustRegistryDto {
+export interface EcosystemDto {
   id: number
   did: string
-  controller: string
+  corporation_id: number
   archived: string | null
-  active_gf_version?: number
+  active_version?: number
 }
 
 export interface CredentialSchemaDto {
   id: number
-  tr_id: number
+  ecosystem_id: number
   json_schema: string
-  issuer_perm_management_mode?: string
-  verifier_perm_management_mode?: string
+  issuer_onboarding_mode?: string
+  verifier_onboarding_mode?: string
   archived: string | null
   created: string
   modified: string
 }
 
-export interface PermissionDto {
+export interface ParticipantDto {
   id: number
   schema_id: number
   did: string | null
-  type: number
-  perm_state: 'ACTIVE' | 'REVOKED' | 'SLASHED' | 'REPAID' | 'EXPIRED' | 'FUTURE' | 'INACTIVE'
-  vp_state?: string
+  role: string
+  op_state?: string
   revoked: string | null
   slashed: string | null
   effective_until?: string
   modified: string
+  validator_participant_id?: number | null
+  op_summary_digest?: string
 }
 
-export interface PermQueryClient {
-  GetPermission(req: { id: Long }): Promise<{ permission?: unknown }>
-  FindPermissionsWithDID(req: object): Promise<{ permissions: unknown[] }>
-  GetPermissionSession(req: { id: string }): Promise<{ session?: unknown }>
+export interface RawParticipant {
+  id: number
+  schemaId: number
+  role: number
+  did: string
+  corporationId?: number
+  validatorParticipantId: number
+  opState?: number
+  opSummaryDigest?: string
+  revoked: Date | undefined
+  slashed: Date | undefined
+}
+
+export interface ParticipantQueryClient {
+  GetParticipant(req: { id: number }): Promise<{ participant?: RawParticipant }>
+  FindParticipantsWithDID(req: object): Promise<{ participants: RawParticipant[] }>
+  GetParticipantSession(req: { id: string }): Promise<{ session?: unknown }>
 }
 
 export interface VeranaChainConfig {
@@ -161,32 +195,134 @@ export interface VeranaChainConfig {
   mnemonic: string
   logger: BaseLogger
   gasPrice?: string
+  corporationAddress?: string
+  /**
+   * FIXME(verana setValidated->AUTHZ-CHECK-3): temporary. On the current chain, validating a participant
+   * (OperatorAuthorization) and creating its session (VSOperatorAuthorization) need two mutually-exclusive
+   * account permissions, so one account cannot do both. When set, the session is signed by this second
+   * account. Remove once the chain authorizes both under one vs_operator (AUTHZ-CHECK-3).
+   */
+  sessionOperatorMnemonic?: string
 }
 
-export interface StartPermissionVPParams {
-  type: number
-  validatorPermId: Long
-  country: string
+/** Wrapper for optional uint64 values per `verana.pp.v1.OptionalUInt64`. */
+export interface OptionalUInt64 {
+  value: number
+}
+
+export interface StartParticipantOPParams {
+  role: number
+  validatorParticipantId: number
   did: string
-  validationFees?: { value: Long }
+  validationFees?: OptionalUInt64
+  issuanceFees?: OptionalUInt64
+  verificationFees?: OptionalUInt64
 }
 
-export interface SetPermissionVPToValidatedParams {
-  id: Long
+export interface SetParticipantOPToValidatedParams {
+  id: number
   effectiveUntil?: Date
-  validationFees: Long
-  issuanceFees: Long
-  verificationFees: Long
-  country: string
-  vpSummaryDigestSri: string
-  issuanceFeeDiscount: Long
-  verificationFeeDiscount: Long
+  validationFees?: number
+  issuanceFees?: number
+  verificationFees?: number
+  opSummaryDigest: string
+  issuanceFeeDiscount?: number
+  verificationFeeDiscount?: number
+  corporation?: string
 }
 
-export interface CreateOrUpdatePermissionSessionParams {
+export interface CreateOrUpdateParticipantSessionParams {
   id: string
-  issuerPermId: Long
-  verifierPermId: Long
-  agentPermId: Long
-  walletAgentPermId: Long
+  issuerParticipantId?: number
+  verifierParticipantId?: number
+  agentParticipantId: number
+  walletAgentParticipantId: number
+  digest?: string
+  corporation?: string
+}
+
+export interface Coin {
+  denom: string
+  amount: string
+}
+
+export interface DurationParam {
+  seconds: number
+  nanos?: number
+}
+
+export interface GrantOperatorAuthorizationParams {
+  grantee: string
+  msgTypes: string[]
+  expiration?: Date
+  authzSpendLimit?: Coin[]
+  authzSpendLimitPeriod?: DurationParam
+  withFeegrant?: boolean
+  feegrantSpendLimit?: Coin[]
+  feegrantSpendLimitPeriod?: DurationParam
+  feeSpendLimit?: Coin[]
+}
+
+export interface RevokeOperatorAuthorizationParams {
+  grantee: string
+}
+
+export interface CreateEcosystemParams {
+  did: string
+  language: string
+  docUrl: string
+  docDigestSri: string
+  aka?: string
+}
+
+export interface ArchiveEcosystemParams {
+  ecosystemId: number
+  archive: boolean
+}
+
+/** Wrapper for optional uint32 values per `verana.cs.v1.OptionalUInt32`. */
+export interface OptionalUInt32 {
+  value: number
+}
+
+export interface CreateCredentialSchemaParams {
+  ecosystemId: number
+  jsonSchema: string
+  issuerOnboardingMode?: number
+  verifierOnboardingMode?: number
+  holderOnboardingMode?: number
+  pricingAssetType?: number
+  pricingAsset?: string
+  digestAlgorithm?: string
+  issuerGrantorValidationValidityPeriod?: OptionalUInt32
+  verifierGrantorValidationValidityPeriod?: OptionalUInt32
+  issuerValidationValidityPeriod?: OptionalUInt32
+  verifierValidationValidityPeriod?: OptionalUInt32
+  holderValidationValidityPeriod?: OptionalUInt32
+}
+
+export interface CreateRootParticipantParams {
+  schemaId: number
+  did: string
+  effectiveFrom?: Date
+  effectiveUntil?: Date
+  validationFees?: number
+  issuanceFees?: number
+  verificationFees?: number
+}
+
+export interface SelfCreateParticipantParams {
+  role: number
+  validatorParticipantId: number
+  did: string
+  effectiveFrom?: Date
+  effectiveUntil?: Date
+  validationFees?: number
+  verificationFees?: number
+  vsOperator?: string
+  vsOperatorAuthzEnabled?: boolean
+  vsOperatorAuthzSpendLimit?: Coin[]
+  vsOperatorAuthzWithFeegrant?: boolean
+  vsOperatorAuthzFeeSpendLimit?: Coin[]
+  vsOperatorAuthzSpendPeriod?: DurationParam
 }
