@@ -264,16 +264,11 @@ export class BaseMessageHandler implements MessageHandler {
           )
           if (!isRevocable) throw new Error(`Credential for threadId ${msg.threadId} is not revocable)`)
 
-          const uptStatusListResult = await agent.modules.anoncreds.updateRevocationStatusList({
-            revocationStatusList: {
-              revocationRegistryDefinitionId: credential.getTag('anonCredsRevocationRegistryId') as string,
-              revokedCredentialIndexes: [Number(credential.getTag('anonCredsCredentialRevocationId'))],
-            },
-            options: {},
-          })
-          if (!uptStatusListResult.revocationStatusListState.revocationStatusList) {
-            throw new Error(`Failed to update revocation status list`)
-          }
+          await this.credentialService.revokeCredential(
+            agent,
+            credential.getTag('anonCredsRevocationRegistryId') as string,
+            Number(credential.getTag('anonCredsCredentialRevocationId')),
+          )
 
           await agent.didcomm.credentials.sendRevocationNotification({
             credentialExchangeRecordId: credential.id,
