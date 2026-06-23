@@ -1,6 +1,10 @@
 import type { MessageHandler } from '../MessageHandler'
 
-import { AnonCredsRequestedAttribute, dateToTimestamp } from '@credo-ts/anoncreds'
+import {
+  AnonCredsNonRevokedInterval,
+  AnonCredsRequestedAttribute,
+  dateToTimestamp,
+} from '@credo-ts/anoncreds'
 import { JsonTransformer, utils } from '@credo-ts/core'
 import {
   DidCommAutoAcceptCredential,
@@ -325,7 +329,11 @@ export class BaseMessageHandler implements MessageHandler {
             restrictions: [{ cred_def_id: credentialDefinitionId }],
           }
 
-          const now = dateToTimestamp(new Date())
+          let nonRevoked: AnonCredsNonRevokedInterval | undefined
+          if (msg.requireNonRevocation) {
+            const now = dateToTimestamp(new Date())
+            nonRevoked = { from: now, to: now }
+          }
 
           const record = await agent.didcomm.proofs.requestProof({
             comment: vcItem.description as string,
@@ -335,7 +343,7 @@ export class BaseMessageHandler implements MessageHandler {
                 name: 'proof-request',
                 version: '1.0',
                 requested_attributes: requestedAttributes,
-                non_revoked: { from: now, to: now },
+                non_revoked: nonRevoked,
               },
             },
             protocolVersion: 'v2',
