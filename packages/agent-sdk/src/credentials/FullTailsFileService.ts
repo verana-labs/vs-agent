@@ -1,96 +1,52 @@
 import type { AnonCredsRevocationRegistryDefinition } from '@credo-ts/anoncreds'
-import type { AgentContext, Logger } from '@credo-ts/core'
+import type { AgentContext, FileSystem } from '@credo-ts/core'
 
 import { BasicTailsFileService } from '@credo-ts/anoncreds'
-import { utils } from '@credo-ts/core'
-import { createHash } from 'crypto'
+import { InjectionSymbols } from '@credo-ts/core'
 import fs from 'fs'
-import os from 'os'
 import path from 'path'
+
+const tailsFileNamePattern = /^[A-Za-z0-9]+$/
+
+export function isValidTailsFileName(name: string): boolean {
+  return tailsFileNamePattern.test(name)
+}
+
+export function getTailsDirectoryPath(agentContext: AgentContext): string {
+  if (process.env.TAILS_DIRECTORY_PATH) return process.env.TAILS_DIRECTORY_PATH
+  const fileSystem = agentContext.dependencyManager.resolve<FileSystem>(InjectionSymbols.FileSystem)
+  return path.join(fileSystem.dataPath, 'tails')
+}
 
 export class FullTailsFileService extends BasicTailsFileService {
   private tailsServerBaseUrl: string
-  public constructor(options: { tailsDirectoryPath?: string; tailsServerBaseUrl: string }) {
-    super(options)
+
+  public constructor(options: { tailsServerBaseUrl: string }) {
+    super()
     this.tailsServerBaseUrl = options.tailsServerBaseUrl
   }
 
   public async uploadTailsFile(
     agentContext: AgentContext,
-    options: {
-      revocationRegistryDefinition: AnonCredsRevocationRegistryDefinition
-    },
-  ) {
-    const revocationRegistryDefinition = options.revocationRegistryDefinition
-    const localTailsFilePath = revocationRegistryDefinition.value.tailsLocation
+    options: { revocationRegistryDefinition: AnonCredsRevocationRegistryDefinition },
+  ): Promise<{ tailsFileUrl: string }> {
+    const { tailsLocation, tailsHash } = options.revocationRegistryDefinition.value
 
-    const tailsFileId = utils.uuid()
-    await saveTailsFile(localTailsFilePath, tailsFileId, agentContext.config.logger)
-    return { tailsFileUrl: `${this.tailsServerBaseUrl}/${encodeURIComponent(tailsFileId)}` }
+    const directory = getTailsDirectoryPath(agentContext)
+    await fs.promises.mkdir(directory, { recursive: true })
+
+    const destination = path.join(directory, tailsHash)
+    if (!fs.existsSync(destination)) await fs.promises.copyFile(tailsLocation, destination)
+
+    agentContext.config.logger.info(`Stored tails file ${tailsHash}`)
+    return { tailsFileUrl: `${this.tailsServerBaseUrl}/${encodeURIComponent(tailsHash)}` }
   }
 }
 
-export const baseFilePath = process.env.TAILS_DIRECTORY_PATH || path.join(os.homedir(), '.afj', 'tails')
-const indexFilePath = path.join(baseFilePath, 'index.json')
+export function deleteTailsFile(agentContext: AgentContext, tailsFileUrl: string): void {
+  const tailsHash = decodeURIComponent(tailsFileUrl.split('/').pop() ?? '')
+  if (!isValidTailsFileName(tailsHash)) return
 
-if (!fs.existsSync(baseFilePath)) {
-  fs.mkdirSync(baseFilePath, { recursive: true })
-}
-export const tailsIndex = (
-  fs.existsSync(indexFilePath) ? JSON.parse(fs.readFileSync(indexFilePath, { encoding: 'utf-8' })) : {}
-) as Record<string, string>
-
-function fileHash(filePath: string, algorithm = 'sha256') {
-  return new Promise<string>((resolve, reject) => {
-    const shasum = createHash(algorithm)
-    try {
-      const s = fs.createReadStream(filePath)
-      s.on('data', function (data) {
-        shasum.update(data)
-      })
-      s.on('error', reject)
-      s.on('end', function () {
-        const hash = shasum.digest('hex')
-        return resolve(hash)
-      })
-    } catch (error) {
-      return reject('error in calculation')
-    }
-  })
-}
-
-export function deleteTailsEntry(tailsFileUrl: string): void {
-  const tailsFileId = decodeURIComponent(tailsFileUrl.split('/').pop() ?? '')
-  if (!tailsFileId || !tailsIndex[tailsFileId]) return
-
-  const hash = tailsIndex[tailsFileId]
-  delete tailsIndex[tailsFileId]
-  fs.writeFileSync(indexFilePath, JSON.stringify(tailsIndex))
-
-  const stillReferenced = Object.values(tailsIndex).includes(hash)
-  if (!stillReferenced) {
-    const filePath = `${baseFilePath}/${hash}`
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
-  }
-}
-
-async function saveTailsFile(localFilePath: string, tailsFileId: string, logger: Logger) {
-  logger.info(`Processing tails file: ${tailsFileId}`)
-
-  if (!localFilePath) throw new Error('No file path was provided.')
-  if (!tailsFileId) throw new Error('Missing tailsFileId')
-  if (tailsIndex[tailsFileId]) throw new Error(`There is already an entry for: ${tailsFileId}`)
-
-  const hash = await fileHash(localFilePath)
-  const destinationPath = `${baseFilePath}/${hash}`
-  if (fs.existsSync(destinationPath)) {
-    logger.warn('Tails file already exists')
-  } else {
-    fs.copyFileSync(localFilePath, destinationPath)
-  }
-
-  tailsIndex[tailsFileId] = hash
-  fs.writeFileSync(indexFilePath, JSON.stringify(tailsIndex))
-
-  logger.info(`Successfully processed tails file ${tailsFileId}`)
+  const filePath = path.join(getTailsDirectoryPath(agentContext), tailsHash)
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
 }
