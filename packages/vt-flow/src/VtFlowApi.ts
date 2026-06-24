@@ -116,8 +116,6 @@ export class VtFlowApi {
       )
     }
 
-    await this.ensureRotated(record)
-
     const credentialsApi = this.agentContext.dependencyManager.resolve(DidCommCredentialsApi)
     await credentialsApi.acceptCredential({
       credentialExchangeRecordId: record.credentialExchangeRecordId,
@@ -197,8 +195,6 @@ export class VtFlowApi {
   ): Promise<{ record: VtFlowRecord; credentialExchangeRecord: DidCommCredentialExchangeRecord }> {
     const record = await this.vtFlowService.getById(this.agentContext, options.vtFlowRecordId)
     record.assertRole(VtFlowRole.Validator)
-
-    await this.ensureRotated(record)
 
     const connection = await this.connectionService.getById(this.agentContext, record.connectionId)
     connection.assertReady()
@@ -291,19 +287,11 @@ export class VtFlowApi {
     return this.vtFlowService.findAllByQuery(this.agentContext, query, queryOptions)
   }
 
-  private async ensureRotated(record: VtFlowRecord): Promise<void> {
-    if (record.hasRotated) return
-    await this.vtFlowService.rotateAndWait(this.agentContext, record.connectionId)
-    record.hasRotated = true
-    await this.vtFlowService.updateRecord(this.agentContext, record)
-  }
-
   private async dispatchMessage(
     connectionId: string,
     message: DidCommMessage,
     associatedRecord: VtFlowRecord,
   ): Promise<void> {
-    await this.ensureRotated(associatedRecord)
     const connection = await this.connectionService.getById(this.agentContext, connectionId)
     const outbound = await getOutboundDidCommMessageContext(this.agentContext, {
       message,

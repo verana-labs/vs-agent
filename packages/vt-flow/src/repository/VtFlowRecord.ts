@@ -46,7 +46,6 @@ export interface VtFlowStorageProps {
   errorMessage?: string
 
   peerPublicDid?: string
-  hasRotated?: boolean
 
   tags?: CustomVtFlowTags
 }
@@ -77,7 +76,6 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
   public errorMessage?: string
 
   public peerPublicDid?: string
-  public hasRotated?: boolean
 
   public constructor(props: VtFlowStorageProps) {
     super()
@@ -107,7 +105,6 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
       this.errorMessage = props.errorMessage
 
       this.peerPublicDid = props.peerPublicDid
-      this.hasRotated = props.hasRotated
     }
   }
 

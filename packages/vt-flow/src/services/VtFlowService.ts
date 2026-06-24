@@ -1,13 +1,8 @@
 import type { AgentContext, Logger, Query, QueryOptions } from '@credo-ts/core'
-import type {
-  DidCommConnectionDidRotatedEvent,
-  DidCommCredentialExchangeRecord,
-  DidCommInboundMessageContext,
-} from '@credo-ts/didcomm'
+import type { DidCommCredentialExchangeRecord, DidCommInboundMessageContext } from '@credo-ts/didcomm'
 
 import { CredoError, EventEmitter, InjectionSymbols, inject, injectable } from '@credo-ts/core'
-import { DidCommConnectionEventTypes, DidCommConnectionsApi, DidCommCredentialState } from '@credo-ts/didcomm'
-import { filter, firstValueFrom, timeout } from 'rxjs'
+import { DidCommCredentialState } from '@credo-ts/didcomm'
 
 import { VtFlowModuleConfig } from '../VtFlowModuleConfig'
 import { type BuildVtFlowProblemReportOptions, VtFlowErrorCode, buildVtFlowProblemReport } from '../errors'
@@ -625,27 +620,4 @@ export class VtFlowService {
     }
   }
 
-  public async rotateAndWait(
-    agentContext: AgentContext,
-    connectionId: string,
-    options: { timeoutMs?: number } = {},
-  ): Promise<{ newDid: string }> {
-    const connectionsApi = agentContext.dependencyManager.resolve(DidCommConnectionsApi)
-
-    const rotated$ = this.eventEmitter
-      .observable<DidCommConnectionDidRotatedEvent>(DidCommConnectionEventTypes.DidCommConnectionDidRotated)
-      .pipe(
-        filter(event => event.payload.connectionRecord.id === connectionId && Boolean(event.payload.ourDid)),
-        timeout({ first: options.timeoutMs ?? 30_000 }),
-      )
-
-    const rotatedPromise = firstValueFrom(rotated$)
-    const { newDid } = await connectionsApi.rotate({ connectionId })
-    this.logger.debug(
-      `[vt-flow] rotation initiated for connection ${connectionId} -> ${newDid}; awaiting ack`,
-    )
-    await rotatedPromise
-    this.logger.debug(`[vt-flow] rotation acknowledged for connection ${connectionId}`)
-    return { newDid }
-  }
 }
