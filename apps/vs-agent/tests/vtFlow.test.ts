@@ -1,6 +1,6 @@
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { type VsAgent } from '@verana-labs/vs-agent-sdk'
+import { VtFlowOrchestrator, type VsAgent } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -215,5 +215,41 @@ describe('vt-flow: two-agent integration', () => {
     expect(conn.did).not.toContain('did:webvh:')
     expect(conn.did).toContain('did:peer:')
     expect(conn.previousDids).toContain(webvhDid)
+  })
+
+  it('rotateRequesterDidToPeer rotates the Applicant from webvh to peer (temporary workaround)', async () => {
+    const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+
+    await applicant.modules.vtFlow.sendIssuanceRequest({
+      connectionId: applicantConnection.id,
+      schemaId: 'https://example.test/schemas/applicant-rotation.json',
+      agentParticipantId: 'agent-participant-5',
+      walletAgentParticipantId: 'wallet-agent-participant-5',
+    })
+    const validatingEvent = await validatingReached
+    const validatorRecord = await validator.modules.vtFlow.getById(validatingEvent.payload.vtFlowRecordId)
+    const applicantWebvhDid = applicant.did
+
+    const validatorConnBefore = await validator.didcomm.connections.getById(validatorRecord.connectionId)
+    expect(validatorConnBefore.theirDid).toBe(applicantWebvhDid)
+
+    // Workaround: rotate the applicant to a fresh peer DID and stage `from_prior`.
+    await new VtFlowOrchestrator(applicant).rotateRequesterDidToPeer(applicantConnection.id)
+
+    const applicantConnAfter = await applicant.didcomm.connections.getById(applicantConnection.id)
+    expect(applicantConnAfter.did).toContain('did:peer:')
+    expect(applicantConnAfter.did).not.toContain('did:webvh:')
+    expect(applicantConnAfter.previousDids).toContain(applicantWebvhDid)
+
+    await applicant.didcomm.connections.sendPing(applicantConnection.id, {})
+
+    let validatorTheirDid: string | undefined
+    for (let i = 0; i < 25; i++) {
+      const c = await validator.didcomm.connections.getById(validatorRecord.connectionId)
+      validatorTheirDid = c.theirDid
+      if (validatorTheirDid === applicantConnAfter.did) break
+      await new Promise(r => setTimeout(r, 100))
+    }
+    expect(validatorTheirDid).toBe(applicantConnAfter.did)
   })
 })

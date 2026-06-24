@@ -2,7 +2,9 @@ import type { JsonObject } from '@credo-ts/core'
 
 import { JsonTransformer, W3cJsonLdVerifiableCredential, utils } from '@credo-ts/core'
 import {
+  DidCommDidRotateV2Service,
   DidCommHandshakeProtocol,
+  DidCommRoutingService,
   type JsonCredential,
   type JsonLdFormatDataVerifiableCredential,
 } from '@credo-ts/didcomm'
@@ -271,6 +273,19 @@ export class VtFlowOrchestrator {
   private extractSchemaBaseId(jscUrl: string): string | undefined {
     const match = jscUrl.match(/schemas-([a-z0-9-]+?)-(?:jsc|c-vp)\.json/i)
     return match?.[1]?.toLowerCase()
+  }
+
+  // TODO: temporary applicant-side rotation; remove once credo-ts `connections.rotate()` supports v2.
+  // Call after the first message has gone out on the public DID. See:
+  // https://github.com/verana-labs/vs-agent/pull/440/#issuecomment-4793219808
+  async rotateRequesterDidToPeer(connectionId: string): Promise<void> {
+    const agentContext = this.agent.context
+    const didRotateV2 = agentContext.dependencyManager.resolve(DidCommDidRotateV2Service)
+    const routing = await agentContext.dependencyManager
+      .resolve(DidCommRoutingService)
+      .getRouting(agentContext, {})
+    const connection = await this.agent.didcomm.connections.getById(connectionId)
+    await didRotateV2.rotateOurDid(agentContext, connection, routing)
   }
 
   private resolveVtFlowApi(): VtFlowApi {
