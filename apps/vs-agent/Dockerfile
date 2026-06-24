@@ -30,8 +30,8 @@ COPY apps/vs-agent-ui/src apps/vs-agent-ui/src
 COPY apps/vs-agent-ui/index.html apps/vs-agent-ui/vite.config.js apps/vs-agent-ui/tsconfig.json apps/vs-agent-ui/
 
 RUN pnpm --filter @verana-labs/vs-agent-model build && \
-    pnpm --filter @verana-labs/vs-agent-sdk build && \
     pnpm --filter @verana-labs/credo-ts-didcomm-vt-flow build && \
+    pnpm --filter @verana-labs/vs-agent-sdk build && \
     pnpm --filter @verana-labs/vs-agent-ui build && \
     pnpm --filter @verana-labs/vs-agent build
 
@@ -68,8 +68,8 @@ COPY apps/vs-agent-ui/src apps/vs-agent-ui/src
 COPY apps/vs-agent-ui/index.html apps/vs-agent-ui/vite.config.js apps/vs-agent-ui/tsconfig.json apps/vs-agent-ui/
 
 RUN pnpm --filter @verana-labs/vs-agent-model build && \
-    pnpm --filter @verana-labs/vs-agent-sdk build && \
     pnpm --filter @verana-labs/credo-ts-didcomm-vt-flow build && \
+    pnpm --filter @verana-labs/vs-agent-sdk build && \
     pnpm --filter @verana-labs/vs-agent-plugin-chat build && \
     pnpm --filter @verana-labs/vs-agent-ui build && \
     pnpm --filter @verana-labs/vs-agent build
@@ -109,8 +109,8 @@ COPY apps/vs-agent-ui/src ./apps/vs-agent-ui/src
 COPY apps/vs-agent-ui/index.html ./apps/vs-agent-ui/vite.config.js apps/vs-agent-ui/tsconfig.json apps/vs-agent-ui/
 
 RUN pnpm --filter @verana-labs/vs-agent-model build && \
-    pnpm --filter @verana-labs/vs-agent-sdk build && \
     pnpm --filter @verana-labs/credo-ts-didcomm-vt-flow build && \
+    pnpm --filter @verana-labs/vs-agent-sdk build && \
     pnpm --filter @verana-labs/vs-agent-plugin-chat build && \
     pnpm --filter @verana-labs/vs-agent-plugin-mrtd build && \
     pnpm --filter @verana-labs/vs-agent-ui build && \
