@@ -3,7 +3,6 @@ import type { JsonObject } from '@credo-ts/core'
 import { JsonTransformer, W3cJsonLdVerifiableCredential, utils } from '@credo-ts/core'
 import {
   DidCommDidRotateV2Service,
-  DidCommHandshakeProtocol,
   DidCommRoutingService,
   type JsonCredential,
   type JsonLdFormatDataVerifiableCredential,
@@ -81,8 +80,9 @@ export class VtFlowOrchestrator {
 
     const { connectionRecord } = await this.agent.didcomm.oob.receiveImplicitInvitation({
       did: validatorParticipant.did,
+      ourDid: this.agent.did,
       label: this.agent.label,
-      handshakeProtocols: [DidCommHandshakeProtocol.Connections],
+      didCommVersion: 'v2',
     })
     if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
     const ready = await this.agent.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
