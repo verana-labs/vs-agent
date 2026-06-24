@@ -17,3 +17,5 @@ packages/**/test/logs
 Chart.lock
 
 CLAUDE.md
+.claude
+.vscode

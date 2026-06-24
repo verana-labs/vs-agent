@@ -600,7 +600,11 @@ export class VtFlowService {
   }
 
   /** Spec Verifiable Service Identity Check: invokes the caller-provided VS-CONN-VS hook. Throws `vt-flow.not-a-verifiable-service` when the peer fails the check. When no hook is configured, logs a warning and permits. */
-  public async assertVerifiableService(agentContext: AgentContext, connectionId: string): Promise<void> {
+  public async assertVerifiableService(
+    agentContext: AgentContext,
+    peerDid: string,
+    connectionId: string,
+  ): Promise<void> {
     const hook = this.config.assertVerifiableService
     if (!hook) {
       this.logger.warn(

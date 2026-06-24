@@ -1,14 +1,12 @@
-import type { VsAgent } from '@verana-labs/vs-agent-sdk'
-
-import { DidCommConnectionRecord, DidCommHandshakeProtocol } from '@credo-ts/didcomm'
+import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { type VsAgent } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { startAgent } from './__mocks__'
+import { FakeDidResolver } from './__mocks__/fakeDidResolver'
 import {
-  FakeDidResolver,
   isVtFlowStateChangedEvent,
   SubjectInboundTransport,
   SubjectOutboundTransport,
@@ -25,6 +23,7 @@ import {
 describe('vt-flow: two-agent integration', () => {
   let applicant: VsAgent<any>
   let validator: VsAgent<any>
+  let applicantConnection: DidCommConnectionRecord
   let applicantEvents: ReturnType<typeof vi.spyOn>
   let validatorEvents: ReturnType<typeof vi.spyOn>
   const sharedResolver = new FakeDidResolver()
@@ -42,6 +41,7 @@ describe('vt-flow: two-agent integration', () => {
       label: 'Applicant',
       domain: 'applicant',
       vtFlowOptions: {},
+      didcommVersions: ['v1', 'v2'],
     })
     applicant.didcomm.registerInboundTransport(new SubjectInboundTransport(applicantMessages))
     applicant.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
@@ -59,6 +59,7 @@ describe('vt-flow: two-agent integration', () => {
         autoMarkValidated: true,
         autoOfferCredential: false,
       },
+      didcommVersions: ['v1', 'v2'],
     })
     validator.didcomm.registerInboundTransport(new SubjectInboundTransport(validatorMessages))
     validator.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
@@ -66,6 +67,15 @@ describe('vt-flow: two-agent integration', () => {
     await validator.initialize()
     await sharedResolver.registerAgent(validator)
     validatorEvents = vi.spyOn(validator.events, 'emit')
+
+    const { connectionRecord } = await applicant.didcomm.oob.receiveImplicitInvitation({
+      did: validator.did,
+      label: applicant.label,
+      didCommVersion: 'v2',
+      ourDid: applicant.did,
+    })
+    if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
+    applicantConnection = await applicant.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
   }, 30_000)
 
   afterEach(async () => {
@@ -79,7 +89,7 @@ describe('vt-flow: two-agent integration', () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
     const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
-      recipientDid: validator.did,
+      connectionId: applicantConnection.id,
       schemaId: 'https://example.test/schemas/organization.json',
       agentParticipantId: 'agent-participant-1',
       walletAgentParticipantId: 'wallet-agent-participant-1',
@@ -165,7 +175,7 @@ describe('vt-flow: two-agent integration', () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
     const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
-      recipientDid: validator.did,
+      connectionId: applicantConnection.id,
       schemaId: 'https://example.test/schemas/service.json',
       agentParticipantId: 'agent-participant-3',
       walletAgentParticipantId: 'wallet-agent-participant-3',
@@ -183,10 +193,10 @@ describe('vt-flow: two-agent integration', () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
     await applicant.modules.vtFlow.sendIssuanceRequest({
-      recipientDid: validator.did,
+      connectionId: applicantConnection.id,
       schemaId: 'https://example.test/schemas/rotation.json',
-      agentPermId: 'agent-perm-4',
-      walletAgentPermId: 'wallet-agent-perm-4',
+      agentParticipantId: 'agent-participant-4',
+      walletAgentParticipantId: 'wallet-agent-participant-4',
     })
 
     const validatingEvent = await validatingReached

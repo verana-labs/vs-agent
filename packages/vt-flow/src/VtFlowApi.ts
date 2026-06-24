@@ -14,16 +14,14 @@ import type {
   DidCommMessage,
 } from '@credo-ts/didcomm'
 
-import { AgentContext, CredoError, DidRepository, injectable, utils } from '@credo-ts/core'
+import { AgentContext, CredoError, injectable, utils } from '@credo-ts/core'
 import {
   DidCommAutoAcceptCredential,
   DidCommConnectionService,
-  DidCommConnectionsApi,
   DidCommCredentialExchangeRepository,
   DidCommCredentialsApi,
   DidCommCredentialsModuleConfig,
   DidCommMessageSender,
-  DidCommOutOfBandApi,
   getOutboundDidCommMessageContext,
 } from '@credo-ts/didcomm'
 
@@ -49,7 +47,11 @@ export class VtFlowApi {
   public async sendOnboardingRequest(options: SendOnboardingRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
     connection.assertReady()
-    await this.vtFlowService.assertVerifiableService(this.agentContext, connection.id)
+    const peerDid = connection.theirDid
+    if (!peerDid) {
+      throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
+    }
+    await this.vtFlowService.assertVerifiableService(this.agentContext, peerDid, connection.id)
 
     const participantSessionId = options.participantSessionId ?? utils.uuid()
 
@@ -74,8 +76,12 @@ export class VtFlowApi {
   }
 
   public async sendIssuanceRequest(options: SendIssuanceRequestOptions): Promise<VtFlowRecord> {
-    const { connection } = await this.bootstrapConnection(options.recipientDid)
-    const peerDid = connection.theirDid ?? options.recipientDid
+    const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
+    connection.assertReady()
+    const peerDid = connection.theirDid
+    if (!peerDid) {
+      throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
+    }
     await this.vtFlowService.assertVerifiableService(this.agentContext, peerDid, connection.id)
 
     const participantSessionId = options.participantSessionId ?? utils.uuid()
@@ -283,38 +289,6 @@ export class VtFlowApi {
 
   public findAllByQuery(query: Query<VtFlowRecord>, queryOptions?: QueryOptions): Promise<VtFlowRecord[]> {
     return this.vtFlowService.findAllByQuery(this.agentContext, query, queryOptions)
-  }
-
-  private async bootstrapConnection(
-    recipientDid: string,
-  ): Promise<{ connection: Awaited<ReturnType<DidCommConnectionService['getById']>> }> {
-    const oobApi = this.agentContext.dependencyManager.resolve(DidCommOutOfBandApi)
-    const connectionsApi = this.agentContext.dependencyManager.resolve(DidCommConnectionsApi)
-    const didRepository = this.agentContext.dependencyManager.resolve(DidRepository)
-
-    const existing = await connectionsApi.findByInvitationDid(recipientDid)
-    const ready = existing.find(c => c.isReady)
-    if (ready) return { connection: ready }
-
-    const [createdDidRecord] = await didRepository.getCreatedDids(this.agentContext, { method: 'webvh' })
-    const ourDid = createdDidRecord?.did
-
-    const { connectionRecord } = await oobApi.receiveImplicitInvitation({
-      did: recipientDid,
-      label: 'vs-agent',
-      didCommVersion: 'v2',
-      autoAcceptConnection: true,
-      ourDid,
-    })
-
-    if (!connectionRecord) {
-      throw new CredoError(
-        `vt-flow: receiveImplicitInvitation for '${recipientDid}' did not return a connection record`,
-      )
-    }
-
-    const connection = await connectionsApi.getById(connectionRecord.id)
-    return { connection }
   }
 
   private async ensureRotated(record: VtFlowRecord): Promise<void> {
