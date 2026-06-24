@@ -7,7 +7,14 @@ import { loadSyncState, saveSyncState } from './VeranaHelpers'
 import { VeranaIndexerService } from './VeranaIndexerService'
 import { buildDefaultIndexerHandlerRegistry } from './handlers'
 import { IndexerHandlerRegistry } from './handlers/IndexerHandlerRegistry'
-import { IndexerActivity, IndexerEventRecord, IndexerEventsResponse } from './types'
+import {
+  IndexerActivity,
+  IndexerBlockMessage,
+  IndexerEventRecord,
+  IndexerEventsResponse,
+  IndexerReadyMessage,
+  IndexerSubscribeMessage,
+} from './types'
 
 export interface IndexerWebSocketServiceOptions {
   indexerUrl: string
@@ -16,8 +23,7 @@ export interface IndexerWebSocketServiceOptions {
 }
 
 const MAX_RECONNECT_DELAY_MS = 300_000
-const WS_PATHNAME = 'verana/indexer/v1/events'
-const CREATES_WITHOUT_ID = new Set(['CreateNewTrustRegistry', 'CreateNewCredentialSchema'])
+const WS_PATHNAME = 'v4/indexer/subscribe'
 
 export class IndexerWebSocketService {
   private ws: WebSocket | null = null
@@ -70,7 +76,7 @@ export class IndexerWebSocketService {
     const url = new URL(this.options.indexerUrl)
     const wsProto = url.protocol === 'https:' ? 'wss:' : 'ws:'
     if (!this.options.agent.did) throw new Error('Agent does not have any defined public DID')
-    const wsUrl = `${wsProto}//${url.host}/${WS_PATHNAME}?did=${encodeURIComponent(this.options.agent.did)}`
+    const wsUrl = `${wsProto}//${url.host}/${WS_PATHNAME}`
 
     this.logger.info(`[IndexerWS] Connecting to ${wsUrl}`)
     const ws = new WebSocket(wsUrl)
@@ -83,17 +89,29 @@ export class IndexerWebSocketService {
 
     ws.on('message', (data: WebSocket.RawData) => {
       try {
-        const event = JSON.parse(data.toString()) as IndexerEventRecord
-        if (event.type !== 'indexer-event') return
-        if (event.block_height <= 0) return
-        if (!event.payload?.sender) return
+        const message = JSON.parse(data.toString()) as IndexerReadyMessage | IndexerBlockMessage
+        if (message.type === 'ready') {
+          const subscribe: IndexerSubscribeMessage = {
+            action: 'subscribe',
+            dids: this.options.agent.did ? [this.options.agent.did] : undefined,
+          }
+          ws.send(JSON.stringify(subscribe))
+          return
+        }
+        if (message.type !== 'block') return
 
-        if (this.syncing) {
-          this.IndexerEventRecords.push(event)
-        } else {
-          this.processBlock(event).catch(err =>
-            this.logger.error(`[IndexerWS] Handler error: ${(err as Error).message}`),
-          )
+        for (const event of message.events) {
+          if (event.type !== 'indexer-event') continue
+          if (event.block_height <= 0) continue
+          if (!event.payload?.sender) continue
+
+          if (this.syncing) {
+            this.IndexerEventRecords.push(event)
+          } else {
+            this.processBlock(event).catch(err =>
+              this.logger.error(`[IndexerWS] Handler error: ${(err as Error).message}`),
+            )
+          }
         }
       } catch {
         this.logger.warn(`[IndexerWS] Failed to parse message: ${data}`)
@@ -147,10 +165,7 @@ export class IndexerWebSocketService {
 
   private async processBlock(event: IndexerEventRecord): Promise<void> {
     try {
-      const activity = CREATES_WITHOUT_ID.has(event.event_type)
-        ? await this.resolveCreateActivity(event)
-        : await this.fetchActivity(event)
-
+      const activity = await this.fetchActivity(event)
       if (activity) {
         await this.applyChanges(event, activity)
       }
@@ -159,19 +174,6 @@ export class IndexerWebSocketService {
         `[IndexerWS] Failed to process event ${event.event_type} block=${event.block_height}: ${(error as Error).message}`,
       )
     }
-  }
-
-  /**
-   * TODO: Once the indexer emits consistent event_id for create events, we can remove this workaround
-   */
-  private async resolveCreateActivity(event: IndexerEventRecord): Promise<IndexerActivity | undefined> {
-    const changes = await this.indexer.getChanges(event.block_height)
-    const expectedType = event.payload.entity_type
-    const expectedAccount = event.payload.sender
-    const matches = changes.activity.filter(
-      a => a.entity_type === expectedType && a.account === expectedAccount,
-    )
-    return matches.length > 0 ? { ...matches[0], msg: event.event_type } : undefined
   }
 
   private async fetchActivity(event: IndexerEventRecord): Promise<IndexerActivity | undefined> {
@@ -196,12 +198,12 @@ export class IndexerWebSocketService {
 
   private async fetchEntity(entityType: string | undefined, id: string): Promise<Record<string, unknown>> {
     switch (entityType) {
-      case 'TrustRegistry':
-        return (await this.indexer.getTrustRegistry(id)) as unknown as Record<string, unknown>
+      case 'Ecosystem':
+        return (await this.indexer.getEcosystem(id)) as unknown as Record<string, unknown>
       case 'CredentialSchema':
         return (await this.indexer.getCredentialSchema(id)) as unknown as Record<string, unknown>
-      case 'Permission':
-        return (await this.indexer.getPermission(id)) as unknown as Record<string, unknown>
+      case 'Participant':
+        return (await this.indexer.getParticipant(id)) as unknown as Record<string, unknown>
       default:
         return {}
     }
@@ -217,6 +219,7 @@ export class IndexerWebSocketService {
         block_height,
         operatorAddress: event.payload.sender,
         state,
+        txHash: event.tx_hash,
       })
     } catch (err) {
       this.logger.error(

@@ -4,8 +4,8 @@ import type {
   OfferCredentialForSessionOptions,
   ProblemReportDispatchOptions,
   SendIssuanceRequestOptions,
+  SendOnboardingRequestOptions,
   SendOobLinkOptions,
-  SendValidationRequestOptions,
 } from './types'
 import type { Query, QueryOptions } from '@credo-ts/core'
 import type {
@@ -46,19 +46,19 @@ export class VtFlowApi {
     void this.config
   }
 
-  public async sendValidationRequest(options: SendValidationRequestOptions): Promise<VtFlowRecord> {
-    const { connection } = await this.bootstrapConnection(options.recipientDid)
-    const peerDid = connection.theirDid ?? options.recipientDid
-    await this.vtFlowService.assertVerifiableService(this.agentContext, peerDid, connection.id)
+  public async sendOnboardingRequest(options: SendOnboardingRequestOptions): Promise<VtFlowRecord> {
+    const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
+    connection.assertReady()
+    await this.vtFlowService.assertVerifiableService(this.agentContext, connection.id)
 
-    const sessionUuid = options.sessionUuid ?? utils.uuid()
+    const participantSessionId = options.participantSessionId ?? utils.uuid()
 
-    const { message, record } = await this.vtFlowService.createValidationProcessRecord(this.agentContext, {
-      connectionId: connection.id,
-      sessionUuid,
-      permId: options.permId,
-      agentPermId: options.agentPermId,
-      walletAgentPermId: options.walletAgentPermId,
+    const { message, record } = await this.vtFlowService.createOnboardingProcessRecord(this.agentContext, {
+      connectionId: options.connectionId,
+      participantSessionId,
+      participantId: options.participantId,
+      agentParticipantId: options.agentParticipantId,
+      walletAgentParticipantId: options.walletAgentParticipantId,
       claims: options.claims,
       peerPublicDid: peerDid,
     })
@@ -78,14 +78,14 @@ export class VtFlowApi {
     const peerDid = connection.theirDid ?? options.recipientDid
     await this.vtFlowService.assertVerifiableService(this.agentContext, peerDid, connection.id)
 
-    const sessionUuid = options.sessionUuid ?? utils.uuid()
+    const participantSessionId = options.participantSessionId ?? utils.uuid()
 
     const { message, record } = await this.vtFlowService.createDirectIssuanceRecord(this.agentContext, {
-      connectionId: connection.id,
-      sessionUuid,
+      connectionId: options.connectionId,
+      participantSessionId,
       schemaId: options.schemaId,
-      agentPermId: options.agentPermId,
-      walletAgentPermId: options.walletAgentPermId,
+      agentParticipantId: options.agentParticipantId,
+      walletAgentParticipantId: options.walletAgentParticipantId,
       claims: options.claims,
       peerPublicDid: peerDid,
     })
@@ -133,8 +133,8 @@ export class VtFlowApi {
     return record
   }
 
-  public acceptValidationRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
-    return this.vtFlowService.acceptValidationRequest(this.agentContext, vtFlowRecordId)
+  public acceptOnboardingRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    return this.vtFlowService.acceptOnboardingRequest(this.agentContext, vtFlowRecordId)
   }
 
   public acceptIssuanceRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {

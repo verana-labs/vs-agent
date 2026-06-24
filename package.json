@@ -21,6 +21,7 @@
     "format": "prettier \"{packages,apps}/**/*.ts\" --write",
     "check-format": "prettier -c \"{packages,apps}/**/*.ts\"",
     "test": "pnpm -r run test",
+    "test:e2e": "pnpm --filter @verana-labs/vs-agent-sdk test:e2e",
     "lint": "eslint \"{packages,apps}/**/*.ts\" --fix",
     "validate": "pnpm lint && pnpm check-types && pnpm check-format",
     "prepare": "corepack enable"
@@ -52,26 +53,26 @@
     "tsyringe": "4.8.0",
     "@hyperledger/anoncreds-nodejs": "0.4.0",
     "@hyperledger/anoncreds-shared": "0.4.0",
-    "@credo-ts/action-menu": "0.7.1-pr-2704-20260519192541",
-    "@credo-ts/core": "0.7.1-pr-2704-20260519192541",
-    "@credo-ts/didcomm": "0.7.1-pr-2704-20260519192541",
-    "@credo-ts/question-answer": "0.7.1-pr-2704-20260519192541",
-    "@credo-ts/node": "0.7.1-pr-2704-20260519192541",
-    "@credo-ts/askar": "0.7.1-pr-2704-20260519192541",
-    "@credo-ts/anoncreds": "0.7.1-pr-2704-20260519192541"
+    "@credo-ts/action-menu": "0.7.1-pr-2704-20260610194233",
+    "@credo-ts/core": "0.7.1-pr-2704-20260610194233",
+    "@credo-ts/didcomm": "0.7.1-pr-2704-20260610194233",
+    "@credo-ts/question-answer": "0.7.1-pr-2704-20260610194233",
+    "@credo-ts/node": "0.7.1-pr-2704-20260610194233",
+    "@credo-ts/askar": "0.7.1-pr-2704-20260610194233",
+    "@credo-ts/anoncreds": "0.7.1-pr-2704-20260610194233"
   },
   "packageManager": "pnpm@9.15.3",
   "pnpm": {
     "overrides": {
       "libphonenumber-js": "^1.12.33",
-      "@credo-ts/core": "0.7.1-pr-2704-20260519192541",
-      "@credo-ts/didcomm": "0.7.1-pr-2704-20260519192541",
-      "@credo-ts/anoncreds": "0.7.1-pr-2704-20260519192541",
-      "@credo-ts/askar": "0.7.1-pr-2704-20260519192541",
+      "@credo-ts/core": "0.7.1-pr-2704-20260610194233",
+      "@credo-ts/didcomm": "0.7.1-pr-2704-20260610194233",
+      "@credo-ts/anoncreds": "0.7.1-pr-2704-20260610194233",
+      "@credo-ts/askar": "0.7.1-pr-2704-20260610194233",
       "@hyperledger/anoncreds-shared": "0.4.0"
     },
     "patchedDependencies": {
-      "@credo-ts/webvh@0.7.1-pr-2704-20260519192541": "patches/@credo-ts__webvh@0.7.1-pr-2704-20260519192541.patch"
+      "@credo-ts/webvh@0.7.1-pr-2704-20260610194233": "patches/@credo-ts__webvh@0.7.1-pr-2704-20260610194233.patch"
     }
   }
 }

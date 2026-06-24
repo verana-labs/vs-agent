@@ -5,6 +5,7 @@ import { LogLevel, ParsedDid } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
+import { setupVtFlow } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
   createVsAgent,
   HttpInboundTransport,
@@ -90,6 +91,7 @@ export const setupAgent = async ({
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol({ masterListCscaLocation })] : []),
+      ...(ENABLED_PLUGINS.includes('vt-flow') ? [setupVtFlow()] : []),
     ],
     config: {
       logger,

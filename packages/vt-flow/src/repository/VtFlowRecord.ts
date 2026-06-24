@@ -4,15 +4,15 @@ import { BaseRecord, CredoError, utils } from '@credo-ts/core'
 
 import { VtFlowRole, VtFlowState, VtFlowVariant } from '../types'
 
-/** Indexed storage tags queryable through `VtFlowRepository`; `permId` is §5.1-only and `schemaId` is §5.2-only. */
+/** Indexed storage tags queryable through `VtFlowRepository`; `participantId` is OnboardingProcess-only and `schemaId` is DirectIssuance-only. */
 export type DefaultVtFlowTags = {
   threadId: string
-  sessionUuid: string
+  participantSessionId: string
   connectionId: string
   role: VtFlowRole
   flowState: VtFlowState
   flowVariant: VtFlowVariant
-  permId?: string
+  participantId?: string
   schemaId?: string
   credentialExchangeRecordId?: string
   subprotocolThid?: string
@@ -27,16 +27,16 @@ export interface VtFlowStorageProps {
   createdAt?: Date
 
   threadId: string
-  sessionUuid: string
+  participantSessionId: string
   connectionId: string
   role: VtFlowRole
   state: VtFlowState
   variant: VtFlowVariant
 
-  agentPermId: string
-  walletAgentPermId: string
+  agentParticipantId: string
+  walletAgentParticipantId: string
 
-  permId?: string
+  participantId?: string
   schemaId?: string
   claims?: Record<string, unknown>
 
@@ -57,16 +57,16 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
   public readonly type = VtFlowRecord.type
 
   public threadId!: string
-  public sessionUuid!: string
+  public participantSessionId!: string
   public connectionId!: string
   public role!: VtFlowRole
   public state!: VtFlowState
   public variant!: VtFlowVariant
 
-  public agentPermId!: string
-  public walletAgentPermId!: string
+  public agentParticipantId!: string
+  public walletAgentParticipantId!: string
 
-  public permId?: string
+  public participantId?: string
   public schemaId?: string
 
   public claims?: Record<string, unknown>
@@ -88,16 +88,16 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
       this._tags = props.tags ?? {}
 
       this.threadId = props.threadId
-      this.sessionUuid = props.sessionUuid
+      this.participantSessionId = props.participantSessionId
       this.connectionId = props.connectionId
       this.role = props.role
       this.state = props.state
       this.variant = props.variant
 
-      this.agentPermId = props.agentPermId
-      this.walletAgentPermId = props.walletAgentPermId
+      this.agentParticipantId = props.agentParticipantId
+      this.walletAgentParticipantId = props.walletAgentParticipantId
 
-      this.permId = props.permId
+      this.participantId = props.participantId
       this.schemaId = props.schemaId
       this.claims = props.claims
 
@@ -115,12 +115,12 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
     return {
       ...this._tags,
       threadId: this.threadId,
-      sessionUuid: this.sessionUuid,
+      participantSessionId: this.participantSessionId,
       connectionId: this.connectionId,
       role: this.role,
       flowState: this.state,
       flowVariant: this.variant,
-      permId: this.permId,
+      participantId: this.participantId,
       schemaId: this.schemaId,
       credentialExchangeRecordId: this.credentialExchangeRecordId,
       subprotocolThid: this.subprotocolThid,

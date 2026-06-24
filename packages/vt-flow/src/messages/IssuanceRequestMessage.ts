@@ -7,14 +7,14 @@ import { VT_FLOW_ISSUANCE_REQUEST_TYPE } from './VtFlowProtocol'
 export interface IssuanceRequestMessageOptions {
   id?: string
   schemaId: string
-  sessionUuid: string
-  agentPermId: string
-  walletAgentPermId: string
+  participantSessionId: string
+  agentParticipantId: string
+  walletAgentParticipantId: string
   claims?: Record<string, unknown>
   proofsAttach?: DidCommAttachment[]
 }
 
-/** Spec v4 §5.2 `issuance-request`; opens a DirectIssuance session and its `@id` becomes the session `thid`. */
+/** Spec `issuance-request`; opens a DirectIssuance session and its `@id` becomes the session `thid`. */
 export class IssuanceRequestMessage extends DidCommMessage {
   public constructor(options: IssuanceRequestMessageOptions) {
     super()
@@ -22,9 +22,9 @@ export class IssuanceRequestMessage extends DidCommMessage {
     if (options) {
       this.id = options.id ?? this.generateId()
       this.schemaId = options.schemaId
-      this.sessionUuid = options.sessionUuid
-      this.agentPermId = options.agentPermId
-      this.walletAgentPermId = options.walletAgentPermId
+      this.participantSessionId = options.participantSessionId
+      this.agentParticipantId = options.agentParticipantId
+      this.walletAgentParticipantId = options.walletAgentParticipantId
       this.claims = options.claims
       this.proofsAttach = options.proofsAttach
     }
@@ -39,17 +39,17 @@ export class IssuanceRequestMessage extends DidCommMessage {
   @IsString()
   public schemaId!: string
 
-  @Expose({ name: 'session_uuid' })
+  @Expose({ name: 'participant_session_id' })
   @IsUUID('4')
-  public sessionUuid!: string
+  public participantSessionId!: string
 
-  @Expose({ name: 'agent_perm_id' })
+  @Expose({ name: 'agent_participant_id' })
   @IsString()
-  public agentPermId!: string
+  public agentParticipantId!: string
 
-  @Expose({ name: 'wallet_agent_perm_id' })
+  @Expose({ name: 'wallet_agent_participant_id' })
   @IsString()
-  public walletAgentPermId!: string
+  public walletAgentParticipantId!: string
 
   @IsOptional()
   @IsObject()

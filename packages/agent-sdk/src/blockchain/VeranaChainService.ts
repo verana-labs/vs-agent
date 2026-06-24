@@ -10,34 +10,49 @@ import {
 } from '@cosmjs/stargate'
 import { connectComet } from '@cosmjs/tendermint-rpc'
 import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
-import Long from 'long'
 
 import {
-  CreateOrUpdatePermissionSessionParams,
-  PermQueryClient,
-  SetPermissionVPToValidatedParams,
-  StartPermissionVPParams,
+  CreateOrUpdateParticipantSessionParams,
+  Participant,
+  ParticipantQueryClient,
+  RawParticipant,
+  SetParticipantOPToValidatedParams,
   VERANA_BECH32_PREFIX,
   VeranaChainConfig,
 } from './types'
 
+const { QueryClientImpl: PpQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/pp/v1/query')
 const {
-  QueryClientImpl: PermQueryClientImpl,
-} = require('@verana-labs/verana-types/codec/verana/perm/v1/query')
-const {
-  MsgStartPermissionVP,
-  MsgRenewPermissionVP,
-  MsgSetPermissionVPToValidated,
-  MsgCancelPermissionVPLastRequest,
-  MsgCreateOrUpdatePermissionSession,
-} = require('@verana-labs/verana-types/codec/verana/perm/v1/tx')
+  MsgSetParticipantOPToValidated,
+  MsgCreateOrUpdateParticipantSession,
+} = require('@verana-labs/verana-types/codec/verana/pp/v1/tx')
+
+function mapParticipant(p: RawParticipant): Participant {
+  return {
+    id: p.id,
+    schemaId: p.schemaId,
+    role: p.role,
+    did: p.did,
+    corporation: p.corporationId != null ? String(p.corporationId) : '',
+    validatorParticipantId: p.validatorParticipantId,
+    opState: p.opState as unknown as Participant['opState'],
+    opSummaryDigest: p.opSummaryDigest ?? '',
+    revoked: p.revoked,
+    slashed: p.slashed,
+  }
+}
 
 export class VeranaChainService {
   private signingClient!: SigningStargateClient
   private operatorAddress!: string
   private chainId!: string
+  private corporationAddress!: string
 
-  private permQuery!: PermQueryClient
+  private ppQuery!: ParticipantQueryClient
+
+  // FIXME(verana setValidated->AUTHZ-CHECK-3): temporary second account that signs the session only.
+  private sessionSigningClient?: SigningStargateClient
+  private sessionOperatorAddress?: string
 
   constructor(private readonly config: VeranaChainConfig) {}
 
@@ -49,6 +64,10 @@ export class VeranaChainService {
     return this.chainId
   }
 
+  get corporation(): string {
+    return this.corporationAddress
+  }
+
   async start(): Promise<void> {
     const { rpcUrl, mnemonic, chainId, logger, gasPrice } = this.config
 
@@ -57,6 +76,7 @@ export class VeranaChainService {
     })
     const [account] = await wallet.getAccounts()
     this.operatorAddress = account.address
+    this.corporationAddress = this.config.corporationAddress ?? account.address
     logger.info(
       `[VeranaChain] vs_operator address: ${this.operatorAddress} (fund this address with VNA to enable on-chain operations)`,
     )
@@ -65,7 +85,7 @@ export class VeranaChainService {
     this.signingClient = await SigningStargateClient.createWithSigner(cometClient, wallet, {
       registry: createVeranaRegistry(),
       aminoTypes: createVeranaAminoTypes(),
-      gasPrice: GasPrice.fromString(gasPrice ?? '0uvna'), // TODO: consider minium gas price
+      gasPrice: GasPrice.fromString(gasPrice ?? '1uvna'),
     })
 
     this.chainId = await this.signingClient.getChainId()
@@ -74,95 +94,120 @@ export class VeranaChainService {
     }
     logger.info(`[VeranaChain] Connected to chain: ${this.chainId}`)
 
+    // FIXME(verana setValidated->AUTHZ-CHECK-3): validating needs an OperatorAuthorization and the session
+    // needs a mutually-exclusive VSOperatorAuthorization, so when configured the agent signs the session
+    // with a second account. Remove once both are authorized under one vs_operator.
+    if (this.config.sessionOperatorMnemonic) {
+      const sessionWallet = await DirectSecp256k1HdWallet.fromMnemonic(this.config.sessionOperatorMnemonic, {
+        prefix: VERANA_BECH32_PREFIX,
+      })
+      const [sessionAccount] = await sessionWallet.getAccounts()
+      this.sessionOperatorAddress = sessionAccount.address
+      this.sessionSigningClient = await SigningStargateClient.createWithSigner(cometClient, sessionWallet, {
+        registry: createVeranaRegistry(),
+        aminoTypes: createVeranaAminoTypes(),
+        gasPrice: GasPrice.fromString(gasPrice ?? '1uvna'),
+      })
+      logger.info(`[VeranaChain] session vs_operator: ${this.sessionOperatorAddress}`)
+    }
+
     const queryClient = new QueryClient(cometClient)
     const rpc = createProtobufRpcClient(queryClient)
-    this.permQuery = new PermQueryClientImpl(rpc) as PermQueryClient
+    this.ppQuery = new PpQueryClientImpl(rpc) as ParticipantQueryClient
   }
 
-  // Query API (No signed)
-  async getPermission(id: Long): Promise<unknown> {
-    return this.permQuery.GetPermission({ id })
+  // Query API (unsigned)
+  async getParticipant(id: number): Promise<Participant | undefined> {
+    const result = await this.ppQuery.GetParticipant({ id })
+    return result.participant ? mapParticipant(result.participant) : undefined
   }
 
-  async findPermissionsWithDID(params: object): Promise<unknown[]> {
-    const result = await this.permQuery.FindPermissionsWithDID(params)
-    return result.permissions ?? []
-  }
-
-  async getPermissionSession(uuid: string): Promise<unknown> {
-    return this.permQuery.GetPermissionSession({ id: uuid })
-  }
-
-  // Transaction API (Signed)
-  async startPermissionVP(params: StartPermissionVPParams): Promise<{ txHash: string }> {
-    const value = MsgStartPermissionVP.fromPartial({
-      creator: this.operatorAddress,
-      type: params.type,
-      validatorPermId: params.validatorPermId,
-      country: params.country,
-      did: params.did,
-      validationFees: params.validationFees,
-    })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgStartPermissionVP, value)
-    return { txHash: result.transactionHash }
-  }
-
-  async renewPermissionVP(id: Long): Promise<{ txHash: string }> {
-    const value = MsgRenewPermissionVP.fromPartial({
-      creator: this.operatorAddress,
-      id,
-    })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgRenewPermissionVP, value)
-    return { txHash: result.transactionHash }
-  }
-
-  async setPermissionVPToValidated(params: SetPermissionVPToValidatedParams): Promise<{ txHash: string }> {
-    const value = MsgSetPermissionVPToValidated.fromPartial({
-      creator: this.operatorAddress,
+  // Transaction API (signed)
+  async setParticipantOPToValidated(params: SetParticipantOPToValidatedParams): Promise<{ txHash: string }> {
+    const value = MsgSetParticipantOPToValidated.fromPartial({
+      corporation: this.corporationAddress,
+      operator: this.operatorAddress,
       id: params.id,
       effectiveUntil: params.effectiveUntil,
-      validationFees: params.validationFees,
-      issuanceFees: params.issuanceFees,
-      verificationFees: params.verificationFees,
-      country: params.country,
-      vpSummaryDigestSri: params.vpSummaryDigestSri,
-      issuanceFeeDiscount: params.issuanceFeeDiscount,
-      verificationFeeDiscount: params.verificationFeeDiscount,
+      validationFees: params.validationFees ?? 0,
+      issuanceFees: params.issuanceFees ?? 0,
+      verificationFees: params.verificationFees ?? 0,
+      opSummaryDigest: params.opSummaryDigest,
+      issuanceFeeDiscount: params.issuanceFeeDiscount ?? 0,
+      verificationFeeDiscount: params.verificationFeeDiscount ?? 0,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgSetPermissionVPToValidated, value)
+    const result = await this.broadcastMsg(veranaTypeUrls.MsgSetParticipantOPToValidated, value)
     return { txHash: result.transactionHash }
   }
 
-  async cancelPermissionVPLastRequest(id: Long): Promise<{ txHash: string }> {
-    const value = MsgCancelPermissionVPLastRequest.fromPartial({
-      creator: this.operatorAddress,
-      id,
-    })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgCancelPermissionVPLastRequest, value)
-    return { txHash: result.transactionHash }
-  }
-
-  async createOrUpdatePermissionSession(
-    params: CreateOrUpdatePermissionSessionParams,
+  async createOrUpdateParticipantSession(
+    params: CreateOrUpdateParticipantSessionParams,
   ): Promise<{ txHash: string }> {
-    const value = MsgCreateOrUpdatePermissionSession.fromPartial({
-      creator: this.operatorAddress,
+    // FIXME(verana setValidated->AUTHZ-CHECK-3): sign the session with the VSOA account when configured.
+    const operator = this.sessionOperatorAddress ?? this.operatorAddress
+    const value = MsgCreateOrUpdateParticipantSession.fromPartial({
+      corporation: this.corporationAddress,
+      operator,
       id: params.id,
-      issuerPermId: params.issuerPermId,
-      verifierPermId: params.verifierPermId,
-      agentPermId: params.agentPermId,
-      walletAgentPermId: params.walletAgentPermId,
+      issuerParticipantId: params.issuerParticipantId,
+      verifierParticipantId: params.verifierParticipantId,
+      agentParticipantId: params.agentParticipantId,
+      walletAgentParticipantId: params.walletAgentParticipantId,
+      digest: params.digest,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateOrUpdatePermissionSession, value)
+    const result = await this.broadcastMsg(
+      veranaTypeUrls.MsgCreateOrUpdateParticipantSession,
+      value,
+      this.sessionSigningClient ?? this.signingClient,
+      operator,
+    )
     return { txHash: result.transactionHash }
   }
 
-  private async broadcastMsg(typeUrl: string, value: object): Promise<DeliverTxResponse> {
+  private async broadcastMsg(
+    typeUrl: string,
+    value: object,
+    client: SigningStargateClient = this.signingClient,
+    signer: string = this.operatorAddress,
+  ): Promise<DeliverTxResponse> {
     const msg = { typeUrl, value }
     this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl}`)
-    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], 'auto')
+    const result = await client.signAndBroadcast(signer, [msg], 'auto')
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result
+  }
+
+  async extractIdFromEvent(
+    txHashOrResult: string | DeliverTxResponse,
+    eventType: string,
+    attrKey: string,
+  ): Promise<number> {
+    let events: readonly { type: string; attributes: readonly { key: string; value: string }[] }[]
+    let txRef: string
+    if (typeof txHashOrResult === 'string') {
+      const tx = await this.signingClient.getTx(txHashOrResult)
+      if (!tx) {
+        throw new Error(`[VeranaChain] tx ${txHashOrResult} not found`)
+      }
+      events = tx.events
+      txRef = txHashOrResult
+    } else {
+      events = txHashOrResult.events
+      txRef = txHashOrResult.transactionHash
+    }
+    const event = events.find(e => e.type === eventType)
+    if (!event) {
+      throw new Error(`[VeranaChain] tx ${txRef} missing '${eventType}' event`)
+    }
+    const attr = event.attributes.find(a => a.key === attrKey)
+    if (!attr) {
+      throw new Error(`[VeranaChain] tx ${txRef} missing '${attrKey}' in '${eventType}' event`)
+    }
+    const id = Number(attr.value)
+    if (!Number.isFinite(id)) {
+      throw new Error(`[VeranaChain] tx ${txRef} has non-numeric ${attrKey}=${attr.value}`)
+    }
+    return id
   }
 }

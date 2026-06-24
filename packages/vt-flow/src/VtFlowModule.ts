@@ -17,9 +17,9 @@ import { VtFlowModuleConfig, type VtFlowModuleConfigOptions } from './VtFlowModu
 import {
   CredentialStateChangeHandler,
   IssuanceRequestHandler,
+  OnboardingRequestHandler,
   OobLinkHandler,
   ValidatingHandler,
-  ValidationRequestHandler,
 } from './handlers'
 import { VT_FLOW_PROTOCOL_URI } from './messages'
 import { VtFlowRepository } from './repository'
@@ -55,7 +55,7 @@ export class VtFlowModule implements Module {
     const eventEmitter = agentContext.dependencyManager.resolve(EventEmitter)
 
     messageHandlerRegistry.registerMessageHandlers([
-      new ValidationRequestHandler(service),
+      new OnboardingRequestHandler(service),
       new IssuanceRequestHandler(service),
       new OobLinkHandler(service),
       new ValidatingHandler(service),
@@ -180,14 +180,14 @@ export class VtFlowModule implements Module {
         if (record.role !== VtFlowRole.Validator) return
 
         if (
-          payload.state === VtFlowState.AwaitingVr &&
+          payload.state === VtFlowState.AwaitingOr &&
           payload.previousState === null &&
-          config.autoAcceptValidationRequest
+          config.autoAcceptOnboardingRequest
         ) {
           service
             .getLogger()
-            .debug(`[vt-flow] auto-accepting VR for ${record.id} (autoAcceptValidationRequest=true)`)
-          await service.acceptValidationRequest(agentContext, record.id)
+            .debug(`[vt-flow] auto-accepting OR for ${record.id} (autoAcceptOnboardingRequest=true)`)
+          await service.acceptOnboardingRequest(agentContext, record.id)
           return
         }
 
@@ -206,7 +206,7 @@ export class VtFlowModule implements Module {
         if (
           payload.state === VtFlowState.Validating &&
           config.autoMarkValidated &&
-          record.variant === VtFlowVariant.ValidationProcess
+          record.variant === VtFlowVariant.OnboardingProcess
         ) {
           service.getLogger().debug(`[vt-flow] auto-mark-validated for ${record.id} (autoMarkValidated=true)`)
           await service.markValidated(agentContext, record.id)
@@ -214,7 +214,7 @@ export class VtFlowModule implements Module {
         }
 
         const readyToOffer =
-          (record.variant === VtFlowVariant.ValidationProcess && payload.state === VtFlowState.Validated) ||
+          (record.variant === VtFlowVariant.OnboardingProcess && payload.state === VtFlowState.Validated) ||
           (record.variant === VtFlowVariant.DirectIssuance && payload.state === VtFlowState.Validating)
         if (readyToOffer && config.autoOfferCredential && config.buildCredentialOffer) {
           service

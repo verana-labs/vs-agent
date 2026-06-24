@@ -8,6 +8,42 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
     uses: 2060-io/organization/.github/workflows/2060-linter-call.yml@main
+
+  docker-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dockerfile: ./apps/vs-agent/Dockerfile
+            target: vs-agent
+          - dockerfile: ./apps/vs-agent/Dockerfile
+            target: vs-agent-chat
+          - dockerfile: ./apps/vs-agent/Dockerfile
+            target: vs-agent-mrtd
+          - dockerfile: ./examples/chatbot/Dockerfile
+          - dockerfile: ./examples/verifier/Dockerfile
+          - dockerfile: ./examples/nestjs-vs/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.dockerfile }} ${{ matrix.target }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

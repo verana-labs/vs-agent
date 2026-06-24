@@ -1,14 +1,14 @@
-/** Wire `description.code` values for vt-flow problem-reports (see spec §Error Codes). */
+/** Wire `description.code` values for vt-flow problem-reports (see spec Error Codes). */
 export enum VtFlowErrorCode {
-  VrRequired = 'vt-flow.vr-required',
+  OrRequired = 'vt-flow.or-required',
   IrRequired = 'vt-flow.ir-required',
   UnsupportedMessage = 'vt-flow.unsupported-message',
-  InvalidPermId = 'vt-flow.invalid-perm-id',
+  InvalidParticipantId = 'vt-flow.invalid-participant-id',
   InvalidSchemaId = 'vt-flow.invalid-schema-id',
-  InvalidAgentPermId = 'vt-flow.invalid-agent-perm-id',
-  InvalidWalletAgentPermId = 'vt-flow.invalid-wallet-agent-perm-id',
+  InvalidAgentParticipantId = 'vt-flow.invalid-agent-participant-id',
+  InvalidWalletAgentParticipantId = 'vt-flow.invalid-wallet-agent-participant-id',
   InvalidClaims = 'vt-flow.invalid-claims',
-  InvalidSessionUuid = 'vt-flow.invalid-session-uuid',
+  InvalidParticipantSessionId = 'vt-flow.invalid-participant-session-id',
   NotAVerifiableService = 'vt-flow.not-a-verifiable-service',
   ValidationFailed = 'vt-flow.validation-failed',
   OobExpired = 'vt-flow.oob-expired',
@@ -30,27 +30,27 @@ export interface VtFlowErrorInfo {
 }
 
 export const VT_FLOW_ERROR_INFO: Readonly<Record<VtFlowErrorCode, VtFlowErrorInfo>> = {
-  [VtFlowErrorCode.VrRequired]: { whoRetries: 'you', impact: 'thread', retryable: true },
+  [VtFlowErrorCode.OrRequired]: { whoRetries: 'you', impact: 'thread', retryable: true },
   [VtFlowErrorCode.IrRequired]: { whoRetries: 'you', impact: 'thread', retryable: true },
   [VtFlowErrorCode.UnsupportedMessage]: {
     whoRetries: 'none',
     impact: 'connection',
     retryable: false,
   },
-  [VtFlowErrorCode.InvalidPermId]: { whoRetries: 'you', impact: 'thread', retryable: true },
+  [VtFlowErrorCode.InvalidParticipantId]: { whoRetries: 'you', impact: 'thread', retryable: true },
   [VtFlowErrorCode.InvalidSchemaId]: { whoRetries: 'you', impact: 'thread', retryable: true },
-  [VtFlowErrorCode.InvalidAgentPermId]: {
+  [VtFlowErrorCode.InvalidAgentParticipantId]: {
     whoRetries: 'you',
     impact: 'thread',
     retryable: true,
   },
-  [VtFlowErrorCode.InvalidWalletAgentPermId]: {
+  [VtFlowErrorCode.InvalidWalletAgentParticipantId]: {
     whoRetries: 'you',
     impact: 'thread',
     retryable: true,
   },
   [VtFlowErrorCode.InvalidClaims]: { whoRetries: 'you', impact: 'thread', retryable: true },
-  [VtFlowErrorCode.InvalidSessionUuid]: {
+  [VtFlowErrorCode.InvalidParticipantSessionId]: {
     whoRetries: 'you',
     impact: 'thread',
     retryable: true,

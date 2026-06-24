@@ -1,10 +1,15 @@
 import { IndexerEventHandler, IndexerHandlerRegistry } from './IndexerHandlerRegistry'
 import {
-  bumpActiveGfVersion,
+  bumpActiveVersion,
+  markVtFlowRecordsValidated,
   publishVtjscIfOwner,
+  setVtFlowRecordsParticipantRevoked,
+  setVtFlowRecordsParticipantSlashed,
+  startParticipantOPAutoFlow,
+  terminateVtFlowRecordsByApplicant,
   upsertCredentialSchema,
-  upsertPermission,
-  upsertTrustRegistry,
+  upsertEcosystem,
+  upsertParticipant,
 } from './stateMutations'
 
 /**
@@ -12,27 +17,27 @@ import {
  */
 export const defaultHandlers: IndexerEventHandler[] = [
   {
-    msg: 'CreateNewTrustRegistry',
+    msg: 'CreateNewEcosystem',
     handle: async (activity, ctx) => {
-      upsertTrustRegistry(ctx.state, activity)
+      upsertEcosystem(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] CreateNewTrustRegistry entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] CreateNewEcosystem entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
   {
-    msg: 'UpdateTrustRegistry',
+    msg: 'UpdateEcosystem',
     handle: async (activity, ctx) => {
-      upsertTrustRegistry(ctx.state, activity)
+      upsertEcosystem(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] UpdateTrustRegistry entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] UpdateEcosystem entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
   {
     msg: 'AddGovernanceFrameworkDocument',
     handle: async (activity, ctx) => {
-      upsertTrustRegistry(ctx.state, activity)
+      upsertEcosystem(ctx.state, activity)
       ctx.agent.config.logger.info(
         `[IndexerWS] AddGovernanceFrameworkDocument entity=${activity.entity_id} block=${ctx.block_height}`,
       )
@@ -41,7 +46,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
   {
     msg: 'IncreaseActiveGFVersion',
     handle: async (activity, ctx) => {
-      bumpActiveGfVersion(ctx.state, activity)
+      bumpActiveVersion(ctx.state, activity)
       ctx.agent.config.logger.info(
         `[IndexerWS] IncreaseActiveGFVersion entity=${activity.entity_id} block=${ctx.block_height}`,
       )
@@ -76,77 +81,83 @@ export const defaultHandlers: IndexerEventHandler[] = [
     },
   },
   {
-    msg: 'StartPermissionVP',
+    msg: 'StartParticipantOP',
     handle: async (activity, ctx) => {
-      upsertPermission(ctx.state, activity, { vpState: 'PENDING' })
+      upsertParticipant(ctx.state, activity, { opState: 'PENDING' })
       ctx.agent.config.logger.info(
-        `[IndexerWS] StartPermissionVP entity=${activity.entity_id} block=${ctx.block_height} — TODO §5.1: progress credential acquisition flow (applicant)`,
+        `[IndexerWS] StartParticipantOP entity=${activity.entity_id} block=${ctx.block_height}`,
+      )
+
+      await startParticipantOPAutoFlow(ctx.agent, activity)
+    },
+  },
+  {
+    msg: 'RenewParticipantOP',
+    handle: async (activity, ctx) => {
+      upsertParticipant(ctx.state, activity, { opState: 'PENDING' })
+      ctx.agent.config.logger.info(
+        `[IndexerWS] RenewParticipantOP entity=${activity.entity_id} block=${ctx.block_height} — TODO §5.1: progress credential acquisition flow (applicant renewal)`,
       )
     },
   },
   {
-    msg: 'RenewPermissionVP',
+    msg: 'SetParticipantOPToValidated',
     handle: async (activity, ctx) => {
-      upsertPermission(ctx.state, activity, { vpState: 'PENDING' })
+      upsertParticipant(ctx.state, activity, { opState: 'VALIDATED' })
       ctx.agent.config.logger.info(
-        `[IndexerWS] RenewPermissionVP entity=${activity.entity_id} block=${ctx.block_height} — TODO §5.1: progress credential acquisition flow (applicant renewal)`,
+        `[IndexerWS] SetParticipantOPToValidated participant=${activity.entity_id} block=${ctx.block_height}`,
       )
+      await markVtFlowRecordsValidated(ctx.agent, String(activity.entity_id))
     },
   },
   {
-    msg: 'SetPermissionVPToValidated',
+    msg: 'SetParticipantEffectiveUntil',
     handle: async (activity, ctx) => {
-      upsertPermission(ctx.state, activity, { vpState: 'VALIDATED' })
-      ctx.agent.config.logger.info(
-        `[IndexerWS] SetPermissionVPToValidated entity=${activity.entity_id} block=${ctx.block_height} — TODO §5.1: progress credential acquisition flow (validator)`,
-      )
-    },
-  },
-  {
-    msg: 'AdjustPermission',
-    handle: async (activity, ctx) => {
-      upsertPermission(ctx.state, activity, {
+      upsertParticipant(ctx.state, activity, {
         effectiveUntil: String(activity.changes['effective_until'] ?? ''),
       })
       ctx.agent.config.logger.info(
-        `[IndexerWS] AdjustPermission entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] SetParticipantEffectiveUntil entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
   {
-    msg: 'RevokePermission',
+    msg: 'RevokeParticipant',
     handle: async (activity, ctx) => {
-      upsertPermission(ctx.state, activity, { revoked: true })
+      upsertParticipant(ctx.state, activity, { revoked: true })
       ctx.agent.config.logger.info(
-        `[IndexerWS] RevokePermission entity=${activity.entity_id} block=${ctx.block_height} — TODO §7.2: remove linked VP from DID doc + delete credential`,
+        `[IndexerWS] RevokeParticipant entity=${activity.entity_id} block=${ctx.block_height} — TODO §7.2: remove linked VP from DID doc + delete credential`,
+      )
+      await setVtFlowRecordsParticipantRevoked(ctx.agent, String(activity.entity_id))
+    },
+  },
+  {
+    msg: 'SlashParticipantTrustDeposit',
+    handle: async (activity, ctx) => {
+      upsertParticipant(ctx.state, activity, { slashed: true })
+      ctx.agent.config.logger.info(
+        `[IndexerWS] SlashParticipantTrustDeposit participant=${activity.entity_id} block=${ctx.block_height}`,
+      )
+      await setVtFlowRecordsParticipantSlashed(ctx.agent, String(activity.entity_id))
+    },
+  },
+  {
+    msg: 'RepayParticipantSlashedTrustDeposit',
+    handle: async (activity, ctx) => {
+      upsertParticipant(ctx.state, activity, { slashed: false })
+      ctx.agent.config.logger.info(
+        `[IndexerWS] RepayParticipantSlashedTrustDeposit entity=${activity.entity_id} block=${ctx.block_height}`,
       )
     },
   },
   {
-    msg: 'SlashPermissionTrustDeposit',
+    msg: 'CancelParticipantOPLastRequest',
     handle: async (activity, ctx) => {
-      upsertPermission(ctx.state, activity, { slashed: true })
+      upsertParticipant(ctx.state, activity, {})
       ctx.agent.config.logger.info(
-        `[IndexerWS] SlashPermissionTrustDeposit entity=${activity.entity_id} block=${ctx.block_height} — TODO §7.2: clean up associated flow state`,
+        `[IndexerWS] CancelParticipantOPLastRequest participant=${activity.entity_id} block=${ctx.block_height}`,
       )
-    },
-  },
-  {
-    msg: 'RepayPermissionSlashedTrustDeposit',
-    handle: async (activity, ctx) => {
-      upsertPermission(ctx.state, activity, { slashed: false })
-      ctx.agent.config.logger.info(
-        `[IndexerWS] RepayPermissionSlashedTrustDeposit entity=${activity.entity_id} block=${ctx.block_height}`,
-      )
-    },
-  },
-  {
-    msg: 'CancelPermissionVPLastRequest',
-    handle: async (activity, ctx) => {
-      upsertPermission(ctx.state, activity, {})
-      ctx.agent.config.logger.info(
-        `[IndexerWS] CancelPermissionVPLastRequest entity=${activity.entity_id} block=${ctx.block_height} — TODO §7.2: clean up associated flow state`,
-      )
+      await terminateVtFlowRecordsByApplicant(ctx.agent, String(activity.entity_id))
     },
   },
 ]

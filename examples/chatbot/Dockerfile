@@ -15,6 +15,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json tsconf
 COPY packages/model/package.json packages/model/package.json
 COPY packages/client/package.json packages/client/package.json
 COPY packages/agent-sdk/package.json packages/agent-sdk/package.json
+COPY packages/vt-flow/package.json packages/vt-flow/package.json
 COPY packages/plugin-mrtd/package.json packages/plugin-mrtd/package.json
 COPY examples/chatbot/package.json examples/chatbot/package.json
 
@@ -32,6 +33,10 @@ COPY packages/agent-sdk/src ./packages/agent-sdk/src
 COPY packages/agent-sdk/tsconfig.json packages/agent-sdk/tsconfig.json
 COPY packages/agent-sdk/tsconfig.build.json packages/agent-sdk/tsconfig.build.json
 
+COPY packages/vt-flow/src ./packages/vt-flow/src
+COPY packages/vt-flow/tsconfig.json packages/vt-flow/tsconfig.json
+COPY packages/vt-flow/tsconfig.build.json packages/vt-flow/tsconfig.build.json
+
 COPY packages/plugin-mrtd/src ./packages/plugin-mrtd/src
 COPY packages/plugin-mrtd/tsconfig.json packages/plugin-mrtd/tsconfig.json
 COPY packages/plugin-mrtd/tsconfig.build.json packages/plugin-mrtd/tsconfig.build.json
@@ -42,6 +47,7 @@ COPY examples/chatbot/index.ts examples/chatbot/index.ts
 
 RUN pnpm --filter @verana-labs/vs-agent-model build && \
     pnpm --filter @verana-labs/vs-agent-client build && \
+    pnpm --filter @verana-labs/credo-ts-didcomm-vt-flow build && \
     pnpm --filter @verana-labs/vs-agent-sdk build && \
     pnpm --filter @verana-labs/vs-agent-plugin-mrtd build && \
     pnpm --filter demo-chatbot build
@@ -65,6 +71,8 @@ COPY --from=build /www/packages/client/package.json ./packages/client/package.js
 COPY --from=build /www/packages/client/build ./packages/client/build
 COPY --from=build /www/packages/agent-sdk/package.json ./packages/agent-sdk/package.json
 COPY --from=build /www/packages/agent-sdk/build ./packages/agent-sdk/build
+COPY --from=build /www/packages/vt-flow/package.json ./packages/vt-flow/package.json
+COPY --from=build /www/packages/vt-flow/build ./packages/vt-flow/build
 COPY --from=build /www/packages/plugin-mrtd/package.json ./packages/plugin-mrtd/package.json
 COPY --from=build /www/packages/plugin-mrtd/build ./packages/plugin-mrtd/build
 COPY examples/chatbot/package.json ./examples/chatbot/package.json
