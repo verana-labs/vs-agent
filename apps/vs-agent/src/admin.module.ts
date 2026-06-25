@@ -10,6 +10,7 @@ import {
   InvitationController,
   PresentationsController,
   QrController,
+  ServiceEndpointsController,
   TrustController,
   TrustService,
   VsAgentController,
@@ -37,6 +38,7 @@ export class VsAgentModule {
       TrustController,
       ConnectionController,
       PresentationsController,
+      ServiceEndpointsController,
     ]
 
     const baseProviders = [
