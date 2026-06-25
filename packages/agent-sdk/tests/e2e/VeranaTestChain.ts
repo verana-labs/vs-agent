@@ -40,7 +40,6 @@ const {
 const PP_START_OP = '/verana.pp.v1.MsgStartParticipantOP'
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
 const PP_SESSION = '/verana.pp.v1.MsgCreateOrUpdateParticipantSession'
-const PP_TRIGGER_RESOLVER = '/verana.pp.v1.MsgTriggerResolver'
 
 export const PARTICIPANT_ROLE_ISSUER = 1
 
@@ -279,7 +278,7 @@ export class VeranaTestChain {
         validatorParticipantId: params.validatorParticipantId,
         did: params.did,
         vsOperator: params.vsOperator,
-        vsOperatorAuthzMsgTypes: [PP_SESSION, PP_TRIGGER_RESOLVER],
+        vsOperatorAuthzMsgTypes: [PP_SESSION],
       }),
     }
     // The root validator has a future effective_from; retry until it is ACTIVE.

@@ -90,9 +90,6 @@ describeE2E('vt-flow onboarding chain integration: dual-operator validate + 0/0 
       const onChain = await veranaChain.getParticipant(applicant.participantId)
       expect(onChain?.opState).toBe(ValidationState.VALIDATED)
 
-      const triggered = await veranaChain.triggerResolver(applicant.participantId)
-      expect(triggered.txHash).toMatch(/^[0-9A-F]{64}$/i)
-
       // V4 indexer REST: confirm the participant is indexed with the migrated wire fields
       // (/verana/pp/v1/get/:id, {participant} wrapper, op_state/op_summary_digest/validator_participant_id).
       const indexer = new VeranaIndexerService({
