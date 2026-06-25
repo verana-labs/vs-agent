@@ -232,9 +232,19 @@ async function publishDidDocument(
   await triggerResolverAfterMutation(agent)
 }
 
-// Wired in #419: after a DID Document change the agent SHOULD trigger an on-chain trust-resolution refresh (MOD-PP-MSG-15).
+// Best-effort: after a DID Document change, ask the chain to re-resolve trust (MOD-PP-MSG-15).
 async function triggerResolverAfterMutation(agent: VsAgent): Promise<void> {
-  agent.config.logger.debug('TriggerResolver gated; skipping until #419 ships')
+  const chain = agent.veranaChain
+  if (!chain || !chain.autoTriggerResolverEnabled || !agent.did) return
+  try {
+    const participantId = await chain.findActiveParticipantIdByDid(agent.did)
+    if (participantId === undefined) return
+    await chain.triggerResolver(participantId)
+  } catch (error) {
+    agent.config.logger.warn('[ServiceEndpoints] TriggerResolver failed; will refresh on next change', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 export async function listServiceEndpoints(agent: VsAgent): Promise<ServiceEndpoint[]> {
