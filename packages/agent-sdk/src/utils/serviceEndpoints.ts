@@ -237,7 +237,7 @@ async function triggerResolverAfterMutation(agent: VsAgent): Promise<void> {
   const chain = agent.veranaChain
   if (!chain || !chain.autoTriggerResolverEnabled || !agent.did) return
   try {
-    const participantId = await chain.findActiveParticipantIdByDid(agent.did)
+    const participantId = await chain.findActiveHolderParticipantIdByDid(agent.did)
     if (participantId === undefined) return
     await chain.triggerResolver(participantId)
   } catch (error) {
