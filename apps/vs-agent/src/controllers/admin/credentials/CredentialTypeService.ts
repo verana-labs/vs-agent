@@ -113,6 +113,44 @@ export class CredentialTypesService {
     await agent.genericRecords.update(revRegDefRecord)
   }
 
+  /**
+   * Revoke a credential by its revocation registry index: update the AnonCreds status list and
+   * publish the new status list entry so holders/verifiers resolve the revoked state. Shared by
+   * the credential-revocation message handler and the VT revoke endpoint.
+   */
+  public async revokeCredential(
+    agent: VsAgent,
+    revocationRegistryDefinitionId: string,
+    revocationRegistryIndex: number,
+  ): Promise<void> {
+    const uptStatusListResult = await agent.modules.anoncreds.updateRevocationStatusList({
+      revocationStatusList: {
+        revocationRegistryDefinitionId,
+        revokedCredentialIndexes: [revocationRegistryIndex],
+      },
+      options: {},
+    })
+
+    const revocationStatusList = uptStatusListResult.revocationStatusListState.revocationStatusList
+    if (!revocationStatusList) {
+      throw new Error('Failed to update revocation status list')
+    }
+
+    const statusRegistration = (
+      uptStatusListResult.registrationMetadata as { attestedResource?: Record<string, unknown> }
+    )?.attestedResource
+    if (!statusRegistration) {
+      throw new Error('Revocation status list attestedResource missing from registration metadata')
+    }
+
+    await this.appendStatusListToRevocationRegistry(
+      agent,
+      revocationRegistryDefinitionId,
+      statusRegistration,
+      revocationStatusList.timestamp,
+    )
+  }
+
   public async saveAttestedResource(agent: VsAgent, resource: Record<string, unknown>, tags?: Tags) {
     if (!resource) return
     return await agent.genericRecords.save({

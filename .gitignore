@@ -17,3 +17,7 @@ packages/**/test/logs
 Chart.lock
 
 CLAUDE.md
+
+# Editor and agent config (not shared)
+.claude/
+.vscode/
