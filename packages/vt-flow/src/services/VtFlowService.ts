@@ -33,6 +33,7 @@ export interface CreateOnboardingRequestParams {
   agentParticipantId: string
   walletAgentParticipantId: string
   claims?: Record<string, unknown>
+  peerPublicDid?: string
 }
 
 export interface CreateIssuanceRequestParams {
@@ -42,6 +43,7 @@ export interface CreateIssuanceRequestParams {
   agentParticipantId: string
   walletAgentParticipantId: string
   claims?: Record<string, unknown>
+  peerPublicDid?: string
 }
 
 export interface SendOobLinkParams extends Omit<OobLinkMessageOptions, 'threadId' | 'id'> {}
@@ -102,6 +104,7 @@ export class VtFlowService {
       walletAgentParticipantId: params.walletAgentParticipantId,
       participantId: params.participantId,
       claims: params.claims,
+      peerPublicDid: params.peerPublicDid,
     })
 
     await this.repository.save(agentContext, record)
@@ -134,6 +137,7 @@ export class VtFlowService {
       walletAgentParticipantId: params.walletAgentParticipantId,
       schemaId: params.schemaId,
       claims: params.claims,
+      peerPublicDid: params.peerPublicDid,
     })
 
     await this.repository.save(agentContext, record)
@@ -147,7 +151,9 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    await this.assertVerifiableService(agentContext, connection.id)
+    const peerDid = connection.theirDid
+    if (!peerDid) throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
+    await this.assertVerifiableService(agentContext, peerDid, connection.id)
 
     const existing = await this.repository.findByParticipantSessionId(
       agentContext,
@@ -157,6 +163,7 @@ export class VtFlowService {
     if (existing) {
       existing.connectionId = connection.id
       existing.threadId = message.threadId
+      existing.peerPublicDid = existing.peerPublicDid ?? peerDid
       await this.repository.update(agentContext, existing)
       return existing
     }
@@ -172,6 +179,7 @@ export class VtFlowService {
       walletAgentParticipantId: message.walletAgentParticipantId,
       participantId: message.participantId,
       claims: message.claims,
+      peerPublicDid: peerDid,
     })
 
     await this.repository.save(agentContext, record)
@@ -185,7 +193,9 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    await this.assertVerifiableService(agentContext, connection.id)
+    const peerDid = connection.theirDid
+    if (!peerDid) throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
+    await this.assertVerifiableService(agentContext, peerDid, connection.id)
 
     const existing = await this.repository.findByParticipantSessionId(
       agentContext,
@@ -195,6 +205,7 @@ export class VtFlowService {
     if (existing) {
       existing.connectionId = connection.id
       existing.threadId = message.threadId
+      existing.peerPublicDid = existing.peerPublicDid ?? connection.theirDid
       await this.repository.update(agentContext, existing)
       return existing
     }
@@ -210,6 +221,7 @@ export class VtFlowService {
       walletAgentParticipantId: message.walletAgentParticipantId,
       schemaId: message.schemaId,
       claims: message.claims,
+      peerPublicDid: connection.theirDid,
     })
 
     await this.repository.save(agentContext, record)
@@ -548,6 +560,11 @@ export class VtFlowService {
     this.emitStateChanged(agentContext, record, previousState)
   }
 
+  /** Persist record changes without state-transition semantics (no event emitted). */
+  public async updateRecord(agentContext: AgentContext, record: VtFlowRecord): Promise<void> {
+    await this.repository.update(agentContext, record)
+  }
+
   private emitStateChanged(
     agentContext: AgentContext,
     record: VtFlowRecord,
@@ -578,26 +595,29 @@ export class VtFlowService {
   }
 
   /** Spec Verifiable Service Identity Check: invokes the caller-provided VS-CONN-VS hook. Throws `vt-flow.not-a-verifiable-service` when the peer fails the check. When no hook is configured, logs a warning and permits. */
-  public async assertVerifiableService(agentContext: AgentContext, connectionId: string): Promise<void> {
+  public async assertVerifiableService(
+    agentContext: AgentContext,
+    peerDid: string,
+    connectionId: string,
+  ): Promise<void> {
     const hook = this.config.assertVerifiableService
     if (!hook) {
       this.logger.warn(
-        `[vt-flow] assertVerifiableService hook not configured; skipping VS-CONN-VS check for connection '${connectionId}'. Configure VtFlowModuleConfig.assertVerifiableService for spec-conformant trust resolution.`,
+        `[vt-flow] assertVerifiableService hook not configured; skipping VS-CONN-VS check for peer '${peerDid}'. Configure VtFlowModuleConfig.assertVerifiableService for spec-conformant trust resolution.`,
       )
       return
     }
     let permitted = false
     try {
-      permitted = await hook({ agentContext, connectionId })
+      permitted = await hook({ agentContext, peerDid, connectionId })
     } catch (error) {
       throw new CredoError(
-        `vt-flow.not-a-verifiable-service: peer connection '${connectionId}' failed VS-CONN-VS check (${(error as Error).message})`,
+        `vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check (${(error as Error).message})`,
       )
     }
     if (!permitted) {
-      throw new CredoError(
-        `vt-flow.not-a-verifiable-service: peer connection '${connectionId}' failed VS-CONN-VS check`,
-      )
+      throw new CredoError(`vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check`)
     }
   }
+
 }

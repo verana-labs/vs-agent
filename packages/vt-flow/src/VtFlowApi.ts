@@ -47,7 +47,11 @@ export class VtFlowApi {
   public async sendOnboardingRequest(options: SendOnboardingRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
     connection.assertReady()
-    await this.vtFlowService.assertVerifiableService(this.agentContext, connection.id)
+    const peerDid = connection.theirDid
+    if (!peerDid) {
+      throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
+    }
+    await this.vtFlowService.assertVerifiableService(this.agentContext, peerDid, connection.id)
 
     const participantSessionId = options.participantSessionId ?? utils.uuid()
 
@@ -58,6 +62,7 @@ export class VtFlowApi {
       agentParticipantId: options.agentParticipantId,
       walletAgentParticipantId: options.walletAgentParticipantId,
       claims: options.claims,
+      peerPublicDid: peerDid,
     })
 
     const outboundMessageContext = await getOutboundDidCommMessageContext(this.agentContext, {
@@ -73,7 +78,11 @@ export class VtFlowApi {
   public async sendIssuanceRequest(options: SendIssuanceRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
     connection.assertReady()
-    await this.vtFlowService.assertVerifiableService(this.agentContext, connection.id)
+    const peerDid = connection.theirDid
+    if (!peerDid) {
+      throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
+    }
+    await this.vtFlowService.assertVerifiableService(this.agentContext, peerDid, connection.id)
 
     const participantSessionId = options.participantSessionId ?? utils.uuid()
 
@@ -84,6 +93,7 @@ export class VtFlowApi {
       agentParticipantId: options.agentParticipantId,
       walletAgentParticipantId: options.walletAgentParticipantId,
       claims: options.claims,
+      peerPublicDid: peerDid,
     })
 
     const outboundMessageContext = await getOutboundDidCommMessageContext(this.agentContext, {
