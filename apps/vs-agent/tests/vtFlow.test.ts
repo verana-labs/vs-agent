@@ -2,7 +2,7 @@ import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { VtFlowOrchestrator, type VsAgent } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { startAgent } from './__mocks__'
 import { FakeDidResolver } from './__mocks__/fakeDidResolver'
@@ -251,5 +251,99 @@ describe('vt-flow: two-agent integration', () => {
       await new Promise(r => setTimeout(r, 100))
     }
     expect(validatorTheirDid).toBe(applicantConnAfter.did)
+  })
+})
+
+/**
+ * VS-CONN-VS trust gate: when an `assertVerifiableService` hook is configured, vt-flow runs trust
+ * resolution on the peer's public DID before acting. `resolveDID` (delegated to `@verana-labs/verre`
+ * in production) is mocked to always approve, so this only checks that a verified peer is let through
+ * and that both sides resolve the right DID: the Applicant the Validator (VS-SVC-4) on send, and the
+ * Validator the Applicant (VS-CONN-VS) on receive.
+ */
+describe('vt-flow: VS-CONN-VS trust gate (verre approves)', () => {
+  let applicant: VsAgent<any>
+  let validator: VsAgent<any>
+  let applicantConnection: DidCommConnectionRecord
+  let validatorEvents: ReturnType<typeof vi.spyOn>
+  let resolveDID: Mock<(did: string) => Promise<{ verified: boolean; outcome: string }>>
+  const sharedResolver = new FakeDidResolver()
+
+  beforeEach(async () => {
+    resolveDID = vi.fn().mockResolvedValue({ verified: true, outcome: 'resolved' })
+    const assertVerifiableService = async ({ peerDid }: { peerDid: string }) =>
+      (await resolveDID(peerDid)).verified
+
+    const applicantMessages = new Subject<SubjectMessage>()
+    const validatorMessages = new Subject<SubjectMessage>()
+    const subjectMap = {
+      'rxjs:applicant': applicantMessages,
+      'rxjs:validator': validatorMessages,
+    }
+
+    applicant = await startAgent({
+      label: 'Applicant',
+      domain: 'applicant',
+      vtFlowOptions: { assertVerifiableService },
+      didcommVersions: ['v1', 'v2'],
+    })
+    applicant.didcomm.registerInboundTransport(new SubjectInboundTransport(applicantMessages))
+    applicant.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+    applicant.dids.config.resolvers.unshift(sharedResolver)
+    await applicant.initialize()
+    await sharedResolver.registerAgent(applicant)
+
+    validator = await startAgent({
+      label: 'Validator',
+      domain: 'validator',
+      vtFlowOptions: {
+        autoAcceptIssuanceRequest: true,
+        autoMarkValidated: true,
+        autoOfferCredential: false,
+        assertVerifiableService,
+      },
+      didcommVersions: ['v1', 'v2'],
+    })
+    validator.didcomm.registerInboundTransport(new SubjectInboundTransport(validatorMessages))
+    validator.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+    validator.dids.config.resolvers.unshift(sharedResolver)
+    await validator.initialize()
+    await sharedResolver.registerAgent(validator)
+    validatorEvents = vi.spyOn(validator.events, 'emit')
+
+    const { connectionRecord } = await applicant.didcomm.oob.receiveImplicitInvitation({
+      did: validator.did,
+      label: applicant.label,
+      didCommVersion: 'v2',
+      ourDid: applicant.did,
+    })
+    if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
+    applicantConnection = await applicant.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
+  }, 30_000)
+
+  afterEach(async () => {
+    await applicant?.shutdown()
+    await validator?.shutdown()
+    vi.restoreAllMocks()
+  })
+
+  it('resolves both peers and proceeds to VALIDATING when verre approves', async () => {
+    const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+
+    const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
+      connectionId: applicantConnection.id,
+      schemaId: 'https://example.test/schemas/organization.json',
+      agentParticipantId: 'agent-participant-gate',
+      walletAgentParticipantId: 'wallet-agent-participant-gate',
+    })
+    expect(applicantRecord.state).toBe(VtFlowState.IrSent)
+
+    expect(resolveDID).toHaveBeenCalledWith(validator.did)
+
+    const validatingEvent = await validatingReached
+    const validatorRecord = await validator.modules.vtFlow.findById(validatingEvent.payload.vtFlowRecordId)
+    expect(validatorRecord?.state).toBe(VtFlowState.Validating)
+
+    expect(resolveDID).toHaveBeenCalledWith(applicant.did)
   })
 })

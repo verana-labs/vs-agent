@@ -5,7 +5,6 @@ import { LogLevel, ParsedDid } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
-import { setupVtFlow } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
   createVsAgent,
   HttpInboundTransport,
@@ -16,7 +15,12 @@ import {
 import express from 'express'
 import WebSocket from 'ws'
 
-import { AGENT_DIDCOMM_VERSIONS, ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
+import {
+  AGENT_DIDCOMM_VERSIONS,
+  ENABLE_PUBLIC_API_SWAGGER,
+  ENABLED_PLUGINS,
+  VERANA_INDEXER_BASE_URL,
+} from '../config'
 import { MessageService } from '../controllers/admin/message/MessageService'
 
 import { TsLogger } from './logger'
@@ -88,10 +92,12 @@ export const setupAgent = async ({
         publicApiBaseUrl,
         endpoints,
         didcommVersions,
+        verifiablePublicRegistries: VERANA_INDEXER_BASE_URL
+          ? [{ id: 'verana', baseUrls: [VERANA_INDEXER_BASE_URL], production: false }]
+          : undefined,
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol({ masterListCscaLocation })] : []),
-      ...(ENABLED_PLUGINS.includes('vt-flow') ? [setupVtFlow()] : []),
     ],
     config: {
       logger,
