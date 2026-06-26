@@ -205,7 +205,6 @@ describe('vt-flow: two-agent integration', () => {
 
     await validator.modules.vtFlow.sendValidating(validatorRecord.id)
 
-    // Ensure the applicant has fully processed the validating message before afterEach closes the wallet.
     await waitForEvent(applicantEvents, (ev: unknown): ev is unknown => {
       const e = ev as any
       return e?.type === 'DidCommMessageProcessed' && String(e?.payload?.message?.type).includes('validating')
@@ -327,7 +326,8 @@ describe('vt-flow: VS-CONN-VS trust gate (verre approves)', () => {
     vi.restoreAllMocks()
   })
 
-  it('resolves both peers and proceeds to VALIDATING when verre approves', async () => {
+  it('resolves both peers, proceeds to VALIDATING and rotates the Validator when verre approves', async () => {
+    const applicantEvents = vi.spyOn(applicant.events, 'emit')
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
     const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
@@ -345,5 +345,18 @@ describe('vt-flow: VS-CONN-VS trust gate (verre approves)', () => {
     expect(validatorRecord?.state).toBe(VtFlowState.Validating)
 
     expect(resolveDID).toHaveBeenCalledWith(applicant.did)
+
+    const webvhDid = validator.did
+    await validator.modules.vtFlow.sendValidating(validatorRecord!.id)
+
+    await waitForEvent(applicantEvents, (ev: unknown): ev is unknown => {
+      const e = ev as any
+      return e?.type === 'DidCommMessageProcessed' && String(e?.payload?.message?.type).includes('validating')
+    })
+
+    const conn = await validator.didcomm.connections.getById(validatorRecord!.connectionId)
+    expect(conn.did).not.toContain('did:webvh:')
+    expect(conn.did).toContain('did:peer:')
+    expect(conn.previousDids).toContain(webvhDid)
   })
 })
