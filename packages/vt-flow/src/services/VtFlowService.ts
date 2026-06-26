@@ -619,5 +619,4 @@ export class VtFlowService {
       throw new CredoError(`vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check`)
     }
   }
-
 }
