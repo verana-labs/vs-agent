@@ -50,6 +50,8 @@ import {
   askarPostgresConfig,
   keyDerivationMethodMap,
   DEFAULT_AGENT_ENDPOINTS,
+  ADMIN_API_AUTH_MODE,
+  ADMIN_API_PUBLIC_URL,
   DEFAULT_PUBLIC_API_BASE_URL,
   ENABLED_PLUGINS,
   EVENTS_BASE_URL,
@@ -157,6 +159,20 @@ const run = async () => {
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
+  if (ADMIN_API_PUBLIC_URL && !ADMIN_API_AUTH_MODE.includes('corporation')) {
+    serverLogger.error(
+      'ADMIN_API_PUBLIC_URL must not be set unless ADMIN_API_AUTH_MODE includes "corporation"',
+    )
+    process.exit(1)
+  }
+  if (ADMIN_API_AUTH_MODE.includes('corporation') && !ADMIN_API_PUBLIC_URL) {
+    serverLogger.error('ADMIN_API_PUBLIC_URL is required when ADMIN_API_AUTH_MODE includes "corporation"')
+    process.exit(1)
+  }
+  const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE.includes('corporation')
+    ? ADMIN_API_PUBLIC_URL
+    : undefined
+
   // Dynamically load optional plugin packages.
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
   const [chatModule, mrtdModule] = await Promise.all([
@@ -227,6 +243,7 @@ const run = async () => {
     masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
     veranaChain,
+    adminApiServiceEndpoint,
   })
 
   const conf: ServerConfig = {

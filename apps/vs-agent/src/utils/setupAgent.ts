@@ -35,6 +35,7 @@ export const setupAgent = async ({
   autoUpdateStorageOnStartup,
   veranaChain,
   discoveryOptions,
+  adminApiServiceEndpoint,
 }: {
   port: number
   walletConfig: AskarModuleConfigStoreOptions
@@ -49,6 +50,7 @@ export const setupAgent = async ({
   autoUpdateStorageOnStartup?: boolean
   veranaChain?: VeranaChainService
   discoveryOptions?: DidCommFeatureQueryOptions[]
+  adminApiServiceEndpoint?: string
 }) => {
   const logger = new TsLogger(logLevel ?? LogLevel.Warn, 'Agent')
   const publicDid = parsedDid?.did
@@ -107,6 +109,7 @@ export const setupAgent = async ({
     label,
     veranaChain,
     discoveryOptions,
+    adminApiServiceEndpoint,
   })
 
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
