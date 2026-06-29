@@ -25,6 +25,7 @@ export {
   getTailsDirectoryPath,
   deleteTailsFile,
   isValidTailsFileName,
+  migrateLegacyTailsFiles,
 } from './credentials/FullTailsFileService'
 
 // Utils
