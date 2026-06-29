@@ -193,6 +193,13 @@ const run = async () => {
       logger: serverLogger,
     })
     await veranaChain.start()
+
+    const balance = await veranaChain.getBalance()
+    if (Number(balance.amount) === 0) {
+      serverLogger.warn(
+        `[VeranaChain] Operator account ${veranaChain.address} has zero ${balance.denom} balance; on-chain operations will fail until it is funded.`,
+      )
+    }
   } else {
     serverLogger.warn(
       'VERANA_RPC_ENDPOINT_URL or VERANA_ACCOUNT_MNEMONIC not set. Verana blockchain features will be disabled. Set these environment variables to enable on-chain capabilities.',

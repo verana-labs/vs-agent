@@ -12,6 +12,7 @@ import { connectComet } from '@cosmjs/tendermint-rpc'
 import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
 
 import {
+  Coin,
   CreateOrUpdateParticipantSessionParams,
   Participant,
   ParticipantQueryClient,
@@ -120,6 +121,10 @@ export class VeranaChainService {
   async getParticipant(id: number): Promise<Participant | undefined> {
     const result = await this.ppQuery.GetParticipant({ id })
     return result.participant ? mapParticipant(result.participant) : undefined
+  }
+
+  async getBalance(denom = 'uvna'): Promise<Coin> {
+    return this.signingClient.getBalance(this.operatorAddress, denom)
   }
 
   // Transaction API (signed)
