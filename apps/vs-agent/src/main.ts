@@ -95,7 +95,6 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
-  const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
 
   const webSocketServer = agent.didcomm.inboundTransports
     .find(x => x instanceof VsAgentWsInboundTransport)
@@ -108,15 +107,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   const httpServer = httpInboundTransport ? httpInboundTransport.server : await publicApp.listen(AGENT_PORT)
 
-  // Add WebSocket support if required
-  if (enableWs) {
-    httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
-      webSocketServer?.handleUpgrade(request, socket as Socket, head, socketParam => {
-        const socketId = utils.uuid()
-        webSocketServer?.emit('connection', socketParam, request, socketId)
-      })
-    })
-  }
+  return { httpServer, webSocketServer }
 }
 
 const run = async () => {
@@ -244,7 +235,7 @@ const run = async () => {
     endpoints,
     nestPlugins,
   }
-  await startServers(agent, conf)
+  const { httpServer, webSocketServer } = await startServers(agent, conf)
 
   // Initialize Self-Trust Registry
   if (agent.did)
@@ -284,6 +275,15 @@ const run = async () => {
       agent,
     })
     await indexerWs.start()
+  }
+
+  // Accept incoming DIDComm only after the catch-up, so the agent does not act on stale chain state.
+  if (webSocketServer) {
+    httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
+      webSocketServer.handleUpgrade(request, socket, head, client => {
+        webSocketServer.emit('connection', client, request, utils.uuid())
+      })
+    })
   }
 
   agent.config.logger.info(
