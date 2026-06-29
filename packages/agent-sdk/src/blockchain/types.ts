@@ -135,6 +135,8 @@ export interface VeranaSyncState {
   ecosystems: Record<string, SyncedEcosystem>
   credentialSchemas: Record<string, SyncedCredentialSchema>
   participants: Record<string, SyncedParticipant>
+  partialBlock?: number
+  partialKeys?: string[]
 }
 
 export interface EcosystemDto {
