@@ -185,10 +185,17 @@ const run = async () => {
     })
     await veranaChain.start()
 
-    const balance = await veranaChain.getBalance()
-    if (Number(balance.amount) === 0) {
+    try {
+      const balance = await veranaChain.getBalance()
+      const authorized = await veranaChain.hasVsOperatorAuthorization()
+      if (!authorized && Number(balance.amount) === 0) {
+        serverLogger.warn(
+          `[VeranaChain] Operator account ${veranaChain.address} has no VSOperatorAuthorization and zero ${balance.denom} balance; on-chain operations will fail until it is granted authorization or funded.`,
+        )
+      }
+    } catch (error) {
       serverLogger.warn(
-        `[VeranaChain] Operator account ${veranaChain.address} has zero ${balance.denom} balance; on-chain operations will fail until it is funded.`,
+        `[VeranaChain] Could not check operator authorization/balance: ${(error as Error).message}`,
       )
     }
   } else {

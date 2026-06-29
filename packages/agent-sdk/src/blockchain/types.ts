@@ -191,6 +191,14 @@ export interface ParticipantQueryClient {
   GetParticipantSession(req: { id: string }): Promise<{ session?: unknown }>
 }
 
+export interface DelegationQueryClient {
+  ListVSOperatorAuthorizations(req: {
+    corporationId: number
+    vsOperator: string
+    responseMaxSize: number
+  }): Promise<{ vsOperatorAuthorizations: unknown[] }>
+}
+
 export interface VeranaChainConfig {
   rpcUrl: string
   chainId?: string
