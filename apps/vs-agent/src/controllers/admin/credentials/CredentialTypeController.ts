@@ -191,7 +191,7 @@ export class CredentialTypesController {
   /**
    * Delete a revocation registry definition and its associated records
    */
-  @Delete('/revocationRegistry')
+  @Delete(['/revocation-registry', '/revocationRegistry'])
   @ApiOperation({ summary: 'Delete a revocation registry definition and its associated records' })
   @ApiQuery({
     name: 'revocationRegistryDefinitionId',
@@ -508,7 +508,7 @@ export class CredentialTypesController {
    * @param credentialDefinitionId
    * @returns RevocationTypeInfo
    */
-  @Post('/revocationRegistry')
+  @Post(['/revocation-registry', '/revocationRegistry'])
   @ApiOperation({ summary: 'Create a new revocation registry definition' })
   @ApiBody({
     description: 'Options to create a revocation registry',
@@ -614,7 +614,7 @@ export class CredentialTypesController {
    *
    * @returns string[] with revocationRegistryDefinitionIds
    */
-  @Get('/revocationRegistry')
+  @Get(['/revocation-registry', '/revocationRegistry'])
   @ApiOperation({ summary: 'List revocation registry definitions' })
   @ApiQuery({
     name: 'credentialDefinitionId',
