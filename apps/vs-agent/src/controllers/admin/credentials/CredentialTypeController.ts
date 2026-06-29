@@ -191,8 +191,11 @@ export class CredentialTypesController {
   /**
    * Delete a revocation registry definition and its associated records
    */
-  @Delete('/revocationRegistry')
-  @ApiOperation({ summary: 'Delete a revocation registry definition and its associated records' })
+  @Delete(['/revocation-registry', '/revocationRegistry'])
+  @ApiOperation({
+    summary: 'Delete a revocation registry definition and its associated records',
+    description: 'The "/revocationRegistry" path is deprecated. Use "/revocation-registry".',
+  })
   @ApiQuery({
     name: 'revocationRegistryDefinitionId',
     description: 'Identifier of the revocation registry definition to delete',
@@ -508,8 +511,11 @@ export class CredentialTypesController {
    * @param credentialDefinitionId
    * @returns RevocationTypeInfo
    */
-  @Post('/revocationRegistry')
-  @ApiOperation({ summary: 'Create a new revocation registry definition' })
+  @Post(['/revocation-registry', '/revocationRegistry'])
+  @ApiOperation({
+    summary: 'Create a new revocation registry definition',
+    description: 'The "/revocationRegistry" path is deprecated. Use "/revocation-registry".',
+  })
   @ApiBody({
     description: 'Options to create a revocation registry',
     type: CreateRevocationRegistryDto,
@@ -614,8 +620,11 @@ export class CredentialTypesController {
    *
    * @returns string[] with revocationRegistryDefinitionIds
    */
-  @Get('/revocationRegistry')
-  @ApiOperation({ summary: 'List revocation registry definitions' })
+  @Get(['/revocation-registry', '/revocationRegistry'])
+  @ApiOperation({
+    summary: 'List revocation registry definitions',
+    description: 'The "/revocationRegistry" path is deprecated. Use "/revocation-registry".',
+  })
   @ApiQuery({
     name: 'credentialDefinitionId',
     required: false,
