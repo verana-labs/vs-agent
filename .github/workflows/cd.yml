@@ -3,6 +3,12 @@ name: Continuous Deployment
 on:
   push:
     branches: [main, 'release/**']
+  workflow_dispatch:
+    inputs:
+      notify_tag:
+        description: "Release tag to (re)announce on Discord, e.g. v1.2.0"
+        required: true
+        type: string
 
 permissions:
   id-token: write   # Required for OIDC
@@ -12,7 +18,8 @@ permissions:
 
 jobs:
   resolve-version:
-    uses: 2060-io/organization/.github/workflows/resolve-version-call.yml@main
+    if: github.event_name == 'push'
+    uses: 2060-io/organization/.github/workflows/resolve-version-call.yml@5f813454d8962db006c4e4466f3af1cf4af8dfa4 # main
 
   docker:
     needs: resolve-version
@@ -42,7 +49,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Compute tags
         id: tags
@@ -68,13 +75,13 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Docker login
-        uses: docker/login-action@v2
+        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2.2.0
         with:
           username: ${{ secrets.DOCKER_HUB_LOGIN }}
           password: ${{ secrets.DOCKER_HUB_PWD }}
 
       - name: Build & push ${{ matrix.image }}
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -94,10 +101,10 @@ jobs:
       RELEASE_PATCH: ${{ needs.resolve-version.outputs.release-patch }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Docker login
-        uses: docker/login-action@v2
+        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2.2.0
         with:
           username: ${{ secrets.DOCKER_HUB_LOGIN }}
           password: ${{ secrets.DOCKER_HUB_PWD }}
@@ -146,11 +153,11 @@ jobs:
       RELEASE_VERSION: ${{ needs.resolve-version.outputs.release-version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       # Pnpm version has been pinned in package.json
       - name: Setup node v22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22.14.0'
           registry-url: 'https://registry.npmjs.org'
@@ -174,3 +181,24 @@ jobs:
         run: |
           pnpm -r publish --no-git-checks --access public
 
+
+  discord-notify:
+    needs: [resolve-version, docker, helm]
+    if: needs.resolve-version.outputs.new-release-published == 'true' && needs.resolve-version.outputs.release-type == 'stable'
+    permissions:
+      contents: read
+    uses: 2060-io/organization/.github/workflows/discord-release-notify-call.yml@5f813454d8962db006c4e4466f3af1cf4af8dfa4 # main
+    with:
+      tag_name: ${{ needs.resolve-version.outputs.release-version }}
+    secrets:
+      DISCORD_UPDATES_WEBHOOK_URL: ${{ secrets.DISCORD_UPDATES_WEBHOOK_URL }}
+
+  discord-notify-manual:
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+    uses: 2060-io/organization/.github/workflows/discord-release-notify-call.yml@5f813454d8962db006c4e4466f3af1cf4af8dfa4 # main
+    with:
+      tag_name: ${{ inputs.notify_tag }}
+    secrets:
+      DISCORD_UPDATES_WEBHOOK_URL: ${{ secrets.DISCORD_UPDATES_WEBHOOK_URL }}

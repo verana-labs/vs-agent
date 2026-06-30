@@ -1,3 +1,4 @@
+import '@openwallet-foundation/askar-nodejs'
 import { vi } from 'vitest'
 
 import { mockResponses } from './object'

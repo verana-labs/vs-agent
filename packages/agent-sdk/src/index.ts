@@ -1,6 +1,6 @@
 // Agent
 export * from './agent'
-export type { Plugin } from './types'
+export * from './types'
 
 // Events
 export * from './events'
@@ -8,10 +8,6 @@ export * from './events'
 // Plugins
 export { setupBaseDidComm } from './plugins/setupBaseDidComm'
 export type { BaseDidCommPlugin, BaseDidCommPluginOptions } from './plugins/setupBaseDidComm'
-
-// NestJS integration
-export type { VsAgentNestPlugin, MessageHandler } from './types'
-export { MESSAGE_HANDLERS } from './types'
 
 // DID utilities
 export { CachedWebDidResolver } from './did/CachedWebDidResolver'
@@ -35,3 +31,4 @@ export {
 export * from './utils'
 
 export * from './blockchain'
+export * from './vtFlow'

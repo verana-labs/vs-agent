@@ -27,3 +27,5 @@ export interface VsAgentNestPlugin {
   imports?: any[]
   registerEvents?: (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => void
 }
+
+export const ISSUER_PARTICIPANT_TYPE = 1

@@ -48,11 +48,11 @@ import {
   AGENT_WALLET_KEY,
   AGENT_WALLET_KEY_DERIVATION_METHOD,
   askarPostgresConfig,
+  keyDerivationMethodMap,
   DEFAULT_AGENT_ENDPOINTS,
   DEFAULT_PUBLIC_API_BASE_URL,
   ENABLED_PLUGINS,
   EVENTS_BASE_URL,
-  keyDerivationMethodMap,
   POSTGRES_HOST,
   PUBLIC_API_BASE_URL,
   USE_CORS,
@@ -64,7 +64,7 @@ import {
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
 } from './config'
-import { MessagingPlugin } from './plugins'
+import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { commonAppConfig, type ServerConfig, setupAgent, TsLogger, webhookEvent } from './utils'
 
@@ -180,6 +180,7 @@ const run = async () => {
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
     ...(chatModule ? [chatModule.ChatPlugin] : []),
     ...(mrtdModule ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })] : []),
+    VtFlowNestPlugin,
   ]
 
   // Connect to Verana blockchain for on-chain transactions
@@ -276,6 +277,13 @@ const run = async () => {
       agent,
     })
     await indexerWs.start()
+  }
+
+  // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
+  if (!VERANA_INDEXER_BASE_URL || !VERANA_CHAIN_ID) {
+    serverLogger.warn(
+      'VERANA_INDEXER_BASE_URL or VERANA_CHAIN_ID not set. The VS-CONN-VS trust gate is disabled and every peer will be accepted. Set these environment variables to enforce trust resolution.',
+    )
   }
 
   agent.config.logger.info(

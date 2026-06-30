@@ -53,6 +53,7 @@ These are variables that you are likely to use when going into production, since
 | POSTGRES_ADMIN_PASSWORD | PosgreSQL database admin password                                                                                           | None              |
 | REDIS_HOST              | Redis host used for message caching and asynchronous processing. The system requires this for production-ready performance. | None              |
 | REDIS_PASSWORD          | Password for connecting to the Redis instance.                                                                              | None              |
+| TAILS_DIRECTORY_PATH    | Directory where AnonCreds revocation tails files are stored and served from. Must be on durable storage that survives restarts. | `<home>/.afj/tails` |
 
 VS Agent supports two database backends:
 

@@ -17,7 +17,7 @@ export interface CredentialStateChangeMessageOptions {
   reason?: string
 }
 
-/** Spec v4 §5.3 `credential-state-change`; Validator => Applicant post-issuance notification referencing the IC V2 subprotocol `thid`. */
+/** Spec `credential-state-change`; Validator => Applicant post-issuance notification referencing the IC V2 subprotocol `thid`. */
 export class CredentialStateChangeMessage extends DidCommMessage {
   public constructor(options: CredentialStateChangeMessageOptions) {
     super()

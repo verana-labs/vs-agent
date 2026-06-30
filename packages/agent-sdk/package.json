@@ -28,20 +28,22 @@
     "compile": "tsc -p tsconfig.build.json",
     "prepublishOnly": "pnpm run build",
     "version": "pnpm version --allow-same-version",
-    "test": "vitest"
+    "test": "vitest",
+    "test:e2e": "RUN_FLOW_E2E=1 vitest run tests/e2e"
   },
   "dependencies": {
     "@cosmjs/proto-signing": "^0.32.3",
     "@cosmjs/stargate": "^0.32.3",
     "@cosmjs/tendermint-rpc": "^0.32.4",
-    "@credo-ts/anoncreds": "0.7.1-pr-2704-20260519192541",
-    "@credo-ts/askar": "0.7.1-pr-2704-20260519192541",
-    "@credo-ts/core": "0.7.1-pr-2704-20260519192541",
-    "@credo-ts/didcomm": "0.7.1-pr-2704-20260519192541",
-    "@credo-ts/webvh": "0.7.1-pr-2704-20260519192541",
+    "@credo-ts/anoncreds": "0.7.1-pr-2704-20260630143332",
+    "@credo-ts/askar": "0.7.1-pr-2704-20260630143332",
+    "@credo-ts/core": "0.7.1-pr-2704-20260630143332",
+    "@credo-ts/didcomm": "0.7.1-pr-2704-20260630143332",
+    "@credo-ts/webvh": "0.7.1-pr-2704-20260630143332",
     "@hyperledger/anoncreds-nodejs": "^0.4.0",
     "@openwallet-foundation/askar-nodejs": "^0.6.0",
-    "@verana-labs/verana-types": "0.10.1-dev.11",
+    "@verana-labs/verana-types": "0.10.1-dev.16",
+    "@verana-labs/verre": "0.3.2-dev.1",
     "@verana-labs/credo-ts-didcomm-vt-flow": "workspace:*",
     "@verana-labs/vs-agent-model": "workspace:*",
     "ajv": "^8.17.1",
@@ -53,10 +55,11 @@
     "tsyringe": "4.8.0"
   },
   "peerDependencies": {
-    "@credo-ts/core": "0.7.1-pr-2704-20260519192541",
-    "@credo-ts/node": "0.7.1-pr-2704-20260519192541"
+    "@credo-ts/core": "0.7.1-pr-2704-20260630143332",
+    "@credo-ts/node": "0.7.1-pr-2704-20260630143332"
   },
   "devDependencies": {
+    "testcontainers": "^12.0.3",
     "ts-node-dev": "^2.0.0"
   }
 }

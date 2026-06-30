@@ -21,7 +21,7 @@ import {
 import { WebVhAnonCredsRegistry, WebVhDidRegistrar, WebVhDidResolver } from '@credo-ts/webvh'
 import { anoncreds } from '@hyperledger/anoncreds-nodejs'
 import { askar } from '@openwallet-foundation/askar-nodejs'
-import { VtFlowModule, VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { VtFlowModule, type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { DidWebAnonCredsRegistry } from 'credo-ts-didweb-anoncreds'
 
 import { BaseAgentModules } from '../agent/VsAgent'
@@ -44,7 +44,7 @@ export interface BaseDidCommPlugin {
 }
 
 /**
- * Sets up the base DIDComm module: connections, OOB, credential exchange, and proof exchange.
+ * Sets up the base DIDComm module: connections, OOB, credential exchange, proof exchange, and vt-flow.
  * For chat protocols, add setupChatProtocols(). For eMRTD, add setupMrtdProtocol().
  */
 export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidCommPlugin {
@@ -112,7 +112,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
       w3cCredentials: new W3cCredentialsModule({
         documentLoader: defaultDocumentLoader,
       }),
-      vtFlow: new VtFlowModule(options.vtFlow),
+      vtFlow: new VtFlowModule({ ...options.vtFlow }),
     },
   }
 }

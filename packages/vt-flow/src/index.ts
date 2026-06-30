@@ -12,20 +12,20 @@ export type {
   OfferCredentialForSessionOptions,
   ProblemReportDispatchOptions,
   SendIssuanceRequestOptions,
+  SendOnboardingRequestOptions,
   SendOobLinkOptions,
-  SendValidationRequestOptions,
   VtFlowStateChangedEvent,
 } from './types'
 
 // Wire messages
 export {
   VT_FLOW_PROTOCOL_URI,
-  VT_FLOW_VALIDATION_REQUEST_TYPE,
+  VT_FLOW_ONBOARDING_REQUEST_TYPE,
   VT_FLOW_ISSUANCE_REQUEST_TYPE,
   VT_FLOW_OOB_LINK_TYPE,
   VT_FLOW_VALIDATING_TYPE,
   VT_FLOW_CREDENTIAL_STATE_CHANGE_TYPE,
-  ValidationRequestMessage,
+  OnboardingRequestMessage,
   IssuanceRequestMessage,
   OobLinkMessage,
   ValidatingMessage,
@@ -33,7 +33,7 @@ export {
   VtCredentialState,
 } from './messages'
 export type {
-  ValidationRequestMessageOptions,
+  OnboardingRequestMessageOptions,
   IssuanceRequestMessageOptions,
   OobLinkMessageOptions,
   ValidatingMessageOptions,
@@ -50,15 +50,15 @@ export type { CustomVtFlowTags, DefaultVtFlowTags, VtFlowStorageProps, VtFlowTag
 
 // Service
 export { VtFlowService } from './services'
-export type { CreateIssuanceRequestParams, CreateValidationRequestParams } from './services'
+export type { CreateIssuanceRequestParams, CreateOnboardingRequestParams } from './services'
 
 // Handlers
 export {
   CredentialStateChangeHandler,
   IssuanceRequestHandler,
+  OnboardingRequestHandler,
   OobLinkHandler,
   ValidatingHandler,
-  ValidationRequestHandler,
 } from './handlers'
 
 // Module surface
