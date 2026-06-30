@@ -7,20 +7,20 @@ import { EventType } from './EventType'
 export interface VtFlowStateUpdatedOptions {
   vtFlowRecordId: string
   threadId: string
-  sessionUuid: string
+  participantSessionId: string
   connectionId: string
   role: string
   variant: string
   state: string
   previousState?: string | null
-  permId?: string
+  participantId?: string
   schemaId?: string
   claims?: Record<string, unknown>
   credentialExchangeRecordId?: string
   errorMessage?: string
   subprotocolThid?: string
-  agentPermId?: string
-  walletAgentPermId?: string
+  agentParticipantId?: string
+  walletAgentParticipantId?: string
   timestamp?: Date
 }
 
@@ -31,20 +31,20 @@ export class VtFlowStateUpdated extends Event {
     if (options) {
       this.vtFlowRecordId = options.vtFlowRecordId
       this.threadId = options.threadId
-      this.sessionUuid = options.sessionUuid
+      this.participantSessionId = options.participantSessionId
       this.connectionId = options.connectionId
       this.role = options.role
       this.variant = options.variant
       this.state = options.state
       this.previousState = options.previousState ?? undefined
-      this.permId = options.permId
+      this.participantId = options.participantId
       this.schemaId = options.schemaId
       this.claims = options.claims
       this.credentialExchangeRecordId = options.credentialExchangeRecordId
       this.errorMessage = options.errorMessage
       this.subprotocolThid = options.subprotocolThid
-      this.agentPermId = options.agentPermId
-      this.walletAgentPermId = options.walletAgentPermId
+      this.agentParticipantId = options.agentParticipantId
+      this.walletAgentParticipantId = options.walletAgentParticipantId
       this.timestamp = options.timestamp ?? new Date()
     }
   }
@@ -62,7 +62,7 @@ export class VtFlowStateUpdated extends Event {
 
   @Expose()
   @IsString()
-  public sessionUuid!: string
+  public participantSessionId!: string
 
   @Expose()
   @IsString()
@@ -88,7 +88,7 @@ export class VtFlowStateUpdated extends Event {
   @Expose()
   @IsOptional()
   @IsString()
-  public permId?: string
+  public participantId?: string
 
   @Expose()
   @IsOptional()
@@ -118,10 +118,10 @@ export class VtFlowStateUpdated extends Event {
   @Expose()
   @IsOptional()
   @IsString()
-  public agentPermId?: string
+  public agentParticipantId?: string
 
   @Expose()
   @IsOptional()
   @IsString()
-  public walletAgentPermId?: string
+  public walletAgentParticipantId?: string
 }
