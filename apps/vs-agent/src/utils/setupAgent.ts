@@ -9,6 +9,7 @@ import { setupVtFlow } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
   createVsAgent,
   HttpInboundTransport,
+  migrateLegacyTailsFiles,
   setupBaseDidComm,
   VeranaChainService,
   VsAgentWsInboundTransport,
@@ -124,6 +125,8 @@ export const setupAgent = async ({
   }
 
   await agent.initialize()
+
+  migrateLegacyTailsFiles(agent.context)
 
   return { agent }
 }

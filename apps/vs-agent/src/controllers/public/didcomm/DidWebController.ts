@@ -9,7 +9,6 @@ import {
   getTailsDirectoryPath,
   getWebDid,
   isValidTailsFileName,
-  migrateLegacyTailsFiles,
   VsAgent,
 } from '@verana-labs/vs-agent-sdk'
 import { DIDLog } from 'didwebvh-ts'
@@ -183,7 +182,6 @@ export class DidWebController {
       throw new HttpException('tailsFileId not found', HttpStatus.NOT_FOUND)
     }
 
-    migrateLegacyTailsFiles(agent.context)
     const filePath = path.join(getTailsDirectoryPath(agent.context), tailsFileId)
     if (!fs.existsSync(filePath)) {
       throw new HttpException('tailsFileId not found', HttpStatus.NOT_FOUND)
