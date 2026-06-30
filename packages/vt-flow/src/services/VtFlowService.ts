@@ -33,7 +33,6 @@ export interface CreateOnboardingRequestParams {
   agentParticipantId: string
   walletAgentParticipantId: string
   claims?: Record<string, unknown>
-  peerPublicDid?: string
 }
 
 export interface CreateIssuanceRequestParams {
@@ -43,7 +42,6 @@ export interface CreateIssuanceRequestParams {
   agentParticipantId: string
   walletAgentParticipantId: string
   claims?: Record<string, unknown>
-  peerPublicDid?: string
 }
 
 export interface SendOobLinkParams extends Omit<OobLinkMessageOptions, 'threadId' | 'id'> {}
@@ -104,7 +102,6 @@ export class VtFlowService {
       walletAgentParticipantId: params.walletAgentParticipantId,
       participantId: params.participantId,
       claims: params.claims,
-      peerPublicDid: params.peerPublicDid,
     })
 
     await this.repository.save(agentContext, record)
@@ -137,7 +134,6 @@ export class VtFlowService {
       walletAgentParticipantId: params.walletAgentParticipantId,
       schemaId: params.schemaId,
       claims: params.claims,
-      peerPublicDid: params.peerPublicDid,
     })
 
     await this.repository.save(agentContext, record)
@@ -163,7 +159,6 @@ export class VtFlowService {
     if (existing) {
       existing.connectionId = connection.id
       existing.threadId = message.threadId
-      existing.peerPublicDid = existing.peerPublicDid ?? peerDid
       await this.repository.update(agentContext, existing)
       return existing
     }
@@ -179,7 +174,6 @@ export class VtFlowService {
       walletAgentParticipantId: message.walletAgentParticipantId,
       participantId: message.participantId,
       claims: message.claims,
-      peerPublicDid: peerDid,
     })
 
     await this.repository.save(agentContext, record)
@@ -205,7 +199,6 @@ export class VtFlowService {
     if (existing) {
       existing.connectionId = connection.id
       existing.threadId = message.threadId
-      existing.peerPublicDid = existing.peerPublicDid ?? connection.theirDid
       await this.repository.update(agentContext, existing)
       return existing
     }
@@ -221,7 +214,6 @@ export class VtFlowService {
       walletAgentParticipantId: message.walletAgentParticipantId,
       schemaId: message.schemaId,
       claims: message.claims,
-      peerPublicDid: connection.theirDid,
     })
 
     await this.repository.save(agentContext, record)

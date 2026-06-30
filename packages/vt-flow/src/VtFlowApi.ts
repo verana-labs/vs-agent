@@ -62,7 +62,6 @@ export class VtFlowApi {
       agentParticipantId: options.agentParticipantId,
       walletAgentParticipantId: options.walletAgentParticipantId,
       claims: options.claims,
-      peerPublicDid: peerDid,
     })
 
     const outboundMessageContext = await getOutboundDidCommMessageContext(this.agentContext, {
@@ -93,7 +92,6 @@ export class VtFlowApi {
       agentParticipantId: options.agentParticipantId,
       walletAgentParticipantId: options.walletAgentParticipantId,
       claims: options.claims,
-      peerPublicDid: peerDid,
     })
 
     const outboundMessageContext = await getOutboundDidCommMessageContext(this.agentContext, {

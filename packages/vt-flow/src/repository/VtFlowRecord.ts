@@ -45,8 +45,6 @@ export interface VtFlowStorageProps {
 
   errorMessage?: string
 
-  peerPublicDid?: string
-
   tags?: CustomVtFlowTags
 }
 
@@ -75,8 +73,6 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
 
   public errorMessage?: string
 
-  public peerPublicDid?: string
-
   public constructor(props: VtFlowStorageProps) {
     super()
 
@@ -103,8 +99,6 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
       this.subprotocolThid = props.subprotocolThid
 
       this.errorMessage = props.errorMessage
-
-      this.peerPublicDid = props.peerPublicDid
     }
   }
 

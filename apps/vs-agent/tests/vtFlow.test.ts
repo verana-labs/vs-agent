@@ -101,8 +101,9 @@ describe('vt-flow: two-agent integration', () => {
     expect(applicantRecord.state).toBe(VtFlowState.IrSent)
     expect(applicantRecord.schemaId).toBe('https://example.test/schemas/organization.json')
     expect(applicantRecord.claims).toEqual({ name: 'Acme', country: 'CH' })
-    expect(applicantRecord.peerPublicDid).toBe(validator.did)
     expect(applicantRecord.connectionId).toBeDefined()
+    const applicantConn = await applicant.didcomm.connections.getById(applicantRecord.connectionId)
+    expect(applicantConn.theirDid).toBe(validator.did)
 
     const validatingEvent = await validatingReached
     const validatorRecord = await validator.modules.vtFlow.findById(validatingEvent.payload.vtFlowRecordId)
@@ -113,7 +114,8 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.threadId).toBe(applicantRecord.threadId)
     expect(validatorRecord?.participantSessionId).toBe(applicantRecord.participantSessionId)
     expect(validatorRecord?.schemaId).toBe(applicantRecord.schemaId)
-    expect(validatorRecord?.peerPublicDid).toBe(applicant.did)
+    const validatorConn = await validator.didcomm.connections.getById(validatorRecord!.connectionId)
+    expect(validatorConn.theirDid).toBe(applicant.did)
   })
 
   it('onboarding-request: Applicant OR_SENT, Validator auto-accepts + auto-marks-validated', async () => {

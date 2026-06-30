@@ -1,10 +1,7 @@
 import type { JsonObject } from '@credo-ts/core'
 
 import { JsonTransformer, W3cJsonLdVerifiableCredential, utils } from '@credo-ts/core'
-import {
-  type JsonCredential,
-  type JsonLdFormatDataVerifiableCredential,
-} from '@credo-ts/didcomm'
+import { type JsonCredential, type JsonLdFormatDataVerifiableCredential } from '@credo-ts/didcomm'
 import {
   VtFlowApi,
   VtFlowRecord,
