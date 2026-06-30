@@ -1,11 +1,7 @@
 import type { JsonObject } from '@credo-ts/core'
 
 import { JsonTransformer, W3cJsonLdVerifiableCredential, utils } from '@credo-ts/core'
-import {
-  DidCommHandshakeProtocol,
-  type JsonCredential,
-  type JsonLdFormatDataVerifiableCredential,
-} from '@credo-ts/didcomm'
+import { type JsonCredential, type JsonLdFormatDataVerifiableCredential } from '@credo-ts/didcomm'
 import {
   VtFlowApi,
   VtFlowRecord,
@@ -79,8 +75,9 @@ export class VtFlowOrchestrator {
 
     const { connectionRecord } = await this.agent.didcomm.oob.receiveImplicitInvitation({
       did: validatorParticipant.did,
+      ourDid: this.agent.did,
       label: this.agent.label,
-      handshakeProtocols: [DidCommHandshakeProtocol.Connections],
+      didCommVersion: 'v2',
     })
     if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
     const ready = await this.agent.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
@@ -271,6 +268,10 @@ export class VtFlowOrchestrator {
   private extractSchemaBaseId(jscUrl: string): string | undefined {
     const match = jscUrl.match(/schemas-([a-z0-9-]+?)-(?:jsc|c-vp)\.json/i)
     return match?.[1]?.toLowerCase()
+  }
+
+  async rotateRequesterDidToPeer(connectionId: string): Promise<void> {
+    await this.agent.didcomm.connections.rotate({ connectionId })
   }
 
   private resolveVtFlowApi(): VtFlowApi {

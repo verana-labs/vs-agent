@@ -5,8 +5,8 @@ import { LogLevel, ParsedDid } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
-import { setupVtFlow } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
+  assertVerifiableService,
   createVsAgent,
   HttpInboundTransport,
   setupBaseDidComm,
@@ -16,7 +16,13 @@ import {
 import express from 'express'
 import WebSocket from 'ws'
 
-import { AGENT_DIDCOMM_VERSIONS, ENABLE_PUBLIC_API_SWAGGER, ENABLED_PLUGINS } from '../config'
+import {
+  AGENT_DIDCOMM_VERSIONS,
+  ENABLE_PUBLIC_API_SWAGGER,
+  ENABLED_PLUGINS,
+  VERANA_CHAIN_ID,
+  VERANA_INDEXER_BASE_URL,
+} from '../config'
 import { MessageService } from '../controllers/admin/message/MessageService'
 
 import { TsLogger } from './logger'
@@ -83,6 +89,17 @@ export const setupAgent = async ({
       : null,
   ])
 
+  const verifiablePublicRegistries =
+    VERANA_INDEXER_BASE_URL && VERANA_CHAIN_ID
+      ? [
+          {
+            id: `vpr:verana:${VERANA_CHAIN_ID}`,
+            baseUrls: [`${VERANA_INDEXER_BASE_URL}/verana`],
+            production: true,
+          },
+        ]
+      : undefined
+
   const agent = createVsAgent({
     plugins: [
       setupBaseDidComm({
@@ -90,10 +107,14 @@ export const setupAgent = async ({
         publicApiBaseUrl,
         endpoints,
         didcommVersions,
+        vtFlow: {
+          assertVerifiableService: verifiablePublicRegistries
+            ? assertVerifiableService({ verifiablePublicRegistries })
+            : undefined,
+        },
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol({ masterListCscaLocation })] : []),
-      ...(ENABLED_PLUGINS.includes('vt-flow') ? [setupVtFlow()] : []),
     ],
     config: {
       logger,
