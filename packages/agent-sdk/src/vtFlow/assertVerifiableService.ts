@@ -4,22 +4,22 @@ import type { ResolverConfig } from '@verana-labs/verre'
 
 import { resolveDID, InMemoryCache } from '@verana-labs/verre'
 
-export interface AssertVerifiableServiceDeps {
+export interface AssertVerifiableServiceOptions {
   verifiablePublicRegistries: NonNullable<ResolverConfig['verifiablePublicRegistries']>
   logger?: BaseLogger
 }
 
 // VS-CONN-VS gate: delegates trust resolution to `@verana-labs/verre` (`resolveDID`)
 export function assertVerifiableService(
-  deps: AssertVerifiableServiceDeps,
+  options: AssertVerifiableServiceOptions,
 ): VtFlowAssertVerifiableServiceHook {
   let cache: ResolverConfig['cache']
   return async ({ agentContext, peerDid }) => {
-    const logger = deps.logger ?? agentContext.config.logger
+    const logger = options.logger ?? agentContext.config.logger
     try {
       cache ??= new InMemoryCache()
       const { verified, outcome, metadata } = await resolveDID(peerDid, {
-        verifiablePublicRegistries: deps.verifiablePublicRegistries,
+        verifiablePublicRegistries: options.verifiablePublicRegistries,
         cache,
       })
       if (!verified) {
