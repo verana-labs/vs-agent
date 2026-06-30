@@ -47,7 +47,7 @@ export class VtFlowApi {
   public async sendOnboardingRequest(options: SendOnboardingRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
     connection.assertReady()
-    await this.vtFlowService.assertVerifiableService(this.agentContext, connection.id)
+    await this.vtFlowService.checkIsVerifiableService(this.agentContext, connection)
 
     const participantSessionId = options.participantSessionId ?? utils.uuid()
 
@@ -73,7 +73,7 @@ export class VtFlowApi {
   public async sendIssuanceRequest(options: SendIssuanceRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
     connection.assertReady()
-    await this.vtFlowService.assertVerifiableService(this.agentContext, connection.id)
+    await this.vtFlowService.checkIsVerifiableService(this.agentContext, connection)
 
     const participantSessionId = options.participantSessionId ?? utils.uuid()
 

@@ -1,5 +1,9 @@
 import type { AgentContext, Logger, Query, QueryOptions } from '@credo-ts/core'
-import type { DidCommCredentialExchangeRecord, DidCommInboundMessageContext } from '@credo-ts/didcomm'
+import type {
+  DidCommConnectionRecord,
+  DidCommCredentialExchangeRecord,
+  DidCommInboundMessageContext,
+} from '@credo-ts/didcomm'
 
 import { CredoError, EventEmitter, InjectionSymbols, inject, injectable } from '@credo-ts/core'
 import { DidCommCredentialState } from '@credo-ts/didcomm'
@@ -147,7 +151,7 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    await this.assertVerifiableService(agentContext, connection.id)
+    await this.checkIsVerifiableService(agentContext, connection)
 
     const existing = await this.repository.findByParticipantSessionId(
       agentContext,
@@ -185,7 +189,7 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    await this.assertVerifiableService(agentContext, connection.id)
+    await this.checkIsVerifiableService(agentContext, connection)
 
     const existing = await this.repository.findByParticipantSessionId(
       agentContext,
@@ -548,6 +552,11 @@ export class VtFlowService {
     this.emitStateChanged(agentContext, record, previousState)
   }
 
+  /** Persist record changes without state-transition semantics (no event emitted). */
+  public async updateRecord(agentContext: AgentContext, record: VtFlowRecord): Promise<void> {
+    await this.repository.update(agentContext, record)
+  }
+
   private emitStateChanged(
     agentContext: AgentContext,
     record: VtFlowRecord,
@@ -578,26 +587,30 @@ export class VtFlowService {
   }
 
   /** Spec Verifiable Service Identity Check: invokes the caller-provided VS-CONN-VS hook. Throws `vt-flow.not-a-verifiable-service` when the peer fails the check. When no hook is configured, logs a warning and permits. */
-  public async assertVerifiableService(agentContext: AgentContext, connectionId: string): Promise<void> {
+  public async checkIsVerifiableService(
+    agentContext: AgentContext,
+    connection: DidCommConnectionRecord,
+  ): Promise<void> {
+    const peerDid = connection.theirDid
+    if (!peerDid) throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
+
     const hook = this.config.assertVerifiableService
     if (!hook) {
       this.logger.warn(
-        `[vt-flow] assertVerifiableService hook not configured; skipping VS-CONN-VS check for connection '${connectionId}'. Configure VtFlowModuleConfig.assertVerifiableService for spec-conformant trust resolution.`,
+        `[vt-flow] assertVerifiableService hook not configured; skipping VS-CONN-VS check for peer '${peerDid}'. Configure VtFlowModuleConfig.assertVerifiableService for spec-conformant trust resolution.`,
       )
       return
     }
     let permitted = false
     try {
-      permitted = await hook({ agentContext, connectionId })
+      permitted = await hook({ agentContext, peerDid, connectionId: connection.id })
     } catch (error) {
       throw new CredoError(
-        `vt-flow.not-a-verifiable-service: peer connection '${connectionId}' failed VS-CONN-VS check (${(error as Error).message})`,
+        `vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check (${(error as Error).message})`,
       )
     }
     if (!permitted) {
-      throw new CredoError(
-        `vt-flow.not-a-verifiable-service: peer connection '${connectionId}' failed VS-CONN-VS check`,
-      )
+      throw new CredoError(`vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check`)
     }
   }
 }
