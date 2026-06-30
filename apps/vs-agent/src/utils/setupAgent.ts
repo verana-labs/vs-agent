@@ -19,6 +19,7 @@ import {
   AGENT_DIDCOMM_VERSIONS,
   ENABLE_PUBLIC_API_SWAGGER,
   ENABLED_PLUGINS,
+  VERANA_CHAIN_ID,
   VERANA_INDEXER_BASE_URL,
 } from '../config'
 import { MessageService } from '../controllers/admin/message/MessageService'
@@ -92,9 +93,16 @@ export const setupAgent = async ({
         publicApiBaseUrl,
         endpoints,
         didcommVersions,
-        verifiablePublicRegistries: VERANA_INDEXER_BASE_URL
-          ? [{ id: 'verana', baseUrls: [VERANA_INDEXER_BASE_URL], production: false }]
-          : undefined,
+        verifiablePublicRegistries:
+          VERANA_INDEXER_BASE_URL && VERANA_CHAIN_ID
+            ? [
+                {
+                  id: `vpr:verana:${VERANA_CHAIN_ID}`,
+                  baseUrls: [`${VERANA_INDEXER_BASE_URL}/verana`],
+                  production: true,
+                },
+              ]
+            : undefined,
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol({ masterListCscaLocation })] : []),
