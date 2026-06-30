@@ -2,15 +2,12 @@ import type { BaseLogger } from '@credo-ts/core'
 import type { VtFlowAssertVerifiableServiceHook } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import type { ResolverConfig } from '@verana-labs/verre'
 
+import { resolveDID, InMemoryCache } from '@verana-labs/verre'
+
 export interface AssertVerifiableServiceDeps {
   verifiablePublicRegistries: NonNullable<ResolverConfig['verifiablePublicRegistries']>
   logger?: BaseLogger
 }
-
-// TODO: Remove this workaround after migrating to ESM
-const importVerre = new Function('s', 'return import(s)') as (
-  s: string,
-) => Promise<typeof import('@verana-labs/verre')>
 
 /**
  * VS-CONN-VS gate: delegates trust resolution to `@verana-labs/verre` (`resolveDID`), which verifies
@@ -20,12 +17,10 @@ const importVerre = new Function('s', 'return import(s)') as (
 export function assertVerifiableService(
   deps: AssertVerifiableServiceDeps,
 ): VtFlowAssertVerifiableServiceHook {
-  let verre: Promise<typeof import('@verana-labs/verre')> | undefined
   let cache: ResolverConfig['cache']
   return async ({ agentContext, peerDid }) => {
     const logger = deps.logger ?? agentContext.config.logger
     try {
-      const { resolveDID, InMemoryCache } = await (verre ??= importVerre('@verana-labs/verre'))
       cache ??= new InMemoryCache()
       const { verified, outcome, metadata } = await resolveDID(peerDid, {
         verifiablePublicRegistries: deps.verifiablePublicRegistries,

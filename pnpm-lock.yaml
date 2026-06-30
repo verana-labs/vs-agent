@@ -487,8 +487,8 @@ importers:
         specifier: 0.10.1-dev.16
         version: 0.10.1-dev.16(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)
       '@verana-labs/verre':
-        specifier: ^0.3.1
-        version: 0.3.1(web-streams-polyfill@3.3.3)
+        specifier: 0.3.2-dev.1
+        version: 0.3.2-dev.1(web-streams-polyfill@3.3.3)
       '@verana-labs/vs-agent-model':
         specifier: workspace:*
         version: link:../model
@@ -2521,8 +2521,8 @@ packages:
       '@cosmjs/proto-signing': ^0.32.3
       '@cosmjs/stargate': ^0.32.3
 
-  '@verana-labs/verre@0.3.1':
-    resolution: {integrity: sha512-KKeDNOjhKkuHWl/4gYO4vbfVf4kZwwOUfGsAOpYly82meC1pW+0+QmmzrWQYg4DZA7eRjeEUUtxnWphvFi5FKw==}
+  '@verana-labs/verre@0.3.2-dev.1':
+    resolution: {integrity: sha512-G37jDGVSb8yMTQhAgBGVHYxz7/5XphJ1S8KJuur63SxUnfQal5yhRJMfZlpaBk7v+skADqGNTVVL4qH9nFMyeQ==}
     engines: {node: '>= 18'}
 
   '@verifiables/request-converter@0.2.0':
@@ -8414,7 +8414,7 @@ snapshots:
       long: 5.3.2
       protobufjs: 7.2.6
 
-  '@verana-labs/verre@0.3.1(web-streams-polyfill@3.3.3)':
+  '@verana-labs/verre@0.3.2-dev.1(web-streams-polyfill@3.3.3)':
     dependencies:
       '@digitalcredentials/jsonld': 9.0.0
       '@noble/curves': 2.0.1
