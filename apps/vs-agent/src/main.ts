@@ -159,6 +159,33 @@ const run = async () => {
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
+  if (ADMIN_API_AUTH_MODE.length === 0) {
+    serverLogger.error('ADMIN_API_AUTH_MODE is required (comma-separated list of: internal, corporation)')
+    process.exit(1)
+  }
+  const unknownAuthModes = ADMIN_API_AUTH_MODE.filter(mode => !['internal', 'corporation'].includes(mode))
+  if (unknownAuthModes.length > 0) {
+    serverLogger.error(
+      `ADMIN_API_AUTH_MODE has unsupported value(s): ${unknownAuthModes.join(', ')}. Allowed: internal, corporation`,
+    )
+    process.exit(1)
+  }
+  if (ADMIN_API_PUBLIC_URL) {
+    let isBareHttpsOrigin = false
+    try {
+      const url = new URL(ADMIN_API_PUBLIC_URL)
+      isBareHttpsOrigin = url.protocol === 'https:' && url.origin === ADMIN_API_PUBLIC_URL
+    } catch {
+      isBareHttpsOrigin = false
+    }
+    if (!isBareHttpsOrigin) {
+      serverLogger.error(
+        'ADMIN_API_PUBLIC_URL must be a single https:// origin (scheme + host + optional port, no trailing path)',
+      )
+      process.exit(1)
+    }
+  }
+
   if (ADMIN_API_PUBLIC_URL && !ADMIN_API_AUTH_MODE.includes('corporation')) {
     serverLogger.error(
       'ADMIN_API_PUBLIC_URL must not be set unless ADMIN_API_AUTH_MODE includes "corporation"',
