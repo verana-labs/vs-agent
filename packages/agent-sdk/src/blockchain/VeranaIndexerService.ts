@@ -26,7 +26,7 @@ export class VeranaIndexerService {
   ): Promise<IndexerEventsResponse> {
     this.config.logger.debug(`[VeranaIndexer] getEvents after_block=${afterBlockHeight}`)
     const scope =
-      corporationId != null ? `corporation_id=${corporationId}` : `did=${encodeURIComponent(agentDid)}`
+      corporationId != null ? `corporation_id=${corporationId}` : `dids=${encodeURIComponent(agentDid)}`
     const url = `${this.baseUrl}/verana/indexer/v1/events?${scope}&after_block_height=${afterBlockHeight}&limit=${limit}`
     return fetchJson<IndexerEventsResponse>(url, REQUEST_TIMEOUT_MS)
   }
