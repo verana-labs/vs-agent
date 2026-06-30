@@ -1,10 +1,11 @@
-import { DidCommConnectionRecord, DidCommHandshakeProtocol } from '@credo-ts/didcomm'
+import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { type VsAgent } from '@verana-labs/vs-agent-sdk'
+import { VtFlowOrchestrator, type VsAgent } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { startAgent } from './__mocks__'
+import { FakeDidResolver } from './__mocks__/fakeDidResolver'
 import {
   isVtFlowStateChangedEvent,
   SubjectInboundTransport,
@@ -23,7 +24,9 @@ describe('vt-flow: two-agent integration', () => {
   let applicant: VsAgent<any>
   let validator: VsAgent<any>
   let applicantConnection: DidCommConnectionRecord
+  let applicantEvents: ReturnType<typeof vi.spyOn>
   let validatorEvents: ReturnType<typeof vi.spyOn>
+  const sharedResolver = new FakeDidResolver()
 
   beforeEach(async () => {
     const applicantMessages = new Subject<SubjectMessage>()
@@ -38,10 +41,14 @@ describe('vt-flow: two-agent integration', () => {
       label: 'Applicant',
       domain: 'applicant',
       vtFlowOptions: {},
+      didcommVersions: ['v1', 'v2'],
     })
     applicant.didcomm.registerInboundTransport(new SubjectInboundTransport(applicantMessages))
     applicant.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+    applicant.dids.config.resolvers.unshift(sharedResolver)
     await applicant.initialize()
+    await sharedResolver.registerAgent(applicant)
+    applicantEvents = vi.spyOn(applicant.events, 'emit')
 
     validator = await startAgent({
       label: 'Validator',
@@ -52,15 +59,27 @@ describe('vt-flow: two-agent integration', () => {
         autoMarkValidated: true,
         autoOfferCredential: false,
       },
+      didcommVersions: ['v1', 'v2'],
     })
     validator.didcomm.registerInboundTransport(new SubjectInboundTransport(validatorMessages))
     validator.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+    validator.dids.config.resolvers.unshift(sharedResolver)
     await validator.initialize()
+    await sharedResolver.registerAgent(validator)
     validatorEvents = vi.spyOn(validator.events, 'emit')
-    ;[applicantConnection] = await makeConnection(applicant, validator)
+
+    const { connectionRecord } = await applicant.didcomm.oob.receiveImplicitInvitation({
+      did: validator.did,
+      label: applicant.label,
+      didCommVersion: 'v2',
+      ourDid: applicant.did,
+    })
+    if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
+    applicantConnection = await applicant.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
   }, 30_000)
 
   afterEach(async () => {
+    applicantEvents.mockClear()
     await applicant?.shutdown()
     await validator?.shutdown()
     vi.restoreAllMocks()
@@ -82,6 +101,9 @@ describe('vt-flow: two-agent integration', () => {
     expect(applicantRecord.state).toBe(VtFlowState.IrSent)
     expect(applicantRecord.schemaId).toBe('https://example.test/schemas/organization.json')
     expect(applicantRecord.claims).toEqual({ name: 'Acme', country: 'CH' })
+    expect(applicantRecord.connectionId).toBeDefined()
+    const applicantConn = await applicant.didcomm.connections.getById(applicantRecord.connectionId)
+    expect(applicantConn.theirDid).toBe(validator.did)
 
     const validatingEvent = await validatingReached
     const validatorRecord = await validator.modules.vtFlow.findById(validatingEvent.payload.vtFlowRecordId)
@@ -92,6 +114,8 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.threadId).toBe(applicantRecord.threadId)
     expect(validatorRecord?.participantSessionId).toBe(applicantRecord.participantSessionId)
     expect(validatorRecord?.schemaId).toBe(applicantRecord.schemaId)
+    const validatorConn = await validator.didcomm.connections.getById(validatorRecord!.connectionId)
+    expect(validatorConn.theirDid).toBe(applicant.did)
   })
 
   it('onboarding-request: Applicant OR_SENT, Validator auto-accepts + auto-marks-validated', async () => {
@@ -166,25 +190,211 @@ describe('vt-flow: two-agent integration', () => {
     // Distinct records on each side, same thread.
     expect(validatorRecord?.id).not.toBe(applicantRecord.id)
   })
-})
 
-async function makeConnection(
-  applicantAgent: VsAgent<any>,
-  validatorAgent: VsAgent<any>,
-): Promise<[DidCommConnectionRecord, DidCommConnectionRecord]> {
-  const validatorOutOfBand = await validatorAgent.didcomm.oob.createInvitation({
-    handshakeProtocols: [DidCommHandshakeProtocol.Connections],
+  it('sendValidating rotates the Validator DID from webvh to peer', async () => {
+    const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+
+    await applicant.modules.vtFlow.sendIssuanceRequest({
+      connectionId: applicantConnection.id,
+      schemaId: 'https://example.test/schemas/rotation.json',
+      agentParticipantId: 'agent-participant-4',
+      walletAgentParticipantId: 'wallet-agent-participant-4',
+    })
+
+    const validatingEvent = await validatingReached
+    const validatorRecord = await validator.modules.vtFlow.getById(validatingEvent.payload.vtFlowRecordId)
+    const webvhDid = validator.did
+
+    await validator.modules.vtFlow.sendValidating(validatorRecord.id)
+
+    await waitForEvent(applicantEvents, (ev: unknown): ev is unknown => {
+      const e = ev as any
+      return e?.type === 'DidCommMessageProcessed' && String(e?.payload?.message?.type).includes('validating')
+    })
+
+    const conn = await validator.didcomm.connections.getById(validatorRecord.connectionId)
+    expect(conn.did).not.toContain('did:webvh:')
+    expect(conn.did).toContain('did:peer:')
+    expect(conn.previousDids).toContain(webvhDid)
   })
 
-  const { connectionRecord: applicantConnection } = await applicantAgent.didcomm.oob.receiveInvitation(
-    validatorOutOfBand.outOfBandInvitation,
-    { label: applicantAgent.label },
-  )
+  it('rotateRequesterDidToPeer rotates the Applicant from webvh to peer (temporary workaround)', async () => {
+    const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
-  const applicantCompleted = await applicantAgent.didcomm.connections.returnWhenIsConnected(
-    applicantConnection!.id,
-  )
-  const [validatorRaw] = await validatorAgent.didcomm.connections.findAllByOutOfBandId(validatorOutOfBand.id)
-  const validatorCompleted = await validatorAgent.didcomm.connections.returnWhenIsConnected(validatorRaw!.id)
-  return [applicantCompleted, validatorCompleted]
-}
+    await applicant.modules.vtFlow.sendIssuanceRequest({
+      connectionId: applicantConnection.id,
+      schemaId: 'https://example.test/schemas/applicant-rotation.json',
+      agentParticipantId: 'agent-participant-5',
+      walletAgentParticipantId: 'wallet-agent-participant-5',
+    })
+    const validatingEvent = await validatingReached
+    const validatorRecord = await validator.modules.vtFlow.getById(validatingEvent.payload.vtFlowRecordId)
+    const applicantWebvhDid = applicant.did
+
+    const validatorConnBefore = await validator.didcomm.connections.getById(validatorRecord.connectionId)
+    expect(validatorConnBefore.theirDid).toBe(applicantWebvhDid)
+
+    // Workaround: rotate the applicant to a fresh peer DID and stage `from_prior`.
+    await new VtFlowOrchestrator(applicant).rotateRequesterDidToPeer(applicantConnection.id)
+
+    const applicantConnAfter = await applicant.didcomm.connections.getById(applicantConnection.id)
+    expect(applicantConnAfter.did).toContain('did:peer:')
+    expect(applicantConnAfter.did).not.toContain('did:webvh:')
+    expect(applicantConnAfter.previousDids).toContain(applicantWebvhDid)
+
+    await applicant.didcomm.connections.sendPing(applicantConnection.id, {})
+
+    let validatorTheirDid: string | undefined
+    for (let i = 0; i < 25; i++) {
+      const c = await validator.didcomm.connections.getById(validatorRecord.connectionId)
+      validatorTheirDid = c.theirDid
+      if (validatorTheirDid === applicantConnAfter.did) break
+      await new Promise(r => setTimeout(r, 100))
+    }
+    expect(validatorTheirDid).toBe(applicantConnAfter.did)
+  })
+})
+
+/** VS-CONN-VS trust gate: the `assertVerifiableService` hook gates each send/receive on trust resolution (`resolveDID`, mocked here). */
+describe('vt-flow: VS-CONN-VS trust gate', () => {
+  let applicant: VsAgent<any>
+  let validator: VsAgent<any>
+  let applicantConnection: DidCommConnectionRecord
+  let validatorEvents: ReturnType<typeof vi.spyOn>
+  let resolveDID: Mock<(did: string) => Promise<{ verified: boolean; outcome: string }>>
+  const sharedResolver = new FakeDidResolver()
+
+  beforeEach(async () => {
+    resolveDID = vi.fn().mockResolvedValue({ verified: true, outcome: 'resolved' })
+    const assertVerifiableService = async ({ peerDid }: { peerDid: string }) =>
+      (await resolveDID(peerDid)).verified
+
+    const applicantMessages = new Subject<SubjectMessage>()
+    const validatorMessages = new Subject<SubjectMessage>()
+    const subjectMap = {
+      'rxjs:applicant': applicantMessages,
+      'rxjs:validator': validatorMessages,
+    }
+
+    applicant = await startAgent({
+      label: 'Applicant',
+      domain: 'applicant',
+      vtFlowOptions: { assertVerifiableService },
+      didcommVersions: ['v1', 'v2'],
+    })
+    applicant.didcomm.registerInboundTransport(new SubjectInboundTransport(applicantMessages))
+    applicant.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+    applicant.dids.config.resolvers.unshift(sharedResolver)
+    await applicant.initialize()
+    await sharedResolver.registerAgent(applicant)
+
+    validator = await startAgent({
+      label: 'Validator',
+      domain: 'validator',
+      vtFlowOptions: {
+        autoAcceptIssuanceRequest: true,
+        autoMarkValidated: true,
+        autoOfferCredential: false,
+        assertVerifiableService,
+      },
+      didcommVersions: ['v1', 'v2'],
+    })
+    validator.didcomm.registerInboundTransport(new SubjectInboundTransport(validatorMessages))
+    validator.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+    validator.dids.config.resolvers.unshift(sharedResolver)
+    await validator.initialize()
+    await sharedResolver.registerAgent(validator)
+    validatorEvents = vi.spyOn(validator.events, 'emit')
+
+    const { connectionRecord } = await applicant.didcomm.oob.receiveImplicitInvitation({
+      did: validator.did,
+      label: applicant.label,
+      didCommVersion: 'v2',
+      ourDid: applicant.did,
+    })
+    if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
+    applicantConnection = await applicant.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
+  }, 30_000)
+
+  afterEach(async () => {
+    await applicant?.shutdown()
+    await validator?.shutdown()
+    vi.restoreAllMocks()
+  })
+
+  it('resolves both peers, proceeds to VALIDATING and rotates the Validator when verre approves', async () => {
+    const applicantEvents = vi.spyOn(applicant.events, 'emit')
+    const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+
+    const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
+      connectionId: applicantConnection.id,
+      schemaId: 'https://example.test/schemas/organization.json',
+      agentParticipantId: 'agent-participant-gate',
+      walletAgentParticipantId: 'wallet-agent-participant-gate',
+    })
+    expect(applicantRecord.state).toBe(VtFlowState.IrSent)
+
+    expect(resolveDID).toHaveBeenCalledWith(validator.did)
+
+    const validatingEvent = await validatingReached
+    const validatorRecord = await validator.modules.vtFlow.findById(validatingEvent.payload.vtFlowRecordId)
+    expect(validatorRecord?.state).toBe(VtFlowState.Validating)
+
+    expect(resolveDID).toHaveBeenCalledWith(applicant.did)
+
+    const webvhDid = validator.did
+    await validator.modules.vtFlow.sendValidating(validatorRecord!.id)
+
+    await waitForEvent(applicantEvents, (ev: unknown): ev is unknown => {
+      const e = ev as any
+      return e?.type === 'DidCommMessageProcessed' && String(e?.payload?.message?.type).includes('validating')
+    })
+
+    const conn = await validator.didcomm.connections.getById(validatorRecord!.connectionId)
+    expect(conn.did).not.toContain('did:webvh:')
+    expect(conn.did).toContain('did:peer:')
+    expect(conn.previousDids).toContain(webvhDid)
+  })
+
+  it('rejects sendIssuanceRequest with vt-flow.not-a-verifiable-service when the hook returns false', async () => {
+    resolveDID.mockResolvedValue({ verified: false, outcome: 'not-trusted' })
+
+    await expect(
+      applicant.modules.vtFlow.sendIssuanceRequest({
+        connectionId: applicantConnection.id,
+        schemaId: 'https://example.test/schemas/organization.json',
+        agentParticipantId: 'agent-participant-gate-neg-1',
+        walletAgentParticipantId: 'wallet-agent-participant-gate-neg-1',
+      }),
+    ).rejects.toThrow('vt-flow.not-a-verifiable-service')
+
+    expect(resolveDID).toHaveBeenCalledWith(validator.did)
+  })
+
+  it('Validator does not reach VALIDATING on an IR from an unverified peer', async () => {
+    resolveDID.mockImplementation(async (did: string) => ({
+      verified: did === validator.did,
+      outcome: did === validator.did ? 'resolved' : 'not-trusted',
+    }))
+
+    const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
+      connectionId: applicantConnection.id,
+      schemaId: 'https://example.test/schemas/organization.json',
+      agentParticipantId: 'agent-participant-gate-neg-3',
+      walletAgentParticipantId: 'wallet-agent-participant-gate-neg-3',
+    })
+    expect(applicantRecord.state).toBe(VtFlowState.IrSent)
+
+    const deadline = Date.now() + 5000
+    while (Date.now() < deadline && !resolveDID.mock.calls.some(([did]) => did === applicant.did)) {
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+    expect(resolveDID).toHaveBeenCalledWith(applicant.did)
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const validatingEvent = validatorEvents.mock.calls
+      .flat()
+      .find(isVtFlowStateChangedEvent(VtFlowState.Validating))
+    expect(validatingEvent).toBeUndefined()
+  })
+})
