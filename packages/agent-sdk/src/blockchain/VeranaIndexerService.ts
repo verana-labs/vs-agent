@@ -18,9 +18,16 @@ export class VeranaIndexerService {
     this.baseUrl = config.baseUrl.replace(/\/$/, '')
   }
 
-  async getEvents(agentDid: string, afterBlockHeight = 0, limit = 500): Promise<IndexerEventsResponse> {
+  async getEvents(
+    agentDid: string,
+    afterBlockHeight = 0,
+    limit = 500,
+    corporationId?: number,
+  ): Promise<IndexerEventsResponse> {
     this.config.logger.debug(`[VeranaIndexer] getEvents after_block=${afterBlockHeight}`)
-    const url = `${this.baseUrl}/verana/indexer/v1/events?did=${encodeURIComponent(agentDid)}&after_block_height=${afterBlockHeight}&limit=${limit}`
+    const scope =
+      corporationId != null ? `corporation_id=${corporationId}` : `did=${encodeURIComponent(agentDid)}`
+    const url = `${this.baseUrl}/verana/indexer/v1/events?${scope}&after_block_height=${afterBlockHeight}&limit=${limit}`
     return fetchJson<IndexerEventsResponse>(url, REQUEST_TIMEOUT_MS)
   }
 

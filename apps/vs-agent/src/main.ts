@@ -63,6 +63,8 @@ import {
   VERANA_ACCOUNT_MNEMONIC,
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
+  VERANA_CORPORATION_ID,
+  VERANA_INDEXER_SUBSCRIPTION_SCOPE,
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
@@ -277,9 +279,14 @@ const run = async () => {
   // Connect to Verana indexer for on-chain notifications
   // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
   if (VERANA_INDEXER_BASE_URL) {
+    const indexerCorporationId =
+      VERANA_INDEXER_SUBSCRIPTION_SCOPE === 'corporation' && VERANA_CORPORATION_ID
+        ? Number(VERANA_CORPORATION_ID)
+        : undefined
     const indexerWs = new IndexerWebSocketService({
       indexerUrl: VERANA_INDEXER_BASE_URL,
       agent,
+      corporationId: indexerCorporationId,
     })
     await indexerWs.start()
   }

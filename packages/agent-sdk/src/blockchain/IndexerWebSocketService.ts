@@ -20,6 +20,7 @@ export interface IndexerWebSocketServiceOptions {
   indexerUrl: string
   agent: VsAgent
   handlerRegistry?: IndexerHandlerRegistry
+  corporationId?: number
 }
 
 const MAX_RECONNECT_DELAY_MS = 300_000
@@ -138,10 +139,10 @@ export class IndexerWebSocketService {
 
     if (message.type === 'ready') {
       this.reconnectAttempt = 0
-      const subscribe: IndexerSubscribeMessage = {
-        action: 'subscribe',
-        dids: this.options.agent.did ? [this.options.agent.did] : undefined,
-      }
+      const subscribe: IndexerSubscribeMessage =
+        this.options.corporationId != null
+          ? { action: 'subscribe', corporationId: this.options.corporationId }
+          : { action: 'subscribe', dids: this.options.agent.did ? [this.options.agent.did] : undefined }
       ws.send(JSON.stringify(subscribe))
       return
     }
@@ -169,7 +170,7 @@ export class IndexerWebSocketService {
 
     for (;;) {
       if (this.stopped || generation !== this.generation) return
-      const page = await this.indexer.getEvents(did, cursor, REST_PAGE_LIMIT)
+      const page = await this.indexer.getEvents(did, cursor, REST_PAGE_LIMIT, this.options.corporationId)
       for (const event of sortEventsByPosition(page.events.filter(isProcessableEvent))) {
         if (this.stopped || generation !== this.generation) return
         await this.runExclusive(() => this.applyEvent(event, generation))

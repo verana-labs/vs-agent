@@ -151,6 +151,26 @@ describe('IndexerWebSocketService', () => {
     expect(subscribe).toContainEqual({ action: 'subscribe', dids: ['did:web:agent.test'] })
   })
 
+  it('sends a corp-scoped subscribe and catch-up when corporationId is set', async () => {
+    registry.register({ msg: 'TestMsg', handle: async () => undefined })
+    service = new IndexerWebSocketService({
+      indexerUrl: 'http://indexer.test',
+      agent,
+      handlerRegistry: registry,
+      corporationId: 42,
+    })
+    await service.start()
+
+    const catchupUrl = fetchJsonMock.mock.calls.at(0)?.[0] as string
+    expect(catchupUrl).toContain('corporation_id=42')
+    expect(catchupUrl).not.toContain('did=')
+
+    lastWs().emit('message', readyFrame())
+    const subscribe = lastWs().sent.map(s => JSON.parse(s))
+    expect(subscribe).toContainEqual({ action: 'subscribe', corporationId: 42 })
+    expect(subscribe).not.toContainEqual({ action: 'subscribe', dids: ['did:web:agent.test'] })
+  })
+
   it('processes a live event once and advances the watermark on success', async () => {
     const dispatched: string[] = []
     await startWith(async a => {
