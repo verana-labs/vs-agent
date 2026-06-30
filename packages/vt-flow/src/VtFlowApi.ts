@@ -47,11 +47,7 @@ export class VtFlowApi {
   public async sendOnboardingRequest(options: SendOnboardingRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
     connection.assertReady()
-    const peerDid = connection.theirDid
-    if (!peerDid) {
-      throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
-    }
-    await this.vtFlowService.assertVerifiableService(this.agentContext, peerDid, connection.id)
+    await this.vtFlowService.checkIsVerifiableService(this.agentContext, connection)
 
     const participantSessionId = options.participantSessionId ?? utils.uuid()
 
@@ -77,11 +73,7 @@ export class VtFlowApi {
   public async sendIssuanceRequest(options: SendIssuanceRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
     connection.assertReady()
-    const peerDid = connection.theirDid
-    if (!peerDid) {
-      throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
-    }
-    await this.vtFlowService.assertVerifiableService(this.agentContext, peerDid, connection.id)
+    await this.vtFlowService.checkIsVerifiableService(this.agentContext, connection)
 
     const participantSessionId = options.participantSessionId ?? utils.uuid()
 
