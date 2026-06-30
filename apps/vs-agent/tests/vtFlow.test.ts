@@ -207,8 +207,6 @@ describe('vt-flow: two-agent integration', () => {
     vi.stubGlobal('fetch', fetchSpy)
 
     try {
-      // vtFlowEvents is wired automatically on agent.initialize(); webhookEvent forwards the
-      // resulting VtFlowStateUpdated bus event to the configured webhook, mirroring connections/messages.
       webhookEvent(validator, webhookUrl, new TsLogger(LogLevel.Off, validator.label))
 
       await applicant.modules.vtFlow.sendIssuanceRequest({
