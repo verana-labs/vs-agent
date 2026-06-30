@@ -1,14 +1,13 @@
 import {
   BadRequestException,
   Body,
-  ConflictException,
   Controller,
   Delete,
   Get,
-  NotFoundException,
   Param,
   Patch,
   Post,
+  UseFilters,
 } from '@nestjs/common'
 import { ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 import {
@@ -16,14 +15,13 @@ import {
   deleteServiceEndpoint,
   listServiceEndpoints,
   ServiceEndpoint,
-  ServiceEndpointError,
-  ServiceEndpointErrorCode,
   updateServiceEndpoint,
   VsAgent,
 } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
 
+import { ServiceEndpointExceptionFilter } from './ServiceEndpointExceptionFilter'
 import {
   AddServiceEndpointDto,
   ServiceEndpointDto,
@@ -32,6 +30,7 @@ import {
 
 @ApiTags('service-endpoints')
 @Controller({ path: 'vt/service-endpoints', version: '1' })
+@UseFilters(ServiceEndpointExceptionFilter)
 export class ServiceEndpointsController {
   constructor(private readonly agentService: VsAgentService) {}
 
@@ -44,11 +43,7 @@ export class ServiceEndpointsController {
   @ApiOkResponse({ description: 'Consumable service entries', type: ServiceEndpointDto, isArray: true })
   public async listServiceEndpoints(): Promise<ServiceEndpoint[]> {
     const agent = await this.requireAgentWithDid()
-    try {
-      return await listServiceEndpoints(agent)
-    } catch (error) {
-      throw this.toHttpException(error)
-    }
+    return listServiceEndpoints(agent)
   }
 
   @Post('/')
@@ -56,11 +51,7 @@ export class ServiceEndpointsController {
   @ApiOkResponse({ description: 'The created service entry', type: ServiceEndpointDto })
   public async addServiceEndpoint(@Body() dto: AddServiceEndpointDto): Promise<ServiceEndpoint> {
     const agent = await this.requireAgentWithDid()
-    try {
-      return await addServiceEndpoint(agent, dto)
-    } catch (error) {
-      throw this.toHttpException(error)
-    }
+    return addServiceEndpoint(agent, dto)
   }
 
   @Patch('/:id')
@@ -75,11 +66,7 @@ export class ServiceEndpointsController {
       throw new BadRequestException('At least one of type or serviceEndpoint must be provided')
     }
     const agent = await this.requireAgentWithDid()
-    try {
-      return await updateServiceEndpoint(agent, id, dto)
-    } catch (error) {
-      throw this.toHttpException(error)
-    }
+    return updateServiceEndpoint(agent, id, dto)
   }
 
   @Delete('/:id')
@@ -88,29 +75,12 @@ export class ServiceEndpointsController {
   @ApiOkResponse({ description: 'The deleted service entry', type: ServiceEndpointDto })
   public async deleteServiceEndpoint(@Param('id') id: string): Promise<ServiceEndpoint> {
     const agent = await this.requireAgentWithDid()
-    try {
-      return await deleteServiceEndpoint(agent, id)
-    } catch (error) {
-      throw this.toHttpException(error)
-    }
+    return deleteServiceEndpoint(agent, id)
   }
 
   private async requireAgentWithDid(): Promise<VsAgent> {
     const agent = await this.agentService.getAgent()
     if (!agent.did) throw new BadRequestException('Agent has no public DID')
     return agent
-  }
-
-  private toHttpException(error: unknown): Error {
-    if (!(error instanceof ServiceEndpointError)) return error as Error
-    const body = { code: error.code, reason: error.message }
-    switch (error.code) {
-      case ServiceEndpointErrorCode.NotFound:
-        return new NotFoundException(body)
-      case ServiceEndpointErrorCode.DuplicateId:
-        return new ConflictException(body)
-      default:
-        return new BadRequestException(body)
-    }
   }
 }
