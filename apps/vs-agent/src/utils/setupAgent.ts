@@ -6,6 +6,7 @@ import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import {
+  assertVerifiableService,
   createVsAgent,
   HttpInboundTransport,
   setupBaseDidComm,
@@ -86,6 +87,17 @@ export const setupAgent = async ({
       : null,
   ])
 
+  const verifiablePublicRegistries =
+    VERANA_INDEXER_BASE_URL && VERANA_CHAIN_ID
+      ? [
+          {
+            id: `vpr:verana:${VERANA_CHAIN_ID}`,
+            baseUrls: [`${VERANA_INDEXER_BASE_URL}/verana`],
+            production: true,
+          },
+        ]
+      : undefined
+
   const agent = createVsAgent({
     plugins: [
       setupBaseDidComm({
@@ -93,16 +105,11 @@ export const setupAgent = async ({
         publicApiBaseUrl,
         endpoints,
         didcommVersions,
-        verifiablePublicRegistries:
-          VERANA_INDEXER_BASE_URL && VERANA_CHAIN_ID
-            ? [
-                {
-                  id: `vpr:verana:${VERANA_CHAIN_ID}`,
-                  baseUrls: [`${VERANA_INDEXER_BASE_URL}/verana`],
-                  production: true,
-                },
-              ]
+        vtFlow: {
+          assertVerifiableService: verifiablePublicRegistries
+            ? assertVerifiableService({ verifiablePublicRegistries })
             : undefined,
+        },
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol({ masterListCscaLocation })] : []),

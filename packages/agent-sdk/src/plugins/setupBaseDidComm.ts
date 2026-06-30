@@ -30,7 +30,6 @@ import { defaultDocumentLoader } from '../did/CachedDocumentLoader'
 import { CachedWebDidResolver } from '../did/CachedWebDidResolver'
 import { WebDidRegistrar } from '../did/WebDidRegistrar'
 import { VsAgentWsOutboundTransport } from '../transports/VsAgentWsOutboundTransport'
-import { assertVerifiableService, type AssertVerifiableServiceOptions } from '../vtFlow'
 
 export interface BaseDidCommPluginOptions {
   walletConfig: AskarModuleConfigStoreOptions
@@ -38,8 +37,6 @@ export interface BaseDidCommPluginOptions {
   endpoints: string[]
   vtFlow?: VtFlowModuleConfigOptions
   didcommVersions?: DidCommVersion[]
-  /** When set, wires the default VS-CONN-VS trust-resolution hook (verre) into vt-flow unless `vtFlow.assertVerifiableService` is already provided. */
-  verifiablePublicRegistries?: AssertVerifiableServiceOptions['verifiablePublicRegistries']
 }
 
 export interface BaseDidCommPlugin {
@@ -115,14 +112,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
       w3cCredentials: new W3cCredentialsModule({
         documentLoader: defaultDocumentLoader,
       }),
-      vtFlow: new VtFlowModule({
-        ...options.vtFlow,
-        assertVerifiableService:
-          options.vtFlow?.assertVerifiableService ??
-          (options.verifiablePublicRegistries
-            ? assertVerifiableService({ verifiablePublicRegistries: options.verifiablePublicRegistries })
-            : undefined),
-      }),
+      vtFlow: new VtFlowModule({ ...options.vtFlow }),
     },
   }
 }
