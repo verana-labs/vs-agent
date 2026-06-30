@@ -9,11 +9,7 @@ export interface AssertVerifiableServiceDeps {
   logger?: BaseLogger
 }
 
-/**
- * VS-CONN-VS gate: delegates trust resolution to `@verana-labs/verre` (`resolveDID`), which verifies
- * the peer's VTC signatures, schema bindings, digestSRI, issuer permissions and recurses to the
- * Ecosystem trust root. We only map the result to a boolean (fail-closed on error, TR-8).
- */
+// VS-CONN-VS gate: delegates trust resolution to `@verana-labs/verre` (`resolveDID`)
 export function assertVerifiableService(
   deps: AssertVerifiableServiceDeps,
 ): VtFlowAssertVerifiableServiceHook {
