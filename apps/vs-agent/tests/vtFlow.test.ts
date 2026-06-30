@@ -1,8 +1,5 @@
-import type { ServerConfig } from '../src/utils'
-import type { VsAgent } from '@verana-labs/vs-agent-sdk'
-
 import { LogLevel } from '@credo-ts/core'
-import { DidCommConnectionRecord, DidCommHandshakeProtocol } from '@credo-ts/didcomm'
+import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { VtFlowOrchestrator, type VsAgent } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
@@ -197,7 +194,7 @@ describe('vt-flow: two-agent integration', () => {
 
   it('vtFlowEvents POSTs vt-flow-state-updated as the Validator transitions to VALIDATING', async () => {
     const webhookUrl = 'http://localhost:5005'
-    const { vtFlowEvents } = await import('@verana-labs/vs-agent-sdk')
+    const { webhookEvent } = await import('../src/utils')
     const { TsLogger } = await import('../src/utils/logger')
 
     const baseFetch = global.fetch
@@ -210,28 +207,31 @@ describe('vt-flow: two-agent integration', () => {
     vi.stubGlobal('fetch', fetchSpy)
 
     try {
-      const conf: ServerConfig = {
-        port: 3000,
-        logger: new TsLogger(LogLevel.Off, validator.label),
-        publicApiBaseUrl: 'https://validator',
-        webhookUrl,
-        endpoints: validator.didcomm.config.endpoints,
-      }
-      await vtFlowEvents(validator, conf)
+      // vtFlowEvents is wired automatically on agent.initialize(); webhookEvent forwards the
+      // resulting VtFlowStateUpdated bus event to the configured webhook, mirroring connections/messages.
+      webhookEvent(validator, webhookUrl, new TsLogger(LogLevel.Off, validator.label))
 
       await applicant.modules.vtFlow.sendIssuanceRequest({
         connectionId: applicantConnection.id,
         schemaId: 'https://example.test/schemas/organization.json',
-        agentPermId: 'agent-perm-4',
-        walletAgentPermId: 'wallet-agent-perm-4',
+        agentParticipantId: 'agent-participant-4',
+        walletAgentParticipantId: 'wallet-agent-participant-4',
         claims: { name: 'Acme', country: 'CH' },
       })
 
       const validatingCall = await vi.waitFor(
         () => {
-          const call = fetchSpy.mock.calls.find(([, init]) => {
-            const parsed = JSON.parse((init as RequestInit).body as string)
-            return parsed.state === VtFlowState.Validating
+          const call = fetchSpy.mock.calls.find(([input, init]) => {
+            const url =
+              typeof input === 'string' ? input : ((input as { url?: string })?.url ?? String(input))
+            if (!url.startsWith(webhookUrl)) return false
+            const rawBody = (init as RequestInit | undefined)?.body
+            if (typeof rawBody !== 'string') return false
+            try {
+              return JSON.parse(rawBody).state === VtFlowState.Validating
+            } catch {
+              return false
+            }
           })
           expect(call).toBeDefined()
           return call!
@@ -250,7 +250,7 @@ describe('vt-flow: two-agent integration', () => {
       expect(body.variant).toBe(VtFlowVariant.DirectIssuance)
       expect(body.connectionId).toBeDefined()
       expect(body.threadId).toBeDefined()
-      expect(body.sessionUuid).toBeDefined()
+      expect(body.participantSessionId).toBeDefined()
       expect(body.vtFlowRecordId).toBeDefined()
       expect(body.schemaId).toBe('https://example.test/schemas/organization.json')
       expect(body.claims).toEqual({ name: 'Acme', country: 'CH' })

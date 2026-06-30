@@ -2,7 +2,6 @@ import { AskarModuleConfigStoreOptions, AskarSqliteStorageConfig } from '@credo-
 import { LogLevel, utils } from '@credo-ts/core'
 import { type DidCommVersion } from '@credo-ts/didcomm'
 import { agentDependencies } from '@credo-ts/node'
-import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import { type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { createVsAgent, setupBaseDidComm, VsAgent } from '@verana-labs/vs-agent-sdk'
 
