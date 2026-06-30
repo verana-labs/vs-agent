@@ -255,14 +255,8 @@ describe('vt-flow: two-agent integration', () => {
   })
 })
 
-/**
- * VS-CONN-VS trust gate: when an `assertVerifiableService` hook is configured, vt-flow runs trust
- * resolution on the peer's public DID before acting. `resolveDID` (delegated to `@verana-labs/verre`
- * in production) is mocked to always approve, so this only checks that a verified peer is let through
- * and that both sides resolve the right DID: the Applicant the Validator (VS-SVC-4) on send, and the
- * Validator the Applicant (VS-CONN-VS) on receive.
- */
-describe('vt-flow: VS-CONN-VS trust gate (verre approves)', () => {
+/** VS-CONN-VS trust gate: the `assertVerifiableService` hook gates each send/receive on trust resolution (`resolveDID`, mocked here). */
+describe('vt-flow: VS-CONN-VS trust gate', () => {
   let applicant: VsAgent<any>
   let validator: VsAgent<any>
   let applicantConnection: DidCommConnectionRecord
@@ -360,5 +354,47 @@ describe('vt-flow: VS-CONN-VS trust gate (verre approves)', () => {
     expect(conn.did).not.toContain('did:webvh:')
     expect(conn.did).toContain('did:peer:')
     expect(conn.previousDids).toContain(webvhDid)
+  })
+
+  it('rejects sendIssuanceRequest with vt-flow.not-a-verifiable-service when the hook returns false', async () => {
+    resolveDID.mockResolvedValue({ verified: false, outcome: 'not-trusted' })
+
+    await expect(
+      applicant.modules.vtFlow.sendIssuanceRequest({
+        connectionId: applicantConnection.id,
+        schemaId: 'https://example.test/schemas/organization.json',
+        agentParticipantId: 'agent-participant-gate-neg-1',
+        walletAgentParticipantId: 'wallet-agent-participant-gate-neg-1',
+      }),
+    ).rejects.toThrow('vt-flow.not-a-verifiable-service')
+
+    expect(resolveDID).toHaveBeenCalledWith(validator.did)
+  })
+
+  it('Validator does not reach VALIDATING on an IR from an unverified peer', async () => {
+    resolveDID.mockImplementation(async (did: string) => ({
+      verified: did === validator.did,
+      outcome: did === validator.did ? 'resolved' : 'not-trusted',
+    }))
+
+    const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
+      connectionId: applicantConnection.id,
+      schemaId: 'https://example.test/schemas/organization.json',
+      agentParticipantId: 'agent-participant-gate-neg-3',
+      walletAgentParticipantId: 'wallet-agent-participant-gate-neg-3',
+    })
+    expect(applicantRecord.state).toBe(VtFlowState.IrSent)
+
+    const deadline = Date.now() + 5000
+    while (Date.now() < deadline && !resolveDID.mock.calls.some(([did]) => did === applicant.did)) {
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+    expect(resolveDID).toHaveBeenCalledWith(applicant.did)
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const validatingEvent = validatorEvents.mock.calls
+      .flat()
+      .find(isVtFlowStateChangedEvent(VtFlowState.Validating))
+    expect(validatingEvent).toBeUndefined()
   })
 })
