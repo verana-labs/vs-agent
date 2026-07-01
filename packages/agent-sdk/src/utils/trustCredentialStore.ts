@@ -9,6 +9,7 @@ import {
 } from '@credo-ts/core'
 
 import { VsAgent } from '../agent/VsAgent'
+import { applyAdminApiServiceEntry } from '../did/adminApiService'
 
 import {
   addDigestSRI,
@@ -29,6 +30,7 @@ async function getDidRecord(agent: VsAgent) {
 
 async function updateDidRecord(agent: VsAgent, didRecord: DidRecord) {
   const repo = agent.context.dependencyManager.resolve(DidRepository)
+  applyAdminApiServiceEntry(didRecord.didDocument!, agent.adminApiServiceEndpoint)
   await repo.update(agent.context, didRecord)
   await agent.dids.update({ did: didRecord.did, didDocument: didRecord.didDocument! })
 }
