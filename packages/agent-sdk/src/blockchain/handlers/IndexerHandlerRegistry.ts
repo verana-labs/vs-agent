@@ -1,7 +1,7 @@
 import { VsAgent } from '../../agent'
 import { IndexerActivity, VeranaSyncState } from '../types'
 
-interface IndexerHandlerContext {
+export interface IndexerHandlerContext {
   agent: VsAgent
   block_height: number
   operatorAddress: string
