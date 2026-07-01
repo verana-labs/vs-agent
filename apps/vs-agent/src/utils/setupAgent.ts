@@ -9,6 +9,7 @@ import {
   assertVerifiableService,
   createVsAgent,
   HttpInboundTransport,
+  migrateLegacyTailsFiles,
   setupBaseDidComm,
   VeranaChainService,
   VsAgentWsInboundTransport,
@@ -145,6 +146,8 @@ export const setupAgent = async ({
   }
 
   await agent.initialize()
+
+  migrateLegacyTailsFiles(agent.context)
 
   return { agent }
 }
