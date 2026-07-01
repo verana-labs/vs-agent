@@ -1,6 +1,8 @@
 import { DidDocument, DidDocumentService, DidRepository, NewDidCommV2Service } from '@credo-ts/core'
+import { BadRequestException, Inject, Injectable } from '@nestjs/common'
+import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { VsAgent } from '../agent/VsAgent'
+import { VsAgentService } from '../../../services/VsAgentService'
 
 export enum ServiceEndpointErrorCode {
   DidcommEntry = 'DIDCOMM_ENTRY',
@@ -42,10 +44,8 @@ export interface UpdateServiceEndpointInput {
 
 const ADMIN_API_SERVICE_TYPE = 'VsAgentAdminAPI'
 const LINKED_VP_SERVICE_TYPE = 'LinkedVerifiablePresentation'
-// Only the v2 DIDCommMessaging type is reserved; v1 did-communication intentionally is not.
 const DIDCOMM_SERVICE_TYPE = NewDidCommV2Service.type
 
-// Agent-internal types (e.g. #anoncreds, #files): excluded and protected, though not named by the spec.
 const INTERNAL_SERVICE_TYPES: readonly string[] = ['AnonCredsRegistry', 'relativeRef']
 
 function reservedErrorCode(type: string): ServiceEndpointErrorCode | undefined {
@@ -106,11 +106,11 @@ function toServiceEndpoint(service: DidDocumentService): ServiceEndpoint {
   }
 }
 
-export function getServiceEndpoints(didDocument: DidDocument): ServiceEndpoint[] {
+function getServiceEndpoints(didDocument: DidDocument): ServiceEndpoint[] {
   return (didDocument.service ?? []).filter(s => !isManagedType(s.type)).map(toServiceEndpoint)
 }
 
-export function planAddServiceEndpoint(
+function planAddServiceEndpoint(
   agentDid: string,
   services: readonly DidDocumentService[],
   input: AddServiceEndpointInput,
@@ -144,7 +144,7 @@ export function planAddServiceEndpoint(
   return { services: [...services, service], added: toServiceEndpoint(service) }
 }
 
-export function planUpdateServiceEndpoint(
+function planUpdateServiceEndpoint(
   agentDid: string,
   services: readonly DidDocumentService[],
   id: string,
@@ -179,7 +179,7 @@ export function planUpdateServiceEndpoint(
   }
 }
 
-export function planDeleteServiceEndpoint(
+function planDeleteServiceEndpoint(
   agentDid: string,
   services: readonly DidDocumentService[],
   id: string,
@@ -211,7 +211,6 @@ function findConsumableTarget(
 }
 
 async function loadDidRecord(agent: VsAgent) {
-  if (!agent.did) throw new ServiceEndpointError(ServiceEndpointErrorCode.NotFound, 'Agent has no public DID')
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
   if (!didRecord?.didDocument) {
     throw new ServiceEndpointError(
@@ -222,72 +221,83 @@ async function loadDidRecord(agent: VsAgent) {
   return didRecord
 }
 
-async function publishDidDocument(
-  agent: VsAgent,
-  didRecord: Awaited<ReturnType<typeof loadDidRecord>>,
-): Promise<void> {
-  const didRepository = agent.context.dependencyManager.resolve(DidRepository)
-  await didRepository.update(agent.context, didRecord)
-  await agent.dids.update({ did: didRecord.did, didDocument: didRecord.didDocument! })
-  await triggerResolverAfterMutation(agent)
-}
+@Injectable()
+export class ServiceEndpointsService {
+  public constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
 
-// Best-effort: after a DID Document change, ask the chain to re-resolve trust (MOD-PP-MSG-15).
-async function triggerResolverAfterMutation(agent: VsAgent): Promise<void> {
-  const chain = agent.veranaChain
-  if (!chain || !chain.autoTriggerResolverEnabled || !agent.did) return
-  try {
-    const participantId = await chain.findActiveHolderParticipantIdByDid(agent.did)
-    if (participantId === undefined) return
-    await chain.triggerResolver(participantId)
-  } catch (error) {
-    agent.config.logger.warn('[ServiceEndpoints] TriggerResolver failed; will refresh on next change', {
-      error: error instanceof Error ? error.message : String(error),
-    })
+  public async list(): Promise<ServiceEndpoint[]> {
+    const agent = await this.requireAgentWithDid()
+    const didRecord = await loadDidRecord(agent)
+    return getServiceEndpoints(didRecord.didDocument!)
   }
-}
 
-export async function listServiceEndpoints(agent: VsAgent): Promise<ServiceEndpoint[]> {
-  const didRecord = await loadDidRecord(agent)
-  return getServiceEndpoints(didRecord.didDocument!)
-}
+  public async add(input: AddServiceEndpointInput): Promise<ServiceEndpoint> {
+    const agent = await this.requireAgentWithDid()
+    const didRecord = await loadDidRecord(agent)
+    const { services, added } = planAddServiceEndpoint(
+      agent.did!,
+      didRecord.didDocument!.service ?? [],
+      input,
+    )
+    didRecord.didDocument!.service = services
+    await this.publishDidDocument(agent, didRecord)
+    return added
+  }
 
-export async function addServiceEndpoint(
-  agent: VsAgent,
-  input: AddServiceEndpointInput,
-): Promise<ServiceEndpoint> {
-  const didRecord = await loadDidRecord(agent)
-  const { services, added } = planAddServiceEndpoint(agent.did!, didRecord.didDocument!.service ?? [], input)
-  didRecord.didDocument!.service = services
-  await publishDidDocument(agent, didRecord)
-  return added
-}
+  public async update(id: string, input: UpdateServiceEndpointInput): Promise<ServiceEndpoint> {
+    const agent = await this.requireAgentWithDid()
+    const didRecord = await loadDidRecord(agent)
+    const { services, updated } = planUpdateServiceEndpoint(
+      agent.did!,
+      didRecord.didDocument!.service ?? [],
+      id,
+      input,
+    )
+    didRecord.didDocument!.service = services
+    await this.publishDidDocument(agent, didRecord)
+    return updated
+  }
 
-export async function updateServiceEndpoint(
-  agent: VsAgent,
-  id: string,
-  input: UpdateServiceEndpointInput,
-): Promise<ServiceEndpoint> {
-  const didRecord = await loadDidRecord(agent)
-  const { services, updated } = planUpdateServiceEndpoint(
-    agent.did!,
-    didRecord.didDocument!.service ?? [],
-    id,
-    input,
-  )
-  didRecord.didDocument!.service = services
-  await publishDidDocument(agent, didRecord)
-  return updated
-}
+  public async delete(id: string): Promise<ServiceEndpoint> {
+    const agent = await this.requireAgentWithDid()
+    const didRecord = await loadDidRecord(agent)
+    const { services, deleted } = planDeleteServiceEndpoint(
+      agent.did!,
+      didRecord.didDocument!.service ?? [],
+      id,
+    )
+    didRecord.didDocument!.service = services
+    await this.publishDidDocument(agent, didRecord)
+    return deleted
+  }
 
-export async function deleteServiceEndpoint(agent: VsAgent, id: string): Promise<ServiceEndpoint> {
-  const didRecord = await loadDidRecord(agent)
-  const { services, deleted } = planDeleteServiceEndpoint(
-    agent.did!,
-    didRecord.didDocument!.service ?? [],
-    id,
-  )
-  didRecord.didDocument!.service = services
-  await publishDidDocument(agent, didRecord)
-  return deleted
+  private async requireAgentWithDid(): Promise<VsAgent> {
+    const agent = await this.agentService.getAgent()
+    if (!agent.did) throw new BadRequestException('Agent has no public DID')
+    return agent
+  }
+
+  private async publishDidDocument(
+    agent: VsAgent,
+    didRecord: Awaited<ReturnType<typeof loadDidRecord>>,
+  ): Promise<void> {
+    const didRepository = agent.context.dependencyManager.resolve(DidRepository)
+    await didRepository.update(agent.context, didRecord)
+    await agent.dids.update({ did: didRecord.did, didDocument: didRecord.didDocument! })
+    await this.triggerResolverAfterMutation(agent)
+  }
+
+  private async triggerResolverAfterMutation(agent: VsAgent): Promise<void> {
+    const chain = agent.veranaChain
+    if (!chain || !chain.autoTriggerResolverEnabled || !agent.did) return
+    try {
+      const participantId = await chain.findActiveHolderParticipantIdByDid(agent.did)
+      if (participantId === undefined) return
+      await chain.triggerResolver(participantId)
+    } catch (error) {
+      agent.config.logger.warn('[ServiceEndpoints] TriggerResolver failed; will refresh on next change', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
 }

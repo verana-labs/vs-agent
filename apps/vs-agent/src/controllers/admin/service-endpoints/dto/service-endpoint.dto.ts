@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { ServiceEndpointValue } from '@verana-labs/vs-agent-sdk'
 import { IsDefined, IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator'
+
+import { ServiceEndpointValue } from '../ServiceEndpointsService'
 
 export class AddServiceEndpointDto {
   @ApiProperty({

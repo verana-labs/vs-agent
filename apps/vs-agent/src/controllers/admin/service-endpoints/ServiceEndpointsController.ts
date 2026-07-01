@@ -10,18 +10,9 @@ import {
   UseFilters,
 } from '@nestjs/common'
 import { ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
-import {
-  addServiceEndpoint,
-  deleteServiceEndpoint,
-  listServiceEndpoints,
-  ServiceEndpoint,
-  updateServiceEndpoint,
-  VsAgent,
-} from '@verana-labs/vs-agent-sdk'
-
-import { VsAgentService } from '../../../services/VsAgentService'
 
 import { ServiceEndpointExceptionFilter } from './ServiceEndpointExceptionFilter'
+import { ServiceEndpoint, ServiceEndpointsService } from './ServiceEndpointsService'
 import {
   AddServiceEndpointDto,
   ServiceEndpointDto,
@@ -32,7 +23,7 @@ import {
 @Controller({ path: 'vt/service-endpoints', version: '1' })
 @UseFilters(ServiceEndpointExceptionFilter)
 export class ServiceEndpointsController {
-  constructor(private readonly agentService: VsAgentService) {}
+  constructor(private readonly service: ServiceEndpointsService) {}
 
   @Get('/')
   @ApiOperation({
@@ -42,16 +33,14 @@ export class ServiceEndpointsController {
   })
   @ApiOkResponse({ description: 'Consumable service entries', type: ServiceEndpointDto, isArray: true })
   public async listServiceEndpoints(): Promise<ServiceEndpoint[]> {
-    const agent = await this.requireAgentWithDid()
-    return listServiceEndpoints(agent)
+    return this.service.list()
   }
 
   @Post('/')
   @ApiOperation({ summary: 'Add a consumable service endpoint' })
   @ApiOkResponse({ description: 'The created service entry', type: ServiceEndpointDto })
   public async addServiceEndpoint(@Body() dto: AddServiceEndpointDto): Promise<ServiceEndpoint> {
-    const agent = await this.requireAgentWithDid()
-    return addServiceEndpoint(agent, dto)
+    return this.service.add(dto)
   }
 
   @Patch('/:id')
@@ -65,8 +54,7 @@ export class ServiceEndpointsController {
     if (dto.type === undefined && dto.serviceEndpoint === undefined) {
       throw new BadRequestException('At least one of type or serviceEndpoint must be provided')
     }
-    const agent = await this.requireAgentWithDid()
-    return updateServiceEndpoint(agent, id, dto)
+    return this.service.update(id, dto)
   }
 
   @Delete('/:id')
@@ -74,13 +62,6 @@ export class ServiceEndpointsController {
   @ApiParam({ name: 'id', description: 'Percent-encoded entry id (e.g. %23mcp for #mcp)', example: '%23mcp' })
   @ApiOkResponse({ description: 'The deleted service entry', type: ServiceEndpointDto })
   public async deleteServiceEndpoint(@Param('id') id: string): Promise<ServiceEndpoint> {
-    const agent = await this.requireAgentWithDid()
-    return deleteServiceEndpoint(agent, id)
-  }
-
-  private async requireAgentWithDid(): Promise<VsAgent> {
-    const agent = await this.agentService.getAgent()
-    if (!agent.did) throw new BadRequestException('Agent has no public DID')
-    return agent
+    return this.service.delete(id)
   }
 }

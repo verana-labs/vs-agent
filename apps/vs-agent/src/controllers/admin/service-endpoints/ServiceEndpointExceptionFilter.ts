@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpStatus } from '@nestjs/common'
-import { ServiceEndpointError, ServiceEndpointErrorCode } from '@verana-labs/vs-agent-sdk'
 import { Response } from 'express'
+
+import { ServiceEndpointError, ServiceEndpointErrorCode } from './ServiceEndpointsService'
 
 @Catch(ServiceEndpointError)
 export class ServiceEndpointExceptionFilter implements ExceptionFilter<ServiceEndpointError> {
