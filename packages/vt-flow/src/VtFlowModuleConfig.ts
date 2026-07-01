@@ -33,7 +33,8 @@ export type VtFlowBuildCredentialOfferHook = (
 
 export interface VtFlowAssertVerifiableServiceContext {
   agentContext: AgentContext
-  connectionId: string
+  peerDid: string
+  connectionId?: string
 }
 
 /** Spec Verifiable Service Identity Check: caller-provided VS-CONN-VS gate invoked at session start (Applicant before sending OR/IR, Validator on receipt of OR/IR). Return `false` (or throw) to reject the peer; the module then aborts the operation with a `vt-flow.not-a-verifiable-service` error. When the hook is undefined, the module logs a warning and permits — production callers MUST configure this for spec-conformant trust resolution. */

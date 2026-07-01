@@ -300,6 +300,13 @@ const run = async () => {
     })
   }
 
+  // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
+  if (!VERANA_INDEXER_BASE_URL || !VERANA_CHAIN_ID) {
+    serverLogger.warn(
+      'VERANA_INDEXER_BASE_URL or VERANA_CHAIN_ID not set. The VS-CONN-VS trust gate is disabled and every peer will be accepted. Set these environment variables to enforce trust resolution.',
+    )
+  }
+
   agent.config.logger.info(
     `VS Agent v${packageJson['version']} running in port ${AGENT_PORT}. Admin interface at port ${conf.port}`,
   )
