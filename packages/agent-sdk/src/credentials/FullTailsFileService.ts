@@ -21,6 +21,7 @@ export function getTailsDirectoryPath(agentContext: AgentContext): string {
 }
 
 // Copy uuid tails files from earlier locations (TAILS_DIRECTORY_PATH, ~/.afj/tails, the old cwd ./tails) into the current dir so URLs published before the hash-based change still resolve.
+// TODO (last legacy version: v1.12.0-dev.8): Remove this once the last release using the legacy configuration is no longer supported.
 export function migrateLegacyTailsFiles(agentContext: AgentContext): void {
   const directory = getTailsDirectoryPath(agentContext)
   const legacyDirectories = [
