@@ -22,9 +22,10 @@ export { VsAgentWsOutboundTransport } from './transports/VsAgentWsOutboundTransp
 // Credentials
 export {
   FullTailsFileService,
-  tailsIndex,
-  baseFilePath,
-  deleteTailsEntry,
+  getTailsDirectoryPath,
+  deleteTailsFile,
+  isValidTailsFileName,
+  migrateLegacyTailsFiles,
 } from './credentials/FullTailsFileService'
 
 // Utils

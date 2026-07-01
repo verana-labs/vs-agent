@@ -4,10 +4,17 @@ import {
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
 import { Controller, Get, Param, Res, HttpStatus, HttpException, Inject, Query } from '@nestjs/common'
-import { baseFilePath, getLegacyDidDocument, getWebDid, tailsIndex, VsAgent } from '@verana-labs/vs-agent-sdk'
+import {
+  getLegacyDidDocument,
+  getTailsDirectoryPath,
+  getWebDid,
+  isValidTailsFileName,
+  VsAgent,
+} from '@verana-labs/vs-agent-sdk'
 import { DIDLog } from 'didwebvh-ts'
 import { Response } from 'express'
 import * as fs from 'fs'
+import * as path from 'path'
 
 import { VsAgentService } from '../../../services'
 
@@ -170,35 +177,20 @@ export class DidWebController {
   @Get('/anoncreds/v1/tails/:tailsFileId')
   async getTailsFile(@Param('tailsFileId') tailsFileId: string, @Res() res: Response) {
     const agent = await this.agentService.getAgent()
-    agent.config.logger.debug(`requested file`)
 
-    if (!tailsFileId) {
-      throw new HttpException('tailsFileId not found', HttpStatus.CONFLICT)
-    }
-
-    const fileName = tailsIndex[tailsFileId]
-
-    if (!fileName) {
-      agent.config.logger.debug(`no entry found for tailsFileId: ${tailsFileId}`)
+    if (!tailsFileId || !isValidTailsFileName(tailsFileId)) {
       throw new HttpException('tailsFileId not found', HttpStatus.NOT_FOUND)
     }
 
-    const path = `${baseFilePath}/${fileName}`
-    try {
-      agent.config.logger.debug(`reading file: ${path}`)
-
-      if (!fs.existsSync(path)) {
-        agent.config.logger.debug(`file not found: ${path}`)
-        throw new HttpException('tailsFileId not found', HttpStatus.NOT_FOUND)
-      }
-
-      const file = fs.createReadStream(path)
-      res.setHeader('Content-Disposition', `attachment: filename="${fileName}"`)
-      file.pipe(res)
-    } catch (error) {
-      agent.config.logger.debug(`error reading file: ${path}`)
-      throw new HttpException('Internal Server Error', HttpStatus.INTERNAL_SERVER_ERROR)
+    const filePath = path.join(getTailsDirectoryPath(agent.context), tailsFileId)
+    if (!fs.existsSync(filePath)) {
+      throw new HttpException('tailsFileId not found', HttpStatus.NOT_FOUND)
     }
+
+    res.setHeader('Content-Disposition', `attachment; filename="${tailsFileId}"`)
+    const stream = fs.createReadStream(filePath)
+    stream.on('error', () => res.destroy())
+    stream.pipe(res)
   }
 
   @Get('/resources')
