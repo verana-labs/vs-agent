@@ -43,6 +43,7 @@ import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { connectionEvents } from '../events/ConnectionEvents'
+import { vtFlowEvents } from '../events/VtFlowEvents'
 
 const MANAGED_DIDCOMM_SERVICE_TYPES: readonly string[] = [DidCommV1Service.type, NewDidCommV2Service.type]
 
@@ -116,6 +117,11 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
   public async initialize() {
     await super.initialize()
+
+    const logger = this.config.logger as BaseLogger
+    await connectionEvents(this, { discoveryOptions: this.discoveryOptions, logger })
+    await baseMessageEvents(this as VsAgent, logger)
+    await vtFlowEvents(this as VsAgent, logger)
 
     if (this.hasUserProfile) {
       // Make sure default User Profile corresponds to settings in environment variables
@@ -288,11 +294,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       }
       this.did = existingRecord.did
     }
-
-    // Initialize events
-    const logger = this.config.logger as BaseLogger
-    await connectionEvents(this, { discoveryOptions: this.discoveryOptions, logger })
-    await baseMessageEvents(this as VsAgent, logger)
   }
 
   private async findCreatedDid(parsedDid: ParsedDid) {
