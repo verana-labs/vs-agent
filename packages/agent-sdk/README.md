@@ -49,7 +49,14 @@ await indexerWs.start()
 
 ### Custom Handlers
 
-Build default handlers or replace with your own:
+A handler implements `IndexerEventHandler`: a `msg` (the indexer activity name it reacts to) and a
+`handle(activity, ctx)` method. Register handlers on an `IndexerHandlerRegistry` and pass it to the
+service via the `handlerRegistry` option. When no registry is provided, the service falls back to
+`buildDefaultIndexerHandlerRegistry()`, so the default behavior is unchanged.
+
+`register` stores handlers keyed by `msg`, so registering a handler for an existing `msg` **overrides**
+the default one, and registering a new `msg` **adds** support for an event the default implementation
+does not cover.
 
 ```typescript
 import { buildDefaultIndexerHandlerRegistry } from '@verana-labs/vs-agent-sdk'
@@ -63,21 +70,29 @@ const indexerWs = new IndexerWebSocketService({
 })
 ```
 
-**Override a specific handler:**
+**Override a default handler, or add one for an uncovered event:**
 
 ```typescript
 import { buildDefaultIndexerHandlerRegistry } from '@verana-labs/vs-agent-sdk'
-import type { IndexerActivity, IndexerDispatchContext } from '@verana-labs/vs-agent-sdk'
+import type { IndexerActivity, IndexerHandlerContext } from '@verana-labs/vs-agent-sdk'
 
 const registry = buildDefaultIndexerHandlerRegistry()
 
-// Replace credential schema handler with custom logic
-registry.register('CredentialSchema', async (activity: IndexerActivity, context: IndexerDispatchContext) => {
-  const { id, jsonSchema } = activity.changes as any
-  console.log(`Schema ${id} updated at block ${context.blockHeight}`)
-  
-  // Sync to your database
-  await db.schemas.update(id, { schema: jsonSchema })
+// Replace the default handler for a given msg with custom logic
+registry.register({
+  msg: 'UpdateCredentialSchema',
+  handle: async (activity: IndexerActivity, ctx: IndexerHandlerContext) => {
+    ctx.agent.config.logger.info(`Schema ${activity.entity_id} updated at block ${ctx.block_height}`)
+    await db.schemas.update(activity.entity_id, activity.changes)
+  },
+})
+
+// Add a handler for an event the default implementation does not cover
+registry.register({
+  msg: 'SomeCustomEvent',
+  handle: async (activity, ctx) => {
+    ctx.agent.config.logger.info(`Custom event ${activity.entity_id} at block ${ctx.block_height}`)
+  },
 })
 
 const indexerWs = new IndexerWebSocketService({
@@ -87,25 +102,18 @@ const indexerWs = new IndexerWebSocketService({
 })
 ```
 
-**Custom handlers from scratch:**
+**Compose on top of a default handler** (run the default, then your own logic):
 
 ```typescript
-import { IndexerHandlerRegistry } from '@verana-labs/vs-agent-sdk'
-import type { IndexerActivity, IndexerDispatchContext } from '@verana-labs/vs-agent-sdk'
+const registry = buildDefaultIndexerHandlerRegistry()
+const previous = registry.get('StartParticipantOP')
 
-const registry = new IndexerHandlerRegistry()
-
-// Handle ecosystem changes
-registry.register('Ecosystem', async (activity, context) => {
-  const { id, did, archived } = activity.changes as any
-  await agent.config.logger.info(`[Block ${context.blockHeight}] Ecosystem ${id} ${archived ? 'archived' : 'activated'}`)
-})
-
-// Handle participant changes with custom messages
-registry.register('Participant', async (activity, context) => {
-  const { id, revoked } = activity.changes as any
-  const status = revoked ? 'revoked' : 'granted'
-  await agent.config.logger.info(`[Block ${context.blockHeight}] Participant ${status}: ${id}`)
+registry.register({
+  msg: 'StartParticipantOP',
+  handle: async (activity, ctx) => {
+    await previous?.handle(activity, ctx)
+    await myExtraSideEffect(activity, ctx)
+  },
 })
 
 const indexerWs = new IndexerWebSocketService({
