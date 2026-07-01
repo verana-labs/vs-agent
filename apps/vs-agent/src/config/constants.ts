@@ -128,7 +128,6 @@ export const VERANA_RPC_ENDPOINT_URL = process.env.VERANA_RPC_ENDPOINT_URL
 export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID
 export const VERANA_CORPORATION_ID = process.env.VERANA_CORPORATION_ID
 
-// Agent mode: standalone (default) or delegated
 export const AGENT_MODE = (process.env.AGENT_MODE ?? '').trim().toLowerCase() || 'standalone'
 export const AGENT_DELEGATED_PARENT_VS_DID = process.env.AGENT_DELEGATED_PARENT_VS_DID
 
