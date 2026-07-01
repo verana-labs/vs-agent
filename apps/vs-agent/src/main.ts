@@ -65,6 +65,7 @@ import {
   VERANA_ACCOUNT_MNEMONIC,
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
+  VERANA_AUTO_TRIGGER_RESOLVER,
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
@@ -234,6 +235,7 @@ const run = async () => {
       chainId: VERANA_CHAIN_ID,
       mnemonic: VERANA_ACCOUNT_MNEMONIC,
       logger: serverLogger,
+      autoTriggerResolver: VERANA_AUTO_TRIGGER_RESOLVER,
     })
     await veranaChain.start()
   } else {
