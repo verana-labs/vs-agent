@@ -1,5 +1,6 @@
 import { AskarModuleConfigStoreOptions, AskarSqliteStorageConfig } from '@credo-ts/askar'
 import { LogLevel, utils } from '@credo-ts/core'
+import { type DidCommVersion } from '@credo-ts/didcomm'
 import { agentDependencies } from '@credo-ts/node'
 import { type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { createVsAgent, setupBaseDidComm, VsAgent } from '@verana-labs/vs-agent-sdk'
@@ -10,10 +11,12 @@ export const startAgent = async ({
   label,
   domain,
   vtFlowOptions,
+  didcommVersions,
 }: {
   label: string
   domain: string
   vtFlowOptions?: VtFlowModuleConfigOptions
+  didcommVersions?: DidCommVersion[]
 }): Promise<VsAgent<any>> => {
   const walletConfig = getAskarStoreConfig(label, { inMemory: true })
 
@@ -29,6 +32,7 @@ export const startAgent = async ({
         publicApiBaseUrl: `https://${domain}`,
         endpoints: [`rxjs:${domain}`],
         vtFlow: vtFlowOptions,
+        didcommVersions,
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol()] : []),

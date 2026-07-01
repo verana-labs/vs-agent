@@ -112,7 +112,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
       w3cCredentials: new W3cCredentialsModule({
         documentLoader: defaultDocumentLoader,
       }),
-      vtFlow: new VtFlowModule(options.vtFlow),
+      vtFlow: new VtFlowModule({ ...options.vtFlow }),
     },
   }
 }
