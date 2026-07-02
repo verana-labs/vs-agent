@@ -28,6 +28,12 @@ export const AGENT_PUBLIC_DID = process.env.AGENT_PUBLIC_DID
 export const PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL
 export const DEFAULT_PUBLIC_API_BASE_URL = 'http://localhost:3001'
 
+export const ADMIN_API_PUBLIC_URL = process.env.ADMIN_API_PUBLIC_URL
+export const ADMIN_API_AUTH_MODE = (process.env.ADMIN_API_AUTH_MODE ?? 'internal')
+  .split(',')
+  .map(s => s.trim().toLowerCase())
+  .filter(s => s.length > 0)
+
 export const EVENTS_BASE_URL = process.env.EVENTS_BASE_URL || 'http://localhost:5000'
 
 // Wallet and Database
@@ -127,6 +133,7 @@ export const VERANA_ACCOUNT_MNEMONIC = process.env.VERANA_ACCOUNT_MNEMONIC
 export const VERANA_RPC_ENDPOINT_URL = process.env.VERANA_RPC_ENDPOINT_URL
 export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID
 export const VERANA_CORPORATION_ID = process.env.VERANA_CORPORATION_ID
+export const VERANA_AUTO_TRIGGER_RESOLVER = process.env.VERANA_AUTO_TRIGGER_RESOLVER !== 'false'
 
 export const AGENT_MODE = (process.env.AGENT_MODE ?? '').trim().toLowerCase() || 'standalone'
 export const AGENT_DELEGATED_PARENT_VS_DID = process.env.AGENT_DELEGATED_PARENT_VS_DID

@@ -50,6 +50,8 @@ import {
   askarPostgresConfig,
   keyDerivationMethodMap,
   DEFAULT_AGENT_ENDPOINTS,
+  ADMIN_API_AUTH_MODE,
+  ADMIN_API_PUBLIC_URL,
   DEFAULT_PUBLIC_API_BASE_URL,
   ENABLED_PLUGINS,
   EVENTS_BASE_URL,
@@ -64,6 +66,7 @@ import {
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
   VERANA_CORPORATION_ID,
+  VERANA_AUTO_TRIGGER_RESOLVER,
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
 } from './config'
@@ -178,6 +181,47 @@ const run = async () => {
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
+  if (ADMIN_API_AUTH_MODE.length === 0) {
+    serverLogger.error('ADMIN_API_AUTH_MODE is required (comma-separated list of: internal, corporation)')
+    process.exit(1)
+  }
+  const unknownAuthModes = ADMIN_API_AUTH_MODE.filter(mode => !['internal', 'corporation'].includes(mode))
+  if (unknownAuthModes.length > 0) {
+    serverLogger.error(
+      `ADMIN_API_AUTH_MODE has unsupported value(s): ${unknownAuthModes.join(', ')}. Allowed: internal, corporation`,
+    )
+    process.exit(1)
+  }
+  if (ADMIN_API_PUBLIC_URL) {
+    let isBareHttpsOrigin = false
+    try {
+      const url = new URL(ADMIN_API_PUBLIC_URL)
+      isBareHttpsOrigin = url.protocol === 'https:' && url.origin === ADMIN_API_PUBLIC_URL
+    } catch {
+      isBareHttpsOrigin = false
+    }
+    if (!isBareHttpsOrigin) {
+      serverLogger.error(
+        'ADMIN_API_PUBLIC_URL must be a single https:// origin (scheme + host + optional port, no trailing path)',
+      )
+      process.exit(1)
+    }
+  }
+
+  if (ADMIN_API_PUBLIC_URL && !ADMIN_API_AUTH_MODE.includes('corporation')) {
+    serverLogger.error(
+      'ADMIN_API_PUBLIC_URL must not be set unless ADMIN_API_AUTH_MODE includes "corporation"',
+    )
+    process.exit(1)
+  }
+  if (ADMIN_API_AUTH_MODE.includes('corporation') && !ADMIN_API_PUBLIC_URL) {
+    serverLogger.error('ADMIN_API_PUBLIC_URL is required when ADMIN_API_AUTH_MODE includes "corporation"')
+    process.exit(1)
+  }
+  const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE.includes('corporation')
+    ? ADMIN_API_PUBLIC_URL
+    : undefined
+
   // Dynamically load optional plugin packages.
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
   const [chatModule, mrtdModule] = await Promise.all([
@@ -212,6 +256,7 @@ const run = async () => {
       chainId: VERANA_CHAIN_ID,
       mnemonic: VERANA_ACCOUNT_MNEMONIC,
       logger: serverLogger,
+      autoTriggerResolver: VERANA_AUTO_TRIGGER_RESOLVER,
     })
     await veranaChain.start()
   } else {
@@ -248,6 +293,7 @@ const run = async () => {
     masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
     veranaChain,
+    adminApiServiceEndpoint,
   })
 
   const conf: ServerConfig = {
