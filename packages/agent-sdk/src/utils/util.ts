@@ -139,10 +139,16 @@ export const SOVRIN_STAGING_NET = `{"reqSignature":{},"txn":{"data":{"data":{"al
 {"reqSignature":{"type":"ED25519","values":[{"from":"6feBTywcmJUriqqnGc1zSJ","value":"3QyhWLE53fg8wsNRFJijV6QKax2deCAzhUa1g152KYJ7exk1iqv6mLsHtY5KXNiXLg1a8vxQiFj8Hp8iRb7CXrCA"}]},"txn":{"data":{"data":{"alias":"RFCU","services":[]},"dest":"2B8bkZX3SvcBq3amP7aeATsSPz82RyyCJQbEjZpLgZLh"},"metadata":{"digest":"58c132bc0b8c96fb7628e8b7af9a9086ff2b2c894091090f88eb328ee945fe28","from":"6feBTywcmJUriqqnGc1zSJ","payloadDigest":"64b6882e3cbf71154369d91f9da431d069b465116dada6ba685928cd11c7b9e3","reqId":1558034435821210238},"protocolVersion":2,"type":"0"},"txnMetadata":{"seqNo":134,"txnTime":1558034436},"ver":"1"}
 `
 
-export async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url)
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${url}: ${res.statusText}`)
+export async function fetchJson<T>(url: string, timeoutMs?: number): Promise<T> {
+  const controller = timeoutMs ? new AbortController() : undefined
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : undefined
+  try {
+    const res = await fetch(url, controller ? { signal: controller.signal } : undefined)
+    if (!res.ok) {
+      throw new Error(`Failed to fetch ${url}: ${res.statusText}`)
+    }
+    return (await res.json()) as T
+  } finally {
+    if (timer) clearTimeout(timer)
   }
-  return res.json() as Promise<T>
 }
