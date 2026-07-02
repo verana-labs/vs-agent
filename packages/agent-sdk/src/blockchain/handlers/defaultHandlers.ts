@@ -21,7 +21,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertEcosystem(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] CreateNewEcosystem entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] CreateNewEcosystem entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
     },
   },
@@ -30,7 +30,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertEcosystem(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] UpdateEcosystem entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] UpdateEcosystem entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
     },
   },
@@ -39,7 +39,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertEcosystem(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] AddGovernanceFrameworkDocument entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] AddGovernanceFrameworkDocument entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
     },
   },
@@ -48,7 +48,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       bumpActiveVersion(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] IncreaseActiveGFVersion entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] IncreaseActiveGFVersion entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
     },
   },
@@ -57,7 +57,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertCredentialSchema(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] CreateNewCredentialSchema entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] CreateNewCredentialSchema entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
       await publishVtjscIfOwner(ctx.state, ctx.agent, String(activity.entity_id))
     },
@@ -67,7 +67,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertCredentialSchema(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] UpdateCredentialSchema entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] UpdateCredentialSchema entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
     },
   },
@@ -76,7 +76,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertCredentialSchema(ctx.state, activity)
       ctx.agent.config.logger.info(
-        `[IndexerWS] ArchiveCredentialSchema entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] ArchiveCredentialSchema entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
     },
   },
@@ -85,7 +85,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertParticipant(ctx.state, activity, { opState: 'PENDING' })
       ctx.agent.config.logger.info(
-        `[IndexerWS] StartParticipantOP entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] StartParticipantOP entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
 
       await startParticipantOPAutoFlow(ctx.agent, activity)
@@ -96,7 +96,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertParticipant(ctx.state, activity, { opState: 'PENDING' })
       ctx.agent.config.logger.info(
-        `[IndexerWS] RenewParticipantOP entity=${activity.entity_id} block=${ctx.block_height} — TODO §5.1: progress credential acquisition flow (applicant renewal)`,
+        `[IndexerWS] RenewParticipantOP entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §5.1: progress credential acquisition flow (applicant renewal)`,
       )
     },
   },
@@ -105,7 +105,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertParticipant(ctx.state, activity, { opState: 'VALIDATED' })
       ctx.agent.config.logger.info(
-        `[IndexerWS] SetParticipantOPToValidated participant=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] SetParticipantOPToValidated participant=${activity.entity_id} block=${ctx.blockHeight}`,
       )
       await markVtFlowRecordsValidated(ctx.agent, String(activity.entity_id))
     },
@@ -117,7 +117,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
         effectiveUntil: String(activity.changes['effective_until'] ?? ''),
       })
       ctx.agent.config.logger.info(
-        `[IndexerWS] SetParticipantEffectiveUntil entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] SetParticipantEffectiveUntil entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
     },
   },
@@ -126,7 +126,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertParticipant(ctx.state, activity, { revoked: true })
       ctx.agent.config.logger.info(
-        `[IndexerWS] RevokeParticipant entity=${activity.entity_id} block=${ctx.block_height} — TODO §7.2: remove linked VP from DID doc + delete credential`,
+        `[IndexerWS] RevokeParticipant entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §7.2: remove linked VP from DID doc + delete credential`,
       )
       await setVtFlowRecordsParticipantRevoked(ctx.agent, String(activity.entity_id))
     },
@@ -136,7 +136,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertParticipant(ctx.state, activity, { slashed: true })
       ctx.agent.config.logger.info(
-        `[IndexerWS] SlashParticipantTrustDeposit participant=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] SlashParticipantTrustDeposit participant=${activity.entity_id} block=${ctx.blockHeight}`,
       )
       await setVtFlowRecordsParticipantSlashed(ctx.agent, String(activity.entity_id))
     },
@@ -146,7 +146,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertParticipant(ctx.state, activity, { slashed: false })
       ctx.agent.config.logger.info(
-        `[IndexerWS] RepayParticipantSlashedTrustDeposit entity=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] RepayParticipantSlashedTrustDeposit entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
     },
   },
@@ -155,7 +155,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
     handle: async (activity, ctx) => {
       upsertParticipant(ctx.state, activity, {})
       ctx.agent.config.logger.info(
-        `[IndexerWS] CancelParticipantOPLastRequest participant=${activity.entity_id} block=${ctx.block_height}`,
+        `[IndexerWS] CancelParticipantOPLastRequest participant=${activity.entity_id} block=${ctx.blockHeight}`,
       )
       await terminateVtFlowRecordsByApplicant(ctx.agent, String(activity.entity_id))
     },

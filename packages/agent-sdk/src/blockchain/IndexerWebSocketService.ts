@@ -216,7 +216,7 @@ export class IndexerWebSocketService {
     try {
       await this.handlerRegistry.dispatch(activity, {
         agent: this.options.agent,
-        block_height,
+        blockHeight: block_height,
         operatorAddress: event.payload.sender,
         state,
         txHash: event.tx_hash,
