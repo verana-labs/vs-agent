@@ -5,7 +5,10 @@ import {
   IndexerHandlerContext,
   IndexerHandlerRegistry,
 } from '../src/blockchain/handlers/IndexerHandlerRegistry'
-import { buildDefaultIndexerHandlerRegistry, defaultHandlers } from '../src/blockchain/handlers/defaultHandlers'
+import {
+  buildDefaultIndexerHandlerRegistry,
+  defaultHandlers,
+} from '../src/blockchain/handlers/defaultHandlers'
 import { applyStateMutation } from '../src/blockchain/handlers/stateMutations'
 import { IndexerActivity, VeranaSyncState } from '../src/blockchain/types'
 
@@ -14,7 +17,14 @@ function emptyState(): VeranaSyncState {
 }
 
 function makeContext(state: VeranaSyncState = emptyState()): IndexerHandlerContext {
-  const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trace: vi.fn(), fatal: vi.fn() }
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    trace: vi.fn(),
+    fatal: vi.fn(),
+  }
   return {
     agent: { config: { logger } } as unknown as IndexerHandlerContext['agent'],
     blockHeight: 100,

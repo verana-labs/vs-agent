@@ -64,7 +64,10 @@ describe('verana: indexer notifications', () => {
     (service as any).applyChanges(makeEvent(), makeActivity()) as Promise<void>
 
   async function driveValidatorToValidating(): Promise<{ id: string }> {
-    const validatorValidating = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+    const validatorValidating = waitForEvent(
+      validatorEvents,
+      isVtFlowStateChangedEvent(VtFlowState.Validating),
+    )
 
     await applicant.modules.vtFlow.sendOnboardingRequest({
       connectionId: applicantConnection.id,
