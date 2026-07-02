@@ -132,7 +132,18 @@ export const VERANA_INDEXER_BASE_URL = process.env.VERANA_INDEXER_BASE_URL
 export const VERANA_ACCOUNT_MNEMONIC = process.env.VERANA_ACCOUNT_MNEMONIC
 export const VERANA_RPC_ENDPOINT_URL = process.env.VERANA_RPC_ENDPOINT_URL
 export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID
+export const VERANA_CORPORATION_ID = process.env.VERANA_CORPORATION_ID
 export const VERANA_AUTO_TRIGGER_RESOLVER = process.env.VERANA_AUTO_TRIGGER_RESOLVER !== 'false'
+
+export const AGENT_MODE = (process.env.AGENT_MODE ?? '').trim().toLowerCase() || 'standalone'
+export const AGENT_DELEGATED_PARENT_VS_DID = process.env.AGENT_DELEGATED_PARENT_VS_DID
+
+export const ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS = (
+  process.env.ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS ?? ''
+)
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean)
 
 // Active plugins: comma-separated list of plugin names.
 // Available:
