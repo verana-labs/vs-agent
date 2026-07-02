@@ -13,6 +13,7 @@ export type { BaseDidCommPlugin, BaseDidCommPluginOptions } from './plugins/setu
 export { CachedWebDidResolver } from './did/CachedWebDidResolver'
 export { WebDidRegistrar } from './did/WebDidRegistrar'
 export { getLegacyDidDocument } from './did/legacyDidWeb'
+export { applyAdminApiServiceEntry } from './did/adminApiService'
 
 // Transports
 export { HttpInboundTransport, HttpTransportSession } from './transports/HttpInboundTransport'

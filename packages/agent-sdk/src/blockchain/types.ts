@@ -196,6 +196,7 @@ export interface VeranaChainConfig {
   logger: BaseLogger
   gasPrice?: string
   corporationAddress?: string
+  autoTriggerResolver?: boolean
   /**
    * FIXME(verana setValidated->AUTHZ-CHECK-3): temporary. On the current chain, validating a participant
    * (OperatorAuthorization) and creating its session (VSOperatorAuthorization) need two mutually-exclusive

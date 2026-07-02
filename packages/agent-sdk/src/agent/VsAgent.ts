@@ -40,6 +40,7 @@ import { VtFlowModule } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { VeranaChainService } from '../blockchain/VeranaChainService'
+import { applyAdminApiServiceEntry } from '../did/adminApiService'
 import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { connectionEvents } from '../events/ConnectionEvents'
@@ -84,6 +85,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public did?: string
   public autoDiscloseUserProfile?: boolean
   public publicApiBaseUrl: string
+  public adminApiServiceEndpoint?: string
   public displayPictureUrl?: string
   public label: string
   public veranaChain?: VeranaChainService
@@ -94,6 +96,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       did?: string
       autoDiscloseUserProfile?: boolean
       publicApiBaseUrl: string
+      adminApiServiceEndpoint?: string
       displayPictureUrl?: string
       label: string
       veranaChain?: VeranaChainService
@@ -104,6 +107,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.did = options.did
     this.autoDiscloseUserProfile = options.autoDiscloseUserProfile
     this.publicApiBaseUrl = options.publicApiBaseUrl
+    this.adminApiServiceEndpoint = options.adminApiServiceEndpoint
     this.displayPictureUrl = options.displayPictureUrl
     this.label = options.label
     this.veranaChain = options.veranaChain
@@ -150,6 +154,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           // Add AnonCreds Services
           await this.createAndAddAnonCredsServices(didDocument)
 
+          this.applyAdminApiService(didDocument)
+
           await this.dids.create({
             method: 'web',
             domain,
@@ -191,6 +197,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           // The webvh registrar doesn't merge new keys into the DidRecord on update,
           // so persist the DIDComm key mapping directly on the existing record.
           await this.persistDidDocumentKey(publicDid, didCommKey)
+
+          this.applyAdminApiService(didDocument)
 
           const result = await this.dids.update({ did: publicDid, didDocument })
           if (result.didState.state !== 'finished') {
@@ -256,7 +264,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           const id = typeof a === 'string' ? a : a.id
           return id !== ed25519VerificationMethodId
         })
-      if (hasLegacyMethods || servicesChanged || authHasUpdateKey) {
+      const currentAdminEntry = (didDocument.service ?? []).find(s => s.type === 'VsAgentAdminAPI')
+      const adminEntryChanged = currentAdminEntry?.serviceEndpoint !== this.adminApiServiceEndpoint
+      if (hasLegacyMethods || servicesChanged || authHasUpdateKey || adminEntryChanged) {
         if (servicesChanged && ed25519VerificationMethodId) {
           didDocument.service = [
             ...(didDocument.service
@@ -265,6 +275,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             ...this.getDidCommServices(didDocument.id, ed25519VerificationMethodId),
           ]
         }
+        this.applyAdminApiService(didDocument)
         const newKeys: DidDocumentKey[] = []
         if (hasLegacyMethods) {
           newKeys.push(await this.createAndAddDidCommKeysAndServices(didDocument))
@@ -509,6 +520,10 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       }),
     ]
   }
+
+  private applyAdminApiService(didDocument: DidDocument): void {
+    applyAdminApiServiceEntry(didDocument, this.adminApiServiceEndpoint)
+  }
 }
 
 export interface VsAgentOptions {
@@ -517,6 +532,7 @@ export interface VsAgentOptions {
   autoDiscloseUserProfile?: boolean
   dependencies: AgentDependencies
   publicApiBaseUrl: string
+  adminApiServiceEndpoint?: string
   masterListCscaLocation?: string
   endpoints: string[]
   walletConfig: AskarModuleConfigStoreOptions
