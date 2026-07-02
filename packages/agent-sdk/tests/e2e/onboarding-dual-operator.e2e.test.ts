@@ -4,7 +4,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { ValidationState, VeranaChainService, VeranaIndexerService } from '../../src/blockchain'
 
-import { PARTICIPANT_ROLE_ISSUER, VeranaTestChain } from './VeranaTestChain'
+import {
+  PARTICIPANT_ROLE_HOLDER,
+  PARTICIPANT_ROLE_ISSUER,
+  PP_TRIGGER_RESOLVER,
+  VeranaTestChain,
+} from './VeranaTestChain'
 import { COOLUSER_MNEMONIC, SETUP_TIMEOUT_MS, startStack, type StartedStack } from './helpers'
 
 const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
@@ -25,7 +30,7 @@ const MINIMAL_SCHEMA = JSON.stringify({
 // they need mutually-exclusive authz (OperatorAuthorization vs VSOperatorAuthorization), so the agent
 // signs the session with a second account. This exercises that dual-operator path end-to-end through
 // VeranaChainService on a local V4 node.
-describeE2E('vt-flow onboarding chain integration: dual-operator validate + 0/0 session (V4)', () => {
+describeE2E('vt-flow onboarding chain integration (V4)', () => {
   let stack: StartedStack
   let chainA: VeranaTestChain
   let veranaChain: VeranaChainService
@@ -116,6 +121,61 @@ describeE2E('vt-flow onboarding chain integration: dual-operator validate + 0/0 
       expect(indexed?.op_state).toBe('VALIDATED')
       expect(indexed?.op_summary_digest).toBe(digest)
       expect(Number(indexed?.validator_participant_id)).toBe(root.participantId)
+    },
+    SETUP_TIMEOUT_MS,
+  )
+
+  it(
+    'triggers the resolver for a HOLDER participant via its own vs_operator (Path 1)',
+    async () => {
+      const suffix = `h-${RUN_ID}`
+      const corp = await chainA.createCorporation({ did: `did:example:corp-${suffix}` })
+      await chainA.fundCorporation(corp.policyAddress)
+      await chainA.grantOperatorAuthorization(corp.policyAddress)
+      const eco = await chainA.createEcosystem(corp.policyAddress, { did: `did:example:eco-${suffix}` })
+      const schema = await chainA.createCredentialSchema(corp.policyAddress, {
+        ecosystemId: eco.ecosystemId,
+        jsonSchema: MINIMAL_SCHEMA,
+      })
+      const root = await chainA.createRootParticipant(corp.policyAddress, {
+        schemaId: schema.schemaId,
+        did: `did:example:eco-root-${suffix}`,
+      })
+
+      // HOLDER onboarding requires an ISSUER validator (chain holder_onboarding_mode = ISSUER_VALIDATION).
+      const issuer = await chainA.startParticipantOp(corp.policyAddress, {
+        role: PARTICIPANT_ROLE_ISSUER,
+        validatorParticipantId: root.participantId,
+        did: `did:example:issuer-${suffix}`,
+      })
+
+      // Only a HOLDER may be granted TriggerResolver as VSOA, so it self-triggers via Path 1 (AUTHZ-CHECK-3).
+      const opHolder = await chainA.createFundedOperator()
+
+      const holderChain = new VeranaChainService({
+        rpcUrl: stack.rpcUrl,
+        mnemonic: COOLUSER_MNEMONIC, // OA account -> setValidated
+        sessionOperatorMnemonic: opHolder.mnemonic, // HOLDER vs_operator -> TriggerResolver
+        corporationAddress: corp.policyAddress,
+        logger: new ConsoleLogger(LogLevel.Debug),
+      })
+      await holderChain.start()
+
+      const digest = `sha384-${createHash('sha384').update(`cred-${suffix}`).digest('base64')}`
+      await holderChain.setParticipantOPToValidated({ id: issuer.participantId, opSummaryDigest: digest })
+
+      const holder = await chainA.startParticipantOp(corp.policyAddress, {
+        role: PARTICIPANT_ROLE_HOLDER,
+        validatorParticipantId: issuer.participantId,
+        did: `did:example:holder-${suffix}`,
+        vsOperator: opHolder.address,
+        vsOperatorAuthzMsgTypes: [PP_TRIGGER_RESOLVER],
+      })
+      // A HOLDER's op_summary_digest must be null (chain rejects a digest for HOLDER type).
+      await holderChain.setParticipantOPToValidated({ id: holder.participantId, opSummaryDigest: '' })
+
+      const triggered = await holderChain.triggerResolver(holder.participantId)
+      expect(triggered.txHash).toMatch(/^[0-9A-F]{64}$/i)
     },
     SETUP_TIMEOUT_MS,
   )

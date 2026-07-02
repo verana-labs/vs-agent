@@ -10,6 +10,8 @@ import {
   InvitationController,
   PresentationsController,
   QrController,
+  ServiceEndpointsController,
+  ServiceEndpointsService,
   TrustController,
   TrustService,
   VsAgentController,
@@ -37,6 +39,7 @@ export class VsAgentModule {
       TrustController,
       ConnectionController,
       PresentationsController,
+      ServiceEndpointsController,
     ]
 
     const baseProviders = [
@@ -52,6 +55,7 @@ export class VsAgentModule {
       UrlShorteningService,
       TrustService,
       CredentialTypesService,
+      ServiceEndpointsService,
     ]
 
     // Collect all handler classes declared by plugins and create ONE aggregate provider.
