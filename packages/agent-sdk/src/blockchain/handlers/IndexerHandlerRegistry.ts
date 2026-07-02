@@ -37,6 +37,14 @@ export class IndexerHandlerRegistry {
     return this.handlers.has(msg)
   }
 
+  keys(): string[] {
+    return [...this.handlers.keys()]
+  }
+
+  clear(): void {
+    this.handlers.clear()
+  }
+
   async dispatch(activity: IndexerActivity, ctx: IndexerHandlerContext): Promise<void> {
     const h = this.handlers.get(activity.msg)
     if (!h) {

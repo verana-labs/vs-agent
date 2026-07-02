@@ -11,6 +11,7 @@ import {
   type VsAgentNestPlugin,
   VeranaChainService,
   IndexerWebSocketService,
+  buildDefaultIndexerHandlerRegistry,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -63,6 +64,7 @@ import {
   VERANA_ACCOUNT_MNEMONIC,
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
+  INDEXER_DEFAULT_HANDLERS_DISABLED,
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
@@ -272,9 +274,22 @@ const run = async () => {
   // Connect to Verana indexer for on-chain notifications
   // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
   if (VERANA_INDEXER_BASE_URL) {
+    const handlerRegistry = buildDefaultIndexerHandlerRegistry()
+    if (INDEXER_DEFAULT_HANDLERS_DISABLED.includes('*')) {
+      handlerRegistry.clear()
+    } else {
+      for (const msg of INDEXER_DEFAULT_HANDLERS_DISABLED) handlerRegistry.unregister(msg)
+    }
+    if (INDEXER_DEFAULT_HANDLERS_DISABLED.length) {
+      serverLogger.info(
+        `[IndexerWS] Default handlers disabled: ${INDEXER_DEFAULT_HANDLERS_DISABLED.join(', ')}`,
+      )
+    }
+
     const indexerWs = new IndexerWebSocketService({
       indexerUrl: VERANA_INDEXER_BASE_URL,
       agent,
+      handlerRegistry,
     })
     await indexerWs.start()
   }

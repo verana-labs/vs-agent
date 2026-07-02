@@ -126,6 +126,12 @@ export const VERANA_INDEXER_BASE_URL = process.env.VERANA_INDEXER_BASE_URL
 export const VERANA_ACCOUNT_MNEMONIC = process.env.VERANA_ACCOUNT_MNEMONIC
 export const VERANA_RPC_ENDPOINT_URL = process.env.VERANA_RPC_ENDPOINT_URL
 export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID
+export const INDEXER_DEFAULT_HANDLERS_DISABLED: string[] = (
+  process.env.INDEXER_DEFAULT_HANDLERS_DISABLED ?? ''
+)
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean)
 
 // Active plugins: comma-separated list of plugin names.
 // Available:

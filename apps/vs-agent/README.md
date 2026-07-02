@@ -125,6 +125,7 @@ These variables enable on-chain features (permission management, trust registry 
 | `VERANA_ACCOUNT_MNEMONIC` | REQUIRED* | BIP-39 mnemonic for the agent's Verana blockchain account.                                                                                                    |
 | `VERANA_CHAIN_ID`         | OPTIONAL  | Chain ID (defaults to the network's chain ID if not set).                                                                                                     |
 | `VERANA_INDEXER_BASE_URL` | REQUIRED* | Verana indexer URL (e.g. `https://...`). Used to establish a WebSocket connection for subscribing to real-time ledger notifications related to the agent DID. |
+| `INDEXER_DEFAULT_HANDLERS_DISABLED` | OPTIONAL | Comma-separated indexer `msg` names whose default handler is disabled (or `*` for all), so a backend behind the container can override them and react via the `indexer-notification` webhook. State-sync bookkeeping is never affected. |
 
 * Required only if on-chain features are enabled.
 

@@ -1,11 +1,13 @@
 import { BaseLogger } from '@credo-ts/core'
+import { IndexerNotification } from '@verana-labs/vs-agent-model'
 import WebSocket from 'ws'
 
 import { VsAgent } from '../agent/VsAgent'
+import { emitVsAgentEvent, VsAgentEventTypes } from '../events'
 
 import { loadSyncState, saveSyncState } from './VeranaHelpers'
 import { VeranaIndexerService } from './VeranaIndexerService'
-import { buildDefaultIndexerHandlerRegistry } from './handlers'
+import { applyStateMutation, buildDefaultIndexerHandlerRegistry } from './handlers'
 import { IndexerHandlerRegistry } from './handlers/IndexerHandlerRegistry'
 import {
   IndexerActivity,
@@ -213,6 +215,8 @@ export class IndexerWebSocketService {
     const state = await loadSyncState(this.options.agent)
     const { block_height } = event
 
+    applyStateMutation(state, activity)
+
     try {
       await this.handlerRegistry.dispatch(activity, {
         agent: this.options.agent,
@@ -230,6 +234,29 @@ export class IndexerWebSocketService {
     state.lastBlockHeight = Math.max(state.lastBlockHeight, event.block_height)
     await saveSyncState(this.options.agent, state)
     this.logger.debug(`[IndexerWS] Block ${event.block_height}: applied ${event.event_type}`)
+
+    this.emitNotification(event, activity)
+  }
+
+  private emitNotification(event: IndexerEventRecord, activity: IndexerActivity): void {
+    try {
+      emitVsAgentEvent(
+        this.options.agent,
+        VsAgentEventTypes.IndexerNotification,
+        new IndexerNotification({
+          msg: activity.msg,
+          entityType: String(activity.entity_type),
+          entityId: String(activity.entity_id),
+          changes: activity.changes,
+          blockHeight: event.block_height,
+          txHash: event.tx_hash,
+          operatorAddress: event.payload.sender,
+          timestamp: new Date(event.timestamp),
+        }),
+      )
+    } catch (err) {
+      this.logger.error(`[IndexerWS] Failed to emit indexer notification: ${(err as Error).message}`)
+    }
   }
 
   private scheduleReconnect(): void {
