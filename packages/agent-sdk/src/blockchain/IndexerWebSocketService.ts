@@ -235,10 +235,6 @@ export class IndexerWebSocketService {
     await saveSyncState(this.options.agent, state)
     this.logger.debug(`[IndexerWS] Block ${event.block_height}: applied ${event.event_type}`)
 
-    this.emitNotification(event, activity)
-  }
-
-  private emitNotification(event: IndexerEventRecord, activity: IndexerActivity): void {
     try {
       emitVsAgentEvent(
         this.options.agent,
