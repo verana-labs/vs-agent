@@ -29,7 +29,9 @@ export class VeranaIndexerService {
 
   async getCredentialSchema(id: string | number): Promise<CredentialSchemaDto> {
     this.config.logger.debug(`[VeranaIndexer] getCredentialSchema id=${id}`)
-    const data = await fetchJson<{ schema: CredentialSchemaDto }>(`${this.baseUrl}/v4/credential-schema/get/${id}`)
+    const data = await fetchJson<{ schema: CredentialSchemaDto }>(
+      `${this.baseUrl}/v4/credential-schema/get/${id}`,
+    )
     return data.schema
   }
 
