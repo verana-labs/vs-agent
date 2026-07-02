@@ -154,12 +154,10 @@ const run = async () => {
   }
 
   const configErrors: string[] = []
-  if (!VERANA_CORPORATION_ID || !/^\d+$/.test(VERANA_CORPORATION_ID)) {
-    configErrors.push('VERANA_CORPORATION_ID is required and must be a non-negative integer')
+  // Verana on-chain config is optional (v1.x behaviour); validate the format only when provided.
+  if (VERANA_CORPORATION_ID && !/^\d+$/.test(VERANA_CORPORATION_ID)) {
+    configErrors.push('VERANA_CORPORATION_ID must be a non-negative integer')
   }
-  if (!VERANA_RPC_ENDPOINT_URL) configErrors.push('VERANA_RPC_ENDPOINT_URL is required')
-  if (!VERANA_INDEXER_BASE_URL) configErrors.push('VERANA_INDEXER_BASE_URL is required')
-  if (!VERANA_ACCOUNT_MNEMONIC) configErrors.push('VERANA_ACCOUNT_MNEMONIC is required')
   if (!['standalone', 'delegated'].includes(AGENT_MODE)) {
     configErrors.push(`AGENT_MODE must be 'standalone' or 'delegated' (got '${AGENT_MODE}')`)
   }
