@@ -156,11 +156,31 @@ export interface CredentialSchemaDto {
   modified: string
 }
 
+export enum ParticipantRole {
+  Issuer = 'ISSUER',
+  Verifier = 'VERIFIER',
+  IssuerGrantor = 'ISSUER_GRANTOR',
+  VerifierGrantor = 'VERIFIER_GRANTOR',
+  Ecosystem = 'ECOSYSTEM',
+  Holder = 'HOLDER',
+}
+
+export enum ParticipantState {
+  Active = 'ACTIVE',
+  Future = 'FUTURE',
+  Inactive = 'INACTIVE',
+  Expired = 'EXPIRED',
+  Revoked = 'REVOKED',
+  Slashed = 'SLASHED',
+  Repaid = 'REPAID',
+}
+
 export interface ParticipantDto {
   id: number
   schema_id: number
   did: string | null
-  role: string
+  role: ParticipantRole
+  participant_state?: ParticipantState
   op_state?: string
   revoked: string | null
   slashed: string | null
@@ -168,6 +188,28 @@ export interface ParticipantDto {
   modified: string
   validator_participant_id?: number | null
   op_summary_digest?: string
+}
+
+export interface ParticipantSessionRecordDto {
+  created?: string
+  issuer_participant_id?: number
+  verifier_participant_id?: number
+  wallet_agent_participant_id?: number
+  agent_participant_id?: number
+}
+
+export interface ParticipantSessionDto {
+  id: string
+  corporation_id?: number
+  vs_operator?: string
+  created?: string
+  modified?: string
+  session_records?: ParticipantSessionRecordDto[]
+}
+
+export interface DigestDto {
+  digest: string
+  created: string
 }
 
 export interface RawParticipant {
