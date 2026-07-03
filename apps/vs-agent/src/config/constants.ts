@@ -132,6 +132,10 @@ export const VERANA_INDEXER_BASE_URL = process.env.VERANA_INDEXER_BASE_URL
 export const VERANA_ACCOUNT_MNEMONIC = process.env.VERANA_ACCOUNT_MNEMONIC
 export const VERANA_RPC_ENDPOINT_URL = process.env.VERANA_RPC_ENDPOINT_URL
 export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID
+export const VERANA_CORPORATION_ID = process.env.VERANA_CORPORATION_ID
+export const VERANA_INDEXER_SUBSCRIPTION_SCOPE = (process.env.VERANA_INDEXER_SUBSCRIPTION_SCOPE ?? 'did')
+  .trim()
+  .toLowerCase()
 export const VERANA_AUTO_TRIGGER_RESOLVER = process.env.VERANA_AUTO_TRIGGER_RESOLVER !== 'false'
 
 // Active plugins: comma-separated list of plugin names.

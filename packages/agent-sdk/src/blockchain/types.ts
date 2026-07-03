@@ -135,6 +135,8 @@ export interface VeranaSyncState {
   ecosystems: Record<string, SyncedEcosystem>
   credentialSchemas: Record<string, SyncedCredentialSchema>
   participants: Record<string, SyncedParticipant>
+  partialBlock?: number
+  partialKeys?: string[]
 }
 
 export interface EcosystemDto {
@@ -187,6 +189,14 @@ export interface ParticipantQueryClient {
   GetParticipant(req: { id: number }): Promise<{ participant?: RawParticipant }>
   FindParticipantsWithDID(req: object): Promise<{ participants: RawParticipant[] }>
   GetParticipantSession(req: { id: string }): Promise<{ session?: unknown }>
+}
+
+export interface DelegationQueryClient {
+  ListVSOperatorAuthorizations(req: {
+    corporationId: number
+    vsOperator: string
+    responseMaxSize: number
+  }): Promise<{ vsOperatorAuthorizations: unknown[] }>
 }
 
 export interface VeranaChainConfig {
