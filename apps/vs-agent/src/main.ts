@@ -66,6 +66,7 @@ import {
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
   VERANA_CORPORATION_ID,
+  VERANA_INDEXER_SUBSCRIPTION_SCOPE,
   VERANA_AUTO_TRIGGER_RESOLVER,
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
@@ -101,7 +102,6 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
-  const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
 
   const webSocketServer = agent.didcomm.inboundTransports
     .find(x => x instanceof VsAgentWsInboundTransport)
@@ -114,15 +114,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   const httpServer = httpInboundTransport ? httpInboundTransport.server : await publicApp.listen(AGENT_PORT)
 
-  // Add WebSocket support if required
-  if (enableWs) {
-    httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
-      webSocketServer?.handleUpgrade(request, socket as Socket, head, socketParam => {
-        const socketId = utils.uuid()
-        webSocketServer?.emit('connection', socketParam, request, socketId)
-      })
-    })
-  }
+  return { httpServer, webSocketServer }
 }
 
 const run = async () => {
@@ -257,6 +249,20 @@ const run = async () => {
       autoTriggerResolver: VERANA_AUTO_TRIGGER_RESOLVER,
     })
     await veranaChain.start()
+
+    try {
+      const balance = await veranaChain.getBalance()
+      const authorized = await veranaChain.hasVsOperatorAuthorization()
+      if (!authorized && Number(balance.amount) === 0) {
+        serverLogger.warn(
+          `[VeranaChain] Operator account ${veranaChain.address} has no VSOperatorAuthorization and zero ${balance.denom} balance; on-chain operations will fail until it is granted authorization or funded.`,
+        )
+      }
+    } catch (error) {
+      serverLogger.warn(
+        `[VeranaChain] Could not check operator authorization/balance: ${(error as Error).message}`,
+      )
+    }
   } else {
     serverLogger.warn(
       'VERANA_RPC_ENDPOINT_URL or VERANA_ACCOUNT_MNEMONIC not set. Verana blockchain features will be disabled. Set these environment variables to enable on-chain capabilities.',
@@ -302,7 +308,7 @@ const run = async () => {
     endpoints,
     nestPlugins,
   }
-  await startServers(agent, conf)
+  const { httpServer, webSocketServer } = await startServers(agent, conf)
 
   // Initialize Self-Trust Registry
   if (agent.did)
@@ -337,11 +343,25 @@ const run = async () => {
   // Connect to Verana indexer for on-chain notifications
   // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
   if (VERANA_INDEXER_BASE_URL) {
+    const indexerCorporationId =
+      VERANA_INDEXER_SUBSCRIPTION_SCOPE === 'corporation' && VERANA_CORPORATION_ID
+        ? Number(VERANA_CORPORATION_ID)
+        : undefined
     const indexerWs = new IndexerWebSocketService({
       indexerUrl: VERANA_INDEXER_BASE_URL,
       agent,
+      corporationId: indexerCorporationId,
     })
     await indexerWs.start()
+  }
+
+  // Accept incoming DIDComm only after the catch-up, so the agent does not act on stale chain state.
+  if (webSocketServer) {
+    httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
+      webSocketServer.handleUpgrade(request, socket, head, client => {
+        webSocketServer.emit('connection', client, request, utils.uuid())
+      })
+    })
   }
 
   // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
