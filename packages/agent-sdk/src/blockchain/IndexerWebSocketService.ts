@@ -227,9 +227,10 @@ export class IndexerWebSocketService {
     const activity = await this.fetchActivity(event)
     if (this.stopped || generation !== this.generation) return
     if (activity) {
+      applyStateMutation(state, activity)
       await this.handlerRegistry.dispatch(activity, {
         agent: this.options.agent,
-        block_height: block,
+        blockHeight: block,
         operatorAddress: event.payload.sender,
         state,
         txHash: event.tx_hash,
@@ -245,6 +246,27 @@ export class IndexerWebSocketService {
     // A block counts as done only when a later block arrives, so the saved height stays one behind.
     state.lastBlockHeight = Math.max(state.lastBlockHeight, block - 1)
     await saveSyncState(this.options.agent, state)
+
+    if (activity) {
+      try {
+        emitVsAgentEvent(
+          this.options.agent,
+          VsAgentEventTypes.IndexerNotification,
+          new IndexerNotification({
+            msg: activity.msg,
+            entityType: String(activity.entity_type),
+            entityId: String(activity.entity_id),
+            changes: activity.changes,
+            blockHeight: block,
+            txHash: event.tx_hash,
+            operatorAddress: event.payload.sender,
+            timestamp: new Date(event.timestamp),
+          }),
+        )
+      } catch (err) {
+        this.logger.error(`[IndexerWS] Failed to emit indexer notification: ${(err as Error).message}`)
+      }
+    }
   }
 
   private async fetchActivity(event: IndexerEventRecord): Promise<IndexerActivity | undefined> {
@@ -283,20 +305,6 @@ export class IndexerWebSocketService {
     this.watchdog = setTimeout(() => this.forceReconnect('liveness timeout'), LIVENESS_TIMEOUT_MS)
   }
 
-    applyStateMutation(state, activity)
-
-    try {
-      await this.handlerRegistry.dispatch(activity, {
-        agent: this.options.agent,
-        blockHeight: block_height,
-        operatorAddress: event.payload.sender,
-        state,
-        txHash: event.tx_hash,
-      })
-    } catch (err) {
-      this.logger.error(
-        `[IndexerWS] Handler ${event.event_type} failed at block ${event.block_height}: ${(err as Error).message}`,
-      )
   private clearWatchdog(): void {
     if (this.watchdog) {
       clearTimeout(this.watchdog)
@@ -304,27 +312,6 @@ export class IndexerWebSocketService {
     }
   }
 
-    state.lastBlockHeight = Math.max(state.lastBlockHeight, event.block_height)
-    await saveSyncState(this.options.agent, state)
-    this.logger.debug(`[IndexerWS] Block ${event.block_height}: applied ${event.event_type}`)
-
-    try {
-      emitVsAgentEvent(
-        this.options.agent,
-        VsAgentEventTypes.IndexerNotification,
-        new IndexerNotification({
-          msg: activity.msg,
-          entityType: String(activity.entity_type),
-          entityId: String(activity.entity_id),
-          changes: activity.changes,
-          blockHeight: event.block_height,
-          txHash: event.tx_hash,
-          operatorAddress: event.payload.sender,
-          timestamp: new Date(event.timestamp),
-        }),
-      )
-    } catch (err) {
-      this.logger.error(`[IndexerWS] Failed to emit indexer notification: ${(err as Error).message}`)
   private forceReconnect(reason: string): void {
     if (this.stopped) return
     this.logger.warn(`[IndexerWS] Forcing reconnect: ${reason}`)
