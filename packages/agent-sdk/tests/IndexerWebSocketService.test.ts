@@ -317,7 +317,7 @@ describe('IndexerWebSocketService', () => {
   it('reconnects when an entity fetch fails so a hung request cannot wedge the queue', async () => {
     vi.useFakeTimers()
     fetchJsonMock.mockImplementation(async (url: string) => {
-      if (url.includes('/pp/v1/get/')) throw new Error('participant fetch failed')
+      if (url.includes('/participant/get/')) throw new Error('participant fetch failed')
       return { events: [], count: 0, after_block_height: 0 }
     })
 
