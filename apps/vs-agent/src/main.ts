@@ -347,7 +347,7 @@ const run = async () => {
       indexerUrl: VERANA_INDEXER_BASE_URL,
       agent,
       handlerRegistry,
-      corporationId: indexerCorporationId
+      corporationId: indexerCorporationId,
     })
     await indexerWs.start()
   }
