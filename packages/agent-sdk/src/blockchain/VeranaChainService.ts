@@ -12,7 +12,9 @@ import { connectComet } from '@cosmjs/tendermint-rpc'
 import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
 
 import {
+  Coin,
   CreateOrUpdateParticipantSessionParams,
+  DelegationQueryClient,
   Participant,
   ParticipantQueryClient,
   RawParticipant,
@@ -21,6 +23,7 @@ import {
   VeranaChainConfig,
 } from './types'
 
+const { QueryClientImpl: DeQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/de/v1/query')
 const {
   QueryClientImpl: PpQueryClientImpl,
   QueryFindParticipantsWithDIDRequest,
@@ -56,6 +59,7 @@ export class VeranaChainService {
   private corporationAddress!: string
 
   private ppQuery!: ParticipantQueryClient
+  private deQuery!: DelegationQueryClient
 
   // FIXME(verana setValidated->AUTHZ-CHECK-3): temporary second account that signs the session only.
   private sessionSigningClient?: SigningStargateClient
@@ -125,12 +129,26 @@ export class VeranaChainService {
     const queryClient = new QueryClient(cometClient)
     const rpc = createProtobufRpcClient(queryClient)
     this.ppQuery = new PpQueryClientImpl(rpc) as ParticipantQueryClient
+    this.deQuery = new DeQueryClientImpl(rpc) as DelegationQueryClient
   }
 
   // Query API (unsigned)
   async getParticipant(id: number): Promise<Participant | undefined> {
     const result = await this.ppQuery.GetParticipant({ id })
     return result.participant ? mapParticipant(result.participant) : undefined
+  }
+
+  async getBalance(denom = 'uvna'): Promise<Coin> {
+    return this.signingClient.getBalance(this.operatorAddress, denom)
+  }
+
+  async hasVsOperatorAuthorization(): Promise<boolean> {
+    const result = await this.deQuery.ListVSOperatorAuthorizations({
+      corporationId: 0,
+      vsOperator: this.operatorAddress,
+      responseMaxSize: 64,
+    })
+    return result.vsOperatorAuthorizations.length > 0
   }
 
   // Transaction API (signed)

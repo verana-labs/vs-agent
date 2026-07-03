@@ -9,6 +9,7 @@ const emptyState = (): VeranaSyncState => ({
   ecosystems: {},
   credentialSchemas: {},
   participants: {},
+  partialKeys: [],
 })
 
 export async function loadSyncState(agent: VsAgent): Promise<VeranaSyncState> {
