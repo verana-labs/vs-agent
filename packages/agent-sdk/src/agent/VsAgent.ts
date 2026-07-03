@@ -42,6 +42,7 @@ import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
 import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
+import { migrateWebVhVersionTimeIfBroken } from '../did/migrateWebVhVersionTime'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { connectionEvents } from '../events/ConnectionEvents'
 
@@ -214,13 +215,13 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         return
       }
 
-      // If this is a did:webvh record, ensure the stored log is resolvable under the
-      // current didwebvh-ts version. Logs created with didwebvh-ts <2.7.4 used the
-      // SCID placeholder when computing the entry hash for entries beyond #1, which
-      // newer resolvers (correctly) reject as a broken hash chain. We rebuild the
-      // log in-place, preserving entry #1 (and therefore the SCID and the public DID).
+      // Ensure the stored did:webvh log is resolvable under the current didwebvh-ts version:
+      // <2.7.4 wrote broken entry hashes (SCID placeholder), and >=2.8.0 rejects the
+      // same-second versionTimes the old create+update-at-init flow produced. Both migrations
+      // rebuild the log in-place, preserving entry #1 (and therefore the SCID and public DID).
       if (parsedDid.method === 'webvh') {
         try {
+          await migrateWebVhVersionTimeIfBroken(this.agentContext, existingRecord, this.logger)
           await migrateWebVhLogIfBroken(this.agentContext, existingRecord, this.logger)
         } catch (error) {
           this.logger.error(
