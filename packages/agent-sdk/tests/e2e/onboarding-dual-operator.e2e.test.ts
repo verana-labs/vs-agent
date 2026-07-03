@@ -96,7 +96,7 @@ describeE2E('vt-flow onboarding chain integration (V4)', () => {
       expect(onChain?.opState).toBe(ValidationState.VALIDATED)
 
       // V4 indexer REST: confirm the participant is indexed with the migrated wire fields
-      // (/verana/pp/v1/get/:id, {participant} wrapper, op_state/op_summary_digest/validator_participant_id).
+      // (/v4/participant/get/:id, {participant} wrapper, op_state/op_summary_digest/validator_participant_id).
       const indexer = new VeranaIndexerService({
         baseUrl: stack.indexerWsUrl.replace(/^ws/, 'http'),
         logger: new ConsoleLogger(LogLevel.Warn),
