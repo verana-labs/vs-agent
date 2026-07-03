@@ -49,6 +49,11 @@ const signer = new InMemorySigner()
 const verifier = new InMemoryVerifier()
 const opts = { signer, verifier, domain: 'example.com' }
 
+function oneSecondAfter(iso: string): string {
+  const ms = Math.floor(Date.parse(iso) / 1000) * 1000 + 1000
+  return new Date(ms).toISOString().replace(/\.\d+Z$/, 'Z')
+}
+
 async function makeFreshLog(): Promise<DIDLog> {
   const domain = 'example.com'
   const baseDid = `did:webvh:{SCID}:${domain}`
@@ -83,6 +88,7 @@ async function makeFreshLog(): Promise<DIDLog> {
       },
     ],
     controller: created.did,
+    updated: oneSecondAfter(created.log[0].versionTime),
   })
 
   return updated.log

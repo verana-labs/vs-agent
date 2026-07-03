@@ -132,6 +132,12 @@ export const VERANA_INDEXER_BASE_URL = process.env.VERANA_INDEXER_BASE_URL
 export const VERANA_ACCOUNT_MNEMONIC = process.env.VERANA_ACCOUNT_MNEMONIC
 export const VERANA_RPC_ENDPOINT_URL = process.env.VERANA_RPC_ENDPOINT_URL
 export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID
+export const VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE: string[] = (
+  process.env.VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE ?? ''
+)
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean)
 export const VERANA_CORPORATION_ID = process.env.VERANA_CORPORATION_ID
 export const VERANA_INDEXER_SUBSCRIPTION_SCOPE = (process.env.VERANA_INDEXER_SUBSCRIPTION_SCOPE ?? 'did')
   .trim()

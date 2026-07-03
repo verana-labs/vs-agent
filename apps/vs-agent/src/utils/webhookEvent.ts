@@ -5,6 +5,7 @@ import {
   VsAgent,
   VsAgentConnectionStateEvent,
   VsAgentEventTypes,
+  VsAgentIndexerNotificationEvent,
   VsAgentMessageReceivedEvent,
   VsAgentMessageStateUpdatedEvent,
   VsAgentPresentationStateUpdatedEvent,
@@ -33,6 +34,9 @@ export const webhookEvent = (agent: VsAgent, webhookUrl: string, logger: BaseLog
     sendWebhookEvent(payload.event),
   )
   agent.events.on<VsAgentMessageStateUpdatedEvent>(VsAgentEventTypes.MessageStateUpdated, ({ payload }) =>
+    sendWebhookEvent(payload.event),
+  )
+  agent.events.on<VsAgentIndexerNotificationEvent>(VsAgentEventTypes.IndexerNotification, ({ payload }) =>
     sendWebhookEvent(payload.event),
   )
   agent.events.on<VsAgentPresentationStateUpdatedEvent>(

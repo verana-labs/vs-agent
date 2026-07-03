@@ -1,9 +1,9 @@
 import { VsAgent } from '../../agent'
 import { IndexerActivity, VeranaSyncState } from '../types'
 
-interface IndexerHandlerContext {
+export interface IndexerHandlerContext {
   agent: VsAgent
-  block_height: number
+  blockHeight: number
   operatorAddress: string
   state: VeranaSyncState
   txHash: string
@@ -35,6 +35,14 @@ export class IndexerHandlerRegistry {
 
   has(msg: string): boolean {
     return this.handlers.has(msg)
+  }
+
+  keys(): string[] {
+    return [...this.handlers.keys()]
+  }
+
+  clear(): void {
+    this.handlers.clear()
   }
 
   async dispatch(activity: IndexerActivity, ctx: IndexerHandlerContext): Promise<void> {
