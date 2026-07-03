@@ -64,7 +64,7 @@ export class VeranaIndexerService {
     this.config.logger.debug(`[VeranaIndexer] getParticipantSession id=${id}`)
     const data = await fetchJson<{ session: ParticipantSessionDto }>(
       `${this.baseUrl}/v4/participant/participant-session/${encodeURIComponent(id)}`,
-      true,
+      { timeoutMs: REQUEST_TIMEOUT_MS, allowNotFound: true },
     )
     return data?.session
   }
@@ -73,7 +73,7 @@ export class VeranaIndexerService {
     this.config.logger.debug(`[VeranaIndexer] getDigest digest=${digest}`)
     const data = await fetchJson<{ digest: DigestDto }>(
       `${this.baseUrl}/v4/di/get/${encodeURIComponent(digest)}`,
-      true,
+      { timeoutMs: REQUEST_TIMEOUT_MS, allowNotFound: true },
     )
     return data?.digest
   }
