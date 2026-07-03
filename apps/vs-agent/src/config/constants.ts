@@ -138,6 +138,10 @@ export const VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE: string[] = (
   .split(',')
   .map(s => s.trim())
   .filter(Boolean)
+export const VERANA_CORPORATION_ID = process.env.VERANA_CORPORATION_ID
+export const VERANA_INDEXER_SUBSCRIPTION_SCOPE = (process.env.VERANA_INDEXER_SUBSCRIPTION_SCOPE ?? 'did')
+  .trim()
+  .toLowerCase()
 export const VERANA_AUTO_TRIGGER_RESOLVER = process.env.VERANA_AUTO_TRIGGER_RESOLVER !== 'false'
 
 // Active plugins: comma-separated list of plugin names.

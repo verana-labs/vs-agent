@@ -131,8 +131,8 @@ importers:
         specifier: 0.0.2-alpha.5
         version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.7.2))
       didwebvh-ts:
-        specifier: ^2.7.4
-        version: 2.7.4
+        specifier: ^2.8.0
+        version: 2.8.0
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -500,8 +500,8 @@ importers:
         specifier: 0.0.2-alpha.5
         version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))
       didwebvh-ts:
-        specifier: ^2.7.4
-        version: 2.7.4
+        specifier: ^2.8.0
+        version: 2.8.0
       express:
         specifier: ^4.18.1
         version: 4.21.2
@@ -1794,6 +1794,10 @@ packages:
 
   '@noble/hashes@2.0.1':
     resolution: {integrity: sha512-XlOlEbQcE9fmuXxrVTXCTlG2nlRXa9Rj3rr5Ue/+tX+nmkgbX720YHh0VR3hBF9xDvwnb8D2shVGOwNx+ulArw==}
+    engines: {node: '>= 20.19.0'}
+
+  '@noble/hashes@2.2.0':
+    resolution: {integrity: sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==}
     engines: {node: '>= 20.19.0'}
 
   '@nodelib/fs.scandir@2.1.5':
@@ -3320,8 +3324,8 @@ packages:
   did-resolver@4.1.0:
     resolution: {integrity: sha512-S6fWHvCXkZg2IhS4RcVHxwuyVejPR7c+a4Go0xbQ9ps5kILa8viiYQgrM4gfTyeTjJ0ekgJH9gk/BawTpmkbZA==}
 
-  didwebvh-ts@2.7.4:
-    resolution: {integrity: sha512-4AH4xITOgEQ7EfqGDm3ZgtzD8Rt44xj1z1mZ0YrWZnr5RUaNt30BSMn46HrOt58Ydd03EETNF+jCT4c9qNCy7g==}
+  didwebvh-ts@2.8.0:
+    resolution: {integrity: sha512-JAIK/Udr7xbGoYTDRjbm34nD8iddREIQffRL+vsrCaREyVtZDuy8SdFs5lXoop9zwEjXwh64ZFRSOYm6ZCZcAw==}
     hasBin: true
 
   diff@4.0.2:
@@ -4201,9 +4205,6 @@ packages:
 
   json-buffer@3.0.1:
     resolution: {integrity: sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==}
-
-  json-canonicalize@1.2.0:
-    resolution: {integrity: sha512-TTdjBvqrqJKSADlEsY5rWbx8/1tOrVlTR/aSLU8N2VSInCTffP0p+byYB8Es+OmL4ZOeEftjUdvV+eJeSzJC/Q==}
 
   json-canonicalize@2.0.0:
     resolution: {integrity: sha512-yyrnK/mEm6Na3ChbJUWueXdapueW0p380RUyTW87XGb1ww8l8hU0pRrGC3vSWHe9CxrbPHX2fGUOZpNiHR0IIg==}
@@ -6743,7 +6744,7 @@ snapshots:
       '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
       class-transformer: 0.5.1
       class-validator: 0.14.3
-      didwebvh-ts: 2.7.4
+      didwebvh-ts: 2.8.0
       json-canonicalize: 2.0.0
       tsyringe: 4.8.0
     transitivePeerDependencies:
@@ -6758,7 +6759,7 @@ snapshots:
       '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.3
-      didwebvh-ts: 2.7.4
+      didwebvh-ts: 2.8.0
       json-canonicalize: 2.0.0
       tsyringe: 4.8.0
     transitivePeerDependencies:
@@ -7551,6 +7552,8 @@ snapshots:
   '@noble/hashes@1.8.0': {}
 
   '@noble/hashes@2.0.1': {}
+
+  '@noble/hashes@2.2.0': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
@@ -8386,7 +8389,7 @@ snapshots:
       ajv-formats: 3.0.1(ajv@8.17.1)
       canonicalize: 2.1.0
       did-resolver: 4.1.0
-      didwebvh-ts: 2.7.4
+      didwebvh-ts: 2.8.0
       jsonld: 8.3.3(web-streams-polyfill@3.3.3)
       tslog: 4.10.2
       web-did-resolver: 2.0.32
@@ -9272,13 +9275,13 @@ snapshots:
 
   did-resolver@4.1.0: {}
 
-  didwebvh-ts@2.7.4:
+  didwebvh-ts@2.8.0:
     dependencies:
-      '@noble/hashes': 1.8.0
+      '@noble/hashes': 2.2.0
       cookie: 1.1.1
       glob: 13.0.6
       js-yaml: 4.1.1
-      json-canonicalize: 1.2.0
+      json-canonicalize: 2.0.0
 
   diff@4.0.2: {}
 
@@ -10438,8 +10441,6 @@ snapshots:
   jsesc@3.1.0: {}
 
   json-buffer@3.0.1: {}
-
-  json-canonicalize@1.2.0: {}
 
   json-canonicalize@2.0.0: {}
 
