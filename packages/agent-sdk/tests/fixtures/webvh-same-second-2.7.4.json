@@ -1,0 +1,103 @@
+[
+  {
+    "versionId": "1-QmaBFyTCB1FPAk1LLK5rDHPLaywUHmXLboLupncjRE2LhH",
+    "versionTime": "2026-07-01T13:16:29Z",
+    "parameters": {
+      "method": "did:webvh:1.0",
+      "scid": "QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk",
+      "updateKeys": [
+        "z6MkvDqGT54cXesYGvABpF1UapVNwjCqRcafi4Px6Thv5T3Z"
+      ],
+      "portable": false,
+      "nextKeyHashes": [],
+      "watchers": [],
+      "witness": {},
+      "deactivated": false
+    },
+    "state": {
+      "@context": [
+        "https://www.w3.org/ns/did/v1",
+        "https://w3id.org/security/multikey/v1"
+      ],
+      "id": "did:webvh:QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk:example.com",
+      "controller": "did:webvh:QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk:example.com",
+      "verificationMethod": [
+        {
+          "id": "did:webvh:QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk:example.com#6Thv5T3Z",
+          "controller": "did:webvh:QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk:example.com",
+          "type": "Multikey",
+          "publicKeyMultibase": "z6MkvDqGT54cXesYGvABpF1UapVNwjCqRcafi4Px6Thv5T3Z"
+        }
+      ],
+      "authentication": [
+        "did:webvh:QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk:example.com#6Thv5T3Z"
+      ],
+      "assertionMethod": [],
+      "keyAgreement": [],
+      "capabilityDelegation": [],
+      "capabilityInvocation": []
+    },
+    "proof": [
+      {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "verificationMethod": "did:key:z6MkvDqGT54cXesYGvABpF1UapVNwjCqRcafi4Px6Thv5T3Z",
+        "created": "2026-07-01T13:16:29Z",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z2Li1JKNJe8EkxFkhhtJcFnqZ96HpbXoTh9figxbBUd5qbLqH74gbbc6kCN2xcmN6Kuf1ATPe2VUVWtvtkxfYZxs1"
+      }
+    ]
+  },
+  {
+    "versionId": "2-QmbAF1EnHDeDD2xkYmUvcsXELKmVFd2Ma8xRtf5rknoFwG",
+    "versionTime": "2026-07-01T13:16:29Z",
+    "parameters": {
+      "updateKeys": [
+        "z6MkvDqGT54cXesYGvABpF1UapVNwjCqRcafi4Px6Thv5T3Z"
+      ],
+      "nextKeyHashes": [],
+      "witness": {},
+      "watchers": []
+    },
+    "state": {
+      "@context": [
+        "https://www.w3.org/ns/did/v1",
+        "https://w3id.org/security/multikey/v1"
+      ],
+      "id": "did:webvh:QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk:example.com",
+      "controller": "did:webvh:QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk:example.com",
+      "verificationMethod": [
+        {
+          "id": "did:webvh:QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk:example.com#6Thv5T3Z",
+          "controller": "did:webvh:QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk:example.com",
+          "type": "Multikey",
+          "publicKeyMultibase": "z6MkvDqGT54cXesYGvABpF1UapVNwjCqRcafi4Px6Thv5T3Z"
+        }
+      ],
+      "authentication": [
+        "did:webvh:QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk:example.com#6Thv5T3Z"
+      ],
+      "assertionMethod": [],
+      "keyAgreement": [],
+      "capabilityDelegation": [],
+      "capabilityInvocation": [],
+      "service": [
+        {
+          "id": "did:webvh:QmYQUqrBb5shqbzb1VKoX8RBnunii5d9vhVu65NuGbNERk:example.com#test-service",
+          "type": "TestService",
+          "serviceEndpoint": "https://example.com/test"
+        }
+      ]
+    },
+    "proof": [
+      {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "verificationMethod": "did:key:z6MkvDqGT54cXesYGvABpF1UapVNwjCqRcafi4Px6Thv5T3Z",
+        "created": "2026-07-01T13:16:29Z",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z2tvceHKXPmwMFbLGuswMZHZFY6kUGGt4MDRwzbkM5TsSgaAghX3xvx5mpMASCxsbdDHN32Na9KUX9NqTpmFGacb9"
+      }
+    ]
+  }
+]
