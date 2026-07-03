@@ -10,6 +10,48 @@ import { IndexerActivity, VeranaSyncState } from '../types'
 
 const DEFAULT_CHAIN_ID = 'vna-testnet-1'
 
+export function applyStateMutation(state: VeranaSyncState, activity: IndexerActivity): void {
+  switch (activity.msg) {
+    case 'CreateNewEcosystem':
+    case 'UpdateEcosystem':
+    case 'AddGovernanceFrameworkDocument':
+      upsertEcosystem(state, activity)
+      break
+    case 'IncreaseActiveGFVersion':
+      bumpActiveVersion(state, activity)
+      break
+    case 'CreateNewCredentialSchema':
+    case 'UpdateCredentialSchema':
+    case 'ArchiveCredentialSchema':
+      upsertCredentialSchema(state, activity)
+      break
+    case 'StartParticipantOP':
+    case 'RenewParticipantOP':
+      upsertParticipant(state, activity, { opState: 'PENDING' })
+      break
+    case 'SetParticipantOPToValidated':
+      upsertParticipant(state, activity, { opState: 'VALIDATED' })
+      break
+    case 'SetParticipantEffectiveUntil':
+      upsertParticipant(state, activity, {
+        effectiveUntil: String(activity.changes['effective_until'] ?? ''),
+      })
+      break
+    case 'RevokeParticipant':
+      upsertParticipant(state, activity, { revoked: true })
+      break
+    case 'SlashParticipantTrustDeposit':
+      upsertParticipant(state, activity, { slashed: true })
+      break
+    case 'RepayParticipantSlashedTrustDeposit':
+      upsertParticipant(state, activity, { slashed: false })
+      break
+    case 'CancelParticipantOPLastRequest':
+      upsertParticipant(state, activity, {})
+      break
+  }
+}
+
 export function upsertEcosystem(state: VeranaSyncState, activity: IndexerActivity): void {
   const block = Number(activity.block_height) || 0
   const id = String(activity.entity_id)

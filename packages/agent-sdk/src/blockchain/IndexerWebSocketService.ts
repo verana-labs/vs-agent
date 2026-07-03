@@ -1,11 +1,13 @@
 import { BaseLogger } from '@credo-ts/core'
+import { IndexerNotification } from '@verana-labs/vs-agent-model'
 import WebSocket from 'ws'
 
 import { VsAgent } from '../agent/VsAgent'
+import { emitVsAgentEvent, VsAgentEventTypes } from '../events'
 
 import { loadSyncState, saveSyncState } from './VeranaHelpers'
 import { VeranaIndexerService } from './VeranaIndexerService'
-import { buildDefaultIndexerHandlerRegistry } from './handlers'
+import { applyStateMutation, buildDefaultIndexerHandlerRegistry } from './handlers'
 import { IndexerHandlerRegistry } from './handlers/IndexerHandlerRegistry'
 import { eventKey, isProcessableEvent, nextRestCursor, sortEventsByPosition } from './indexerSync'
 import {
@@ -14,6 +16,7 @@ import {
   IndexerEventRecord,
   IndexerReadyMessage,
   IndexerSubscribeMessage,
+  VeranaSyncState,
 } from './types'
 
 export interface IndexerWebSocketServiceOptions {
@@ -224,15 +227,7 @@ export class IndexerWebSocketService {
 
     const activity = await this.fetchActivity(event)
     if (this.stopped || generation !== this.generation) return
-    if (activity) {
-      await this.handlerRegistry.dispatch(activity, {
-        agent: this.options.agent,
-        block_height: block,
-        operatorAddress: event.payload.sender,
-        state,
-        txHash: event.tx_hash,
-      })
-    }
+    if (activity) await this.applyChanges(event, activity, state)
 
     if (state.partialBlock === undefined || block > state.partialBlock) {
       state.partialBlock = block
@@ -243,6 +238,49 @@ export class IndexerWebSocketService {
     // A block counts as done only when a later block arrives, so the saved height stays one behind.
     state.lastBlockHeight = Math.max(state.lastBlockHeight, block - 1)
     await saveSyncState(this.options.agent, state)
+  }
+
+  private async applyChanges(
+    event: IndexerEventRecord,
+    activity: IndexerActivity,
+    state?: VeranaSyncState,
+  ): Promise<void> {
+    const syncState = state ?? (await loadSyncState(this.options.agent))
+    const block = event.block_height
+
+    applyStateMutation(syncState, activity)
+
+    await this.handlerRegistry.dispatch(activity, {
+      agent: this.options.agent,
+      blockHeight: block,
+      operatorAddress: event.payload.sender,
+      state: syncState,
+      txHash: event.tx_hash,
+    })
+
+    if (!state) {
+      syncState.lastBlockHeight = Math.max(syncState.lastBlockHeight, block)
+      await saveSyncState(this.options.agent, syncState)
+    }
+
+    try {
+      emitVsAgentEvent(
+        this.options.agent,
+        VsAgentEventTypes.IndexerNotification,
+        new IndexerNotification({
+          msg: activity.msg,
+          entityType: String(activity.entity_type),
+          entityId: String(activity.entity_id),
+          changes: activity.changes,
+          blockHeight: block,
+          txHash: event.tx_hash,
+          operatorAddress: event.payload.sender,
+          timestamp: new Date(event.timestamp),
+        }),
+      )
+    } catch (err) {
+      this.logger.error(`[IndexerWS] Failed to emit indexer notification: ${(err as Error).message}`)
+    }
   }
 
   private async fetchActivity(event: IndexerEventRecord): Promise<IndexerActivity | undefined> {
