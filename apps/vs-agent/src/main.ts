@@ -66,7 +66,7 @@ import {
   VERANA_ACCOUNT_MNEMONIC,
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
-  INDEXER_DEFAULT_HANDLERS_DISABLED,
+  VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE,
   VERANA_AUTO_TRIGGER_RESOLVER,
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
@@ -321,14 +321,14 @@ const run = async () => {
   // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
   if (VERANA_INDEXER_BASE_URL) {
     const handlerRegistry = buildDefaultIndexerHandlerRegistry()
-    if (INDEXER_DEFAULT_HANDLERS_DISABLED.includes('*')) {
+    if (VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE.includes('*')) {
       handlerRegistry.clear()
     } else {
-      for (const msg of INDEXER_DEFAULT_HANDLERS_DISABLED) handlerRegistry.unregister(msg)
+      for (const msg of VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE) handlerRegistry.unregister(msg)
     }
-    if (INDEXER_DEFAULT_HANDLERS_DISABLED.length) {
+    if (VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE.length) {
       serverLogger.info(
-        `[IndexerWS] Default handlers disabled: ${INDEXER_DEFAULT_HANDLERS_DISABLED.join(', ')}`,
+        `[IndexerWS] Default handlers disabled: ${VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE.join(', ')}`,
       )
     }
 

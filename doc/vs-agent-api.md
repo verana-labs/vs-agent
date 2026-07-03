@@ -802,7 +802,7 @@ Sent whenever an on-chain activity related to the agent DID is received from the
 }
 ```
 
-It is emitted for **every** indexer activity, regardless of which default handlers are active. This lets a backend behind the container react to `msg` types not covered by the default implementation, or override the ones that are (together with the `INDEXER_DEFAULT_HANDLERS_DISABLED` environment variable). The state-sync bookkeeping the agent needs internally always runs and is never affected by overriding handlers.
+It is emitted for **every** indexer activity, regardless of which default handlers are active. This lets a backend behind the container react to `msg` types not covered by the default implementation, or override the ones that are (together with the `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` environment variable). The state-sync bookkeeping the agent needs internally always runs and is never affected by overriding handlers.
 
 ### Subscribing to events
 
