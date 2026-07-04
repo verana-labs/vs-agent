@@ -4,7 +4,12 @@ import {
   type VtFlowState,
   type VtFlowStateChangedEvent,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { type BaseAgentModules, type VsAgent } from '@verana-labs/vs-agent-sdk'
+import {
+  VsAgentEventTypes,
+  type BaseAgentModules,
+  type VsAgent,
+  type VsAgentIndexerNotificationEvent,
+} from '@verana-labs/vs-agent-sdk'
 import { vi } from 'vitest'
 
 export async function makeConnection(agentA: VsAgent<BaseAgentModules>, agentB: VsAgent<BaseAgentModules>) {
@@ -33,6 +38,13 @@ export function isVtFlowStateChangedEvent(state: VtFlowState) {
       type === VtFlowEventTypes.VtFlowStateChanged &&
       payload?.state === state
     )
+  }
+}
+
+export function isIndexerNotificationEvent(msg: string) {
+  return (arg: unknown): arg is VsAgentIndexerNotificationEvent => {
+    const { type, payload } = (arg ?? {}) as any
+    return type === VsAgentEventTypes.IndexerNotification && payload?.event?.msg === msg
   }
 }
 

@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import '@openwallet-foundation/askar-nodejs'
+
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+
+import { VsAgent } from '../../src/agent'
+import { IndexerWebSocketService } from '../../src/blockchain'
+import { IndexerActivity } from '../../src/blockchain/types'
+import { VsAgentEventTypes } from '../../src/events'
+import { startAgent } from '../__mocks__/startTestAgent'
 
 import { VeranaTestChain, type CorporationResult } from './VeranaTestChain'
 import {
@@ -24,16 +32,20 @@ describeE2E('Verana blockchain integration (node + indexer, CosmJS + WebSocket)'
   let chain: VeranaTestChain
   let subscriber: IndexerSubscriber
   let corporation: CorporationResult
+  let agent: VsAgent
 
   beforeAll(async () => {
     stack = await startStack()
     chain = await VeranaTestChain.connect(stack.rpcUrl, COOLUSER_MNEMONIC)
     subscriber = await IndexerSubscriber.connect(stack.indexerWsUrl)
+    agent = await startAgent({ label: 'IndexerAgent', domain: 'indexeragent' })
+    await agent.initialize()
   }, SETUP_TIMEOUT_MS)
 
   afterAll(async () => {
     subscriber?.close()
     chain?.disconnect()
+    await agent?.shutdown()
     await stack?.stop().catch(() => undefined)
   })
 
@@ -65,6 +77,29 @@ describeE2E('Verana blockchain integration (node + indexer, CosmJS + WebSocket)'
 
       const event = await subscriber.waitForEvent(sameTx(ecosystem.txHash), EVENT_TIMEOUT_MS)
       expect(event.payload.message_type).toContain('MsgCreateEcosystem')
+
+      // Include internal event validation
+      const service = new IndexerWebSocketService({ indexerUrl: stack.indexerWsUrl, agent })
+      const activity: IndexerActivity = {
+        timestamp: event.timestamp,
+        block_height: event.block_height,
+        entity_type: event.payload.entity_type ?? 'Ecosystem',
+        entity_id: event.payload.entity_id ?? '',
+        msg: event.event_type,
+        changes: {},
+      }
+      const emitSpy = vi.spyOn(agent.events, 'emit')
+      await (service as any).applyChanges(event, activity)
+
+      const notification = emitSpy.mock.calls
+        .map(call => call[1] as any)
+        .find(emitted => emitted?.type === VsAgentEventTypes.IndexerNotification)
+      expect(notification).toBeDefined()
+      expect(notification.payload.event).toMatchObject({
+        msg: event.event_type,
+        blockHeight: event.block_height,
+        txHash: event.tx_hash,
+      })
     },
     SETUP_TIMEOUT_MS,
   )
