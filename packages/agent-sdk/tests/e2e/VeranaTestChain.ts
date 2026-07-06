@@ -53,6 +53,9 @@ const OPERATOR_GRANT_MSG_TYPES = [
   veranaTypeUrls.MsgCreateRootParticipant,
   PP_START_OP,
   PP_VALIDATE,
+  veranaTypeUrls.MsgRenewParticipantOP,
+  veranaTypeUrls.MsgCancelParticipantOPLastRequest,
+  veranaTypeUrls.MsgSelfCreateParticipant,
 ]
 
 const delay = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms))
@@ -216,7 +219,7 @@ export class VeranaTestChain {
 
   async createCredentialSchema(
     policyAddress: string,
-    params: { ecosystemId: number; jsonSchema: string },
+    params: { ecosystemId: number; jsonSchema: string; issuerOnboardingMode?: number },
   ): Promise<{ schemaId: number; txHash: string }> {
     const msg = {
       typeUrl: veranaTypeUrls.MsgCreateCredentialSchema,
@@ -230,7 +233,7 @@ export class VeranaTestChain {
         issuerValidationValidityPeriod: { value: 365 },
         verifierValidationValidityPeriod: { value: 365 },
         holderValidationValidityPeriod: { value: 365 },
-        issuerOnboardingMode: 2,
+        issuerOnboardingMode: params.issuerOnboardingMode ?? 2,
         verifierOnboardingMode: 2,
         holderOnboardingMode: 1,
         pricingAssetType: 1,
