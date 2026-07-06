@@ -1,19 +1,28 @@
 import { AgentContext } from '@credo-ts/core'
-import { VtFlowRecord, VtFlowService, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  VtFlowApi,
+  VtFlowErrorCode,
+  VtFlowRecord,
+  VtFlowRole,
+  VtFlowService,
+  VtFlowState,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
-import { createJsc } from '../../utils/trustCredentialStore'
+import { createJsc, removeTrustCredential } from '../../utils/trustCredentialStore'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { IndexerActivity, VeranaSyncState } from '../types'
 
 const DEFAULT_CHAIN_ID = 'vna-testnet-1'
+const PARTICIPANT_ROLE_HOLDER = 6
 
 export function applyStateMutation(state: VeranaSyncState, activity: IndexerActivity): void {
   switch (activity.msg) {
     case 'CreateNewEcosystem':
     case 'UpdateEcosystem':
+    case 'ArchiveEcosystem':
     case 'AddGovernanceFrameworkDocument':
       upsertEcosystem(state, activity)
       break
@@ -28,6 +37,10 @@ export function applyStateMutation(state: VeranaSyncState, activity: IndexerActi
     case 'StartParticipantOP':
     case 'RenewParticipantOP':
       upsertParticipant(state, activity, { opState: 'PENDING' })
+      break
+    case 'CreateRootParticipant':
+    case 'SelfCreateParticipant':
+      upsertParticipant(state, activity, {})
       break
     case 'SetParticipantOPToValidated':
       upsertParticipant(state, activity, { opState: 'VALIDATED' })
@@ -58,11 +71,15 @@ export function upsertEcosystem(state: VeranaSyncState, activity: IndexerActivit
   const c = activity.changes
   const existing = state.ecosystems[id]
 
+  const archivedRaw = c['archived']
+  const archived =
+    archivedRaw !== undefined ? archivedRaw !== null && archivedRaw !== false : (existing?.archived ?? false)
+
   state.ecosystems[id] = {
     id: Number(id),
     did: String(c['did'] ?? existing?.did ?? ''),
     corporationId: Number(c['corporation_id'] ?? existing?.corporationId ?? 0),
-    archived: Boolean(c['archived'] ?? existing?.archived ?? false),
+    archived,
     activeVersion: existing?.activeVersion,
     lastModifiedBlock: block,
   }
@@ -194,7 +211,12 @@ export async function setVtFlowRecordsParticipantRevoked(
       ) {
         return null
       }
-      await service.updateState(agentContext, record, VtFlowState.ParticipantRevoked)
+      await agentContext.dependencyManager.resolve(VtFlowApi).terminateByChainEvent({
+        vtFlowRecordId: record.id,
+        code: VtFlowErrorCode.ParticipantRevoked,
+        state: VtFlowState.ParticipantRevoked,
+        enDescription: `Participant ${participantId} has been revoked on-chain`,
+      })
       return 'PARTICIPANT_REVOKED'
     },
     'Failed to set PARTICIPANT_REVOKED',
@@ -215,11 +237,57 @@ export async function setVtFlowRecordsParticipantSlashed(
       ) {
         return null
       }
-      await service.updateState(agentContext, record, VtFlowState.ParticipantSlashed)
+      await agentContext.dependencyManager.resolve(VtFlowApi).terminateByChainEvent({
+        vtFlowRecordId: record.id,
+        code: VtFlowErrorCode.ParticipantSlashed,
+        state: VtFlowState.ParticipantSlashed,
+        enDescription: `Participant ${participantId} trust deposit has been slashed on-chain`,
+      })
       return 'PARTICIPANT_SLASHED'
     },
     'Failed to set PARTICIPANT_SLASHED',
   )
+}
+
+/** VSA-VTI-FLOW-OP-REVOKE: a revoked/slashed HOLDER's credential is gone; drop its linked VP and stored VTC. */
+export async function removeHolderTrustCredentialIfRevoked(
+  agent: VsAgent,
+  participantId: string,
+): Promise<void> {
+  const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
+  if (participant?.role !== PARTICIPANT_ROLE_HOLDER || participant.did !== agent.did) return
+  if (!agent.publicApiBaseUrl) return
+
+  const agentContext = agent.context
+  const service = agentContext.dependencyManager.resolve(VtFlowService)
+  const records = await service.findAllByQuery(agentContext, { participantId })
+  for (const record of records) {
+    if (record.role !== VtFlowRole.Applicant || !record.credentialExchangeRecordId) continue
+    try {
+      const formatData = await agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
+      const credentialId = (
+        (formatData.credential as { jsonld?: { id?: string } } | undefined)?.jsonld as
+          | { id?: string }
+          | undefined
+      )?.id
+      if (!credentialId) continue
+      const removed = await removeTrustCredential(agent, agent.publicApiBaseUrl, credentialId, '_vt/vtc')
+      if (removed) {
+        agent.config.logger.info(
+          `[IndexerWS] Removed linked VP and stored credential ${credentialId} (participant=${participantId})`,
+        )
+      } else {
+        agent.config.logger.debug(
+          `[IndexerWS] No stored trust credential matched ${credentialId} (participant=${participantId})`,
+        )
+      }
+    } catch (e) {
+      agent.config.logger.error(
+        `[IndexerWS] Failed to remove credential for revoked HOLDER participant ${participantId}`,
+        e as Record<string, unknown>,
+      )
+    }
+  }
 }
 
 export async function terminateVtFlowRecordsByApplicant(

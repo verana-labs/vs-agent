@@ -172,6 +172,11 @@ export interface ParticipantDto {
   op_summary_digest?: string
 }
 
+export interface CorporationDto {
+  id: number
+  did?: string | null
+}
+
 export interface RawParticipant {
   id: number
   schemaId: number

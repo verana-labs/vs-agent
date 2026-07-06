@@ -1,6 +1,7 @@
 import { fetchJson } from '../utils/util'
 
 import {
+  CorporationDto,
   CredentialSchemaDto,
   EcosystemDto,
   IndexerEventsResponse,
@@ -56,5 +57,10 @@ export class VeranaIndexerService {
       REQUEST_TIMEOUT_MS,
     )
     return data.participant
+  }
+
+  async getCorporation(id: string | number): Promise<CorporationDto> {
+    this.config.logger.debug(`[VeranaIndexer] getCorporation id=${id}`)
+    return fetchJson<CorporationDto>(`${this.baseUrl}/v4/corporation/get/${id}`, REQUEST_TIMEOUT_MS)
   }
 }
