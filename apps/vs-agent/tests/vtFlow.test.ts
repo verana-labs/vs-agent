@@ -1,3 +1,4 @@
+import { LogLevel } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { VtFlowOrchestrator, type VsAgent } from '@verana-labs/vs-agent-sdk'
@@ -191,6 +192,70 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.id).not.toBe(applicantRecord.id)
   })
 
+  it('vtFlowEvents POSTs vt-flow-state-updated as the Validator transitions to VALIDATING', async () => {
+    const webhookUrl = 'http://localhost:5005'
+    const { webhookEvent } = await import('../src/utils')
+    const { TsLogger } = await import('../src/utils/logger')
+
+    const baseFetch = global.fetch
+    const fetchSpy = vi.fn((...args: Parameters<typeof fetch>) => {
+      const [input] = args
+      const url = typeof input === 'string' ? input : ((input as { url?: string })?.url ?? String(input))
+      if (url.startsWith(webhookUrl)) return Promise.resolve(new Response(null, { status: 200 }))
+      return (baseFetch as typeof fetch)(...args)
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    try {
+      webhookEvent(validator, webhookUrl, new TsLogger(LogLevel.Off, validator.label))
+
+      await applicant.modules.vtFlow.sendIssuanceRequest({
+        connectionId: applicantConnection.id,
+        schemaId: 'https://example.test/schemas/organization.json',
+        agentParticipantId: 'agent-participant-4',
+        walletAgentParticipantId: 'wallet-agent-participant-4',
+        claims: { name: 'Acme', country: 'CH' },
+      })
+
+      const validatingCall = await vi.waitFor(
+        () => {
+          const call = fetchSpy.mock.calls.find(([input, init]) => {
+            const url =
+              typeof input === 'string' ? input : ((input as { url?: string })?.url ?? String(input))
+            if (!url.startsWith(webhookUrl)) return false
+            const rawBody = (init as RequestInit | undefined)?.body
+            if (typeof rawBody !== 'string') return false
+            try {
+              return JSON.parse(rawBody).state === VtFlowState.Validating
+            } catch {
+              return false
+            }
+          })
+          expect(call).toBeDefined()
+          return call!
+        },
+        { timeout: 10_000, interval: 50 },
+      )
+
+      const [url, init] = validatingCall
+      expect(url).toBe(`${webhookUrl}/vt-flow-state-updated`)
+      expect((init as RequestInit).method).toBe('POST')
+
+      const body = JSON.parse((init as RequestInit).body as string)
+      expect(body.type).toBe('vt-flow-state-updated')
+      expect(body.state).toBe(VtFlowState.Validating)
+      expect(body.role).toBe(VtFlowRole.Validator)
+      expect(body.variant).toBe(VtFlowVariant.DirectIssuance)
+      expect(body.connectionId).toBeDefined()
+      expect(body.threadId).toBeDefined()
+      expect(body.participantSessionId).toBeDefined()
+      expect(body.vtFlowRecordId).toBeDefined()
+      expect(body.schemaId).toBe('https://example.test/schemas/organization.json')
+      expect(body.claims).toEqual({ name: 'Acme', country: 'CH' })
+    } finally {
+      vi.stubGlobal('fetch', baseFetch)
+    }
+  }, 30_000)
   it('sendValidating rotates the Validator DID from webvh to peer', async () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 

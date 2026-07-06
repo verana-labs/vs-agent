@@ -9,6 +9,7 @@ import {
   MessageReceived,
   MessageStateUpdated,
   PresentationStateUpdated,
+  VtFlowStateUpdated,
 } from '@verana-labs/vs-agent-model'
 
 export enum VsAgentEventTypes {
@@ -16,6 +17,7 @@ export enum VsAgentEventTypes {
   MessageReceived = 'vs-agent-message-received',
   MessageStateUpdated = 'vs-agent-message-state-updated',
   PresentationStateUpdated = 'vs-agent-presentation-state-updated',
+  VtFlowStateUpdated = 'vs-agent-vt-flow-state-updated',
   IndexerNotification = 'vs-agent-indexer-notification',
 }
 
@@ -41,6 +43,12 @@ export interface VsAgentPresentationStateUpdatedEvent extends BaseEvent {
   type: typeof VsAgentEventTypes.PresentationStateUpdated
   payload: {
     event: PresentationStateUpdated
+  }
+}
+export interface VsAgentVtFlowStateUpdatedEvent extends BaseEvent {
+  type: typeof VsAgentEventTypes.VtFlowStateUpdated
+  payload: {
+    event: VtFlowStateUpdated
   }
 }
 export interface VsAgentIndexerNotificationEvent extends BaseEvent {
