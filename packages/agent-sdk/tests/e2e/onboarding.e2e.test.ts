@@ -26,10 +26,9 @@ const MINIMAL_SCHEMA = JSON.stringify({
   required: ['name'],
 })
 
-// Until the chain authorizes both setValidated and the session under one vs_operator (AUTHZ-CHECK-3),
-// they need mutually-exclusive authz (OperatorAuthorization vs VSOperatorAuthorization), so the agent
-// signs the session with a second account. This exercises that dual-operator path end-to-end through
-// VeranaChainService on a local V4 node.
+// Split-account deployment: validation signed by an OA account and the session by a separate VSOA
+// account, each through its own VeranaChainService. The single-account path (one vs_operator whose
+// VSOA covers both msgs) is covered by applicant-ops.e2e.test.ts.
 describeE2E('vt-flow onboarding chain integration (V4)', () => {
   let stack: StartedStack
   let chainA: VeranaTestChain
@@ -73,18 +72,25 @@ describeE2E('vt-flow onboarding chain integration (V4)', () => {
       veranaChain = new VeranaChainService({
         rpcUrl: stack.rpcUrl,
         mnemonic: COOLUSER_MNEMONIC, // operator A (OperatorAuthorization) -> setValidated
-        sessionOperatorMnemonic: opB.mnemonic, // operator B (VSOperatorAuthorization) -> session
         corporationAddress: corp.policyAddress,
         logger: new ConsoleLogger(LogLevel.Debug),
       })
       await veranaChain.start()
+
+      const vsoaChain = new VeranaChainService({
+        rpcUrl: stack.rpcUrl,
+        mnemonic: opB.mnemonic, // operator B (VSOperatorAuthorization) -> session
+        corporationAddress: corp.policyAddress,
+        logger: new ConsoleLogger(LogLevel.Warn),
+      })
+      await vsoaChain.start()
 
       const digest = `sha384-${createHash('sha384').update(`cred-${RUN_ID}`).digest('base64')}`
       await veranaChain.setParticipantOPToValidated({
         id: applicant.participantId,
         opSummaryDigest: digest,
       })
-      await veranaChain.createOrUpdateParticipantSession({
+      await vsoaChain.createOrUpdateParticipantSession({
         id: randomUUID(),
         issuerParticipantId: applicant.participantId,
         agentParticipantId: 0,
@@ -94,13 +100,6 @@ describeE2E('vt-flow onboarding chain integration (V4)', () => {
 
       const onChain = await veranaChain.getParticipant(applicant.participantId)
       expect(onChain?.opState).toBe(ValidationState.VALIDATED)
-
-      const vsoaChain = new VeranaChainService({
-        rpcUrl: stack.rpcUrl,
-        mnemonic: opB.mnemonic,
-        logger: new ConsoleLogger(LogLevel.Warn),
-      })
-      await vsoaChain.start()
 
       expect(await vsoaChain.hasVsOperatorAuthorization()).toBe(true)
       expect(await veranaChain.hasVsOperatorAuthorization()).toBe(false)
@@ -152,17 +151,16 @@ describeE2E('vt-flow onboarding chain integration (V4)', () => {
       // Only a HOLDER may be granted TriggerResolver as VSOA, so it self-triggers via Path 1 (AUTHZ-CHECK-3).
       const opHolder = await chainA.createFundedOperator()
 
-      const holderChain = new VeranaChainService({
+      const oaChain = new VeranaChainService({
         rpcUrl: stack.rpcUrl,
         mnemonic: COOLUSER_MNEMONIC, // OA account -> setValidated
-        sessionOperatorMnemonic: opHolder.mnemonic, // HOLDER vs_operator -> TriggerResolver
         corporationAddress: corp.policyAddress,
         logger: new ConsoleLogger(LogLevel.Debug),
       })
-      await holderChain.start()
+      await oaChain.start()
 
       const digest = `sha384-${createHash('sha384').update(`cred-${suffix}`).digest('base64')}`
-      await holderChain.setParticipantOPToValidated({ id: issuer.participantId, opSummaryDigest: digest })
+      await oaChain.setParticipantOPToValidated({ id: issuer.participantId, opSummaryDigest: digest })
 
       const holder = await chainA.startParticipantOp(corp.policyAddress, {
         role: PARTICIPANT_ROLE_HOLDER,
@@ -172,7 +170,15 @@ describeE2E('vt-flow onboarding chain integration (V4)', () => {
         vsOperatorAuthzMsgTypes: [PP_TRIGGER_RESOLVER],
       })
       // A HOLDER's op_summary_digest must be null (chain rejects a digest for HOLDER type).
-      await holderChain.setParticipantOPToValidated({ id: holder.participantId, opSummaryDigest: '' })
+      await oaChain.setParticipantOPToValidated({ id: holder.participantId, opSummaryDigest: '' })
+
+      const holderChain = new VeranaChainService({
+        rpcUrl: stack.rpcUrl,
+        mnemonic: opHolder.mnemonic, // HOLDER vs_operator -> TriggerResolver
+        corporationAddress: corp.policyAddress,
+        logger: new ConsoleLogger(LogLevel.Debug),
+      })
+      await holderChain.start()
 
       const triggered = await holderChain.triggerResolver(holder.participantId)
       expect(triggered.txHash).toMatch(/^[0-9A-F]{64}$/i)

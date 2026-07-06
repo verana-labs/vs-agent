@@ -34,7 +34,7 @@ export const ADMIN_API_AUTH_MODE = (process.env.ADMIN_API_AUTH_MODE ?? 'internal
   .map(s => s.trim().toLowerCase())
   .filter(s => s.length > 0)
 
-export const EVENTS_BASE_URL = process.env.EVENTS_BASE_URL || 'http://localhost:5000'
+export const EVENTS_BASE_URL = (process.env.EVENTS_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '')
 
 // Wallet and Database
 export const AGENT_WALLET_ID = process.env.AGENT_WALLET_ID

@@ -185,18 +185,68 @@ export interface RawParticipant {
   slashed: Date | undefined
 }
 
+export interface Ecosystem {
+  id: number
+  did: string
+  corporationId: number
+  archived: boolean
+  activeVersion: number
+}
+
+export interface CredentialSchema {
+  id: number
+  ecosystemId: number
+  jsonSchema: string
+  issuerOnboardingMode: number
+  verifierOnboardingMode: number
+  holderOnboardingMode: number
+  archived: Date | undefined
+}
+
+export interface OperatorAuthorization {
+  id: number
+  corporationId: number
+  operator: string
+  msgTypes: string[]
+}
+
+export interface ParticipantAuthorizationRecord {
+  participantId: number
+  msgTypes: string[]
+}
+
+export interface VsOperatorAuthorization {
+  id: number
+  corporationId: number
+  vsOperator: string
+  records: ParticipantAuthorizationRecord[]
+}
+
 export interface ParticipantQueryClient {
   GetParticipant(req: { id: number }): Promise<{ participant?: RawParticipant }>
   FindParticipantsWithDID(req: object): Promise<{ participants: RawParticipant[] }>
   GetParticipantSession(req: { id: string }): Promise<{ session?: unknown }>
 }
 
+export interface EcosystemQueryClient {
+  GetEcosystem(req: { id: number }): Promise<{ ecosystem?: Ecosystem }>
+}
+
+export interface CredentialSchemaQueryClient {
+  GetCredentialSchema(req: { id: number }): Promise<{ schema?: CredentialSchema }>
+}
+
 export interface DelegationQueryClient {
+  ListOperatorAuthorizations(req: {
+    corporationId: number
+    operator: string
+    responseMaxSize: number
+  }): Promise<{ operatorAuthorizations: OperatorAuthorization[] }>
   ListVSOperatorAuthorizations(req: {
     corporationId: number
     vsOperator: string
     responseMaxSize: number
-  }): Promise<{ vsOperatorAuthorizations: unknown[] }>
+  }): Promise<{ vsOperatorAuthorizations: VsOperatorAuthorization[] }>
 }
 
 export interface VeranaChainConfig {
@@ -207,13 +257,6 @@ export interface VeranaChainConfig {
   gasPrice?: string
   corporationAddress?: string
   autoTriggerResolver?: boolean
-  /**
-   * FIXME(verana setValidated->AUTHZ-CHECK-3): temporary. On the current chain, validating a participant
-   * (OperatorAuthorization) and creating its session (VSOperatorAuthorization) need two mutually-exclusive
-   * account permissions, so one account cannot do both. When set, the session is signed by this second
-   * account. Remove once the chain authorizes both under one vs_operator (AUTHZ-CHECK-3).
-   */
-  sessionOperatorMnemonic?: string
 }
 
 /** Wrapper for optional uint64 values per `verana.pp.v1.OptionalUInt64`. */
@@ -228,6 +271,8 @@ export interface StartParticipantOPParams {
   validationFees?: OptionalUInt64
   issuanceFees?: OptionalUInt64
   verificationFees?: OptionalUInt64
+  vsOperator?: string
+  vsOperatorAuthzMsgTypes?: string[]
 }
 
 export interface SetParticipantOPToValidatedParams {
@@ -331,9 +376,9 @@ export interface SelfCreateParticipantParams {
   validationFees?: number
   verificationFees?: number
   vsOperator?: string
-  vsOperatorAuthzEnabled?: boolean
+  vsOperatorAuthzMsgTypes?: string[]
   vsOperatorAuthzSpendLimit?: Coin[]
   vsOperatorAuthzWithFeegrant?: boolean
   vsOperatorAuthzFeeSpendLimit?: Coin[]
-  vsOperatorAuthzSpendPeriod?: DurationParam
+  vsOperatorAuthzPeriod?: DurationParam
 }
