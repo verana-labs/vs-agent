@@ -352,6 +352,31 @@ export class VtFlowService {
     return { record, problemReport }
   }
 
+  /** On-chain revoke/slash termination producing a problem-report; lands in `PARTICIPANT_REVOKED` or `PARTICIPANT_SLASHED`. */
+  public async terminateByChainEvent(
+    agentContext: AgentContext,
+    recordId: string,
+    params: {
+      code: VtFlowErrorCode
+      state: VtFlowState.ParticipantRevoked | VtFlowState.ParticipantSlashed
+      enDescription?: string
+    },
+  ): Promise<{ record: VtFlowRecord; problemReport: ReturnType<typeof buildVtFlowProblemReport> }> {
+    const record = await this.repository.getById(agentContext, recordId)
+
+    const problemReport = buildVtFlowProblemReport({
+      code: params.code,
+      threadId: record.threadId,
+      enDescription: params.enDescription,
+    })
+
+    record.errorMessage = params.enDescription ?? params.code
+
+    await this.updateState(agentContext, record, params.state)
+
+    return { record, problemReport }
+  }
+
   /** Build an `oob-link`; non-terminal records transition to `OOB_PENDING`. */
   public async sendOobLinkForSession(
     agentContext: AgentContext,
