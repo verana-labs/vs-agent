@@ -40,8 +40,10 @@ const {
 const PP_START_OP = '/verana.pp.v1.MsgStartParticipantOP'
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
 const PP_SESSION = '/verana.pp.v1.MsgCreateOrUpdateParticipantSession'
+export const PP_TRIGGER_RESOLVER = '/verana.pp.v1.MsgTriggerResolver'
 
 export const PARTICIPANT_ROLE_ISSUER = 1
+export const PARTICIPANT_ROLE_HOLDER = 6
 
 const OPERATOR_GRANT_MSG_TYPES = [
   veranaTypeUrls.MsgCreateEcosystem,
@@ -264,10 +266,16 @@ export class VeranaTestChain {
     return { participantId, txHash: res.transactionHash }
   }
 
-  /** Creates the applicant participant and grants `vsOperator` an inline VSOA for the session. */
+  /** Creates an applicant participant, optionally granting `vsOperator` an inline VSOA. */
   async startParticipantOp(
     policyAddress: string,
-    params: { role: number; validatorParticipantId: number; did: string; vsOperator: string },
+    params: {
+      role: number
+      validatorParticipantId: number
+      did: string
+      vsOperator?: string
+      vsOperatorAuthzMsgTypes?: string[]
+    },
   ): Promise<{ participantId: number; txHash: string }> {
     const msg = {
       typeUrl: veranaTypeUrls.MsgStartParticipantOP,
@@ -277,8 +285,8 @@ export class VeranaTestChain {
         role: params.role,
         validatorParticipantId: params.validatorParticipantId,
         did: params.did,
-        vsOperator: params.vsOperator,
-        vsOperatorAuthzMsgTypes: [PP_SESSION],
+        vsOperator: params.vsOperator ?? '',
+        vsOperatorAuthzMsgTypes: params.vsOperator ? (params.vsOperatorAuthzMsgTypes ?? [PP_SESSION]) : [],
       }),
     }
     // The root validator has a future effective_from; retry until it is ACTIVE.

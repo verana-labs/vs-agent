@@ -26,6 +26,7 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
   did?: string
   label: string
   publicApiBaseUrl: string
+  adminApiServiceEndpoint?: string
   displayPictureUrl?: string
   autoDiscloseUserProfile?: boolean
   masterListCscaLocation?: string
@@ -79,6 +80,7 @@ export function createVsAgent<T extends Plugin[]>(
     did: options.did,
     autoDiscloseUserProfile: options.autoDiscloseUserProfile,
     publicApiBaseUrl: options.publicApiBaseUrl,
+    adminApiServiceEndpoint: options.adminApiServiceEndpoint,
     displayPictureUrl: options.displayPictureUrl,
     label: options.label,
     veranaChain: options.veranaChain,

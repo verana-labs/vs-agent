@@ -135,6 +135,8 @@ export interface VeranaSyncState {
   ecosystems: Record<string, SyncedEcosystem>
   credentialSchemas: Record<string, SyncedCredentialSchema>
   participants: Record<string, SyncedParticipant>
+  partialBlock?: number
+  partialKeys?: string[]
 }
 
 export interface EcosystemDto {
@@ -189,6 +191,14 @@ export interface ParticipantQueryClient {
   GetParticipantSession(req: { id: string }): Promise<{ session?: unknown }>
 }
 
+export interface DelegationQueryClient {
+  ListVSOperatorAuthorizations(req: {
+    corporationId: number
+    vsOperator: string
+    responseMaxSize: number
+  }): Promise<{ vsOperatorAuthorizations: unknown[] }>
+}
+
 export interface VeranaChainConfig {
   rpcUrl: string
   chainId?: string
@@ -196,6 +206,7 @@ export interface VeranaChainConfig {
   logger: BaseLogger
   gasPrice?: string
   corporationAddress?: string
+  autoTriggerResolver?: boolean
   /**
    * FIXME(verana setValidated->AUTHZ-CHECK-3): temporary. On the current chain, validating a participant
    * (OperatorAuthorization) and creating its session (VSOperatorAuthorization) need two mutually-exclusive

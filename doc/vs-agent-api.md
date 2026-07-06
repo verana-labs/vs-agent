@@ -52,6 +52,7 @@ In addition, it supports a notification mechanism to subscribe to any event the 
       - [Connection State Updated](#connection-state-updated)
       - [Message State Updated](#message-state-updated)
       - [Message Received](#message-received)
+      - [Indexer Notification](#indexer-notification)
     - [Subscribing to events](#subscribing-to-events)
   - [Invitations](#invitations)
     - [Connection Invitation](#connection-invitation)
@@ -723,6 +724,7 @@ VS Agent Notification interface supports the following event topics:
 - Connection State Updated (`connection-state-updated`): usually for new connections
 - Message State Updated (`message-state-updated`): used to keep track of sent messages
 - Message Received (`message-received`): for reception of any message
+- Indexer Notification (`indexer-notification`): on-chain ledger notifications relayed from the Verana indexer
 
 Events are JSON-encoded and include their underlying data in their payload field:
 
@@ -781,6 +783,26 @@ Sent when a message is received. Event format is as follows:
 ```
 
 Payload contains the message itself, as specified in the previous section.
+
+#### Indexer Notification
+
+Sent whenever an on-chain activity related to the agent DID is received from the Verana indexer. Event format is as follows:
+
+```json
+{
+  "type": "indexer-notification",
+  "timestamp": "NumericDate",
+  "msg": "string",
+  "entityType": "string",
+  "entityId": "string",
+  "changes": {},
+  "blockHeight": 0,
+  "txHash": "string",
+  "operatorAddress": "string"
+}
+```
+
+It is emitted for **every** indexer activity, regardless of which default handlers are active. This lets a backend behind the container react to `msg` types not covered by the default implementation, or override the ones that are (together with the `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` environment variable). The state-sync bookkeeping the agent needs internally always runs and is never affected by overriding handlers.
 
 ### Subscribing to events
 

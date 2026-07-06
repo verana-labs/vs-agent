@@ -4,4 +4,5 @@ export enum EventType {
   MessageReceived = 'message-received',
   PresentationStateUpdated = 'presentation-state-updated',
   VtFlowStateUpdated = 'vt-flow-state-updated',
+  IndexerNotification = 'indexer-notification',
 }

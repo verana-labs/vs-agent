@@ -53,7 +53,7 @@ These are variables that you are likely to use when going into production, since
 | POSTGRES_ADMIN_PASSWORD | PosgreSQL database admin password                                                                                           | None              |
 | REDIS_HOST              | Redis host used for message caching and asynchronous processing. The system requires this for production-ready performance. | None              |
 | REDIS_PASSWORD          | Password for connecting to the Redis instance.                                                                              | None              |
-| TAILS_DIRECTORY_PATH    | Directory where AnonCreds revocation tails files are stored and served from. Must be on durable storage that survives restarts. | `<home>/.afj/tails` |
+| TAILS_DIRECTORY_PATH    | Directory where AnonCreds revocation tails files are stored and served from. Must be on durable storage that survives restarts, and on a shared volume when running multiple instances. | `<home>/.afj/data/tails` |
 
 VS Agent supports two database backends:
 
@@ -125,6 +125,9 @@ These variables enable on-chain features (permission management, trust registry 
 | `VERANA_ACCOUNT_MNEMONIC` | REQUIRED* | BIP-39 mnemonic for the agent's Verana blockchain account.                                                                                                    |
 | `VERANA_CHAIN_ID`         | OPTIONAL  | Chain ID (defaults to the network's chain ID if not set).                                                                                                     |
 | `VERANA_INDEXER_BASE_URL` | REQUIRED* | Verana indexer URL (e.g. `https://...`). Used to establish a WebSocket connection for subscribing to real-time ledger notifications related to the agent DID. |
+| `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` | OPTIONAL | Comma-separated indexer `msg` names whose default handler is disabled (or `*` for all), so a backend behind the container can override them and react via the `indexer-notification` webhook. State-sync bookkeeping is never affected. |
+| `VERANA_INDEXER_SUBSCRIPTION_SCOPE` | OPTIONAL | Scope of the indexer subscription and REST catch-up: `did` (default, only the agent's own DID) or `corporation` (all events for `VERANA_CORPORATION_ID`). |
+| `VERANA_CORPORATION_ID` | OPTIONAL | Corporation ID used when `VERANA_INDEXER_SUBSCRIPTION_SCOPE` is `corporation`. |
 
 * Required only if on-chain features are enabled.
 

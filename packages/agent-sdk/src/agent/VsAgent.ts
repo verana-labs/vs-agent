@@ -40,7 +40,9 @@ import { VtFlowModule } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { VeranaChainService } from '../blockchain/VeranaChainService'
+import { applyAdminApiServiceEntry } from '../did/adminApiService'
 import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
+import { migrateWebVhVersionTimeIfBroken } from '../did/migrateWebVhVersionTime'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { connectionEvents } from '../events/ConnectionEvents'
 import { vtFlowEvents } from '../events/VtFlowEvents'
@@ -85,6 +87,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public did?: string
   public autoDiscloseUserProfile?: boolean
   public publicApiBaseUrl: string
+  public adminApiServiceEndpoint?: string
   public displayPictureUrl?: string
   public label: string
   public veranaChain?: VeranaChainService
@@ -95,6 +98,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       did?: string
       autoDiscloseUserProfile?: boolean
       publicApiBaseUrl: string
+      adminApiServiceEndpoint?: string
       displayPictureUrl?: string
       label: string
       veranaChain?: VeranaChainService
@@ -105,6 +109,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.did = options.did
     this.autoDiscloseUserProfile = options.autoDiscloseUserProfile
     this.publicApiBaseUrl = options.publicApiBaseUrl
+    this.adminApiServiceEndpoint = options.adminApiServiceEndpoint
     this.displayPictureUrl = options.displayPictureUrl
     this.label = options.label
     this.veranaChain = options.veranaChain
@@ -156,6 +161,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           // Add AnonCreds Services
           await this.createAndAddAnonCredsServices(didDocument)
 
+          this.applyAdminApiService(didDocument)
+
           await this.dids.create({
             method: 'web',
             domain,
@@ -198,6 +205,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           // so persist the DIDComm key mapping directly on the existing record.
           await this.persistDidDocumentKey(publicDid, didCommKey)
 
+          this.applyAdminApiService(didDocument)
+
           const result = await this.dids.update({ did: publicDid, didDocument })
           if (result.didState.state !== 'finished') {
             this.logger.error(`Cannot update DID ${publicDid}`)
@@ -212,13 +221,13 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         return
       }
 
-      // If this is a did:webvh record, ensure the stored log is resolvable under the
-      // current didwebvh-ts version. Logs created with didwebvh-ts <2.7.4 used the
-      // SCID placeholder when computing the entry hash for entries beyond #1, which
-      // newer resolvers (correctly) reject as a broken hash chain. We rebuild the
-      // log in-place, preserving entry #1 (and therefore the SCID and the public DID).
+      // Ensure the stored did:webvh log is resolvable under the current didwebvh-ts version:
+      // <2.7.4 wrote broken entry hashes (SCID placeholder), and >=2.8.0 rejects the
+      // same-second versionTimes the old create+update-at-init flow produced. Both migrations
+      // rebuild the log in-place, preserving entry #1 (and therefore the SCID and public DID).
       if (parsedDid.method === 'webvh') {
         try {
+          await migrateWebVhVersionTimeIfBroken(this.agentContext, existingRecord, this.logger)
           await migrateWebVhLogIfBroken(this.agentContext, existingRecord, this.logger)
         } catch (error) {
           this.logger.error(
@@ -262,7 +271,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           const id = typeof a === 'string' ? a : a.id
           return id !== ed25519VerificationMethodId
         })
-      if (hasLegacyMethods || servicesChanged || authHasUpdateKey) {
+      const currentAdminEntry = (didDocument.service ?? []).find(s => s.type === 'VsAgentAdminAPI')
+      const adminEntryChanged = currentAdminEntry?.serviceEndpoint !== this.adminApiServiceEndpoint
+      if (hasLegacyMethods || servicesChanged || authHasUpdateKey || adminEntryChanged) {
         if (servicesChanged && ed25519VerificationMethodId) {
           didDocument.service = [
             ...(didDocument.service
@@ -271,6 +282,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             ...this.getDidCommServices(didDocument.id, ed25519VerificationMethodId),
           ]
         }
+        this.applyAdminApiService(didDocument)
         const newKeys: DidDocumentKey[] = []
         if (hasLegacyMethods) {
           newKeys.push(await this.createAndAddDidCommKeysAndServices(didDocument))
@@ -510,6 +522,10 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       }),
     ]
   }
+
+  private applyAdminApiService(didDocument: DidDocument): void {
+    applyAdminApiServiceEntry(didDocument, this.adminApiServiceEndpoint)
+  }
 }
 
 export interface VsAgentOptions {
@@ -518,6 +534,7 @@ export interface VsAgentOptions {
   autoDiscloseUserProfile?: boolean
   dependencies: AgentDependencies
   publicApiBaseUrl: string
+  adminApiServiceEndpoint?: string
   masterListCscaLocation?: string
   endpoints: string[]
   walletConfig: AskarModuleConfigStoreOptions

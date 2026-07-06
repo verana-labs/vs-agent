@@ -12,7 +12,9 @@ import { connectComet } from '@cosmjs/tendermint-rpc'
 import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
 
 import {
+  Coin,
   CreateOrUpdateParticipantSessionParams,
+  DelegationQueryClient,
   Participant,
   ParticipantQueryClient,
   RawParticipant,
@@ -21,11 +23,19 @@ import {
   VeranaChainConfig,
 } from './types'
 
-const { QueryClientImpl: PpQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/pp/v1/query')
+const { QueryClientImpl: DeQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/de/v1/query')
+const {
+  QueryClientImpl: PpQueryClientImpl,
+  QueryFindParticipantsWithDIDRequest,
+} = require('@verana-labs/verana-types/codec/verana/pp/v1/query')
 const {
   MsgSetParticipantOPToValidated,
   MsgCreateOrUpdateParticipantSession,
+  MsgTriggerResolver,
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/tx')
+
+// ParticipantRole.HOLDER (x/pp/types); the only role whose vs_operator may send TriggerResolver (chain Path 1).
+const PARTICIPANT_ROLE_HOLDER = 6
 
 function mapParticipant(p: RawParticipant): Participant {
   return {
@@ -49,6 +59,7 @@ export class VeranaChainService {
   private corporationAddress!: string
 
   private ppQuery!: ParticipantQueryClient
+  private deQuery!: DelegationQueryClient
 
   // FIXME(verana setValidated->AUTHZ-CHECK-3): temporary second account that signs the session only.
   private sessionSigningClient?: SigningStargateClient
@@ -66,6 +77,10 @@ export class VeranaChainService {
 
   get corporation(): string {
     return this.corporationAddress
+  }
+
+  get autoTriggerResolverEnabled(): boolean {
+    return this.config.autoTriggerResolver !== false
   }
 
   async start(): Promise<void> {
@@ -114,12 +129,26 @@ export class VeranaChainService {
     const queryClient = new QueryClient(cometClient)
     const rpc = createProtobufRpcClient(queryClient)
     this.ppQuery = new PpQueryClientImpl(rpc) as ParticipantQueryClient
+    this.deQuery = new DeQueryClientImpl(rpc) as DelegationQueryClient
   }
 
   // Query API (unsigned)
   async getParticipant(id: number): Promise<Participant | undefined> {
     const result = await this.ppQuery.GetParticipant({ id })
     return result.participant ? mapParticipant(result.participant) : undefined
+  }
+
+  async getBalance(denom = 'uvna'): Promise<Coin> {
+    return this.signingClient.getBalance(this.operatorAddress, denom)
+  }
+
+  async hasVsOperatorAuthorization(): Promise<boolean> {
+    const result = await this.deQuery.ListVSOperatorAuthorizations({
+      corporationId: 0,
+      vsOperator: this.operatorAddress,
+      responseMaxSize: 64,
+    })
+    return result.vsOperatorAuthorizations.length > 0
   }
 
   // Transaction API (signed)
@@ -157,6 +186,31 @@ export class VeranaChainService {
     })
     const result = await this.broadcastMsg(
       veranaTypeUrls.MsgCreateOrUpdateParticipantSession,
+      value,
+      this.sessionSigningClient ?? this.signingClient,
+      operator,
+    )
+    return { txHash: result.transactionHash }
+  }
+
+  async findActiveHolderParticipantIdByDid(did: string): Promise<number | undefined> {
+    // fromPartial fills the unused fields with defaults so the request encodes correctly.
+    const request = QueryFindParticipantsWithDIDRequest.fromPartial({ did })
+    const { participants } = await this.ppQuery.FindParticipantsWithDID(request)
+    return participants.find(
+      p => p.did === did && p.role === PARTICIPANT_ROLE_HOLDER && !p.revoked && !p.slashed,
+    )?.id
+  }
+
+  async triggerResolver(participantId: number): Promise<{ txHash: string }> {
+    const operator = this.sessionOperatorAddress ?? this.operatorAddress
+    const value = MsgTriggerResolver.fromPartial({
+      corporation: this.corporationAddress,
+      operator,
+      id: participantId,
+    })
+    const result = await this.broadcastMsg(
+      veranaTypeUrls.MsgTriggerResolver,
       value,
       this.sessionSigningClient ?? this.signingClient,
       operator,

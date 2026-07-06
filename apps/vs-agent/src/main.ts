@@ -11,6 +11,7 @@ import {
   type VsAgentNestPlugin,
   VeranaChainService,
   IndexerWebSocketService,
+  buildDefaultIndexerHandlerRegistry,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -50,6 +51,8 @@ import {
   askarPostgresConfig,
   keyDerivationMethodMap,
   DEFAULT_AGENT_ENDPOINTS,
+  ADMIN_API_AUTH_MODE,
+  ADMIN_API_PUBLIC_URL,
   DEFAULT_PUBLIC_API_BASE_URL,
   ENABLED_PLUGINS,
   EVENTS_BASE_URL,
@@ -63,6 +66,10 @@ import {
   VERANA_ACCOUNT_MNEMONIC,
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
+  VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE,
+  VERANA_CORPORATION_ID,
+  VERANA_INDEXER_SUBSCRIPTION_SCOPE,
+  VERANA_AUTO_TRIGGER_RESOLVER,
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
@@ -95,7 +102,6 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
-  const enableWs = endpoints.find(endpoint => endpoint.startsWith('ws'))
 
   const webSocketServer = agent.didcomm.inboundTransports
     .find(x => x instanceof VsAgentWsInboundTransport)
@@ -108,15 +114,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   const httpServer = httpInboundTransport ? httpInboundTransport.server : await publicApp.listen(AGENT_PORT)
 
-  // Add WebSocket support if required
-  if (enableWs) {
-    httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
-      webSocketServer?.handleUpgrade(request, socket as Socket, head, socketParam => {
-        const socketId = utils.uuid()
-        webSocketServer?.emit('connection', socketParam, request, socketId)
-      })
-    })
-  }
+  return { httpServer, webSocketServer }
 }
 
 const run = async () => {
@@ -157,6 +155,47 @@ const run = async () => {
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
+  if (ADMIN_API_AUTH_MODE.length === 0) {
+    serverLogger.error('ADMIN_API_AUTH_MODE is required (comma-separated list of: internal, corporation)')
+    process.exit(1)
+  }
+  const unknownAuthModes = ADMIN_API_AUTH_MODE.filter(mode => !['internal', 'corporation'].includes(mode))
+  if (unknownAuthModes.length > 0) {
+    serverLogger.error(
+      `ADMIN_API_AUTH_MODE has unsupported value(s): ${unknownAuthModes.join(', ')}. Allowed: internal, corporation`,
+    )
+    process.exit(1)
+  }
+  if (ADMIN_API_PUBLIC_URL) {
+    let isBareHttpsOrigin = false
+    try {
+      const url = new URL(ADMIN_API_PUBLIC_URL)
+      isBareHttpsOrigin = url.protocol === 'https:' && url.origin === ADMIN_API_PUBLIC_URL
+    } catch {
+      isBareHttpsOrigin = false
+    }
+    if (!isBareHttpsOrigin) {
+      serverLogger.error(
+        'ADMIN_API_PUBLIC_URL must be a single https:// origin (scheme + host + optional port, no trailing path)',
+      )
+      process.exit(1)
+    }
+  }
+
+  if (ADMIN_API_PUBLIC_URL && !ADMIN_API_AUTH_MODE.includes('corporation')) {
+    serverLogger.error(
+      'ADMIN_API_PUBLIC_URL must not be set unless ADMIN_API_AUTH_MODE includes "corporation"',
+    )
+    process.exit(1)
+  }
+  if (ADMIN_API_AUTH_MODE.includes('corporation') && !ADMIN_API_PUBLIC_URL) {
+    serverLogger.error('ADMIN_API_PUBLIC_URL is required when ADMIN_API_AUTH_MODE includes "corporation"')
+    process.exit(1)
+  }
+  const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE.includes('corporation')
+    ? ADMIN_API_PUBLIC_URL
+    : undefined
+
   // Dynamically load optional plugin packages.
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
   const [chatModule, mrtdModule] = await Promise.all([
@@ -191,8 +230,23 @@ const run = async () => {
       chainId: VERANA_CHAIN_ID,
       mnemonic: VERANA_ACCOUNT_MNEMONIC,
       logger: serverLogger,
+      autoTriggerResolver: VERANA_AUTO_TRIGGER_RESOLVER,
     })
     await veranaChain.start()
+
+    try {
+      const balance = await veranaChain.getBalance()
+      const authorized = await veranaChain.hasVsOperatorAuthorization()
+      if (!authorized && Number(balance.amount) === 0) {
+        serverLogger.warn(
+          `[VeranaChain] Operator account ${veranaChain.address} has no VSOperatorAuthorization and zero ${balance.denom} balance; on-chain operations will fail until it is granted authorization or funded.`,
+        )
+      }
+    } catch (error) {
+      serverLogger.warn(
+        `[VeranaChain] Could not check operator authorization/balance: ${(error as Error).message}`,
+      )
+    }
   } else {
     serverLogger.warn(
       'VERANA_RPC_ENDPOINT_URL or VERANA_ACCOUNT_MNEMONIC not set. Verana blockchain features will be disabled. Set these environment variables to enable on-chain capabilities.',
@@ -227,6 +281,7 @@ const run = async () => {
     masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
     veranaChain,
+    adminApiServiceEndpoint,
   })
 
   const conf: ServerConfig = {
@@ -237,7 +292,7 @@ const run = async () => {
     endpoints,
     nestPlugins,
   }
-  await startServers(agent, conf)
+  const { httpServer, webSocketServer } = await startServers(agent, conf)
 
   // Initialize Self-Trust Registry
   if (agent.did)
@@ -272,11 +327,38 @@ const run = async () => {
   // Connect to Verana indexer for on-chain notifications
   // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
   if (VERANA_INDEXER_BASE_URL) {
+    const handlerRegistry = buildDefaultIndexerHandlerRegistry()
+    if (VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE.includes('*')) {
+      handlerRegistry.clear()
+    } else {
+      for (const msg of VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE) handlerRegistry.unregister(msg)
+    }
+    if (VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE.length) {
+      serverLogger.info(
+        `[IndexerWS] Default handlers disabled: ${VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE.join(', ')}`,
+      )
+    }
+
+    const indexerCorporationId =
+      VERANA_INDEXER_SUBSCRIPTION_SCOPE === 'corporation' && VERANA_CORPORATION_ID
+        ? Number(VERANA_CORPORATION_ID)
+        : undefined
     const indexerWs = new IndexerWebSocketService({
       indexerUrl: VERANA_INDEXER_BASE_URL,
       agent,
+      handlerRegistry,
+      corporationId: indexerCorporationId,
     })
     await indexerWs.start()
+  }
+
+  // Accept incoming DIDComm only after the catch-up, so the agent does not act on stale chain state.
+  if (webSocketServer) {
+    httpServer?.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
+      webSocketServer.handleUpgrade(request, socket, head, client => {
+        webSocketServer.emit('connection', client, request, utils.uuid())
+      })
+    })
   }
 
   // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
