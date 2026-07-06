@@ -70,6 +70,8 @@ import {
   VERANA_CORPORATION_ID,
   VERANA_INDEXER_SUBSCRIPTION_SCOPE,
   VERANA_AUTO_TRIGGER_RESOLVER,
+  AGENT_MODE,
+  AGENT_DELEGATED_PARENT_VS_DID,
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
@@ -142,6 +144,22 @@ const run = async () => {
   // Check it is a supported DID method
   if (parsedDid && !['web', 'webvh'].includes(parsedDid.method)) {
     serverLogger.error('Only did:web or did:webvh method is supported')
+    process.exit(1)
+  }
+
+  const configErrors: string[] = []
+  // Verana on-chain config is optional (v1.x behaviour); validate the format only when provided.
+  if (VERANA_CORPORATION_ID && !/^\d+$/.test(VERANA_CORPORATION_ID)) {
+    configErrors.push('VERANA_CORPORATION_ID must be a non-negative integer')
+  }
+  if (!['standalone', 'delegated'].includes(AGENT_MODE)) {
+    configErrors.push(`AGENT_MODE must be 'standalone' or 'delegated' (got '${AGENT_MODE}')`)
+  }
+  if (AGENT_MODE === 'delegated' && !AGENT_DELEGATED_PARENT_VS_DID) {
+    configErrors.push('AGENT_DELEGATED_PARENT_VS_DID is required when AGENT_MODE=delegated')
+  }
+  if (configErrors.length > 0) {
+    serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
     process.exit(1)
   }
 
