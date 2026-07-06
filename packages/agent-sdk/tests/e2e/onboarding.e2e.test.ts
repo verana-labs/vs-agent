@@ -220,7 +220,6 @@ describeE2E('vt-flow onboarding chain integration (V4)', () => {
       const chain = new VeranaChainService({
         rpcUrl: stack.rpcUrl,
         mnemonic: COOLUSER_MNEMONIC,
-        sessionOperatorMnemonic: opB.mnemonic,
         corporationAddress: corp.policyAddress,
         logger: new ConsoleLogger(LogLevel.Debug),
       })
