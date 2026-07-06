@@ -28,7 +28,7 @@ RUN_FLOW_E2E=1 pnpm --filter @verana-labs/vs-agent-sdk exec vitest run tests/e2e
 RUN_FLOW_E2E=1 DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm --filter @verana-labs/vs-agent-sdk exec vitest run tests/e2e
 
 # a single file (faster, one stack):
-RUN_FLOW_E2E=1 pnpm --filter @verana-labs/vs-agent-sdk exec vitest run tests/e2e/onboarding-dual-operator.e2e.test.ts
+RUN_FLOW_E2E=1 pnpm --filter @verana-labs/vs-agent-sdk exec vitest run tests/e2e/onboarding.e2e.test.ts
 ```
 
 Expect ~2-4 min per file on amd64, longer under emulation.
@@ -40,9 +40,13 @@ Booting is expensive, so prefer adding to an existing file's stack over creating
 
 - `verana-flow.test.ts` — corporation + ecosystem over the chain, asserted via the indexer
   WebSocket (`v4/indexer/subscribe`).
-- `onboarding-dual-operator.e2e.test.ts` — the V4 onboarding flow: dual-operator validate + `0/0`
-  session through `VeranaChainService`, asserting the on-chain participant and the indexer REST
-  participant fields.
+- `onboarding.e2e.test.ts` — the V4 onboarding flow: validation via an OA operator, `0/0` session
+  via a separate VSOA account, and the HOLDER Path-1 `TriggerResolver`, asserting the on-chain
+  participant and the indexer REST participant fields.
+- `applicant-ops.e2e.test.ts` — the applicant-side tx surface (`startParticipantOP`, renew, cancel,
+  self-create), the chain query surface, the single-account VSOA path (validate + session under one
+  `vs_operator`), and the indexer event_type strings.
+- `corp-scope.e2e.test.ts` — corporation-scoped WS subscribe + REST catch-up with v4 payloads.
 - `helpers.ts` — infra: config, node bootstrap, `startStack()`, `IndexerSubscriber`, `sameTx`.
 - `VeranaTestChain.ts` — throwaway CosmJS driver (see TODO below).
 
