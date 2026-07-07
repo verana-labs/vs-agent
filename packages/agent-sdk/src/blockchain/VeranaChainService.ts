@@ -73,7 +73,9 @@ function mapParticipant(p: RawParticipant): Participant {
 
 export class VeranaChainService {
   private signingClient!: SigningStargateClient
+  private sessionSigningClient?: SigningStargateClient
   private operatorAddress!: string
+  private sessionOperatorAddress?: string
   private chainId!: string
   private corporationAddress!: string
 
@@ -119,6 +121,19 @@ export class VeranaChainService {
       aminoTypes: createVeranaAminoTypes(),
       gasPrice: GasPrice.fromString(gasPrice ?? '1uvna'),
     })
+
+    if (this.config.sessionOperatorMnemonic) {
+      const sessionWallet = await DirectSecp256k1HdWallet.fromMnemonic(this.config.sessionOperatorMnemonic, {
+        prefix: VERANA_BECH32_PREFIX,
+      })
+      const [sessionAccount] = await sessionWallet.getAccounts()
+      this.sessionSigningClient = await SigningStargateClient.createWithSigner(cometClient, sessionWallet, {
+        registry: createVeranaRegistry(),
+        aminoTypes: createVeranaAminoTypes(),
+        gasPrice: GasPrice.fromString(gasPrice ?? '1uvna'),
+      })
+      this.sessionOperatorAddress = sessionAccount.address
+    }
 
     this.chainId = await this.signingClient.getChainId()
     if (chainId && this.chainId !== chainId) {
@@ -215,7 +230,7 @@ export class VeranaChainService {
       vsOperator: params.vsOperator ?? '',
       vsOperatorAuthzMsgTypes: params.vsOperatorAuthzMsgTypes ?? [],
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgStartParticipantOP, value)
+    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgStartParticipantOP, value })
     const participantId = Number(
       MsgStartParticipantOPResponse.decode(result.msgResponses[0].value).participantId,
     )
@@ -228,7 +243,7 @@ export class VeranaChainService {
       operator: this.operatorAddress,
       id,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgRenewParticipantOP, value)
+    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgRenewParticipantOP, value })
     return { txHash: result.transactionHash }
   }
 
@@ -238,7 +253,10 @@ export class VeranaChainService {
       operator: this.operatorAddress,
       id,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgCancelParticipantOPLastRequest, value)
+    const result = await this.broadcastMsg({
+      typeUrl: veranaTypeUrls.MsgCancelParticipantOPLastRequest,
+      value,
+    })
     return { txHash: result.transactionHash }
   }
 
@@ -262,7 +280,7 @@ export class VeranaChainService {
       vsOperatorAuthzFeeSpendLimit: params.vsOperatorAuthzFeeSpendLimit ?? [],
       vsOperatorAuthzPeriod: params.vsOperatorAuthzPeriod,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgSelfCreateParticipant, value)
+    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgSelfCreateParticipant, value })
     const participantId = Number(MsgSelfCreateParticipantResponse.decode(result.msgResponses[0].value).id)
     return { participantId, txHash: result.transactionHash }
   }
@@ -280,7 +298,7 @@ export class VeranaChainService {
       issuanceFeeDiscount: params.issuanceFeeDiscount ?? 0,
       verificationFeeDiscount: params.verificationFeeDiscount ?? 0,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgSetParticipantOPToValidated, value)
+    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgSetParticipantOPToValidated, value })
     return { txHash: result.transactionHash }
   }
 
@@ -289,7 +307,7 @@ export class VeranaChainService {
   ): Promise<{ txHash: string }> {
     const value = MsgCreateOrUpdateParticipantSession.fromPartial({
       corporation: this.corporationAddress,
-      operator: this.operatorAddress,
+      operator: this.sessionOperatorAddress ?? this.operatorAddress,
       id: params.id,
       issuerParticipantId: params.issuerParticipantId,
       verifierParticipantId: params.verifierParticipantId,
@@ -297,7 +315,11 @@ export class VeranaChainService {
       walletAgentParticipantId: params.walletAgentParticipantId,
       digest: params.digest,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateOrUpdateParticipantSession, value)
+    const result = await this.broadcastMsg({
+      typeUrl: veranaTypeUrls.MsgCreateOrUpdateParticipantSession,
+      value,
+      useSessionSigner: true,
+    })
     return { txHash: result.transactionHash }
   }
 
@@ -313,17 +335,32 @@ export class VeranaChainService {
   async triggerResolver(participantId: number): Promise<{ txHash: string }> {
     const value = MsgTriggerResolver.fromPartial({
       corporation: this.corporationAddress,
-      operator: this.operatorAddress,
+      operator: this.sessionOperatorAddress ?? this.operatorAddress,
       id: participantId,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgTriggerResolver, value)
+    const result = await this.broadcastMsg({
+      typeUrl: veranaTypeUrls.MsgTriggerResolver,
+      value,
+      useSessionSigner: true,
+    })
     return { txHash: result.transactionHash }
   }
 
-  private async broadcastMsg(typeUrl: string, value: object): Promise<DeliverTxResponse> {
+  private async broadcastMsg(options: {
+    typeUrl: string
+    value: object
+    useSessionSigner?: boolean
+  }): Promise<DeliverTxResponse> {
+    const { typeUrl, value, useSessionSigner = false } = options
+    const signingClient = useSessionSigner
+      ? (this.sessionSigningClient ?? this.signingClient)
+      : this.signingClient
+    const signerAddress = useSessionSigner
+      ? (this.sessionOperatorAddress ?? this.operatorAddress)
+      : this.operatorAddress
     const msg = { typeUrl, value }
-    this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl}`)
-    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], 'auto')
+    this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl} as ${signerAddress}`)
+    const result = await signingClient.signAndBroadcast(signerAddress, [msg], 'auto')
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result

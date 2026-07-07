@@ -12,7 +12,9 @@ import {
   migrateLegacyTailsFiles,
   setupBaseDidComm,
   VeranaChainService,
+  VeranaIndexerService,
   VsAgentWsInboundTransport,
+  VtFlowOrchestrator,
 } from '@verana-labs/vs-agent-sdk'
 import express from 'express'
 import WebSocket from 'ws'
@@ -101,6 +103,12 @@ export const setupAgent = async ({
         ]
       : undefined
 
+  const indexer = VERANA_INDEXER_BASE_URL
+    ? new VeranaIndexerService({ baseUrl: VERANA_INDEXER_BASE_URL, logger })
+    : undefined
+  // eslint-disable-next-line prefer-const
+  let orchestrator: VtFlowOrchestrator | undefined
+
   const agent = createVsAgent({
     plugins: [
       setupBaseDidComm({
@@ -112,6 +120,27 @@ export const setupAgent = async ({
           assertVerifiableService: verifiablePublicRegistries
             ? assertVerifiableService({ verifiablePublicRegistries })
             : undefined,
+          verifyCredential: async ({ record }) => {
+            if (!orchestrator) {
+              logger.warn('[vt-flow] verifyCredential skipped: orchestrator not ready')
+              return false
+            }
+            try {
+              await orchestrator.verifyOfferedCredential(record.id)
+              return true
+            } catch (error) {
+              logger.error(`[vt-flow] credential verification failed: ${(error as Error).message}`)
+              return false
+            }
+          },
+          onCompleted: async ({ record }) => {
+            if (!orchestrator) return
+            try {
+              await orchestrator.onCredentialCompleted(record.id)
+            } catch (error) {
+              logger.error(`[vt-flow] onCompleted failed: ${(error as Error).message}`)
+            }
+          },
         },
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
@@ -147,6 +176,8 @@ export const setupAgent = async ({
       new VsAgentWsInboundTransport({ server: new WebSocket.Server({ noServer: true }) }),
     )
   }
+
+  orchestrator = new VtFlowOrchestrator(agent, { indexer, publicApiBaseUrl })
 
   await agent.initialize()
 

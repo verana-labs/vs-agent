@@ -2,9 +2,11 @@ import { fetchJson } from '../utils/util'
 
 import {
   CredentialSchemaDto,
+  DigestDto,
   EcosystemDto,
   IndexerEventsResponse,
   ParticipantDto,
+  ParticipantSessionDto,
   VeranaIdxConfig,
 } from './types'
 
@@ -56,5 +58,23 @@ export class VeranaIndexerService {
       REQUEST_TIMEOUT_MS,
     )
     return data.participant
+  }
+
+  async getParticipantSession(id: string): Promise<ParticipantSessionDto | undefined> {
+    this.config.logger.debug(`[VeranaIndexer] getParticipantSession id=${id}`)
+    const data = await fetchJson<{ session: ParticipantSessionDto }>(
+      `${this.baseUrl}/v4/participant/participant-session/${encodeURIComponent(id)}`,
+      { timeoutMs: REQUEST_TIMEOUT_MS, allowNotFound: true },
+    )
+    return data?.session
+  }
+
+  async getDigest(digest: string): Promise<DigestDto | undefined> {
+    this.config.logger.debug(`[VeranaIndexer] getDigest digest=${digest}`)
+    const data = await fetchJson<{ digest: DigestDto }>(
+      `${this.baseUrl}/v4/di/get/${encodeURIComponent(digest)}`,
+      { timeoutMs: REQUEST_TIMEOUT_MS, allowNotFound: true },
+    )
+    return data?.digest
   }
 }
