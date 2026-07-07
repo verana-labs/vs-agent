@@ -230,7 +230,7 @@ export class VeranaChainService {
       vsOperator: params.vsOperator ?? '',
       vsOperatorAuthzMsgTypes: params.vsOperatorAuthzMsgTypes ?? [],
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgStartParticipantOP, value)
+    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgStartParticipantOP, value })
     const participantId = Number(
       MsgStartParticipantOPResponse.decode(result.msgResponses[0].value).participantId,
     )
@@ -243,7 +243,7 @@ export class VeranaChainService {
       operator: this.operatorAddress,
       id,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgRenewParticipantOP, value)
+    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgRenewParticipantOP, value })
     return { txHash: result.transactionHash }
   }
 
@@ -253,7 +253,10 @@ export class VeranaChainService {
       operator: this.operatorAddress,
       id,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgCancelParticipantOPLastRequest, value)
+    const result = await this.broadcastMsg({
+      typeUrl: veranaTypeUrls.MsgCancelParticipantOPLastRequest,
+      value,
+    })
     return { txHash: result.transactionHash }
   }
 
@@ -277,7 +280,7 @@ export class VeranaChainService {
       vsOperatorAuthzFeeSpendLimit: params.vsOperatorAuthzFeeSpendLimit ?? [],
       vsOperatorAuthzPeriod: params.vsOperatorAuthzPeriod,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgSelfCreateParticipant, value)
+    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgSelfCreateParticipant, value })
     const participantId = Number(MsgSelfCreateParticipantResponse.decode(result.msgResponses[0].value).id)
     return { participantId, txHash: result.transactionHash }
   }
@@ -295,7 +298,7 @@ export class VeranaChainService {
       issuanceFeeDiscount: params.issuanceFeeDiscount ?? 0,
       verificationFeeDiscount: params.verificationFeeDiscount ?? 0,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgSetParticipantOPToValidated, value)
+    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgSetParticipantOPToValidated, value })
     return { txHash: result.transactionHash }
   }
 
@@ -312,7 +315,11 @@ export class VeranaChainService {
       walletAgentParticipantId: params.walletAgentParticipantId,
       digest: params.digest,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgCreateOrUpdateParticipantSession, value, true)
+    const result = await this.broadcastMsg({
+      typeUrl: veranaTypeUrls.MsgCreateOrUpdateParticipantSession,
+      value,
+      useSessionSigner: true,
+    })
     return { txHash: result.transactionHash }
   }
 
@@ -331,15 +338,20 @@ export class VeranaChainService {
       operator: this.sessionOperatorAddress ?? this.operatorAddress,
       id: participantId,
     })
-    const result = await this.broadcastMsg(veranaTypeUrls.MsgTriggerResolver, value, true)
+    const result = await this.broadcastMsg({
+      typeUrl: veranaTypeUrls.MsgTriggerResolver,
+      value,
+      useSessionSigner: true,
+    })
     return { txHash: result.transactionHash }
   }
 
-  private async broadcastMsg(
-    typeUrl: string,
-    value: object,
-    useSessionSigner = false,
-  ): Promise<DeliverTxResponse> {
+  private async broadcastMsg(options: {
+    typeUrl: string
+    value: object
+    useSessionSigner?: boolean
+  }): Promise<DeliverTxResponse> {
+    const { typeUrl, value, useSessionSigner = false } = options
     const signingClient = useSessionSigner
       ? (this.sessionSigningClient ?? this.signingClient)
       : this.signingClient
