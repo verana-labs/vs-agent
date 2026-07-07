@@ -14,15 +14,15 @@ function JsonModal({ data, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ width: 780, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0 }}>JSON</h2>
+      <div className="modal modal--json" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>JSON</h2>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-secondary" onClick={copy}>{copied ? 'Copied!' : 'Copy'}</button>
             <button className="btn btn-secondary" onClick={onClose}>Close</button>
           </div>
         </div>
-        <pre style={{ flex: 1, overflow: 'auto', fontSize: 12, fontFamily: "'Fira Code', 'Courier New', monospace", background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        <pre className="json-pre">
           {json}
         </pre>
       </div>
@@ -66,10 +66,8 @@ function AttrValue({ value }) {
 
 function CardSection({ label, children }) {
   return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', paddingBottom: 4, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-        {label}
-      </div>
+    <div className="cred-section">
+      <div className="cred-section-label">{label}</div>
       {children}
     </div>
   )
@@ -83,13 +81,13 @@ function CredentialCard({ vc, type, onSelect }) {
   const hasAttrs = subject.id || attrs.length > 0
 
   return (
-    <div className="cred-card" style={{ position: 'relative' }}>
+    <div className="cred-card">
       <button className="cred-card-details-btn" onClick={onSelect} title="View details">{'{ }'}</button>
       {type && <div className="cred-card-type">{type}</div>}
 
       {schemaId && (
         <CardSection label="Schema">
-          <div style={{ fontSize: 14, color: '#111827', wordBreak: 'break-all', lineHeight: 1.5 }}>
+          <div className="cred-field-value cred-field-mono">
             <LinkOrText text={schemaId} />
           </div>
         </CardSection>
@@ -97,7 +95,7 @@ function CredentialCard({ vc, type, onSelect }) {
 
       {issuer && (
         <CardSection label="Issuer">
-          <div style={{ fontSize: 14, color: '#111827', wordBreak: 'break-all', lineHeight: 1.5 }}>
+          <div className="cred-field-value cred-field-mono">
             <LinkOrText text={issuer} />
           </div>
         </CardSection>
@@ -214,13 +212,13 @@ export default function Dashboard() {
       {selected && <JsonModal data={selected} onClose={() => setSelected(null)} />}
 
       {agentConfig.welcomeMessage && (
-        <h1 style={{ fontSize: 32, fontWeight: 700, color: '#111827', marginBottom: 28, textAlign: 'center' }}>
+        <h1 className="welcome display">
           {agentConfig.welcomeMessage}
         </h1>
       )}
 
       <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 600, color: '#111827', marginBottom: 16, textAlign: 'center' }}>
+        <h2 className="section-title">
           VS Agent Information
         </h2>
 
@@ -233,7 +231,7 @@ export default function Dashboard() {
           <div className="agent-info-row">
             <span className="agent-info-label">Public DID</span>
             <span className="agent-info-value agent-info-mono">
-              {webDid ? <LinkOrText text={webDid} /> : <span style={{ color: '#9ca3af' }}>Not assigned</span>}
+              {webDid ? <LinkOrText text={webDid} /> : <span className="text-subtle">Not assigned</span>}
             </span>
           </div>
 
@@ -249,8 +247,10 @@ export default function Dashboard() {
           <div className="qr-desktop">
             <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 24 }}>
               <div style={{ textAlign: 'center' }}>
-                <img src={qrUrl} alt="Invitation QR" style={{ width: 280, height: 280, display: 'block' }} />
-                <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Scan to connect</p>
+                <span className="qr-tile">
+                  <img src={qrUrl} alt="Invitation QR" />
+                </span>
+                <p className="qr-label">Scan to connect</p>
               </div>
             </div>
           </div>
@@ -279,10 +279,10 @@ export default function Dashboard() {
         title="Schema Credentials"
         items={jscItems}
         renderItem={(item, i) => (
-          <div key={i} className="cred-card" style={{ position: 'relative' }}>
+          <div key={i} className="cred-card">
             <button className="cred-card-details-btn" onClick={() => setSelected(item.service)} title="View details">{'{ }'}</button>
             <div className="cred-card-type">{item.type}</div>
-            <div style={{ fontSize: 12, color: '#6b7280', wordBreak: 'break-all' }}>
+            <div className="cred-field-value cred-field-mono text-subtle">
               <LinkOrText text={item.service.serviceEndpoint} />
             </div>
           </div>
