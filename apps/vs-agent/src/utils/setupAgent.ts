@@ -107,7 +107,7 @@ export const setupAgent = async ({
     ? new VeranaIndexerService({ baseUrl: VERANA_INDEXER_BASE_URL, logger })
     : undefined
   // eslint-disable-next-line prefer-const
-  let orchestratorRef: VtFlowOrchestrator | undefined
+  let orchestrator: VtFlowOrchestrator | undefined
 
   const agent = createVsAgent({
     plugins: [
@@ -121,12 +121,12 @@ export const setupAgent = async ({
             ? assertVerifiableService({ verifiablePublicRegistries })
             : undefined,
           verifyCredential: async ({ record }) => {
-            if (!orchestratorRef) {
+            if (!orchestrator) {
               logger.warn('[vt-flow] verifyCredential skipped: orchestrator not ready')
               return false
             }
             try {
-              await orchestratorRef.verifyOfferedCredential(record.id)
+              await orchestrator.verifyOfferedCredential(record.id)
               return true
             } catch (error) {
               logger.error(`[vt-flow] credential verification failed: ${(error as Error).message}`)
@@ -134,9 +134,9 @@ export const setupAgent = async ({
             }
           },
           onCompleted: async ({ record }) => {
-            if (!orchestratorRef) return
+            if (!orchestrator) return
             try {
-              await orchestratorRef.onCredentialCompleted(record.id)
+              await orchestrator.onCredentialCompleted(record.id)
             } catch (error) {
               logger.error(`[vt-flow] onCompleted failed: ${(error as Error).message}`)
             }
@@ -177,7 +177,7 @@ export const setupAgent = async ({
     )
   }
 
-  orchestratorRef = new VtFlowOrchestrator(agent, { indexer, publicApiBaseUrl })
+  orchestrator = new VtFlowOrchestrator(agent, { indexer, publicApiBaseUrl })
 
   await agent.initialize()
 
