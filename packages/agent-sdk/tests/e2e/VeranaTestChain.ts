@@ -33,6 +33,7 @@ const { MsgCreateCredentialSchema } = require('@verana-labs/verana-types/codec/v
 const {
   MsgCreateRootParticipant,
   MsgCreateRootParticipantResponse,
+  MsgRevokeParticipant,
   MsgStartParticipantOP,
   MsgStartParticipantOPResponse,
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/tx') as any
@@ -56,6 +57,7 @@ const OPERATOR_GRANT_MSG_TYPES = [
   veranaTypeUrls.MsgRenewParticipantOP,
   veranaTypeUrls.MsgCancelParticipantOPLastRequest,
   veranaTypeUrls.MsgSelfCreateParticipant,
+  veranaTypeUrls.MsgRevokeParticipant,
 ]
 
 const delay = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms))
@@ -278,6 +280,7 @@ export class VeranaTestChain {
       did: string
       vsOperator?: string
       vsOperatorAuthzMsgTypes?: string[]
+      vsOperatorAuthzWithFeegrant?: boolean
     },
   ): Promise<{ participantId: number; txHash: string }> {
     const msg = {
@@ -290,6 +293,7 @@ export class VeranaTestChain {
         did: params.did,
         vsOperator: params.vsOperator ?? '',
         vsOperatorAuthzMsgTypes: params.vsOperator ? (params.vsOperatorAuthzMsgTypes ?? [PP_SESSION]) : [],
+        vsOperatorAuthzWithFeegrant: params.vsOperatorAuthzWithFeegrant ?? false,
       }),
     }
     // The root validator has a future effective_from; retry until it is ACTIVE.
@@ -308,5 +312,18 @@ export class VeranaTestChain {
       }
     }
     throw lastErr
+  }
+
+  async revokeParticipant(policyAddress: string, participantId: number): Promise<{ txHash: string }> {
+    const msg = {
+      typeUrl: veranaTypeUrls.MsgRevokeParticipant,
+      value: MsgRevokeParticipant.fromPartial({
+        corporation: policyAddress,
+        operator: this.address,
+        id: participantId,
+      }),
+    }
+    const res = await this.broadcast([msg])
+    return { txHash: res.transactionHash }
   }
 }
