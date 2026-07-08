@@ -48,6 +48,10 @@ export class VsAgentModule {
         useFactory: () => agentRef.get(),
       },
       {
+        provide: 'AUTHORIZATION_SERVICE',
+        useFactory: () => agentRef.get().authorizationService,
+      },
+      {
         provide: 'PUBLIC_API_BASE_URL',
         useFactory: () => publicApiBaseUrl,
       },

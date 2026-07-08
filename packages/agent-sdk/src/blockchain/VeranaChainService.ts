@@ -148,10 +148,10 @@ export class VeranaChainService {
     return (await this.listVsOperatorAuthorizations()).length > 0
   }
 
-  async listOperatorAuthorizations(): Promise<OperatorAuthorization[]> {
+  async listOperatorAuthorizations(operator?: string): Promise<OperatorAuthorization[]> {
     const result = await this.deQuery.ListOperatorAuthorizations({
       corporationId: 0,
-      operator: this.operatorAddress,
+      operator: operator ?? this.operatorAddress,
       responseMaxSize: 64,
     })
     return result.operatorAuthorizations.map(a => ({
@@ -159,20 +159,28 @@ export class VeranaChainService {
       corporationId: a.corporationId,
       operator: a.operator,
       msgTypes: a.msgTypes,
+      expiration: a.expiration,
+      period: a.period,
     }))
   }
 
-  async listVsOperatorAuthorizations(): Promise<VsOperatorAuthorization[]> {
+  async listVsOperatorAuthorizations(vsOperator?: string): Promise<VsOperatorAuthorization[]> {
     const result = await this.deQuery.ListVSOperatorAuthorizations({
       corporationId: 0,
-      vsOperator: this.operatorAddress,
+      vsOperator: vsOperator ?? this.operatorAddress,
       responseMaxSize: 64,
     })
     return result.vsOperatorAuthorizations.map(a => ({
       id: a.id,
       corporationId: a.corporationId,
       vsOperator: a.vsOperator,
-      records: a.records.map(r => ({ participantId: r.participantId, msgTypes: r.msgTypes })),
+      records: a.records.map(r => ({
+        participantId: r.participantId,
+        msgTypes: r.msgTypes,
+        withFeegrant: r.withFeegrant,
+        expiration: r.expiration,
+        period: r.period,
+      })),
     }))
   }
 
@@ -300,7 +308,10 @@ export class VeranaChainService {
       walletAgentParticipantId: params.walletAgentParticipantId,
       digest: params.digest,
     })
-    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgCreateOrUpdateParticipantSession, value })
+    const result = await this.broadcastMsg({
+      typeUrl: veranaTypeUrls.MsgCreateOrUpdateParticipantSession,
+      value,
+    })
     return { txHash: result.transactionHash }
   }
 

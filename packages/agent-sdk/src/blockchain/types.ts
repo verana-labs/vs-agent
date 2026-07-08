@@ -250,11 +250,21 @@ export interface OperatorAuthorization {
   corporationId: number
   operator: string
   msgTypes: string[]
+  expiration?: Date
+  period?: DurationParam
 }
 
 export interface ParticipantAuthorizationRecord {
   participantId: number
   msgTypes: string[]
+  withFeegrant: boolean
+  expiration?: Date
+  period?: DurationParam
+}
+
+export interface CachedVsoaRecord extends ParticipantAuthorizationRecord {
+  corporationId: number
+  vsOperator: string
 }
 
 export interface VsOperatorAuthorization {
