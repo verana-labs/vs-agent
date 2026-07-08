@@ -158,11 +158,31 @@ export interface CredentialSchemaDto {
   modified: string
 }
 
+export enum ParticipantRole {
+  Issuer = 'ISSUER',
+  Verifier = 'VERIFIER',
+  IssuerGrantor = 'ISSUER_GRANTOR',
+  VerifierGrantor = 'VERIFIER_GRANTOR',
+  Ecosystem = 'ECOSYSTEM',
+  Holder = 'HOLDER',
+}
+
+export enum ParticipantState {
+  Active = 'ACTIVE',
+  Future = 'FUTURE',
+  Inactive = 'INACTIVE',
+  Expired = 'EXPIRED',
+  Revoked = 'REVOKED',
+  Slashed = 'SLASHED',
+  Repaid = 'REPAID',
+}
+
 export interface ParticipantDto {
   id: number
   schema_id: number
   did: string | null
-  role: string
+  role: ParticipantRole
+  participant_state?: ParticipantState
   op_state?: string
   revoked: string | null
   slashed: string | null
@@ -175,6 +195,28 @@ export interface ParticipantDto {
 export interface CorporationDto {
   id: number
   did?: string | null
+}
+
+export interface ParticipantSessionRecordDto {
+  created?: string
+  issuer_participant_id?: number
+  verifier_participant_id?: number
+  wallet_agent_participant_id?: number
+  agent_participant_id?: number
+}
+
+export interface ParticipantSessionDto {
+  id: string
+  corporation_id?: number
+  vs_operator?: string
+  created?: string
+  modified?: string
+  session_records?: ParticipantSessionRecordDto[]
+}
+
+export interface DigestDto {
+  digest: string
+  created: string
 }
 
 export interface RawParticipant {
@@ -258,6 +300,7 @@ export interface VeranaChainConfig {
   rpcUrl: string
   chainId?: string
   mnemonic: string
+  sessionOperatorMnemonic?: string
   logger: BaseLogger
   gasPrice?: string
   corporationAddress?: string

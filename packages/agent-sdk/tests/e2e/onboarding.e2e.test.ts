@@ -2,7 +2,13 @@ import { ConsoleLogger, LogLevel } from '@credo-ts/core'
 import { createHash, randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { ValidationState, VeranaChainService, VeranaIndexerService } from '../../src/blockchain'
+import {
+  ParticipantRole,
+  ParticipantState,
+  ValidationState,
+  VeranaChainService,
+  VeranaIndexerService,
+} from '../../src/blockchain'
 
 import {
   PARTICIPANT_ROLE_HOLDER,
@@ -182,6 +188,90 @@ describeE2E('vt-flow onboarding chain integration (V4)', () => {
 
       const triggered = await holderChain.triggerResolver(holder.participantId)
       expect(triggered.txHash).toMatch(/^[0-9A-F]{64}$/i)
+    },
+    SETUP_TIMEOUT_MS,
+  )
+
+  it(
+    'exposes the ParticipantSession, ISSUER participant and anchored digest to the applicant via the indexer',
+    async () => {
+      const suffix = `v-${RUN_ID}`
+      const corp = await chainA.createCorporation({ did: `did:example:corp-${suffix}` })
+      await chainA.fundCorporation(corp.policyAddress)
+      await chainA.grantOperatorAuthorization(corp.policyAddress)
+      const eco = await chainA.createEcosystem(corp.policyAddress, { did: `did:example:eco-${suffix}` })
+      const schema = await chainA.createCredentialSchema(corp.policyAddress, {
+        ecosystemId: eco.ecosystemId,
+        jsonSchema: MINIMAL_SCHEMA,
+      })
+      const root = await chainA.createRootParticipant(corp.policyAddress, {
+        schemaId: schema.schemaId,
+        did: `did:example:validator-${suffix}`,
+      })
+
+      const opB = await chainA.createFundedOperator()
+      const applicant = await chainA.startParticipantOp(corp.policyAddress, {
+        role: PARTICIPANT_ROLE_ISSUER,
+        validatorParticipantId: root.participantId,
+        did: `did:example:applicant-${suffix}`,
+        vsOperator: opB.address,
+      })
+
+      const chain = new VeranaChainService({
+        rpcUrl: stack.rpcUrl,
+        mnemonic: COOLUSER_MNEMONIC,
+        sessionOperatorMnemonic: opB.mnemonic,
+        corporationAddress: corp.policyAddress,
+        logger: new ConsoleLogger(LogLevel.Debug),
+      })
+      await chain.start()
+
+      // The validator (validateAndOfferCredential) writes this digest to the applicant's op_summary_digest
+      // and to the ParticipantSession before offering the credential.
+      const digest = `sha384-${createHash('sha384').update(`cred-${suffix}`).digest('base64')}`
+      const sessionId = randomUUID()
+      await chain.setParticipantOPToValidated({ id: applicant.participantId, opSummaryDigest: digest })
+      await chain.createOrUpdateParticipantSession({
+        id: sessionId,
+        issuerParticipantId: applicant.participantId,
+        agentParticipantId: 0,
+        walletAgentParticipantId: 0,
+        digest,
+      })
+
+      const indexer = new VeranaIndexerService({
+        baseUrl: stack.indexerWsUrl.replace(/^ws/, 'http'),
+        logger: new ConsoleLogger(LogLevel.Warn),
+      })
+
+      const untilDefined = async <T>(fn: () => Promise<T | undefined>): Promise<T | undefined> => {
+        const deadline = Date.now() + 120_000
+        while (Date.now() < deadline) {
+          const value = await fn().catch(() => undefined)
+          if (value != null) return value
+          await new Promise(resolve => setTimeout(resolve, 3_000))
+        }
+        return undefined
+      }
+
+      const session = await untilDefined(() => indexer.getParticipantSession(sessionId))
+      expect(session).toBeDefined()
+      const issuerParticipantId = session?.session_records?.find(
+        r => r.issuer_participant_id != null,
+      )?.issuer_participant_id
+      expect(Number(issuerParticipantId)).toBe(applicant.participantId)
+
+      const issuer = await untilDefined(() =>
+        indexer
+          .getParticipant(applicant.participantId)
+          .then(p => (p?.participant_state === ParticipantState.Active ? p : undefined)),
+      )
+      expect(issuer?.role).toBe(ParticipantRole.Issuer)
+      expect(issuer?.participant_state).toBe(ParticipantState.Active)
+      expect(Number(issuer?.schema_id)).toBe(schema.schemaId)
+
+      const anchored = await untilDefined(() => indexer.getDigest(digest))
+      expect(anchored?.digest).toBe(digest)
     },
     SETUP_TIMEOUT_MS,
   )

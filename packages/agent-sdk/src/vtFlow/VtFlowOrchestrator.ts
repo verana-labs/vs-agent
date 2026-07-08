@@ -12,6 +12,7 @@ import {
 
 import { BaseAgentModules, VsAgent } from '../agent'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
+import { ParticipantRole, ParticipantState } from '../blockchain/types'
 import { ISSUER_PARTICIPANT_TYPE } from '../types'
 import { createCredential, createVtc, findMetadataEntry } from '../utils'
 
@@ -181,60 +182,80 @@ export class VtFlowOrchestrator {
     const record = await vtFlowApi.findById(vtFlowRecordId)
     if (!record) throw new Error(`vt-flow record ${vtFlowRecordId} not found`)
     if (record.role !== VtFlowRole.Applicant) throw new Error('Record is not applicant-side')
-    if (!record.participantId) throw new Error('Record has no participantId')
     if (!record.credentialExchangeRecordId) {
       throw new Error('Record has no credentialExchangeRecordId; nothing to verify')
     }
+    const indexer = this.requireIndexer()
 
-    const { validatorParticipantActive, opSummaryDigest } = await this.resolveHolderAndValidatorState(
-      Number(record.participantId),
-    )
-    if (!validatorParticipantActive) throw new Error('Validator participant is not active')
-
-    if (!opSummaryDigest) {
-      throw new Error('No credential digest recorded in the on-chain ParticipantSession')
+    const session = await indexer.getParticipantSession(record.participantSessionId)
+    if (!session) {
+      throw new Error(`ParticipantSession ${record.participantSessionId} not found on indexer`)
     }
-    const formatData = await this.agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
+    const issuerParticipantId = session.session_records?.find(
+      r => r.issuer_participant_id != null,
+    )?.issuer_participant_id
+    if (issuerParticipantId == null) {
+      throw new Error(`ParticipantSession ${record.participantSessionId} has no issuer_participant_id`)
+    }
+
+    const issuer = await indexer.getParticipant(issuerParticipantId)
+    if (!issuer) throw new Error(`Issuer participant ${issuerParticipantId} not found on indexer`)
+    if (issuer.role !== ParticipantRole.Issuer) {
+      throw new Error(`Issuer participant ${issuerParticipantId} is not an ISSUER (role=${issuer.role})`)
+    }
+    if (issuer.participant_state !== ParticipantState.Active) {
+      throw new Error(
+        `Issuer participant ${issuerParticipantId} is not active (state=${issuer.participant_state})`,
+      )
+    }
+    if (record.schemaId != null && Number(issuer.schema_id) !== Number(record.schemaId)) {
+      throw new Error(
+        `Issuer participant schema ${issuer.schema_id} does not match credential schema ${record.schemaId}`,
+      )
+    }
+
+    const credentialJson = await this.getOfferedCredentialJson(record.credentialExchangeRecordId)
+    const digest = credentialContentDigest(credentialJson)
+    const anchored = await indexer.getDigest(digest)
+    if (!anchored) {
+      throw new Error(`Credential digest ${digest} is not anchored on-chain`)
+    }
+  }
+
+  async onCredentialCompleted(vtFlowRecordId: string): Promise<void> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(vtFlowRecordId)
+    if (!record) return
+    if (record.role !== VtFlowRole.Applicant) return
+    if (!this.options.publicApiBaseUrl) return
+
+    await this.publishCredentialAsLinkedVp(vtFlowRecordId)
+    await this.triggerResolver(record)
+  }
+
+  private async triggerResolver(record: VtFlowRecord): Promise<void> {
+    const chain = this.agent.veranaChain
+    if (!chain || !chain.autoTriggerResolverEnabled) return
+    if (record.participantId == null) return
+    await chain.triggerResolver(Number(record.participantId))
+  }
+
+  private async getOfferedCredentialJson(
+    credentialExchangeRecordId: string,
+  ): Promise<JsonLdFormatDataVerifiableCredential> {
+    const formatData = await this.agent.didcomm.credentials.getFormatData(credentialExchangeRecordId)
     const credentialJson = (
       formatData.credential as { jsonld?: JsonLdFormatDataVerifiableCredential } | undefined
     )?.jsonld
     if (!credentialJson) throw new Error('Offered credential has no JSON-LD body to verify')
-    const computed = credentialContentDigest(credentialJson)
-    if (computed !== opSummaryDigest) {
-      throw new Error(`Credential digest mismatch: computed=${computed} on-chain=${opSummaryDigest}`)
-    }
+    return credentialJson
   }
 
-  private async resolveHolderAndValidatorState(
-    holderParticipantId: number,
-  ): Promise<{ validatorParticipantActive: boolean; opSummaryDigest?: string }> {
-    const indexer = this.options.indexer
-    if (indexer) {
-      const holder = await indexer.getParticipant(holderParticipantId)
-      if (!holder) throw new Error(`Holder participant ${holderParticipantId} not found on indexer`)
-      if (!holder.validator_participant_id) {
-        throw new Error('Holder participant has no validator_participant_id')
-      }
-      const validator = await indexer.getParticipant(holder.validator_participant_id)
-      if (!validator) {
-        throw new Error(`Validator participant ${holder.validator_participant_id} not found on indexer`)
-      }
-      return {
-        validatorParticipantActive: !validator.revoked && !validator.slashed,
-        opSummaryDigest: holder.op_summary_digest,
-      }
+  private requireIndexer(): VeranaIndexerService {
+    if (!this.options.indexer) {
+      throw new Error('Agent has no indexer configured (set VERANA_INDEXER_BASE_URL)')
     }
-    const chain = this.requireChain()
-    const holder = await chain.getParticipant(holderParticipantId)
-    if (!holder) throw new Error(`Holder participant ${holderParticipantId} not found on chain`)
-    if (!holder.validatorParticipantId) throw new Error('Holder participant has no validator_participant_id')
-    const validator = await chain.getParticipant(Number(holder.validatorParticipantId))
-    if (!validator)
-      throw new Error(`Validator participant ${holder.validatorParticipantId} not found on chain`)
-    return {
-      validatorParticipantActive: !validator.revoked && !validator.slashed,
-      opSummaryDigest: holder.opSummaryDigest,
-    }
+    return this.options.indexer
   }
 
   async publishCredentialAsLinkedVp(vtFlowRecordId: string): Promise<void> {
