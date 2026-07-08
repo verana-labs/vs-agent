@@ -295,7 +295,6 @@ export interface VeranaChainConfig {
   rpcUrl: string
   chainId?: string
   mnemonic: string
-  sessionOperatorMnemonic?: string
   logger: BaseLogger
   gasPrice?: string
   corporationAddress?: string
