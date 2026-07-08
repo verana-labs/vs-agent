@@ -309,7 +309,7 @@ export class IndexerWebSocketService {
       case 'Participant':
         return (await this.indexer.getParticipant(id)) as unknown as Record<string, unknown>
       case 'Corporation':
-        return (await this.indexer.getCorporation(id)) as unknown as Record<string, unknown>
+        return ((await this.indexer.getCorporation(id)) ?? {}) as unknown as Record<string, unknown>
       default:
         return {}
     }

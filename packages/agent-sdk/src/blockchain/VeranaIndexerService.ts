@@ -61,9 +61,13 @@ export class VeranaIndexerService {
     return data.participant
   }
 
-  async getCorporation(id: string | number): Promise<CorporationDto> {
+  async getCorporation(id: string | number): Promise<CorporationDto | undefined> {
     this.config.logger.debug(`[VeranaIndexer] getCorporation id=${id}`)
-    return fetchJson<CorporationDto>(`${this.baseUrl}/v4/corporation/get/${id}`, REQUEST_TIMEOUT_MS)
+    const data = await fetchJson<{ corporation: CorporationDto }>(
+      `${this.baseUrl}/v4/corporation/get/${id}`,
+      { timeoutMs: REQUEST_TIMEOUT_MS, allowNotFound: true },
+    )
+    return data?.corporation
   }
 
   async getParticipantSession(id: string): Promise<ParticipantSessionDto | undefined> {
