@@ -76,7 +76,7 @@ describe('registerAuthorizationHandlers', () => {
     expect(calls).toEqual(['invalidate:42', 'refresh'])
   })
 
-  it('registers the spec delegation handlers even without defaults', async () => {
+  it('registers the delegation event handlers even without defaults', async () => {
     const registry = new IndexerHandlerRegistry()
     const authz = makeAuthz()
     registerAuthorizationHandlers(registry, authz)
@@ -85,14 +85,14 @@ describe('registerAuthorizationHandlers', () => {
       'GrantOperatorAuthorization',
       'RevokeOperatorAuthorization',
       'GrantVSOperatorAuthorization',
+      'UpdateVSOperatorAuthorization',
       'RevokeVSOperatorAuthorization',
-      'GrantFeeAllowance',
-      'RevokeFeeAllowance',
     ]) {
       expect(registry.has(msg), `missing handler for ${msg}`).toBe(true)
       await registry.dispatch(makeActivity(msg), makeContext())
     }
-    expect(authz.refreshForOperator).toHaveBeenCalledTimes(6)
+    expect(authz.refreshForOperator).toHaveBeenCalledTimes(5)
+    expect(authz.invalidateParticipant).toHaveBeenCalledWith(10)
   })
 
   it('swallows refresh failures so the dispatch chain is not broken', async () => {

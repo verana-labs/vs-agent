@@ -27,7 +27,7 @@ function makeChain(overrides: Partial<Record<'vsoas' | 'oas', unknown[]>> = {}) 
 }
 
 function makeAuthz(chain: VeranaChainService) {
-  return new AuthorizationService(chain, logger, { minRefreshIntervalMs: 0 })
+  return new AuthorizationService({ chain, logger, minRefreshIntervalMs: 0 })
 }
 
 const future = new Date(Date.now() + 3_600_000)
@@ -62,8 +62,8 @@ describe('AuthorizationService', () => {
     // Record 11 is disabled: StartParticipantOP grants expire immediately until validated.
     expect(authz.canSign(11, PP_SESSION)).toBe(false)
     expect(authz.canSign(99, PP_SESSION)).toBe(false)
-    expect(authz.getVsoaRecord(10)?.corporationId).toBe(7)
-    expect(authz.listVsoaRecords()).toHaveLength(2)
+    expect(authz.getVsOperatorAuthorizationRecord(10)?.corporationId).toBe(7)
+    expect(authz.listVsOperatorAuthorizationRecords()).toHaveLength(2)
   })
 
   it('treats a lapsed record with a period as active (chain auto-renews at check time)', async () => {
@@ -111,12 +111,12 @@ describe('AuthorizationService', () => {
 
     listVsOperatorAuthorizations.mockResolvedValueOnce([])
     await authz.refreshForOperator()
-    expect(authz.getVsoaRecord(10)).toBeUndefined()
+    expect(authz.getVsOperatorAuthorizationRecord(10)).toBeUndefined()
   })
 
   it('skips refreshes inside the configured interval', async () => {
     const { chain, listVsOperatorAuthorizations } = makeChain()
-    const authz = new AuthorizationService(chain, logger, { minRefreshIntervalMs: 60_000 })
+    const authz = new AuthorizationService({ chain, logger, minRefreshIntervalMs: 60_000 })
     await authz.refreshForOperator()
     await authz.refreshForOperator()
     expect(listVsOperatorAuthorizations).toHaveBeenCalledTimes(1)

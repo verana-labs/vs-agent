@@ -121,6 +121,8 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   return { httpServer, webSocketServer }
 }
 
+const AUTHORIZATION_SEED_RETRY_MS = 30_000
+
 const run = async () => {
   const serverLogger = new TsLogger(ADMIN_LOG_LEVEL, 'Server')
 
@@ -255,8 +257,7 @@ const run = async () => {
     })
     await veranaChain.start()
 
-    authorizationService = new AuthorizationService(veranaChain, serverLogger)
-    // The cache must not stay silently empty: retry the seed until it succeeds once.
+    authorizationService = new AuthorizationService({ chain: veranaChain, logger: serverLogger })
     const seedAuthorizationCache = async (): Promise<boolean> =>
       authorizationService!
         .refreshForOperator()
@@ -270,13 +271,16 @@ const run = async () => {
     if (!(await seedAuthorizationCache())) {
       const retry = setInterval(async () => {
         if (await seedAuthorizationCache()) clearInterval(retry)
-      }, 30_000)
+      }, AUTHORIZATION_SEED_RETRY_MS)
       retry.unref()
     }
 
     try {
       const balance = await veranaChain.getBalance()
-      if (authorizationService.listVsoaRecords().length === 0 && Number(balance.amount) === 0) {
+      if (
+        authorizationService.listVsOperatorAuthorizationRecords().length === 0 &&
+        Number(balance.amount) === 0
+      ) {
         serverLogger.warn(
           `[VeranaChain] Operator account ${veranaChain.address} has no VSOperatorAuthorization and zero ${balance.denom} balance; on-chain operations will fail until it is granted authorization or funded.`,
         )

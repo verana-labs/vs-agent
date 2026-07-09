@@ -94,7 +94,9 @@ describeE2E('authorization cache (V4): indexer events drive grant -> activate ->
       })
       await authzChain.start()
 
-      const authz = new AuthorizationService(authzChain, new ConsoleLogger(LogLevel.Warn), {
+      const authz = new AuthorizationService({
+        chain: authzChain,
+        logger: new ConsoleLogger(LogLevel.Warn),
         minRefreshIntervalMs: 0,
       })
       const registry = new IndexerHandlerRegistry()
@@ -139,7 +141,7 @@ describeE2E('authorization cache (V4): indexer events drive grant -> activate ->
         ),
       )
 
-      const granted = authz.getVsoaRecord(applicant.participantId)
+      const granted = authz.getVsOperatorAuthorizationRecord(applicant.participantId)
       expect(granted).toBeDefined()
       expect(granted?.msgTypes).toEqual(expect.arrayContaining([PP_VALIDATE, PP_SESSION]))
       expect(granted?.withFeegrant).toBe(true)
@@ -182,7 +184,7 @@ describeE2E('authorization cache (V4): indexer events drive grant -> activate ->
         ),
       )
 
-      expect(authz.getVsoaRecord(applicant.participantId)).toBeUndefined()
+      expect(authz.getVsOperatorAuthorizationRecord(applicant.participantId)).toBeUndefined()
       expect(authz.canSign(applicant.participantId, PP_SESSION)).toBe(false)
     },
     SETUP_TIMEOUT_MS,

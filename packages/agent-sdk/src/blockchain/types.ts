@@ -262,7 +262,7 @@ export interface ParticipantAuthorizationRecord {
   period?: DurationParam
 }
 
-export interface CachedVsoaRecord extends ParticipantAuthorizationRecord {
+export interface CachedVsOperatorAuthorizationRecord extends ParticipantAuthorizationRecord {
   corporationId: number
   vsOperator: string
 }

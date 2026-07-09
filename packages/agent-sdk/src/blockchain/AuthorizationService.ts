@@ -1,7 +1,7 @@
 import { BaseLogger } from '@credo-ts/core'
 
 import { VeranaChainService } from './VeranaChainService'
-import { CachedVsoaRecord, DurationParam } from './types'
+import { CachedVsOperatorAuthorizationRecord, DurationParam } from './types'
 
 // A lapsed grant that carries a period is still valid: the chain rolls the expiration
 // forward on the next check (VPR spec AUTHZ-CHECK-3 step 4, AUTHZ-CHECK-1 step 2).
@@ -9,22 +9,24 @@ function isActive(expiration?: Date, period?: DurationParam): boolean {
   return expiration === undefined || expiration.getTime() > Date.now() || period != null
 }
 
-/**
- * VSOA records cached for the admin API authorization layer
- * (https://github.com/verana-labs/vs-agent/issues/472). Operator authorizations are
- * queried on demand instead: there is no indexer event to keep a cache fresh.
- */
+export interface AuthorizationServiceConfig {
+  chain: VeranaChainService
+  logger: BaseLogger
+  minRefreshIntervalMs?: number
+}
+
+/** VS operator authorization records cached for the admin API (https://github.com/verana-labs/vs-agent/issues/472); operator authorizations are queried on demand. */
 export class AuthorizationService {
-  private vsoaByParticipant = new Map<number, CachedVsoaRecord>()
+  private vsoaByParticipant = new Map<number, CachedVsOperatorAuthorizationRecord>()
   private lastRefreshAt = 0
+  private readonly chain: VeranaChainService
+  private readonly logger: BaseLogger
   private readonly minRefreshIntervalMs: number
 
-  constructor(
-    private readonly chain: VeranaChainService,
-    private readonly logger: BaseLogger,
-    options: { minRefreshIntervalMs?: number } = {},
-  ) {
-    this.minRefreshIntervalMs = options.minRefreshIntervalMs ?? 2_000
+  constructor(config: AuthorizationServiceConfig) {
+    this.chain = config.chain
+    this.logger = config.logger
+    this.minRefreshIntervalMs = config.minRefreshIntervalMs ?? 2_000
   }
 
   async refreshForOperator(): Promise<void> {
@@ -33,7 +35,7 @@ export class AuthorizationService {
     this.lastRefreshAt = Date.now()
 
     const vsoas = await this.chain.listVsOperatorAuthorizations()
-    const rebuilt = new Map<number, CachedVsoaRecord>()
+    const rebuilt = new Map<number, CachedVsOperatorAuthorizationRecord>()
     for (const vsoa of vsoas) {
       for (const record of vsoa.records) {
         rebuilt.set(record.participantId, {
@@ -58,11 +60,11 @@ export class AuthorizationService {
     return !!record && record.msgTypes.includes(msgType) && isActive(record.expiration, record.period)
   }
 
-  getVsoaRecord(participantId: number): CachedVsoaRecord | undefined {
+  getVsOperatorAuthorizationRecord(participantId: number): CachedVsOperatorAuthorizationRecord | undefined {
     return this.vsoaByParticipant.get(participantId)
   }
 
-  listVsoaRecords(): CachedVsoaRecord[] {
+  listVsOperatorAuthorizationRecords(): CachedVsOperatorAuthorizationRecord[] {
     return [...this.vsoaByParticipant.values()]
   }
 
