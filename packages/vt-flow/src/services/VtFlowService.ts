@@ -6,7 +6,7 @@ import type {
 } from '@credo-ts/didcomm'
 
 import { CredoError, EventEmitter, InjectionSymbols, inject, injectable } from '@credo-ts/core'
-import { DidCommCredentialState } from '@credo-ts/didcomm'
+import { DidCommConnectionRepository, DidCommCredentialState } from '@credo-ts/didcomm'
 
 import { VtFlowModuleConfig } from '../VtFlowModuleConfig'
 import { type BuildVtFlowProblemReportOptions, VtFlowErrorCode, buildVtFlowProblemReport } from '../errors'
@@ -28,6 +28,7 @@ import {
   VtFlowState,
   VtFlowVariant,
   type VtFlowStateChangedEvent,
+  isVtFlowTerminalState,
 } from '../types'
 
 export interface CreateOnboardingRequestParams {
@@ -95,6 +96,24 @@ export class VtFlowService {
     })
     message.setThread({ threadId: message.id })
 
+    const existing = await this.repository.findByParticipantSessionId(
+      agentContext,
+      params.participantSessionId,
+      VtFlowRole.Applicant,
+    )
+    if (existing) {
+      if (existing.state !== VtFlowState.Completed && existing.state !== VtFlowState.CredRevoked) {
+        throw new CredoError(
+          `vt-flow: participant_session_id '${params.participantSessionId}' already belongs to a flow in state ${existing.state}; use a new session id`,
+        )
+      }
+      existing.connectionId = params.connectionId
+      existing.threadId = message.id
+      if (params.claims) existing.claims = params.claims
+      await this.updateState(agentContext, existing, VtFlowState.OrSent)
+      return { message, record: existing }
+    }
+
     const record = new VtFlowRecord({
       threadId: message.id,
       participantSessionId: params.participantSessionId,
@@ -159,9 +178,21 @@ export class VtFlowService {
       VtFlowRole.Validator,
     )
     if (existing) {
+      if (isVtFlowTerminalState(existing.state)) {
+        throw new CredoError(
+          `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
+        )
+      }
+      await this.assertSamePeer(agentContext, existing, connection)
       existing.connectionId = connection.id
       existing.threadId = message.threadId
-      await this.repository.update(agentContext, existing)
+      if (message.claims) existing.claims = message.claims
+      if (existing.state === VtFlowState.Completed || existing.state === VtFlowState.CredRevoked) {
+        // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
+        await this.updateState(agentContext, existing, VtFlowState.AwaitingOr)
+      } else {
+        await this.repository.update(agentContext, existing)
+      }
       return existing
     }
 
@@ -197,6 +228,12 @@ export class VtFlowService {
       VtFlowRole.Validator,
     )
     if (existing) {
+      if (isVtFlowTerminalState(existing.state)) {
+        throw new CredoError(
+          `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
+        )
+      }
+      await this.assertSamePeer(agentContext, existing, connection)
       existing.connectionId = connection.id
       existing.threadId = message.threadId
       await this.repository.update(agentContext, existing)
@@ -580,6 +617,22 @@ export class VtFlowService {
   /** Persist record changes without state-transition semantics (no event emitted). */
   public async updateRecord(agentContext: AgentContext, record: VtFlowRecord): Promise<void> {
     await this.repository.update(agentContext, record)
+  }
+
+  /** participant_session_ids are public on-chain, so only the original peer may re-attach a flow with one. */
+  private async assertSamePeer(
+    agentContext: AgentContext,
+    record: VtFlowRecord,
+    connection: DidCommConnectionRecord,
+  ): Promise<void> {
+    if (record.connectionId === connection.id) return
+    const connectionRepository = agentContext.dependencyManager.resolve(DidCommConnectionRepository)
+    const previous = await connectionRepository.findById(agentContext, record.connectionId)
+    if (previous?.theirDid && connection.theirDid && previous.theirDid !== connection.theirDid) {
+      throw new CredoError(
+        `vt-flow: connection '${connection.id}' peer does not match the original connection of participant_session_id '${record.participantSessionId}'`,
+      )
+    }
   }
 
   private emitStateChanged(
