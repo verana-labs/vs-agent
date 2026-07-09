@@ -36,7 +36,7 @@ const DELEGATED_OUTCOME_TIMEOUT_MS = 15 * 60_000
 
 export interface EcsBootstrapOptions {
   mode: 'standalone' | 'delegated'
-  trustedEcosystemId?: number
+  trustedEcosystemDids?: string[]
   delegatedParentVsDid?: string
   verifyPeer?: (peerDid: string) => Promise<boolean>
 }
@@ -74,7 +74,7 @@ export class EcsBootstrapService {
     const chain = this.agent.veranaChain
     if (!chain) return 'the Verana chain is not configured'
     if (!this.indexer) return 'the Verana indexer is not configured'
-    if (this.options.trustedEcosystemId == null) return 'TRUSTED_ECS_ECOSYSTEM_ID is not set'
+    if (!this.options.trustedEcosystemDids?.length) return 'TRUSTED_ECS_ECOSYSTEM_DIDS is not set'
 
     const operatorAuths = await chain.listOperatorAuthorizations()
     if (!operatorAuths.some(a => a.msgTypes.includes(START_OP_MSG))) {
@@ -84,10 +84,6 @@ export class EcsBootstrapService {
     if (Number(balance.amount) === 0) {
       return `operator ${chain.address} has no ${balance.denom} balance for fees and trust deposits`
     }
-
-    const ecosystem = await this.indexer.getEcosystem(this.options.trustedEcosystemId).catch(() => undefined)
-    if (!ecosystem) return `ecosystem ${this.options.trustedEcosystemId} is not known to the indexer`
-    if (ecosystem.archived) return `ecosystem ${this.options.trustedEcosystemId} is archived`
 
     return null
   }
@@ -115,12 +111,34 @@ export class EcsBootstrapService {
     }
   }
 
+  // WL-ECS: only ecosystems on the configured allowlist may provide the essential credential schemas.
   private async discoverEcsSchemas(indexer: VeranaIndexerService): Promise<{
     credential: CredentialSchemaDto
     credentialType: ECS
     service: CredentialSchemaDto
   }> {
-    const schemas = await indexer.listCredentialSchemas(this.options.trustedEcosystemId!)
+    const ecosystems = await indexer.listEcosystems()
+    const failures: string[] = []
+    for (const did of this.options.trustedEcosystemDids!) {
+      const ecosystem = ecosystems.find(e => e.did === did && !e.archived)
+      if (!ecosystem) {
+        failures.push(`${did}: not a known active ecosystem`)
+        continue
+      }
+      try {
+        return await this.discoverFromEcosystem(indexer, ecosystem.id)
+      } catch (error) {
+        failures.push(`${did}: ${(error as Error).message}`)
+      }
+    }
+    throw new Error(`no trusted ECS ecosystem is usable: ${failures.join('; ')}`)
+  }
+
+  private async discoverFromEcosystem(
+    indexer: VeranaIndexerService,
+    ecosystemId: number,
+  ): Promise<{ credential: CredentialSchemaDto; credentialType: ECS; service: CredentialSchemaDto }> {
+    const schemas = await indexer.listCredentialSchemas(ecosystemId)
     const classified = await Promise.all(
       schemas
         .filter(schema => !schema.archived)
@@ -129,19 +147,11 @@ export class EcsBootstrapService {
     const byType = (type: ECS) => classified.find(c => c.type === type)?.schema
 
     const service = byType(ECS.SERVICE)
-    if (!service) {
-      throw new Error(
-        `ecosystem ${this.options.trustedEcosystemId} does not publish an ECS Service credential schema`,
-      )
-    }
+    if (!service) throw new Error('no ECS Service credential schema')
     const org = byType(ECS.ORG)
     const persona = byType(ECS.PERSONA)
     const credential = org ?? persona
-    if (!credential) {
-      throw new Error(
-        `ecosystem ${this.options.trustedEcosystemId} publishes neither an ECS Organization nor an ECS Persona credential schema`,
-      )
-    }
+    if (!credential) throw new Error('no ECS Organization or Persona credential schema')
     return { credential, credentialType: org ? ECS.ORG : ECS.PERSONA, service }
   }
 

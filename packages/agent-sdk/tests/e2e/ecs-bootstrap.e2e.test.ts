@@ -130,7 +130,7 @@ describeE2E('ECS bootstrap (V4): standalone against a live chain and indexer', (
       const bootstrap = new EcsBootstrapService(
         agent,
         indexer,
-        { mode: 'standalone', trustedEcosystemId: ecosystemId },
+        { mode: 'standalone', trustedEcosystemDids: [`did:example:eco-${RUN_ID}`] },
         new ConsoleLogger(LogLevel.Info),
       )
       await bootstrap.run()

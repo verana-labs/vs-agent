@@ -73,7 +73,7 @@ import {
   VERANA_AUTO_TRIGGER_RESOLVER,
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
-  TRUSTED_ECS_ECOSYSTEM_ID,
+  TRUSTED_ECS_ECOSYSTEM_DIDS,
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
@@ -160,8 +160,8 @@ const run = async () => {
   if (AGENT_MODE === 'delegated' && !AGENT_DELEGATED_PARENT_VS_DID) {
     configErrors.push('AGENT_DELEGATED_PARENT_VS_DID is required when AGENT_MODE=delegated')
   }
-  if (TRUSTED_ECS_ECOSYSTEM_ID && !/^\d+$/.test(TRUSTED_ECS_ECOSYSTEM_ID)) {
-    configErrors.push('TRUSTED_ECS_ECOSYSTEM_ID must be a non-negative integer')
+  if (TRUSTED_ECS_ECOSYSTEM_DIDS.some(did => !did.startsWith('did:'))) {
+    configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS must be a comma-separated list of DIDs')
   }
   if (configErrors.length > 0) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
@@ -380,7 +380,7 @@ const run = async () => {
     indexer,
     {
       mode: AGENT_MODE as 'standalone' | 'delegated',
-      trustedEcosystemId: TRUSTED_ECS_ECOSYSTEM_ID ? Number(TRUSTED_ECS_ECOSYSTEM_ID) : undefined,
+      trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS.length ? TRUSTED_ECS_ECOSYSTEM_DIDS : undefined,
       delegatedParentVsDid: AGENT_DELEGATED_PARENT_VS_DID,
       verifyPeer,
     },

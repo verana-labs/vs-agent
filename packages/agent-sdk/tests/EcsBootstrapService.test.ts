@@ -45,7 +45,7 @@ function makeMocks() {
     selfCreateParticipant: vi.fn().mockResolvedValue({ participantId: 88, txHash: 'BB' }),
   }
   const indexer = {
-    getEcosystem: vi.fn().mockResolvedValue({ id: 1, did: 'did:example:eco', archived: null }),
+    listEcosystems: vi.fn().mockResolvedValue([{ id: 1, did: 'did:example:eco', archived: null }]),
     getCredentialSchema: vi.fn().mockResolvedValue(serviceSchema),
     listCredentialSchemas: vi.fn().mockResolvedValue([orgSchema, serviceSchema]),
     listParticipants: vi.fn().mockResolvedValue([]),
@@ -82,22 +82,20 @@ function makeService(
   return new EcsBootstrapService(
     mocks.agent as unknown as VsAgent,
     mocks.indexer as unknown as VeranaIndexerService,
-    { mode: 'standalone', trustedEcosystemId: 1, ...options },
+    { mode: 'standalone', trustedEcosystemDids: ['did:example:eco'], ...options },
     logger as never,
   )
 }
 
 describe('EcsBootstrapService standalone', () => {
   it.each([
-    ['TRUSTED_ECS_ECOSYSTEM_ID is not set', {}, { trustedEcosystemId: undefined }],
+    ['TRUSTED_ECS_ECOSYSTEM_DIDS is not set', {}, { trustedEcosystemDids: undefined }],
     ['no OperatorAuthorization', { oas: [] }, {}],
     ['no balance', { balance: '0' }, {}],
-    ['ecosystem unknown', { ecosystem: undefined }, {}],
   ])('skips without starting anything when %s', async (_name, mockTweaks, optionTweaks) => {
     const mocks = makeMocks()
     if ('oas' in mockTweaks) mocks.chain.listOperatorAuthorizations.mockResolvedValue([])
     if ('balance' in mockTweaks) mocks.chain.getBalance.mockResolvedValue({ denom: 'uvna', amount: '0' })
-    if ('ecosystem' in mockTweaks) mocks.indexer.getEcosystem.mockResolvedValue(undefined)
 
     await makeService(mocks, optionTweaks).run()
 
@@ -120,12 +118,22 @@ describe('EcsBootstrapService standalone', () => {
       },
     )
 
-    await makeService(mocks).run()
+    await makeService(mocks, {
+      trustedEcosystemDids: ['did:example:unknown', 'did:example:eco'],
+    }).run()
 
     expect(mocks.chain.startParticipantOP).toHaveBeenCalledTimes(2)
     const [holderCall, issuerCall] = mocks.chain.startParticipantOP.mock.calls
     expect(holderCall[0]).toMatchObject({ role: 6, validatorParticipantId: 2, did: 'did:web:agent' })
     expect(issuerCall[0]).toMatchObject({ role: 1, validatorParticipantId: 1 })
+  })
+
+  it('fails when no trusted ecosystem DID resolves to a usable ecosystem', async () => {
+    const mocks = makeMocks()
+    mocks.indexer.listEcosystems.mockResolvedValue([])
+
+    await expect(makeService(mocks).run()).rejects.toThrow('no trusted ECS ecosystem is usable')
+    expect(mocks.chain.startParticipantOP).not.toHaveBeenCalled()
   })
 
   it('excludes expired participants from reuse', async () => {
