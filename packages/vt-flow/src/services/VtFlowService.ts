@@ -189,6 +189,7 @@ export class VtFlowService {
       if (message.claims) existing.claims = message.claims
       if (existing.state === VtFlowState.Completed || existing.state === VtFlowState.CredRevoked) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
+        existing.oobLinkUrl = undefined
         await this.updateState(agentContext, existing, VtFlowState.AwaitingOr)
       } else {
         await this.repository.update(agentContext, existing)
@@ -426,6 +427,7 @@ export class VtFlowService {
       VtFlowState.AwaitingOr,
       VtFlowState.AwaitingIr,
       VtFlowState.Validating,
+      VtFlowState.OobPending,
       VtFlowState.Completed,
     ])
 
@@ -436,8 +438,11 @@ export class VtFlowService {
       expiresTime: params.expiresTime,
     })
 
+    record.oobLinkUrl = params.url
     if (record.state !== VtFlowState.Completed) {
       await this.updateState(agentContext, record, VtFlowState.OobPending)
+    } else {
+      await this.updateRecord(agentContext, record)
     }
 
     return { record, message }
@@ -493,7 +498,7 @@ export class VtFlowService {
     return record
   }
 
-  /** Validator-side `credential-state-change`; `COMPLETED => CRED_REVOKED`. */
+  /** Validator-side `credential-state-change`; `COMPLETED => CRED_REVOKED`, re-notify allowed from `CRED_REVOKED`. */
   public async notifyCredentialStateChange(
     agentContext: AgentContext,
     recordId: string,
@@ -501,7 +506,11 @@ export class VtFlowService {
   ): Promise<{ record: VtFlowRecord; message: CredentialStateChangeMessage }> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    record.assertState(VtFlowState.Completed)
+    record.assertState(
+      params.state === VtCredentialState.Revoked
+        ? [VtFlowState.Completed, VtFlowState.CredRevoked]
+        : VtFlowState.Completed,
+    )
 
     const message = new CredentialStateChangeMessage({
       threadId: record.threadId,
@@ -515,6 +524,19 @@ export class VtFlowService {
     }
 
     return { record, message }
+  }
+
+  public async updateClaims(
+    agentContext: AgentContext,
+    recordId: string,
+    claims: Record<string, unknown>,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.assertState([VtFlowState.Validating, VtFlowState.CredRevoked])
+    record.claims = claims
+    await this.updateRecord(agentContext, record)
+    return record
   }
 
   /** Map a Credo credential-exchange state change onto the vt-flow session via `~thread.pthid`. */

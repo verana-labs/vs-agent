@@ -43,6 +43,7 @@ export interface VtFlowStorageProps {
   credentialExchangeRecordId?: string
   subprotocolThid?: string
 
+  oobLinkUrl?: string
   errorMessage?: string
 
   tags?: CustomVtFlowTags
@@ -71,6 +72,7 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
   public credentialExchangeRecordId?: string
   public subprotocolThid?: string
 
+  public oobLinkUrl?: string
   public errorMessage?: string
 
   public constructor(props: VtFlowStorageProps) {
@@ -98,6 +100,7 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
       this.credentialExchangeRecordId = props.credentialExchangeRecordId
       this.subprotocolThid = props.subprotocolThid
 
+      this.oobLinkUrl = props.oobLinkUrl
       this.errorMessage = props.errorMessage
     }
   }

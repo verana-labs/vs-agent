@@ -279,6 +279,10 @@ export class VtFlowApi {
     return record
   }
 
+  public updateClaims(vtFlowRecordId: string, claims: Record<string, unknown>): Promise<VtFlowRecord> {
+    return this.vtFlowService.updateClaims(this.agentContext, vtFlowRecordId, claims)
+  }
+
   public getById(vtFlowRecordId: string): Promise<VtFlowRecord> {
     return this.vtFlowService.getById(this.agentContext, vtFlowRecordId)
   }
