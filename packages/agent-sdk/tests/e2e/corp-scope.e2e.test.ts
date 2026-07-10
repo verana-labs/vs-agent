@@ -114,6 +114,10 @@ describeE2E('indexer corp-scope (v4): chain -> indexer -> agent', () => {
       const indexedSchema = await untilResolved(() => indexer.getCredentialSchema(schema.schemaId))
       expect(Number(indexedSchema.id)).toBe(schema.schemaId)
       expect(Number(indexedSchema.ecosystem_id)).toBe(eco.ecosystemId)
+
+      const indexedCorp = await untilResolved(() => indexer.getCorporation(corp.corporationId))
+      expect(Number(indexedCorp.id)).toBe(corp.corporationId)
+      expect(indexedCorp.did).toBe(`did:example:corp-${RUN_ID}`)
     },
     SETUP_TIMEOUT_MS,
   )

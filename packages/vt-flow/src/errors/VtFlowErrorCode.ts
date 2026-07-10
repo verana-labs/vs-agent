@@ -13,6 +13,8 @@ export enum VtFlowErrorCode {
   ValidationFailed = 'vt-flow.validation-failed',
   OobExpired = 'vt-flow.oob-expired',
   SessionTerminated = 'vt-flow.session-terminated',
+  ParticipantRevoked = 'vt-flow.participant-revoked',
+  ParticipantSlashed = 'vt-flow.participant-slashed',
   InternalError = 'vt-flow.internal-error',
 }
 
@@ -69,6 +71,16 @@ export const VT_FLOW_ERROR_INFO: Readonly<Record<VtFlowErrorCode, VtFlowErrorInf
   [VtFlowErrorCode.SessionTerminated]: {
     whoRetries: 'none',
     impact: 'thread',
+    retryable: false,
+  },
+  [VtFlowErrorCode.ParticipantRevoked]: {
+    whoRetries: 'none',
+    impact: 'connection',
+    retryable: false,
+  },
+  [VtFlowErrorCode.ParticipantSlashed]: {
+    whoRetries: 'none',
+    impact: 'connection',
     retryable: false,
   },
   [VtFlowErrorCode.InternalError]: { whoRetries: 'none', impact: 'thread', retryable: false },

@@ -192,6 +192,11 @@ export interface ParticipantDto {
   op_summary_digest?: string
 }
 
+export interface CorporationDto {
+  id: number
+  did?: string | null
+}
+
 export interface ParticipantSessionRecordDto {
   created?: string
   issuer_participant_id?: number
