@@ -126,20 +126,19 @@ export const setupAgent = async ({
               logger.warn('[vt-flow] verifyCredential skipped: orchestrator not ready')
               return false
             }
-            // Retries absorb indexer lag: the validator anchors the session and digest
-            // moments before offering, so the first reads can miss.
-            for (let attempt = 1; ; attempt++) {
+            for (let attempt = 1; attempt <= 10; attempt++) {
               try {
                 await orchestrator.verifyOfferedCredential(record.id)
                 return true
               } catch (error) {
-                if (attempt >= 10) {
+                if (attempt === 10) {
                   logger.error(`[vt-flow] credential verification failed: ${(error as Error).message}`)
-                  return false
+                } else {
+                  await new Promise(resolve => setTimeout(resolve, 3000))
                 }
-                await new Promise(resolve => setTimeout(resolve, 3000))
               }
             }
+            return false
           },
           onCompleted: async ({ record }) => {
             if (!orchestrator) return
