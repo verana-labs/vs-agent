@@ -74,6 +74,10 @@ function defaultEnglishDescription(code: VtFlowErrorCode): string {
       return 'The OOB link expired before the Applicant completed it.'
     case VtFlowErrorCode.SessionTerminated:
       return 'The session was terminated by the peer.'
+    case VtFlowErrorCode.ParticipantRevoked:
+      return 'The on-chain participant tied to this session has been revoked.'
+    case VtFlowErrorCode.ParticipantSlashed:
+      return 'The on-chain participant tied to this session has had its trust deposit slashed.'
     case VtFlowErrorCode.InternalError:
       return 'An internal error occurred while processing the session.'
     default: {
