@@ -8,6 +8,7 @@ import {
   VtFlowRole,
   VtFlowState,
   VtFlowVariant,
+  isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { BaseAgentModules, VsAgent } from '../agent'
@@ -77,18 +78,46 @@ export class VtFlowOrchestrator {
       throw new Error(`Validator participant ${validatorParticipant.id} is not active`)
     }
 
-    const { connectionRecord } = await this.agent.didcomm.oob.receiveImplicitInvitation({
-      did: validatorParticipant.did,
-      ourDid: this.agent.did,
-      label: this.agent.label,
-      didCommVersion: 'v2',
-    })
-    if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
-    const ready = await this.agent.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
+    // Renewals resend the OR with the same session id so the validator re-attaches the finished flow.
+    const vtFlowApi = this.resolveVtFlowApi()
+    const [latest] = (
+      await vtFlowApi.findAllByQuery({
+        participantId: String(holderParticipant.id),
+        role: VtFlowRole.Applicant,
+        flowVariant: VtFlowVariant.OnboardingProcess,
+      })
+    )
+      .filter(record => !isVtFlowTerminalState(record.state))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
-    return this.resolveVtFlowApi().sendOnboardingRequest({
-      connectionId: ready.id,
-      participantSessionId: input.participantSessionId ?? utils.uuid(),
+    if (latest && latest.state !== VtFlowState.Completed && latest.state !== VtFlowState.CredRevoked) {
+      this.agent.config.logger.info(
+        `[vt-flow] onboarding flow ${latest.id} for participant ${holderParticipant.id} is already in progress (state ${latest.state}); not resending`,
+      )
+      return latest
+    }
+    const existing = latest
+
+    let connectionId: string | undefined
+    if (existing) {
+      const connection = await this.agent.didcomm.connections.findById(existing.connectionId)
+      if (connection?.isReady) connectionId = connection.id
+    }
+    if (!connectionId) {
+      const { connectionRecord } = await this.agent.didcomm.oob.receiveImplicitInvitation({
+        did: validatorParticipant.did,
+        ourDid: this.agent.did,
+        label: this.agent.label,
+        didCommVersion: 'v2',
+      })
+      if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
+      const ready = await this.agent.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
+      connectionId = ready.id
+    }
+
+    return vtFlowApi.sendOnboardingRequest({
+      connectionId,
+      participantSessionId: input.participantSessionId ?? existing?.participantSessionId ?? utils.uuid(),
       participantId: String(holderParticipant.id),
       agentParticipantId: '0',
       walletAgentParticipantId: '0',
