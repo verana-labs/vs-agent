@@ -26,8 +26,9 @@ import {
 } from '@credo-ts/didcomm'
 
 import { VtFlowModuleConfig } from './VtFlowModuleConfig'
+import { VtFlowErrorCode } from './errors'
 import { VtFlowService } from './services'
-import { VtFlowRole } from './types'
+import { VtFlowRole, VtFlowState } from './types'
 
 /** Public API for vt-flow; each method performs a single state transition so callers can gate each one on its own on-chain work. */
 @injectable()
@@ -124,6 +125,27 @@ export class VtFlowApi {
       },
     )
     await this.dispatchMessage(record.connectionId, problemReport, record)
+    return record
+  }
+
+  public async terminateByChainEvent(options: {
+    vtFlowRecordId: string
+    code: VtFlowErrorCode
+    state: VtFlowState.ParticipantRevoked | VtFlowState.ParticipantSlashed
+    enDescription?: string
+  }): Promise<VtFlowRecord> {
+    const { record, problemReport } = await this.vtFlowService.terminateByChainEvent(
+      this.agentContext,
+      options.vtFlowRecordId,
+      { code: options.code, state: options.state, enDescription: options.enDescription },
+    )
+    try {
+      await this.dispatchMessage(record.connectionId, problemReport, record)
+    } catch (e) {
+      this.agentContext.config.logger.warn(
+        `[VtFlow] problem-report dispatch failed for ${record.id}: ${(e as Error).message}`,
+      )
+    }
     return record
   }
 
