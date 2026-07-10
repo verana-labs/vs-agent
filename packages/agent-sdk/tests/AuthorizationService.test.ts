@@ -81,6 +81,13 @@ describe('AuthorizationService', () => {
               expiration: past,
               period: { seconds: 3600 },
             },
+            {
+              participantId: 11,
+              msgTypes: [PP_SESSION],
+              withFeegrant: true,
+              expiration: past,
+              period: { seconds: 0 },
+            },
           ],
         },
       ],
@@ -90,6 +97,8 @@ describe('AuthorizationService', () => {
 
     expect(authz.canSign(10, PP_SESSION)).toBe(true)
     expect(authz.hasFeegrant(10)).toBe(true)
+    expect(authz.canSign(11, PP_SESSION)).toBe(false)
+    expect(authz.hasFeegrant(11)).toBe(false)
   })
 
   it('drops revoked records on refresh and immediately on invalidateParticipant', async () => {
