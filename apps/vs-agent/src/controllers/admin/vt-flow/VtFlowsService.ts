@@ -36,13 +36,17 @@ export class VtFlowsService {
   public async listFlows(query: ListFlowsQueryDto): Promise<VtFlowRecordDto[]> {
     const agent = await this.agentService.getAgent()
     const vtFlowApi = this.resolveVtFlowApi(agent)
-    const records = await vtFlowApi.findAllByQuery({
+    const validatorScope = query.role === VtFlowRole.Applicant && query.participant_id
+    let records = await vtFlowApi.findAllByQuery({
       ...(query.role && { role: query.role }),
       ...(query.flowState && { flowState: query.flowState }),
-      ...(query.participant_id && { participantId: query.participant_id }),
+      ...(query.participant_id && !validatorScope && { participantId: query.participant_id }),
       ...(query.schema_id && { schemaId: query.schema_id }),
       ...(query.participant_session_id && { participantSessionId: query.participant_session_id }),
     })
+    if (validatorScope) {
+      records = await this.filterByValidatorParticipant(agent, records, query.participant_id!)
+    }
 
     const connectionIds = [...new Set(records.map(record => record.connectionId))]
     const connections = new Map(
@@ -92,6 +96,28 @@ export class VtFlowsService {
         reason,
       }),
     )
+  }
+
+  private async filterByValidatorParticipant(
+    agent: VsAgent,
+    records: VtFlowRecord[],
+    validatorParticipantId: string,
+  ): Promise<VtFlowRecord[]> {
+    const chain = this.requireChain(agent)
+    const validatorByApplicant = new Map<string, string | undefined>()
+    const kept: VtFlowRecord[] = []
+    for (const record of records) {
+      if (!record.participantId) continue
+      if (!validatorByApplicant.has(record.participantId)) {
+        const participant = await chain.getParticipant(Number(record.participantId)).catch(() => undefined)
+        validatorByApplicant.set(
+          record.participantId,
+          participant?.validatorParticipantId ? String(participant.validatorParticipantId) : undefined,
+        )
+      }
+      if (validatorByApplicant.get(record.participantId) === validatorParticipantId) kept.push(record)
+    }
+    return kept
   }
 
   private async mutateFlow(
@@ -197,6 +223,8 @@ function toDto(record: VtFlowRecord, peerDid?: string): VtFlowRecordDto {
   return {
     peerDid,
     oobLinkUrl: record.oobLinkUrl,
+    proofs: record.proofsAttach,
+    credentialDigest: record.credentialDigest,
     id: record.id,
     threadId: record.threadId,
     participantSessionId: record.participantSessionId,

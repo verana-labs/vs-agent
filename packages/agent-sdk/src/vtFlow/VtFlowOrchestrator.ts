@@ -184,6 +184,7 @@ export class VtFlowOrchestrator {
 
     const { record: offered } = await vtFlowApi.offerCredentialForSession({
       vtFlowRecordId: record.id,
+      credentialDigest: digest,
       credentialFormats: {
         jsonld: {
           credential: unsignedCredentialJson,

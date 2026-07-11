@@ -17,6 +17,8 @@ export class VtFlowRecordDto {
   @ApiProperty({ required: false }) credentialExchangeRecordId?: string
   @ApiProperty({ required: false }) subprotocolThid?: string
   @ApiProperty({ required: false }) oobLinkUrl?: string
+  @ApiProperty({ required: false, type: [Object] }) proofs?: unknown[]
+  @ApiProperty({ required: false }) credentialDigest?: string
   @ApiProperty({ required: false }) peerDid?: string
   @ApiProperty({ required: false }) connectionState?: string
   @ApiProperty({ required: false }) errorMessage?: string

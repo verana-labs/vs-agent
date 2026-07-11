@@ -155,15 +155,17 @@ describe('OobLinkMessage', () => {
     expect(parsed.description).toBe('Complete OOB step')
   })
 
-  it('rejects a non-HTTPS URL', () => {
+  it('accepts http URLs and rejects non-URL values', () => {
     // Constructor itself is permissive; validation runs on serialise/parse.
-    const msg = new OobLinkMessage({
+    const httpMsg = new OobLinkMessage({
       threadId,
       url: 'http://issuer.example/oob/abc',
-      description: 'bad',
+      description: 'test env',
     })
-    const json = JsonTransformer.toJSON(msg)
-    expect(() => JsonTransformer.fromJSON(json, OobLinkMessage)).toThrow()
+    expect(() => JsonTransformer.fromJSON(JsonTransformer.toJSON(httpMsg), OobLinkMessage)).not.toThrow()
+
+    const badMsg = new OobLinkMessage({ threadId, url: 'ftp://issuer.example/oob', description: 'bad' })
+    expect(() => JsonTransformer.fromJSON(JsonTransformer.toJSON(badMsg), OobLinkMessage)).toThrow()
   })
 })
 

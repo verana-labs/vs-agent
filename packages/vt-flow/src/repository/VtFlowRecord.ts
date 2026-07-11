@@ -1,4 +1,5 @@
 import type { RecordTags, TagsBase } from '@credo-ts/core'
+import type { DidCommAttachment } from '@credo-ts/didcomm'
 
 import { BaseRecord, CredoError, utils } from '@credo-ts/core'
 
@@ -44,6 +45,8 @@ export interface VtFlowStorageProps {
   subprotocolThid?: string
 
   oobLinkUrl?: string
+  proofsAttach?: DidCommAttachment[]
+  credentialDigest?: string
   errorMessage?: string
 
   tags?: CustomVtFlowTags
@@ -73,6 +76,8 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
   public subprotocolThid?: string
 
   public oobLinkUrl?: string
+  public proofsAttach?: DidCommAttachment[]
+  public credentialDigest?: string
   public errorMessage?: string
 
   public constructor(props: VtFlowStorageProps) {
@@ -101,6 +106,8 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
       this.subprotocolThid = props.subprotocolThid
 
       this.oobLinkUrl = props.oobLinkUrl
+      this.proofsAttach = props.proofsAttach
+      this.credentialDigest = props.credentialDigest
       this.errorMessage = props.errorMessage
     }
   }

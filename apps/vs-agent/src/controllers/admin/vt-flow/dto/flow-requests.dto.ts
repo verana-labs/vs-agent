@@ -47,7 +47,7 @@ export class EditClaimsDto {
 
 export class SendOobLinkDto {
   @ApiProperty()
-  @IsUrl({ require_tld: false, protocols: ['https'] })
+  @IsUrl({ require_tld: false, protocols: ['https', 'http'] })
   @IsNotEmpty()
   url!: string
 

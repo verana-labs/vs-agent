@@ -187,6 +187,7 @@ export class VtFlowService {
       existing.connectionId = connection.id
       existing.threadId = message.threadId
       if (message.claims) existing.claims = message.claims
+      if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
       if (existing.state === VtFlowState.Completed || existing.state === VtFlowState.CredRevoked) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
         existing.oobLinkUrl = undefined
@@ -208,6 +209,7 @@ export class VtFlowService {
       walletAgentParticipantId: message.walletAgentParticipantId,
       participantId: message.participantId,
       claims: message.claims,
+      proofsAttach: message.proofsAttach,
     })
 
     await this.repository.save(agentContext, record)
@@ -481,6 +483,7 @@ export class VtFlowService {
     agentContext: AgentContext,
     recordId: string,
     credentialExchangeRecord: DidCommCredentialExchangeRecord,
+    credentialDigest?: string,
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
@@ -492,6 +495,7 @@ export class VtFlowService {
     ])
 
     record.credentialExchangeRecordId = credentialExchangeRecord.id
+    if (credentialDigest) record.credentialDigest = credentialDigest
     record.subprotocolThid = credentialExchangeRecord.threadId
 
     await this.updateState(agentContext, record, VtFlowState.CredOffered)

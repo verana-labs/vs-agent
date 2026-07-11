@@ -246,6 +246,7 @@ export class VtFlowApi {
       this.agentContext,
       record.id,
       credentialExchangeRecord,
+      options.credentialDigest,
     )
 
     return {
