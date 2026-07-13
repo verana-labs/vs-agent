@@ -6,7 +6,8 @@ import { CachedVsOperatorAuthorizationRecord, DurationParam } from './types'
 // A lapsed grant that carries a period is still valid: the chain rolls the expiration
 // forward on the next check (VPR spec AUTHZ-CHECK-3 step 4, AUTHZ-CHECK-1 step 2).
 function isActive(expiration?: Date, period?: DurationParam): boolean {
-  return expiration === undefined || expiration.getTime() > Date.now() || period != null
+  const renews = period != null && (period.seconds > 0 || (period.nanos ?? 0) > 0)
+  return expiration === undefined || expiration.getTime() > Date.now() || renews
 }
 
 export interface AuthorizationServiceConfig {

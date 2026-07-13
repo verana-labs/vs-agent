@@ -1,7 +1,7 @@
 import { IndexerEventRecord } from './types'
 
 export function eventKey(event: IndexerEventRecord): string {
-  return `${event.tx_hash}:${event.payload.message_index}`
+  return `${event.tx_hash}:${event.payload.message_index}:${event.event_type}`
 }
 
 export function isProcessableEvent(event: IndexerEventRecord): boolean {

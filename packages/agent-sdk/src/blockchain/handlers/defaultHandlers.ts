@@ -2,6 +2,7 @@ import { IndexerEventHandler, IndexerHandlerRegistry } from './IndexerHandlerReg
 import {
   markVtFlowRecordsValidated,
   publishVtjscIfOwner,
+  removeHolderTrustCredentialIfRevoked,
   setVtFlowRecordsParticipantRevoked,
   setVtFlowRecordsParticipantSlashed,
   startParticipantOPAutoFlow,
@@ -85,8 +86,9 @@ export const defaultHandlers: IndexerEventHandler[] = [
     msg: 'RenewParticipantOP',
     handle: async (activity, ctx) => {
       ctx.agent.config.logger.info(
-        `[IndexerWS] RenewParticipantOP entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §5.1: progress credential acquisition flow (applicant renewal)`,
+        `[IndexerWS] RenewParticipantOP entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
+      await startParticipantOPAutoFlow(ctx.agent, activity)
     },
   },
   {
@@ -110,8 +112,9 @@ export const defaultHandlers: IndexerEventHandler[] = [
     msg: 'RevokeParticipant',
     handle: async (activity, ctx) => {
       ctx.agent.config.logger.info(
-        `[IndexerWS] RevokeParticipant entity=${activity.entity_id} block=${ctx.blockHeight} — TODO §7.2: remove linked VP from DID doc + delete credential`,
+        `[IndexerWS] RevokeParticipant entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
+      await removeHolderTrustCredentialIfRevoked(ctx.agent, String(activity.entity_id))
       await setVtFlowRecordsParticipantRevoked(ctx.agent, String(activity.entity_id))
     },
   },
@@ -121,6 +124,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
       ctx.agent.config.logger.info(
         `[IndexerWS] SlashParticipantTrustDeposit participant=${activity.entity_id} block=${ctx.blockHeight}`,
       )
+      await removeHolderTrustCredentialIfRevoked(ctx.agent, String(activity.entity_id))
       await setVtFlowRecordsParticipantSlashed(ctx.agent, String(activity.entity_id))
     },
   },
@@ -139,6 +143,59 @@ export const defaultHandlers: IndexerEventHandler[] = [
         `[IndexerWS] CancelParticipantOPLastRequest participant=${activity.entity_id} block=${ctx.blockHeight}`,
       )
       await terminateVtFlowRecordsByApplicant(ctx.agent, String(activity.entity_id))
+    },
+  },
+  {
+    msg: 'CreateNewCorporation',
+    handle: async (activity, ctx) => {
+      ctx.agent.config.logger.info(
+        `[IndexerWS] CreateNewCorporation entity=${activity.entity_id} block=${ctx.blockHeight}`,
+      )
+    },
+  },
+  {
+    msg: 'UpdateCorporation',
+    handle: async (activity, ctx) => {
+      ctx.agent.config.logger.info(
+        `[IndexerWS] UpdateCorporation entity=${activity.entity_id} block=${ctx.blockHeight}`,
+      )
+      if (activity.changes['did'] != null) {
+        ctx.agent.config.logger.warn(
+          `[IndexerWS] Corporation ${activity.entity_id} was updated; if its DID rotated, per-DID indexer subscriptions may need to be re-established`,
+        )
+      }
+    },
+  },
+  {
+    msg: 'ArchiveEcosystem',
+    handle: async (activity, ctx) => {
+      ctx.agent.config.logger.info(
+        `[IndexerWS] ArchiveEcosystem entity=${activity.entity_id} block=${ctx.blockHeight}`,
+      )
+    },
+  },
+  {
+    msg: 'CreateRootParticipant',
+    handle: async (activity, ctx) => {
+      ctx.agent.config.logger.info(
+        `[IndexerWS] CreateRootParticipant entity=${activity.entity_id} block=${ctx.blockHeight}`,
+      )
+    },
+  },
+  {
+    msg: 'SelfCreateParticipant',
+    handle: async (activity, ctx) => {
+      ctx.agent.config.logger.info(
+        `[IndexerWS] SelfCreateParticipant participant=${activity.entity_id} block=${ctx.blockHeight}`,
+      )
+    },
+  },
+  {
+    msg: 'TriggerResolver',
+    handle: async (activity, ctx) => {
+      ctx.agent.config.logger.info(
+        `[IndexerWS] TriggerResolver participant=${activity.entity_id} block=${ctx.blockHeight}`,
+      )
     },
   },
 ]
