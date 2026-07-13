@@ -442,6 +442,15 @@ importers:
 
   packages/agent-sdk:
     dependencies:
+      '@cosmjs/amino':
+        specifier: ^0.32.4
+        version: 0.32.4
+      '@cosmjs/crypto':
+        specifier: ^0.32.4
+        version: 0.32.4
+      '@cosmjs/encoding':
+        specifier: ^0.32.4
+        version: 0.32.4
       '@cosmjs/proto-signing':
         specifier: ^0.32.3
         version: 0.32.4

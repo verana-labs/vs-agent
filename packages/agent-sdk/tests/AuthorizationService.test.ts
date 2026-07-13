@@ -173,6 +173,26 @@ describe('AuthorizationService', () => {
     await expect(authz.callerHoldsVsOperatorGrant('verana1caller', 43, PP_SESSION)).resolves.toBe(false)
   })
 
+  it('rejects grants issued by another corporation when corporationId is bound', async () => {
+    const { chain, listOperatorAuthorizations, listVsOperatorAuthorizations } = makeChain()
+    const authz = new AuthorizationService({ chain, logger, corporationId: 7, minRefreshIntervalMs: 0 })
+
+    listOperatorAuthorizations.mockResolvedValueOnce([
+      { id: 4, corporationId: 8, operator: 'verana1caller', msgTypes: [PP_VALIDATE], expiration: future },
+    ])
+    await expect(authz.callerHoldsOperatorGrant('verana1caller', PP_VALIDATE)).resolves.toBe(false)
+
+    listVsOperatorAuthorizations.mockResolvedValueOnce([
+      {
+        id: 5,
+        corporationId: 8,
+        vsOperator: 'verana1caller',
+        records: [{ participantId: 42, msgTypes: [PP_SESSION], withFeegrant: false, expiration: future }],
+      },
+    ])
+    await expect(authz.callerHoldsVsOperatorGrant('verana1caller', 42, PP_SESSION)).resolves.toBe(false)
+  })
+
   it('fails closed on a blank caller account without querying the chain', async () => {
     const { chain, listOperatorAuthorizations, listVsOperatorAuthorizations } = makeChain({
       oas: [{ id: 3, corporationId: 7, operator: 'verana1other', msgTypes: [PP_VALIDATE] }],

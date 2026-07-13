@@ -32,6 +32,9 @@
     "test:e2e": "RUN_FLOW_E2E=1 vitest run tests/e2e"
   },
   "dependencies": {
+    "@cosmjs/amino": "^0.32.4",
+    "@cosmjs/crypto": "^0.32.4",
+    "@cosmjs/encoding": "^0.32.4",
     "@cosmjs/proto-signing": "^0.32.3",
     "@cosmjs/stargate": "^0.32.3",
     "@cosmjs/tendermint-rpc": "^0.32.4",
@@ -42,9 +45,9 @@
     "@credo-ts/webvh": "0.7.1-pr-2704-20260630143332",
     "@hyperledger/anoncreds-nodejs": "^0.4.0",
     "@openwallet-foundation/askar-nodejs": "^0.6.0",
+    "@verana-labs/credo-ts-didcomm-vt-flow": "workspace:*",
     "@verana-labs/verana-types": "0.10.1-dev.16",
     "@verana-labs/verre": "0.3.2-dev.1",
-    "@verana-labs/credo-ts-didcomm-vt-flow": "workspace:*",
     "@verana-labs/vs-agent-model": "workspace:*",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",

@@ -12,6 +12,7 @@ function isActive(expiration?: Date, period?: DurationParam): boolean {
 export interface AuthorizationServiceConfig {
   chain: VeranaChainService
   logger: BaseLogger
+  corporationId?: number
   minRefreshIntervalMs?: number
 }
 
@@ -21,12 +22,18 @@ export class AuthorizationService {
   private lastRefreshAt = 0
   private readonly chain: VeranaChainService
   private readonly logger: BaseLogger
+  private readonly corporationId?: number
   private readonly minRefreshIntervalMs: number
 
   constructor(config: AuthorizationServiceConfig) {
     this.chain = config.chain
     this.logger = config.logger
+    this.corporationId = config.corporationId
     this.minRefreshIntervalMs = config.minRefreshIntervalMs ?? 2_000
+  }
+
+  private inScope(corporationId: number): boolean {
+    return this.corporationId === undefined || corporationId === this.corporationId
   }
 
   async refreshForOperator(): Promise<void> {
@@ -37,6 +44,7 @@ export class AuthorizationService {
     const vsoas = await this.chain.listVsOperatorAuthorizations()
     const rebuilt = new Map<number, CachedVsOperatorAuthorizationRecord>()
     for (const vsoa of vsoas) {
+      if (!this.inScope(vsoa.corporationId)) continue
       for (const record of vsoa.records) {
         rebuilt.set(record.participantId, {
           ...record,
@@ -81,7 +89,9 @@ export class AuthorizationService {
   async callerHoldsOperatorGrant(account: string, msgType: string): Promise<boolean> {
     if (!account.trim()) return false
     const auths = await this.chain.listOperatorAuthorizations(account)
-    return auths.some(a => a.msgTypes.includes(msgType) && isActive(a.expiration, a.period))
+    return auths.some(
+      a => this.inScope(a.corporationId) && a.msgTypes.includes(msgType) && isActive(a.expiration, a.period),
+    )
   }
 
   async callerHoldsVsOperatorGrant(
@@ -91,13 +101,15 @@ export class AuthorizationService {
   ): Promise<boolean> {
     if (!account.trim()) return false
     const vsoas = await this.chain.listVsOperatorAuthorizations(account)
-    return vsoas.some(vsoa =>
-      vsoa.records.some(
-        r =>
-          r.participantId === participantId &&
-          r.msgTypes.includes(msgType) &&
-          isActive(r.expiration, r.period),
-      ),
+    return vsoas.some(
+      vsoa =>
+        this.inScope(vsoa.corporationId) &&
+        vsoa.records.some(
+          r =>
+            r.participantId === participantId &&
+            r.msgTypes.includes(msgType) &&
+            isActive(r.expiration, r.period),
+        ),
     )
   }
 }
