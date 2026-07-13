@@ -11,8 +11,9 @@ import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
-import { createJsc, removeTrustCredential } from '../../utils/trustCredentialStore'
+import { createJsc, getTrustMetadata, removeTrustCredential } from '../../utils/trustCredentialStore'
 import { VtFlowOrchestrator } from '../../vtFlow'
+import { VeranaIndexerService } from '../VeranaIndexerService'
 import { IndexerActivity, VeranaSyncState } from '../types'
 
 const DEFAULT_CHAIN_ID = 'vna-testnet-1'
@@ -319,6 +320,37 @@ export async function startParticipantOPAutoFlow(agent: VsAgent, activity: Index
     agent.config.logger.error(
       `[IndexerWS] StartParticipantOP auto-flow failed: ${(err as Error).message}\n${(err as Error).stack}`,
     )
+  }
+}
+
+export async function reconcileVtjscPublications(
+  agent: VsAgent,
+  indexer: VeranaIndexerService,
+  corporationId: number,
+): Promise<void> {
+  if (!agent.did || !agent.publicApiBaseUrl) return
+
+  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
+  if (!didRecord) return
+  const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
+
+  const ecosystems = await indexer.listEcosystems()
+  for (const ecosystem of ecosystems.filter(entry => Number(entry.corporation_id) === corporationId)) {
+    for (const schema of await indexer.listCredentialSchemas(ecosystem.id)) {
+      if (getTrustMetadata(didRecord, '_vt/jsc', String(schema.id))) continue
+      try {
+        await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
+          schemaBaseId: String(schema.id),
+          jsonSchemaRef: `vpr:verana:${chainId}/cs/v1/js/${schema.id}`,
+          precomputedDigestSRI: await computeSchemaDigest(JSON.parse(schema.json_schema)),
+        })
+        agent.config.logger.info(
+          `[VTJSC] Reconciled missing VTJSC for schema ${schema.id} (ecosystem ${ecosystem.id})`,
+        )
+      } catch (e) {
+        agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
+      }
+    }
   }
 }
 
