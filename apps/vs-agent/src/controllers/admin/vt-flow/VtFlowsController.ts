@@ -1,6 +1,8 @@
 import { Controller, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
 import { ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 
+import { AccessMode } from '../../../security'
+
 import { VtFlowsService } from './VtFlowsService'
 import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
@@ -10,6 +12,7 @@ export class VtFlowsController {
   public constructor(private readonly service: VtFlowsService) {}
 
   @Post(':participantSessionId/validate')
+  @AccessMode('CORPORATION', ['/verana.pp.v1.MsgSetParticipantOPToValidated'])
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Validate a request and offer the credential',

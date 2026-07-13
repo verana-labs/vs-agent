@@ -190,7 +190,12 @@ export const setupAgent = async ({
   return { agent }
 }
 
-export function commonAppConfig(app: INestApplication, cors?: boolean, publicApp: boolean = false) {
+export function commonAppConfig(
+  app: INestApplication,
+  cors?: boolean,
+  publicApp: boolean = false,
+  serveSwagger: boolean = true,
+) {
   // Versioning
   app.enableVersioning({
     type: VersioningType.URI,
@@ -215,7 +220,7 @@ export function commonAppConfig(app: INestApplication, cors?: boolean, publicApp
     }
   }
 
-  if (!publicApp || (publicApp && ENABLE_PUBLIC_API_SWAGGER)) SwaggerModule.setup('api', app, document)
+  if (serveSwagger && (!publicApp || ENABLE_PUBLIC_API_SWAGGER)) SwaggerModule.setup('api', app, document)
 
   // Pipes
   app.useGlobalPipes(new ValidationPipe())

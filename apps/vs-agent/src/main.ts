@@ -54,6 +54,8 @@ import {
   keyDerivationMethodMap,
   DEFAULT_AGENT_ENDPOINTS,
   ADMIN_API_AUTH_MODE,
+  ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
+  ADMIN_API_EXTERNAL_PORT,
   ADMIN_API_PUBLIC_URL,
   DEFAULT_PUBLIC_API_BASE_URL,
   ENABLED_PLUGINS,
@@ -82,9 +84,22 @@ import { commonAppConfig, type ServerConfig, setupAgent, TsLogger, webhookEvent 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
 
-  const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins))
-  commonAppConfig(adminApp, cors)
-  await adminApp.listen(port)
+  if (ADMIN_API_AUTH_MODE.includes('internal')) {
+    const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins))
+    commonAppConfig(adminApp, cors)
+    await adminApp.listen(port)
+  }
+
+  if (ADMIN_API_AUTH_MODE.includes('corporation')) {
+    const externalApp = await NestFactory.create(
+      VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins, {
+        external: true,
+        allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
+      }),
+    )
+    commonAppConfig(externalApp, cors, false, false)
+    await externalApp.listen(ADMIN_API_EXTERNAL_PORT)
+  }
 
   // PublicModule-specific config
   const publicApp = await NestFactory.create(PublicModule.register(agent, publicApiBaseUrl))
@@ -257,7 +272,11 @@ const run = async () => {
     })
     await veranaChain.start()
 
-    authorizationService = new AuthorizationService({ chain: veranaChain, logger: serverLogger })
+    authorizationService = new AuthorizationService({
+      chain: veranaChain,
+      logger: serverLogger,
+      corporationId: VERANA_CORPORATION_ID ? Number(VERANA_CORPORATION_ID) : undefined,
+    })
     const seedAuthorizationCache = async (): Promise<boolean> =>
       authorizationService!
         .refreshForOperator()
