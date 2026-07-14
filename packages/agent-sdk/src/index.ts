@@ -1,5 +1,6 @@
 // Agent
 export * from './agent'
+export * from './bootstrap'
 export * from './types'
 
 // Events
