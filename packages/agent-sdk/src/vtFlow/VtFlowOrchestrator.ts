@@ -60,8 +60,11 @@ export class VtFlowOrchestrator {
     if (holderParticipant.did !== this.agent.did) {
       throw new Error(`Applicant participant ${input.applicantParticipantId} does not belong to this agent`)
     }
-    if (holderParticipant.role !== ISSUER_PARTICIPANT_TYPE) {
-      throw new Error(`Participant ${input.applicantParticipantId} is not an ISSUER participant`)
+    if (
+      holderParticipant.role !== ISSUER_PARTICIPANT_TYPE &&
+      holderParticipant.role !== HOLDER_PARTICIPANT_TYPE
+    ) {
+      throw new Error(`Participant ${input.applicantParticipantId} is not an ISSUER or HOLDER participant`)
     }
     if (!holderParticipant.validatorParticipantId) {
       throw new Error(`Applicant participant ${input.applicantParticipantId} has no validator_participant_id`)

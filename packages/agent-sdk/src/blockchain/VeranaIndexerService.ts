@@ -5,6 +5,8 @@ import {
   CredentialSchemaDto,
   DigestDto,
   EcosystemDto,
+  ParticipantRole,
+  ParticipantState,
   IndexerEventsResponse,
   ParticipantDto,
   ParticipantSessionDto,
@@ -95,6 +97,25 @@ export class VeranaIndexerService {
       { timeoutMs: REQUEST_TIMEOUT_MS, allowNotFound: true },
     )
     return data?.session
+  }
+
+  async listParticipants(filter: {
+    schemaId?: number
+    role?: ParticipantRole
+    did?: string
+    participantState?: ParticipantState
+  }): Promise<ParticipantDto[]> {
+    const params = new URLSearchParams()
+    if (filter.schemaId != null) params.set('schema_id', String(filter.schemaId))
+    if (filter.role) params.set('role', filter.role)
+    if (filter.did) params.set('did', filter.did)
+    if (filter.participantState) params.set('participant_state', filter.participantState)
+    this.config.logger.debug(`[VeranaIndexer] listParticipants ${params.toString()}`)
+    const data = await fetchJson<{ participants: ParticipantDto[] }>(
+      `${this.baseUrl}/v4/participant/list?${params.toString()}`,
+      REQUEST_TIMEOUT_MS,
+    )
+    return data.participants
   }
 
   async getDigest(digest: string): Promise<DigestDto | undefined> {
