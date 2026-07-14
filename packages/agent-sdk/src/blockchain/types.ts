@@ -195,6 +195,7 @@ export interface ParticipantDto {
 export interface CorporationDto {
   id: number
   did?: string | null
+  policy_address?: string | null
 }
 
 export interface ParticipantSessionRecordDto {
@@ -338,7 +339,7 @@ export interface SetParticipantOPToValidatedParams {
   validationFees?: number
   issuanceFees?: number
   verificationFees?: number
-  opSummaryDigest: string
+  opSummaryDigest?: string
   issuanceFeeDiscount?: number
   verificationFeeDiscount?: number
   corporation?: string

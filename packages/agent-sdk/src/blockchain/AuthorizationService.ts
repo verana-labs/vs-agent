@@ -5,9 +5,16 @@ import { CachedVsOperatorAuthorizationRecord, DurationParam } from './types'
 
 // A lapsed grant that carries a period is still valid: the chain rolls the expiration
 // forward on the next check (VPR spec AUTHZ-CHECK-3 step 4, AUTHZ-CHECK-1 step 2).
-function isActive(expiration?: Date, period?: DurationParam): boolean {
-  const renews = period != null && (period.seconds > 0 || (period.nanos ?? 0) > 0)
-  return expiration === undefined || expiration.getTime() > Date.now() || renews
+function renews(period?: DurationParam): boolean {
+  return period != null && (period.seconds > 0 || (period.nanos ?? 0) > 0)
+}
+
+function isOperatorAuthorizationActive(expiration?: Date, period?: DurationParam): boolean {
+  return expiration === undefined || expiration.getTime() > Date.now() || renews(period)
+}
+
+function isVsoaRecordActive(expiration?: Date, period?: DurationParam): boolean {
+  return expiration != null && (expiration.getTime() > Date.now() || renews(period))
 }
 
 export interface AuthorizationServiceConfig {
@@ -66,7 +73,9 @@ export class AuthorizationService {
 
   canSign(participantId: number, msgType: string): boolean {
     const record = this.vsoaByParticipant.get(participantId)
-    return !!record && record.msgTypes.includes(msgType) && isActive(record.expiration, record.period)
+    return (
+      !!record && record.msgTypes.includes(msgType) && isVsoaRecordActive(record.expiration, record.period)
+    )
   }
 
   getVsOperatorAuthorizationRecord(participantId: number): CachedVsOperatorAuthorizationRecord | undefined {
@@ -77,9 +86,13 @@ export class AuthorizationService {
     return [...this.vsoaByParticipant.values()]
   }
 
+  // The feegrant mirror requires a strictly future expiration and is not renewed by the
+  // lazy cycle (MOD-DE-MSG-5-5), so no period leniency here.
   hasFeegrant(participantId: number): boolean {
     const record = this.vsoaByParticipant.get(participantId)
-    return !!record && record.withFeegrant && isActive(record.expiration, record.period)
+    return (
+      !!record && record.withFeegrant && record.expiration != null && record.expiration.getTime() > Date.now()
+    )
   }
 
   async agentHoldsOperatorGrant(msgType: string): Promise<boolean> {
@@ -91,7 +104,10 @@ export class AuthorizationService {
     if (!account.trim()) return false
     const auths = await this.chain.listOperatorAuthorizations(account)
     return auths.some(
-      a => this.inScope(a.corporationId) && a.msgTypes.includes(msgType) && isActive(a.expiration, a.period),
+      a =>
+        this.inScope(a.corporationId) &&
+        a.msgTypes.includes(msgType) &&
+        isOperatorAuthorizationActive(a.expiration, a.period),
     )
   }
 
@@ -109,7 +125,7 @@ export class AuthorizationService {
           r =>
             r.participantId === participantId &&
             r.msgTypes.includes(msgType) &&
-            isActive(r.expiration, r.period),
+            isVsoaRecordActive(r.expiration, r.period),
         ),
     )
   }
