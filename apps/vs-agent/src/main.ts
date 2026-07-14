@@ -10,9 +10,11 @@ import {
   VsAgentWsInboundTransport,
   type VsAgentNestPlugin,
   VeranaChainService,
+  VeranaIndexerService,
   IndexerWebSocketService,
   buildDefaultIndexerHandlerRegistry,
   EcsBootstrapService,
+  reconcileVtjscPublications,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -245,13 +247,28 @@ const run = async () => {
     VtFlowNestPlugin,
   ]
 
+  const indexerService = VERANA_INDEXER_BASE_URL
+    ? new VeranaIndexerService({ baseUrl: VERANA_INDEXER_BASE_URL, logger: serverLogger })
+    : undefined
+
   // Connect to Verana blockchain for on-chain transactions
   let veranaChain: VeranaChainService | undefined
   if (VERANA_RPC_ENDPOINT_URL && VERANA_ACCOUNT_MNEMONIC) {
+    let corporationAddress: string | undefined
+    if (VERANA_CORPORATION_ID && indexerService) {
+      const corporation = await indexerService.getCorporation(VERANA_CORPORATION_ID).catch(() => undefined)
+      corporationAddress = corporation?.policy_address ?? undefined
+      if (!corporationAddress) {
+        serverLogger.warn(
+          `Corporation ${VERANA_CORPORATION_ID} not resolvable on the indexer yet; on-chain transactions will sign without a corporation`,
+        )
+      }
+    }
     veranaChain = new VeranaChainService({
       rpcUrl: VERANA_RPC_ENDPOINT_URL,
       chainId: VERANA_CHAIN_ID,
       mnemonic: VERANA_ACCOUNT_MNEMONIC,
+      corporationAddress,
       logger: serverLogger,
       autoTriggerResolver: VERANA_AUTO_TRIGGER_RESOLVER,
     })
@@ -366,13 +383,25 @@ const run = async () => {
       VERANA_INDEXER_SUBSCRIPTION_SCOPE === 'corporation' && VERANA_CORPORATION_ID
         ? Number(VERANA_CORPORATION_ID)
         : undefined
-    const indexerWs = new IndexerWebSocketService({
-      indexerUrl: VERANA_INDEXER_BASE_URL,
-      agent,
-      handlerRegistry,
-      corporationId: indexerCorporationId,
-    })
-    await indexerWs.start()
+    if (agent.did || indexerCorporationId) {
+      const indexerWs = new IndexerWebSocketService({
+        indexerUrl: VERANA_INDEXER_BASE_URL,
+        agent,
+        handlerRegistry,
+        corporationId: indexerCorporationId,
+      })
+      await indexerWs.start()
+    } else {
+      serverLogger.warn(
+        '[IndexerWS] subscription skipped: agent has no public DID and no VERANA_CORPORATION_ID scope',
+      )
+    }
+
+    if (indexerService && VERANA_CORPORATION_ID) {
+      void reconcileVtjscPublications(agent, indexerService, Number(VERANA_CORPORATION_ID)).catch(
+        (error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`),
+      )
+    }
   }
 
   const ecsBootstrap = new EcsBootstrapService(

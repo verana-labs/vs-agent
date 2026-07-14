@@ -54,6 +54,15 @@ export class VeranaIndexerService {
     return data.ecosystems ?? []
   }
 
+  async listCredentialSchemas(ecosystemId: number): Promise<CredentialSchemaDto[]> {
+    this.config.logger.debug(`[VeranaIndexer] listCredentialSchemas ecosystem=${ecosystemId}`)
+    const data = await fetchJson<{ schemas: CredentialSchemaDto[] }>(
+      `${this.baseUrl}/v4/credential-schema/list?ecosystem_id=${ecosystemId}`,
+      REQUEST_TIMEOUT_MS,
+    )
+    return data.schemas
+  }
+
   async getCredentialSchema(id: string | number): Promise<CredentialSchemaDto> {
     this.config.logger.debug(`[VeranaIndexer] getCredentialSchema id=${id}`)
     const data = await fetchJson<{ schema: CredentialSchemaDto }>(
@@ -88,15 +97,6 @@ export class VeranaIndexerService {
       { timeoutMs: REQUEST_TIMEOUT_MS, allowNotFound: true },
     )
     return data?.session
-  }
-
-  async listCredentialSchemas(ecosystemId: number): Promise<CredentialSchemaDto[]> {
-    this.config.logger.debug(`[VeranaIndexer] listCredentialSchemas ecosystem=${ecosystemId}`)
-    const data = await fetchJson<{ schemas: CredentialSchemaDto[] }>(
-      `${this.baseUrl}/v4/credential-schema/list?ecosystem_id=${ecosystemId}`,
-      REQUEST_TIMEOUT_MS,
-    )
-    return data.schemas
   }
 
   async listParticipants(filter: {

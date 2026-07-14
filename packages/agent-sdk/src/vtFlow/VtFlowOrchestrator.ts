@@ -169,14 +169,15 @@ export class VtFlowOrchestrator {
 
     const digest = credentialContentDigest(unsignedCredentialJson)
 
+    // The chain requires a null op_summary_digest for HOLDER participants (MOD-PP-MSG-3).
     await chain.setParticipantOPToValidated({
       id: holderParticipantId,
-      opSummaryDigest: digest,
+      opSummaryDigest: holderParticipant.role === HOLDER_PARTICIPANT_TYPE ? undefined : digest,
       corporation: holderParticipant.corporation,
     })
     await chain.createOrUpdateParticipantSession({
       id: record.participantSessionId,
-      issuerParticipantId: holderParticipantId,
+      issuerParticipantId: Number(holderParticipant.validatorParticipantId),
       agentParticipantId: input.agentParticipantId ?? 0,
       walletAgentParticipantId: input.walletAgentParticipantId ?? 0,
       digest,
