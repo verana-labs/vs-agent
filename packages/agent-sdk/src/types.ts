@@ -29,4 +29,7 @@ export interface VsAgentNestPlugin {
 }
 
 export const ISSUER_PARTICIPANT_TYPE = 1
+export const VERIFIER_PARTICIPANT_TYPE = 2
+export const ISSUER_GRANTOR_PARTICIPANT_TYPE = 3
+export const VERIFIER_GRANTOR_PARTICIPANT_TYPE = 4
 export const HOLDER_PARTICIPANT_TYPE = 6
