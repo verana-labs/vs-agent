@@ -291,18 +291,25 @@ export async function removeHolderTrustCredentialIfRevoked(
   }
 }
 
-export async function terminateVtFlowRecordsByApplicant(
-  agent: VsAgent,
-  participantId: string,
-): Promise<void> {
+const ONBOARDING_STATE_VALIDATED = 2
+
+export async function reconcileVtFlowRecordsOnCancel(agent: VsAgent, participantId: string): Promise<void> {
+  const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
+  const stillValidated = Number(participant?.opState) === ONBOARDING_STATE_VALIDATED
+
   await reconcileVtFlowRecordsForParticipant(
     agent,
     participantId,
     async (record, service, agentContext) => {
+      const renewalState = record.state === VtFlowState.AwaitingOr || record.state === VtFlowState.OrSent
+      if (stillValidated && renewalState && record.credentialExchangeRecordId) {
+        await service.updateState(agentContext, record, VtFlowState.Completed)
+        return 'COMPLETED'
+      }
       await service.updateState(agentContext, record, VtFlowState.TerminatedByApplicant)
       return 'TERMINATED_BY_APPLICANT'
     },
-    'Failed to terminate record',
+    'Failed to reconcile record after cancel',
   )
 }
 

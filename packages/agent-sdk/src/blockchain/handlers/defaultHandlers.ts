@@ -6,7 +6,7 @@ import {
   setVtFlowRecordsParticipantRevoked,
   setVtFlowRecordsParticipantSlashed,
   startParticipantOPAutoFlow,
-  terminateVtFlowRecordsByApplicant,
+  reconcileVtFlowRecordsOnCancel,
 } from './stateMutations'
 
 /**
@@ -142,7 +142,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
       ctx.agent.config.logger.info(
         `[IndexerWS] CancelParticipantOPLastRequest participant=${activity.entity_id} block=${ctx.blockHeight}`,
       )
-      await terminateVtFlowRecordsByApplicant(ctx.agent, String(activity.entity_id))
+      await reconcileVtFlowRecordsOnCancel(ctx.agent, String(activity.entity_id))
     },
   },
   {
