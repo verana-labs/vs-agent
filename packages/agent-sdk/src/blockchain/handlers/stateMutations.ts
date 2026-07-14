@@ -11,7 +11,7 @@ import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
-import { createJsc, getTrustMetadata, removeTrustCredential } from '../../utils/trustCredentialStore'
+import { createJsc, findMetadataEntry, removeTrustCredential } from '../../utils/trustCredentialStore'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'
 import { IndexerActivity, VeranaSyncState } from '../types'
@@ -337,11 +337,12 @@ export async function reconcileVtjscPublications(
   const ecosystems = await indexer.listEcosystems()
   for (const ecosystem of ecosystems.filter(entry => Number(entry.corporation_id) === corporationId)) {
     for (const schema of await indexer.listCredentialSchemas(ecosystem.id)) {
-      if (getTrustMetadata(didRecord, '_vt/jsc', String(schema.id))) continue
+      const schemaRef = `vpr:verana:${chainId}/cs/v1/js/${schema.id}`
+      if (findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)) continue
       try {
         await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
           schemaBaseId: String(schema.id),
-          jsonSchemaRef: `vpr:verana:${chainId}/cs/v1/js/${schema.id}`,
+          jsonSchemaRef: schemaRef,
           precomputedDigestSRI: await computeSchemaDigest(JSON.parse(schema.json_schema)),
         })
         agent.config.logger.info(
