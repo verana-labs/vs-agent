@@ -117,6 +117,7 @@ export const setupAgent = async ({
         endpoints,
         didcommVersions,
         vtFlow: {
+          autoIssueCredentialOnRequest: true,
           assertVerifiableService: verifiablePublicRegistries
             ? assertVerifiableService({ verifiablePublicRegistries })
             : undefined,
