@@ -124,18 +124,25 @@ export const setupAgent = async ({
           assertVerifiableService: verifiablePublicRegistries
             ? assertVerifiableService({ verifiablePublicRegistries })
             : undefined,
+          autoAcceptCredentialOffer: true,
           verifyCredential: async ({ record }) => {
             if (!orchestrator) {
               logger.warn('[vt-flow] verifyCredential skipped: orchestrator not ready')
               return false
             }
-            try {
-              await orchestrator.verifyOfferedCredential(record.id)
-              return true
-            } catch (error) {
-              logger.error(`[vt-flow] credential verification failed: ${(error as Error).message}`)
-              return false
+            for (let attempt = 1; attempt <= 10; attempt++) {
+              try {
+                await orchestrator.verifyOfferedCredential(record.id)
+                return true
+              } catch (error) {
+                if (attempt === 10) {
+                  logger.error(`[vt-flow] credential verification failed: ${(error as Error).message}`)
+                } else {
+                  await new Promise(resolve => setTimeout(resolve, 3000))
+                }
+              }
             }
+            return false
           },
           onCompleted: async ({ record }) => {
             if (!orchestrator) return
@@ -188,7 +195,14 @@ export const setupAgent = async ({
 
   migrateLegacyTailsFiles(agent.context)
 
-  return { agent }
+  const verifyPeer = verifiablePublicRegistries
+    ? async (peerDid: string): Promise<boolean> => {
+        const hook = assertVerifiableService({ verifiablePublicRegistries, logger })
+        return hook({ agentContext: agent.context, peerDid, connectionId: '' })
+      }
+    : undefined
+
+  return { agent, indexer, verifyPeer }
 }
 
 export function commonAppConfig(

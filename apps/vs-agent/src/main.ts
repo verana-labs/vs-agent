@@ -15,6 +15,7 @@ import {
   IndexerWebSocketService,
   buildDefaultIndexerHandlerRegistry,
   registerAuthorizationHandlers,
+  EcsBootstrapService,
   reconcileVtjscPublications,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
@@ -78,6 +79,7 @@ import {
   VERANA_AUTO_TRIGGER_RESOLVER,
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
+  TRUSTED_ECS_ECOSYSTEM_DIDS,
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
@@ -178,6 +180,9 @@ const run = async () => {
   }
   if (AGENT_MODE === 'delegated' && !AGENT_DELEGATED_PARENT_VS_DID) {
     configErrors.push('AGENT_DELEGATED_PARENT_VS_DID is required when AGENT_MODE=delegated')
+  }
+  if (TRUSTED_ECS_ECOSYSTEM_DIDS.some(did => !did.startsWith('did:'))) {
+    configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS must be a comma-separated list of DIDs')
   }
   if (configErrors.length > 0) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
@@ -341,7 +346,7 @@ const run = async () => {
     }
   })()
 
-  const { agent } = await setupAgent({
+  const { agent, indexer, verifyPeer } = await setupAgent({
     endpoints,
     discoveryOptions,
     port: AGENT_PORT,
@@ -444,6 +449,22 @@ const run = async () => {
       )
     }
   }
+
+  const ecsBootstrap = new EcsBootstrapService(
+    agent,
+    indexer,
+    {
+      mode: AGENT_MODE as 'standalone' | 'delegated',
+      trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS.length ? TRUSTED_ECS_ECOSYSTEM_DIDS : undefined,
+      delegatedParentVsDid: AGENT_DELEGATED_PARENT_VS_DID,
+      verifyPeer,
+    },
+    serverLogger,
+  )
+  void ecsBootstrap.run().catch((error: Error) => {
+    serverLogger.error(`[EcsBootstrap] ${error.message}`)
+    if (AGENT_MODE === 'delegated') process.exit(1)
+  })
 
   // Accept incoming DIDComm only after the catch-up, so the agent does not act on stale chain state.
   if (webSocketServer) {
