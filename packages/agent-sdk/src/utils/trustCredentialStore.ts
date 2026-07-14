@@ -242,7 +242,7 @@ export async function createJsc(
   const schemaPresentation = `schemas-${schemaBaseId}-jsc-vp.json`
   const schemaCredential = `schemas-${schemaBaseId}-jsc.json`
   const serviceEndpoint = `${publicApiBaseUrl}/vt/${schemaPresentation}`
-  const didDocumentServiceId = `${agent.did}#vpr-${schemaPresentation.replace('.json', '')}`
+  const didDocumentServiceId = `${agent.did}#vpr-schemas-${schemaBaseId}-vtjsc-vp`
 
   const unsignedCredential = createCredential({
     id: `${publicApiBaseUrl}/vt/${schemaCredential}`,

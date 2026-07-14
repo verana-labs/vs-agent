@@ -62,7 +62,7 @@ describe('TrustService', () => {
 
       const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
       const services = didRecord.didDocument?.service ?? []
-      const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-jsc-vp`
+      const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`
 
       expect(services.some(s => s.id === serviceId)).toBe(true)
     })
@@ -76,7 +76,7 @@ describe('TrustService', () => {
 
       const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
       const services = didRecord.didDocument?.service ?? []
-      const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-jsc-vp`
+      const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`
       const matchingServices = services.filter(s => s.id === serviceId)
 
       expect(matchingServices).toHaveLength(1)
@@ -94,8 +94,8 @@ describe('TrustService', () => {
 
       const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
       const services = didRecord.didDocument?.service ?? []
-      const orgServiceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-jsc-vp`
-      const svcServiceId = `${jscFaberAgent.did}#vpr-schemas-service-schema-jsc-vp`
+      const orgServiceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`
+      const svcServiceId = `${jscFaberAgent.did}#vpr-schemas-service-schema-vtjsc-vp`
 
       expect(services.filter(s => s.id === orgServiceId)).toHaveLength(1)
       expect(services.filter(s => s.id === svcServiceId)).toHaveLength(1)
