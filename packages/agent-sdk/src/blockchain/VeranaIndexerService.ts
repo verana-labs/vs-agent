@@ -43,6 +43,24 @@ export class VeranaIndexerService {
     return data.ecosystem
   }
 
+  async listEcosystems(): Promise<EcosystemDto[]> {
+    this.config.logger.debug('[VeranaIndexer] listEcosystems')
+    const data = await fetchJson<{ ecosystems: EcosystemDto[] }>(
+      `${this.baseUrl}/v4/ecosystem/list`,
+      REQUEST_TIMEOUT_MS,
+    )
+    return data.ecosystems ?? []
+  }
+
+  async listCredentialSchemas(ecosystemId: number): Promise<CredentialSchemaDto[]> {
+    this.config.logger.debug(`[VeranaIndexer] listCredentialSchemas ecosystem=${ecosystemId}`)
+    const data = await fetchJson<{ schemas: CredentialSchemaDto[] }>(
+      `${this.baseUrl}/v4/credential-schema/list?ecosystem_id=${ecosystemId}`,
+      REQUEST_TIMEOUT_MS,
+    )
+    return data.schemas
+  }
+
   async getCredentialSchema(id: string | number): Promise<CredentialSchemaDto> {
     this.config.logger.debug(`[VeranaIndexer] getCredentialSchema id=${id}`)
     const data = await fetchJson<{ schema: CredentialSchemaDto }>(
