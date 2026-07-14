@@ -128,6 +128,9 @@ These variables enable on-chain features (permission management, trust registry 
 | `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` | OPTIONAL | Comma-separated indexer `msg` names whose default handler is disabled (or `*` for all), so a backend behind the container can override them and react via the `indexer-notification` webhook. State-sync bookkeeping is never affected. |
 | `VERANA_INDEXER_SUBSCRIPTION_SCOPE` | OPTIONAL | Scope of the indexer subscription and REST catch-up: `did` (default, only the agent's own DID) or `corporation` (all events for `VERANA_CORPORATION_ID`). |
 | `VERANA_CORPORATION_ID` | OPTIONAL | Corporation ID used when `VERANA_INDEXER_SUBSCRIPTION_SCOPE` is `corporation`. |
+| `AGENT_MODE` | OPTIONAL | `standalone` (default) or `delegated`. Selects how the agent obtains its ECS credentials at startup. |
+| `AGENT_DELEGATED_PARENT_VS_DID` | CONDITIONAL | DID of the parent Verifiable Service that issues the Service credential. Required when `AGENT_MODE` is `delegated`. |
+| `TRUSTED_ECS_ECOSYSTEM_DIDS` | CONDITIONAL | Comma-separated DIDs of the ECS ecosystems the agent trusts for essential credential schemas (WL-ECS). Required for the standalone ECS bootstrap. |
 
 * Required only if on-chain features are enabled.
 

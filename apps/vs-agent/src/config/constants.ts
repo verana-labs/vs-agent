@@ -144,6 +144,10 @@ export const VERANA_INDEXER_SUBSCRIPTION_SCOPE = (process.env.VERANA_INDEXER_SUB
   .toLowerCase()
 export const VERANA_AUTO_TRIGGER_RESOLVER = process.env.VERANA_AUTO_TRIGGER_RESOLVER !== 'false'
 
+export const TRUSTED_ECS_ECOSYSTEM_DIDS = (process.env.TRUSTED_ECS_ECOSYSTEM_DIDS ?? '')
+  .split(',')
+  .map(did => did.trim())
+  .filter(Boolean)
 export const AGENT_MODE = (process.env.AGENT_MODE ?? '').trim().toLowerCase() || 'standalone'
 export const AGENT_DELEGATED_PARENT_VS_DID = process.env.AGENT_DELEGATED_PARENT_VS_DID
 
