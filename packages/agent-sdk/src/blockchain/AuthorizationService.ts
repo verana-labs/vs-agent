@@ -69,9 +69,13 @@ export class AuthorizationService {
     return [...this.vsoaByParticipant.values()]
   }
 
+  // The feegrant mirror requires a strictly future expiration and is not renewed by the
+  // lazy cycle (MOD-DE-MSG-5-5), so no period leniency here.
   hasFeegrant(participantId: number): boolean {
     const record = this.vsoaByParticipant.get(participantId)
-    return !!record && record.withFeegrant && isActive(record.expiration, record.period)
+    return (
+      !!record && record.withFeegrant && record.expiration != null && record.expiration.getTime() > Date.now()
+    )
   }
 
   async agentHoldsOperatorGrant(msgType: string): Promise<boolean> {

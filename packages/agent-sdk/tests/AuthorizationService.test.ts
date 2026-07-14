@@ -96,7 +96,7 @@ describe('AuthorizationService', () => {
     await authz.refreshForOperator()
 
     expect(authz.canSign(10, PP_SESSION)).toBe(true)
-    expect(authz.hasFeegrant(10)).toBe(true)
+    expect(authz.hasFeegrant(10)).toBe(false)
     expect(authz.canSign(11, PP_SESSION)).toBe(false)
     expect(authz.hasFeegrant(11)).toBe(false)
   })
