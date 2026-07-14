@@ -174,6 +174,46 @@ describe('vt-flow: two-agent integration', () => {
     expect(updatedApplicant?.state).toBe(VtFlowState.Validating)
   })
 
+  it('admin flow routes: list, edit claims, and send oob-link on a live flow', async () => {
+    const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+    await applicant.modules.vtFlow.sendIssuanceRequest({
+      connectionId: applicantConnection.id,
+      schemaId: 'https://example.test/schemas/organization.json',
+      agentParticipantId: 'agent-participant-1',
+      walletAgentParticipantId: 'wallet-agent-participant-1',
+      claims: { name: 'Acme', country: 'CH' },
+    })
+    await validatingReached
+
+    const { VtFlowsService } = await import('../src/controllers/admin/vt-flow/VtFlowsService')
+    const flowsService = new VtFlowsService({ getAgent: async () => validator } as never)
+
+    const flows = await flowsService.listFlows({ role: VtFlowRole.Validator })
+    expect(flows).toHaveLength(1)
+    expect(flows[0].peerDid).toBe(applicant.did)
+    expect(flows[0].state).toBe(VtFlowState.Validating)
+
+    const none = await flowsService.listFlows({ role: VtFlowRole.Validator, peerDID: 'did:web:nobody' })
+    expect(none).toHaveLength(0)
+
+    const psid = flows[0].participantSessionId
+    const edited = await flowsService.editCredentialClaims(psid, { name: 'Acme AG', country: 'CH' })
+    expect(edited.claims).toEqual({ name: 'Acme AG', country: 'CH' })
+
+    const applicantOobPending = waitForEvent(
+      applicantEvents,
+      isVtFlowStateChangedEvent(VtFlowState.OobPending),
+    )
+    const sent = await flowsService.sendOobLink(psid, 'https://collect.example/form', 'complete the form')
+    expect(sent.oobLinkUrl).toBe('https://collect.example/form')
+    expect(sent.state).toBe(VtFlowState.OobPending)
+    await applicantOobPending
+
+    const resent = await flowsService.sendOobLink(psid, 'https://collect.example/form-v2')
+    expect(resent.oobLinkUrl).toBe('https://collect.example/form-v2')
+    expect(resent.state).toBe(VtFlowState.OobPending)
+  })
+
   it('threadId lookup on the Validator side matches the Applicant', async () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
