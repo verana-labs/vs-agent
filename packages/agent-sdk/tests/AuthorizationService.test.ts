@@ -49,6 +49,7 @@ describe('AuthorizationService', () => {
               expiration: future,
             },
             { participantId: 11, msgTypes: [PP_SESSION], withFeegrant: true, expiration: past },
+            { participantId: 12, msgTypes: [PP_SESSION], withFeegrant: false, expiration: undefined },
           ],
         },
       ],
@@ -61,9 +62,10 @@ describe('AuthorizationService', () => {
     expect(authz.canSign(10, PP_START_OP)).toBe(false)
     // Record 11 is disabled: StartParticipantOP grants expire immediately until validated.
     expect(authz.canSign(11, PP_SESSION)).toBe(false)
+    expect(authz.canSign(12, PP_SESSION)).toBe(false)
     expect(authz.canSign(99, PP_SESSION)).toBe(false)
     expect(authz.getVsOperatorAuthorizationRecord(10)?.corporationId).toBe(7)
-    expect(authz.listVsOperatorAuthorizationRecords()).toHaveLength(2)
+    expect(authz.listVsOperatorAuthorizationRecords()).toHaveLength(3)
   })
 
   it('treats a lapsed record with a period as active (chain auto-renews at check time)', async () => {
