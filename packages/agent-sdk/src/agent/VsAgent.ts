@@ -384,7 +384,11 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       if (!vm) continue
       const correct = `#${vm.id.split('#')[1]}`
       if (correct !== rel) {
-        this.logger?.warn('Fixing webvh update-key mapping', { from: rel, to: correct, kmsKeyId: key.kmsKeyId })
+        this.logger?.warn('Fixing webvh update-key mapping', {
+          from: rel,
+          to: correct,
+          kmsKeyId: key.kmsKeyId,
+        })
         key.didDocumentRelativeKeyId = correct
         repaired = true
       }
