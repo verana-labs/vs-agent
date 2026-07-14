@@ -15,7 +15,7 @@ import { BaseAgentModules, VsAgent } from '../agent'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { ParticipantRole, ParticipantState } from '../blockchain/types'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
-import { createCredential, createVtc, findMetadataEntry } from '../utils'
+import { createCredential, createVtc, findMetadataEntry, removeTrustCredential } from '../utils'
 
 import { credentialContentDigest } from './credentialDigest'
 
@@ -254,6 +254,27 @@ export class VtFlowOrchestrator {
     if (!anchored) {
       throw new Error(`Credential digest ${digest} is not anchored on-chain`)
     }
+  }
+
+  async onCredentialRevoked(vtFlowRecordId: string): Promise<void> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(vtFlowRecordId)
+    if (!record || record.role !== VtFlowRole.Applicant) return
+    if (!this.options.publicApiBaseUrl || !record.credentialExchangeRecordId) return
+
+    const formatData = await this.agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
+    const credentialId = (formatData.credential as { jsonld?: { id?: string } } | undefined)?.jsonld?.id
+    if (!credentialId) return
+
+    await removeTrustCredential(this.agent, this.options.publicApiBaseUrl, credentialId, '_vt/vtc')
+
+    const stored = await this.agent.w3cCredentials.getAll()
+    for (const storedRecord of stored) {
+      if (storedRecord.getTags().givenId === credentialId) {
+        await this.agent.w3cCredentials.deleteById(storedRecord.id)
+      }
+    }
+    this.agent.config.logger.info(`[vt-flow] removed revoked credential and its linked VP (${credentialId})`)
   }
 
   async onCredentialCompleted(vtFlowRecordId: string): Promise<void> {

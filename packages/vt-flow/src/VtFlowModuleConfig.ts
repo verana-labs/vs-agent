@@ -14,6 +14,11 @@ export type VtFlowVerifyCredentialHook = (ctx: VtFlowCredentialLifecycleContext)
 /** Fired on COMPLETED on both sides; typical applicant use is to link the credential to its DID Document. */
 export type VtFlowOnCompletedHook = (ctx: VtFlowCredentialLifecycleContext) => Promise<void>
 
+export type VtFlowOnCredentialRevokedHook = (ctx: {
+  agentContext: AgentContext
+  record: VtFlowRecord
+}) => Promise<void>
+
 export interface VtFlowBuildCredentialOfferContext {
   agentContext: AgentContext
   record: VtFlowRecord
@@ -50,6 +55,7 @@ export interface VtFlowModuleConfigOptions {
   autoAcceptIssuanceRequest?: boolean
   verifyCredential?: VtFlowVerifyCredentialHook
   onCompleted?: VtFlowOnCompletedHook
+  onCredentialRevoked?: VtFlowOnCredentialRevokedHook
   autoMarkValidated?: boolean
   autoOfferCredential?: boolean
   buildCredentialOffer?: VtFlowBuildCredentialOfferHook
@@ -88,6 +94,10 @@ export class VtFlowModuleConfig {
 
   public get onCompleted(): VtFlowOnCompletedHook | undefined {
     return this.options.onCompleted
+  }
+
+  public get onCredentialRevoked(): VtFlowOnCredentialRevokedHook | undefined {
+    return this.options.onCredentialRevoked
   }
 
   public get autoMarkValidated(): boolean {

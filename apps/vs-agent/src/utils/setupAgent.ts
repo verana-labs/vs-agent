@@ -149,6 +149,14 @@ export const setupAgent = async ({
               logger.error(`[vt-flow] onCompleted failed: ${(error as Error).message}`)
             }
           },
+          onCredentialRevoked: async ({ record }) => {
+            if (!orchestrator) return
+            try {
+              await orchestrator.onCredentialRevoked(record.id)
+            } catch (error) {
+              logger.error(`[vt-flow] onCredentialRevoked failed: ${(error as Error).message}`)
+            }
+          },
         },
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
