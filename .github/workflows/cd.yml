@@ -19,7 +19,9 @@ permissions:
 jobs:
   resolve-version:
     if: github.event_name == 'push'
-    uses: 2060-io/organization/.github/workflows/resolve-version-call.yml@251db2251120e805474da6528dfafd9693379b6e # main
+    uses: 2060-io/organization/.github/workflows/resolve-version-call.yml@41008f619521ec154b02a7065ad332fad445a2fd # v0.5.1
+    with:
+      prerelease-branch: 'v1.11'
 
   docker:
     needs: resolve-version
