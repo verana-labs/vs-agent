@@ -182,6 +182,7 @@ export interface ParticipantDto {
   schema_id: number
   did: string | null
   role: ParticipantRole
+  vs_operator?: string | null
   participant_state?: ParticipantState
   op_state?: string
   revoked: string | null

@@ -222,8 +222,13 @@ export class VtFlowOrchestrator {
       role: ParticipantRole.Issuer,
       participantState: ParticipantState.Active,
     })
-    const issuer = issuers.find(p => !p.revoked && !p.slashed)
-    if (!issuer) return null
+    const issuer = issuers.find(p => !p.revoked && !p.slashed && p.vs_operator === chain.address)
+    if (!issuer) {
+      this.agent.config.logger.warn(
+        `[vt-flow] no active issuer participant with vs_operator ${chain.address} for schema ${record.schemaId}; not offering`,
+      )
+      return null
+    }
 
     const connection = await this.agent.didcomm.connections.findById(record.connectionId)
     if (!connection?.theirDid) throw new Error('Flow connection has no peer DID')
@@ -237,8 +242,8 @@ export class VtFlowOrchestrator {
     await chain.createOrUpdateParticipantSession({
       id: record.participantSessionId,
       issuerParticipantId: issuer.id,
-      agentParticipantId: 0,
-      walletAgentParticipantId: 0,
+      agentParticipantId: Number(record.agentParticipantId ?? 0) || 0,
+      walletAgentParticipantId: Number(record.walletAgentParticipantId ?? 0) || 0,
       digest,
     })
 
@@ -265,7 +270,9 @@ export class VtFlowOrchestrator {
     const didRecord = didRecords[0]
     if (!didRecord) throw new Error('Agent DID record not found')
     const schemaRef = `vpr:verana:${chain.getChainId}/cs/v1/js/${input.credentialSchemaId}`
-    const { data } = await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
+    const entry = await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
+    if (!entry) throw new Error(`No stored VTJSC found for ${schemaRef}`)
+    const { data } = entry
 
     const unsignedCredential = createCredential({
       id: `${this.agent.did}#${utils.uuid()}`,
