@@ -42,8 +42,12 @@ database:
       cpu: 500m
       memory: 512Mi
 
-redis: 
+redis:
   enabled: false
+  image: "redis:alpine"      # Redis container image (pin a tag for reproducible deploys)
+  maxmemory: ""              # e.g. "80mb"; empty = unlimited (Redis default)
+  maxmemoryPolicy: noeviction # applied only when maxmemory is set
+  extraArgs: []              # additional redis-server flags, e.g. ["--save", ""]
   resources:
     requests:
       cpu: 25m

@@ -91,6 +91,10 @@ extraEnv:
 | `redis.enabled`            | Enable Redis                                     | `false`                         |
 | `redis.host`               | Redis host                                       | `your-redis-host`               |
 | `redis.password`           | Redis password                                   | `myRedisPass123`                |
+| `redis.image`              | Redis container image (pin a tag for reproducible deploys) | `redis:alpine`       |
+| `redis.maxmemory`          | Redis `maxmemory` (e.g. `80mb`); empty = unlimited | `""`                          |
+| `redis.maxmemoryPolicy`    | Redis `maxmemory-policy` (applied only when `maxmemory` is set) | `noeviction`     |
+| `redis.extraArgs`          | Additional `redis-server` flags (list)          | `[]`                            |
 
 ### Persistent Storage
 
