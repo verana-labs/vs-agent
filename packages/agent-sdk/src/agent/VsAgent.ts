@@ -16,6 +16,7 @@ import {
   DidDocument,
   DidDocumentKey,
   DidDocumentService,
+  DidRecord,
   DidRepository,
   DidsModule,
   InitConfig,
@@ -251,6 +252,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         const didRepository = this.dependencyManager.resolve(DidRepository)
         await didRepository.update(this.agentContext, existingRecord)
       }
+      // Fix a legacy webvh update-key mapping before the self-heal update below relies on it.
+      if (parsedDid.method === 'webvh') await this.repairWebvhUpdateKeyMapping(existingRecord)
+
       // DID Already exists: update it in case that agent parameters have been changed. At the moment, we can only update
       //  DIDComm endpoints, so we'll only replace the service (if different from previous)
       const didDocument = existingRecord.didDocument!
@@ -295,12 +299,22 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           for (const key of newKeys) await this.persistDidDocumentKey(didDocument.id, key)
         }
 
-        await this.dids.update({
+        // The webvh registrar returns state:"failed" WITHOUT throwing, so an unchecked update
+        // silently no-ops. Check the result and surface the reason instead of assuming success.
+        const updateResult = await this.dids.update({
           did: didDocument.id,
           didDocument,
           ...(newKeys.length && parsedDid.method === 'web' ? { keys: newKeys } : {}),
         })
-        this.logger?.debug('Public did record updated')
+        if (updateResult.didState.state !== 'finished') {
+          this.logger?.error('Public did record update failed to persist', {
+            did: didDocument.id,
+            state: updateResult.didState.state,
+            reason: (updateResult.didState as { reason?: string }).reason,
+          })
+        } else {
+          this.logger?.debug('Public did record updated')
+        }
       } else {
         this.logger?.debug('Existing DID record found. No updates')
       }
@@ -378,6 +392,40 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     if (existing.some(k => k.didDocumentRelativeKeyId === key.didDocumentRelativeKeyId)) return
     record.keys = [...existing, key]
     await didRepository.update(this.agentContext, record)
+  }
+
+  /**
+   * Fix a webvh update-key mapping whose `didDocumentRelativeKeyId` was stored as the full multibase
+   * (e.g. `#z6Mk...`) while the DID document verification method uses a short fragment (e.g. `#BVhGnL79`).
+   * `getKmsKeyIdForVerifiacationMethod` matches by suffix (`vm.id.endsWith(relativeKeyId)`), so the
+   * mismatch leaves the update key unresolvable and every webvh update fails with
+   * "The key ID must be present before the log can be edited." The private key is present in the KMS;
+   * only the mapping label is wrong. Idempotent: a mapping that already correlates to a VM is left alone.
+   */
+  private async repairWebvhUpdateKeyMapping(record: DidRecord): Promise<void> {
+    if (!record.didDocument || !record.keys?.length) return
+    const vms = record.didDocument.verificationMethod ?? []
+    let repaired = false
+    for (const key of record.keys) {
+      const rel = key.didDocumentRelativeKeyId
+      if (vms.some(vm => vm.id.endsWith(rel))) continue // already correlates
+      const vm = vms.find(v => `#${v.publicKeyMultibase}` === rel) // was stored as #<multibase>
+      if (!vm) continue
+      const correct = `#${vm.id.split('#')[1]}`
+      if (correct !== rel) {
+        this.logger?.warn('Fixing webvh update-key mapping', {
+          from: rel,
+          to: correct,
+          kmsKeyId: key.kmsKeyId,
+        })
+        key.didDocumentRelativeKeyId = correct
+        repaired = true
+      }
+    }
+    if (repaired) {
+      const didRepository = this.dependencyManager.resolve(DidRepository)
+      await didRepository.update(this.agentContext, record)
+    }
   }
 
   private async createAndAddDidCommKeysAndServices(didDocument: DidDocument): Promise<DidDocumentKey> {
