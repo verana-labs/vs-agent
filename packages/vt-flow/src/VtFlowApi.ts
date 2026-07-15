@@ -246,6 +246,7 @@ export class VtFlowApi {
       this.agentContext,
       record.id,
       credentialExchangeRecord,
+      options.credentialDigest,
     )
 
     return {
@@ -277,6 +278,10 @@ export class VtFlowApi {
 
     await this.dispatchMessage(record.connectionId, message, record)
     return record
+  }
+
+  public updateClaims(vtFlowRecordId: string, claims: Record<string, unknown>): Promise<VtFlowRecord> {
+    return this.vtFlowService.updateClaims(this.agentContext, vtFlowRecordId, claims)
   }
 
   public getById(vtFlowRecordId: string): Promise<VtFlowRecord> {
