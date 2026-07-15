@@ -118,6 +118,17 @@ export const setupAgent = async ({
         didcommVersions,
         vtFlow: {
           autoIssueCredentialOnRequest: true,
+          autoAcceptIssuanceRequest: true,
+          autoOfferCredential: true,
+          buildCredentialOffer: async ({ record }) => {
+            if (!orchestrator) return null
+            try {
+              return await orchestrator.buildDirectIssuanceOffer(record.id)
+            } catch (error) {
+              logger.error(`[vt-flow] direct issuance offer failed: ${(error as Error).message}`)
+              return null
+            }
+          },
           assertVerifiableService: verifiablePublicRegistries
             ? assertVerifiableService({ verifiablePublicRegistries })
             : undefined,
