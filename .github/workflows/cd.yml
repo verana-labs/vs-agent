@@ -2,7 +2,7 @@ name: Continuous Deployment
 
 on:
   push:
-    branches: [main, 'release/**', 'v1.11']
+    branches: [main, 'release/**', 'v[0-9]*']
   workflow_dispatch:
     inputs:
       notify_tag:
@@ -21,7 +21,9 @@ jobs:
     if: github.event_name == 'push'
     uses: 2060-io/organization/.github/workflows/resolve-version-call.yml@41008f619521ec154b02a7065ad332fad445a2fd # v0.5.1
     with:
-      prerelease-branch: 'v1.11'
+      # Maintenance branches (v1, v1.11, …) anchor their dev prereleases to the branch itself;
+      # on main this resolves to 'main', matching the reusable workflow's default.
+      prerelease-branch: ${{ github.ref_name }}
 
   docker:
     needs: resolve-version
