@@ -190,8 +190,12 @@ export class VtFlowOrchestrator {
     await chain.createOrUpdateParticipantSession({
       id: record.participantSessionId,
       issuerParticipantId: Number(holderParticipant.validatorParticipantId),
-      agentParticipantId: input.agentParticipantId ?? this.options.agentParticipantId ?? 0,
-      walletAgentParticipantId: input.walletAgentParticipantId ?? this.options.walletAgentParticipantId ?? 0,
+      agentParticipantId:
+        Number(record.agentParticipantId ?? 0) ||
+        (input.agentParticipantId ?? this.options.agentParticipantId ?? 0),
+      walletAgentParticipantId:
+        Number(record.walletAgentParticipantId ?? 0) ||
+        (input.walletAgentParticipantId ?? this.options.walletAgentParticipantId ?? 0),
       digest,
     })
 

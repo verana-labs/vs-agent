@@ -6,6 +6,7 @@ import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import {
   AuthorizationService,
   HttpInboundTransport,
+  migrateVtjscServiceIds,
   setupSelfTr,
   VsAgent,
   VsAgentWsInboundTransport,
@@ -383,6 +384,12 @@ const run = async () => {
     nestPlugins,
   }
   const { httpServer, webSocketServer } = await startServers(agent, conf)
+
+  if (agent.did) {
+    await migrateVtjscServiceIds(agent).catch((error: Error) =>
+      serverLogger.error(`[VTJSC] service id migration failed: ${error.message}`),
+    )
+  }
 
   // Initialize Self-Trust Registry
   if (agent.did)

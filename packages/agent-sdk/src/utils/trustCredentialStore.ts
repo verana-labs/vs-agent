@@ -317,6 +317,30 @@ export async function removeStoredTrustCredential(
   return credentialId
 }
 
+export async function migrateVtjscServiceIds(agent: VsAgent): Promise<void> {
+  if (!agent.did) return
+  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
+  if (!didRecord) return
+  const metadata = didRecord.metadata.get('_vt/jsc')
+  if (!metadata) return
+
+  let changed = false
+  for (const entry of Object.values(metadata)) {
+    const serviceId = entry.didDocumentServiceId
+    if (!serviceId || !serviceId.endsWith('-jsc-vp') || serviceId.endsWith('-vtjsc-vp')) continue
+    const nextId = serviceId.replace(/-jsc-vp$/, '-vtjsc-vp')
+    const service = didRecord.didDocument?.service?.find(s => s.id === serviceId)
+    if (service) service.id = nextId
+    entry.didDocumentServiceId = nextId
+    changed = true
+  }
+  if (!changed) return
+
+  didRecord.metadata.set('_vt/jsc', metadata)
+  await updateDidRecord(agent, didRecord)
+  agent.config.logger.info('[VTJSC] migrated stored service ids to the -vtjsc-vp naming')
+}
+
 export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc', schemaId?: string) {
   return findMetadataEntry(didRecord, key, schemaId)
 }
