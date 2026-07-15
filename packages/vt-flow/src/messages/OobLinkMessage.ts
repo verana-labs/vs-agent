@@ -32,7 +32,7 @@ export class OobLinkMessage extends DidCommMessage {
   @IsValidMessageType(OobLinkMessage.type)
   public readonly type = OobLinkMessage.type.messageTypeUri
 
-  @IsUrl({ require_tld: false, protocols: ['https'] })
+  @IsUrl({ require_tld: false, protocols: ['https', 'http'] })
   public url!: string
 
   @IsString()

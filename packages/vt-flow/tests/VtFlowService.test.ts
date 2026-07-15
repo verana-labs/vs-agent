@@ -1,7 +1,7 @@
 import { utils } from '@credo-ts/core'
 import { describe, expect, it, vi } from 'vitest'
 
-import { VtFlowRole, VtFlowState, VtFlowVariant } from '../src'
+import { VtCredentialState, VtFlowRole, VtFlowState, VtFlowVariant } from '../src'
 import { OnboardingRequestMessage } from '../src/messages'
 import { VtFlowRecord } from '../src/repository'
 import { VtFlowService } from '../src/services/VtFlowService'
@@ -24,6 +24,7 @@ function makeRecord(overrides: Partial<ConstructorParameters<typeof VtFlowRecord
 function makeService(existing: VtFlowRecord | null, previousConnection: unknown = null) {
   const repository = {
     findByParticipantSessionId: vi.fn().mockResolvedValue(existing),
+    getById: vi.fn().mockResolvedValue(existing),
     save: vi.fn(),
     update: vi.fn(),
   }
@@ -122,5 +123,33 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     await expect(
       service.processReceiveOnboardingRequest(makeMessageContext(agentContext, 'did:web:attacker') as never),
     ).rejects.toThrow(/peer does not match/)
+  })
+})
+
+describe('VtFlowService.notifyCredentialStateChange', () => {
+  it('allows re-notifying a revocation from CRED_REVOKED', async () => {
+    const revoked = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.CredRevoked })
+    const { service } = makeService(revoked)
+
+    const { record } = await service.notifyCredentialStateChange({} as never, revoked.id, {
+      state: VtCredentialState.Revoked,
+      subprotocolThid: 'sub-1',
+    })
+    expect(record.state).toBe(VtFlowState.CredRevoked)
+  })
+})
+
+describe('VtFlowService.updateClaims', () => {
+  it('replaces claims while validating and rejects other states', async () => {
+    const validating = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validating })
+    const { service, repository } = makeService(validating)
+
+    const updated = await service.updateClaims({} as never, validating.id, { name: 'Edited' })
+    expect(updated.claims).toEqual({ name: 'Edited' })
+    expect(repository.update).toHaveBeenCalled()
+
+    const completed = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Completed })
+    repository.getById.mockResolvedValue(completed)
+    await expect(service.updateClaims({} as never, completed.id, {})).rejects.toThrow()
   })
 })
