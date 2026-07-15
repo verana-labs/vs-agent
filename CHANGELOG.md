@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.1](https://github.com/verana-labs/vs-agent/compare/v1.11.0...v1.11.1) (2026-07-15)
+
+
+### Bug Fixes
+
+* deploy only two vs-agent flavours ([#512](https://github.com/verana-labs/vs-agent/issues/512) backport) ([dfb4e46](https://github.com/verana-labs/vs-agent/commit/dfb4e46b19eb2c58b727801213db75ad08d74a96))
+* **v1.11:** repair webvh update-key mapping so public DID self-heal can publish ([#508](https://github.com/verana-labs/vs-agent/issues/508)) ([24f4a0b](https://github.com/verana-labs/vs-agent/commit/24f4a0b762b3da7f764fad58042855bbdb88c887))
+
 ## [1.11.0](https://github.com/verana-labs/vs-agent/compare/v1.10.1...v1.11.0) (2026-05-25)
 
 
