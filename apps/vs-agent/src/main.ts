@@ -81,17 +81,31 @@ import {
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
-import { commonAppConfig, type ServerConfig, setupAgent, TsLogger, webhookEvent } from './utils'
+import {
+  commonAppConfig,
+  type ServerConfig,
+  setupAgent,
+  toNestLogLevels,
+  TsLogger,
+  webhookEvent,
+} from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
 
-  const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins))
+  // Nest's global level governs the plain @nestjs/common loggers (the credo agent uses AGENT_LOG_LEVEL).
+  const nestLogLevels = toNestLogLevels(ADMIN_LOG_LEVEL)
+
+  const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins), {
+    logger: nestLogLevels,
+  })
   commonAppConfig(adminApp, cors)
   await adminApp.listen(port)
 
   // PublicModule-specific config
-  const publicApp = await NestFactory.create(PublicModule.register(agent, publicApiBaseUrl))
+  const publicApp = await NestFactory.create(PublicModule.register(agent, publicApiBaseUrl), {
+    logger: nestLogLevels,
+  })
   commonAppConfig(publicApp, cors, true)
 
   // Send environment to UI

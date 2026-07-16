@@ -1,11 +1,32 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { LogLevel, BaseLogger } from '@credo-ts/core'
-import { Logger } from '@nestjs/common'
+import { ConsoleLogger, type LogLevel as NestLogLevel } from '@nestjs/common'
 import util from 'util'
 
+// Maps a credo LogLevel to the Nest log levels to enable (Nest treats the array as a threshold).
+export function toNestLogLevels(level: LogLevel): NestLogLevel[] {
+  switch (level) {
+    case LogLevel.Test:
+    case LogLevel.Trace:
+    case LogLevel.Debug:
+      return ['verbose']
+    case LogLevel.Info:
+      return ['log']
+    case LogLevel.Warn:
+      return ['warn']
+    case LogLevel.Error:
+      return ['error']
+    case LogLevel.Fatal:
+      return ['fatal']
+    case LogLevel.Off:
+    default:
+      return []
+  }
+}
+
 export class TsLogger extends BaseLogger {
-  private logger: Logger
+  private logger: ConsoleLogger
 
   // Map our log levels to tslog levels
   private tsLogLevelMap = {
@@ -21,10 +42,13 @@ export class TsLogger extends BaseLogger {
   public constructor(logLevel: LogLevel, name: string) {
     super(logLevel)
 
-    this.logger = new Logger(name)
+    // Dedicated ConsoleLogger so this level is independent of Nest's global logger.
+    this.logger = new ConsoleLogger(name, { logLevels: toNestLogLevels(logLevel) })
   }
 
   private log(level: Exclude<LogLevel, LogLevel.Off>, message: string, data?: Record<string, any>): void {
+    if (!this.isEnabled(level)) return
+
     const tsLogLevel = this.tsLogLevelMap[level]
 
     if (data) {
