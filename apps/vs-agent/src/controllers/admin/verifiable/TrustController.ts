@@ -377,7 +377,7 @@ export class TrustController {
           'The `schemaBaseId` determines the base schema name, and the `jsonSchemaRef` provides the reference to the JSON Schema definition.',
         value: {
           schemaBaseId: 'organization',
-          jsonSchemaRef: 'vpr:verana:vna-testnet-1/cs/v1/js/12345678',
+          jsonSchemaRef: 'vpr:verana:vna-testnet-1:cs:12345678',
         },
       },
     },

@@ -11,7 +11,12 @@ import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
-import { createJsc, findMetadataEntry, removeTrustCredential } from '../../utils/trustCredentialStore'
+import {
+  createJsc,
+  deleteMetadataEntry,
+  findMetadataEntry,
+  removeTrustCredential,
+} from '../../utils/trustCredentialStore'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'
 import { IndexerActivity, VeranaSyncState } from '../types'
@@ -330,23 +335,33 @@ export async function reconcileVtjscPublications(
 ): Promise<void> {
   if (!agent.did || !agent.publicApiBaseUrl) return
 
-  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
-  if (!didRecord) return
   const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
 
   const ecosystems = await indexer.listEcosystems()
   for (const ecosystem of ecosystems.filter(entry => Number(entry.corporation_id) === corporationId)) {
     for (const schema of await indexer.listCredentialSchemas(ecosystem.id)) {
-      const schemaRef = `vpr:verana:${chainId}/cs/v1/js/${schema.id}`
+      const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
+      if (!didRecord) return
+      const schemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
       if (findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)) continue
       try {
+        const legacyRef = `vpr:verana:${chainId}/cs/v1/js/${schema.id}`
+        const legacyEntry = findMetadataEntry(didRecord, '_vt/jsc', '', legacyRef)
+        if (legacyEntry) {
+          if (legacyEntry.didDocumentServiceId && didRecord.didDocument?.service) {
+            didRecord.didDocument.service = didRecord.didDocument.service.filter(
+              service => service.id !== legacyEntry.didDocumentServiceId,
+            )
+          }
+          await deleteMetadataEntry(agent, legacyRef, didRecord, '_vt/jsc', agent.publicApiBaseUrl)
+        }
         await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
           schemaBaseId: String(schema.id),
           jsonSchemaRef: schemaRef,
           precomputedDigestSRI: await computeSchemaDigest(JSON.parse(schema.json_schema)),
         })
         agent.config.logger.info(
-          `[VTJSC] Reconciled missing VTJSC for schema ${schema.id} (ecosystem ${ecosystem.id})`,
+          `[VTJSC] Reconciled VTJSC for schema ${schema.id} (ecosystem ${ecosystem.id})`,
         )
       } catch (e) {
         agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
@@ -371,7 +386,7 @@ export async function publishVtjscIfOwner(
   }
 
   const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
-  const jsonSchemaRef = `vpr:verana:${chainId}/cs/v1/js/${schema.id}`
+  const jsonSchemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
 
   let digestSRI: string
   try {
