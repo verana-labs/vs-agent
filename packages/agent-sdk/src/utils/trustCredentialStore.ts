@@ -297,6 +297,26 @@ export async function removeTrustCredential(
   return await deleteMetadataEntry(agent, schemaId, didRecord, key, publicApiBaseUrl)
 }
 
+export async function removeStoredTrustCredential(
+  agent: VsAgent,
+  publicApiBaseUrl: string,
+  credentialExchangeRecordId: string,
+): Promise<string | undefined> {
+  const formatData = await agent.didcomm.credentials.getFormatData(credentialExchangeRecordId)
+  const credentialId = (formatData.credential as { jsonld?: { id?: string } } | undefined)?.jsonld?.id
+  if (!credentialId) return undefined
+
+  await removeTrustCredential(agent, publicApiBaseUrl, credentialId, '_vt/vtc')
+
+  const stored = await agent.w3cCredentials.getAll()
+  for (const storedRecord of stored) {
+    if (storedRecord.getTags().givenId === credentialId) {
+      await agent.w3cCredentials.deleteById(storedRecord.id)
+    }
+  }
+  return credentialId
+}
+
 export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc', schemaId?: string) {
   return findMetadataEntry(didRecord, key, schemaId)
 }

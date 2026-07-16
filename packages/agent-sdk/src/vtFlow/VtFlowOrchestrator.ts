@@ -15,7 +15,7 @@ import { BaseAgentModules, VsAgent } from '../agent'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { ParticipantRole, ParticipantState } from '../blockchain/types'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
-import { createCredential, createVtc, findMetadataEntry } from '../utils'
+import { createCredential, createVtc, findMetadataEntry, removeStoredTrustCredential } from '../utils'
 
 import { credentialContentDigest } from './credentialDigest'
 
@@ -253,6 +253,24 @@ export class VtFlowOrchestrator {
     const anchored = await indexer.getDigest(digest)
     if (!anchored) {
       throw new Error(`Credential digest ${digest} is not anchored on-chain`)
+    }
+  }
+
+  async onCredentialRevoked(vtFlowRecordId: string): Promise<void> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(vtFlowRecordId)
+    if (!record || record.role !== VtFlowRole.Applicant) return
+    if (!this.options.publicApiBaseUrl || !record.credentialExchangeRecordId) return
+
+    const credentialId = await removeStoredTrustCredential(
+      this.agent,
+      this.options.publicApiBaseUrl,
+      record.credentialExchangeRecordId,
+    )
+    if (credentialId) {
+      this.agent.config.logger.info(
+        `[vt-flow] removed revoked credential and its linked VP (${credentialId})`,
+      )
     }
   }
 

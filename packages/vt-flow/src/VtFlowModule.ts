@@ -153,6 +153,25 @@ export class VtFlowModule implements Module {
     })
 
     eventEmitter.on<VtFlowStateChangedEvent>(VtFlowEventTypes.VtFlowStateChanged, async ({ payload }) => {
+      if (payload.state !== VtFlowState.CredRevoked) return
+      if (payload.previousState === VtFlowState.CredRevoked) return
+
+      const config = service.getModuleConfig()
+      if (!config.onCredentialRevoked) return
+
+      const record = await service.findById(agentContext, payload.vtFlowRecordId)
+      if (!record || record.role !== VtFlowRole.Applicant) return
+
+      try {
+        await config.onCredentialRevoked({ agentContext, record })
+      } catch (error) {
+        service
+          .getLogger()
+          .error('[vt-flow] onCredentialRevoked hook threw', error as Record<string, unknown>)
+      }
+    })
+
+    eventEmitter.on<VtFlowStateChangedEvent>(VtFlowEventTypes.VtFlowStateChanged, async ({ payload }) => {
       const config = service.getModuleConfig()
 
       const record = await service.findById(agentContext, payload.vtFlowRecordId)

@@ -248,7 +248,7 @@ spec:
 {{- toYaml .Values.redis.resources | nindent 14 }}
             volumeMounts:
             - name: {{ .Values.name }}-redis-main
-              mountPath: /home/data
+              mountPath: /data
         {{- end }}
 
          volumes:
