@@ -2,7 +2,7 @@ name: Continuous Deployment
 
 on:
   push:
-    branches: [main, 'release/**']
+    branches: [main, 'release/**', 'v[0-9]*']
   workflow_dispatch:
     inputs:
       notify_tag:
@@ -19,7 +19,11 @@ permissions:
 jobs:
   resolve-version:
     if: github.event_name == 'push'
-    uses: 2060-io/organization/.github/workflows/resolve-version-call.yml@251db2251120e805474da6528dfafd9693379b6e # main
+    uses: 2060-io/organization/.github/workflows/resolve-version-call.yml@41008f619521ec154b02a7065ad332fad445a2fd # v0.5.1
+    with:
+      # Maintenance branches (v1, v1.11, …) anchor their dev prereleases to the branch itself;
+      # on main this resolves to 'main', matching the reusable workflow's default.
+      prerelease-branch: ${{ github.ref_name }}
 
   docker:
     needs: resolve-version
@@ -50,20 +54,35 @@ jobs:
 
       - name: Compute tags
         id: tags
+        env:
+          IS_MAIN: ${{ github.ref_name == 'main' }}
         run: |
           HUB="${{ secrets.DOCKER_HUB_LOGIN }}/${{ matrix.image }}"
+          # The fully-qualified, immutable version tag is always published.
+          TAGS="${HUB}:${RELEASE_VERSION}"
           if [ "$RELEASE_TYPE" = "stable" ]; then
-            TAGS="${HUB}:latest
-          ${HUB}:v${RELEASE_MAJOR}
-          ${HUB}:v${RELEASE_MAJOR}.${RELEASE_MINOR}
-          ${HUB}:${RELEASE_VERSION}"
+            # Minor-line pointer (e.g. v1.11): owned by whichever branch maintains that line.
+            TAGS="${TAGS}
+          ${HUB}:v${RELEASE_MAJOR}.${RELEASE_MINOR}"
+            # Cross-line floating pointers only from the default branch (main). A maintenance
+            # branch (e.g. v1.11) must never move 'latest' or the major (v1) pointer backwards.
+            if [ "$IS_MAIN" = "true" ]; then
+              TAGS="${TAGS}
+          ${HUB}:latest
+          ${HUB}:v${RELEASE_MAJOR}"
+            fi
           else
             P="${RELEASE_PATCH:0:1}"
-            TAGS="${HUB}:dev
+            # Patch-level -dev pointer (e.g. v1.11.1-dev).
+            TAGS="${TAGS}
+          ${HUB}:v${RELEASE_MAJOR}.${RELEASE_MINOR}.${P}-dev"
+            # Floating dev pointers ('dev', v1-dev, v1.11-dev) only from the default branch (main).
+            if [ "$IS_MAIN" = "true" ]; then
+              TAGS="${TAGS}
+          ${HUB}:dev
           ${HUB}:v${RELEASE_MAJOR}-dev
-          ${HUB}:v${RELEASE_MAJOR}.${RELEASE_MINOR}-dev
-          ${HUB}:v${RELEASE_MAJOR}.${RELEASE_MINOR}.${P}-dev
-          ${HUB}:${RELEASE_VERSION}"
+          ${HUB}:v${RELEASE_MAJOR}.${RELEASE_MINOR}-dev"
+            fi
           fi
           {
             echo "list<<EOF"
@@ -147,7 +166,10 @@ jobs:
     if: needs.resolve-version.outputs.new-release-published == 'true'
     runs-on: ubuntu-latest
     env:
+      RELEASE_TYPE: ${{ needs.resolve-version.outputs.release-type }}
       RELEASE_VERSION: ${{ needs.resolve-version.outputs.release-version }}
+      RELEASE_MAJOR: ${{ needs.resolve-version.outputs.release-major }}
+      RELEASE_MINOR: ${{ needs.resolve-version.outputs.release-minor }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -176,7 +198,17 @@ jobs:
       # --no-git-checks is used due to topological version updating.
       - name: Publish NPM packages
         run: |
-          pnpm -r publish --no-git-checks --access public
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            # Default branch: unchanged behaviour (stable -> 'latest', dev -> 'latest').
+            pnpm -r publish --no-git-checks --access public
+          elif [ "$RELEASE_TYPE" = "stable" ]; then
+            # Maintenance branch stable release: track the line pointer, never move 'latest'.
+            pnpm -r publish --no-git-checks --access public --tag "v${RELEASE_MAJOR}.${RELEASE_MINOR}"
+          else
+            # Maintenance branch dev release: separate pointer so it doesn't move the line's
+            # stable tag, and never 'latest'.
+            pnpm -r publish --no-git-checks --access public --tag "v${RELEASE_MAJOR}.${RELEASE_MINOR}-dev"
+          fi
 
 
   discord-notify:
