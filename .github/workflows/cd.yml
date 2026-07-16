@@ -31,9 +31,6 @@ jobs:
           - image: vs-agent
             dockerfile: ./apps/vs-agent/Dockerfile
             target: vs-agent
-          - image: vs-agent-chat
-            dockerfile: ./apps/vs-agent/Dockerfile
-            target: vs-agent-chat
           - image: vs-agent-mrtd
             dockerfile: ./apps/vs-agent/Dockerfile
             target: vs-agent-mrtd
