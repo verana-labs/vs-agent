@@ -220,18 +220,25 @@ describeE2E('vt-flow onboarding chain integration (V4)', () => {
       const chain = new VeranaChainService({
         rpcUrl: stack.rpcUrl,
         mnemonic: COOLUSER_MNEMONIC,
-        sessionOperatorMnemonic: opB.mnemonic,
         corporationAddress: corp.policyAddress,
         logger: new ConsoleLogger(LogLevel.Debug),
       })
       await chain.start()
+
+      const vsoaChain = new VeranaChainService({
+        rpcUrl: stack.rpcUrl,
+        mnemonic: opB.mnemonic,
+        corporationAddress: corp.policyAddress,
+        logger: new ConsoleLogger(LogLevel.Warn),
+      })
+      await vsoaChain.start()
 
       // The validator (validateAndOfferCredential) writes this digest to the applicant's op_summary_digest
       // and to the ParticipantSession before offering the credential.
       const digest = `sha384-${createHash('sha384').update(`cred-${suffix}`).digest('base64')}`
       const sessionId = randomUUID()
       await chain.setParticipantOPToValidated({ id: applicant.participantId, opSummaryDigest: digest })
-      await chain.createOrUpdateParticipantSession({
+      await vsoaChain.createOrUpdateParticipantSession({
         id: sessionId,
         issuerParticipantId: applicant.participantId,
         agentParticipantId: 0,

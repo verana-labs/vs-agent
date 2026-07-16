@@ -4,6 +4,7 @@ import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import {
+  AuthorizationService,
   HttpInboundTransport,
   setupSelfTr,
   VsAgent,
@@ -13,6 +14,7 @@ import {
   VeranaIndexerService,
   IndexerWebSocketService,
   buildDefaultIndexerHandlerRegistry,
+  registerAuthorizationHandlers,
   EcsBootstrapService,
   reconcileVtjscPublications,
 } from '@verana-labs/vs-agent-sdk'
@@ -122,6 +124,8 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   return { httpServer, webSocketServer }
 }
+
+const AUTHORIZATION_SEED_RETRY_MS = 30_000
 
 const run = async () => {
   const serverLogger = new TsLogger(ADMIN_LOG_LEVEL, 'Server')
@@ -253,6 +257,7 @@ const run = async () => {
 
   // Connect to Verana blockchain for on-chain transactions
   let veranaChain: VeranaChainService | undefined
+  let authorizationService: AuthorizationService | undefined
   if (VERANA_RPC_ENDPOINT_URL && VERANA_ACCOUNT_MNEMONIC) {
     let corporationAddress: string | undefined
     if (VERANA_CORPORATION_ID && indexerService) {
@@ -274,10 +279,30 @@ const run = async () => {
     })
     await veranaChain.start()
 
+    authorizationService = new AuthorizationService({ chain: veranaChain, logger: serverLogger })
+    const seedAuthorizationCache = async (): Promise<boolean> =>
+      authorizationService!
+        .refreshForOperator()
+        .then(() => true)
+        .catch(error => {
+          serverLogger.error(
+            `[Authorization] failed to seed the authorization cache: ${(error as Error).message}`,
+          )
+          return false
+        })
+    if (!(await seedAuthorizationCache())) {
+      const retry = setInterval(async () => {
+        if (await seedAuthorizationCache()) clearInterval(retry)
+      }, AUTHORIZATION_SEED_RETRY_MS)
+      retry.unref()
+    }
+
     try {
       const balance = await veranaChain.getBalance()
-      const authorized = await veranaChain.hasVsOperatorAuthorization()
-      if (!authorized && Number(balance.amount) === 0) {
+      if (
+        authorizationService.listVsOperatorAuthorizationRecords().length === 0 &&
+        Number(balance.amount) === 0
+      ) {
         serverLogger.warn(
           `[VeranaChain] Operator account ${veranaChain.address} has no VSOperatorAuthorization and zero ${balance.denom} balance; on-chain operations will fail until it is granted authorization or funded.`,
         )
@@ -321,6 +346,7 @@ const run = async () => {
     masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
     veranaChain,
+    authorizationService,
     adminApiServiceEndpoint,
   })
 
@@ -378,6 +404,7 @@ const run = async () => {
         `[IndexerWS] Default handlers disabled: ${VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE.join(', ')}`,
       )
     }
+    if (authorizationService) registerAuthorizationHandlers(handlerRegistry, authorizationService)
 
     const indexerCorporationId =
       VERANA_INDEXER_SUBSCRIPTION_SCOPE === 'corporation' && VERANA_CORPORATION_ID

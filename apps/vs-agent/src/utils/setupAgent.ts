@@ -11,6 +11,7 @@ import {
   HttpInboundTransport,
   migrateLegacyTailsFiles,
   setupBaseDidComm,
+  AuthorizationService,
   VeranaChainService,
   VeranaIndexerService,
   VsAgentWsInboundTransport,
@@ -43,6 +44,7 @@ export const setupAgent = async ({
   masterListCscaLocation,
   autoUpdateStorageOnStartup,
   veranaChain,
+  authorizationService,
   discoveryOptions,
   adminApiServiceEndpoint,
 }: {
@@ -58,6 +60,7 @@ export const setupAgent = async ({
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
   veranaChain?: VeranaChainService
+  authorizationService?: AuthorizationService
   discoveryOptions?: DidCommFeatureQueryOptions[]
   adminApiServiceEndpoint?: string
 }) => {
@@ -175,6 +178,7 @@ export const setupAgent = async ({
     displayPictureUrl,
     label,
     veranaChain,
+    authorizationService,
     discoveryOptions,
     adminApiServiceEndpoint,
   })

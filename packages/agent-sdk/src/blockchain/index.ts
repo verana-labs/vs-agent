@@ -1,3 +1,4 @@
+export * from './AuthorizationService'
 export * from './IndexerWebSocketService'
 export * from './VeranaHelpers'
 export * from './VeranaChainService'
