@@ -6,15 +6,16 @@ import {
   VtFlowRole,
   VtFlowService,
   VtFlowState,
+  isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
-import { createJsc, findMetadataEntry, removeTrustCredential } from '../../utils/trustCredentialStore'
+import { createJsc, findMetadataEntry, removeStoredTrustCredential } from '../../utils/trustCredentialStore'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'
-import { IndexerActivity, VeranaSyncState } from '../types'
+import { IndexerActivity, ValidationState, VeranaSyncState } from '../types'
 
 const DEFAULT_CHAIN_ID = 'vna-testnet-1'
 const PARTICIPANT_ROLE_HOLDER = 6
@@ -265,21 +266,14 @@ export async function removeHolderTrustCredentialIfRevoked(
   for (const record of records) {
     if (record.role !== VtFlowRole.Applicant || !record.credentialExchangeRecordId) continue
     try {
-      const formatData = await agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
-      const credentialId = (
-        (formatData.credential as { jsonld?: { id?: string } } | undefined)?.jsonld as
-          | { id?: string }
-          | undefined
-      )?.id
-      if (!credentialId) continue
-      const removed = await removeTrustCredential(agent, agent.publicApiBaseUrl, credentialId, '_vt/vtc')
-      if (removed) {
+      const credentialId = await removeStoredTrustCredential(
+        agent,
+        agent.publicApiBaseUrl,
+        record.credentialExchangeRecordId,
+      )
+      if (credentialId) {
         agent.config.logger.info(
           `[IndexerWS] Removed linked VP and stored credential ${credentialId} (participant=${participantId})`,
-        )
-      } else {
-        agent.config.logger.debug(
-          `[IndexerWS] No stored trust credential matched ${credentialId} (participant=${participantId})`,
         )
       }
     } catch (e) {
@@ -291,18 +285,24 @@ export async function removeHolderTrustCredentialIfRevoked(
   }
 }
 
-export async function terminateVtFlowRecordsByApplicant(
-  agent: VsAgent,
-  participantId: string,
-): Promise<void> {
+export async function reconcileVtFlowRecordsOnCancel(agent: VsAgent, participantId: string): Promise<void> {
+  const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
+  const stillValidated = Number(participant?.opState) === ValidationState.VALIDATED
+
   await reconcileVtFlowRecordsForParticipant(
     agent,
     participantId,
     async (record, service, agentContext) => {
+      if (isVtFlowTerminalState(record.state)) return null
+      if (stillValidated && record.credentialExchangeRecordId) {
+        if (record.state === VtFlowState.Completed) return null
+        await service.updateState(agentContext, record, VtFlowState.Completed)
+        return 'COMPLETED'
+      }
       await service.updateState(agentContext, record, VtFlowState.TerminatedByApplicant)
       return 'TERMINATED_BY_APPLICANT'
     },
-    'Failed to terminate record',
+    'Failed to reconcile record after cancel',
   )
 }
 
