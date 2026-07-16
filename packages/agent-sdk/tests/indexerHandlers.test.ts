@@ -1,4 +1,4 @@
-import { VtFlowRole, VtFlowService } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { VtFlowRole, VtFlowService, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -12,6 +12,7 @@ import {
 } from '../src/blockchain/handlers/defaultHandlers'
 import {
   applyStateMutation,
+  reconcileVtFlowRecordsOnCancel,
   removeHolderTrustCredentialIfRevoked,
 } from '../src/blockchain/handlers/stateMutations'
 import { IndexerActivity, VeranaSyncState } from '../src/blockchain/types'
@@ -196,5 +197,74 @@ describe('applyStateMutation', () => {
     )
     expect(state.participants['12']).toMatchObject({ id: 12, schemaId: 4, did: 'did:web:self' })
     expect(state.participants['13']).toMatchObject({ id: 13, schemaId: 4, did: 'did:web:root' })
+  })
+})
+
+describe('reconcileVtFlowRecordsOnCancel', () => {
+  function makeCancelAgent(opState: number | undefined, records: Record<string, unknown>[]) {
+    const updateState = vi.fn().mockResolvedValue(undefined)
+    const agent = {
+      veranaChain: {
+        getParticipant:
+          opState === undefined
+            ? vi.fn().mockRejectedValue(new Error('participant not found'))
+            : vi.fn().mockResolvedValue({ opState }),
+      },
+      context: {
+        dependencyManager: {
+          resolve: () => ({ findAllByQuery: vi.fn().mockResolvedValue(records), updateState }),
+        },
+      },
+      config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
+    }
+    return { agent, updateState }
+  }
+
+  it('restores renewal-reset records to COMPLETED when the participant is still VALIDATED', async () => {
+    for (const state of [
+      VtFlowState.AwaitingOr,
+      VtFlowState.OrSent,
+      VtFlowState.OobPending,
+      VtFlowState.Validating,
+    ]) {
+      const record = { state, credentialExchangeRecordId: 'cx-1' }
+      const { agent, updateState } = makeCancelAgent(2, [record])
+
+      await reconcileVtFlowRecordsOnCancel(agent as never, '7')
+
+      expect(updateState).toHaveBeenCalledWith(expect.anything(), record, VtFlowState.Completed)
+    }
+  })
+
+  it('leaves completed and terminal records untouched', async () => {
+    const records = [
+      { state: VtFlowState.Completed, credentialExchangeRecordId: 'cx-1' },
+      { state: VtFlowState.TerminatedByApplicant, credentialExchangeRecordId: 'cx-1' },
+    ]
+    const { agent, updateState } = makeCancelAgent(2, records)
+
+    await reconcileVtFlowRecordsOnCancel(agent as never, '7')
+
+    expect(updateState).not.toHaveBeenCalled()
+  })
+
+  it('terminates records when the participant is no longer validated', async () => {
+    for (const opState of [1, undefined]) {
+      const record = { state: VtFlowState.AwaitingOr, credentialExchangeRecordId: 'cx-1' }
+      const { agent, updateState } = makeCancelAgent(opState, [record])
+
+      await reconcileVtFlowRecordsOnCancel(agent as never, '7')
+
+      expect(updateState).toHaveBeenCalledWith(expect.anything(), record, VtFlowState.TerminatedByApplicant)
+    }
+  })
+
+  it('terminates a validated participant record that has no prior credential exchange', async () => {
+    const record = { state: VtFlowState.AwaitingOr }
+    const { agent, updateState } = makeCancelAgent(2, [record])
+
+    await reconcileVtFlowRecordsOnCancel(agent as never, '7')
+
+    expect(updateState).toHaveBeenCalledWith(expect.anything(), record, VtFlowState.TerminatedByApplicant)
   })
 })
