@@ -1,6 +1,8 @@
 import type { BaseLogger } from '@credo-ts/core'
 import type { Event } from '@verana-labs/vs-agent-model'
 
+import { safeStringify } from '@verana-labs/vs-agent-model'
+
 import {
   VsAgent,
   VsAgentConnectionStateEvent,
@@ -15,7 +17,7 @@ import {
 export const webhookEvent = (agent: VsAgent, webhookUrl: string, logger: BaseLogger) => {
   const sendWebhookEvent = async (body: Event) => {
     try {
-      logger.debug(`sending webhook event to ${webhookUrl}: ${JSON.stringify(body)}`)
+      logger.debug(`sending webhook event to ${webhookUrl}: ${safeStringify(body)}`)
       await fetch(`${webhookUrl}/${body.type}`, {
         method: 'POST',
         body: JSON.stringify(body),
@@ -51,7 +53,7 @@ export const webhookEvent = (agent: VsAgent, webhookUrl: string, logger: BaseLog
 
       const body = { ref, claims, state, verified, proofExchangeId }
       try {
-        logger.debug(`sending presentation callback event to ${callbackUrl}: ${JSON.stringify(body)}`)
+        logger.debug(`sending presentation callback event to ${callbackUrl}: ${safeStringify(body)}`)
         await fetch(callbackUrl, {
           method: 'POST',
           body: JSON.stringify(body),

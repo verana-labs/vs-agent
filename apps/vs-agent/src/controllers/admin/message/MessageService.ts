@@ -1,7 +1,7 @@
 import { utils } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { IBaseMessage } from '@verana-labs/vs-agent-model'
+import { IBaseMessage, safeStringify } from '@verana-labs/vs-agent-model'
 
 import { VsAgentService } from '../../../services/VsAgentService'
 
@@ -43,7 +43,7 @@ export class MessageService {
   ): Promise<{ id: string }> {
     try {
       const agent = await this.agentService.getAgent()
-      this.logger.debug!(`Message submitted. ${JSON.stringify(message)}`)
+      this.logger.debug!(`Message submitted. ${safeStringify(message)}`)
 
       const handler = this.handlerMap.get(message.type)
       if (!handler) {
