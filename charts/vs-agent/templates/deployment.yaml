@@ -240,8 +240,20 @@ spec:
         {{- end }}
         {{- if .Values.redis.enabled }}
          -  name: {{ .Values.name }}-redis-container
-            image: redis:alpine
+            image: {{ .Values.redis.image | default "redis:alpine" }}
             imagePullPolicy: Always
+            {{- if or .Values.redis.maxmemory .Values.redis.extraArgs }}
+            args:
+            {{- if .Values.redis.maxmemory }}
+            -  --maxmemory
+            -  {{ .Values.redis.maxmemory | quote }}
+            -  --maxmemory-policy
+            -  {{ .Values.redis.maxmemoryPolicy | default "noeviction" }}
+            {{- end }}
+            {{- range .Values.redis.extraArgs }}
+            -  {{ . | quote }}
+            {{- end }}
+            {{- end }}
             ports:
             -  containerPort: 6379
             resources:
