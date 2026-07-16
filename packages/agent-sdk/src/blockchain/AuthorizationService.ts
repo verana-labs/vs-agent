@@ -47,9 +47,9 @@ export class AuthorizationService {
   async refreshForOperator(): Promise<void> {
     // Catch-up replays hit the same current chain state, so back-to-back refreshes are skipped.
     if (Date.now() - this.lastRefreshAt < this.minRefreshIntervalMs) return
-    this.lastRefreshAt = Date.now()
 
     const vsoas = await this.chain.listVsOperatorAuthorizations()
+    this.lastRefreshAt = Date.now()
     const rebuilt = new Map<number, CachedVsOperatorAuthorizationRecord>()
     for (const vsoa of vsoas) {
       if (!this.inScope(vsoa.corporationId)) continue
