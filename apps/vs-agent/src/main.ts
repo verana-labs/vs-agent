@@ -91,9 +91,7 @@ import {
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
 
-  // Nest's global log level governs the plain @nestjs/common Logger instances (controllers,
-  // services) and Nest's own framework logs — i.e. everything except the credo agent, which
-  // has its own independent TsLogger driven by AGENT_LOG_LEVEL.
+  // Nest's global level governs the plain @nestjs/common loggers (the credo agent uses AGENT_LOG_LEVEL).
   const nestLogLevels = toNestLogLevels(ADMIN_LOG_LEVEL)
 
   const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins), {

@@ -46,7 +46,6 @@ import {
   MessageStateUpdated,
   ProfileMessage,
   ReactionMessage,
-  safeStringify,
   TextMessage,
 } from '@verana-labs/vs-agent-model'
 import {
@@ -74,7 +73,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
     async ({ payload }: DidCommMessageProcessedEvent) => {
-      logger.debug(`DidCommMessageProcessedEvent received: ${safeStringify(payload.message)}`)
+      logger.debug(`DidCommMessageProcessedEvent received: ${JSON.stringify(payload.message)}`)
       const { message, connection } = payload
 
       if (!connection) {
@@ -308,7 +307,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
     async ({ payload: { connection, profile } }: DidCommConnectionProfileUpdatedEvent) => {
       const { displayName, displayPicture, displayIcon, description, preferredLanguage } = profile
       logger.debug(
-        `ConnectionProfileUpdatedEvent received. Connection id: ${connection.id} Profile: ${safeStringify(profile)}`,
+        `ConnectionProfileUpdatedEvent received. Connection id: ${connection.id} Profile: ${JSON.stringify(profile)}`,
       )
 
       const msg = new ProfileMessage({

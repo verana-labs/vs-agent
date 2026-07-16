@@ -4,26 +4,19 @@ import { LogLevel, BaseLogger } from '@credo-ts/core'
 import { ConsoleLogger, type LogLevel as NestLogLevel } from '@nestjs/common'
 import util from 'util'
 
-/**
- * Maps a credo {@link LogLevel} threshold to the array of Nest log levels to enable.
- *
- * Nest treats the array as a threshold (the highest-priority entry enables itself and
- * everything more severe), so a single-element array is enough. Used both to configure
- * each {@link TsLogger}'s own {@link ConsoleLogger} and Nest's global level (for the plain
- * `@nestjs/common` `Logger` instances).
- */
+// Maps a credo LogLevel to the Nest log levels to enable (Nest treats the array as a threshold).
 export function toNestLogLevels(level: LogLevel): NestLogLevel[] {
   switch (level) {
     case LogLevel.Test:
     case LogLevel.Trace:
     case LogLevel.Debug:
-      return ['verbose'] // enables verbose, debug, log, warn, error, fatal
+      return ['verbose']
     case LogLevel.Info:
-      return ['log'] // enables log, warn, error, fatal
+      return ['log']
     case LogLevel.Warn:
-      return ['warn'] // enables warn, error, fatal
+      return ['warn']
     case LogLevel.Error:
-      return ['error'] // enables error, fatal
+      return ['error']
     case LogLevel.Fatal:
       return ['fatal']
     case LogLevel.Off:
@@ -49,17 +42,11 @@ export class TsLogger extends BaseLogger {
   public constructor(logLevel: LogLevel, name: string) {
     super(logLevel)
 
-    // Use a dedicated ConsoleLogger instance (not the shared @nestjs/common Logger) so this
-    // logger's level is fully independent of Nest's global log level and of any other
-    // TsLogger. This is what keeps AGENT_LOG_LEVEL (credo agent) and ADMIN_LOG_LEVEL
-    // (rest of the app) from influencing each other.
+    // Dedicated ConsoleLogger so this level is independent of Nest's global logger.
     this.logger = new ConsoleLogger(name, { logLevels: toNestLogLevels(logLevel) })
   }
 
   private log(level: Exclude<LogLevel, LogLevel.Off>, message: string, data?: Record<string, any>): void {
-    // Gate by the configured level. credo delegates level filtering to the logger
-    // implementation (see its ConsoleLogger), so without this check the configured level
-    // would have no effect. Doing it here also avoids the util.inspect cost when disabled.
     if (!this.isEnabled(level)) return
 
     const tsLogLevel = this.tsLogLevelMap[level]
