@@ -12,6 +12,8 @@ const urlMap = new Map<string, string>([
 ])
 
 export function mapToEcosystem(input: string): string {
+  const canonical = input.match(/^(vpr:verana:[^:/]+):cs:(\d+)$/)
+  if (canonical) input = `${canonical[1]}/cs/v1/js/${canonical[2]}`
   for (const [key, value] of urlMap.entries()) {
     if (input.includes(key)) {
       input = input.replace(key, value)
