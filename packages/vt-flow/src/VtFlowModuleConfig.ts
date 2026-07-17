@@ -26,6 +26,7 @@ export interface VtFlowBuildCredentialOfferContext {
 
 export interface VtFlowCredentialOfferPayload {
   credentialFormats: { jsonld: DidCommJsonLdCredentialDetailFormat }
+  credentialDigest?: string
   comment?: string
   goal?: string
   goalCode?: string

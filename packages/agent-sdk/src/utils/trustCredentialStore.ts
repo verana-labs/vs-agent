@@ -120,7 +120,7 @@ export async function deleteMetadataEntry(
   key: '_vt/vtc' | '_vt/jsc',
   publicApiBaseUrl: string,
 ) {
-  const found = findMetadataEntry(didRecord, key, id)
+  const found = findMetadataEntry(didRecord, key, id, id)
   if (!found) return null
 
   const metadata = didRecord.metadata.get(key)

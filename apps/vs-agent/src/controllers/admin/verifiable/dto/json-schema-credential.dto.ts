@@ -22,7 +22,7 @@ export class JsonSchemaCredentialDto {
       'URL to the JSON Schema definition. ' +
       'If omitted, it will be treated as a self essential schema (' +
       '`schemas-example-service.json`).',
-    example: 'vpr:verana:vna-testnet-1/cs/v1/js/12345678',
+    example: 'vpr:verana:vna-testnet-1:cs:12345678',
   })
   @IsString()
   @Matches(/^(https?:\/\/[^\s]+|vpr:[^\s]+)$/i, {

@@ -245,6 +245,7 @@ export class VtFlowModule implements Module {
             await api.offerCredentialForSession({
               vtFlowRecordId: record.id,
               credentialFormats: payload$.credentialFormats,
+              credentialDigest: payload$.credentialDigest,
               comment: payload$.comment,
               goal: payload$.goal,
               goalCode: payload$.goalCode,

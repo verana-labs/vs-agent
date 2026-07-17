@@ -1,7 +1,11 @@
 import type { JsonObject } from '@credo-ts/core'
 
 import { JsonTransformer, W3cJsonLdVerifiableCredential, utils } from '@credo-ts/core'
-import { type JsonCredential, type JsonLdFormatDataVerifiableCredential } from '@credo-ts/didcomm'
+import {
+  type DidCommJsonLdCredentialDetailFormat,
+  type JsonCredential,
+  type JsonLdFormatDataVerifiableCredential,
+} from '@credo-ts/didcomm'
 import {
   VtFlowApi,
   VtFlowRecord,
@@ -158,28 +162,13 @@ export class VtFlowOrchestrator {
     if (!holderParticipant) throw new Error(`Holder participant ${holderParticipantId} not found on chain`)
     if (!holderParticipant.did) throw new Error('Holder participant has no DID')
 
-    const didRecords = await this.agent.dids.getCreatedDids({ did: this.agent.did })
-    const didRecord = didRecords[0]
-    if (!didRecord) throw new Error('Agent DID record not found')
-    const schemaRef = `vpr:verana:${chain.getChainId}/cs/v1/js/${input.credentialSchemaId}`
-    const { data } = await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
-
-    const claims = (record.claims ?? {}) as JsonObject
-    const unsignedCredential = createCredential({
-      id: `${this.agent.did}#${utils.uuid()}`,
-      type: input.credentialType ?? ['VerifiableCredential', 'VerifiableTrustCredential'],
-      issuer: this.agent.did,
-      credentialSubject: { id: holderParticipant.did, claims },
+    const { unsignedCredentialJson, digest } = await this.buildCredential({
+      credentialSchemaId: input.credentialSchemaId,
+      subjectDid: holderParticipant.did,
+      claims: (record.claims ?? {}) as JsonObject,
+      credentialType: input.credentialType,
+      credentialContext: input.credentialContext,
     })
-    if (input.credentialContext) unsignedCredential.context = input.credentialContext
-    unsignedCredential.credentialSchema = {
-      id: data.verifiableCredential?.[0]?.id,
-      type: 'JsonSchemaCredential',
-    }
-
-    const unsignedCredentialJson = JsonTransformer.toJSON(unsignedCredential) as JsonCredential
-
-    const digest = credentialContentDigest(unsignedCredentialJson)
 
     // The chain requires a null op_summary_digest for HOLDER participants (MOD-PP-MSG-3).
     await chain.setParticipantOPToValidated({
@@ -225,6 +214,99 @@ export class VtFlowOrchestrator {
     }
     await this.verifyOfferedCredential(input.vtFlowRecordId)
     return vtFlowApi.acceptReceivedCredential(input.vtFlowRecordId)
+  }
+
+  async buildDirectIssuanceOffer(vtFlowRecordId: string): Promise<{
+    credentialFormats: { jsonld: DidCommJsonLdCredentialDetailFormat }
+    credentialDigest: string
+  } | null> {
+    const chain = this.requireChain()
+    if (!this.agent.did) throw new Error('Agent has no public DID')
+    const indexer = this.requireIndexer()
+
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(vtFlowRecordId)
+    if (!record) throw new Error(`vt-flow record ${vtFlowRecordId} not found`)
+    if (record.role !== VtFlowRole.Validator || record.variant !== VtFlowVariant.DirectIssuance) {
+      return null
+    }
+    if (!record.schemaId) throw new Error('Record has no schemaId')
+
+    const issuers = await indexer.listParticipants({
+      did: this.agent.did,
+      schemaId: Number(record.schemaId),
+      role: ParticipantRole.Issuer,
+      participantState: ParticipantState.Active,
+    })
+    const issuer = issuers.find(p => !p.revoked && !p.slashed && p.vs_operator === chain.address)
+    if (!issuer) {
+      this.agent.config.logger.warn(
+        `[vt-flow] no active issuer participant with vs_operator ${chain.address} for schema ${record.schemaId}; not offering`,
+      )
+      return null
+    }
+
+    const connection = await this.agent.didcomm.connections.findById(record.connectionId)
+    if (!connection?.theirDid) throw new Error('Flow connection has no peer DID')
+
+    const { unsignedCredentialJson, digest } = await this.buildCredential({
+      credentialSchemaId: String(record.schemaId),
+      subjectDid: connection.theirDid,
+      claims: (record.claims ?? {}) as JsonObject,
+    })
+
+    await chain.createOrUpdateParticipantSession({
+      id: record.participantSessionId,
+      issuerParticipantId: issuer.id,
+      agentParticipantId: Number(record.agentParticipantId ?? 0) || 0,
+      walletAgentParticipantId: Number(record.walletAgentParticipantId ?? 0) || 0,
+      digest,
+    })
+
+    return {
+      credentialFormats: {
+        jsonld: {
+          credential: unsignedCredentialJson,
+          options: { proofType: 'Ed25519Signature2020', proofPurpose: 'assertionMethod' },
+        },
+      },
+      credentialDigest: digest,
+    }
+  }
+
+  private async buildCredential(input: {
+    credentialSchemaId: string
+    subjectDid: string
+    claims: JsonObject
+    credentialType?: string[]
+    credentialContext?: string[]
+  }): Promise<{ unsignedCredentialJson: JsonCredential; digest: string }> {
+    const chain = this.requireChain()
+    const didRecords = await this.agent.dids.getCreatedDids({ did: this.agent.did! })
+    const didRecord = didRecords[0]
+    if (!didRecord) throw new Error('Agent DID record not found')
+    const schemaRef = `vpr:verana:${chain.getChainId}:cs:${input.credentialSchemaId}`
+    const legacyRef = `vpr:verana:${chain.getChainId}/cs/v1/js/${input.credentialSchemaId}`
+    const entry =
+      (await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)) ??
+      (await findMetadataEntry(didRecord, '_vt/jsc', '', legacyRef))
+    if (!entry) throw new Error(`No stored VTJSC found for ${schemaRef}`)
+    const { data } = entry
+
+    const unsignedCredential = createCredential({
+      id: `${this.agent.did}#${utils.uuid()}`,
+      type: input.credentialType ?? ['VerifiableCredential', 'VerifiableTrustCredential'],
+      issuer: this.agent.did!,
+      credentialSubject: { id: input.subjectDid, claims: input.claims },
+    })
+    if (input.credentialContext) unsignedCredential.context = input.credentialContext
+    unsignedCredential.credentialSchema = {
+      id: data.verifiableCredential?.[0]?.id,
+      type: 'JsonSchemaCredential',
+    }
+
+    const unsignedCredentialJson = JsonTransformer.toJSON(unsignedCredential) as JsonCredential
+    return { unsignedCredentialJson, digest: credentialContentDigest(unsignedCredentialJson) }
   }
 
   async verifyOfferedCredential(vtFlowRecordId: string): Promise<void> {

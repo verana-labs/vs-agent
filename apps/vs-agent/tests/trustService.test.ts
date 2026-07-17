@@ -3,7 +3,12 @@ import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { INestApplication } from '@nestjs/common'
 import { Claim, CredentialIssuanceMessage } from '@verana-labs/vs-agent-model'
-import { type BaseAgentModules, type VsAgent, migrateVtjscServiceIds } from '@verana-labs/vs-agent-sdk'
+import {
+  type BaseAgentModules,
+  type VsAgent,
+  migrateVtjscServiceIds,
+  reconcileVtjscPublications,
+} from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import request from 'supertest'
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
@@ -66,6 +71,35 @@ describe('TrustService', () => {
       const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`
 
       expect(services.some(s => s.id === serviceId)).toBe(true)
+    })
+
+    it('migrates a legacy vpr ref entry to the canonical form on reconcile', async () => {
+      const legacyRef = 'vpr:verana:vna-testnet-1/cs/v1/js/16'
+      const canonicalRef = 'vpr:verana:vna-testnet-1:cs:16'
+      await jscFaberService.createJsc('16', legacyRef)
+
+      const jsonSchema = JSON.stringify({
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        title: 'MigrationCredential',
+        description: 'migration test',
+        type: 'object',
+        properties: { name: { type: 'string' } },
+        required: ['name'],
+      })
+      const indexerStub = {
+        listEcosystems: async () => [{ id: 1, corporation_id: 7, did: 'did:example:eco', archived: null }],
+        listCredentialSchemas: async () => [
+          { id: 16, ecosystem_id: 1, json_schema: jsonSchema, archived: null, created: '', modified: '' },
+        ],
+      }
+      await reconcileVtjscPublications(jscFaberAgent, indexerStub as never, 7)
+
+      const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
+      const metadata = didRecord.metadata.get('_vt/jsc')!
+      expect(Object.keys(metadata)).toContain(canonicalRef)
+      expect(Object.keys(metadata)).not.toContain(legacyRef)
+      const serviceIds = (didRecord.didDocument?.service ?? []).map(s => s.id)
+      expect(serviceIds.filter(id => id.includes('schemas-16')).length).toBe(1)
     })
 
     it('renames pre-vtjsc service ids on migration without re-signing', async () => {
