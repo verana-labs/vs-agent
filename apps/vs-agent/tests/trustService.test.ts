@@ -3,7 +3,12 @@ import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { INestApplication } from '@nestjs/common'
 import { Claim, CredentialIssuanceMessage } from '@verana-labs/vs-agent-model'
-import { type BaseAgentModules, type VsAgent, migrateVtjscServiceIds, reconcileVtjscPublications } from '@verana-labs/vs-agent-sdk'
+import {
+  type BaseAgentModules,
+  type VsAgent,
+  migrateVtjscServiceIds,
+  reconcileVtjscPublications,
+} from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import request from 'supertest'
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
@@ -96,7 +101,7 @@ describe('TrustService', () => {
       const serviceIds = (didRecord.didDocument?.service ?? []).map(s => s.id)
       expect(serviceIds.filter(id => id.includes('schemas-16')).length).toBe(1)
     })
-    
+
     it('renames pre-vtjsc service ids on migration without re-signing', async () => {
       const schemaBaseId = 'org-schema'
       await jscFaberService.createJsc(
