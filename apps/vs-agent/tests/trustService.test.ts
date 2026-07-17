@@ -1,8 +1,9 @@
+import { DidRepository } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { INestApplication } from '@nestjs/common'
 import { Claim, CredentialIssuanceMessage } from '@verana-labs/vs-agent-model'
-import { type BaseAgentModules, type VsAgent } from '@verana-labs/vs-agent-sdk'
+import { type BaseAgentModules, type VsAgent, migrateVtjscServiceIds } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import request from 'supertest'
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
@@ -62,9 +63,38 @@ describe('TrustService', () => {
 
       const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
       const services = didRecord.didDocument?.service ?? []
-      const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-jsc-vp`
+      const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`
 
       expect(services.some(s => s.id === serviceId)).toBe(true)
+    })
+
+    it('renames pre-vtjsc service ids on migration without re-signing', async () => {
+      const schemaBaseId = 'org-schema'
+      await jscFaberService.createJsc(
+        schemaBaseId,
+        'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-org',
+      )
+
+      const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
+      const newId = `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`
+      const legacyId = `${jscFaberAgent.did}#vpr-schemas-org-schema-jsc-vp`
+      const metadata = didRecord.metadata.get('_vt/jsc')!
+      const entry = Object.values(metadata).find(e => e.didDocumentServiceId === newId)!
+      entry.didDocumentServiceId = legacyId
+      const service = didRecord.didDocument!.service!.find(s => s.id === newId)!
+      service.id = legacyId
+      didRecord.metadata.set('_vt/jsc', metadata)
+      const didRepository = jscFaberAgent.context.dependencyManager.resolve(DidRepository)
+      await didRepository.update(jscFaberAgent.context, didRecord)
+      await jscFaberAgent.dids.update({ did: didRecord.did, didDocument: didRecord.didDocument! })
+
+      await migrateVtjscServiceIds(jscFaberAgent)
+
+      const [migrated] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
+      const migratedMeta = migrated.metadata.get('_vt/jsc')!
+      expect(Object.values(migratedMeta).some(e => e.didDocumentServiceId === newId)).toBe(true)
+      expect(migrated.didDocument?.service?.some(s => s.id === newId)).toBe(true)
+      expect(migrated.didDocument?.service?.some(s => s.id === legacyId)).toBe(false)
     })
 
     it('should not create duplicate service references when the same JSC is created twice', async () => {
@@ -76,7 +106,7 @@ describe('TrustService', () => {
 
       const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
       const services = didRecord.didDocument?.service ?? []
-      const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-jsc-vp`
+      const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`
       const matchingServices = services.filter(s => s.id === serviceId)
 
       expect(matchingServices).toHaveLength(1)
@@ -94,8 +124,8 @@ describe('TrustService', () => {
 
       const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
       const services = didRecord.didDocument?.service ?? []
-      const orgServiceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-jsc-vp`
-      const svcServiceId = `${jscFaberAgent.did}#vpr-schemas-service-schema-jsc-vp`
+      const orgServiceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`
+      const svcServiceId = `${jscFaberAgent.did}#vpr-schemas-service-schema-vtjsc-vp`
 
       expect(services.filter(s => s.id === orgServiceId)).toHaveLength(1)
       expect(services.filter(s => s.id === svcServiceId)).toHaveLength(1)
