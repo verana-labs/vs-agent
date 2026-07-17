@@ -161,6 +161,7 @@ export class TrustController {
   }
 
   @Delete('linked-credentials')
+  @UseGuards(IndexerDisabledGuard)
   @ApiOperation({
     summary: 'Delete a Verifiable Trust Credential (VTC)',
     description:
@@ -196,6 +197,7 @@ export class TrustController {
   }
 
   @Post('linked-credentials')
+  @UseGuards(IndexerDisabledGuard)
   @ApiOperation({
     summary: 'Create a new Verifiable Trust Credential (VTC)',
     description:

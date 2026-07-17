@@ -257,11 +257,21 @@ export interface OperatorAuthorization {
   corporationId: number
   operator: string
   msgTypes: string[]
+  expiration?: Date
+  period?: DurationParam
 }
 
 export interface ParticipantAuthorizationRecord {
   participantId: number
   msgTypes: string[]
+  withFeegrant: boolean
+  expiration?: Date
+  period?: DurationParam
+}
+
+export interface CachedVsOperatorAuthorizationRecord extends ParticipantAuthorizationRecord {
+  corporationId: number
+  vsOperator: string
 }
 
 export interface VsOperatorAuthorization {
@@ -302,7 +312,6 @@ export interface VeranaChainConfig {
   rpcUrl: string
   chainId?: string
   mnemonic: string
-  sessionOperatorMnemonic?: string
   logger: BaseLogger
   gasPrice?: string
   corporationAddress?: string

@@ -73,9 +73,7 @@ function mapParticipant(p: RawParticipant): Participant {
 
 export class VeranaChainService {
   private signingClient!: SigningStargateClient
-  private sessionSigningClient?: SigningStargateClient
   private operatorAddress!: string
-  private sessionOperatorAddress?: string
   private chainId!: string
   private corporationAddress!: string
 
@@ -122,19 +120,6 @@ export class VeranaChainService {
       gasPrice: GasPrice.fromString(gasPrice ?? '1uvna'),
     })
 
-    if (this.config.sessionOperatorMnemonic) {
-      const sessionWallet = await DirectSecp256k1HdWallet.fromMnemonic(this.config.sessionOperatorMnemonic, {
-        prefix: VERANA_BECH32_PREFIX,
-      })
-      const [sessionAccount] = await sessionWallet.getAccounts()
-      this.sessionSigningClient = await SigningStargateClient.createWithSigner(cometClient, sessionWallet, {
-        registry: createVeranaRegistry(),
-        aminoTypes: createVeranaAminoTypes(),
-        gasPrice: GasPrice.fromString(gasPrice ?? '1uvna'),
-      })
-      this.sessionOperatorAddress = sessionAccount.address
-    }
-
     this.chainId = await this.signingClient.getChainId()
     if (chainId && this.chainId !== chainId) {
       throw new Error(`[VeranaChain] Chain ID mismatch: expected "${chainId}", got "${this.chainId}"`)
@@ -163,10 +148,10 @@ export class VeranaChainService {
     return (await this.listVsOperatorAuthorizations()).length > 0
   }
 
-  async listOperatorAuthorizations(): Promise<OperatorAuthorization[]> {
+  async listOperatorAuthorizations(operator?: string): Promise<OperatorAuthorization[]> {
     const result = await this.deQuery.ListOperatorAuthorizations({
       corporationId: 0,
-      operator: this.operatorAddress,
+      operator: operator ?? this.operatorAddress,
       responseMaxSize: 64,
     })
     return result.operatorAuthorizations.map(a => ({
@@ -174,20 +159,28 @@ export class VeranaChainService {
       corporationId: a.corporationId,
       operator: a.operator,
       msgTypes: a.msgTypes,
+      expiration: a.expiration,
+      period: a.period,
     }))
   }
 
-  async listVsOperatorAuthorizations(): Promise<VsOperatorAuthorization[]> {
+  async listVsOperatorAuthorizations(vsOperator?: string): Promise<VsOperatorAuthorization[]> {
     const result = await this.deQuery.ListVSOperatorAuthorizations({
       corporationId: 0,
-      vsOperator: this.operatorAddress,
+      vsOperator: vsOperator ?? this.operatorAddress,
       responseMaxSize: 64,
     })
     return result.vsOperatorAuthorizations.map(a => ({
       id: a.id,
       corporationId: a.corporationId,
       vsOperator: a.vsOperator,
-      records: a.records.map(r => ({ participantId: r.participantId, msgTypes: r.msgTypes })),
+      records: a.records.map(r => ({
+        participantId: r.participantId,
+        msgTypes: r.msgTypes,
+        withFeegrant: r.withFeegrant,
+        expiration: r.expiration,
+        period: r.period,
+      })),
     }))
   }
 
@@ -307,7 +300,7 @@ export class VeranaChainService {
   ): Promise<{ txHash: string }> {
     const value = MsgCreateOrUpdateParticipantSession.fromPartial({
       corporation: this.corporationAddress,
-      operator: this.sessionOperatorAddress ?? this.operatorAddress,
+      operator: this.operatorAddress,
       id: params.id,
       issuerParticipantId: params.issuerParticipantId,
       verifierParticipantId: params.verifierParticipantId,
@@ -318,7 +311,6 @@ export class VeranaChainService {
     const result = await this.broadcastMsg({
       typeUrl: veranaTypeUrls.MsgCreateOrUpdateParticipantSession,
       value,
-      useSessionSigner: true,
     })
     return { txHash: result.transactionHash }
   }
@@ -335,32 +327,18 @@ export class VeranaChainService {
   async triggerResolver(participantId: number): Promise<{ txHash: string }> {
     const value = MsgTriggerResolver.fromPartial({
       corporation: this.corporationAddress,
-      operator: this.sessionOperatorAddress ?? this.operatorAddress,
+      operator: this.operatorAddress,
       id: participantId,
     })
-    const result = await this.broadcastMsg({
-      typeUrl: veranaTypeUrls.MsgTriggerResolver,
-      value,
-      useSessionSigner: true,
-    })
+    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgTriggerResolver, value })
     return { txHash: result.transactionHash }
   }
 
-  private async broadcastMsg(options: {
-    typeUrl: string
-    value: object
-    useSessionSigner?: boolean
-  }): Promise<DeliverTxResponse> {
-    const { typeUrl, value, useSessionSigner = false } = options
-    const signingClient = useSessionSigner
-      ? (this.sessionSigningClient ?? this.signingClient)
-      : this.signingClient
-    const signerAddress = useSessionSigner
-      ? (this.sessionOperatorAddress ?? this.operatorAddress)
-      : this.operatorAddress
+  private async broadcastMsg(options: { typeUrl: string; value: object }): Promise<DeliverTxResponse> {
+    const { typeUrl, value } = options
     const msg = { typeUrl, value }
-    this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl} as ${signerAddress}`)
-    const result = await signingClient.signAndBroadcast(signerAddress, [msg], 'auto')
+    this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl} as ${this.operatorAddress}`)
+    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], 'auto')
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result

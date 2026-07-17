@@ -40,6 +40,7 @@ import {
 import { VtFlowModule } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
+import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
 import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
@@ -92,6 +93,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public displayPictureUrl?: string
   public label: string
   public veranaChain?: VeranaChainService
+  public authorizationService?: AuthorizationService
   public discoveryOptions?: DidCommFeatureQueryOptions[]
 
   public constructor(
@@ -103,6 +105,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       displayPictureUrl?: string
       label: string
       veranaChain?: VeranaChainService
+      authorizationService?: AuthorizationService
       discoveryOptions?: DidCommFeatureQueryOptions[]
     },
   ) {
@@ -114,6 +117,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.displayPictureUrl = options.displayPictureUrl
     this.label = options.label
     this.veranaChain = options.veranaChain
+    this.authorizationService = options.authorizationService
     this.discoveryOptions = options.discoveryOptions
   }
 

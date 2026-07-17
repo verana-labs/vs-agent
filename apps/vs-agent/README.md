@@ -42,17 +42,17 @@ Besides these parameters, you are likely to use your VS Agent alongside a **cont
 
 These are variables that you are likely to use when going into production, since you don't want to use dummy credentials and also you'll probably want to use external components to improve horizontal scalability.
 
-| Variable                | Description                                                                                                                 | Default value     |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| AGENT_WALLET_ID         | ID for agent wallet                                                                                                         | test-vs-agent     |
-| AGENT_WALLET_KEY        | Key for agent wallet                                                                                                        | test-vs-agent     |
-| POSTGRES_HOST           | PosgreSQL database host                                                                                                     | None (use SQLite) |
-| POSTGRES_USER           | PosgreSQL database username                                                                                                 | None              |
-| POSTGRES_PASSWORD       | PosgreSQL database password                                                                                                 | None              |
-| POSTGRES_ADMIN_USER     | PosgreSQL database admin user                                                                                               | None              |
-| POSTGRES_ADMIN_PASSWORD | PosgreSQL database admin password                                                                                           | None              |
-| REDIS_HOST              | Redis host used for message caching and asynchronous processing. The system requires this for production-ready performance. | None              |
-| REDIS_PASSWORD          | Password for connecting to the Redis instance.                                                                              | None              |
+| Variable                | Description                                                                                                                                                                             | Default value            |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| AGENT_WALLET_ID         | ID for agent wallet                                                                                                                                                                     | test-vs-agent            |
+| AGENT_WALLET_KEY        | Key for agent wallet                                                                                                                                                                    | test-vs-agent            |
+| POSTGRES_HOST           | PosgreSQL database host                                                                                                                                                                 | None (use SQLite)        |
+| POSTGRES_USER           | PosgreSQL database username                                                                                                                                                             | None                     |
+| POSTGRES_PASSWORD       | PosgreSQL database password                                                                                                                                                             | None                     |
+| POSTGRES_ADMIN_USER     | PosgreSQL database admin user                                                                                                                                                           | None                     |
+| POSTGRES_ADMIN_PASSWORD | PosgreSQL database admin password                                                                                                                                                       | None                     |
+| REDIS_HOST              | Redis host used for message caching and asynchronous processing. The system requires this for production-ready performance.                                                             | None                     |
+| REDIS_PASSWORD          | Password for connecting to the Redis instance.                                                                                                                                          | None                     |
 | TAILS_DIRECTORY_PATH    | Directory where AnonCreds revocation tails files are stored and served from. Must be on durable storage that survives restarts, and on a shared volume when running multiple instances. | `<home>/.afj/data/tails` |
 
 VS Agent supports two database backends:
@@ -77,7 +77,7 @@ Here is a couple of variables that you may want to take care in case of troubles
 | Variable        | Description                                                          | Default value |
 | --------------- | -------------------------------------------------------------------- | ------------- |
 | AGENT_LOG_LEVEL | Credo Agent Log level                                                | 4 (warn)      |
-| ADMIN_LOG_LEVEL | Admin interface Log level                                            | 2 (debug)     |
+| ADMIN_LOG_LEVEL | Admin interface Log level                                            | 3 (info)     |
 | USE_CORS        | Enable Cross-Origin Resource Sharing (only for development purposes) | false         |
 | ENABLE_PUBLIC_API_SWAGGER  | Enable Swagger documentation for public API (recommended only for development environments) | false |
 
@@ -97,19 +97,19 @@ Possible log levels:
 
 These are variables that are updated only on specific use cases.
 
-| Variable                               | Description                                                                                                                                                                                                                | Default value            |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| PUBLIC_API_BASE_URL                    | Base URL for public API (e.g. invitations, short URLs). Used when no public DID is defined or you want to override it                                                                                                      | <http://localhost:3001>  |
-| AGENT_ENDPOINTS                        | Comma-separeated list of endpoints where agent DIDComm endpoints will be accessible (including protocol and port). Used when no public DID is defined or you want to override it                                           | ws://localhost:3001      |
-| AGENT_DIDCOMM_VERSIONS                 | Comma-separated list of DIDComm envelope versions accepted and sent by the agent. Allowed values: `v1`, `v2`. Controls which `did-communication` / `DIDCommMessaging` services are published in the agent's DID Document.  | `v1`                  |
-| AGENT_WALLET_KEY_DERIVATION_METHOD     | Wallet key derivation method: ARGON2I_INT, ARGON2_MOD or RAW                                                                                                                                                               | ARGON2I_MOD              |
-| AGENT_INVITATION_BASE_URL              | Public URL for fallback when no DIDComm agent is found                                                                                                                                                                     | <https://hologram.zone/> |
-| REDIRECT_DEFAULT_URL_TO_INVITATION_URL | Default redirect to AGENT_INVITATION_BASE_URL                                                                                                                                                                              | true                     |
-| USER_PROFILE_AUTODISCLOSE              | Whether to disclose User Profile when requested by another agent. If not set, User Profile can manually be sent by using a Profile message                                                                                 | false                    |
-| MASTER_LIST_CSCA_LOCATION              | **Enables the eMRTD verification module**. Location (URL or absolute path) of the CSCA Master List in **LDIF** format When set, VS Agent loads trust anchors at startup and activates ePassport verification capabilities. | none                     |
-| AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP   | Toggle automatic storage migration on startup. If true, the agent runs migrations and attempts to make a backup of the wallet on startup                                                                                   | false                    |
-| AGENT_BACKUP_BEFORE_STORAGE_UPDATE     | Toggle backup before storage update. If true, the agent creates a backup of the wallet using Askar's export before performing storage migrations                                                                           | false                    |
-| VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. Set by the Docker image in production, only override in development. See [Plugin system](#plugin-system) for available values.                                       | `messaging,chat`         |
+| Variable                               | Description                                                                                                                                                                                                                                      | Default value            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
+| PUBLIC_API_BASE_URL                    | Base URL for public API (e.g. invitations, short URLs). Used when no public DID is defined or you want to override it                                                                                                                            | <http://localhost:3001>  |
+| AGENT_ENDPOINTS                        | Comma-separeated list of endpoints where agent DIDComm endpoints will be accessible (including protocol and port). Used when no public DID is defined or you want to override it                                                                 | ws://localhost:3001      |
+| AGENT_DIDCOMM_VERSIONS                 | Comma-separated list of DIDComm envelope versions accepted and sent by the agent. Allowed values: `v1`, `v2`. Controls which `did-communication` / `DIDCommMessaging` services are published in the agent's DID Document. vt-flow requires `v2`. | `v1`                     |
+| AGENT_WALLET_KEY_DERIVATION_METHOD     | Wallet key derivation method: ARGON2I_INT, ARGON2_MOD or RAW                                                                                                                                                                                     | ARGON2I_MOD              |
+| AGENT_INVITATION_BASE_URL              | Public URL for fallback when no DIDComm agent is found                                                                                                                                                                                           | <https://hologram.zone/> |
+| REDIRECT_DEFAULT_URL_TO_INVITATION_URL | Default redirect to AGENT_INVITATION_BASE_URL                                                                                                                                                                                                    | true                     |
+| USER_PROFILE_AUTODISCLOSE              | Whether to disclose User Profile when requested by another agent. If not set, User Profile can manually be sent by using a Profile message                                                                                                       | false                    |
+| MASTER_LIST_CSCA_LOCATION              | **Enables the eMRTD verification module**. Location (URL or absolute path) of the CSCA Master List in **LDIF** format When set, VS Agent loads trust anchors at startup and activates ePassport verification capabilities.                       | none                     |
+| AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP   | Toggle automatic storage migration on startup. If true, the agent runs migrations and attempts to make a backup of the wallet on startup                                                                                                         | false                    |
+| AGENT_BACKUP_BEFORE_STORAGE_UPDATE     | Toggle backup before storage update. If true, the agent creates a backup of the wallet using Askar's export before performing storage migrations                                                                                                 | false                    |
+| VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. Set by the Docker image in production, only override in development. See [Plugin system](#plugin-system) for available values.                                                               | `messaging,chat`         |
 
 > **Note about Key derivation method**: By default, we use the strongest ARGON2I_MOD, but since this is the slowest one as well, depending on the security infrastructure you have, you might want to not derive the key at all (use RAW). However, in versions of VS Agent we are going to deprecate this setting, so we recommend to keep the default setting to make migration process easier.
 
@@ -119,20 +119,20 @@ These are variables that are updated only on specific use cases.
 
 These variables enable on-chain features (permission management, trust registry notifications). If not set, the agent starts normally but blockchain functionality is disabled.
 
-| Variable                  | Required  | Description                                                                                                                                                   |
-| ------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `VERANA_RPC_ENDPOINT_URL` | REQUIRED* | Verana blockchain RPC endpoint URL.                                                                                                                           |
-| `VERANA_ACCOUNT_MNEMONIC` | REQUIRED* | BIP-39 mnemonic for the agent's Verana blockchain account.                                                                                                    |
-| `VERANA_CHAIN_ID`         | OPTIONAL  | Chain ID (defaults to the network's chain ID if not set).                                                                                                     |
-| `VERANA_INDEXER_BASE_URL` | REQUIRED* | Verana indexer URL (e.g. `https://...`). Used to establish a WebSocket connection for subscribing to real-time ledger notifications related to the agent DID. |
-| `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` | OPTIONAL | Comma-separated indexer `msg` names whose default handler is disabled (or `*` for all), so a backend behind the container can override them and react via the `indexer-notification` webhook. State-sync bookkeeping is never affected. |
-| `VERANA_INDEXER_SUBSCRIPTION_SCOPE` | OPTIONAL | Scope of the indexer subscription and REST catch-up: `did` (default, only the agent's own DID) or `corporation` (all events for `VERANA_CORPORATION_ID`). |
-| `VERANA_CORPORATION_ID` | OPTIONAL | Corporation ID used when `VERANA_INDEXER_SUBSCRIPTION_SCOPE` is `corporation`. |
-| `AGENT_MODE` | OPTIONAL | `standalone` (default) or `delegated`. Selects how the agent obtains its ECS credentials at startup. |
-| `AGENT_DELEGATED_PARENT_VS_DID` | CONDITIONAL | DID of the parent Verifiable Service that issues the Service credential. Required when `AGENT_MODE` is `delegated`. |
-| `TRUSTED_ECS_ECOSYSTEM_DIDS` | CONDITIONAL | Comma-separated DIDs of the ECS ecosystems the agent trusts for essential credential schemas (WL-ECS). Required for the standalone ECS bootstrap. |
+| Variable                                   | Required    | Description                                                                                                                                                                                                                             |
+| ------------------------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VERANA_RPC_ENDPOINT_URL`                  | REQUIRED\*  | Verana blockchain RPC endpoint URL.                                                                                                                                                                                                     |
+| `VERANA_ACCOUNT_MNEMONIC`                  | REQUIRED\*  | BIP-39 mnemonic for the agent's Verana blockchain account.                                                                                                                                                                              |
+| `VERANA_CHAIN_ID`                          | OPTIONAL    | Chain ID (defaults to the network's chain ID if not set).                                                                                                                                                                               |
+| `VERANA_INDEXER_BASE_URL`                  | REQUIRED\*  | Verana indexer URL (e.g. `https://...`). Used to establish a WebSocket connection for subscribing to real-time ledger notifications related to the agent DID.                                                                           |
+| `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` | OPTIONAL    | Comma-separated indexer `msg` names whose default handler is disabled (or `*` for all), so a backend behind the container can override them and react via the `indexer-notification` webhook. State-sync bookkeeping is never affected. |
+| `VERANA_INDEXER_SUBSCRIPTION_SCOPE`        | OPTIONAL    | Scope of the indexer subscription and REST catch-up: `did` (default, only the agent's own DID) or `corporation` (all events for `VERANA_CORPORATION_ID`).                                                                               |
+| `VERANA_CORPORATION_ID`                    | OPTIONAL    | Corporation ID used when `VERANA_INDEXER_SUBSCRIPTION_SCOPE` is `corporation`.                                                                                                                                                          |
+| `AGENT_MODE`                               | OPTIONAL    | `standalone` (default) or `delegated`. Selects how the agent obtains its ECS credentials at startup.                                                                                                                                    |
+| `AGENT_DELEGATED_PARENT_VS_DID`            | CONDITIONAL | DID of the parent Verifiable Service that issues the Service credential. Required when `AGENT_MODE` is `delegated`.                                                                                                                     |
+| `TRUSTED_ECS_ECOSYSTEM_DIDS`               | CONDITIONAL | Comma-separated DIDs of the ECS ecosystems the agent trusts for essential credential schemas (WL-ECS). Required for the standalone ECS bootstrap.                                                                                       |
 
-* Required only if on-chain features are enabled.
+- Required only if on-chain features are enabled.
 
 > The agent maintains a persistent WebSocket connection to the indexer to receive updates about permissions, trust registries, and credential schemas. These events are used to keep the agent state in sync with the ledger.
 
@@ -148,18 +148,18 @@ VS-A fetches capabilities from the `discovery.json` file (which is located at at
 
 To enable the Self-Verifiable Trust Registry API endpoints, you must set the following environment variables in your `.env` file or system environment. These variables control the agent's identity, endpoints, and the data used for example credentials:
 
-| Variable                                     | Description                              | Example Value                               |
-| -------------------------------------------- | ---------------------------------------- | ------------------------------------------- |
-| `SELF_ISSUED_VTC_ORG_TYPE`                   | Organization type for example credential | `PRIVATE`                                   |
-| `SELF_ISSUED_VTC_ORG_COUNTRYCODE`            | Organization country code                | `EE`                                        |
-| `SELF_ISSUED_VTC_ORG_REGISTRYID`             | Organization registry ID                 | `1234567890`                                |
-| `SELF_ISSUED_VTC_ORG_REGISTRYURL`            | Organization registry URL                | `https://registry.example.com`     |
-| `SELF_ISSUED_VTC_ORG_ADDRESS`                | Organization address                     | `Ahtri tn 12 10151 Tallinn, Estonia`         |
-| `SELF_ISSUED_VTC_SERVICE_TYPE`               | Service type for example credential      | `HealthCheckService`                        |
-| `SELF_ISSUED_VTC_SERVICE_DESCRIPTION`        | Service description                      | `Health Verification Service` |
-| `SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED` | Minimum age required for service         | `18`                                        |
-| `SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS` | Terms and conditions URL                 | `https://service.example.com/terminos`     |
-| `SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY`      | Privacy policy URL                       | `https://service.example.com/privacidad`   |
+| Variable                                     | Description                              | Example Value                            |
+| -------------------------------------------- | ---------------------------------------- | ---------------------------------------- |
+| `SELF_ISSUED_VTC_ORG_TYPE`                   | Organization type for example credential | `PRIVATE`                                |
+| `SELF_ISSUED_VTC_ORG_COUNTRYCODE`            | Organization country code                | `EE`                                     |
+| `SELF_ISSUED_VTC_ORG_REGISTRYID`             | Organization registry ID                 | `1234567890`                             |
+| `SELF_ISSUED_VTC_ORG_REGISTRYURL`            | Organization registry URL                | `https://registry.example.com`           |
+| `SELF_ISSUED_VTC_ORG_ADDRESS`                | Organization address                     | `Ahtri tn 12 10151 Tallinn, Estonia`     |
+| `SELF_ISSUED_VTC_SERVICE_TYPE`               | Service type for example credential      | `HealthCheckService`                     |
+| `SELF_ISSUED_VTC_SERVICE_DESCRIPTION`        | Service description                      | `Health Verification Service`            |
+| `SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED` | Minimum age required for service         | `18`                                     |
+| `SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS` | Terms and conditions URL                 | `https://service.example.com/terminos`   |
+| `SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY`      | Privacy policy URL                       | `https://service.example.com/privacidad` |
 
 > **Note:**  
 > This Self-Verifiable Trust Registry API and its configuration are **unstable** and intended for testing and development only. These endpoints and related environment variables may be removed or changed in future releases **without prior notice**.
@@ -212,11 +212,11 @@ VS Agent uses an opt-in plugin architecture. Each plugin is an independent packa
 
 ### Available plugins
 
-| Plugin      | Package                              | Description                                                                                   |
-| ----------- | ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `messaging` | _(built-in)_                         | Base credential and proof handlers. Always loaded — cannot be disabled.                       |
-| `chat`      | `@verana-labs/vs-agent-plugin-chat`  | Chat protocols: text messages, media, reactions, receipts, calls, action menus, user profile. |
-| `mrtd`      | `@verana-labs/vs-agent-plugin-mrtd`  | eMRTD / ePassport verification. Requires the `vs-agent-mrtd` Docker image.                    |
+| Plugin      | Package                             | Description                                                                                   |
+| ----------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| `messaging` | _(built-in)_                        | Base credential and proof handlers. Always loaded — cannot be disabled.                       |
+| `chat`      | `@verana-labs/vs-agent-plugin-chat` | Chat protocols: text messages, media, reactions, receipts, calls, action menus, user profile. |
+| `mrtd`      | `@verana-labs/vs-agent-plugin-mrtd` | eMRTD / ePassport verification. Requires the `vs-agent-mrtd` Docker image.                    |
 
 ### Selecting plugins
 
@@ -308,7 +308,7 @@ When building the image as part of a Compose setup, set `context` to the reposit
 services:
   vs-agent:
     build:
-      context: ../..                          # repository root
+      context: ../.. # repository root
       dockerfile: ./apps/vs-agent/Dockerfile
       target: vs-agent                        # choose the appropriate target (vs-agent or vs-agent-mrtd)
     environment:
@@ -329,9 +329,9 @@ For the moment, some details about VS-A API can be found in this [Document](./do
 
 The Admin API exposes a `credential-exchanges` resource for inspecting the issuance pipeline:
 
-| Method | Path                                              | Description                                                                                 |
-| ------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| GET    | `/v1/credential-exchanges`                        | List every credential exchange record with anoncreds metadata, state, and offer attributes. |
-| GET    | `/v1/credential-exchanges/:credentialExchangeId`  | Fetch a single credential exchange by id.                                                   |
+| Method | Path                                             | Description                                                                                 |
+| ------ | ------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| GET    | `/v1/credential-exchanges`                       | List every credential exchange record with anoncreds metadata, state, and offer attributes. |
+| GET    | `/v1/credential-exchanges/:credentialExchangeId` | Fetch a single credential exchange by id.                                                   |
 
 Useful for backend integrations and during testing to inspect what was offered, issued, or revoked.

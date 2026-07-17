@@ -4,7 +4,9 @@ import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import {
+  AuthorizationService,
   HttpInboundTransport,
+  migrateVtjscServiceIds,
   setupSelfTr,
   VsAgent,
   VsAgentWsInboundTransport,
@@ -13,6 +15,7 @@ import {
   VeranaIndexerService,
   IndexerWebSocketService,
   buildDefaultIndexerHandlerRegistry,
+  registerAuthorizationHandlers,
   EcsBootstrapService,
   reconcileVtjscPublications,
 } from '@verana-labs/vs-agent-sdk'
@@ -44,6 +47,7 @@ import {
   SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
   SELF_ISSUED_VTC_SERVICE_TYPE,
   UI_WELCOME_MESSAGE,
+  AGENT_DIDCOMM_VERSIONS,
   AGENT_LOG_LEVEL,
   AGENT_NAME,
   AGENT_PORT,
@@ -79,17 +83,31 @@ import {
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
-import { commonAppConfig, type ServerConfig, setupAgent, TsLogger, webhookEvent } from './utils'
+import {
+  commonAppConfig,
+  type ServerConfig,
+  setupAgent,
+  toNestLogLevels,
+  TsLogger,
+  webhookEvent,
+} from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
 
-  const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins))
+  // Nest's global level governs the plain @nestjs/common loggers (the credo agent uses AGENT_LOG_LEVEL).
+  const nestLogLevels = toNestLogLevels(ADMIN_LOG_LEVEL)
+
+  const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins), {
+    logger: nestLogLevels,
+  })
   commonAppConfig(adminApp, cors)
   await adminApp.listen(port)
 
   // PublicModule-specific config
-  const publicApp = await NestFactory.create(PublicModule.register(agent, publicApiBaseUrl))
+  const publicApp = await NestFactory.create(PublicModule.register(agent, publicApiBaseUrl), {
+    logger: nestLogLevels,
+  })
   commonAppConfig(publicApp, cors, true)
 
   // Send environment to UI
@@ -122,6 +140,8 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   return { httpServer, webSocketServer }
 }
+
+const AUTHORIZATION_SEED_RETRY_MS = 30_000
 
 const run = async () => {
   const serverLogger = new TsLogger(ADMIN_LOG_LEVEL, 'Server')
@@ -164,6 +184,15 @@ const run = async () => {
   }
   if (TRUSTED_ECS_ECOSYSTEM_DIDS.some(did => !did.startsWith('did:'))) {
     configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS must be a comma-separated list of DIDs')
+  }
+  if (!AGENT_DIDCOMM_VERSIONS.includes('v2')) {
+    if (VERANA_RPC_ENDPOINT_URL || VERANA_INDEXER_BASE_URL) {
+      configErrors.push('vt-flow requires DIDComm v2: add v2 to AGENT_DIDCOMM_VERSIONS')
+    } else {
+      serverLogger.warn(
+        'DIDComm v2 is disabled; vt-flow will be unavailable until v2 is added to AGENT_DIDCOMM_VERSIONS',
+      )
+    }
   }
   if (configErrors.length > 0) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
@@ -253,6 +282,7 @@ const run = async () => {
 
   // Connect to Verana blockchain for on-chain transactions
   let veranaChain: VeranaChainService | undefined
+  let authorizationService: AuthorizationService | undefined
   if (VERANA_RPC_ENDPOINT_URL && VERANA_ACCOUNT_MNEMONIC) {
     let corporationAddress: string | undefined
     if (VERANA_CORPORATION_ID && indexerService) {
@@ -274,10 +304,30 @@ const run = async () => {
     })
     await veranaChain.start()
 
+    authorizationService = new AuthorizationService({ chain: veranaChain, logger: serverLogger })
+    const seedAuthorizationCache = async (): Promise<boolean> =>
+      authorizationService!
+        .refreshForOperator()
+        .then(() => true)
+        .catch(error => {
+          serverLogger.error(
+            `[Authorization] failed to seed the authorization cache: ${(error as Error).message}`,
+          )
+          return false
+        })
+    if (!(await seedAuthorizationCache())) {
+      const retry = setInterval(async () => {
+        if (await seedAuthorizationCache()) clearInterval(retry)
+      }, AUTHORIZATION_SEED_RETRY_MS)
+      retry.unref()
+    }
+
     try {
       const balance = await veranaChain.getBalance()
-      const authorized = await veranaChain.hasVsOperatorAuthorization()
-      if (!authorized && Number(balance.amount) === 0) {
+      if (
+        authorizationService.listVsOperatorAuthorizationRecords().length === 0 &&
+        Number(balance.amount) === 0
+      ) {
         serverLogger.warn(
           `[VeranaChain] Operator account ${veranaChain.address} has no VSOperatorAuthorization and zero ${balance.denom} balance; on-chain operations will fail until it is granted authorization or funded.`,
         )
@@ -321,6 +371,7 @@ const run = async () => {
     masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
     veranaChain,
+    authorizationService,
     adminApiServiceEndpoint,
   })
 
@@ -333,6 +384,12 @@ const run = async () => {
     nestPlugins,
   }
   const { httpServer, webSocketServer } = await startServers(agent, conf)
+
+  if (agent.did) {
+    await migrateVtjscServiceIds(agent).catch((error: Error) =>
+      serverLogger.error(`[VTJSC] service id migration failed: ${error.message}`),
+    )
+  }
 
   // Initialize Self-Trust Registry
   if (agent.did)
@@ -378,6 +435,7 @@ const run = async () => {
         `[IndexerWS] Default handlers disabled: ${VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE.join(', ')}`,
       )
     }
+    if (authorizationService) registerAuthorizationHandlers(handlerRegistry, authorizationService)
 
     const indexerCorporationId =
       VERANA_INDEXER_SUBSCRIPTION_SCOPE === 'corporation' && VERANA_CORPORATION_ID
