@@ -14,7 +14,13 @@ import {
 import { BaseAgentModules, VsAgent } from '../agent'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { ParticipantRole, ParticipantState } from '../blockchain/types'
-import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
+import {
+  HOLDER_PARTICIPANT_TYPE,
+  ISSUER_GRANTOR_PARTICIPANT_TYPE,
+  ISSUER_PARTICIPANT_TYPE,
+  VERIFIER_GRANTOR_PARTICIPANT_TYPE,
+  VERIFIER_PARTICIPANT_TYPE,
+} from '../types'
 import { createCredential, createVtc, findMetadataEntry, removeStoredTrustCredential } from '../utils'
 
 import { credentialContentDigest } from './credentialDigest'
@@ -22,6 +28,8 @@ import { credentialContentDigest } from './credentialDigest'
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
   indexer?: VeranaIndexerService
+  agentParticipantId?: number
+  walletAgentParticipantId?: number
 }
 
 export interface StartOnboardingProcessInput {
@@ -60,11 +68,15 @@ export class VtFlowOrchestrator {
     if (holderParticipant.did !== this.agent.did) {
       throw new Error(`Applicant participant ${input.applicantParticipantId} does not belong to this agent`)
     }
-    if (
-      holderParticipant.role !== ISSUER_PARTICIPANT_TYPE &&
-      holderParticipant.role !== HOLDER_PARTICIPANT_TYPE
-    ) {
-      throw new Error(`Participant ${input.applicantParticipantId} is not an ISSUER or HOLDER participant`)
+    const applicantRoles = [
+      ISSUER_PARTICIPANT_TYPE,
+      VERIFIER_PARTICIPANT_TYPE,
+      ISSUER_GRANTOR_PARTICIPANT_TYPE,
+      VERIFIER_GRANTOR_PARTICIPANT_TYPE,
+      HOLDER_PARTICIPANT_TYPE,
+    ]
+    if (!applicantRoles.includes(Number(holderParticipant.role))) {
+      throw new Error(`Participant ${input.applicantParticipantId} has no applicant-capable role`)
     }
     if (!holderParticipant.validatorParticipantId) {
       throw new Error(`Applicant participant ${input.applicantParticipantId} has no validator_participant_id`)
@@ -119,8 +131,8 @@ export class VtFlowOrchestrator {
       connectionId,
       participantSessionId: input.participantSessionId ?? existing?.participantSessionId ?? utils.uuid(),
       participantId: String(holderParticipant.id),
-      agentParticipantId: '0',
-      walletAgentParticipantId: '0',
+      agentParticipantId: String(this.options.agentParticipantId ?? 0),
+      walletAgentParticipantId: String(this.options.walletAgentParticipantId ?? 0),
       claims: input.claims,
     })
   }
@@ -178,8 +190,12 @@ export class VtFlowOrchestrator {
     await chain.createOrUpdateParticipantSession({
       id: record.participantSessionId,
       issuerParticipantId: Number(holderParticipant.validatorParticipantId),
-      agentParticipantId: input.agentParticipantId ?? 0,
-      walletAgentParticipantId: input.walletAgentParticipantId ?? 0,
+      agentParticipantId:
+        Number(record.agentParticipantId ?? 0) ||
+        (input.agentParticipantId ?? this.options.agentParticipantId ?? 0),
+      walletAgentParticipantId:
+        Number(record.walletAgentParticipantId ?? 0) ||
+        (input.walletAgentParticipantId ?? this.options.walletAgentParticipantId ?? 0),
       digest,
     })
 
