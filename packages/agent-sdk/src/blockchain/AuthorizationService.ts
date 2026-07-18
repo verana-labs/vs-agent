@@ -117,7 +117,12 @@ export class AuthorizationService {
     return vsoas.some(
       vsoa =>
         this.inScope(vsoa.corporationId) &&
-        vsoa.records.some(r => r.msgTypes.includes(msgType) && isVsoaRecordActive(r.expiration, r.period)),
+        vsoa.records.some(
+          r =>
+            this.vsoaByParticipant.has(r.participantId) &&
+            r.msgTypes.includes(msgType) &&
+            isVsoaRecordActive(r.expiration, r.period),
+        ),
     )
   }
 

@@ -204,6 +204,44 @@ describe('AuthorizationService', () => {
     await expect(authz.callerHoldsVsOperatorGrant('verana1caller', 42, PP_SESSION)).resolves.toBe(false)
   })
 
+  it('scopes callerHoldsAnyVsOperatorGrant to participants the agent operates', async () => {
+    const { chain, listVsOperatorAuthorizations } = makeChain()
+    const agentVsoas = [
+      {
+        id: 1,
+        corporationId: 7,
+        vsOperator: 'verana1agent',
+        records: [{ participantId: 10, msgTypes: [PP_START_OP], withFeegrant: false, expiration: future }],
+      },
+    ]
+    let callerVsoas: unknown[] = []
+    listVsOperatorAuthorizations.mockImplementation((account?: string) =>
+      Promise.resolve(account === 'verana1caller' ? callerVsoas : agentVsoas),
+    )
+    const authz = makeAuthz(chain)
+    await authz.refreshForOperator()
+
+    callerVsoas = [
+      {
+        id: 2,
+        corporationId: 7,
+        vsOperator: 'verana1caller',
+        records: [{ participantId: 10, msgTypes: [PP_START_OP], withFeegrant: false, expiration: future }],
+      },
+    ]
+    await expect(authz.callerHoldsAnyVsOperatorGrant('verana1caller', PP_START_OP)).resolves.toBe(true)
+
+    callerVsoas = [
+      {
+        id: 3,
+        corporationId: 7,
+        vsOperator: 'verana1caller',
+        records: [{ participantId: 99, msgTypes: [PP_START_OP], withFeegrant: false, expiration: future }],
+      },
+    ]
+    await expect(authz.callerHoldsAnyVsOperatorGrant('verana1caller', PP_START_OP)).resolves.toBe(false)
+  })
+
   it('fails closed on a blank caller account without querying the chain', async () => {
     const { chain, listOperatorAuthorizations, listVsOperatorAuthorizations } = makeChain({
       oas: [{ id: 3, corporationId: 7, operator: 'verana1other', msgTypes: [PP_VALIDATE] }],

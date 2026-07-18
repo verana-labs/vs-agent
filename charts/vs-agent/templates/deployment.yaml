@@ -218,6 +218,7 @@ spec:
             resources:
 {{- toYaml .Values.resources | nindent 14 }}
             {{- end }}
+            {{- if contains "internal" (.Values.adminApiAuthMode | default "internal") }}
             livenessProbe:
               httpGet:
                 path: /v1/health
@@ -234,6 +235,22 @@ spec:
               periodSeconds: 60
               timeoutSeconds: 5
               failureThreshold: 2
+            {{- else }}
+            livenessProbe:
+              tcpSocket:
+                port: {{ .Values.adminApiExternalPort | default 3010 }}
+              initialDelaySeconds: 30
+              periodSeconds: 60
+              timeoutSeconds: 5
+              failureThreshold: 2
+            readinessProbe:
+              tcpSocket:
+                port: {{ .Values.adminApiExternalPort | default 3010 }}
+              initialDelaySeconds: 15
+              periodSeconds: 60
+              timeoutSeconds: 5
+              failureThreshold: 2
+            {{- end }}
             volumeMounts:
             - name: {{ .Values.name }}-vsa-pv
               mountPath: /root/.afj

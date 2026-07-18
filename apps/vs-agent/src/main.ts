@@ -262,6 +262,10 @@ const run = async () => {
     serverLogger.error('ADMIN_API_PUBLIC_URL is required when ADMIN_API_AUTH_MODE includes "corporation"')
     process.exit(1)
   }
+  if (ADMIN_API_AUTH_MODE.includes('corporation') && !VERANA_CORPORATION_ID) {
+    serverLogger.error('VERANA_CORPORATION_ID is required when ADMIN_API_AUTH_MODE includes "corporation"')
+    process.exit(1)
+  }
   const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE.includes('corporation')
     ? ADMIN_API_PUBLIC_URL
     : undefined
