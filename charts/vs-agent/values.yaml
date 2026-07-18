@@ -10,6 +10,12 @@ replicas: 1 # Number of replicas for the VS Agent service
 adminPort: 3000 # adminPort is the port for the Agent Admin API
 didcommPort: 3001 # Port for DIDComm
 
+# Admin API authentication
+adminApiAuthMode: "internal" # Comma-separated Admin API listeners: internal (no auth) and/or corporation (external listener with ADR-036 auth)
+adminApiPublicUrl: "" # Public https origin of the external listener, required when corporation mode is enabled (e.g. "https://admin.{{ .Values.global.domain }}")
+adminApiExternalPort: 3010 # Port for the external authenticated Admin API listener (used when corporation mode is enabled)
+adminApiCorporationAllowedAccounts: "" # Optional comma-separated allowlist of Verana account addresses for the external listener
+
 # Agent configuration
 didcommLabel: "VS Agent"
 eventsBaseUrl: "https://events.{{ .Values.global.domain }}"

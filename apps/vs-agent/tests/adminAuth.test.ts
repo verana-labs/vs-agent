@@ -38,7 +38,11 @@ async function issueToken(authService: AdminAuthService) {
   return { account: signer, token: issued!.token }
 }
 
-function makeContext(metadata: AccessModeMetadata | undefined, headers: Record<string, string> = {}) {
+function makeContext(
+  metadata: AccessModeMetadata | undefined,
+  headers: Record<string, string> = {},
+  params: Record<string, string> = { participantSessionId: 'sess-1' },
+) {
   const reflector = {
     getAllAndOverride: vi.fn((key: string) => (key === ACCESS_MODE_KEY ? metadata : undefined)),
   } as unknown as Reflector
@@ -46,7 +50,7 @@ function makeContext(metadata: AccessModeMetadata | undefined, headers: Record<s
     getHandler: () => ({}),
     getClass: () => ({}),
     switchToHttp: () => ({
-      getRequest: () => ({ headers, params: { participantSessionId: 'sess-1' } }),
+      getRequest: () => ({ headers, params }),
     }),
   } as unknown as ExecutionContext
   return { reflector, context }
@@ -143,6 +147,18 @@ describe('AdminAuthGuard', () => {
 
     await expect(guard.canActivate(context)).resolves.toBe(true)
     expect(callerCheck).toHaveBeenCalledWith(account, 9, '/verana.pp.v1.MsgSetParticipantOPToValidated')
+  })
+
+  it('allows a CORPORATION route without a flow scope when the caller holds any matching grant', async () => {
+    const authService = new AdminAuthService()
+    const { account, token } = await issueToken(authService)
+    const anyGrantCheck = vi.fn().mockResolvedValue(true)
+    const agent = { authorizationService: { callerHoldsAnyVsOperatorGrant: anyGrantCheck } }
+    const { reflector, context } = makeContext(CORPORATION_META, { authorization: `Bearer ${token}` }, {})
+    const guard = new AdminAuthGuard(reflector, authService, agent as never, [])
+
+    await expect(guard.canActivate(context)).resolves.toBe(true)
+    expect(anyGrantCheck).toHaveBeenCalledWith(account, '/verana.pp.v1.MsgSetParticipantOPToValidated')
   })
 
   it('rejects a CORPORATION route when the caller holds no matching grant', async () => {

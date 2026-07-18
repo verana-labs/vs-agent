@@ -111,6 +111,16 @@ export class AuthorizationService {
     )
   }
 
+  async callerHoldsAnyVsOperatorGrant(account: string, msgType: string): Promise<boolean> {
+    if (!account.trim()) return false
+    const vsoas = await this.chain.listVsOperatorAuthorizations(account)
+    return vsoas.some(
+      vsoa =>
+        this.inScope(vsoa.corporationId) &&
+        vsoa.records.some(r => r.msgTypes.includes(msgType) && isVsoaRecordActive(r.expiration, r.period)),
+    )
+  }
+
   async callerHoldsVsOperatorGrant(
     account: string,
     participantId: number,

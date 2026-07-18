@@ -46,18 +46,26 @@ export class AdminAuthGuard implements CanActivate {
     }
 
     const msgTypes = metadata?.msgTypes ?? []
-    const participantId = await this.resolveValidatorParticipantId(
-      request.params?.participantSessionId as string | undefined,
-    )
-    if (participantId === undefined) {
-      throw new ForbiddenException('could not resolve the participant scope for this flow')
-    }
+    const participantSessionId = request.params?.participantSessionId as string | undefined
 
-    const results = await Promise.all(
-      msgTypes.map(msgType =>
-        this.agent.authorizationService?.callerHoldsVsOperatorGrant(account, participantId, msgType),
-      ),
-    )
+    let results: (boolean | undefined)[]
+    if (participantSessionId) {
+      const participantId = await this.resolveValidatorParticipantId(participantSessionId)
+      if (participantId === undefined) {
+        throw new ForbiddenException('could not resolve the participant scope for this flow')
+      }
+      results = await Promise.all(
+        msgTypes.map(msgType =>
+          this.agent.authorizationService?.callerHoldsVsOperatorGrant(account, participantId, msgType),
+        ),
+      )
+    } else {
+      results = await Promise.all(
+        msgTypes.map(msgType =>
+          this.agent.authorizationService?.callerHoldsAnyVsOperatorGrant(account, msgType),
+        ),
+      )
+    }
     if (!results.some(Boolean)) {
       throw new ForbiddenException('account holds no authorization covering this method')
     }
