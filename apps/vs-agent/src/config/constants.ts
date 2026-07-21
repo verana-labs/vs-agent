@@ -164,6 +164,7 @@ export const ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS = (
 //   'messaging' — base MessageController + credential/proof handlers (always required)
 //   'chat'      — chat Credo modules + chat message handlers
 //   'mrtd'      — eMRTD Credo module + MRTD message handlers
+//   'openid4vc' — OpenID4VCI issuer and OpenID4VP verifier
 //
 // In production this value is set by the Docker image (VS_AGENT_PLUGINS env in Dockerfile).
 // Only override it in development environments.
@@ -173,3 +174,5 @@ export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'messa
   .filter(Boolean)
 
 if (!ENABLED_PLUGINS.includes('messaging')) ENABLED_PLUGINS.unshift('messaging')
+
+export const OID4VC_CONFIG_FILE = process.env.OID4VC_CONFIG_FILE

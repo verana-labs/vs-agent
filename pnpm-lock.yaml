@@ -162,6 +162,9 @@ importers:
       '@verana-labs/vs-agent-plugin-mrtd':
         specifier: workspace:*
         version: link:../../packages/plugin-mrtd
+      '@verana-labs/vs-agent-plugin-openid4vc':
+        specifier: workspace:*
+        version: link:../../packages/plugin-openid4vc
     devDependencies:
       '@nestjs/cli':
         specifier: ^10.0.0
