@@ -26,7 +26,9 @@ export async function loadOpenId4VcOptions(
   publicApiBaseUrl: string,
 ): Promise<OpenId4VcOptions> {
   const pluginModule = await importOpenId4VcPlugin()
-  return loadOpenId4VcOptionsWithModule(configPath, publicApiBaseUrl, pluginModule)
+  const options = await readOpenId4VcOptions(configPath, publicApiBaseUrl)
+  pluginModule.validateOpenId4VcOptions(options)
+  return options
 }
 
 export async function loadOptionalOpenId4VcPlugin(
@@ -38,15 +40,11 @@ export async function loadOptionalOpenId4VcPlugin(
   if (!configPath) throw new Error('OID4VC_CONFIG_FILE is required when the OpenID4VC plugin is enabled')
 
   const pluginModule = await importOpenId4VcPlugin()
-  const options = await loadOpenId4VcOptionsWithModule(configPath, publicApiBaseUrl, pluginModule)
+  const options = await readOpenId4VcOptions(configPath, publicApiBaseUrl)
   return pluginModule.OpenId4VcPlugin(options)
 }
 
-async function loadOpenId4VcOptionsWithModule(
-  configPath: string,
-  publicApiBaseUrl: string,
-  pluginModule: OpenId4VcPluginModule,
-): Promise<OpenId4VcOptions> {
+async function readOpenId4VcOptions(configPath: string, publicApiBaseUrl: string): Promise<OpenId4VcOptions> {
   let contents: string
   try {
     contents = await readFile(configPath, 'utf8')
@@ -75,9 +73,7 @@ async function loadOpenId4VcOptionsWithModule(
     )
   }
 
-  const options: OpenId4VcOptions = { ...parsed, publicApiBaseUrl }
-  pluginModule.validateOpenId4VcOptions(options)
-  return options
+  return { ...parsed, publicApiBaseUrl }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

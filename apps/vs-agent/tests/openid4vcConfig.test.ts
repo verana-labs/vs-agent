@@ -21,7 +21,9 @@ const validConfig = () => ({
   trust: {
     resolverUrl: 'https://resolver.example/v1/trust',
     timeoutMs: 5_000,
-    credentialIssuerCertificates: ['MIIB-test-root'],
+    allowedDidWebHosts: ['issuer.example'],
+    credentialIssuerCertificates: [],
+    developmentCertificateFingerprints: [`SHA256:${'0'.repeat(64)}`],
   },
   credentialConfigurations: [
     {
@@ -110,7 +112,10 @@ describe('OpenID4VC application configuration', () => {
   it('returns the single plugin instance created by the optional package', async () => {
     const plugin = { name: 'openid4vc' }
     const validateOpenId4VcOptions = vi.fn()
-    const OpenId4VcPlugin = vi.fn(() => plugin)
+    const OpenId4VcPlugin = vi.fn(options => {
+      validateOpenId4VcOptions(options)
+      return plugin
+    })
     vi.doMock('@verana-labs/vs-agent-plugin-openid4vc', () => ({
       validateOpenId4VcOptions,
       OpenId4VcPlugin,
