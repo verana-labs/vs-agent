@@ -18,7 +18,12 @@ export class TrustClient {
     private readonly options: TrustClientOptions,
     private readonly fetchImplementation: typeof fetch = globalThis.fetch,
   ) {
-    this.resolverUrl = new URL(options.resolverUrl)
+    const resolverUrl = new URL(options.resolverUrl)
+    if (resolverUrl.username || resolverUrl.password) {
+      throw new Error('resolver URL must not contain credentials')
+    }
+
+    this.resolverUrl = resolverUrl
   }
 
   public async resolve(did: string): Promise<TrustResolution> {

@@ -38,6 +38,16 @@ describe('computeVerdict', () => {
 })
 
 describe('TrustClient', () => {
+  it('rejects resolver URL credentials before fetch or trust evidence can expose them', () => {
+    const fetchImplementation = vi.fn() as unknown as typeof fetch
+    const credentialedUrl = 'https://resolver-user:resolver-password@resolver.example/v1/trust'
+
+    expect(
+      () => new TrustClient({ resolverUrl: credentialedUrl, timeoutMs: 1_000 }, fetchImplementation),
+    ).toThrowError('resolver URL must not contain credentials')
+    expect(fetchImplementation).not.toHaveBeenCalled()
+  })
+
   it.each(['TRUSTED', 'PARTIAL', 'UNTRUSTED'] as const)(
     'accepts only the declared %s trust status',
     async trustStatus => {
