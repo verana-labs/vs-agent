@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.12.0](https://github.com/verana-labs/vs-agent/compare/v1.11.0...v1.12.0) (2026-07-21)
+
+
+### Features
+
+* **agent-sdk:** applicant-side on-chain operations ([#492](https://github.com/verana-labs/vs-agent/issues/492)) ([610bac5](https://github.com/verana-labs/vs-agent/commit/610bac53009a79d018400eef994d94bd9650133b))
+* **agent-sdk:** authorization notifications and cache ([#495](https://github.com/verana-labs/vs-agent/issues/495)) ([2a4aeb7](https://github.com/verana-labs/vs-agent/commit/2a4aeb7659f1ee1751c7873c2ec861e5c40844b2))
+* **agent-sdk:** complete indexer notification default handlers ([#493](https://github.com/verana-labs/vs-agent/issues/493)) ([7a0243a](https://github.com/verana-labs/vs-agent/commit/7a0243a13b4cc6f1f86884383ca18e67f37b9695))
+* **agent-sdk:** direct issuance validator side ([#510](https://github.com/verana-labs/vs-agent/issues/510)) ([f13a359](https://github.com/verana-labs/vs-agent/commit/f13a3591fada7335b288e30294c6386ba24d6dc0))
+* **agent-sdk:** harden indexer subscription ([#482](https://github.com/verana-labs/vs-agent/issues/482)) ([cc29bc7](https://github.com/verana-labs/vs-agent/commit/cc29bc73919af9de9ff353f103704e3f3afd7bbf))
+* **agent-sdk:** serve tails by content hash, drop in-memory index ([#462](https://github.com/verana-labs/vs-agent/issues/462)) ([645ede0](https://github.com/verana-labs/vs-agent/commit/645ede0897b85b441503867dd3f507104c8ed02f))
+* applicant credential verification and acceptance ([#490](https://github.com/verana-labs/vs-agent/issues/490)) ([046c185](https://github.com/verana-labs/vs-agent/commit/046c185249bf7ca43b4cf476462dad97b2ecf181))
+* **chart:** configurable redis image, maxmemory and extra args ([#514](https://github.com/verana-labs/vs-agent/issues/514)) ([b714471](https://github.com/verana-labs/vs-agent/commit/b714471e852533d78ec5d8672a00b19c6a6714c8))
+* check verifiable service requirements prior to accept vt flows ([#479](https://github.com/verana-labs/vs-agent/issues/479)) ([4347f91](https://github.com/verana-labs/vs-agent/commit/4347f91899a671548dda10364364a87960fa781e))
+* create vt flow events ([#448](https://github.com/verana-labs/vs-agent/issues/448)) ([a91e2ea](https://github.com/verana-labs/vs-agent/commit/a91e2ea31ef25d7cf592711b97557741ba58a52d))
+* decouple webhook event delivery from sdk ([#447](https://github.com/verana-labs/vs-agent/issues/447)) ([703a196](https://github.com/verana-labs/vs-agent/commit/703a196d40ed52089037ec30c5436c49b8ca7db0))
+* Developer overridable handler extension points ([#486](https://github.com/verana-labs/vs-agent/issues/486)) ([739092a](https://github.com/verana-labs/vs-agent/commit/739092a4fc1a456d04912b74f70d5b23d7bd82a1))
+* **vs-agent-ui:** restyle dashboard to the Verana Protocol Grid design ([#494](https://github.com/verana-labs/vs-agent/issues/494)) ([f4793d4](https://github.com/verana-labs/vs-agent/commit/f4793d4be8262b1599de2f6d05c0aa68b8ae06d9))
+* **vs-agent:** add and validate v4 config and env surface ([#484](https://github.com/verana-labs/vs-agent/issues/484)) ([5d8c836](https://github.com/verana-labs/vs-agent/commit/5d8c836cb3713bc422cf4f1d99fa1efcfde4e2b7))
+* **vs-agent:** add revocation-registry kebab-case route alias ([#480](https://github.com/verana-labs/vs-agent/issues/480)) ([97cc075](https://github.com/verana-labs/vs-agent/commit/97cc075f22955b931c8ba573545afd8d5c65bb0f))
+* **vs-agent:** corporation-scoped admin API auth (ADR-036) ([#500](https://github.com/verana-labs/vs-agent/issues/500)) ([a56bc20](https://github.com/verana-labs/vs-agent/commit/a56bc20a47368ff1c7976b7924db05cd3b4d4707))
+* **vs-agent:** ECS credential bootstrap for standalone and delegated modes ([#496](https://github.com/verana-labs/vs-agent/issues/496)) ([a40e7db](https://github.com/verana-labs/vs-agent/commit/a40e7dbbb620fbd7fed9c38e5cb33df263b294a5))
+* **vs-agent:** flow management admin routes ([#498](https://github.com/verana-labs/vs-agent/issues/498)) ([19d6ee2](https://github.com/verana-labs/vs-agent/commit/19d6ee29b55fce37953debadabba468b26e9ada1))
+* **vs-agent:** NRP flag for IdentityProofRequestMessage ([#460](https://github.com/verana-labs/vs-agent/issues/460)) ([e3389a6](https://github.com/verana-labs/vs-agent/commit/e3389a60f04df93d54c37788fa6bfdc8ac761e6d))
+* **vs-agent:** publish VsAgentAdminAPI DID Document service entry ([#478](https://github.com/verana-labs/vs-agent/issues/478)) ([9526c53](https://github.com/verana-labs/vs-agent/commit/9526c5300ccb1e688d849abf19adaa977d5c8a0b))
+* **vs-agent:** service endpoint management admin API and trigger resolver ([#468](https://github.com/verana-labs/vs-agent/issues/468)) ([e6df3a2](https://github.com/verana-labs/vs-agent/commit/e6df3a2acbba02602f80e8597359b8321064fa1a))
+* **vt-flow:** align with onboarding-process spec and remove legacy one ([#457](https://github.com/verana-labs/vs-agent/issues/457)) ([a247fd0](https://github.com/verana-labs/vs-agent/commit/a247fd04db28198bdd153dbd7181848ce00744a4))
+* **vt-flow:** onboarding-process flow + v4 participant/ecosystem migration ([#430](https://github.com/verana-labs/vs-agent/issues/430)) ([cac9a79](https://github.com/verana-labs/vs-agent/commit/cac9a79ca2e92e63572cf32ad404a84ec3327dd0))
+
+
+### Bug Fixes
+
+* **agent-sdk:** migrate did:webvh logs rejected by didwebvh-ts 2.8.0 ([#489](https://github.com/verana-labs/vs-agent/issues/489)) ([582275d](https://github.com/verana-labs/vs-agent/commit/582275d125636d317b288f5016efb26c6cdfc90e))
+* **agent-sdk:** store tails files in a durable configurable directory ([#459](https://github.com/verana-labs/vs-agent/issues/459)) ([47808b0](https://github.com/verana-labs/vs-agent/commit/47808b0a5fc8d5177f9624a03e20870c17041814))
+* **chart:** mount redis data volume at /data so persistence works ([#515](https://github.com/verana-labs/vs-agent/issues/515)) ([5fd15cf](https://github.com/verana-labs/vs-agent/commit/5fd15cf5a76dbeee11ab734d25020a2ec001e570))
+* deploy only two vs-agent flavours ([#512](https://github.com/verana-labs/vs-agent/issues/512)) ([fc788e5](https://github.com/verana-labs/vs-agent/commit/fc788e57a41cc11d14d140101af7b04d8b1dadc9))
+* **examples:** build vt-flow before sdk in docker images ([#463](https://github.com/verana-labs/vs-agent/issues/463)) ([eb86d81](https://github.com/verana-labs/vs-agent/commit/eb86d818a6cc5e9114109275f7a61c36ab4517ef))
+* log levels from env vars not taken into account ([#517](https://github.com/verana-labs/vs-agent/issues/517)) ([ddba7e3](https://github.com/verana-labs/vs-agent/commit/ddba7e35d18691b6e9c2f1aa32549a34c55b7f92))
+* repair webvh keys missing on migration ([#511](https://github.com/verana-labs/vs-agent/issues/511)) ([823c22f](https://github.com/verana-labs/vs-agent/commit/823c22f216dea2599f827f31266ae64c97cce17d))
+* v4 conformance details for VTJSC naming, managed mutations, and applicant roles ([#507](https://github.com/verana-labs/vs-agent/issues/507)) ([387d8ab](https://github.com/verana-labs/vs-agent/commit/387d8ab2e02c83eca84bf5f0a93bba403c6f9636))
+* validator-side issuance and agent startup bugs ([#501](https://github.com/verana-labs/vs-agent/issues/501)) ([9316205](https://github.com/verana-labs/vs-agent/commit/9316205f4aac875cbe5b494b7ebb6c548f6b476f))
+* vs-agent docker image build ([#461](https://github.com/verana-labs/vs-agent/issues/461)) ([1dbcf22](https://github.com/verana-labs/vs-agent/commit/1dbcf223f4f98ebe731f909a292c582203512302))
+* **vt-flow:** credential cleanup on revocation and cancel-aware flow reconciliation ([#506](https://github.com/verana-labs/vs-agent/issues/506)) ([391299f](https://github.com/verana-labs/vs-agent/commit/391299f46e2a4a4d3eec2106434997ab1a0f5610))
+
 ## [1.11.0](https://github.com/verana-labs/vs-agent/compare/v1.10.1...v1.11.0) (2026-05-25)
 
 
