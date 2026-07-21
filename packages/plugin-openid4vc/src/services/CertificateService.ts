@@ -54,6 +54,14 @@ async function loadConfiguredSigningCertificate(
 
   const chain = configured.certificateChain.map(encoded => X509Certificate.fromEncodedCertificate(encoded))
   assertCertificateChainUsable(chain)
+  const configuredChainEndpoint = configured.certificateChain[configured.certificateChain.length - 1]
+
+  // This trust endpoint is operator-configured signing material, never a peer-provided chain.
+  await agent.x509.validateCertificateChain({
+    certificateChain: configured.certificateChain,
+    trustedCertificates: [configuredChainEndpoint],
+    allowNonRootTrustedCertificate: true,
+  })
 
   const certificate = chain[0]
   if (certificate.subject === certificate.issuer) {

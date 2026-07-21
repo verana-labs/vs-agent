@@ -56,12 +56,15 @@ export const OTHER_PRIVATE_JWK: Kms.KmsJwkPrivateEc = {
 interface CertificateFixtures {
   root: X509Certificate
   intermediate: X509Certificate
+  expiredIntermediate: X509Certificate
+  notYetValidIntermediate: X509Certificate
   leaf: X509Certificate
   expiredLeaf: X509Certificate
   leafWithoutUriSan: X509Certificate
   leafWithNonDidUriSan: X509Certificate
   leafWithMalformedDidUriSan: X509Certificate
   attacker: X509Certificate
+  expiredAttacker: X509Certificate
 }
 
 export async function createCertificateFixtures(): Promise<CertificateFixtures> {
@@ -86,22 +89,28 @@ export async function createCertificateFixtures(): Promise<CertificateFixtures> 
     },
     webcrypto,
   )
-  const intermediate = await X509CertificateGenerator.create(
-    {
-      serialNumber: '02',
-      issuer: root.subject,
-      subject: 'CN=Fixture Intermediate',
-      publicKey: intermediateKeys.publicKey,
-      signingKey: rootKeys.privateKey,
-      notBefore: VALID_FROM,
-      notAfter: VALID_UNTIL,
-      extensions: [
-        new BasicConstraintsExtension(true, 0, true),
-        new KeyUsagesExtension(KeyUsageFlags.keyCertSign | KeyUsageFlags.cRLSign, true),
-      ],
-    },
-    webcrypto,
-  )
+  const createIntermediate = async (serialNumber: string, notBefore: Date, notAfter: Date) =>
+    await X509CertificateGenerator.create(
+      {
+        serialNumber,
+        issuer: root.subject,
+        subject: 'CN=Fixture Intermediate',
+        publicKey: intermediateKeys.publicKey,
+        signingKey: rootKeys.privateKey,
+        notBefore,
+        notAfter,
+        extensions: [
+          new BasicConstraintsExtension(true, 0, true),
+          new KeyUsagesExtension(KeyUsageFlags.keyCertSign | KeyUsageFlags.cRLSign, true),
+        ],
+      },
+      webcrypto,
+    )
+  const [intermediate, expiredIntermediate, notYetValidIntermediate] = await Promise.all([
+    createIntermediate('02', VALID_FROM, VALID_UNTIL),
+    createIntermediate('09', new Date('2019-01-01T00:00:00.000Z'), new Date('2020-01-01T00:00:00.000Z')),
+    createIntermediate('0A', new Date('2040-01-01T00:00:00.000Z'), new Date('2041-01-01T00:00:00.000Z')),
+  ])
 
   const createLeaf = async ({
     serialNumber,
@@ -131,63 +140,76 @@ export async function createCertificateFixtures(): Promise<CertificateFixtures> 
       },
       webcrypto,
     )
-
-  const [leaf, expiredLeaf, leafWithoutUriSan, leafWithNonDidUriSan, leafWithMalformedDidUriSan, attacker] =
-    await Promise.all([
-      createLeaf({
-        serialNumber: '03',
-        subjectAlternativeNames: [
-          { type: 'url', value: 'did:web:issuer.example' },
-          { type: 'dns', value: 'issuer.example' },
+  const createOtherSelfSigned = async (serialNumber: string, notBefore: Date, notAfter: Date) =>
+    await X509CertificateGenerator.createSelfSigned(
+      {
+        serialNumber,
+        name: 'CN=Attacker',
+        keys: otherKeys,
+        notBefore,
+        notAfter,
+        extensions: [
+          new BasicConstraintsExtension(false, undefined, true),
+          new KeyUsagesExtension(KeyUsageFlags.digitalSignature, true),
+          new SubjectAlternativeNameExtension([
+            { type: 'url', value: 'did:web:attacker.example' },
+            { type: 'dns', value: 'attacker.example' },
+          ]),
         ],
-      }),
-      createLeaf({
-        serialNumber: '04',
-        notBefore: new Date('2019-01-01T00:00:00.000Z'),
-        notAfter: new Date('2020-01-01T00:00:00.000Z'),
-        subjectAlternativeNames: [{ type: 'url', value: 'did:web:expired.example' }],
-      }),
-      createLeaf({
-        serialNumber: '05',
-        subjectAlternativeNames: [{ type: 'dns', value: 'issuer.example' }],
-      }),
-      createLeaf({
-        serialNumber: '06',
-        subjectAlternativeNames: [{ type: 'url', value: 'https://issuer.example' }],
-      }),
-      createLeaf({
-        serialNumber: '08',
-        subjectAlternativeNames: [{ type: 'url', value: 'did:' }],
-      }),
-      X509CertificateGenerator.createSelfSigned(
-        {
-          serialNumber: '07',
-          name: 'CN=Attacker',
-          keys: otherKeys,
-          notBefore: VALID_FROM,
-          notAfter: VALID_UNTIL,
-          extensions: [
-            new BasicConstraintsExtension(false, undefined, true),
-            new KeyUsagesExtension(KeyUsageFlags.digitalSignature, true),
-            new SubjectAlternativeNameExtension([
-              { type: 'url', value: 'did:web:attacker.example' },
-              { type: 'dns', value: 'attacker.example' },
-            ]),
-          ],
-        },
-        webcrypto,
-      ),
-    ])
+      },
+      webcrypto,
+    )
+
+  const [
+    leaf,
+    expiredLeaf,
+    leafWithoutUriSan,
+    leafWithNonDidUriSan,
+    leafWithMalformedDidUriSan,
+    attacker,
+    expiredAttacker,
+  ] = await Promise.all([
+    createLeaf({
+      serialNumber: '03',
+      subjectAlternativeNames: [
+        { type: 'url', value: 'did:web:issuer.example' },
+        { type: 'dns', value: 'issuer.example' },
+      ],
+    }),
+    createLeaf({
+      serialNumber: '04',
+      notBefore: new Date('2019-01-01T00:00:00.000Z'),
+      notAfter: new Date('2020-01-01T00:00:00.000Z'),
+      subjectAlternativeNames: [{ type: 'url', value: 'did:web:expired.example' }],
+    }),
+    createLeaf({
+      serialNumber: '05',
+      subjectAlternativeNames: [{ type: 'dns', value: 'issuer.example' }],
+    }),
+    createLeaf({
+      serialNumber: '06',
+      subjectAlternativeNames: [{ type: 'url', value: 'https://issuer.example' }],
+    }),
+    createLeaf({
+      serialNumber: '08',
+      subjectAlternativeNames: [{ type: 'url', value: 'did:' }],
+    }),
+    createOtherSelfSigned('07', VALID_FROM, VALID_UNTIL),
+    createOtherSelfSigned('0B', new Date('2019-01-01T00:00:00.000Z'), new Date('2020-01-01T00:00:00.000Z')),
+  ])
 
   return {
     root: fromPeculiar(root),
     intermediate: fromPeculiar(intermediate),
+    expiredIntermediate: fromPeculiar(expiredIntermediate),
+    notYetValidIntermediate: fromPeculiar(notYetValidIntermediate),
     leaf: fromPeculiar(leaf),
     expiredLeaf: fromPeculiar(expiredLeaf),
     leafWithoutUriSan: fromPeculiar(leafWithoutUriSan),
     leafWithNonDidUriSan: fromPeculiar(leafWithNonDidUriSan),
     leafWithMalformedDidUriSan: fromPeculiar(leafWithMalformedDidUriSan),
     attacker: fromPeculiar(attacker),
+    expiredAttacker: fromPeculiar(expiredAttacker),
   }
 }
 

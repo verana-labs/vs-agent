@@ -26,6 +26,11 @@ describe('CertificateService', () => {
     expect(handle.certificate.equal(handle.chain[0])).toBe(true)
     expect(handle.keyId).toBe('fixture-leaf')
     expect(handle.development).toBe(false)
+    expect(agent.x509.validateCertificateChain).toHaveBeenCalledWith({
+      certificateChain: [fixtures.leaf.toString('base64'), fixtures.intermediate.toString('base64')],
+      trustedCertificates: [fixtures.intermediate.toString('base64')],
+      allowNonRootTrustedCertificate: true,
+    })
   })
 
   it('rejects a private key that does not match the leaf certificate', async () => {
@@ -38,10 +43,42 @@ describe('CertificateService', () => {
     )
   })
 
+  it('rejects a leaf followed by an unrelated self-signed certificate', async () => {
+    const validationError = new Error('configured certificate chain is invalid')
+    const agent = createAgent({ validationError })
+    const certificateChain = [fixtures.leaf.toString('base64'), fixtures.attacker.toString('base64')]
+
+    await expect(
+      loadSigningCertificate(agent, {
+        configured: { certificateChain, privateJwk: LEAF_PRIVATE_JWK },
+      }),
+    ).rejects.toThrow('configured certificate chain is invalid')
+    expect(agent.x509.validateCertificateChain).toHaveBeenCalledWith({
+      certificateChain,
+      trustedCertificates: [fixtures.attacker.toString('base64')],
+      allowNonRootTrustedCertificate: true,
+    })
+  })
+
   it('rejects an expired certificate', async () => {
     await expect(
       loadSigningCertificate(createAgent(), configuredSigning(fixtures.expiredLeaf, fixtures.intermediate)),
     ).rejects.toThrow('expired')
+  })
+
+  it('rejects an expired intermediate certificate', async () => {
+    await expect(
+      loadSigningCertificate(createAgent(), configuredSigning(fixtures.leaf, fixtures.expiredIntermediate)),
+    ).rejects.toThrow('expired')
+  })
+
+  it('rejects an intermediate certificate that is not yet valid', async () => {
+    await expect(
+      loadSigningCertificate(
+        createAgent(),
+        configuredSigning(fixtures.leaf, fixtures.notYetValidIntermediate),
+      ),
+    ).rejects.toThrow('not yet valid')
   })
 
   it('rejects an empty configured chain', async () => {
@@ -128,6 +165,19 @@ describe('CertificateService', () => {
       }),
     )
   })
+
+  it('rejects an expired persisted development certificate', async () => {
+    const agent = createAgent({ persistedDevelopmentCertificate: fixtures.expiredAttacker })
+    agent.did = 'did:web:attacker.example'
+    agent.publicApiBaseUrl = 'https://attacker.example/agent'
+
+    await expect(
+      loadSigningCertificate(agent, {
+        development: { enabled: true, commonName: 'Development Agent' },
+      }),
+    ).rejects.toThrow('expired')
+    expect(agent.kms.createKey).not.toHaveBeenCalled()
+  })
 })
 
 function configuredSigning(
@@ -152,9 +202,20 @@ function publicJwk(privateJwk: Kms.KmsJwkPrivateEc): Kms.KmsJwkPublicEc {
   }
 }
 
-function createAgent({ developmentCertificate }: { developmentCertificate?: X509Certificate } = {}) {
+function createAgent({
+  developmentCertificate,
+  persistedDevelopmentCertificate,
+  validationError,
+}: {
+  developmentCertificate?: X509Certificate
+  persistedDevelopmentCertificate?: X509Certificate
+  validationError?: Error
+} = {}) {
   const keys = new Map<string, Kms.KmsJwkPublicEc>()
   const records = new Map<string, { id: string; content: Record<string, unknown> }>()
+  if (persistedDevelopmentCertificate) {
+    keys.set('development-key', { ...publicJwk(OTHER_PRIVATE_JWK), kid: 'development-key' })
+  }
   const kms = {
     createKey: vi.fn(async () => {
       const keyId = 'development-key'
@@ -175,13 +236,27 @@ function createAgent({ developmentCertificate }: { developmentCertificate?: X509
     }),
   }
   const genericRecords = {
-    findById: vi.fn(async (id: string) => records.get(id) ?? null),
+    findById: vi.fn(async (id: string) =>
+      persistedDevelopmentCertificate
+        ? {
+            id,
+            content: {
+              certificate: persistedDevelopmentCertificate.toString('base64'),
+              keyId: 'development-key',
+            },
+          }
+        : (records.get(id) ?? null),
+    ),
     save: vi.fn(async (record: { id: string; content: Record<string, unknown> }) => {
       records.set(record.id, record)
       return record
     }),
   }
   const x509 = {
+    validateCertificateChain: vi.fn(async () => {
+      if (validationError) throw validationError
+      return []
+    }),
     createCertificate: vi.fn(async () => {
       if (!developmentCertificate) throw new Error('development certificate fixture was not configured')
       return developmentCertificate
