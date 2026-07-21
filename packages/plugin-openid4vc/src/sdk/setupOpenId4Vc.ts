@@ -1,6 +1,6 @@
 import type { OpenId4VcPluginOptions } from '../types'
 
-import { X509Module } from '@credo-ts/core'
+import { X509Certificate, X509Module } from '@credo-ts/core'
 import {
   OpenId4VcModule,
   type OpenId4VciCredentialRequestToCredentialMapper,
@@ -31,11 +31,14 @@ export function setupOpenId4Vc(
   options: OpenId4VcPluginOptions,
   getIssuerService?: () => OpenId4VcIssuerRequestMapper,
 ): OpenId4VcSdkPlugin {
-  const app = express()
+  const walletAttestationCertificates = options.issuer?.walletAttestationCertificates
   const walletAttestationEnabled =
-    options.issuer?.requireWalletAttestation === true &&
-    Boolean(options.issuer.walletAttestationCertificates?.length)
+    options.issuer?.requireWalletAttestation === true && Boolean(walletAttestationCertificates?.length)
+  if (walletAttestationEnabled && walletAttestationCertificates) {
+    assertValidWalletAttestationCertificates(walletAttestationCertificates)
+  }
 
+  const app = express()
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
 
   const moduleOptions: OpenId4VcModuleConfigOptions<null, null> = {
@@ -72,6 +75,16 @@ export function setupOpenId4Vc(
     },
     publicMiddleware: app,
   }
+}
+
+function assertValidWalletAttestationCertificates(certificates: string[]): void {
+  certificates.forEach((certificate, index) => {
+    try {
+      X509Certificate.fromEncodedCertificate(certificate)
+    } catch {
+      throw new Error(`issuer.walletAttestationCertificates[${index}] must be a valid X.509 certificate`)
+    }
+  })
 }
 
 function advertiseWalletAttestationMetadata(request: Request, response: Response, next: NextFunction): void {

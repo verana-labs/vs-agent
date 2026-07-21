@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 
 import { setupOpenId4Vc } from '../src/sdk/setupOpenId4Vc'
 
+import { createCertificateFixtures } from './helpers/certificates'
+
 const validOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   issuer: {
@@ -89,7 +91,9 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('does not advertise wallet attestation metadata by default', async () => {
-    const setup = setupOpenId4Vc(validOptions(), () => ({
+    const options = validOptions()
+    options.issuer!.walletAttestationCertificates = ['unused-while-attestation-is-not-required']
+    const setup = setupOpenId4Vc(options, () => ({
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
@@ -110,9 +114,10 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('advertises wallet attestation only when it is required and has trusted roots', async () => {
+    const fixtures = await createCertificateFixtures()
     const options = validOptions()
     options.issuer!.requireWalletAttestation = true
-    options.issuer!.walletAttestationCertificates = ['MIIB-wallet-root']
+    options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]
     const setup = setupOpenId4Vc(options, () => ({
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -131,5 +136,23 @@ describe('setupOpenId4Vc', () => {
     expect(response.body.client_attestation_signing_alg_values_supported).toEqual(['ES256'])
     expect(response.body.client_attestation_pop_signing_alg_values_supported).toEqual(['ES256'])
     expect(setup.modules.openId4Vc.config.issuer?.walletAttestationsRequired).toBe(true)
+  })
+
+  it('rejects a malformed required wallet-attestation root synchronously', async () => {
+    const fixtures = await createCertificateFixtures()
+    const options = validOptions()
+    options.issuer!.requireWalletAttestation = true
+    options.issuer!.walletAttestationCertificates = [
+      fixtures.root.toString('base64'),
+      'MIIB-private-attestation-material',
+    ]
+
+    expect(() =>
+      setupOpenId4Vc(options, () => ({
+        mapCredentialRequest: () => {
+          throw new Error('not implemented')
+        },
+      })),
+    ).toThrowError(/^issuer\.walletAttestationCertificates\[1\] must be a valid X\.509 certificate$/)
   })
 })
