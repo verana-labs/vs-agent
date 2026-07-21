@@ -52,7 +52,8 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node build/src/main",
     "version": "pnpm version --allow-same-version",
-    "test": "vitest"
+    "test": "vitest",
+    "test:e2e": "RUN_FLOW_E2E=1 vitest run tests/e2e"
   },
   "dependencies": {
     "@credo-ts/anoncreds": "0.7.1-pr-2704-20260630143332",

@@ -136,6 +136,17 @@ These variables enable on-chain features (permission management, trust registry 
 
 > The agent maintains a persistent WebSocket connection to the indexer to receive updates about permissions, trust registries, and credential schemas. These events are used to keep the agent state in sync with the ledger.
 
+#### Admin API authentication
+
+The Admin API can run two listeners: an unauthenticated internal one (trusted by network reachability) and an authenticated external one. External callers get a bearer token by signing a challenge with their Verana account key (ADR-036) via `POST /v1/auth/challenge` and `POST /v1/auth/token`.
+
+| Variable                                 | Required | Description                                                                                                                                          |
+| ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ADMIN_API_AUTH_MODE`                    | OPTIONAL | Comma-separated listeners to activate: `internal` (default, no auth) and/or `corporation` (external listener with ADR-036 auth).                      |
+| `ADMIN_API_PUBLIC_URL`                   | CONDITIONAL | Public `https://` origin (no trailing path) where the external listener is exposed. Required when `corporation` is in `ADMIN_API_AUTH_MODE`, must not be set otherwise. Published in the agent's DID Document as the `VsAgentAdminAPI` service. |
+| `ADMIN_API_EXTERNAL_PORT`                | OPTIONAL | Port for the external authenticated listener. Default `3010`. Only used when `corporation` is in `ADMIN_API_AUTH_MODE`.                              |
+| `ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS` | OPTIONAL | Comma-separated allowlist of Verana account addresses accepted on the external listener, applied before the per-method authorization check.          |
+
 > **Note:** This feature is currently under active development. The interface and behavior may change in future releases.
 
 ### Agent feature discovery

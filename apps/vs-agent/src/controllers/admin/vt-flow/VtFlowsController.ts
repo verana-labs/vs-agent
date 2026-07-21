@@ -8,6 +8,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 
+import { AccessMode } from '../../../security'
+
 import { VtFlowsService } from './VtFlowsService'
 import {
   EditClaimsDto,
@@ -23,6 +25,11 @@ export class VtFlowsController {
   public constructor(private readonly service: VtFlowsService) {}
 
   @Get()
+  @AccessMode('CORPORATION', [
+    '/verana.pp.v1.MsgSetParticipantOPToValidated',
+    '/verana.pp.v1.MsgStartParticipantOP',
+    '/verana.pp.v1.MsgRenewParticipantOP',
+  ])
   @ApiOperation({
     summary: 'List credential-acquisition flows',
     description: 'Lists flows handled by the agent, with optional role, state, peer, and identifier filters.',
@@ -33,6 +40,7 @@ export class VtFlowsController {
   }
 
   @Put(':participantSessionId/claims')
+  @AccessMode('CORPORATION', ['/verana.pp.v1.MsgSetParticipantOPToValidated'])
   @ApiOperation({
     summary: 'Edit the credential claims of a flow',
     description:
@@ -50,6 +58,7 @@ export class VtFlowsController {
   }
 
   @Post(':participantSessionId/oob-link')
+  @AccessMode('CORPORATION', ['/verana.pp.v1.MsgSetParticipantOPToValidated'])
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Send an OOB_LINK message to the applicant',
@@ -67,6 +76,7 @@ export class VtFlowsController {
   }
 
   @Post(':participantSessionId/validate')
+  @AccessMode('CORPORATION', ['/verana.pp.v1.MsgSetParticipantOPToValidated'])
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Validate a request and offer the credential',
@@ -81,6 +91,7 @@ export class VtFlowsController {
   }
 
   @Post(':participantSessionId/revoke-credential')
+  @AccessMode('CORPORATION', ['/verana.pp.v1.MsgRevokeParticipant'])
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Revoke the credential issued for a flow',

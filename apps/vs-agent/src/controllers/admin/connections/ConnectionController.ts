@@ -25,12 +25,14 @@ import {
 } from '@nestjs/swagger'
 import { Response } from 'express'
 
+import { AccessMode } from '../../../security'
 import { VsAgentService } from '../../../services/VsAgentService'
 
 import { ConnectionDto } from './dto/connection.dto'
 
 @ApiTags('connections')
 @ApiExtraModels(ConnectionDto)
+@AccessMode('INTERNAL')
 @Controller({
   path: 'connections',
   version: '1',

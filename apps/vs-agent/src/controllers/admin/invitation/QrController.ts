@@ -5,9 +5,11 @@ import { Response } from 'express'
 import QRCode from 'qrcode'
 
 import { AGENT_INVITATION_BASE_URL } from '../../../config'
+import { AccessMode } from '../../../security'
 import { VsAgentService } from '../../../services/VsAgentService'
 
 @ApiTags('qr')
+@AccessMode('INTERNAL')
 @Controller({
   path: 'qr',
   version: '1',

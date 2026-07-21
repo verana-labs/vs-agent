@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common'
 import { ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 
+import { AccessMode } from '../../../security'
+
 import { ServiceEndpointExceptionFilter } from './ServiceEndpointExceptionFilter'
 import { ServiceEndpoint, ServiceEndpointsService } from './ServiceEndpointsService'
 import {
@@ -20,6 +22,7 @@ import {
 } from './dto/service-endpoint.dto'
 
 @ApiTags('service-endpoints')
+@AccessMode('INTERNAL')
 @Controller({ path: 'vt/service-endpoints', version: '1' })
 @UseFilters(ServiceEndpointExceptionFilter)
 export class ServiceEndpointsController {

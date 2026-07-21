@@ -1,4 +1,5 @@
 import { DynamicModule, Module } from '@nestjs/common'
+import { APP_GUARD } from '@nestjs/core'
 import { VsAgent, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import {
@@ -17,6 +18,7 @@ import {
   VsAgentController,
   MESSAGE_HANDLERS,
 } from './controllers'
+import { AdminAuthGuard, AdminAuthService, AuthController } from './security'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
 
@@ -26,6 +28,7 @@ export class VsAgentModule {
     agent: VsAgent,
     publicApiBaseUrl: string,
     nestPlugins: VsAgentNestPlugin[] = [],
+    options: { external?: boolean; allowedAccounts?: string[] } = {},
   ): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
 
@@ -66,11 +69,29 @@ export class VsAgentModule {
       inject: allHandlerClasses,
     }
 
+    const securityControllers = options.external ? [AuthController] : []
+    const securityProviders = options.external
+      ? [
+          AdminAuthService,
+          { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: options.allowedAccounts ?? [] },
+          { provide: APP_GUARD, useClass: AdminAuthGuard },
+        ]
+      : []
+
     return {
       module: VsAgentModule,
       imports: nestPlugins.flatMap(p => p.imports ?? []),
-      controllers: [...baseControllers, ...nestPlugins.flatMap(p => p.controllers ?? [])],
-      providers: [...baseProviders, ...nestPlugins.flatMap(p => p.providers ?? []), handlersProvider],
+      controllers: [
+        ...baseControllers,
+        ...securityControllers,
+        ...nestPlugins.flatMap(p => p.controllers ?? []),
+      ],
+      providers: [
+        ...baseProviders,
+        ...securityProviders,
+        ...nestPlugins.flatMap(p => p.providers ?? []),
+        handlersProvider,
+      ],
       exports: [VsAgentService],
     }
   }

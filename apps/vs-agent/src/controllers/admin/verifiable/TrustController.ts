@@ -2,6 +2,8 @@ import { JsonTransformer, W3cJsonLdVerifiableCredential } from '@credo-ts/core'
 import { Controller, Logger, Post, Body, Delete, Get, Query, UseGuards } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery } from '@nestjs/swagger'
 
+import { AccessMode } from '../../../security'
+
 import { IndexerDisabledGuard } from './IndexerDisabledGuard'
 import { TrustService } from './TrustService'
 import {
@@ -12,6 +14,7 @@ import {
 } from './dto'
 
 @ApiTags('Verifiable Trust')
+@AccessMode('INTERNAL')
 @Controller({ path: 'vt', version: '1' })
 export class TrustController {
   private readonly logger = new Logger(TrustController.name)

@@ -24,6 +24,7 @@ import {
 import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
 
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../config'
+import { AccessMode } from '../../../security'
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../services/VsAgentService'
 import { CredentialTypesService } from '../credentials'
@@ -36,6 +37,7 @@ import {
 } from './InvitationDto'
 
 @ApiTags('invitation')
+@AccessMode('INTERNAL')
 @Controller({
   path: 'invitation',
   version: '1',

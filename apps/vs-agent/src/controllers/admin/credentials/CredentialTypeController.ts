@@ -42,6 +42,7 @@ import {
   ImportCredentialTypeOptions,
 } from '@verana-labs/vs-agent-model'
 
+import { AccessMode } from '../../../security'
 import { VsAgentService } from '../../../services/VsAgentService'
 
 import { CreateRevocationRegistryDto } from './CreateRevocationRegistryDto'
@@ -49,6 +50,7 @@ import { CreateCredentialTypeDto } from './CredentialTypeDto'
 import { CredentialTypesService } from './CredentialTypeService'
 
 @ApiTags('credential-types')
+@AccessMode('INTERNAL')
 @Controller({
   path: 'credential-types',
   version: '1',

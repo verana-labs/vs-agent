@@ -19,11 +19,13 @@ import {
 } from '@nestjs/swagger'
 import { PresentationData, RequestedCredential, Claim } from '@verana-labs/vs-agent-model'
 
+import { AccessMode } from '../../../security'
 import { VsAgentService } from '../../../services/VsAgentService'
 
 import { PresentationDataDto } from './dto/presentation-data.dto'
 
 @ApiTags('presentations')
+@AccessMode('INTERNAL')
 @Controller({
   path: 'presentations',
   version: '1',

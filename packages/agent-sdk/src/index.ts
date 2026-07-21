@@ -1,5 +1,6 @@
 // Agent
 export * from './agent'
+export * from './auth'
 export * from './bootstrap'
 export * from './types'
 

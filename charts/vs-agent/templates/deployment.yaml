@@ -18,6 +18,12 @@ spec:
     port: {{ .Values.adminPort }}
     targetPort: {{ .Values.adminPort }}
     protocol: TCP
+  {{- if contains "corporation" (.Values.adminApiAuthMode | default "internal") }}
+  - name: admin-external
+    port: {{ .Values.adminApiExternalPort | default 3010 }}
+    targetPort: {{ .Values.adminApiExternalPort | default 3010 }}
+    protocol: TCP
+  {{- end }}
   - name: db
     port: 5432
     targetPort: 5432
@@ -187,16 +193,32 @@ spec:
               value: {{ .Values.enablePublicApiSwagger | quote }}
             - name: AGENT_PUBLIC_DID
               value: "did:{{ default "webvh" .Values.publicDidMethod }}:{{ tpl .Values.ingress.host . }}"
+            - name: ADMIN_API_AUTH_MODE
+              value: {{ .Values.adminApiAuthMode | default "internal" | quote }}
+            {{- if .Values.adminApiPublicUrl }}
+            - name: ADMIN_API_PUBLIC_URL
+              value: {{ tpl .Values.adminApiPublicUrl . | quote }}
+            {{- end }}
+            - name: ADMIN_API_EXTERNAL_PORT
+              value: {{ .Values.adminApiExternalPort | default 3010 | quote }}
+            {{- if .Values.adminApiCorporationAllowedAccounts }}
+            - name: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS
+              value: {{ .Values.adminApiCorporationAllowedAccounts | quote }}
+            {{- end }}
 {{- with .Values.extraEnv }}
 {{ toYaml . | nindent 12 }}
 {{- end }}
             ports:
             -  containerPort: {{ .Values.adminPort }}
             -  containerPort: {{ .Values.didcommPort }}
+            {{- if contains "corporation" (.Values.adminApiAuthMode | default "internal") }}
+            -  containerPort: {{ .Values.adminApiExternalPort | default 3010 }}
+            {{- end }}
             {{- if .Values.resources }}
             resources:
 {{- toYaml .Values.resources | nindent 14 }}
             {{- end }}
+            {{- if contains "internal" (.Values.adminApiAuthMode | default "internal") }}
             livenessProbe:
               httpGet:
                 path: /v1/health
@@ -213,6 +235,22 @@ spec:
               periodSeconds: 60
               timeoutSeconds: 5
               failureThreshold: 2
+            {{- else }}
+            livenessProbe:
+              tcpSocket:
+                port: {{ .Values.adminApiExternalPort | default 3010 }}
+              initialDelaySeconds: 30
+              periodSeconds: 60
+              timeoutSeconds: 5
+              failureThreshold: 2
+            readinessProbe:
+              tcpSocket:
+                port: {{ .Values.adminApiExternalPort | default 3010 }}
+              initialDelaySeconds: 15
+              periodSeconds: 60
+              timeoutSeconds: 5
+              failureThreshold: 2
+            {{- end }}
             volumeMounts:
             - name: {{ .Values.name }}-vsa-pv
               mountPath: /root/.afj
