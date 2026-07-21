@@ -21,3 +21,7 @@ CLAUDE.md
 # Editor and agent config (not shared)
 .claude/
 .vscode/
+
+# Local demo secrets (keep the .example template)
+.env
+.env.demo
