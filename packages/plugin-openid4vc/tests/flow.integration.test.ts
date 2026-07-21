@@ -3,7 +3,7 @@ import type { DidDocument, X509Certificate } from '@credo-ts/core'
 
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { createCertificateFixtures } from './helpers/certificates'
 import { didDocumentWithKey, MapDidResolver } from './helpers/didResolver'
@@ -24,15 +24,21 @@ const CONFIGURATION: OpenId4VcCredentialConfiguration = {
 }
 
 describe('in-process OpenID4VC issuance and presentation', () => {
-  const didDocuments = new Map<string, DidDocument>()
-  const didResolver = new MapDidResolver(didDocuments)
+  let didDocuments: Map<string, DidDocument>
   let resolver: Awaited<ReturnType<typeof startResolverStub>>
   let agents: Awaited<ReturnType<typeof startOpenId4VcTestAgents>>
   let verifierCertificate: X509Certificate
+  let storedCredential: Awaited<
+    ReturnType<Awaited<ReturnType<typeof startOpenId4VcTestAgents>>['holder']['acceptCredentialOffer']>
+  >
+  let tcpServerBaseline: string[]
 
-  beforeAll(async () => {
+  beforeEach(async () => {
+    tcpServerBaseline = activeTcpServers()
     const certificates = await createCertificateFixtures()
     verifierCertificate = await createVerifierCertificate(certificates.root, VERIFIER_DID)
+    didDocuments = new Map<string, DidDocument>()
+    const didResolver = new MapDidResolver(didDocuments)
 
     didDocuments.set(
       ISSUER_DID,
@@ -43,43 +49,47 @@ describe('in-process OpenID4VC issuance and presentation', () => {
       didDocumentWithKey(VERIFIER_DID, verifierCertificate.publicJwk.toJson(), ['authentication']),
     )
 
-    resolver = await startResolverStub({
-      trusted: new Set([ISSUER_DID, VERIFIER_DID]),
-      authorized: new Set([ISSUER_DID, VERIFIER_DID]),
-    })
-    agents = await startOpenId4VcTestAgents({
-      certificates,
-      verifierCertificate,
-      didResolver,
-      resolverUrl: resolver.url,
-      issuerDid: ISSUER_DID,
-      verifierDid: VERIFIER_DID,
-      credentialConfiguration: CONFIGURATION,
-    })
+    try {
+      resolver = await startResolverStub({
+        trusted: new Set([ISSUER_DID, VERIFIER_DID]),
+        authorized: new Set([ISSUER_DID, VERIFIER_DID]),
+      })
+      agents = await startOpenId4VcTestAgents({
+        certificates,
+        verifierCertificate,
+        didResolver,
+        resolverUrl: resolver.url,
+        issuerDid: ISSUER_DID,
+        verifierDid: VERIFIER_DID,
+        credentialConfiguration: CONFIGURATION,
+      })
+      const offer = await agents.issuer.service.createOffer(CONFIGURATION.id, {
+        name: 'Ada Lovelace',
+        role: 'engineer',
+      })
+      storedCredential = await agents.holder.acceptCredentialOffer(offer.credentialOffer)
+    } catch (error) {
+      await rethrowAfterFixtureCleanup(error, [agents?.stop(), resolver?.stop()])
+    }
   }, 60_000)
 
-  afterAll(async () => {
+  afterEach(async () => {
     const cleanup = await Promise.allSettled([agents?.stop(), resolver?.stop()])
     expect(cleanup.filter(result => result.status === 'rejected')).toEqual([])
     await new Promise(resolve => setImmediate(resolve))
-    expect(process.getActiveResourcesInfo().filter(resource => resource.includes('TCPSERVER'))).toEqual([])
+    expect(activeTcpServers()).toEqual(tcpServerBaseline)
   })
 
   it('issues and stores a holder-bound dc+sd-jwt through the pre-authorized flow', async () => {
-    const offer = await agents.issuer.service.createOffer(CONFIGURATION.id, {
-      name: 'Ada Lovelace',
-      role: 'engineer',
-    })
-
-    const stored = await agents.holder.acceptCredentialOffer(offer.credentialOffer)
-
-    expect(stored.claimFormat).toBe('dc+sd-jwt')
-    expect(stored.prettyClaims).toMatchObject({
+    expect(storedCredential.claimFormat).toBe('dc+sd-jwt')
+    expect(storedCredential.prettyClaims).toMatchObject({
       vct: CONFIGURATION.vct,
       name: 'Ada Lovelace',
       role: 'engineer',
     })
-    expect(Number(stored.prettyClaims.exp) - Number(stored.prettyClaims.iat)).toBe(CONFIGURATION.ttlSeconds)
+    expect(Number(storedCredential.prettyClaims.exp) - Number(storedCredential.prettyClaims.iat)).toBe(
+      CONFIGURATION.ttlSeconds,
+    )
     const records = await agents.holder.agent.sdJwtVc.getAll()
     expect(records).toHaveLength(1)
     expect(records[0].firstCredential.claimFormat).toBe('dc+sd-jwt')
@@ -148,6 +158,13 @@ describe('in-process OpenID4VC issuance and presentation', () => {
 
   it('rejects a replayed completed authorization response in Credo', async () => {
     const exchange = await presentCredential()
+    expect(exchange.submission.ok).toBe(true)
+    expect(exchange.submission.serverResponse?.status).toBe(200)
+    expect(await agents.verifier.service.getResult(exchange.verificationSessionId)).toMatchObject({
+      state: 'ResponseVerified',
+      cryptographicVerified: true,
+    })
+
     const responseUri = exchange.resolved.authorizationRequestPayload.response_uri
     const authorizationResponse = exchange.submission.authorizationResponse
     if (typeof responseUri !== 'string' || !('response' in authorizationResponse)) {
@@ -183,6 +200,9 @@ describe('in-process OpenID4VC issuance and presentation', () => {
     const sourceFiles = await filesBelow(new URL('../src', import.meta.url).pathname)
     expect(sourceFiles).not.toContain('WalletController.ts')
     expect(sourceFiles).not.toContain('WalletService.ts')
+    const publicApi = await import('../src')
+    expect(publicApi).not.toHaveProperty('WalletController')
+    expect(publicApi).not.toHaveProperty('WalletService')
   }, 60_000)
 
   async function presentCredential() {
@@ -194,6 +214,22 @@ describe('in-process OpenID4VC issuance and presentation', () => {
     return { resolved, submission, verificationSessionId: request.verificationSessionId }
   }
 })
+
+async function rethrowAfterFixtureCleanup(
+  primaryError: unknown,
+  tasks: Array<Promise<unknown> | undefined>,
+): Promise<never> {
+  const cleanup = await Promise.allSettled(tasks)
+  const cleanupErrors = cleanup.flatMap(result => (result.status === 'rejected' ? [result.reason] : []))
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError([primaryError, ...cleanupErrors], 'OpenID4VC fixture setup and cleanup failed')
+  }
+  throw primaryError
+}
+
+function activeTcpServers(): string[] {
+  return process.getActiveResourcesInfo().filter(resource => resource.includes('TCPSERVER'))
+}
 
 async function filesBelow(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true })
