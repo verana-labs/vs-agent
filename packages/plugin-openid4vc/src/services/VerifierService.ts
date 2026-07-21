@@ -17,6 +17,7 @@ import { blockingBindingVerdict, ownDidResolutionPolicy, verifyKeyBoundToDid } f
 import {
   didFromValidatedCertificate,
   loadSigningCertificate,
+  publishDevelopmentSigningKey,
   type SigningCertificateHandle,
 } from './CertificateService'
 
@@ -209,6 +210,7 @@ export class VerifierService {
     if (certificateDid !== agentDid) {
       throw new Error('OpenID4VC verifier certificate DID does not match the agent DID')
     }
+    await publishDevelopmentSigningKey(this.agent, signingCertificate, 'verifier')
 
     const binding = await verifyKeyBoundToDid(
       this.agent,

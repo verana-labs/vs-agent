@@ -166,7 +166,7 @@ describe('OpenId4VcPlugin', () => {
     expect(verifierInitialize).toHaveBeenCalledOnce()
   })
 
-  it('awaits all enabled services before initialization resolves', async () => {
+  it('initializes issuer before verifier when both roles share the agent DID', async () => {
     let resolveIssuer: ((value: typeof signingHandle) => void) | undefined
     let resolveVerifier: ((value: typeof signingHandle) => void) | undefined
     loadSigningCertificate
@@ -191,9 +191,11 @@ describe('OpenId4VcPlugin', () => {
     })
     await Promise.resolve()
 
-    expect(loadSigningCertificate).toHaveBeenCalledTimes(2)
+    expect(loadSigningCertificate).toHaveBeenCalledOnce()
     expect(initialized).toBe(false)
     resolveIssuer?.(signingHandle)
+    await vi.waitFor(() => expect(loadSigningCertificate).toHaveBeenCalledTimes(2))
+    expect(initialized).toBe(false)
     resolveVerifier?.(signingHandle)
     await initialization
     expect(initialized).toBe(true)

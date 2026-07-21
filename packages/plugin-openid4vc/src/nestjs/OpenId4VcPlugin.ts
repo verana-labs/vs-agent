@@ -64,10 +64,8 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlu
     ],
     initialize: async agent => {
       const lifecycleAgent = agent as unknown as OpenId4VcLifecycleAgent
-      await Promise.all([
-        ...(options.issuer ? [getIssuerService(lifecycleAgent).ensureInitialized()] : []),
-        ...(options.verifier ? [getVerifierService(lifecycleAgent).ensureInitialized()] : []),
-      ])
+      if (options.issuer) await getIssuerService(lifecycleAgent).ensureInitialized()
+      if (options.verifier) await getVerifierService(lifecycleAgent).ensureInitialized()
     },
   }
 }

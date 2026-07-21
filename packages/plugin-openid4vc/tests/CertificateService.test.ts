@@ -3,7 +3,11 @@ import type { OpenId4VcSigningOptions } from '../src/types'
 import { Kms, X509Certificate } from '@credo-ts/core'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
-import { didFromValidatedCertificate, loadSigningCertificate } from '../src/services/CertificateService'
+import {
+  didFromValidatedCertificate,
+  loadSigningCertificate,
+  publishDevelopmentSigningKey,
+} from '../src/services/CertificateService'
 
 import { createCertificateFixtures, LEAF_PRIVATE_JWK, OTHER_PRIVATE_JWK } from './helpers/certificates'
 
@@ -148,6 +152,20 @@ describe('CertificateService', () => {
     await expect(
       loadSigningCertificate(agent, configuredSigning(fixtures.leaf, fixtures.intermediate)),
     ).rejects.toThrow('does not match the configured private key')
+  })
+
+  it('never publishes configured production signing material to the DID', async () => {
+    const agent = createAgent()
+    agent.did = 'did:web:issuer.example'
+    const handle = await loadSigningCertificate(
+      agent,
+      configuredSigning(fixtures.leaf, fixtures.intermediate),
+    )
+
+    await publishDevelopmentSigningKey(agent, handle, 'issuer')
+
+    expect(agent.dids.resolve).not.toHaveBeenCalled()
+    expect(agent.dids.update).not.toHaveBeenCalled()
   })
 
   it('extracts the DID URI SAN from a validated certificate', () => {
@@ -318,6 +336,7 @@ function createAgent({
 
   const agent = {
     keys,
+    dids: { resolve: vi.fn(), update: vi.fn() },
     kms,
     genericRecords,
     x509,

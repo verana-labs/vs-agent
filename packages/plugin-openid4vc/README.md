@@ -93,12 +93,12 @@ This complete `openid4vc.json` shape passes the current configuration validator.
 }
 ```
 
-Development signing generates and persists a self-signed P-256 certificate for each role, with a DNS SAN derived from `PUBLIC_API_BASE_URL` and a DID URI SAN derived from `AGENT_PUBLIC_DID`.
+Development signing generates and persists a self-signed P-256 certificate for each role, with a DNS SAN derived from `PUBLIC_API_BASE_URL` and a DID URI SAN derived from `AGENT_PUBLIC_DID`. Before completing startup, the plugin publishes only those development public keys to the agent-owned DID through Credo's DID update API. Issuer keys use `assertionMethod`, verifier keys use `authentication`, and deterministic role-specific method IDs make restarts idempotent. When both roles share one DID, the plugin publishes them sequentially so neither relationship is lost.
 
 The certificate still requires both bindings:
 
 - its exact fingerprint must be configured by every verifier that accepts it;
-- its public key must be present in the DID document under `assertionMethod` for issuance and `authentication` for verifier request signing.
+- the auto-published public key must remain present in the DID document under `assertionMethod` for issuance and `authentication` for verifier request signing.
 
 A pin does not replace DID key binding or Verana authorization. Development signing is unsuitable for production and is not a HAIP deployment mode.
 
@@ -135,7 +135,7 @@ Configured signing material uses a non-self-signed leaf, followed by any interme
 }
 ```
 
-Apply the `signing` object under `issuer`, `verifier`, or both. Each leaf must contain the agent DID as a URI SAN, and its key must match the relevant DID relationship. `credentialIssuerCertificates` contains verifier trust anchors, not peer-supplied chains. Each entry must parse as a currently valid, self-issued CA root with `keyCertSign`; duplicate roots are rejected. Do not put private JWKs in source control, logs, image layers, or public metadata.
+Apply the `signing` object under `issuer`, `verifier`, or both. Each leaf must contain the agent DID as a URI SAN, and its key must match the relevant DID relationship. The plugin never auto-publishes configured production keys; operators must publish them under `assertionMethod` or `authentication` themselves before startup. `credentialIssuerCertificates` contains verifier trust anchors, not peer-supplied chains. Each entry must parse as a currently valid, self-issued CA root with `keyCertSign`; duplicate roots are rejected. Do not put private JWKs in source control, logs, image layers, or public metadata.
 
 `allowedDidWebHosts` is the explicit network trust boundary for issuer DIDs read from verified certificates. Only exact `did:web` and `did:webvh` hosts on this operator-managed list are resolved. Do not populate it from a peer request or certificate. Credo owns the underlying fetch and redirect behavior, so an allowlisted host must have operator-trusted DNS and redirect behavior. Loopback, private, link-local, and unsupported DID targets are rejected before Credo resolution. Resolution returns after at most `timeoutMs`, which must not exceed 30000 milliseconds. The agent's own DID host is derived from `AGENT_PUBLIC_DID` and does not need to be repeated in this list.
 

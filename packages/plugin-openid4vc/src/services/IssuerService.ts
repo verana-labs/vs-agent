@@ -15,6 +15,7 @@ import { ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding
 import {
   didFromValidatedCertificate,
   loadSigningCertificate,
+  publishDevelopmentSigningKey,
   type SigningCertificateHandle,
 } from './CertificateService'
 
@@ -184,6 +185,7 @@ export class IssuerService {
     if (certificateDid !== agentDid) {
       throw new Error('OpenID4VC issuer certificate DID does not match the agent DID')
     }
+    await publishDevelopmentSigningKey(this.agent, signingCertificate, 'issuer')
 
     const binding = await verifyKeyBoundToDid(
       this.agent,

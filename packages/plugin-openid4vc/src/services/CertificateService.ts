@@ -1,11 +1,19 @@
 import type { OpenId4VcSigningOptions } from '../types'
 
-import { type BaseAgent, Kms, tryParseDid, X509Certificate, X509KeyUsage } from '@credo-ts/core'
+import {
+  type BaseAgent,
+  DidDocument,
+  Kms,
+  tryParseDid,
+  VerificationMethod,
+  X509Certificate,
+  X509KeyUsage,
+} from '@credo-ts/core'
 import { createHash } from 'node:crypto'
 
 const DEVELOPMENT_CERTIFICATE_VALIDITY_MS = 365 * 24 * 60 * 60 * 1_000
 const DEVELOPMENT_RECORD_PREFIX = 'openid4vc-development-signing'
-type SigningRole = 'issuer' | 'verifier'
+export type SigningRole = 'issuer' | 'verifier'
 
 type CertificateAgent = Pick<BaseAgent, 'genericRecords' | 'kms' | 'x509'> & {
   did?: string
@@ -22,6 +30,11 @@ export interface SigningCertificateHandle {
   chain: X509Certificate[]
   keyId: string
   development: boolean
+}
+
+type DevelopmentDidAgent = {
+  did?: string
+  dids: Pick<BaseAgent['dids'], 'resolve' | 'update'>
 }
 
 export async function loadSigningCertificate(
@@ -44,6 +57,73 @@ export function didFromValidatedCertificate(certificate: X509Certificate): strin
   }
 
   return did
+}
+
+export async function publishDevelopmentSigningKey(
+  agent: DevelopmentDidAgent,
+  signingCertificate: SigningCertificateHandle,
+  role: SigningRole,
+): Promise<void> {
+  if (!signingCertificate.development) return
+
+  const did = agent.did
+  if (!did) throw new Error('development signing key publication requires an agent DID')
+
+  let resolution
+  try {
+    resolution = await agent.dids.resolve(did)
+  } catch {
+    throw new Error('development signing key DID resolution failed')
+  }
+  if (resolution.didResolutionMetadata?.error || !resolution.didDocument) {
+    throw new Error('development signing key DID resolution failed')
+  }
+  if (resolution.didDocument.id !== did) {
+    throw new Error('development signing key DID resolution returned a different DID')
+  }
+
+  const methodId = `${did}#openid4vc-development-${role}`
+  const purpose = role === 'issuer' ? 'assertionMethod' : 'authentication'
+  const publicJwk = canonicalP256PublicJwk(signingCertificate.certificate.publicJwk.toJson())
+  const existingMethod = resolution.didDocument.verificationMethod?.find(method => method.id === methodId)
+  const relationship = resolution.didDocument[purpose] ?? []
+  if (
+    existingMethod &&
+    equalVerificationMethodJwk(existingMethod, publicJwk) &&
+    relationship.some(method => (typeof method === 'string' ? method : method.id) === methodId)
+  ) {
+    return
+  }
+
+  const didDocument = DidDocument.fromJSON(resolution.didDocument.toJSON())
+  didDocument.verificationMethod = [
+    ...(didDocument.verificationMethod ?? []).filter(method => method.id !== methodId),
+    new VerificationMethod({
+      id: methodId,
+      type: 'JsonWebKey2020',
+      controller: did,
+      publicKeyJwk: publicJwk,
+    }),
+  ]
+  didDocument[purpose] = [
+    ...(didDocument[purpose] ?? []).filter(
+      method => (typeof method === 'string' ? method : method.id) !== methodId,
+    ),
+    methodId,
+  ]
+
+  let update
+  try {
+    update = await agent.dids.update({ did, didDocument })
+  } catch {
+    throw new Error('development signing key DID update failed')
+  }
+  if (update.didState.state !== 'finished') {
+    throw new Error('development signing key DID update failed')
+  }
+  if (update.didState.did !== did || update.didState.didDocument.id !== did) {
+    throw new Error('development signing key DID update returned a different DID')
+  }
 }
 
 async function loadConfiguredSigningCertificate(
@@ -217,6 +297,14 @@ function canonicalP256PublicJwk(jwk: unknown): Kms.KmsJwkPublicEc & { crv: 'P-25
 
 function equalPublicJwk(left: Kms.KmsJwkPublicEc, right: Kms.KmsJwkPublicEc): boolean {
   return left.kty === right.kty && left.crv === right.crv && left.x === right.x && left.y === right.y
+}
+
+function equalVerificationMethodJwk(method: VerificationMethod, expected: Kms.KmsJwkPublicEc): boolean {
+  try {
+    return equalPublicJwk(canonicalP256PublicJwk(method.publicKeyJwk), expected)
+  } catch {
+    return false
+  }
 }
 
 function hostnameFromPublicApiBaseUrl(publicApiBaseUrl: string): string {
