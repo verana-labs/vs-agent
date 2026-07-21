@@ -16,6 +16,7 @@ overrides:
   '@credo-ts/node': 0.7.1-pr-2704-20260630143332
   '@credo-ts/askar': 0.7.1-pr-2704-20260630143332
   '@credo-ts/anoncreds': 0.7.1-pr-2704-20260630143332
+  '@credo-ts/openid4vc': 0.7.1-pr-2704-20260630143332
   libphonenumber-js: ^1.12.33
 
 importers:
@@ -714,6 +715,18 @@ importers:
         specifier: ^4.2.0
         version: 4.2.1
 
+  packages/plugin-openid4vc:
+    dependencies:
+      '@credo-ts/core':
+        specifier: 0.7.1-pr-2704-20260630143332
+        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/openid4vc':
+        specifier: 0.7.1-pr-2704-20260630143332
+        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      express:
+        specifier: ^4.18.1
+        version: 4.21.2
+
   packages/vt-flow:
     dependencies:
       '@credo-ts/core':
@@ -996,6 +1009,9 @@ packages:
   '@credo-ts/node@0.7.1-pr-2704-20260630143332':
     resolution: {integrity: sha512-U050hUuvEdLLr591FFBCFb8QEhV7RQe0inBQ61fltd3Wph/LfSako0IdWRy0VfILYkVnQ+GKASoyW4HWAjZB/g==}
     engines: {node: '>=20.19'}
+
+  '@credo-ts/openid4vc@0.7.1-pr-2704-20260630143332':
+    resolution: {integrity: sha512-+0qZxlavrzr/lXuYDGO48ZIMvPBXWs2UiuvMWw1iEeD3hKzKxilFqJC6ogGkptGJe7SgrTK6orYpU4ZBa8DsJg==}
 
   '@credo-ts/question-answer@0.7.1-pr-2704-20260630143332':
     resolution: {integrity: sha512-xnpgjzWt+5e4cljrkFkr4sFb2LMaja0C+YrzU3ezY2CYBExCmXw5MsZAh1h0e5/11T40UdeYNtN4Neh3Kg4iqQ==}
@@ -1829,6 +1845,18 @@ packages:
     resolution: {integrity: sha512-um0xL3fO7Mf4fDxcqx9KryrB7zgRM5JSlvGN5AGkP6JLM5XEKyjeAiPbNxdXVXQ16isuAhYpvP88NgL2BGd6aA==}
     engines: {node: '>=8.0.0', npm: '>=5.0.0'}
     hasBin: true
+
+  '@openid4vc/oauth2@0.5.4':
+    resolution: {integrity: sha512-wEK7fDk/n+c0d2AbCTBIR8Tstf/+Yr4ckmOa0nlTv0V9cOd1WMiR3+OY5vXG9FVsV275q1DgLZr20EPqlWhtVg==}
+
+  '@openid4vc/openid4vci@0.5.4':
+    resolution: {integrity: sha512-QN+Q3JLpsogIR6PlXePiLBsgkBCxhdfZ6cXtNWH39/TO/190FTBYHwzC5sJQh8HHoYyrZU/whdvpnC2324Gdkw==}
+
+  '@openid4vc/openid4vp@0.5.4':
+    resolution: {integrity: sha512-09bhaG7fI3zSdnx6pO5UKXWm4oH1RvotVWRfZ1rUnAgFCxF/QV6014oVwhgwRQcPHe/rHNXrlKjp2fGgrrO64A==}
+
+  '@openid4vc/utils@0.5.4':
+    resolution: {integrity: sha512-Cxc/vWxvoS1F7jREgAm0oVaC3Qna/P0wJvvwtcdLDxGeDHjqNHrqjt4RiGY5b9k+I0vjIUBb1iivVuu3H9XtMA==}
 
   '@openwallet-foundation/askar-nodejs@0.6.0':
     resolution: {integrity: sha512-PNIftXrE64oxjPaq4c8QEZCuhf21jpeMqjwPwDPZsfUnx1DlVIWYQQIJI2ZPAaXl2EUs6ldNqrwHMjVUC4xW+Q==}
@@ -6735,6 +6763,23 @@ snapshots:
       - typescript
       - utf-8-validate
 
+  '@credo-ts/openid4vc@0.7.1-pr-2704-20260630143332(typescript@5.8.3)':
+    dependencies:
+      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@openid4vc/oauth2': 0.5.4
+      '@openid4vc/openid4vci': 0.5.4
+      '@openid4vc/openid4vp': 0.5.4
+      '@openid4vc/utils': 0.5.4
+      '@types/express': 5.0.6
+      class-transformer: 0.5.1
+      express: 5.2.1
+      rxjs: 7.8.2
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - typescript
+
   '@credo-ts/question-answer@0.7.1-pr-2704-20260630143332(typescript@5.8.3)':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
@@ -7585,6 +7630,29 @@ snapshots:
       node-fetch: 2.7.0
     transitivePeerDependencies:
       - encoding
+
+  '@openid4vc/oauth2@0.5.4':
+    dependencies:
+      '@openid4vc/utils': 0.5.4
+      zod: 4.4.3
+
+  '@openid4vc/openid4vci@0.5.4':
+    dependencies:
+      '@openid4vc/oauth2': 0.5.4
+      '@openid4vc/utils': 0.5.4
+      zod: 4.4.3
+
+  '@openid4vc/openid4vp@0.5.4':
+    dependencies:
+      '@openid4vc/oauth2': 0.5.4
+      '@openid4vc/utils': 0.5.4
+      zod: 4.4.3
+
+  '@openid4vc/utils@0.5.4':
+    dependencies:
+      buffer: 6.0.3
+      zod: 4.4.3
+      zod-validation-error: 5.0.0(zod@4.4.3)
 
   '@openwallet-foundation/askar-nodejs@0.6.0':
     dependencies:

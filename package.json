@@ -59,7 +59,8 @@
     "@credo-ts/question-answer": "0.7.1-pr-2704-20260630143332",
     "@credo-ts/node": "0.7.1-pr-2704-20260630143332",
     "@credo-ts/askar": "0.7.1-pr-2704-20260630143332",
-    "@credo-ts/anoncreds": "0.7.1-pr-2704-20260630143332"
+    "@credo-ts/anoncreds": "0.7.1-pr-2704-20260630143332",
+    "@credo-ts/openid4vc": "0.7.1-pr-2704-20260630143332"
   },
   "packageManager": "pnpm@9.15.3",
   "pnpm": {
@@ -69,6 +70,7 @@
       "@credo-ts/didcomm": "0.7.1-pr-2704-20260630143332",
       "@credo-ts/anoncreds": "0.7.1-pr-2704-20260630143332",
       "@credo-ts/askar": "0.7.1-pr-2704-20260630143332",
+      "@credo-ts/openid4vc": "0.7.1-pr-2704-20260630143332",
       "@hyperledger/anoncreds-shared": "0.4.0"
     }
   }
