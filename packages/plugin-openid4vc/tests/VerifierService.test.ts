@@ -29,7 +29,7 @@ vi.mock('../src/trust/TrustClient', () => ({
   },
 }))
 
-const AGENT_DID = 'did:example:verifier'
+const AGENT_DID = 'did:web:agent.example'
 const ISSUER_DID = 'did:web:issuer.example'
 const VCT = 'https://agent.example/oid4vc/vct/employee'
 const VTJSC_ID = 'https://agent.example/vt/employee.json'
@@ -50,6 +50,7 @@ const options = (): OpenId4VcPluginOptions => ({
   trust: {
     resolverUrl: 'https://resolver.example/v1/trust',
     timeoutMs: 5_000,
+    allowedDidWebHosts: ['issuer.example'],
     credentialIssuerCertificates: ['trusted-root'],
   },
   credentialConfigurations: [
@@ -188,10 +189,19 @@ describe('VerifierService', () => {
 
     await service.ensureInitialized()
 
-    expect(loadSigningCertificate).toHaveBeenCalledOnce()
-    expect(verifyKeyBoundToDid).toHaveBeenCalledWith(expect.anything(), AGENT_DID, PUBLIC_JWK, [
-      'authentication',
-    ])
+    expect(loadSigningCertificate).toHaveBeenCalledWith(
+      expect.anything(),
+      options().verifier!.signing,
+      'https://agent.example',
+      'verifier',
+    )
+    expect(verifyKeyBoundToDid).toHaveBeenCalledWith(
+      expect.anything(),
+      AGENT_DID,
+      PUBLIC_JWK,
+      ['authentication'],
+      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000 },
+    )
     expect(api.createVerifier).toHaveBeenCalledWith({
       verifierId: 'verifier',
       clientMetadata: { client_name: 'Example Verifier' },
@@ -355,9 +365,13 @@ describe('VerifierService', () => {
       trust: trust('TRUSTED_AUTHORIZED'),
       credential: { vct: VCT, disclosedClaims: { name: 'Ada' } },
     })
-    expect(verifyKeyBoundToDid).toHaveBeenCalledWith(expect.anything(), ISSUER_DID, PUBLIC_JWK, [
-      'assertionMethod',
-    ])
+    expect(verifyKeyBoundToDid).toHaveBeenCalledWith(
+      expect.anything(),
+      ISSUER_DID,
+      PUBLIC_JWK,
+      ['assertionMethod'],
+      { allowedWebHosts: ['issuer.example'], timeoutMs: 5_000 },
+    )
     expect(verdictFor).toHaveBeenCalledWith('issuer', ISSUER_DID, VTJSC_ID)
     expect(JSON.stringify(result)).not.toContain('secret-')
     expect(JSON.stringify(result)).not.toContain('admin')

@@ -142,6 +142,7 @@ describe('VerifierController', () => {
       trust: {
         resolverUrl: 'https://resolver.example/v1/trust',
         timeoutMs: 5_000,
+        allowedDidWebHosts: ['issuer.example'],
         credentialIssuerCertificates: ['trusted-root'],
       },
       credentialConfigurations: [],

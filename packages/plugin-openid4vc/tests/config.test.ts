@@ -1,6 +1,6 @@
 import type { OpenId4VcPluginOptions } from '../src/types'
 
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 import {
   findCredentialConfiguration,
@@ -8,6 +8,14 @@ import {
   parseOfferClaims,
   validateOpenId4VcOptions,
 } from '../src/config'
+
+import { createCertificateFixtures } from './helpers/certificates'
+
+let fixtures: Awaited<ReturnType<typeof createCertificateFixtures>>
+
+beforeAll(async () => {
+  fixtures = await createCertificateFixtures()
+})
 
 const validOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
@@ -24,7 +32,8 @@ const validOptions = (): OpenId4VcPluginOptions => ({
   trust: {
     resolverUrl: 'https://resolver.example/v1/trust',
     timeoutMs: 5_000,
-    credentialIssuerCertificates: ['MIIB-test-root'],
+    allowedDidWebHosts: ['issuer.example'],
+    credentialIssuerCertificates: [fixtures.root.toString('base64')],
   },
   credentialConfigurations: [
     {
@@ -67,6 +76,42 @@ describe('validateOpenId4VcOptions', () => {
     } finally {
       process.env.NODE_ENV = previousNodeEnv
     }
+  })
+
+  it('supports a public API base path', () => {
+    const options = validOptions()
+    options.publicApiBaseUrl = 'https://agent.example/public/base'
+
+    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
+  })
+
+  it.each([
+    ['publicApiBaseUrl', (options: OpenId4VcPluginOptions, url: string) => (options.publicApiBaseUrl = url)],
+    [
+      'vct',
+      (options: OpenId4VcPluginOptions, url: string) => (options.credentialConfigurations[0].vct = url),
+    ],
+    [
+      'vtjscId',
+      (options: OpenId4VcPluginOptions, url: string) => (options.credentialConfigurations[0].vtjscId = url),
+    ],
+    [
+      'trust.resolverUrl',
+      (options: OpenId4VcPluginOptions, url: string) => (options.trust!.resolverUrl = url),
+    ],
+  ] as const)('rejects credentials in %s without exposing them', (field, setUrl) => {
+    const username = 'private-url-username'
+    const password = 'private-url-password'
+    const options = validOptions()
+    setUrl(options, `https://${username}:${password}@agent.example/base`)
+
+    const error = catchValidationError(options)
+
+    expect(error.message).toContain(field)
+    expect(String(error)).not.toContain(username)
+    expect(String(error)).not.toContain(password)
+    expect(JSON.stringify(error)).not.toContain(username)
+    expect(JSON.stringify(error)).not.toContain(password)
   })
 
   it('rejects duplicate credential configuration IDs', () => {
@@ -128,9 +173,84 @@ describe('validateOpenId4VcOptions', () => {
   it('accepts development certificate fingerprints as verifier trust anchors', () => {
     const options = validOptions()
     options.trust!.credentialIssuerCertificates = []
-    options.trust!.developmentCertificateFingerprints = ['SHA256:example']
+    options.trust!.developmentCertificateFingerprints = [`SHA256:${'0'.repeat(64)}`]
 
     expect(() => validateOpenId4VcOptions(options)).not.toThrow()
+  })
+
+  it('rejects malformed credential issuer certificate material without exposing it', () => {
+    const malformed = 'private-malformed-certificate-material'
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates.push(malformed)
+
+    const error = catchValidationError(options)
+
+    expect(error.message).toContain('credentialIssuerCertificates[1]')
+    expect(String(error)).not.toContain(malformed)
+    expect(JSON.stringify(error)).not.toContain(malformed)
+  })
+
+  it('rejects a non-CA certificate as a credential issuer trust anchor', () => {
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = [fixtures.attacker.toString('base64')]
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('CA trust anchor')
+  })
+
+  it('rejects an intermediate CA as a root trust anchor', () => {
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = [fixtures.intermediate.toString('base64')]
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('root trust anchor')
+  })
+
+  it('rejects an expired credential issuer root', () => {
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = [fixtures.expiredRoot.toString('base64')]
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('expired')
+  })
+
+  it('rejects duplicate credential issuer roots across encodings', () => {
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = [
+      fixtures.root.toString('base64'),
+      fixtures.root.toString('pem'),
+    ]
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('duplicate credential issuer certificate')
+  })
+
+  it.each(['SHA256:example', `sha256:${'0'.repeat(64)}`, `SHA256:${'A'.repeat(64)}`])(
+    'rejects malformed development certificate fingerprint %s',
+    fingerprint => {
+      const options = validOptions()
+      options.trust!.credentialIssuerCertificates = []
+      options.trust!.developmentCertificateFingerprints = [fingerprint]
+
+      expect(() => validateOpenId4VcOptions(options)).toThrow('SHA256')
+    },
+  )
+
+  it('rejects duplicate development certificate fingerprints', () => {
+    const fingerprint = `SHA256:${'0'.repeat(64)}`
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = []
+    options.trust!.developmentCertificateFingerprints = [fingerprint, fingerprint]
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow(
+      'developmentCertificateFingerprints must not contain duplicates',
+    )
+  })
+
+  it('requires an explicit DID web host allowlist and a bounded resolution timeout', () => {
+    const missingHosts = validOptions()
+    missingHosts.trust!.allowedDidWebHosts = []
+    expect(() => validateOpenId4VcOptions(missingHosts)).toThrow('allowedDidWebHosts')
+
+    const excessiveTimeout = validOptions()
+    excessiveTimeout.trust!.timeoutMs = 30_001
+    expect(() => validateOpenId4VcOptions(excessiveTimeout)).toThrow('timeoutMs')
   })
 
   it('rejects required wallet attestation without attestation anchors', () => {
@@ -150,6 +270,16 @@ describe('validateOpenId4VcOptions', () => {
     expect(() => validateOpenId4VcOptions(options)).toThrow('signing')
   })
 })
+
+function catchValidationError(options: OpenId4VcPluginOptions): Error {
+  try {
+    validateOpenId4VcOptions(options)
+  } catch (error) {
+    if (error instanceof Error) return error
+  }
+
+  throw new Error('expected OpenID4VC option validation to fail')
+}
 
 describe('configuration lookups', () => {
   it('finds configured credential configurations and verifier policies', () => {

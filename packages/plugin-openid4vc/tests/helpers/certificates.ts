@@ -55,6 +55,7 @@ export const OTHER_PRIVATE_JWK: Kms.KmsJwkPrivateEc = {
 
 interface CertificateFixtures {
   root: X509Certificate
+  expiredRoot: X509Certificate
   intermediate: X509Certificate
   expiredIntermediate: X509Certificate
   notYetValidIntermediate: X509Certificate
@@ -75,20 +76,25 @@ export async function createCertificateFixtures(): Promise<CertificateFixtures> 
     importKeyPair(OTHER_PRIVATE_JWK),
   ])
 
-  const root = await X509CertificateGenerator.createSelfSigned(
-    {
-      serialNumber: '01',
-      name: 'CN=Fixture Root',
-      keys: rootKeys,
-      notBefore: VALID_FROM,
-      notAfter: VALID_UNTIL,
-      extensions: [
-        new BasicConstraintsExtension(true, 1, true),
-        new KeyUsagesExtension(KeyUsageFlags.keyCertSign | KeyUsageFlags.cRLSign, true),
-      ],
-    },
-    webcrypto,
-  )
+  const createRoot = async (serialNumber: string, notBefore: Date, notAfter: Date) =>
+    await X509CertificateGenerator.createSelfSigned(
+      {
+        serialNumber,
+        name: 'CN=Fixture Root',
+        keys: rootKeys,
+        notBefore,
+        notAfter,
+        extensions: [
+          new BasicConstraintsExtension(true, 1, true),
+          new KeyUsagesExtension(KeyUsageFlags.keyCertSign | KeyUsageFlags.cRLSign, true),
+        ],
+      },
+      webcrypto,
+    )
+  const [root, expiredRoot] = await Promise.all([
+    createRoot('01', VALID_FROM, VALID_UNTIL),
+    createRoot('0C', new Date('2019-01-01T00:00:00.000Z'), new Date('2020-01-01T00:00:00.000Z')),
+  ])
   const createIntermediate = async (serialNumber: string, notBefore: Date, notAfter: Date) =>
     await X509CertificateGenerator.create(
       {
@@ -200,6 +206,7 @@ export async function createCertificateFixtures(): Promise<CertificateFixtures> 
 
   return {
     root: fromPeculiar(root),
+    expiredRoot: fromPeculiar(expiredRoot),
     intermediate: fromPeculiar(intermediate),
     expiredIntermediate: fromPeculiar(expiredIntermediate),
     notYetValidIntermediate: fromPeculiar(notYetValidIntermediate),

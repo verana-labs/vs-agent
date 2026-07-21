@@ -16,7 +16,7 @@ This is implementation groundwork, not EUDI certification or a claim of complete
 
 Use the `vs-agent-openid4vc` image target. It enables `messaging,chat,openid4vc` and requires `OID4VC_CONFIG_FILE`:
 
-The commands below explicitly select Maxime's Colima Docker context. Omit `--context colima` when the active Docker context already points to the intended engine.
+The commands below explicitly select the Colima Docker context. Omit `--context colima` when the active Docker context already points to the intended engine.
 
 ```bash
 docker --context colima build \
@@ -33,7 +33,7 @@ docker --context colima run --rm \
   vs-agent-openid4vc:dev
 ```
 
-Run both commands from the monorepo root. `env-vars` must set an HTTPS `PUBLIC_API_BASE_URL`, an `AGENT_PUBLIC_DID`, and the normal VS Agent wallet and deployment settings. The JSON file must not contain `publicApiBaseUrl`; VS Agent injects the trusted value from `PUBLIC_API_BASE_URL`.
+Run both commands from the monorepo root. `env-vars` must set an HTTPS `PUBLIC_API_BASE_URL`, an `AGENT_PUBLIC_DID`, and the normal VS Agent wallet and deployment settings. The JSON file must not contain `publicApiBaseUrl`; VS Agent injects the trusted value from `PUBLIC_API_BASE_URL`. An HTTPS base path is supported and is used verbatim when composing protocol URLs. URLs containing a username or password are rejected.
 
 ### Development configuration
 
@@ -64,6 +64,7 @@ This complete `openid4vc.json` shape passes the current configuration validator.
   "trust": {
     "resolverUrl": "https://resolver.example/v1/trust",
     "timeoutMs": 5000,
+    "allowedDidWebHosts": ["issuer.example"],
     "credentialIssuerCertificates": [],
     "developmentCertificateFingerprints": [
       "SHA256:0000000000000000000000000000000000000000000000000000000000000000"
@@ -128,23 +129,26 @@ Configured signing material uses a non-self-signed leaf, followed by any interme
   "trust": {
     "resolverUrl": "https://resolver.example/v1/trust",
     "timeoutMs": 5000,
+    "allowedDidWebHosts": ["issuer.example"],
     "credentialIssuerCertificates": ["MIIC...REDACTED_TRUSTED_ROOT_BASE64..."]
   }
 }
 ```
 
-Apply the `signing` object under `issuer`, `verifier`, or both. Each leaf must contain the agent DID as a URI SAN, and its key must match the relevant DID relationship. `credentialIssuerCertificates` contains verifier trust anchors, not peer-supplied chains. Do not put private JWKs in source control, logs, image layers, or public metadata.
+Apply the `signing` object under `issuer`, `verifier`, or both. Each leaf must contain the agent DID as a URI SAN, and its key must match the relevant DID relationship. `credentialIssuerCertificates` contains verifier trust anchors, not peer-supplied chains. Each entry must parse as a currently valid, self-issued CA root with `keyCertSign`; duplicate roots are rejected. Do not put private JWKs in source control, logs, image layers, or public metadata.
+
+`allowedDidWebHosts` is the explicit network trust boundary for issuer DIDs read from verified certificates. Only exact `did:web` and `did:webvh` hosts on this operator-managed list are resolved. Do not populate it from a peer request or certificate. Credo owns the underlying fetch and redirect behavior, so an allowlisted host must have operator-trusted DNS and redirect behavior. Loopback, private, link-local, and unsupported DID targets are rejected before Credo resolution. Resolution returns after at most `timeoutMs`, which must not exceed 30000 milliseconds. The agent's own DID host is derived from `AGENT_PUBLIC_DID` and does not need to be repeated in this list.
 
 ### Configuration reference
 
-| Field                             | Requirement                                                                                                                                         |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `issuer`                          | Optional when `verifier` is present. Defines `id`, `displayName`, and exactly one signing mode.                                                     |
-| `issuer.requireWalletAttestation` | Optional. When `true`, `walletAttestationCertificates` must contain locally configured X.509 roots. Trust-list distribution is not implemented.     |
-| `verifier`                        | Optional when `issuer` is present. Defines `id`, `displayName`, and exactly one signing mode.                                                       |
-| `trust`                           | Required by the verifier. Defines the HTTPS Verana resolver, positive timeout, issuer roots, and optional development leaf fingerprints.            |
-| `credentialConfigurations`        | Array of stable IDs, `dc+sd-jwt` format, VCT and VTJSC URLs, display fields, allowed claims, disclosure frame, and a 60–31,536,000 second lifetime. |
-| `verifierPolicies`                | Array mapping a policy ID to one credential configuration and a subset of its claims.                                                               |
+| Field                             | Requirement                                                                                                                                                                                                                                  |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `issuer`                          | Optional when `verifier` is present. Defines `id`, `displayName`, and exactly one signing mode.                                                                                                                                              |
+| `issuer.requireWalletAttestation` | Optional. When `true`, `walletAttestationCertificates` must contain locally configured X.509 roots. Trust-list distribution is not implemented.                                                                                              |
+| `verifier`                        | Optional when `issuer` is present. Defines `id`, `displayName`, and exactly one signing mode.                                                                                                                                                |
+| `trust`                           | Required by the verifier. Defines the HTTPS Verana resolver, a 1–30000 ms resolver timeout, exact allowed issuer DID web hosts, valid issuer CA roots, and optional development leaf fingerprints in `SHA256:` plus 64 lowercase hex format. |
+| `credentialConfigurations`        | Array of stable IDs, `dc+sd-jwt` format, VCT and VTJSC URLs, display fields, allowed claims, disclosure frame, and a 60–31,536,000 second lifetime.                                                                                          |
+| `verifierPolicies`                | Array mapping a policy ID to one credential configuration and a subset of its claims.                                                                                                                                                        |
 
 Claims named `vct`, `iat`, `exp`, `iss`, or `cnf` are reserved for the credential envelope and cannot be configured.
 
@@ -171,9 +175,10 @@ A verifier accepts a presentation only after this sequence succeeds:
 
 1. Credo verifies the OpenID4VP response, nonce, audience, holder binding, SD-JWT disclosure, signature, and X.509 chain against configured roots or an exact development leaf pin.
 2. The plugin reads a DID only from a URI SAN after X.509 validation succeeds.
-3. The certificate public key must match a verification method authorized by that DID document under `assertionMethod`. The plugin uses `authentication` for its own verifier request-signing certificate during startup.
-4. The Verana resolver must return `TRUSTED` for the issuer DID and authorize that issuer for the credential configuration's `vtjscId`.
-5. The result is accepted only for the exact `TRUSTED_AUTHORIZED` verdict.
+3. Before network resolution, the DID must be a well-formed `did:web` or `did:webvh` on the operator allowlist, with no loopback, private, or link-local target. The resolved document ID must exactly match the requested DID.
+4. The certificate public key must match a verification method authorized by that DID document under `assertionMethod`. The plugin uses `authentication` for its own verifier request-signing certificate during startup.
+5. The Verana resolver must return `TRUSTED` for the issuer DID and authorize that issuer for the credential configuration's `vtjscId`.
+6. The result is accepted only for the exact `TRUSTED_AUTHORIZED` verdict.
 
 Missing or invalid chains, SAN errors, key mismatch, unresolvable DIDs, resolver timeout, malformed responses, non-`TRUSTED` status, and missing authorization all fail closed.
 

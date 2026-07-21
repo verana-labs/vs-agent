@@ -14,7 +14,10 @@ vi.mock('../src/services/CertificateService', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/services/CertificateService')>()),
   loadSigningCertificate,
 }))
-vi.mock('../src/trust/keyBinding', () => ({ verifyKeyBoundToDid }))
+vi.mock('../src/trust/keyBinding', async importOriginal => ({
+  ...(await importOriginal<typeof import('../src/trust/keyBinding')>()),
+  verifyKeyBoundToDid,
+}))
 
 const AGENT_DID = 'did:example:issuer'
 const signingHandle = {
@@ -85,7 +88,9 @@ const validOptions = (): OpenId4VcPluginOptions => ({
   trust: {
     resolverUrl: 'https://resolver.example/v1/trust',
     timeoutMs: 5_000,
-    credentialIssuerCertificates: ['MIIB-trusted-root'],
+    allowedDidWebHosts: ['issuer.example'],
+    credentialIssuerCertificates: [],
+    developmentCertificateFingerprints: [`SHA256:${'0'.repeat(64)}`],
   },
   credentialConfigurations: [],
   verifierPolicies: [],

@@ -10,7 +10,7 @@ import type {
 import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 
 import { findCredentialConfiguration, parseOfferClaims } from '../config'
-import { verifyKeyBoundToDid } from '../trust/keyBinding'
+import { ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
 
 import {
   didFromValidatedCertificate,
@@ -178,6 +178,7 @@ export class IssuerService {
       this.agent,
       this.issuerOptions().signing,
       this.options.publicApiBaseUrl,
+      'issuer',
     )
     const certificateDid = didFromValidatedCertificate(signingCertificate.certificate)
     if (certificateDid !== agentDid) {
@@ -189,6 +190,7 @@ export class IssuerService {
       agentDid,
       signingCertificate.certificate.publicJwk.toJson(),
       ['assertionMethod'],
+      ownDidResolutionPolicy(agentDid),
     )
     if (binding === 'unresolvable') {
       throw new Error('OpenID4VC issuer DID could not be resolved for assertionMethod key binding')

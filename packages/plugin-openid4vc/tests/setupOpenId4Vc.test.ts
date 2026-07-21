@@ -22,6 +22,7 @@ const validOptions = (): OpenId4VcPluginOptions => ({
   trust: {
     resolverUrl: 'https://resolver.example/v1/trust',
     timeoutMs: 5_000,
+    allowedDidWebHosts: ['issuer.example'],
     credentialIssuerCertificates: ['MIIB-trusted-root'],
   },
   credentialConfigurations: [],

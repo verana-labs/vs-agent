@@ -111,6 +111,7 @@ function validOptions(root: X509Certificate): OpenId4VcPluginOptions {
     trust: {
       resolverUrl: 'https://resolver.example',
       timeoutMs: 5_000,
+      allowedDidWebHosts: ['issuer.example'],
       credentialIssuerCertificates: [root.toString('base64')],
     },
     credentialConfigurations: [],

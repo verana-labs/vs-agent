@@ -196,6 +196,24 @@ describe('CertificateService', () => {
     )
   })
 
+  it('uses separate development records for concurrent issuer and verifier roles with equal names', async () => {
+    const agent = createAgent({ developmentCertificate: fixtures.attacker })
+    agent.did = 'did:web:attacker.example'
+    agent.publicApiBaseUrl = 'https://attacker.example/agent'
+    const signing: OpenId4VcSigningOptions = {
+      development: { enabled: true, commonName: 'Development Agent' },
+    }
+
+    await Promise.all([
+      loadSigningCertificate(agent, signing, agent.publicApiBaseUrl, 'issuer'),
+      loadSigningCertificate(agent, signing, agent.publicApiBaseUrl, 'verifier'),
+    ])
+
+    const savedRecordIds = agent.genericRecords.save.mock.calls.map(([record]) => record.id)
+    expect(savedRecordIds).toHaveLength(2)
+    expect(new Set(savedRecordIds)).toHaveLength(2)
+  })
+
   it('rejects an expired persisted development certificate', async () => {
     const agent = createAgent({ persistedDevelopmentCertificate: fixtures.expiredAttacker })
     agent.did = 'did:web:attacker.example'

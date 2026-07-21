@@ -12,7 +12,7 @@ import { OpenId4VcVerificationSessionState } from '@credo-ts/openid4vc'
 
 import { findCredentialConfiguration, findVerifierPolicy } from '../config'
 import { TrustClient } from '../trust/TrustClient'
-import { blockingBindingVerdict, verifyKeyBoundToDid } from '../trust/keyBinding'
+import { blockingBindingVerdict, ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
 
 import {
   didFromValidatedCertificate,
@@ -171,7 +171,10 @@ export class VerifierService {
     }
 
     const credential = { vct: configuration.vct, disclosedClaims }
-    const binding = await verifyKeyBoundToDid(this.agent, issuerDid, issuerPublicJwk, ['assertionMethod'])
+    const binding = await verifyKeyBoundToDid(this.agent, issuerDid, issuerPublicJwk, ['assertionMethod'], {
+      allowedWebHosts: this.trustOptions().allowedDidWebHosts,
+      timeoutMs: this.trustOptions().timeoutMs,
+    })
     if (binding !== 'bound') {
       return {
         state: session.state,
@@ -200,6 +203,7 @@ export class VerifierService {
       this.agent,
       this.verifierOptions().signing,
       this.options.publicApiBaseUrl,
+      'verifier',
     )
     const certificateDid = didFromValidatedCertificate(signingCertificate.certificate)
     if (certificateDid !== agentDid) {
@@ -211,6 +215,7 @@ export class VerifierService {
       agentDid,
       signingCertificate.certificate.publicJwk.toJson(),
       ['authentication'],
+      ownDidResolutionPolicy(agentDid, this.trustOptions().timeoutMs),
     )
     if (binding === 'unresolvable') {
       throw new Error('OpenID4VC verifier DID could not be resolved for authentication key binding')
@@ -340,6 +345,12 @@ export class VerifierService {
     const verifier = this.options.verifier
     if (!verifier) throw new Error('OpenID4VC verifier capability is not configured')
     return verifier
+  }
+
+  private trustOptions(): NonNullable<OpenId4VcPluginOptions['trust']> {
+    const trust = this.options.trust
+    if (!trust) throw new Error('OpenID4VC verifier requires trust configuration')
+    return trust
   }
 
   private signingCertificateHandle(): SigningCertificateHandle {

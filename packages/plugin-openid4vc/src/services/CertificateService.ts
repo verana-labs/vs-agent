@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 
 const DEVELOPMENT_CERTIFICATE_VALIDITY_MS = 365 * 24 * 60 * 60 * 1_000
 const DEVELOPMENT_RECORD_PREFIX = 'openid4vc-development-signing'
+type SigningRole = 'issuer' | 'verifier'
 
 type CertificateAgent = Pick<BaseAgent, 'genericRecords' | 'kms' | 'x509'> & {
   did?: string
@@ -27,12 +28,13 @@ export async function loadSigningCertificate(
   agent: CertificateAgent,
   signing: OpenId4VcSigningOptions,
   publicApiBaseUrl = agent.publicApiBaseUrl,
+  role: SigningRole = 'issuer',
 ): Promise<SigningCertificateHandle> {
   if (signing.configured) {
     return await loadConfiguredSigningCertificate(agent, signing.configured)
   }
 
-  return await loadDevelopmentSigningCertificate(agent, signing.development, publicApiBaseUrl)
+  return await loadDevelopmentSigningCertificate(agent, signing.development, publicApiBaseUrl, role)
 }
 
 export function didFromValidatedCertificate(certificate: X509Certificate): string {
@@ -108,6 +110,7 @@ async function loadDevelopmentSigningCertificate(
   agent: CertificateAgent,
   development: NonNullable<OpenId4VcSigningOptions['development']>,
   publicApiBaseUrl?: string,
+  role: SigningRole = 'issuer',
 ): Promise<SigningCertificateHandle> {
   if (development.enabled !== true) {
     throw new Error('development certificate mode must be explicitly enabled')
@@ -120,7 +123,7 @@ async function loadDevelopmentSigningCertificate(
   }
 
   const hostname = hostnameFromPublicApiBaseUrl(publicApiBaseUrl)
-  const recordId = developmentRecordId(agent.did, hostname, development.commonName)
+  const recordId = developmentRecordId(agent.did, hostname, development.commonName, role)
   const existing = await agent.genericRecords.findById(recordId)
   if (existing) {
     const stored = parseDevelopmentRecord(existing.content)
@@ -176,7 +179,7 @@ async function loadDevelopmentSigningCertificate(
   return { certificate, chain: [certificate], keyId, development: true }
 }
 
-function assertCertificateChainUsable(chain: X509Certificate[], now = new Date()): void {
+export function assertCertificateChainUsable(chain: X509Certificate[], now = new Date()): void {
   for (const certificate of chain) {
     if (certificate.data.notAfter.getTime() < now.getTime()) {
       throw new Error('certificate chain contains an expired certificate')
@@ -226,8 +229,8 @@ function hostnameFromPublicApiBaseUrl(publicApiBaseUrl: string): string {
   }
 }
 
-function developmentRecordId(did: string, hostname: string, commonName: string): string {
-  const suffix = createHash('sha256').update(`${did}\0${hostname}\0${commonName}`).digest('hex')
+function developmentRecordId(did: string, hostname: string, commonName: string, role: SigningRole): string {
+  const suffix = createHash('sha256').update(`${did}\0${hostname}\0${commonName}\0${role}`).digest('hex')
   return `${DEVELOPMENT_RECORD_PREFIX}:${suffix}`
 }
 

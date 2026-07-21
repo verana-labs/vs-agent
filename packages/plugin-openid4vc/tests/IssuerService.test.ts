@@ -14,9 +14,12 @@ vi.mock('../src/services/CertificateService', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/services/CertificateService')>()),
   loadSigningCertificate,
 }))
-vi.mock('../src/trust/keyBinding', () => ({ verifyKeyBoundToDid }))
+vi.mock('../src/trust/keyBinding', async importOriginal => ({
+  ...(await importOriginal<typeof import('../src/trust/keyBinding')>()),
+  verifyKeyBoundToDid,
+}))
 
-const AGENT_DID = 'did:example:issuer'
+const AGENT_DID = 'did:web:agent.example'
 const PUBLIC_JWK = {
   kty: 'EC' as const,
   crv: 'P-256' as const,
@@ -139,8 +142,19 @@ describe('IssuerService', () => {
 
     await Promise.all([service.ensureInitialized(), service.ensureInitialized(), service.ensureInitialized()])
 
-    expect(loadSigningCertificate).toHaveBeenCalledOnce()
-    expect(verifyKeyBoundToDid).toHaveBeenCalledOnce()
+    expect(loadSigningCertificate).toHaveBeenCalledWith(
+      expect.anything(),
+      options().issuer!.signing,
+      'https://agent.example',
+      'issuer',
+    )
+    expect(verifyKeyBoundToDid).toHaveBeenCalledWith(
+      expect.anything(),
+      AGENT_DID,
+      PUBLIC_JWK,
+      ['assertionMethod'],
+      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000 },
+    )
     expect(api.getIssuerByIssuerId).toHaveBeenCalledOnce()
     expect(api.updateIssuerMetadata).toHaveBeenCalledOnce()
     expect(api.createIssuer).not.toHaveBeenCalled()

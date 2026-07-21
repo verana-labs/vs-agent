@@ -44,6 +44,7 @@ export interface OpenId4VcPluginOptions {
   trust?: {
     resolverUrl: string
     timeoutMs: number
+    allowedDidWebHosts: string[]
     credentialIssuerCertificates: string[]
     developmentCertificateFingerprints?: string[]
   }

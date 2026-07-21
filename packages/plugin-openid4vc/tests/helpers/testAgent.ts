@@ -206,6 +206,7 @@ export async function startOpenId4VcTestAgents(input: {
       trust: {
         resolverUrl: input.resolverUrl,
         timeoutMs: 500,
+        allowedDidWebHosts: ['issuer.example'],
         credentialIssuerCertificates: [rootCertificate],
       },
       credentialConfigurations: [input.credentialConfiguration],
@@ -241,6 +242,7 @@ export async function startOpenId4VcTestAgents(input: {
         trust: {
           resolverUrl: input.resolverUrl,
           timeoutMs: 500,
+          allowedDidWebHosts: ['issuer.example'],
           credentialIssuerCertificates: [rootCertificate],
         },
         credentialConfigurations: [input.credentialConfiguration],

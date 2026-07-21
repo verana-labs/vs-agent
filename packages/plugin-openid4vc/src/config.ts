@@ -5,6 +5,12 @@ import type {
   OpenId4VcVerifierPolicy,
 } from './types'
 
+import { X509Certificate, X509KeyUsage } from '@credo-ts/core'
+
+import { assertCertificateChainUsable } from './services/CertificateService'
+import { certificateFingerprint } from './trust/CertificateTrust'
+import { MAX_DID_RESOLUTION_TIMEOUT_MS } from './trust/keyBinding'
+
 const MAX_TTL_SECONDS = 31_536_000
 const MIN_TTL_SECONDS = 60
 const RESERVED_CREDENTIAL_CLAIMS = new Set(['vct', 'iat', 'exp', 'iss', 'cnf'])
@@ -148,12 +154,36 @@ function assertTrustOptions(trust: OpenId4VcPluginOptions['trust'], requiresAnch
   }
 
   assertHttpsUrl(trust.resolverUrl, 'trust.resolverUrl')
-  if (!Number.isInteger(trust.timeoutMs) || trust.timeoutMs <= 0) {
-    throw new Error('trust.timeoutMs must be a positive integer')
+  if (
+    !Number.isInteger(trust.timeoutMs) ||
+    trust.timeoutMs <= 0 ||
+    trust.timeoutMs > MAX_DID_RESOLUTION_TIMEOUT_MS
+  ) {
+    throw new Error(
+      `trust.timeoutMs must be a positive integer no greater than ${MAX_DID_RESOLUTION_TIMEOUT_MS}`,
+    )
   }
+  assertNonEmptyUniqueStrings(trust.allowedDidWebHosts, 'trust.allowedDidWebHosts')
+  trust.allowedDidWebHosts.forEach((host, index) =>
+    assertDidWebHost(host, `trust.allowedDidWebHosts[${index}]`),
+  )
   assertStringArray(trust.credentialIssuerCertificates, 'trust.credentialIssuerCertificates')
+  assertCredentialIssuerTrustAnchors(trust.credentialIssuerCertificates)
   if (trust.developmentCertificateFingerprints) {
     assertStringArray(trust.developmentCertificateFingerprints, 'trust.developmentCertificateFingerprints')
+    if (
+      new Set(trust.developmentCertificateFingerprints).size !==
+      trust.developmentCertificateFingerprints.length
+    ) {
+      throw new Error('trust.developmentCertificateFingerprints must not contain duplicates')
+    }
+    if (
+      trust.developmentCertificateFingerprints.some(fingerprint => !/^SHA256:[0-9a-f]{64}$/.test(fingerprint))
+    ) {
+      throw new Error(
+        'trust.developmentCertificateFingerprints must use SHA256 followed by 64 lowercase hexadecimal characters',
+      )
+    }
   }
 
   if (
@@ -210,10 +240,64 @@ function assertHttpUrl(value: string, field: string): void {
 }
 
 function parseUrl(value: string, field: string): URL {
+  let url: URL
   try {
-    return new URL(value)
+    url = new URL(value)
   } catch {
     throw new Error(`${field} must be a valid URL`)
+  }
+
+  if (url.username || url.password) {
+    throw new Error(`${field} must not include credentials`)
+  }
+  return url
+}
+
+function assertCredentialIssuerTrustAnchors(encodedCertificates: string[]): void {
+  const fingerprints = new Set<string>()
+
+  encodedCertificates.forEach((encodedCertificate, index) => {
+    let certificate: X509Certificate
+    try {
+      certificate = X509Certificate.fromEncodedCertificate(encodedCertificate)
+    } catch {
+      throw new Error(`trust.credentialIssuerCertificates[${index}] must be a valid X.509 certificate`)
+    }
+
+    assertCertificateChainUsable([certificate])
+    if (!certificate.isCertificateAuthority || !certificate.keyUsage?.includes(X509KeyUsage.KeyCertSign)) {
+      throw new Error(
+        `trust.credentialIssuerCertificates[${index}] must be a CA trust anchor with keyCertSign usage`,
+      )
+    }
+    if (certificate.subject !== certificate.issuer) {
+      throw new Error(`trust.credentialIssuerCertificates[${index}] must be a self-issued root trust anchor`)
+    }
+
+    const fingerprint = certificateFingerprint(certificate)
+    if (fingerprints.has(fingerprint)) {
+      throw new Error('trust.credentialIssuerCertificates contains a duplicate credential issuer certificate')
+    }
+    fingerprints.add(fingerprint)
+  })
+}
+
+function assertDidWebHost(value: string, field: string): void {
+  try {
+    const url = new URL(`https://${value}`)
+    if (
+      url.username ||
+      url.password ||
+      !url.hostname ||
+      url.pathname !== '/' ||
+      url.search ||
+      url.hash ||
+      url.host.toLowerCase() !== value
+    ) {
+      throw new Error()
+    }
+  } catch {
+    throw new Error(`${field} must be an exact lowercase host with an optional port`)
   }
 }
 
