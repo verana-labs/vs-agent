@@ -109,6 +109,7 @@ These are variables that are updated only on specific use cases.
 | AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP   | Toggle automatic storage migration on startup. If true, the agent runs migrations and attempts to make a backup of the wallet on startup                                                                                                         | false                    |
 | AGENT_BACKUP_BEFORE_STORAGE_UPDATE     | Toggle backup before storage update. If true, the agent creates a backup of the wallet using Askar's export before performing storage migrations                                                                                                 | false                    |
 | VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. Set by the Docker image in production, only override in development. See [Plugin system](#plugin-system) for available values.                                                               | `messaging,chat`         |
+| OID4VC_CONFIG_FILE                     | Path to a readable OpenID4VC JSON configuration file. Required when `VS_AGENT_PLUGINS` includes `openid4vc`; ignored when the plugin is disabled.                                                                                                | none                     |
 
 > **Note about Key derivation method**: By default, we use the strongest ARGON2I_MOD, but since this is the slowest one as well, depending on the security infrastructure you have, you might want to not derive the key at all (use RAW). However, in versions of VS Agent we are going to deprecate this setting, so we recommend to keep the default setting to make migration process easier.
 
@@ -249,7 +250,7 @@ VS_AGENT_PLUGINS=messaging,chat,openid4vc
 
 > **Note:** `messaging` is always required and will be prepended automatically if omitted.
 >
-> In production, `VS_AGENT_PLUGINS` is pre-configured by the Docker image, override it only in development environments. Using a value that references a plugin not bundled in the current image will result in a startup warning and the plugin being skipped.
+> In production, `VS_AGENT_PLUGINS` is pre-configured by the Docker image; override it only in development environments. Missing `chat` or `mrtd` packages produce a startup warning and those plugins are skipped. When `openid4vc` is selected, a missing package, a missing or invalid `OID4VC_CONFIG_FILE`, or plugin initialization failure aborts startup.
 
 ### Optional dependencies
 

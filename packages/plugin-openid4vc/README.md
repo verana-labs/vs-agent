@@ -16,6 +16,8 @@ This is implementation groundwork, not EUDI certification or a claim of complete
 
 Use the `vs-agent-openid4vc` image target. It enables `messaging,chat,openid4vc` and requires `OID4VC_CONFIG_FILE`:
 
+The commands below explicitly select Maxime's Colima Docker context. Omit `--context colima` when the active Docker context already points to the intended engine.
+
 ```bash
 docker --context colima build \
   --target vs-agent-openid4vc \
