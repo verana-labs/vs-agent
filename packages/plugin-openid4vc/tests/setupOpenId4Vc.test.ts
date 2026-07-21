@@ -59,7 +59,10 @@ describe('setupOpenId4Vc', () => {
       },
     }))
 
-    expect(issuerSetup.modules.openId4Vc.config.issuer?.baseUrl).toBe('https://agent.example/oid4vci')
+    expect(issuerSetup.modules.openId4Vc.config).toHaveProperty(
+      'issuer.baseUrl',
+      'https://agent.example/oid4vci',
+    )
     expect(issuerSetup.modules.openId4Vc.config.verifier).toBeUndefined()
 
     const verifierOnly = validOptions()
@@ -67,7 +70,10 @@ describe('setupOpenId4Vc', () => {
     const verifierSetup = setupOpenId4Vc(verifierOnly)
 
     expect(verifierSetup.modules.openId4Vc.config.issuer).toBeUndefined()
-    expect(verifierSetup.modules.openId4Vc.config.verifier?.baseUrl).toBe('https://agent.example/oid4vp')
+    expect(verifierSetup.modules.openId4Vc.config).toHaveProperty(
+      'verifier.baseUrl',
+      'https://agent.example/oid4vp',
+    )
   })
 
   it('delegates X.509 trust only to configured trust anchors', async () => {
@@ -115,7 +121,7 @@ describe('setupOpenId4Vc', () => {
     expect(response.body.token_endpoint_auth_methods_supported).toEqual(['none'])
     expect(response.body.client_attestation_signing_alg_values_supported).toBeUndefined()
     expect(response.body.client_attestation_pop_signing_alg_values_supported).toBeUndefined()
-    expect(setup.modules.openId4Vc.config.issuer?.walletAttestationsRequired).toBe(false)
+    expect(setup.modules.openId4Vc.config).toHaveProperty('issuer.walletAttestationsRequired', false)
   })
 
   it('advertises wallet attestation only when it is required and has trusted roots', async () => {
@@ -141,7 +147,7 @@ describe('setupOpenId4Vc', () => {
     expect(response.body.token_endpoint_auth_methods_supported).toEqual(['none', 'attest_jwt_client_auth'])
     expect(response.body.client_attestation_signing_alg_values_supported).toEqual(['ES256'])
     expect(response.body.client_attestation_pop_signing_alg_values_supported).toEqual(['ES256'])
-    expect(setup.modules.openId4Vc.config.issuer?.walletAttestationsRequired).toBe(true)
+    expect(setup.modules.openId4Vc.config).toHaveProperty('issuer.walletAttestationsRequired', true)
   })
 
   it('rejects a malformed required wallet-attestation root synchronously', async () => {

@@ -298,7 +298,7 @@ function createAgent({
     }),
   }
 
-  return {
+  const agent = {
     keys,
     kms,
     genericRecords,
@@ -306,4 +306,6 @@ function createAgent({
     did: undefined as string | undefined,
     publicApiBaseUrl: undefined as string | undefined,
   }
+
+  return agent as unknown as typeof agent & Parameters<typeof loadSigningCertificate>[0]
 }

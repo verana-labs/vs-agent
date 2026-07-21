@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { createCertificateFixtures } from './helpers/certificates'
 import { didDocumentWithKey, MapDidResolver } from './helpers/didResolver'
 import {
+  activeTcpServers,
   createVerifierCertificate,
   OpenId4VcTestStartupError,
   startOpenId4VcTestAgents,
@@ -112,8 +113,4 @@ async function startupInput() {
     verifierDid: VERIFIER_DID,
     credentialConfiguration: CONFIGURATION,
   }
-}
-
-function activeTcpServers(): string[] {
-  return process.getActiveResourcesInfo().filter(resource => resource.includes('TCPSERVER'))
 }

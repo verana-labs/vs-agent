@@ -1,7 +1,7 @@
 # OpenID4VC Foundation Design
 
-**Date:** 2026-07-21  
-**Issue:** [verana-labs/vs-agent#518](https://github.com/verana-labs/vs-agent/issues/518)  
+**Date:** 2026-07-21
+**Issue:** [verana-labs/vs-agent#518](https://github.com/verana-labs/vs-agent/issues/518)
 **Status:** Approved for implementation planning
 
 ## Context

@@ -304,8 +304,10 @@ describe('IssuerService', () => {
 
     expect(mapped.type).toBe('credentials')
     if (mapped.type !== 'credentials') throw new Error('expected credentials')
-    expect(mapped.credentials[0].payload.iat).toBe(1_784_635_200)
-    expect(mapped.credentials[0].payload.exp).toBe(1_784_638_800)
+    const credential = mapped.credentials[0]
+    if (!credential || !('payload' in credential)) throw new Error('expected SD-JWT credentials')
+    expect(credential.payload.iat).toBe(1_784_635_200)
+    expect(credential.payload.exp).toBe(1_784_638_800)
     vi.useRealTimers()
   })
 
@@ -327,7 +329,9 @@ describe('IssuerService', () => {
 
     expect(mapped.type).toBe('credentials')
     if (mapped.type !== 'credentials') throw new Error('expected credentials')
-    expect(mapped.credentials[0].holder).toEqual({ method: 'did', didUrl: 'did:example:holder#key-1' })
+    const credential = mapped.credentials[0]
+    if (!credential || !('holder' in credential)) throw new Error('expected SD-JWT credentials')
+    expect(credential.holder).toEqual({ method: 'did', didUrl: 'did:example:holder#key-1' })
   })
 
   it.each([

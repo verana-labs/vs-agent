@@ -8,7 +8,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createCertificateFixtures } from './helpers/certificates'
 import { didDocumentWithKey, MapDidResolver } from './helpers/didResolver'
 import { startResolverStub } from './helpers/resolverStub'
-import { createVerifierCertificate, startOpenId4VcTestAgents } from './helpers/testAgent'
+import {
+  activeTcpServers,
+  createAggregateError,
+  createVerifierCertificate,
+  startOpenId4VcTestAgents,
+} from './helpers/testAgent'
 
 const ISSUER_DID = 'did:web:issuer.example'
 const VERIFIER_DID = 'did:web:verifier.example'
@@ -197,7 +202,7 @@ describe('in-process OpenID4VC issuance and presentation', () => {
   }, 60_000)
 
   it('keeps holder controllers and services out of production source', async () => {
-    const sourceFiles = await filesBelow(new URL('../src', import.meta.url).pathname)
+    const sourceFiles = await filesBelow(join(__dirname, '../src'))
     expect(sourceFiles).not.toContain('WalletController.ts')
     expect(sourceFiles).not.toContain('WalletService.ts')
     const publicApi = await import('../src')
@@ -222,13 +227,9 @@ async function rethrowAfterFixtureCleanup(
   const cleanup = await Promise.allSettled(tasks)
   const cleanupErrors = cleanup.flatMap(result => (result.status === 'rejected' ? [result.reason] : []))
   if (cleanupErrors.length > 0) {
-    throw new AggregateError([primaryError, ...cleanupErrors], 'OpenID4VC fixture setup and cleanup failed')
+    throw createAggregateError([primaryError, ...cleanupErrors], 'OpenID4VC fixture setup and cleanup failed')
   }
   throw primaryError
-}
-
-function activeTcpServers(): string[] {
-  return process.getActiveResourcesInfo().filter(resource => resource.includes('TCPSERVER'))
 }
 
 async function filesBelow(directory: string): Promise<string[]> {

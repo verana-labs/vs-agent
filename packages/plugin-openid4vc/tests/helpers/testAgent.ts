@@ -266,7 +266,7 @@ export async function startOpenId4VcTestAgents(input: {
       },
     }
   } catch (error) {
-    await rethrowAfterCleanup(error, [verifier?.stop(), holder?.stop(), issuer.stop()])
+    return await rethrowAfterCleanup(error, [verifier?.stop(), holder?.stop(), issuer.stop()])
   }
 }
 
@@ -319,7 +319,7 @@ async function startPluginAgent<Service>(input: {
       stop: createStop(agent, server),
     }
   } catch (error) {
-    await rethrowAfterCleanup(
+    return await rethrowAfterCleanup(
       error,
       [agent?.shutdown(), server ? closeServer(server) : undefined],
       input.failureHooks?.afterCleanup ? () => input.failureHooks?.afterCleanup?.(input.role) : undefined,
@@ -347,7 +347,7 @@ async function startHolderAgent(
     await agent.initialize()
     await failureHooks?.afterInitialize?.('holder')
   } catch (error) {
-    await rethrowAfterCleanup(
+    return await rethrowAfterCleanup(
       error,
       [agent?.shutdown()],
       failureHooks?.afterCleanup ? () => failureHooks.afterCleanup?.('holder') : undefined,
@@ -456,7 +456,7 @@ function createStop(agent: Agent, server?: Server): () => Promise<void> {
 
 async function settleCleanup(tasks: Array<Promise<unknown> | undefined>): Promise<void> {
   const errors = await cleanupErrors(tasks)
-  if (errors.length > 0) throw new AggregateError(errors, 'OpenID4VC test cleanup failed')
+  if (errors.length > 0) throw createAggregateError(errors, 'OpenID4VC test cleanup failed')
 }
 
 async function rethrowAfterCleanup(
@@ -485,6 +485,21 @@ async function rethrowAfterCleanup(
 async function cleanupErrors(tasks: Array<Promise<unknown> | undefined>): Promise<unknown[]> {
   const results = await Promise.allSettled(tasks)
   return results.flatMap(result => (result.status === 'rejected' ? [result.reason] : []))
+}
+
+export function activeTcpServers(): string[] {
+  const getActiveResourcesInfo = (process as NodeJS.Process & { getActiveResourcesInfo: () => string[] })
+    .getActiveResourcesInfo
+  return getActiveResourcesInfo.call(process).filter(resource => resource.includes('TCPSERVER'))
+}
+
+export function createAggregateError(errors: unknown[], message: string): Error {
+  const AggregateErrorConstructor = (
+    globalThis as typeof globalThis & {
+      AggregateError: new (errors: Iterable<unknown>, message?: string) => Error
+    }
+  ).AggregateError
+  return new AggregateErrorConstructor(errors, message)
 }
 
 function errorMessage(error: unknown): string {

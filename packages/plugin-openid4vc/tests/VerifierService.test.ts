@@ -217,8 +217,7 @@ describe('VerifierService', () => {
   })
 
   it('requires an agent DID before loading verifier signing material', async () => {
-    const agentWithoutDid = agent()
-    delete agentWithoutDid.did
+    const agentWithoutDid = { ...agent(), did: undefined }
     const service = new VerifierService(agentWithoutDid as never, options())
 
     await expect(service.ensureInitialized()).rejects.toThrow('agent DID')

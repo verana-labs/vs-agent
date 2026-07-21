@@ -213,7 +213,7 @@ export async function createCertificateFixtures(): Promise<CertificateFixtures> 
   }
 }
 
-async function importKeyPair(privateJwk: Kms.KmsJwkPrivateEc): Promise<CryptoKeyPair> {
+async function importKeyPair(privateJwk: Kms.KmsJwkPrivateEc): Promise<webcrypto.CryptoKeyPair> {
   const algorithm = { name: 'ECDSA', namedCurve: 'P-256' }
   const privateKey = await webcrypto.subtle.importKey('jwk', privateJwk, algorithm, true, ['sign'])
   const publicKey = await webcrypto.subtle.importKey(

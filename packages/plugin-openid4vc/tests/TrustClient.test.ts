@@ -127,17 +127,18 @@ describe('TrustClient', () => {
   )
 
   it('builds unambiguous endpoint URLs and encoded query parameters', async () => {
-    const fetchImplementation = vi
+    const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(response(200, { trustStatus: 'TRUSTED' }))
-      .mockResolvedValueOnce(response(200, { authorized: true })) as unknown as typeof fetch
+      .mockResolvedValueOnce(response(200, { authorized: true }))
+    const fetchImplementation = fetchMock as unknown as typeof fetch
     const did = 'did:web:issuer.example:user?version=1&active=true'
     const vtjscId = 'https://agent.example/vt/employee.json?version=1&scope=all'
 
     await clientWith(fetchImplementation, `${RESOLVER_URL}/?ignored=true`).verdictFor('issuer', did, vtjscId)
 
-    const resolveUrl = new URL(String(fetchImplementation.mock.calls[0][0]))
-    const authorizationUrl = new URL(String(fetchImplementation.mock.calls[1][0]))
+    const resolveUrl = new URL(String(fetchMock.mock.calls[0][0]))
+    const authorizationUrl = new URL(String(fetchMock.mock.calls[1][0]))
     expect(resolveUrl.pathname).toBe('/v1/trust/resolve')
     expect(resolveUrl.searchParams.get('did')).toBe(did)
     expect(resolveUrl.searchParams.has('ignored')).toBe(false)
@@ -168,7 +169,7 @@ describe('TrustClient', () => {
 
   it('treats an AbortError as resolver unavailable and clears its timeout', async () => {
     const fetchImplementation = vi.fn(async () => {
-      throw new DOMException('request aborted', 'AbortError')
+      throw abortError('request aborted')
     }) as unknown as typeof fetch
     const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
 
@@ -185,7 +186,7 @@ describe('TrustClient', () => {
       async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
         requestSignal = init?.signal as AbortSignal
         return await new Promise((_resolve, reject) => {
-          requestSignal?.addEventListener('abort', () => reject(new DOMException('timed out', 'AbortError')))
+          requestSignal?.addEventListener('abort', () => reject(abortError('timed out')))
         })
       },
     ) as unknown as typeof fetch
@@ -209,9 +210,7 @@ describe('TrustClient', () => {
         status: 200,
         json: async () =>
           await new Promise((_resolve, reject) => {
-            requestSignal?.addEventListener('abort', () =>
-              reject(new DOMException('timed out', 'AbortError')),
-            )
+            requestSignal?.addEventListener('abort', () => reject(abortError('timed out')))
           }),
       } as Response
     }) as unknown as typeof fetch
@@ -223,3 +222,9 @@ describe('TrustClient', () => {
     await expect(verdictPromise).resolves.toMatchObject({ verdict: 'RESOLVER_UNAVAILABLE' })
   })
 })
+
+function abortError(message: string): Error {
+  const error = new Error(message)
+  error.name = 'AbortError'
+  return error
+}
