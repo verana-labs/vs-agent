@@ -167,7 +167,7 @@ export class VeranaTestChain {
       typeUrl: veranaTypeUrls.MsgGrantOperatorAuthorization,
       value: MsgGrantOperatorAuthorization.fromPartial({
         corporation: policyAddress,
-        operator: '',
+        operator: policyAddress,
         grantee: this.address,
         msgTypes: OPERATOR_GRANT_MSG_TYPES,
       }),
@@ -209,6 +209,10 @@ export class VeranaTestChain {
     const res = await this.broadcast([msg])
     const decoded = MsgCreateEcosystemResponse.decode(res.msgResponses[0].value)
     return { ecosystemId: Number(decoded.ecosystemId), txHash: res.transactionHash }
+  }
+
+  async fundAccount(address: string, amount = '50000000000'): Promise<void> {
+    await this.client.sendTokens(this.address, address, [{ denom: 'uvna', amount }], 'auto')
   }
 
   /** A second funded account used as the agent's session vs_operator (VSOA), distinct from the OA operator. */
