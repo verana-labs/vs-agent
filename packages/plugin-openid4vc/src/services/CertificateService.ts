@@ -57,13 +57,21 @@ async function loadConfiguredSigningCertificate(
   const configuredChainEndpoint = configured.certificateChain[configured.certificateChain.length - 1]
 
   // This trust endpoint is operator-configured signing material, never a peer-provided chain.
-  await agent.x509.validateCertificateChain({
+  const validatedRootToLeafChain = await agent.x509.validateCertificateChain({
     certificateChain: configured.certificateChain,
     trustedCertificates: [configuredChainEndpoint],
     allowNonRootTrustedCertificate: true,
   })
 
-  const certificate = chain[0]
+  const validatedChain = [...validatedRootToLeafChain].reverse()
+  if (
+    validatedChain.length !== chain.length ||
+    validatedChain.some((certificate, index) => !certificate.equal(chain[index]))
+  ) {
+    throw new Error('configured certificate chain must be ordered leaf-first')
+  }
+
+  const certificate = validatedChain[0]
   if (certificate.subject === certificate.issuer) {
     throw new Error('configured leaf certificate must not be self-signed')
   }
@@ -93,7 +101,7 @@ async function loadConfiguredSigningCertificate(
   }
 
   certificate.keyId = keyId
-  return { certificate, chain, keyId, development: false }
+  return { certificate, chain: validatedChain, keyId, development: false }
 }
 
 async function loadDevelopmentSigningCertificate(

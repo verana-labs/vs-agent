@@ -1,7 +1,6 @@
 import type { OpenId4VcSigningOptions } from '../src/types'
-import type { X509Certificate } from '@credo-ts/core'
 
-import { Kms } from '@credo-ts/core'
+import { Kms, X509Certificate } from '@credo-ts/core'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { didFromValidatedCertificate, loadSigningCertificate } from '../src/services/CertificateService'
@@ -58,6 +57,37 @@ describe('CertificateService', () => {
       trustedCertificates: [fixtures.attacker.toString('base64')],
       allowNonRootTrustedCertificate: true,
     })
+  })
+
+  it('rejects a valid chain that is not configured leaf-first', async () => {
+    const agent = createAgent({
+      validatedCertificateChain: [fixtures.intermediate, fixtures.leaf],
+    })
+    const certificateChain = [
+      fixtures.leaf.toString('base64'),
+      fixtures.root.toString('base64'),
+      fixtures.intermediate.toString('base64'),
+    ]
+
+    await expect(
+      loadSigningCertificate(agent, {
+        configured: { certificateChain, privateJwk: LEAF_PRIVATE_JWK },
+      }),
+    ).rejects.toThrow('leaf-first')
+  })
+
+  it('returns a validated three-certificate chain in leaf-first order', async () => {
+    const certificateChain = [
+      fixtures.leaf.toString('base64'),
+      fixtures.intermediate.toString('base64'),
+      fixtures.root.toString('base64'),
+    ]
+
+    const handle = await loadSigningCertificate(createAgent(), {
+      configured: { certificateChain, privateJwk: LEAF_PRIVATE_JWK },
+    })
+
+    expect(handle.chain.map(certificate => certificate.toString('base64'))).toEqual(certificateChain)
   })
 
   it('rejects an expired certificate', async () => {
@@ -205,10 +235,12 @@ function publicJwk(privateJwk: Kms.KmsJwkPrivateEc): Kms.KmsJwkPublicEc {
 function createAgent({
   developmentCertificate,
   persistedDevelopmentCertificate,
+  validatedCertificateChain,
   validationError,
 }: {
   developmentCertificate?: X509Certificate
   persistedDevelopmentCertificate?: X509Certificate
+  validatedCertificateChain?: X509Certificate[]
   validationError?: Error
 } = {}) {
   const keys = new Map<string, Kms.KmsJwkPublicEc>()
@@ -253,9 +285,12 @@ function createAgent({
     }),
   }
   const x509 = {
-    validateCertificateChain: vi.fn(async () => {
+    validateCertificateChain: vi.fn(async ({ certificateChain }: { certificateChain: string[] }) => {
       if (validationError) throw validationError
-      return []
+      return (
+        validatedCertificateChain ??
+        certificateChain.map(encoded => X509Certificate.fromEncodedCertificate(encoded)).reverse()
+      )
     }),
     createCertificate: vi.fn(async () => {
       if (!developmentCertificate) throw new Error('development certificate fixture was not configured')
