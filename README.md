@@ -10,7 +10,9 @@ VS Agent is a web application that can be used as a framework for building conve
 - Issue and verify AnonCreds credentials, with revocation support
 - Built-in [Verifiable Trust](https://verana.foundation/page/learn-vt-demystified/) implementation
 - Hands-on client for easy integrations in existing backends using NestJS
-- Plugin architecture: load only the features you need (`chat`, `mrtd`) via `VS_AGENT_PLUGINS`
+- Plugin architecture: load only the features you need (`chat`, `mrtd`, `openid4vc`) via `VS_AGENT_PLUGINS`
+
+The OpenID4VC plugin provides `dc+sd-jwt` issuance and presentation groundwork. Use the `vs-agent-openid4vc` Docker target and see the [operator documentation](./packages/plugin-openid4vc/README.md).
 
 ---
 
@@ -38,7 +40,7 @@ Once your VS Agent is up and running, you can manage it from your backend basica
 
 ### Using NestJS Client (preferred way)
 
-[NestJS client](./packages/nestjs-client/) can be imported as a module in your backend, and it will implement all endpoints required to handle event coming from VS Agent. It also provides some extra models to manage credential revocation, use statistics and handling user profile (including useful information such as preferred language). See [NestJS client documentation]((./packages/nestjs-client/README.md) for more details.
+[NestJS client](./packages/nestjs-client/) can be imported as a module in your backend, and it will implement all endpoints required to handle event coming from VS Agent. It also provides some extra models to manage credential revocation, use statistics and handling user profile (including useful information such as preferred language). See [NestJS client documentation](./packages/nestjs-client/README.md) for more details.
 
 ### Using basic client
 
@@ -47,7 +49,6 @@ Once your VS Agent is up and running, you can manage it from your backend basica
 ### Using VS Agent REST API
 
 This can be used regardless the software stack you use in your backend. See [VS Agent API reference](./doc/vs-agent-api.md) for a detailed guide about all endpoints.
-
 
 ---
 

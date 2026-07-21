@@ -74,13 +74,12 @@ By offloading message handling and enabling asynchronous processing, Redis helps
 
 Here is a couple of variables that you may want to take care in case of troubles or working in development environments.
 
-| Variable        | Description                                                          | Default value |
-| --------------- | -------------------------------------------------------------------- | ------------- |
-| AGENT_LOG_LEVEL | Credo Agent Log level                                                | 4 (warn)      |
-| ADMIN_LOG_LEVEL | Admin interface Log level                                            | 3 (info)     |
-| USE_CORS        | Enable Cross-Origin Resource Sharing (only for development purposes) | false         |
-| ENABLE_PUBLIC_API_SWAGGER  | Enable Swagger documentation for public API (recommended only for development environments) | false |
-
+| Variable                  | Description                                                                                 | Default value |
+| ------------------------- | ------------------------------------------------------------------------------------------- | ------------- |
+| AGENT_LOG_LEVEL           | Credo Agent Log level                                                                       | 4 (warn)      |
+| ADMIN_LOG_LEVEL           | Admin interface Log level                                                                   | 3 (info)      |
+| USE_CORS                  | Enable Cross-Origin Resource Sharing (only for development purposes)                        | false         |
+| ENABLE_PUBLIC_API_SWAGGER | Enable Swagger documentation for public API (recommended only for development environments) | false         |
 
 Possible log levels:
 
@@ -140,12 +139,12 @@ These variables enable on-chain features (permission management, trust registry 
 
 The Admin API can run two listeners: an unauthenticated internal one (trusted by network reachability) and an authenticated external one. External callers get a bearer token by signing a challenge with their Verana account key (ADR-036) via `POST /v1/auth/challenge` and `POST /v1/auth/token`.
 
-| Variable                                 | Required | Description                                                                                                                                          |
-| ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ADMIN_API_AUTH_MODE`                    | OPTIONAL | Comma-separated listeners to activate: `internal` (default, no auth) and/or `corporation` (external listener with ADR-036 auth).                      |
+| Variable                                 | Required    | Description                                                                                                                                                                                                                                     |
+| ---------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ADMIN_API_AUTH_MODE`                    | OPTIONAL    | Comma-separated listeners to activate: `internal` (default, no auth) and/or `corporation` (external listener with ADR-036 auth).                                                                                                                |
 | `ADMIN_API_PUBLIC_URL`                   | CONDITIONAL | Public `https://` origin (no trailing path) where the external listener is exposed. Required when `corporation` is in `ADMIN_API_AUTH_MODE`, must not be set otherwise. Published in the agent's DID Document as the `VsAgentAdminAPI` service. |
-| `ADMIN_API_EXTERNAL_PORT`                | OPTIONAL | Port for the external authenticated listener. Default `3010`. Only used when `corporation` is in `ADMIN_API_AUTH_MODE`.                              |
-| `ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS` | OPTIONAL | Comma-separated allowlist of Verana account addresses accepted on the external listener, applied before the per-method authorization check.          |
+| `ADMIN_API_EXTERNAL_PORT`                | OPTIONAL    | Port for the external authenticated listener. Default `3010`. Only used when `corporation` is in `ADMIN_API_AUTH_MODE`.                                                                                                                         |
+| `ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS` | OPTIONAL    | Comma-separated allowlist of Verana account addresses accepted on the external listener, applied before the per-method authorization check.                                                                                                     |
 
 > **Note:** This feature is currently under active development. The interface and behavior may change in future releases.
 
@@ -223,11 +222,12 @@ VS Agent uses an opt-in plugin architecture. Each plugin is an independent packa
 
 ### Available plugins
 
-| Plugin      | Package                             | Description                                                                                   |
-| ----------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
-| `messaging` | _(built-in)_                        | Base credential and proof handlers. Always loaded — cannot be disabled.                       |
-| `chat`      | `@verana-labs/vs-agent-plugin-chat` | Chat protocols: text messages, media, reactions, receipts, calls, action menus, user profile. |
-| `mrtd`      | `@verana-labs/vs-agent-plugin-mrtd` | eMRTD / ePassport verification. Requires the `vs-agent-mrtd` Docker image.                    |
+| Plugin      | Package                                  | Description                                                                                                                                                |
+| ----------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `messaging` | _(built-in)_                             | Base credential and proof handlers. Always loaded — cannot be disabled.                                                                                    |
+| `chat`      | `@verana-labs/vs-agent-plugin-chat`      | Chat protocols: text messages, media, reactions, receipts, calls, action menus, user profile.                                                              |
+| `mrtd`      | `@verana-labs/vs-agent-plugin-mrtd`      | eMRTD / ePassport verification. Requires the `vs-agent-mrtd` Docker image.                                                                                 |
+| `openid4vc` | `@verana-labs/vs-agent-plugin-openid4vc` | `dc+sd-jwt` issuance and presentation. Requires the `vs-agent-openid4vc` Docker image and [JSON configuration](../../packages/plugin-openid4vc/README.md). |
 
 ### Selecting plugins
 
@@ -240,8 +240,11 @@ VS_AGENT_PLUGINS=messaging,chat
 # Base only (no chat, no eMRTD)
 VS_AGENT_PLUGINS=messaging
 
-# All features
+# MRTD image default
 VS_AGENT_PLUGINS=messaging,chat,mrtd
+
+# OpenID4VC image default
+VS_AGENT_PLUGINS=messaging,chat,openid4vc
 ```
 
 > **Note:** `messaging` is always required and will be prepended automatically if omitted.
@@ -250,7 +253,7 @@ VS_AGENT_PLUGINS=messaging,chat,mrtd
 
 ### Optional dependencies
 
-`@verana-labs/vs-agent-plugin-chat` and `@verana-labs/vs-agent-plugin-mrtd` are declared as `optionalDependencies` in the Docker image. This makes it possible to build leaner images that only install the plugins you need:
+`@verana-labs/vs-agent-plugin-chat`, `@verana-labs/vs-agent-plugin-mrtd`, and `@verana-labs/vs-agent-plugin-openid4vc` are declared as `optionalDependencies` in the Docker image. This makes it possible to build leaner images that only install the plugins you need:
 
 ```bash
 # Install without mrtd plugin (no native binaries required)
@@ -284,12 +287,13 @@ This means that VS-A is up and running!
 
 First
 
-The Dockerfile produces two images of different sizes depending on which plugins are included. Choose the one that matches your needs:
+The Dockerfile produces separate targets for the optional protocol plugins. Choose the one that matches your needs:
 
-| Target | Image | Plugins included |
-|--------|-------|-----------------|
-| `vs-agent` | `2060io/vs-agent` | messaging + chat |
-| `vs-agent-mrtd` | `2060io/vs-agent-mrtd` | messaging + chat + mrtd |
+| Target               | Image                  | Plugins included             |
+| -------------------- | ---------------------- | ---------------------------- |
+| `vs-agent`           | `2060io/vs-agent`      | messaging + chat             |
+| `vs-agent-mrtd`      | `2060io/vs-agent-mrtd` | messaging + chat + mrtd      |
+| `vs-agent-openid4vc` | local build target     | messaging + chat + openid4vc |
 
 #### Building locally
 
@@ -299,7 +303,10 @@ The build context must be the **monorepo root**, not the `apps/vs-agent` directo
 # From the repository root
 docker build --target vs-agent      -t vs-agent      -f apps/vs-agent/Dockerfile .
 docker build --target vs-agent-mrtd -t vs-agent-mrtd -f apps/vs-agent/Dockerfile .
+docker build --target vs-agent-openid4vc -t vs-agent-openid4vc -f apps/vs-agent/Dockerfile .
 ```
+
+The OpenID4VC target requires a mounted JSON file and `OID4VC_CONFIG_FILE`. See the [OpenID4VC operator documentation](../../packages/plugin-openid4vc/README.md).
 
 #### Running a container
 
@@ -321,7 +328,7 @@ services:
     build:
       context: ../.. # repository root
       dockerfile: ./apps/vs-agent/Dockerfile
-      target: vs-agent                        # choose the appropriate target (vs-agent or vs-agent-mrtd)
+      target: vs-agent # choose vs-agent, vs-agent-mrtd, or vs-agent-openid4vc
     environment:
       - AGENT_PUBLIC_DID=did:web:myagent.example.com
       - EVENTS_BASE_URL=http://my-backend:5000
@@ -334,7 +341,7 @@ services:
 
 ## API
 
-For the moment, some details about VS-A API can be found in this [Document](./doc/vs-agent-api.md). There is some work in progress to make the API available within Swagger: when deployed, just go to [VS_AGENT_ADMIN_BASE_URL]/api.
+For the moment, some details about VS-A API can be found in this [Document](../../doc/vs-agent-api.md). There is some work in progress to make the API available within Swagger: when deployed, just go to [VS_AGENT_ADMIN_BASE_URL]/api.
 
 ### Credential exchanges
 
