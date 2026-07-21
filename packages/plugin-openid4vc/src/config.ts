@@ -7,6 +7,7 @@ import type {
 
 const MAX_TTL_SECONDS = 31_536_000
 const MIN_TTL_SECONDS = 60
+const RESERVED_CREDENTIAL_CLAIMS = new Set(['vct', 'iat', 'exp', 'iss', 'cnf'])
 
 export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void {
   assertHttpsUrl(options.publicApiBaseUrl, 'publicApiBaseUrl')
@@ -97,6 +98,10 @@ function assertCredentialConfigurations(configurations: OpenId4VcCredentialConfi
     assertHttpUrl(configuration.vtjscId, `${prefix}.vtjscId`)
     assertNonEmptyString(configuration.name, `${prefix}.name`)
     assertNonEmptyUniqueStrings(configuration.claims, `${prefix}.claims`)
+    const reservedClaim = configuration.claims.find(claim => RESERVED_CREDENTIAL_CLAIMS.has(claim))
+    if (reservedClaim) {
+      throw new Error(`${prefix}.claims contains reserved claim '${reservedClaim}'`)
+    }
     assertSubset(configuration.disclosureFrame, configuration.claims, `${prefix}.disclosureFrame`)
 
     if (

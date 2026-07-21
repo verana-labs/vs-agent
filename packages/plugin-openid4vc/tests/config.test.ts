@@ -1,3 +1,5 @@
+import type { OpenId4VcPluginOptions } from '../src/types'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -6,7 +8,6 @@ import {
   parseOfferClaims,
   validateOpenId4VcOptions,
 } from '../src/config'
-import type { OpenId4VcPluginOptions } from '../src/types'
 
 const validOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
@@ -87,6 +88,13 @@ describe('validateOpenId4VcOptions', () => {
     options.credentialConfigurations[0].claims = []
 
     expect(() => validateOpenId4VcOptions(options)).toThrow('claims')
+  })
+
+  it.each(['vct', 'iat', 'exp', 'iss', 'cnf'])('rejects reserved credential claim %s', claim => {
+    const options = validOptions()
+    options.credentialConfigurations[0].claims.push(claim)
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow(`reserved claim '${claim}'`)
   })
 
   it('rejects a disclosure outside the claim allowlist', () => {

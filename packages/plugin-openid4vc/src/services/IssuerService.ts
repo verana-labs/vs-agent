@@ -144,10 +144,10 @@ export class IssuerService {
     const claims = parseOfferClaims(configuration, input.issuanceSession.issuanceMetadata)
     const issuedAt = Math.floor(Date.now() / 1_000)
     const payload = {
+      ...claims,
       vct: configuration.vct,
       iat: issuedAt,
       exp: issuedAt + configuration.ttlSeconds,
-      ...claims,
     }
 
     return {

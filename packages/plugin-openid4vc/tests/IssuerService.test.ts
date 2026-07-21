@@ -282,6 +282,33 @@ describe('IssuerService', () => {
     vi.useRealTimers()
   })
 
+  it('prevents supplied exp metadata from overriding the configured credential lifetime', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-21T12:00:00.000Z'))
+    const unsafeOptions = options()
+    unsafeOptions.credentialConfigurations[0].claims.push('exp')
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const service = new IssuerService(agent(api) as never, unsafeOptions)
+    await service.ensureInitialized()
+
+    const mapped = await service.mapCredentialRequest({
+      credentialConfigurationId: 'employee',
+      issuanceSession: { issuanceMetadata: { name: 'Ada', role: 'engineer', exp: 1 } },
+      holderBinding: {
+        bindingMethod: 'jwk',
+        proofType: 'jwt',
+        keys: [{ method: 'jwk', jwk: HOLDER_JWK }],
+      },
+    } as never)
+
+    expect(mapped.type).toBe('credentials')
+    if (mapped.type !== 'credentials') throw new Error('expected credentials')
+    expect(mapped.credentials[0].payload.iat).toBe(1_784_635_200)
+    expect(mapped.credentials[0].payload.exp).toBe(1_784_638_800)
+    vi.useRealTimers()
+  })
+
   it('preserves a verified DID holder binding supplied by Credo', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
