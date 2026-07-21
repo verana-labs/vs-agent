@@ -735,6 +735,16 @@ importers:
       express:
         specifier: ^4.18.1
         version: 4.21.2
+    devDependencies:
+      '@credo-ts/askar':
+        specifier: 0.7.1-pr-2704-20260630143332
+        version: 0.7.1-pr-2704-20260630143332(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.8.3)
+      '@credo-ts/node':
+        specifier: 0.7.1-pr-2704-20260630143332
+        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@openwallet-foundation/askar-nodejs':
+        specifier: 0.6.0
+        version: 0.6.0
 
   packages/vt-flow:
     dependencies:

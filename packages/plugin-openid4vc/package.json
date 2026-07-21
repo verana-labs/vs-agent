@@ -39,5 +39,10 @@
   },
   "peerDependencies": {
     "@credo-ts/core": "0.7.1-pr-2704-20260630143332"
+  },
+  "devDependencies": {
+    "@credo-ts/askar": "0.7.1-pr-2704-20260630143332",
+    "@credo-ts/node": "0.7.1-pr-2704-20260630143332",
+    "@openwallet-foundation/askar-nodejs": "0.6.0"
   }
 }
