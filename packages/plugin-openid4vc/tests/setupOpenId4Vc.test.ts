@@ -31,11 +31,13 @@ const validOptions = (): OpenId4VcPluginOptions => ({
 describe('setupOpenId4Vc', () => {
   it('creates a fresh non-global Express application for every setup', () => {
     const first = setupOpenId4Vc(validOptions(), () => ({
+      getVctMetadata: () => undefined,
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
     }))
     const second = setupOpenId4Vc(validOptions(), () => ({
+      getVctMetadata: () => undefined,
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
@@ -51,6 +53,7 @@ describe('setupOpenId4Vc', () => {
     delete issuerOnly.verifier
     delete issuerOnly.trust
     const issuerSetup = setupOpenId4Vc(issuerOnly, () => ({
+      getVctMetadata: () => undefined,
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
@@ -69,6 +72,7 @@ describe('setupOpenId4Vc', () => {
 
   it('delegates X.509 trust only to configured trust anchors', async () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
+      getVctMetadata: () => undefined,
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
@@ -94,6 +98,7 @@ describe('setupOpenId4Vc', () => {
     const options = validOptions()
     options.issuer!.walletAttestationCertificates = ['unused-while-attestation-is-not-required']
     const setup = setupOpenId4Vc(options, () => ({
+      getVctMetadata: () => undefined,
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
@@ -119,6 +124,7 @@ describe('setupOpenId4Vc', () => {
     options.issuer!.requireWalletAttestation = true
     options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]
     const setup = setupOpenId4Vc(options, () => ({
+      getVctMetadata: () => undefined,
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
@@ -149,6 +155,7 @@ describe('setupOpenId4Vc', () => {
 
     expect(() =>
       setupOpenId4Vc(options, () => ({
+        getVctMetadata: () => undefined,
         mapCredentialRequest: () => {
           throw new Error('not implemented')
         },

@@ -15,9 +15,11 @@ const ATTESTATION_ALGORITHMS = ['ES256']
 
 export interface OpenId4VcIssuerRequestMapper {
   mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper
+  getVctMetadata: (configurationId: string) => Record<string, unknown> | undefined
 }
 
 export interface OpenId4VcAgentModules {
+  [key: string]: unknown
   openId4Vc: OpenId4VcModule<null, null>
   x509: X509Module
 }
@@ -40,6 +42,21 @@ export function setupOpenId4Vc(
 
   const app = express()
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
+  if (options.issuer) {
+    app.get('/oid4vc/vct/:configurationId', (request, response, next) => {
+      try {
+        if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
+        const metadata = getIssuerService().getVctMetadata(request.params.configurationId)
+        if (!metadata) {
+          response.status(404).json({ message: 'credential configuration not found' })
+          return
+        }
+        response.json(metadata)
+      } catch (error) {
+        next(error)
+      }
+    })
+  }
 
   const moduleOptions: OpenId4VcModuleConfigOptions<null, null> = {
     // Credo declares Express 5, while VS Agent mounts the compatible Express 4 application.

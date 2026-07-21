@@ -5,11 +5,55 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { OpenId4VcPlugin } from '../src/nestjs/OpenId4VcPlugin'
 
-const { loadSigningCertificate } = vi.hoisted(() => ({
+const { loadSigningCertificate, verifyKeyBoundToDid } = vi.hoisted(() => ({
   loadSigningCertificate: vi.fn(),
+  verifyKeyBoundToDid: vi.fn(),
 }))
 
-vi.mock('../src/services/CertificateService', () => ({ loadSigningCertificate }))
+vi.mock('../src/services/CertificateService', async importOriginal => ({
+  ...(await importOriginal<typeof import('../src/services/CertificateService')>()),
+  loadSigningCertificate,
+}))
+vi.mock('../src/trust/keyBinding', () => ({ verifyKeyBoundToDid }))
+
+const AGENT_DID = 'did:example:issuer'
+const signingHandle = {
+  certificate: {
+    sanUriNames: [AGENT_DID],
+    publicJwk: {
+      toJson: () => ({
+        kty: 'EC',
+        crv: 'P-256',
+        x: 'f83OJ3D2xF4vJZFGh7LbqoFh8z3eYMSO5Rohb7EBM0Y',
+        y: 'x_FEzRu9C79d3eRWUSYufNWJckU1iK4R0jP4lJv-Eow',
+      }),
+    },
+  },
+  chain: [],
+  keyId: 'issuer-key',
+  development: false,
+}
+
+function validAgent() {
+  return {
+    did: AGENT_DID,
+    dids: {},
+    genericRecords: {},
+    kms: {},
+    x509: {},
+    modules: {
+      openId4Vc: {
+        issuer: {
+          getIssuerByIssuerId: vi.fn().mockResolvedValue({ issuerId: 'issuer' }),
+          createIssuer: vi.fn(),
+          updateIssuerMetadata: vi.fn(),
+          createCredentialOffer: vi.fn(),
+          getIssuanceSessionById: vi.fn(),
+        },
+      },
+    },
+  }
+}
 
 interface FactoryProvider {
   provide: { name?: string }
@@ -48,6 +92,8 @@ function provider(plugin: VsAgentNestPlugin, name: string): FactoryProvider {
 describe('OpenId4VcPlugin', () => {
   beforeEach(() => {
     loadSigningCertificate.mockReset()
+    verifyKeyBoundToDid.mockReset()
+    verifyKeyBoundToDid.mockResolvedValue('bound')
   })
 
   it('validates options synchronously', () => {
@@ -74,10 +120,7 @@ describe('OpenId4VcPlugin', () => {
     delete issuerOptions.trust
     const issuer = OpenId4VcPlugin(issuerOptions)
 
-    expect(issuer.controllers?.map(controller => controller.name)).toEqual([
-      'IssuerController',
-      'VctController',
-    ])
+    expect(issuer.controllers?.map(controller => controller.name)).toEqual(['IssuerController'])
     expect((issuer.providers as FactoryProvider[]).map(item => item.provide.name)).toEqual(['IssuerService'])
 
     const verifierOptions = validOptions()
@@ -94,9 +137,9 @@ describe('OpenId4VcPlugin', () => {
   })
 
   it('uses the same service instances for providers and initialization', async () => {
-    loadSigningCertificate.mockResolvedValue({})
+    loadSigningCertificate.mockResolvedValue(signingHandle)
     const plugin = OpenId4VcPlugin(validOptions())
-    const agent = {} as never
+    const agent = validAgent() as never
     const issuerService = provider(plugin, 'IssuerService').useFactory(agent)
     const verifierService = provider(plugin, 'VerifierService').useFactory(agent)
     const issuerInitialize = vi.spyOn(issuerService, 'ensureInitialized')
@@ -111,33 +154,34 @@ describe('OpenId4VcPlugin', () => {
   })
 
   it('awaits all enabled services before initialization resolves', async () => {
-    let resolveIssuer: (() => void) | undefined
-    let resolveVerifier: (() => void) | undefined
+    let resolveIssuer: ((value: typeof signingHandle) => void) | undefined
+    let resolveVerifier: ((value: typeof signingHandle) => void) | undefined
     loadSigningCertificate
       .mockImplementationOnce(
         () =>
-          new Promise<void>(resolve => {
+          new Promise<typeof signingHandle>(resolve => {
             resolveIssuer = resolve
           }),
       )
       .mockImplementationOnce(
         () =>
-          new Promise<void>(resolve => {
+          new Promise<typeof signingHandle>(resolve => {
             resolveVerifier = resolve
           }),
       )
     const plugin = OpenId4VcPlugin(validOptions())
+    const agent = validAgent() as never
 
     let initialized = false
-    const initialization = plugin.initialize?.({} as never, {} as never).then(() => {
+    const initialization = plugin.initialize?.(agent, {} as never).then(() => {
       initialized = true
     })
     await Promise.resolve()
 
     expect(loadSigningCertificate).toHaveBeenCalledTimes(2)
     expect(initialized).toBe(false)
-    resolveIssuer?.()
-    resolveVerifier?.()
+    resolveIssuer?.(signingHandle)
+    resolveVerifier?.(signingHandle)
     await initialization
     expect(initialized).toBe(true)
   })
@@ -149,7 +193,7 @@ describe('OpenId4VcPlugin', () => {
     loadSigningCertificate.mockResolvedValueOnce({})
     const plugin = OpenId4VcPlugin(validOptions())
 
-    await expect(plugin.initialize?.({} as never, {} as never)).rejects.toThrow(
+    await expect(plugin.initialize?.(validAgent() as never, {} as never)).rejects.toThrow(
       'does not match the leaf certificate',
     )
   })

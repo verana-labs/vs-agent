@@ -5,7 +5,19 @@ export {
   validateOpenId4VcOptions,
 } from './config'
 export { OpenId4VcPlugin } from './nestjs/OpenId4VcPlugin'
+export { IssuerController } from './nestjs/IssuerController'
+export { CreateOpenId4VcOfferDto } from './nestjs/dto'
 export { setupOpenId4Vc } from './sdk/setupOpenId4Vc'
+export {
+  IssuerService,
+  OpenId4VcIssuerRequestError,
+  OpenId4VcOfferNotFoundError,
+} from './services/IssuerService'
+export type {
+  OpenId4VcIssuerAgent,
+  OpenId4VcOfferResult,
+  OpenId4VcOfferState,
+} from './services/IssuerService'
 export type {
   OpenId4VcAgentModules,
   OpenId4VcIssuerRequestMapper,

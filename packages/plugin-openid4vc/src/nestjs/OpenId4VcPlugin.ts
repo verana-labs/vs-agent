@@ -1,46 +1,18 @@
 import type { OpenId4VcPluginOptions, OpenId4VcSigningOptions } from '../types'
-import type { BaseAgent, BaseLogger } from '@credo-ts/core'
-import type { OpenId4VciCredentialRequestToCredentialMapper } from '@credo-ts/openid4vc'
-import type { RequestHandler } from 'express'
+import type { BaseAgent } from '@credo-ts/core'
+import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import { validateOpenId4VcOptions } from '../config'
 import { setupOpenId4Vc } from '../sdk/setupOpenId4Vc'
 import { loadSigningCertificate } from '../services/CertificateService'
+import { IssuerService, type OpenId4VcIssuerAgent } from '../services/IssuerService'
 
-type OpenId4VcLifecycleAgent = Pick<BaseAgent, 'genericRecords' | 'kms' | 'x509'> & {
+import { IssuerController } from './IssuerController'
+
+type OpenId4VcLifecycleAgent = Pick<BaseAgent, 'dids' | 'genericRecords' | 'kms' | 'x509'> & {
   did?: string
   publicApiBaseUrl?: string
-}
-
-interface OpenId4VcNestPlugin {
-  name: string
-  credoPlugin: ReturnType<typeof setupOpenId4Vc>
-  initialize: (agent: OpenId4VcLifecycleAgent, logger: BaseLogger) => Promise<void>
-  publicMiddleware: RequestHandler
-  controllers: Array<new () => object>
-  providers: unknown[]
-}
-
-class IssuerService {
-  private initialization?: Promise<void>
-
-  public constructor(
-    private readonly agent: OpenId4VcLifecycleAgent,
-    private readonly options: OpenId4VcPluginOptions,
-  ) {}
-
-  public ensureInitialized(): Promise<void> {
-    this.initialization ??= initializeSigningCertificate(
-      this.agent,
-      this.options.issuer!.signing,
-      this.options.publicApiBaseUrl,
-    )
-    return this.initialization
-  }
-
-  public mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper = () => {
-    throw new Error('OpenID4VC issuer credential mapping is not implemented')
-  }
+  modules: OpenId4VcIssuerAgent['modules']
 }
 
 class VerifierService {
@@ -61,11 +33,9 @@ class VerifierService {
   }
 }
 
-class IssuerController {}
-class VctController {}
 class VerifierController {}
 
-export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): OpenId4VcNestPlugin {
+export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlugin {
   validateOpenId4VcOptions(options)
 
   let issuerService: IssuerService | undefined
@@ -88,7 +58,7 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): OpenId4VcNestP
     credoPlugin: sdkPlugin,
     publicMiddleware: sdkPlugin.publicMiddleware,
     controllers: [
-      ...(options.issuer ? [IssuerController, VctController] : []),
+      ...(options.issuer ? [IssuerController] : []),
       ...(options.verifier ? [VerifierController] : []),
     ],
     providers: [
@@ -112,9 +82,10 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): OpenId4VcNestP
         : []),
     ],
     initialize: async agent => {
+      const lifecycleAgent = agent as unknown as OpenId4VcLifecycleAgent
       await Promise.all([
-        ...(options.issuer ? [getIssuerService(agent).ensureInitialized()] : []),
-        ...(options.verifier ? [getVerifierService(agent).ensureInitialized()] : []),
+        ...(options.issuer ? [getIssuerService(lifecycleAgent).ensureInitialized()] : []),
+        ...(options.verifier ? [getVerifierService(lifecycleAgent).ensureInitialized()] : []),
       ])
     },
   }
