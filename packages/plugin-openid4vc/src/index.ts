@@ -6,7 +6,8 @@ export {
 } from './config'
 export { OpenId4VcPlugin } from './nestjs/OpenId4VcPlugin'
 export { IssuerController } from './nestjs/IssuerController'
-export { CreateOpenId4VcOfferDto } from './nestjs/dto'
+export { VerifierController } from './nestjs/VerifierController'
+export { CreateOpenId4VcOfferDto, CreateOpenId4VcVerificationRequestDto } from './nestjs/dto'
 export { setupOpenId4Vc } from './sdk/setupOpenId4Vc'
 export {
   IssuerService,
@@ -18,6 +19,17 @@ export type {
   OpenId4VcOfferResult,
   OpenId4VcOfferState,
 } from './services/IssuerService'
+export {
+  OpenId4VcVerifierRequestError,
+  UnknownVerificationSessionError,
+  VerifierService,
+} from './services/VerifierService'
+export type {
+  OpenId4VcVerificationRequest,
+  OpenId4VcVerificationResult,
+  OpenId4VcVerifiedCredentialResult,
+  OpenId4VcVerifierAgent,
+} from './services/VerifierService'
 export type {
   OpenId4VcAgentModules,
   OpenId4VcIssuerRequestMapper,

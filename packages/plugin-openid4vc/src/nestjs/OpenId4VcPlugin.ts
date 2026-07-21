@@ -1,39 +1,20 @@
-import type { OpenId4VcPluginOptions, OpenId4VcSigningOptions } from '../types'
+import type { OpenId4VcPluginOptions } from '../types'
 import type { BaseAgent } from '@credo-ts/core'
 import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import { validateOpenId4VcOptions } from '../config'
 import { setupOpenId4Vc } from '../sdk/setupOpenId4Vc'
-import { loadSigningCertificate } from '../services/CertificateService'
 import { IssuerService, type OpenId4VcIssuerAgent } from '../services/IssuerService'
+import { VerifierService, type OpenId4VcVerifierAgent } from '../services/VerifierService'
 
 import { IssuerController } from './IssuerController'
+import { VerifierController } from './VerifierController'
 
 type OpenId4VcLifecycleAgent = Pick<BaseAgent, 'dids' | 'genericRecords' | 'kms' | 'x509'> & {
   did?: string
   publicApiBaseUrl?: string
-  modules: OpenId4VcIssuerAgent['modules']
+  modules: OpenId4VcIssuerAgent['modules'] & OpenId4VcVerifierAgent['modules']
 }
-
-class VerifierService {
-  private initialization?: Promise<void>
-
-  public constructor(
-    private readonly agent: OpenId4VcLifecycleAgent,
-    private readonly options: OpenId4VcPluginOptions,
-  ) {}
-
-  public ensureInitialized(): Promise<void> {
-    this.initialization ??= initializeSigningCertificate(
-      this.agent,
-      this.options.verifier!.signing,
-      this.options.publicApiBaseUrl,
-    )
-    return this.initialization
-  }
-}
-
-class VerifierController {}
 
 export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlugin {
   validateOpenId4VcOptions(options)
@@ -89,12 +70,4 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlu
       ])
     },
   }
-}
-
-async function initializeSigningCertificate(
-  agent: OpenId4VcLifecycleAgent,
-  signing: OpenId4VcSigningOptions,
-  publicApiBaseUrl: string,
-): Promise<void> {
-  await loadSigningCertificate(agent, signing, publicApiBaseUrl)
 }

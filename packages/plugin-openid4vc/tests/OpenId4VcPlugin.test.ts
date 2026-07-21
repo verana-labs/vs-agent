@@ -50,6 +50,14 @@ function validAgent() {
           createCredentialOffer: vi.fn(),
           getIssuanceSessionById: vi.fn(),
         },
+        verifier: {
+          getVerifierByVerifierId: vi.fn().mockResolvedValue({ verifierId: 'verifier' }),
+          createVerifier: vi.fn(),
+          updateVerifierMetadata: vi.fn(),
+          createAuthorizationRequest: vi.fn(),
+          getVerificationSessionById: vi.fn(),
+          getVerifiedAuthorizationResponse: vi.fn(),
+        },
       },
     },
   }

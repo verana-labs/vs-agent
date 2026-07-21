@@ -138,7 +138,10 @@ describe('IssuerController', () => {
     const { validate } = await import('class-validator')
 
     expect(await validate(dto)).toHaveLength(2)
-    expect(Object.keys(moduleName)).toEqual(['CreateOpenId4VcOfferDto'])
+    expect(Object.keys(moduleName)).toEqual([
+      'CreateOpenId4VcOfferDto',
+      'CreateOpenId4VcVerificationRequestDto',
+    ])
   })
 
   it('mounts only public VCT metadata and no offer control, list, or delete route', async () => {
