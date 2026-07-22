@@ -201,12 +201,12 @@ export class IssuerService {
       throw new Error('OpenID4VC issuer certificate key is not bound to the agent DID assertionMethod')
     }
 
-    await this.createOrUpdateIssuer()
+    await this.createOrUpdateIssuer(signingCertificate)
     this.signingCertificate = signingCertificate
     this.initialized = true
   }
 
-  private async createOrUpdateIssuer(): Promise<void> {
+  private async createOrUpdateIssuer(signingCertificate: SigningCertificateHandle): Promise<void> {
     const issuer = this.issuerOptions()
     const issuerId = issuer.id
     const metadata = {
@@ -219,7 +219,18 @@ export class IssuerService {
       await this.issuerApi().getIssuerByIssuerId(issuerId)
     } catch (error) {
       if (!(error instanceof RecordNotFoundError)) throw error
-      await this.issuerApi().createIssuer(metadata)
+      await this.issuerApi().createIssuer({
+        ...metadata,
+        metadataSigner: {
+          method: 'x5c' as const,
+          x5c: signingCertificate.development
+            ? signingCertificate.chain
+            : signingCertificate.chain.filter(
+                (certificate, index, chain) =>
+                  index !== chain.length - 1 || certificate.subject !== certificate.issuer,
+              ),
+        },
+      })
       return
     }
 

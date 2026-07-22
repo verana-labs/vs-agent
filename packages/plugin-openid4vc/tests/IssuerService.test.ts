@@ -5,14 +5,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { IssuerService } from '../src/services/IssuerService'
 
-const { loadSigningCertificate, verifyKeyBoundToDid } = vi.hoisted(() => ({
+const { loadSigningCertificate, publishDevelopmentSigningKey, verifyKeyBoundToDid } = vi.hoisted(() => ({
   loadSigningCertificate: vi.fn(),
+  publishDevelopmentSigningKey: vi.fn(),
   verifyKeyBoundToDid: vi.fn(),
 }))
 
 vi.mock('../src/services/CertificateService', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/services/CertificateService')>()),
   loadSigningCertificate,
+  publishDevelopmentSigningKey,
 }))
 vi.mock('../src/trust/keyBinding', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/trust/keyBinding')>()),
@@ -82,7 +84,11 @@ const leafCertificate = {
   publicJwk: { toJson: () => PUBLIC_JWK },
   toString: () => 'leaf-certificate',
 }
-const rootCertificate = { toString: () => 'root-certificate' }
+const rootCertificate = {
+  subject: 'CN=Example Root',
+  issuer: 'CN=Example Root',
+  toString: () => 'root-certificate',
+}
 
 function signingHandle() {
   return {
@@ -97,6 +103,7 @@ describe('IssuerService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     loadSigningCertificate.mockResolvedValue(signingHandle())
+    publishDevelopmentSigningKey.mockResolvedValue(undefined)
     verifyKeyBoundToDid.mockResolvedValue('bound')
   })
 
@@ -112,6 +119,10 @@ describe('IssuerService', () => {
     expect(api.createIssuer).toHaveBeenCalledWith({
       issuerId: 'issuer',
       display: [{ name: 'Example Issuer', locale: 'en' }],
+      metadataSigner: {
+        method: 'x5c',
+        x5c: [leafCertificate],
+      },
       credentialConfigurationsSupported: {
         employee: {
           format: 'dc+sd-jwt',
@@ -133,6 +144,49 @@ describe('IssuerService', () => {
       },
     })
     expect(api.updateIssuerMetadata).not.toHaveBeenCalled()
+  })
+
+  it('signs new issuer metadata with the issuance certificate chain excluding the configured trust anchor', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockRejectedValue(
+      new RecordNotFoundError('issuer not found', { recordType: 'OpenId4VcIssuerRecord' }),
+    )
+    const service = new IssuerService(agent(api) as never, options())
+
+    await service.ensureInitialized()
+
+    expect(api.createIssuer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadataSigner: {
+          method: 'x5c',
+          x5c: [leafCertificate],
+        },
+      }),
+    )
+  })
+
+  it('signs development issuer metadata with its self-signed leaf certificate', async () => {
+    loadSigningCertificate.mockResolvedValue({
+      ...signingHandle(),
+      chain: [leafCertificate],
+      development: true,
+    })
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockRejectedValue(
+      new RecordNotFoundError('issuer not found', { recordType: 'OpenId4VcIssuerRecord' }),
+    )
+    const service = new IssuerService(agent(api) as never, options())
+
+    await service.ensureInitialized()
+
+    expect(api.createIssuer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadataSigner: {
+          method: 'x5c',
+          x5c: [leafCertificate],
+        },
+      }),
+    )
   })
 
   it('updates an existing configured issuer and initializes only once under concurrency', async () => {
@@ -157,6 +211,9 @@ describe('IssuerService', () => {
     )
     expect(api.getIssuerByIssuerId).toHaveBeenCalledOnce()
     expect(api.updateIssuerMetadata).toHaveBeenCalledOnce()
+    expect(api.updateIssuerMetadata).not.toHaveBeenCalledWith(
+      expect.objectContaining({ metadataSigner: expect.anything() }),
+    )
     expect(api.createIssuer).not.toHaveBeenCalled()
   })
 
