@@ -112,4 +112,22 @@ describe('SafeWebVhDidResolver', () => {
     expect(fetchImplementation).toHaveBeenCalledOnce()
     expect(fetchImplementation).toHaveBeenCalledWith(url, { redirect: 'manual' })
   })
+
+  it('uses the standard encoded-port did:webvh log URL', async () => {
+    const { publicKey } = await signedLog()
+    const did = 'did:webvh:QmFixtureScid:issuer.example%3A8443'
+    const url = 'https://issuer.example:8443/.well-known/did.jsonl'
+    const fetchImplementation = vi.fn(
+      async () => ({ status: 302, redirected: false, url }) as unknown as Response,
+    )
+
+    const result = await new SafeWebVhDidResolver().resolve(
+      resolverContext(fetchImplementation, publicKey),
+      did,
+    )
+
+    expect(result.didDocument).toBeNull()
+    expect(fetchImplementation).toHaveBeenCalledOnce()
+    expect(fetchImplementation).toHaveBeenCalledWith(url, { redirect: 'manual' })
+  })
 })

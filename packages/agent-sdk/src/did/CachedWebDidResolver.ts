@@ -1,7 +1,6 @@
 import {
   AgentContext,
   DidRepository,
-  DidResolutionOptions,
   DidResolutionResult,
   DidDocument,
   JsonTransformer,
@@ -23,7 +22,6 @@ export class CachedWebDidResolver extends WebDidResolver {
     agentContext: AgentContext,
     did: string,
     parsed: ParsedDID,
-    _didResolutionOptions: DidResolutionOptions,
   ): Promise<DidResolutionResult> {
     // First check within our own public dids, as there is no need to resolve it through HTTPS
     const didRepository = agentContext.dependencyManager.resolve(DidRepository)

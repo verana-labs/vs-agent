@@ -1,4 +1,4 @@
-import type { DidResolutionOptions, DidResolutionResult, ParsedDid } from '@credo-ts/core'
+import type { DidResolutionResult } from '@credo-ts/core'
 import type { DIDLog, Verifier } from 'didwebvh-ts'
 
 import { AgentContext, DidDocument, Kms } from '@credo-ts/core'
@@ -28,14 +28,9 @@ class KmsWebVhVerifier implements Verifier {
 }
 
 export class SafeWebVhDidResolver extends WebVhDidResolver {
-  public async resolve(
-    agentContext: AgentContext,
-    did: string,
-    _parsed?: ParsedDid,
-    _didResolutionOptions?: DidResolutionOptions,
-  ): Promise<DidResolutionResult> {
+  public async resolve(agentContext: AgentContext, did: string): Promise<DidResolutionResult> {
     try {
-      const url = didWebVhLogUrl(this.getBaseUrl(did))
+      const url = didWebVhLogUrl(did)
       const response = await agentContext.config.agentDependencies.fetch(url, { redirect: 'manual' })
       if (response.status < 200 || response.status >= 300 || response.redirected || response.url !== url) {
         return unresolvedWebVh()
@@ -62,10 +57,24 @@ export class SafeWebVhDidResolver extends WebVhDidResolver {
   }
 }
 
-function didWebVhLogUrl(baseUrl: string): string {
-  const url = new URL(baseUrl)
-  url.pathname =
-    url.pathname === '/' ? '/.well-known/did.jsonl' : `${url.pathname.replace(/\/$/, '')}/did.jsonl`
+function didWebVhLogUrl(did: string): string {
+  const components = did.split(':')
+  if (components.length < 4 || components[0] !== 'did' || components[1] !== 'webvh') {
+    throw new Error(`Invalid did:webvh identifier '${did}'`)
+  }
+
+  const [encodedHost, ...encodedPath] = components.slice(3)
+  if (!encodedHost) throw new Error(`Invalid did:webvh identifier '${did}'`)
+  const host = decodeURIComponent(encodedHost)
+  const path = encodedPath.map(segment => {
+    const decoded = decodeURIComponent(segment)
+    if (decoded === '.' || decoded === '..' || decoded.includes('/') || decoded.includes('\\')) {
+      throw new Error(`Invalid did:webvh path segment '${segment}'`)
+    }
+    return decoded
+  })
+  const url = new URL(`https://${host}`)
+  url.pathname = path.length === 0 ? '/.well-known/did.jsonl' : `/${path.join('/')}/did.jsonl`
   return url.href
 }
 
