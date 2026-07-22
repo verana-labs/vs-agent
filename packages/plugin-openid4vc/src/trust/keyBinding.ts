@@ -44,7 +44,10 @@ export async function verifyKeyBoundToDid(
 
   let didDocument
   try {
-    const resolution = await withTimeout(agent.dids.resolve(did), resolutionPolicy.timeoutMs)
+    const resolution = await withTimeout(
+      agent.dids.resolve(did, { useCache: false, persistInCache: false }),
+      resolutionPolicy.timeoutMs,
+    )
     if (resolution.didResolutionMetadata?.error || !resolution.didDocument) return 'unresolvable'
     if (resolution.didDocument.id !== did) return 'unresolvable'
     didDocument = resolution.didDocument
@@ -87,7 +90,6 @@ function isResolutionAllowed(did: string, policy: DidResolutionPolicy): boolean 
   const requestedHost = didWebHost(did)
   if (!requestedHost || isNonPublicHost(new URL(`https://${requestedHost}`).hostname)) return false
 
-  // Credo owns fetch and redirect handling, so this exact operator allowlist is the network trust boundary.
   return policy.allowedWebHosts.some(allowedHost => canonicalHost(allowedHost) === requestedHost)
 }
 

@@ -3,6 +3,8 @@ import {
   DidRepository,
   DidResolutionOptions,
   DidResolutionResult,
+  DidDocument,
+  JsonTransformer,
   WebDidResolver,
 } from '@credo-ts/core'
 import { ParsedDID } from 'did-resolver'
@@ -21,7 +23,7 @@ export class CachedWebDidResolver extends WebDidResolver {
     agentContext: AgentContext,
     did: string,
     parsed: ParsedDID,
-    didResolutionOptions: DidResolutionOptions,
+    _didResolutionOptions: DidResolutionOptions,
   ): Promise<DidResolutionResult> {
     // First check within our own public dids, as there is no need to resolve it through HTTPS
     const didRepository = agentContext.dependencyManager.resolve(DidRepository)
@@ -55,6 +57,40 @@ export class CachedWebDidResolver extends WebDidResolver {
       }
     }
 
-    return super.resolve(agentContext, did, parsed, didResolutionOptions)
+    const url = didWebResolutionUrl(parsed)
+    try {
+      const response = await agentContext.config.agentDependencies.fetch(url, { redirect: 'manual' })
+      if (response.status < 200 || response.status >= 300 || response.redirected || response.url !== url) {
+        return unresolvedDidWeb()
+      }
+
+      const document = (await response.json()) as { publicKey?: unknown; verificationMethod?: unknown }
+      if (!document.verificationMethod && document.publicKey) document.verificationMethod = document.publicKey
+
+      return {
+        didDocument: JsonTransformer.fromJSON(document, DidDocument),
+        didDocumentMetadata: {},
+        didResolutionMetadata: {},
+      }
+    } catch {
+      return unresolvedDidWeb()
+    }
+  }
+}
+
+function didWebResolutionUrl(parsed: ParsedDID): string {
+  const components = parsed.id.split(':')
+  const path =
+    components.length === 1
+      ? `${decodeURIComponent(parsed.id)}/.well-known/did.json`
+      : `${components.map(decodeURIComponent).join('/')}/did.json`
+  return new URL(`https://${path}`).href
+}
+
+function unresolvedDidWeb(): DidResolutionResult {
+  return {
+    didDocument: null,
+    didDocumentMetadata: {},
+    didResolutionMetadata: { error: 'notFound' },
   }
 }

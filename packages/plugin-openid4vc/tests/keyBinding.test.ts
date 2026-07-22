@@ -196,6 +196,24 @@ describe('verifyKeyBoundToDid', () => {
     expect(resolve).not.toHaveBeenCalled()
   })
 
+  it('bypasses and does not persist DID resolver cache entries for key binding', async () => {
+    const resolve = vi.fn(async () => ({
+      didDocument: didDocument({ assertionMethod: [verificationMethod(LEAF_PUBLIC_JWK)] }),
+    }))
+
+    await expect(
+      verifyKeyBoundToDid(
+        agentResolving(resolve),
+        DID,
+        LEAF_PUBLIC_JWK,
+        ['assertionMethod'],
+        DID_RESOLUTION_POLICY,
+      ),
+    ).resolves.toBe('bound')
+
+    expect(resolve).toHaveBeenCalledWith(DID, { useCache: false, persistInCache: false })
+  })
+
   it('bounds DID resolution by the configured timeout', async () => {
     const agent = agentResolving(
       async () =>
