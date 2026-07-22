@@ -1,19 +1,19 @@
-import path from "node:path";
+import path from 'node:path'
 
-import { defineConfig } from "vitest/config";
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    environment: "node",
+    environment: 'node',
     passWithNoTests: true,
     clearMocks: true,
-    globalSetup: [path.resolve(__dirname, "vitest.globalSetup.ts")],
+    globalSetup: [path.resolve(__dirname, 'vitest.globalSetup.ts')],
     coverage: {
-      provider: "v8",
-      reportsDirectory: "./coverage",
-      exclude: ["build", "node_modules", "__tests__", "tests"],
+      provider: 'v8',
+      reportsDirectory: './coverage',
+      exclude: ['build', 'node_modules', '__tests__', 'tests'],
     },
-    include: ["**/?(*.)+(spec|test).[tj]s?(x)"],
-    root: "./",
+    include: ['**/?(*.)+(spec|test).[tj]s?(x)'],
+    root: './',
   },
-});
+})
