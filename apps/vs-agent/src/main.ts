@@ -64,6 +64,7 @@ import {
   ADMIN_API_PUBLIC_URL,
   DEFAULT_PUBLIC_API_BASE_URL,
   ENABLED_PLUGINS,
+  OID4VC_CONFIG_FILE,
   EVENTS_BASE_URL,
   POSTGRES_HOST,
   PUBLIC_API_BASE_URL,
@@ -82,6 +83,7 @@ import {
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
+  loadOptionalOpenId4VcPlugin,
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
@@ -93,6 +95,7 @@ import {
   TsLogger,
   webhookEvent,
 } from './utils'
+import { initializeNestPlugins, mountPublicPluginMiddleware } from './utils/pluginLifecycle'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
@@ -138,6 +141,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
       const html = fs.readFileSync(indexPath, 'utf-8').replace('</head>', `${script}</head>`)
       res.type('html').send(html)
     })
+  mountPublicPluginMiddleware(publicApp.getHttpAdapter().getInstance(), nestPlugins)
   publicApp.use(express.static(publicDir))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
@@ -270,11 +274,31 @@ const run = async () => {
     ? ADMIN_API_PUBLIC_URL
     : undefined
 
+  const openId4VcPlugin = await loadOptionalOpenId4VcPlugin(
+    ENABLED_PLUGINS,
+    OID4VC_CONFIG_FILE,
+    publicApiBaseUrl,
+  )
+
   // Dynamically load optional plugin packages.
-  const optImport = (name: string): Promise<any> => import(name).catch(() => null)
+  type ChatPluginModule = { ChatPlugin: VsAgentNestPlugin }
+  type MrtdPluginModule = {
+    MrtdPlugin: (options?: { masterListCscaLocation?: string }) => VsAgentNestPlugin
+  }
+  const optImport = async <T>(name: string): Promise<T | null> => {
+    try {
+      return (await import(name)) as T
+    } catch {
+      return null
+    }
+  }
   const [chatModule, mrtdModule] = await Promise.all([
-    ENABLED_PLUGINS.includes('chat') ? optImport('@verana-labs/vs-agent-plugin-chat') : null,
-    ENABLED_PLUGINS.includes('mrtd') ? optImport('@verana-labs/vs-agent-plugin-mrtd') : null,
+    ENABLED_PLUGINS.includes('chat')
+      ? optImport<ChatPluginModule>('@verana-labs/vs-agent-plugin-chat')
+      : null,
+    ENABLED_PLUGINS.includes('mrtd')
+      ? optImport<MrtdPluginModule>('@verana-labs/vs-agent-plugin-mrtd')
+      : null,
   ])
 
   if (
@@ -293,6 +317,7 @@ const run = async () => {
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
     ...(chatModule ? [chatModule.ChatPlugin] : []),
     ...(mrtdModule ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })] : []),
+    ...(openId4VcPlugin ? [openId4VcPlugin] : []),
     VtFlowNestPlugin,
   ]
 
@@ -397,6 +422,7 @@ const run = async () => {
     veranaChain,
     authorizationService,
     adminApiServiceEndpoint,
+    nestPlugins,
   })
 
   const conf: ServerConfig = {
@@ -407,6 +433,7 @@ const run = async () => {
     endpoints,
     nestPlugins,
   }
+  await initializeNestPlugins(nestPlugins, agent, serverLogger)
   const { httpServer, webSocketServer } = await startServers(agent, conf)
 
   if (agent.did) {

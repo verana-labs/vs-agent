@@ -1,5 +1,6 @@
 import type { BaseAgentModules, VsAgent } from './agent/VsAgent'
 import type { IBaseMessage, MessageType } from '@verana-labs/vs-agent-model'
+import type { RequestHandler } from 'express'
 
 import { BaseLogger } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
@@ -21,6 +22,8 @@ export type Plugin = { modules: Record<string, unknown> }
 export interface VsAgentNestPlugin {
   name: string
   credoPlugin?: Plugin
+  initialize?: (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => Promise<void>
+  publicMiddleware?: RequestHandler
   controllers?: (new (...args: any[]) => any)[]
   providers?: any[]
   messageHandlers?: (new (...args: any[]) => MessageHandler)[]

@@ -25,6 +25,8 @@ jobs:
           - dockerfile: ./apps/vs-agent/Dockerfile
             target: vs-agent
           - dockerfile: ./apps/vs-agent/Dockerfile
+            target: vs-agent-openid4vc
+          - dockerfile: ./apps/vs-agent/Dockerfile
             target: vs-agent-mrtd
           - dockerfile: ./examples/chatbot/Dockerfile
           - dockerfile: ./examples/verifier/Dockerfile

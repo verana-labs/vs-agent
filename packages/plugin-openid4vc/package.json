@@ -1,0 +1,48 @@
+{
+  "name": "@verana-labs/vs-agent-plugin-openid4vc",
+  "main": "build/index",
+  "types": "build/index",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "require": "./build/index.js",
+      "default": "./build/index.js"
+    }
+  },
+  "version": "1.11.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/verana-labs/vs-agent"
+  },
+  "files": [
+    "build"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "Apache-2.0",
+  "description": "OpenID4VC issuer and verifier plugin for VS Agent",
+  "scripts": {
+    "build": "pnpm run clean && pnpm run compile",
+    "clean": "rimraf -rf ./build",
+    "compile": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "version": "pnpm version --allow-same-version",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@credo-ts/openid4vc": "0.7.1-pr-2704-20260630143332",
+    "@nestjs/common": "^10.0.0",
+    "@verana-labs/vs-agent-sdk": "workspace:*",
+    "class-validator": "0.14.1",
+    "express": "^4.18.1"
+  },
+  "peerDependencies": {
+    "@credo-ts/core": "0.7.1-pr-2704-20260630143332"
+  },
+  "devDependencies": {
+    "@credo-ts/askar": "0.7.1-pr-2704-20260630143332",
+    "@credo-ts/node": "0.7.1-pr-2704-20260630143332",
+    "@openwallet-foundation/askar-nodejs": "0.6.0"
+  }
+}
