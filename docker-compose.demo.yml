@@ -1,0 +1,158 @@
+services:
+  verana-node:
+    image: ${VERANA_NODE_IMAGE:-veranalabs/verana-node:v0.10.1-dev.25}
+    platform: linux/amd64
+    entrypoint: ['/bin/bash', '/init/verana-node-init.sh']
+    volumes:
+      - ./docker/verana-node-init.sh:/init/verana-node-init.sh:ro
+      - verana-node-data:/root/.verana
+    ports:
+      - '26658:26657'
+      - '1318:1317'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:26657/status || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: indexer
+      POSTGRES_PASSWORD: indexer
+      POSTGRES_DB: indexer
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U indexer']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  indexer:
+    image: ${VERANA_INDEXER_IMAGE:-veranalabs/verana-indexer:dev}
+    user: '0:0'
+    depends_on:
+      verana-node:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
+      ECS_ECOSYSTEM_DIDS: ${TRUSTED_ECS_ECOSYSTEM_DIDS:-}
+      NODE_ENV: production
+      SERVICEDIR: dist/src/services
+      SERVICES: '**/*.service.js'
+      CHAIN_ID: vna-testnet-1
+      RPC_ENDPOINT: http://verana-node:26657/
+      LCD_ENDPOINT: http://verana-node:1317
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: indexer
+      POSTGRES_PASSWORD: indexer
+      POSTGRES_DB: indexer
+      TRANSPORTER: redis://redis:6379
+      CACHER: redis://redis:6379
+      QUEUE_JOB_REDIS: redis://redis:6379
+    volumes:
+      - caddy-data:/caddy:ro
+    ports:
+      - '3011:3001'
+
+  caddy:
+    image: caddy:2-alpine
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    networks:
+      default:
+        aliases:
+          - agent-validator.demo
+          - agent-applicant.demo
+    healthcheck:
+      test: ['CMD', 'test', '-f', '/data/caddy/pki/authorities/local/root.crt']
+      interval: 3s
+      timeout: 2s
+      retries: 30
+
+  agent-validator:
+    build:
+      context: .
+      dockerfile: apps/vs-agent/Dockerfile
+      target: vs-agent
+    depends_on:
+      indexer:
+        condition: service_started
+      caddy:
+        condition: service_healthy
+    volumes:
+      - caddy-data:/caddy:ro
+      - agent-validator-data:/root/.afj
+    environment:
+      AGENT_LABEL: Validator VS
+      AGENT_PORT: '3001'
+      AGENT_DIDCOMM_VERSIONS: v1,v2
+      ADMIN_PORT: '3000'
+      AGENT_PUBLIC_DID: did:webvh:agent-validator.demo
+      AGENT_ENDPOINT: wss://agent-validator.demo
+      PUBLIC_API_BASE_URL: https://agent-validator.demo
+      NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
+      ADMIN_API_AUTH_MODE: internal
+      AGENT_MODE: standalone
+      VERANA_RPC_ENDPOINT_URL: http://verana-node:26657
+      VERANA_CHAIN_ID: vna-testnet-1
+      VERANA_INDEXER_BASE_URL: http://indexer:3001
+      VERANA_ACCOUNT_MNEMONIC: ${VALIDATOR_MNEMONIC:?set VALIDATOR_MNEMONIC in .env}
+      VERANA_CORPORATION_ID: ${VALIDATOR_CORPORATION_ID:-}
+      TRUSTED_ECS_ECOSYSTEM_DIDS: ${TRUSTED_ECS_ECOSYSTEM_DIDS:-}
+    ports:
+      - '4000:3000'
+      - '4001:3001'
+
+  agent-applicant:
+    build:
+      context: .
+      dockerfile: apps/vs-agent/Dockerfile
+      target: vs-agent
+    depends_on:
+      indexer:
+        condition: service_started
+      caddy:
+        condition: service_healthy
+    volumes:
+      - caddy-data:/caddy:ro
+      - agent-applicant-data:/root/.afj
+    environment:
+      AGENT_LABEL: Applicant VS
+      AGENT_PORT: '3001'
+      AGENT_DIDCOMM_VERSIONS: v1,v2
+      ADMIN_PORT: '3000'
+      AGENT_PUBLIC_DID: did:webvh:agent-applicant.demo
+      AGENT_ENDPOINT: wss://agent-applicant.demo
+      PUBLIC_API_BASE_URL: https://agent-applicant.demo
+      NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
+      ADMIN_API_AUTH_MODE: internal
+      AGENT_MODE: standalone
+      VERANA_RPC_ENDPOINT_URL: http://verana-node:26657
+      VERANA_CHAIN_ID: vna-testnet-1
+      VERANA_INDEXER_BASE_URL: http://indexer:3001
+      VERANA_ACCOUNT_MNEMONIC: ${APPLICANT_MNEMONIC:?set APPLICANT_MNEMONIC in .env}
+      VERANA_CORPORATION_ID: ${APPLICANT_CORPORATION_ID:-}
+      TRUSTED_ECS_ECOSYSTEM_DIDS: ${TRUSTED_ECS_ECOSYSTEM_DIDS:-}
+    ports:
+      - '4100:3000'
+      - '4101:3001'
+
+volumes:
+  verana-node-data:
+  caddy-data:
+  agent-validator-data:
+  agent-applicant-data:

@@ -10,7 +10,7 @@ import { GenericContainer, Network, Wait, type StartedTestContainer } from 'test
 import WebSocket from 'ws'
 
 // applicant-ops needs dev.21+ (VSOA accepted for SetParticipantOPToValidated).
-const VERANA_IMAGE = process.env.FLOW_VERANA_IMAGE || 'veranalabs/verana-node:v0.10.1-dev.21'
+const VERANA_IMAGE = process.env.FLOW_VERANA_IMAGE || 'veranalabs/verana-node:v0.10.1-dev.25'
 const VERANA_PLATFORM = process.env.FLOW_VERANA_PLATFORM || 'linux/amd64'
 const POSTGRES_IMAGE = process.env.FLOW_POSTGRES_IMAGE || 'postgres:16-alpine'
 const REDIS_IMAGE = process.env.FLOW_REDIS_IMAGE || 'redis:7-alpine'
