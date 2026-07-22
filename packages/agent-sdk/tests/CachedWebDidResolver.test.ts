@@ -28,12 +28,11 @@ describe('CachedWebDidResolver', () => {
     )
     const resolver = new CachedWebDidResolver({ publicApiBaseUrl: 'https://agent.example' })
 
-    const result = await resolver.resolve(
-      resolverContext(fetchImplementation),
-      DID,
-      { did: DID, method: 'web', id: 'issuer.example' } as never,
-      {},
-    )
+    const result = await resolver.resolve(resolverContext(fetchImplementation), DID, {
+      did: DID,
+      method: 'web',
+      id: 'issuer.example',
+    } as never)
 
     expect(result.didDocument?.id).toBe(DID)
     expect(fetchImplementation).toHaveBeenCalledOnce()
@@ -46,12 +45,11 @@ describe('CachedWebDidResolver', () => {
     )
     const resolver = new CachedWebDidResolver({ publicApiBaseUrl: 'https://agent.example' })
 
-    const result = await resolver.resolve(
-      resolverContext(fetchImplementation),
-      DID,
-      { did: DID, method: 'web', id: 'issuer.example' } as never,
-      {},
-    )
+    const result = await resolver.resolve(resolverContext(fetchImplementation), DID, {
+      did: DID,
+      method: 'web',
+      id: 'issuer.example',
+    } as never)
 
     expect(result.didDocument).toBeNull()
     expect(result.didResolutionMetadata.error).toBe('notFound')
