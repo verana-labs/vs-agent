@@ -12,16 +12,20 @@ import { VsAgent } from '../agent/VsAgent'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
 
 import {
+  SelfTrDefaults,
   addDigestSRI,
   createCredential,
   createJsonSchema,
   createJsonSubjectRef,
   createPresentation,
+  generateVerifiablePresentation,
   getVerificationMethodId,
+  linkedVpFragment,
   mapToSelfTr,
   presentations,
   signerW3c,
 } from './setupSelfTr'
+import { getEcsSchemas } from './data'
 
 async function getDidRecord(agent: VsAgent) {
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
@@ -343,4 +347,65 @@ export async function migrateVtjscServiceIds(agent: VsAgent): Promise<void> {
 
 export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc', schemaId?: string) {
   return findMetadataEntry(didRecord, key, schemaId)
+}
+
+// replaces the self-TR example JSC binding with the on-chain VTJSC so resolvers can link the credential to the VPR
+export async function rebindEcsCredentialSchema(
+  agent: VsAgent,
+  publicApiBaseUrl: string,
+  schemaId: string,
+  schemaKey: string,
+  defaults: SelfTrDefaults,
+): Promise<void> {
+  if (!['ecs-service', 'ecs-org'].includes(schemaKey) || !agent.did) return
+  const vpUrl = `${publicApiBaseUrl}/vt/${schemaKey}-c-vp.json`
+  const jscUrl = `${publicApiBaseUrl}/vt/schemas-${schemaId}-jsc.json`
+
+  const didRecord = await getDidRecord(agent)
+  const record = didRecord.metadata.get('_vt/vtc') ?? {}
+  let removedStale = false
+  for (const [key, entry] of Object.entries(record)) {
+    // findMetadataEntry serves the first entry matching the VP url, so stale bindings must go
+    if (
+      key !== jscUrl &&
+      (entry as { verifiablePresentation?: { id?: string } }).verifiablePresentation?.id === vpUrl
+    ) {
+      delete record[key]
+      removedStale = true
+    }
+  }
+  if (removedStale) {
+    didRecord.metadata.set('_vt/vtc', record)
+    await updateDidRecord(agent, didRecord)
+  }
+
+  await generateVerifiablePresentation(
+    agent,
+    vpUrl,
+    getEcsSchemas(publicApiBaseUrl),
+    schemaKey,
+    ['VerifiableCredential', 'VerifiableTrustCredential'],
+    { id: jscUrl, type: 'JsonSchemaCredential' },
+    defaults,
+  )
+
+  const freshRecord = await getDidRecord(agent)
+  const doc = freshRecord.didDocument
+  if (doc) {
+    // resolvers match the [VT-CRED-W3C-LINKED-VP] fragment; #whois alone is not enough
+    const expectedServiceId = `${agent.did}#${linkedVpFragment(schemaKey)}`
+    const linked = doc.service?.some(s => s.id === expectedServiceId)
+    if (!linked) {
+      doc.service = doc.service ?? []
+      doc.service.push(
+        new DidDocumentService({
+          id: expectedServiceId,
+          serviceEndpoint: vpUrl,
+          type: 'LinkedVerifiablePresentation',
+        }),
+      )
+      await updateDidRecord(agent, freshRecord)
+    }
+  }
+  agent.config.logger.info(`[SelfTR] Rebound ${schemaKey} credential to VTJSC ${jscUrl}`)
 }

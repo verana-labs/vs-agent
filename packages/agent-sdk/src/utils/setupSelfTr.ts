@@ -14,7 +14,7 @@ import {
 } from '@credo-ts/core'
 // No type definitions available for this library
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-//@ts-ignore
+//@ts-expect-error
 import { purposes } from '@digitalcredentials/jsonld-signatures'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
@@ -29,7 +29,7 @@ import { getEcsSchemas } from './data'
 const ajv = new Ajv({ strict: false })
 addFormats(ajv)
 
-interface SelfTrDefaults {
+export interface SelfTrDefaults {
   agentLabel: string
   agentInvitationImageUrl?: string
   fallbackBase64?: string
@@ -85,6 +85,10 @@ export const createJsonSubjectRef = (id: string): W3cCredentialSubject => ({
     },
   },
 })
+
+// fragment format per [VT-CRED-W3C-LINKED-VP]
+export const linkedVpFragment = (schemaKey: string): string =>
+  `vpr-schemas-${schemaKey.replace(/^ecs-/, '')}-vtc-vp`
 
 export const mapToSelfTr = (url: string, publicApiBaseUrl: string): string =>
   url.replace('ecosystem', `${publicApiBaseUrl}/vt`)
@@ -310,7 +314,7 @@ export async function generateVerifiablePresentation(
   if (!didDocument) throw Error('The DID Document be set up')
   const claims = await getClaims(agent.config.logger, ecsSchemas, { id: agent.did }, schemaKey, defaults)
   // Use full input for integrityData to ensure update detection
-  const didDocumentServiceId = `${agent.did}#vpr-${schemaKey}-c-vp`
+  const didDocumentServiceId = `${agent.did}#${linkedVpFragment(schemaKey)}`
   const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
   const record = didRecord.metadata.get('_vt/vtc') ?? {}
   const metadata = record[credentialSchema.id]
