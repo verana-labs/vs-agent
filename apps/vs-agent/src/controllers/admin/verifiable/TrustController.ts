@@ -38,7 +38,8 @@ export class TrustController {
           claims: {
             id: 'https://example.org/org/123',
             name: 'OpenAI Research',
-            logo: 'data:image/png;base64,iVBORw0KGgoAAAANSU...',
+            logoUri: 'https://example.org/logo.png',
+            logoDigestSri: 'sha384-...',
             registryId: 'REG-123',
             registryUri: 'https://registry.example.org',
             address: '123 Main St, San Francisco, CA',
@@ -54,7 +55,8 @@ export class TrustController {
           claims: {
             id: 'https://example.org/org/123',
             name: 'OpenAI Research',
-            logo: 'data:image/png;base64,iVBORw0KGgoAAAANSU...',
+            logoUri: 'https://example.org/logo.png',
+            logoDigestSri: 'sha384-...',
             registryId: 'REG-123',
             registryUri: 'https://registry.example.org',
             address: '123 Main St, San Francisco, CA',
@@ -229,7 +231,8 @@ export class TrustController {
             credentialSubject: {
               id: 'did:example:org123',
               name: 'OpenAI Research',
-              logo: 'data:image/png;base64,iVBORw0KGgoAAAANSU...',
+              logoUri: 'https://example.org/logo.png',
+              logoDigestSri: 'sha384-...',
               registryId: 'REG-123',
               registryUri: 'https://registry.example.org',
               address: '123 Main St, San Francisco, CA',

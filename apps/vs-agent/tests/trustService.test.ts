@@ -201,11 +201,12 @@ describe('TrustService', () => {
         claims: {
           id: 'https://example.org/org/123',
           name: 'OpenAI Research',
-          logo: 'https://example.com/logo.png',
+          logoUri: 'https://example.com/logo.png',
+          logoDigestSri: 'sha384-AAAA',
           registryId: 'REG-123',
-          registryUrl: 'https://registry.example.org',
+          registryUri: 'https://registry.example.org',
           address: '123 Main St, San Francisco, CA',
-          type: 'PRIVATE',
+          organizationKind: 'PRIVATE',
           countryCode: 'US',
         },
       })
@@ -247,11 +248,12 @@ describe('TrustService', () => {
       const claims = {
         id: 'https://example.org/org/123',
         name: 'OpenAI Research',
-        logo: 'https://example.com/logo.png',
+        logoUri: 'https://example.com/logo.png',
+        logoDigestSri: 'sha384-AAAA',
         registryId: 'REG-123',
-        registryUrl: 'https://registry.example.org',
+        registryUri: 'https://registry.example.org',
         address: '123 Main St, San Francisco, CA',
-        type: 'PRIVATE',
+        organizationKind: 'PRIVATE',
         countryCode: 'US',
       }
       const credentialResponse = await faberService.issueCredential({
