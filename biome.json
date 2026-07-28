@@ -1,0 +1,128 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "maxSize": 10000000,
+    "includes": [
+      "**/*.ts",
+      "!**/node_modules",
+      "!**/build",
+      "!**/dist",
+      "!**/public",
+      "!**/coverage",
+      "!**/.idea",
+      "!**/CHANGELOG.md",
+      "!**/pnpm-lock.yaml"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "lineWidth": 110
+  },
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    },
+    "formatter": {
+      "semicolons": "asNeeded",
+      "quoteStyle": "single",
+      "trailingCommas": "all",
+      "arrowParentheses": "asNeeded",
+      "bracketSpacing": true,
+      "indentStyle": "space",
+      "lineWidth": 110
+    }
+  },
+  "json": {
+    "parser": {
+      "allowComments": true
+    }
+  },
+  "assist": { "actions": { "source": { "organizeImports": "off" } } },
+  "linter": {
+    "rules": {
+      "style": {
+        "useImportType": "off",
+        "useNodejsImportProtocol": "off",
+        "noNonNullAssertion": "warn"
+      },
+      "correctness": {
+        "noUnusedVariables": {
+          "level": "warn",
+          "fix": "safe"
+        },
+        "noUnusedFunctionParameters": "off",
+        "noUnusedImports": "warn",
+        "noUndeclaredDependencies": "off",
+        "noInvalidUseBeforeDeclaration": "error",
+        "noSwitchDeclarations": "warn",
+        "noUnreachable": "warn"
+      },
+      "suspicious": {
+        "noConsole": "warn",
+        "noExplicitAny": "off",
+        "noImplicitAnyLet": "warn",
+        "noAssignInExpressions": "warn",
+        "useIterableCallbackReturn": "warn"
+      },
+      "complexity": {
+        "noBannedTypes": "error"
+      },
+      "nursery": {
+        "noImportCycles": "error"
+      },
+      "performance": {
+        "noDelete": {
+          "fix": "none",
+          "level": "warn"
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["scripts/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUndeclaredVariables": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "**/*.test.ts",
+        "**/*.spec.ts",
+        "**/__tests__/**",
+        "**/vitest.*.ts",
+        "**/scripts/**",
+        "**/tests/**"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noNonNullAssertedOptionalChain": "off"
+          },
+          "complexity": {
+            "useArrowFunction": "off"
+          }
+        }
+      }
+    }
+  ]
+}
