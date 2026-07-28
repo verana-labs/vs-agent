@@ -395,7 +395,6 @@ describeE2E('v4 full lifecycle on a live chain and indexer', () => {
         return issuers.length > 0 ? true : undefined
       })
 
-      // eslint-disable-next-line prefer-const
       let childOrchestrator: VtFlowOrchestrator | undefined
       const child = await startAgent({
         label: 'Child',

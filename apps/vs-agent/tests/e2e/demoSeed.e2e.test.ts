@@ -76,7 +76,7 @@ describeSeed('demo chain seed', () => {
     await seeder.start()
     await seeder.setParticipantOPToValidated({ id: validatorOp.participantId, opSummaryDigest: 'sha384-v' })
 
-    // eslint-disable-next-line no-console
+    // biome-ignore lint/suspicious/noConsole: prints the seeded ids for the demo walkthrough
     console.log(
       JSON.stringify(
         {
