@@ -221,11 +221,11 @@ export class TrustController {
         value: {
           schemaBaseId: 'organization',
           credential: {
-            '@context': ['https://www.w3.org/2018/credentials/v1'],
+            '@context': ['https://www.w3.org/ns/credentials/v2'],
             id: 'https://example.org/credentials/123',
             type: ['VerifiableCredential', 'EcsOrgCredential'],
             issuer: 'did:example:issuer123',
-            issuanceDate: '2025-10-13T12:00:00Z',
+            validFrom: '2025-10-13T12:00:00Z',
             credentialSubject: {
               id: 'did:example:org123',
               name: 'OpenAI Research',

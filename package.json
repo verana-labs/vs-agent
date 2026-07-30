@@ -56,6 +56,9 @@
   },
   "packageManager": "pnpm@9.15.3",
   "pnpm": {
+    "patchedDependencies": {
+      "@credo-ts/core@0.7.1-pr-2704-20260630143332": "patches/@credo-ts__core@0.7.1-pr-2704-20260630143332.patch"
+    },
     "overrides": {
       "libphonenumber-js": "^1.12.33",
       "@credo-ts/core": "0.7.1-pr-2704-20260630143332",

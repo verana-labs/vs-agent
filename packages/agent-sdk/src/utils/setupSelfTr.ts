@@ -1,4 +1,5 @@
 import {
+  CREDENTIALS_CONTEXT_V2_URL,
   W3cCredential,
   W3cPresentation,
   W3cCredentialSchema,
@@ -44,6 +45,18 @@ interface SelfTrDefaults {
   orgType: string
   orgCountryCode: string
 }
+
+/**
+ * Base JSON-LD context for every credential and presentation issued by the agent.
+ *
+ * Uses the Verifiable Credentials Data Model 2.0, so credentials carry `validFrom`/`validUntil`
+ * rather than the data model 1.1 `issuanceDate`/`expirationDate`. The examples context supplies
+ * the `@vocab` that lets schema-driven credential subject claims expand.
+ */
+export const CREDENTIAL_CONTEXT = [
+  CREDENTIALS_CONTEXT_V2_URL,
+  'https://www.w3.org/ns/credentials/examples/v2',
+]
 
 // Helpers
 export const presentations = [
@@ -216,13 +229,19 @@ async function generateVerifiableCredential(
 }
 
 export function createCredential(options: Partial<W3cCredentialOptions>) {
-  options.context ??= [
-    'https://www.w3.org/2018/credentials/v1',
-    'https://www.w3.org/ns/credentials/examples/v2',
-  ]
+  options.context ??= CREDENTIAL_CONTEXT
 
-  options.issuanceDate ??= new Date().toISOString()
-  options.expirationDate ??= new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toISOString()
+  const validFrom = new Date().toISOString()
+  const validUntil = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toISOString()
+
+  // Callers may pass a data model 1.1 context, which names these properties differently
+  if (options.context[0] === CREDENTIALS_CONTEXT_V2_URL) {
+    options.validFrom ??= validFrom
+    options.validUntil ??= validUntil
+  } else {
+    options.issuanceDate ??= validFrom
+    options.expirationDate ??= validUntil
+  }
 
   return new W3cCredential(options as W3cCredentialOptions)
 }
@@ -355,10 +374,7 @@ export async function generateVerifiablePresentation(
 }
 
 export function createPresentation(options: Partial<W3cPresentationOptions>) {
-  options.context ??= [
-    'https://www.w3.org/2018/credentials/v1',
-    'https://www.w3.org/ns/credentials/examples/v2',
-  ]
+  options.context ??= CREDENTIAL_CONTEXT
   options.type ??= ['VerifiablePresentation']
   return new W3cPresentation(options as W3cPresentationOptions)
 }

@@ -1,0 +1,247 @@
+diff --git a/build/modules/vc/credentialContextVersion.mjs b/build/modules/vc/credentialContextVersion.mjs
+new file mode 100644
+index 0000000..105ba45
+--- /dev/null
++++ b/build/modules/vc/credentialContextVersion.mjs
+@@ -0,0 +1,17 @@
++import { asArray } from "../../utils/array.mjs";
++import { CREDENTIALS_CONTEXT_V1_URL, CREDENTIALS_CONTEXT_V2_URL } from "./constants.mjs";
++
++//#region src/modules/vc/credentialContextVersion.ts
++const DEFAULT_CREDENTIAL_CONTEXTS = [CREDENTIALS_CONTEXT_V1_URL, CREDENTIALS_CONTEXT_V2_URL];
++function getCredentialContextVersion(context) {
++	const baseContext = asArray(context ?? [])[0];
++	if (baseContext === CREDENTIALS_CONTEXT_V1_URL) return "1.1";
++	if (baseContext === CREDENTIALS_CONTEXT_V2_URL) return "2.0";
++	return void 0;
++}
++function isCredentialContextV2(context) {
++	return getCredentialContextVersion(context) === "2.0";
++}
++
++//#endregion
++export { DEFAULT_CREDENTIAL_CONTEXTS, getCredentialContextVersion, isCredentialContextV2 };
+diff --git a/build/modules/vc/jwt-vc/credentialTransformer.mjs b/build/modules/vc/jwt-vc/credentialTransformer.mjs
+index a46df59..ec2e26c 100644
+--- a/build/modules/vc/jwt-vc/credentialTransformer.mjs
++++ b/build/modules/vc/jwt-vc/credentialTransformer.mjs
+@@ -15,6 +15,7 @@ import { isObject } from "class-validator";
+ function getJwtPayloadFromCredential(credential) {
+ 	const vc = JsonTransformer.toJSON(credential);
+ 	const payloadOptions = { additionalClaims: { vc } };
++	if (credential.dataModelVersion === "2.0") throw new CredoError("Verifiable Credentials Data Model 2.0 credentials cannot be secured using the JWT VC (data model 1.1) envelope. Use W3cV2Credential with the JWT or SD-JWT format instead.");
+ 	const issuanceDate = Date.parse(credential.issuanceDate);
+ 	if (Number.isNaN(issuanceDate)) throw new CredoError("JWT VCs must have a valid issuance date");
+ 	payloadOptions.nbf = Math.floor(issuanceDate / 1e3);
+diff --git a/build/modules/vc/models/credential/W3cCredential.d.mts b/build/modules/vc/models/credential/W3cCredential.d.mts
+index 6ecceb0..8b81869 100644
+--- a/build/modules/vc/models/credential/W3cCredential.d.mts
++++ b/build/modules/vc/models/credential/W3cCredential.d.mts
+@@ -5,13 +5,20 @@ import { W3cCredentialSubject, W3cCredentialSubjectOptions } from "./W3cCredenti
+ import { W3cIssuer, W3cIssuerOptions } from "./W3cIssuer.mjs";
+ 
+ //#region src/modules/vc/models/credential/W3cCredential.d.ts
++type W3cCredentialDataModelVersion = '1.1' | '2.0';
+ interface W3cCredentialOptions {
+   context?: Array<string | JsonObject>;
+   id?: string;
+   type: Array<string>;
+   issuer: string | W3cIssuerOptions;
+-  issuanceDate: string;
++  /** Data model 1.1 only. Required when the credential uses the data model 1.1 context. */
++  issuanceDate?: string;
++  /** Data model 1.1 only. */
+   expirationDate?: string;
++  /** Data model 2.0 only. Replaces `issuanceDate`. */
++  validFrom?: string;
++  /** Data model 2.0 only. Replaces `expirationDate`. */
++  validUntil?: string;
+   credentialSubject: SingleOrArray<W3cCredentialSubjectOptions>;
+   credentialStatus?: W3cCredentialStatus;
+   credentialSchema?: SingleOrArray<W3cCredentialSchema>;
+@@ -22,17 +29,22 @@ declare class W3cCredential {
+   id?: string;
+   type: Array<string>;
+   issuer: string | W3cIssuer;
+-  issuanceDate: string;
++  issuanceDate?: string;
+   expirationDate?: string;
++  validFrom?: string;
++  validUntil?: string;
+   credentialSubject: SingleOrArray<W3cCredentialSubject>;
+   credentialSchema?: SingleOrArray<W3cCredentialSchema>;
+   credentialStatus?: W3cCredentialStatus;
+   get issuerId(): string;
++  get dataModelVersion(): W3cCredentialDataModelVersion | undefined;
++  get validFromDate(): string | undefined;
++  get validUntilDate(): string | undefined;
+   get credentialSchemaIds(): string[];
+   get credentialSubjectIds(): string[];
+   get contexts(): Array<string | JsonObject>;
+   static fromJson(json: Record<string, unknown>): W3cCredential;
+ }
+ //#endregion
+-export { W3cCredential, W3cCredentialOptions };
++export { W3cCredential, W3cCredentialDataModelVersion, W3cCredentialOptions };
+ //# sourceMappingURL=W3cCredential.d.mts.map
+\ No newline at end of file
+diff --git a/build/modules/vc/models/credential/W3cCredential.mjs b/build/modules/vc/models/credential/W3cCredential.mjs
+index f3ad42c..6ce54fe 100644
+--- a/build/modules/vc/models/credential/W3cCredential.mjs
++++ b/build/modules/vc/models/credential/W3cCredential.mjs
+@@ -7,7 +7,8 @@ import "../../../../utils/index.mjs";
+ import { __decorateMetadata } from "../../../../_virtual/_@oxc-project_runtime@0.112.0/helpers/decorateMetadata.mjs";
+ import { __decorate } from "../../../../_virtual/_@oxc-project_runtime@0.112.0/helpers/decorate.mjs";
+ import { CREDENTIALS_CONTEXT_V1_URL } from "../../constants.mjs";
+-import { IsCredentialJsonLdContext, IsCredentialType } from "../../validators.mjs";
++import { getCredentialContextVersion } from "../../credentialContextVersion.mjs";
++import { IsCredentialJsonLdContext, IsCredentialType, IsW3cCredentialDate } from "../../validators.mjs";
+ import { W3cCredentialSchema } from "./W3cCredentialSchema.mjs";
+ import { W3cCredentialStatus } from "./W3cCredentialStatus.mjs";
+ import { IsW3cCredentialSubject, W3cCredentialSubject, W3cCredentialSubjectTransformer } from "./W3cCredentialSubject.mjs";
+@@ -21,11 +22,13 @@ var W3cCredential = class W3cCredential {
+ 	constructor(options) {
+ 		if (options) {
+ 			this.context = options.context ?? [CREDENTIALS_CONTEXT_V1_URL];
+-			this.id = options.id;
++			if (options.id !== void 0) this.id = options.id;
+ 			this.type = options.type || ["VerifiableCredential"];
+ 			this.issuer = typeof options.issuer === "string" || options.issuer instanceof W3cIssuer ? options.issuer : new W3cIssuer(options.issuer);
+-			this.issuanceDate = options.issuanceDate;
+-			this.expirationDate = options.expirationDate;
++			if (options.issuanceDate !== void 0) this.issuanceDate = options.issuanceDate;
++			if (options.expirationDate !== void 0) this.expirationDate = options.expirationDate;
++			if (options.validFrom !== void 0) this.validFrom = options.validFrom;
++			if (options.validUntil !== void 0) this.validUntil = options.validUntil;
+ 			this.credentialSubject = mapSingleOrArray(options.credentialSubject, (subject) => subject instanceof W3cCredentialSubject ? subject : new W3cCredentialSubject(subject));
+ 			if (options.credentialStatus) this.credentialStatus = options.credentialStatus instanceof W3cCredentialStatus ? options.credentialStatus : new W3cCredentialStatus(options.credentialStatus);
+ 			if (options.credentialSchema) this.credentialSchema = mapSingleOrArray(options.credentialSchema, (schema) => schema instanceof W3cCredentialSchema ? schema : new W3cCredentialSchema(schema));
+@@ -34,6 +37,15 @@ var W3cCredential = class W3cCredential {
+ 	get issuerId() {
+ 		return this.issuer instanceof W3cIssuer ? this.issuer.id : this.issuer;
+ 	}
++	get dataModelVersion() {
++		return getCredentialContextVersion(this.context);
++	}
++	get validFromDate() {
++		return this.dataModelVersion === "2.0" ? this.validFrom : this.issuanceDate;
++	}
++	get validUntilDate() {
++		return this.dataModelVersion === "2.0" ? this.validUntil : this.expirationDate;
++	}
+ 	get credentialSchemaIds() {
+ 		if (!this.credentialSchema) return [];
+ 		if (Array.isArray(this.credentialSchema)) return this.credentialSchema.map((credentialSchema) => credentialSchema.id);
+@@ -66,12 +78,13 @@ __decorate([
+ 	IsW3cIssuer(),
+ 	__decorateMetadata("design:type", Object)
+ ], W3cCredential.prototype, "issuer", void 0);
+-__decorate([IsRFC3339(), __decorateMetadata("design:type", String)], W3cCredential.prototype, "issuanceDate", void 0);
+-__decorate([
+-	IsRFC3339(),
+-	IsOptional(),
+-	__decorateMetadata("design:type", String)
+-], W3cCredential.prototype, "expirationDate", void 0);
++__decorate([IsW3cCredentialDate({
++	dataModelVersion: "1.1",
++	required: true
++}), __decorateMetadata("design:type", String)], W3cCredential.prototype, "issuanceDate", void 0);
++__decorate([IsW3cCredentialDate({ dataModelVersion: "1.1" }), __decorateMetadata("design:type", String)], W3cCredential.prototype, "expirationDate", void 0);
++__decorate([IsW3cCredentialDate({ dataModelVersion: "2.0" }), __decorateMetadata("design:type", String)], W3cCredential.prototype, "validFrom", void 0);
++__decorate([IsW3cCredentialDate({ dataModelVersion: "2.0" }), __decorateMetadata("design:type", String)], W3cCredential.prototype, "validUntil", void 0);
+ __decorate([
+ 	IsW3cCredentialSubject({ each: true }),
+ 	W3cCredentialSubjectTransformer(),
+diff --git a/build/modules/vc/models/credential/W3cJsonCredential.d.mts b/build/modules/vc/models/credential/W3cJsonCredential.d.mts
+index de94828..6ba4901 100644
+--- a/build/modules/vc/models/credential/W3cJsonCredential.d.mts
++++ b/build/modules/vc/models/credential/W3cJsonCredential.d.mts
+@@ -14,7 +14,9 @@ interface W3cJsonCredential {
+   id?: string;
+   type: Array<string>;
+   issuer: string | W3cJsonIssuer;
+-  issuanceDate: string;
++  issuanceDate?: string;
++  validFrom?: string;
++  validUntil?: string;
+   expirationDate?: string;
+   credentialSubject: SingleOrArray<W3cJsonCredentialSubject>;
+   [key: string]: unknown;
+diff --git a/build/modules/vc/models/presentation/W3cPresentation.mjs b/build/modules/vc/models/presentation/W3cPresentation.mjs
+index 631b092..932e22d 100644
+--- a/build/modules/vc/models/presentation/W3cPresentation.mjs
++++ b/build/modules/vc/models/presentation/W3cPresentation.mjs
+@@ -19,7 +19,7 @@ var _ref, _ref2;
+ var W3cPresentation = class {
+ 	constructor(options) {
+ 		if (options) {
+-			this.id = options.id;
++			if (options.id !== void 0) this.id = options.id;
+ 			this.context = options.context ?? [CREDENTIALS_CONTEXT_V1_URL];
+ 			this.type = options.type ?? [VERIFIABLE_PRESENTATION_TYPE];
+ 			this.verifiableCredential = options.verifiableCredential;
+diff --git a/build/modules/vc/validators.mjs b/build/modules/vc/validators.mjs
+index 1dc281e..7ce9515 100644
+--- a/build/modules/vc/validators.mjs
++++ b/build/modules/vc/validators.mjs
+@@ -1,25 +1,47 @@
+ 
+ 
+ import { isJsonObject } from "../../types.mjs";
+-import { CREDENTIALS_CONTEXT_V1_URL, VERIFIABLE_CREDENTIAL_TYPE, VERIFIABLE_PRESENTATION_TYPE } from "./constants.mjs";
+-import { ValidateBy, buildMessage, isString, isURL } from "class-validator";
++import { asArray } from "../../utils/array.mjs";
++import { CREDENTIALS_CONTEXT_V1_URL, CREDENTIALS_CONTEXT_V2_URL, VERIFIABLE_CREDENTIAL_TYPE, VERIFIABLE_PRESENTATION_TYPE } from "./constants.mjs";
++import { DEFAULT_CREDENTIAL_CONTEXTS, getCredentialContextVersion } from "./credentialContextVersion.mjs";
++import { ValidateBy, buildMessage, isRFC3339, isString, isURL } from "class-validator";
+ 
+ //#region src/modules/vc/validators.ts
+ function IsCredentialJsonLdContext(validationOptions) {
+ 	const allowString = validationOptions?.allowString ?? false;
+-	const credentialContext = validationOptions?.credentialContext ?? CREDENTIALS_CONTEXT_V1_URL;
++	const credentialContexts = validationOptions?.credentialContext ? asArray(validationOptions.credentialContext) : DEFAULT_CREDENTIAL_CONTEXTS;
+ 	return ValidateBy({
+ 		name: "IsCredentialJsonLdContext",
+ 		validator: {
+ 			validate: (value) => {
+-				if (!Array.isArray(value)) return allowString && isString(value) && value === credentialContext;
+-				if (value[0] !== credentialContext) return false;
++				if (!Array.isArray(value)) return allowString && isString(value) && credentialContexts.includes(value);
++				if (!credentialContexts.includes(value[0])) return false;
+ 				return value.every((v) => isString(v) && isURL(v) || isJsonObject(v));
+ 			},
+ 			defaultMessage: buildMessage((eachPrefix) => `${eachPrefix}$property must be an array of strings or objects, where the first item is the verifiable credential context URL.`, validationOptions)
+ 		}
+ 	}, validationOptions);
+ }
++function IsW3cCredentialDate(options) {
++	const { dataModelVersion, required = false } = options;
++	return ValidateBy({
++		name: "IsW3cCredentialDate",
++		validator: {
++			validate: (value, args) => {
++				const context = args?.object?.context;
++				const version = getCredentialContextVersion(context);
++				if (version === undefined) return value === undefined || isRFC3339(value);
++				if (version !== dataModelVersion) return value === undefined;
++				if (value === undefined) return !required;
++				return isRFC3339(value);
++			},
++			defaultMessage: buildMessage((eachPrefix) => {
++				const other = dataModelVersion === "1.1" ? "2.0" : "1.1";
++				return `${eachPrefix}$property is only defined by the Verifiable Credentials Data Model ${dataModelVersion} context and must be ${required ? "a valid RFC 3339 date" : "undefined or a valid RFC 3339 date"}, and undefined when the credential uses the data model ${other} context.`;
++			}, options)
++		}
++	}, options);
++}
+ function IsCredentialType(validationOptions) {
+ 	return ValidateBy({
+ 		name: "IsVerifiableCredentialType",
+@@ -44,5 +66,5 @@ function IsVerifiablePresentationType(validationOptions) {
+ }
+ 
+ //#endregion
+-export { IsCredentialJsonLdContext, IsCredentialType, IsVerifiablePresentationType };
++export { IsCredentialJsonLdContext, IsCredentialType, IsVerifiablePresentationType, IsW3cCredentialDate };
+ //# sourceMappingURL=validators.mjs.map
+\ No newline at end of file

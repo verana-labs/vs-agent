@@ -293,13 +293,15 @@ export class VtFlowOrchestrator {
     if (!entry) throw new Error(`No stored VTJSC found for ${schemaRef}`)
     const { data } = entry
 
+    // Pass the context to createCredential rather than overriding it afterwards, so the validity
+    // dates match the data model version of the context that ends up on the credential
     const unsignedCredential = createCredential({
       id: `${this.agent.did}#${utils.uuid()}`,
       type: input.credentialType ?? ['VerifiableCredential', 'VerifiableTrustCredential'],
       issuer: this.agent.did!,
+      context: input.credentialContext,
       credentialSubject: { id: input.subjectDid, claims: input.claims },
     })
-    if (input.credentialContext) unsignedCredential.context = input.credentialContext
     unsignedCredential.credentialSchema = {
       id: data.verifiableCredential?.[0]?.id,
       type: 'JsonSchemaCredential',
