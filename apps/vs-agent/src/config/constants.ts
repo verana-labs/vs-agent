@@ -30,7 +30,7 @@ export const DEFAULT_PUBLIC_API_BASE_URL = 'http://localhost:3001'
 
 export const ADMIN_API_PUBLIC_URL = process.env.ADMIN_API_PUBLIC_URL
 export const ADMIN_API_EXTERNAL_PORT = Number(process.env.ADMIN_API_EXTERNAL_PORT || 3010)
-export const ADMIN_API_AUTH_MODE = (process.env.ADMIN_API_AUTH_MODE ?? 'internal')
+export const ADMIN_API_AUTH_MODE = (process.env.ADMIN_API_AUTH_MODE ?? '')
   .split(',')
   .map(s => s.trim().toLowerCase())
   .filter(s => s.length > 0)
@@ -83,7 +83,7 @@ export const ADMIN_LOG_LEVEL = process.env.ADMIN_LOG_LEVEL
 export const USE_CORS = Boolean(process.env.USE_CORS || false)
 export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER === 'false')
 
-export const AGENT_DIDCOMM_VERSIONS = (process.env.AGENT_DIDCOMM_VERSIONS ?? 'v1')
+export const AGENT_DIDCOMM_VERSIONS = (process.env.AGENT_DIDCOMM_VERSIONS ?? 'v1,v2')
   .split(',')
   .map(v => v.trim().toLowerCase())
   .filter(v => v.length > 0)
