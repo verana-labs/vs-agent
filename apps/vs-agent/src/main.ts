@@ -199,11 +199,17 @@ const run = async () => {
   if (!VERANA_INDEXER_BASE_URL) {
     configErrors.push('VERANA_INDEXER_BASE_URL is required')
   }
+  if (!VERANA_ACCOUNT_MNEMONIC) {
+    configErrors.push('VERANA_ACCOUNT_MNEMONIC is required')
+  }
   if (!['standalone', 'delegated'].includes(AGENT_MODE)) {
     configErrors.push(`AGENT_MODE must be 'standalone' or 'delegated' (got '${AGENT_MODE}')`)
   }
   if (AGENT_MODE === 'delegated' && !AGENT_DELEGATED_PARENT_VS_DID) {
     configErrors.push('AGENT_DELEGATED_PARENT_VS_DID is required when AGENT_MODE=delegated')
+  }
+  if (AGENT_MODE === 'standalone' && TRUSTED_ECS_ECOSYSTEM_DIDS.length === 0) {
+    configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS is required when AGENT_MODE=standalone')
   }
   if (TRUSTED_ECS_ECOSYSTEM_DIDS.some(did => !did.startsWith('did:'))) {
     configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS must be a comma-separated list of DIDs')
@@ -358,10 +364,6 @@ const run = async () => {
         `[VeranaChain] Could not check operator authorization/balance: ${(error as Error).message}`,
       )
     }
-  } else {
-    serverLogger.warn(
-      'VERANA_ACCOUNT_MNEMONIC not set. Verana blockchain features will be disabled. Set this environment variable to enable on-chain capabilities.',
-    )
   }
 
   const discoveryOptions = (() => {
