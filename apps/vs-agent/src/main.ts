@@ -188,9 +188,19 @@ const run = async () => {
   }
 
   const configErrors: string[] = []
-  // Verana on-chain config is optional (v1.x behaviour); validate the format only when provided.
-  if (VERANA_CORPORATION_ID && !/^\d+$/.test(VERANA_CORPORATION_ID)) {
+  if (!VERANA_CORPORATION_ID) {
+    configErrors.push('VERANA_CORPORATION_ID is required')
+  } else if (!/^\d+$/.test(VERANA_CORPORATION_ID)) {
     configErrors.push('VERANA_CORPORATION_ID must be a non-negative integer')
+  }
+  if (!VERANA_RPC_ENDPOINT_URL) {
+    configErrors.push('VERANA_RPC_ENDPOINT_URL is required')
+  }
+  if (!VERANA_INDEXER_BASE_URL) {
+    configErrors.push('VERANA_INDEXER_BASE_URL is required')
+  }
+  if (!VERANA_ACCOUNT_MNEMONIC) {
+    configErrors.push('VERANA_ACCOUNT_MNEMONIC is required')
   }
   if (!['standalone', 'delegated'].includes(AGENT_MODE)) {
     configErrors.push(`AGENT_MODE must be 'standalone' or 'delegated' (got '${AGENT_MODE}')`)
@@ -198,17 +208,14 @@ const run = async () => {
   if (AGENT_MODE === 'delegated' && !AGENT_DELEGATED_PARENT_VS_DID) {
     configErrors.push('AGENT_DELEGATED_PARENT_VS_DID is required when AGENT_MODE=delegated')
   }
+  if (AGENT_MODE === 'standalone' && TRUSTED_ECS_ECOSYSTEM_DIDS.length === 0) {
+    configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS is required when AGENT_MODE=standalone')
+  }
   if (TRUSTED_ECS_ECOSYSTEM_DIDS.some(did => !did.startsWith('did:'))) {
     configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS must be a comma-separated list of DIDs')
   }
   if (!AGENT_DIDCOMM_VERSIONS.includes('v2')) {
-    if (VERANA_RPC_ENDPOINT_URL || VERANA_INDEXER_BASE_URL) {
-      configErrors.push('vt-flow requires DIDComm v2: add v2 to AGENT_DIDCOMM_VERSIONS')
-    } else {
-      serverLogger.warn(
-        'DIDComm v2 is disabled; vt-flow will be unavailable until v2 is added to AGENT_DIDCOMM_VERSIONS',
-      )
-    }
+    configErrors.push('vt-flow requires DIDComm v2: add v2 to AGENT_DIDCOMM_VERSIONS')
   }
   if (configErrors.length > 0) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
@@ -260,10 +267,6 @@ const run = async () => {
   }
   if (ADMIN_API_AUTH_MODE.includes('corporation') && !ADMIN_API_PUBLIC_URL) {
     serverLogger.error('ADMIN_API_PUBLIC_URL is required when ADMIN_API_AUTH_MODE includes "corporation"')
-    process.exit(1)
-  }
-  if (ADMIN_API_AUTH_MODE.includes('corporation') && !VERANA_CORPORATION_ID) {
-    serverLogger.error('VERANA_CORPORATION_ID is required when ADMIN_API_AUTH_MODE includes "corporation"')
     process.exit(1)
   }
   const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE.includes('corporation')
@@ -361,10 +364,6 @@ const run = async () => {
         `[VeranaChain] Could not check operator authorization/balance: ${(error as Error).message}`,
       )
     }
-  } else {
-    serverLogger.warn(
-      'VERANA_RPC_ENDPOINT_URL or VERANA_ACCOUNT_MNEMONIC not set. Verana blockchain features will be disabled. Set these environment variables to enable on-chain capabilities.',
-    )
   }
 
   const discoveryOptions = (() => {
@@ -446,7 +445,6 @@ const run = async () => {
   }
 
   // Connect to Verana indexer for on-chain notifications
-  // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
   if (VERANA_INDEXER_BASE_URL) {
     const handlerRegistry = buildDefaultIndexerHandlerRegistry()
     if (VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE.includes('*')) {
@@ -475,7 +473,7 @@ const run = async () => {
       await indexerWs.start()
     } else {
       serverLogger.warn(
-        '[IndexerWS] subscription skipped: agent has no public DID and no VERANA_CORPORATION_ID scope',
+        '[IndexerWS] subscription skipped: agent has no public DID and VERANA_INDEXER_SUBSCRIPTION_SCOPE is not corporation',
       )
     }
 
@@ -511,10 +509,9 @@ const run = async () => {
     })
   }
 
-  // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
-  if (!VERANA_INDEXER_BASE_URL || !VERANA_CHAIN_ID) {
+  if (!VERANA_CHAIN_ID) {
     serverLogger.warn(
-      'VERANA_INDEXER_BASE_URL or VERANA_CHAIN_ID not set. The VS-CONN-VS trust gate is disabled and every peer will be accepted. Set these environment variables to enforce trust resolution.',
+      'VERANA_CHAIN_ID not set. The VS-CONN-VS trust gate is disabled and every peer will be accepted. Set this environment variable to enforce trust resolution.',
     )
   }
 
