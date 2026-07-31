@@ -1,4 +1,5 @@
 import type { OpenId4VcSigningOptions } from '../types'
+import type { DidPurpose } from '@credo-ts/core'
 
 import {
   type BaseAgent,
@@ -81,10 +82,16 @@ export function didFromValidatedCertificate(certificate: X509Certificate): strin
   return did
 }
 
+/**
+ * `extraPurposes` exists because Credo signs credential issuer metadata through the DID's
+ * `authentication` relationship, while an issuer key otherwise only needs `assertionMethod`.
+ * An issuer configured to sign its metadata with its DID has to publish under both.
+ */
 export async function publishDevelopmentSigningKey(
   agent: DevelopmentDidAgent,
   signingCertificate: SigningCertificateHandle,
   role: SigningRole,
+  extraPurposes: DidPurpose[] = [],
 ): Promise<void> {
   if (!signingCertificate.development) return
 
@@ -105,15 +112,15 @@ export async function publishDevelopmentSigningKey(
   }
 
   const methodId = `${did}#openid4vc-development-${role}`
-  const purpose = role === 'issuer' ? 'assertionMethod' : 'authentication'
+  const basePurpose: DidPurpose = role === 'issuer' ? 'assertionMethod' : 'authentication'
+  const purposes = [...new Set<DidPurpose>([basePurpose, ...extraPurposes])]
   const publicJwk = canonicalP256PublicJwk(signingCertificate.certificate.publicJwk.toJson())
   const existingMethod = resolution.didDocument.verificationMethod?.find(method => method.id === methodId)
-  const relationship = resolution.didDocument[purpose] ?? []
-  if (
-    existingMethod &&
-    equalVerificationMethodJwk(existingMethod, publicJwk) &&
-    relationship.some(method => (typeof method === 'string' ? method : method.id) === methodId)
-  ) {
+  const published = (purpose: DidPurpose) =>
+    (resolution.didDocument?.[purpose] ?? []).some(
+      method => (typeof method === 'string' ? method : method.id) === methodId,
+    )
+  if (existingMethod && equalVerificationMethodJwk(existingMethod, publicJwk) && purposes.every(published)) {
     return
   }
 
@@ -123,16 +130,20 @@ export async function publishDevelopmentSigningKey(
     new VerificationMethod({
       id: methodId,
       type: 'JsonWebKey2020',
+      // The kid ties the published method back to the KMS key. Without it Credo derives a
+      // legacy key id from the JWK when signing through the DID, which no backend holds.
+      publicKeyJwk: { ...publicJwk, kid: signingCertificate.keyId },
       controller: did,
-      publicKeyJwk: publicJwk,
     }),
   ]
-  didDocument[purpose] = [
-    ...(didDocument[purpose] ?? []).filter(
-      method => (typeof method === 'string' ? method : method.id) !== methodId,
-    ),
-    methodId,
-  ]
+  for (const purpose of purposes) {
+    didDocument[purpose] = [
+      ...(didDocument[purpose] ?? []).filter(
+        method => (typeof method === 'string' ? method : method.id) !== methodId,
+      ),
+      methodId,
+    ]
+  }
 
   let update
   try {

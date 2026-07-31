@@ -10,7 +10,8 @@ import type {
 import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 
 import { findCredentialConfiguration, parseOfferClaims } from '../config'
-import { ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
+import { StatusListService } from './StatusListService'
+import { findBoundVerificationMethodId, ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
 
 import {
   didFromValidatedCertificate,
@@ -30,7 +31,10 @@ type IssuerApi = Pick<
   | 'getIssuanceSessionById'
 >
 
-export type OpenId4VcIssuerAgent = Pick<BaseAgent, 'dids' | 'genericRecords' | 'kms' | 'x509'> & {
+export type OpenId4VcIssuerAgent = Pick<
+  BaseAgent,
+  'dids' | 'genericRecords' | 'kms' | 'x509' | 'dependencyManager'
+> & {
   did?: string
   modules: {
     openId4Vc?: {
@@ -61,6 +65,7 @@ export class OpenId4VcOfferNotFoundError extends Error {}
 export class IssuerService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
+  private statusListService?: StatusListService
   private initialized = false
 
   public constructor(
@@ -163,11 +168,13 @@ export class IssuerService {
 
     const claims = parseOfferClaims(configuration, input.issuanceSession.issuanceMetadata)
     const issuedAt = Math.floor(Date.now() / 1_000)
+    const status = await this.statusListService?.allocate(input.issuanceSession.id)
     const payload = {
       ...claims,
       vct: configuration.vct,
       iat: issuedAt,
       exp: issuedAt + configuration.ttlSeconds,
+      ...(status ?? {}),
     }
 
     return {
@@ -204,7 +211,12 @@ export class IssuerService {
     if (certificateDid !== agentDid) {
       throw new Error('OpenID4VC issuer certificate DID does not match the agent DID')
     }
-    await publishDevelopmentSigningKey(this.agent, signingCertificate, 'issuer')
+    await publishDevelopmentSigningKey(
+      this.agent,
+      signingCertificate,
+      'issuer',
+      this.issuerOptions().metadataSigner === 'did' ? ['authentication'] : [],
+    )
 
     const binding = await verifyKeyBoundToDid(
       this.agent,
@@ -221,8 +233,59 @@ export class IssuerService {
     }
 
     await this.createOrUpdateIssuer(signingCertificate)
+
+    if (this.options.revocation?.enabled) {
+      this.statusListService = new StatusListService(
+        this.agent,
+        signingCertificate,
+        this.options.publicApiBaseUrl,
+        this.options.revocation.size,
+      )
+      await this.statusListService.initialize()
+    }
+
     this.signingCertificate = signingCertificate
     this.initialized = true
+  }
+
+  /** The signed status list token for `listId`, served at `<publicApiBaseUrl>/oid4vc/status-list/:id`. */
+  public getStatusListToken(listId: string): string | undefined {
+    return this.statusListService?.getToken(listId)
+  }
+
+  /** Revoke every credential issued for `issuanceSessionId`. Idempotent. */
+  public revokeIssuanceSession(issuanceSessionId: string): Promise<number[]> {
+    if (!this.statusListService) throw new OpenId4VcIssuerRequestError('revocation is not enabled')
+    return this.statusListService.revoke(issuanceSessionId)
+  }
+
+  private async buildMetadataSigner(signingCertificate: SigningCertificateHandle) {
+    if (this.issuerOptions().metadataSigner === 'did') {
+      const did = this.agent.did ?? null
+      const didUrl = await findBoundVerificationMethodId(
+        this.agent,
+        did,
+        signingCertificate.certificate.publicJwk.toJson(),
+        ['authentication'],
+        ownDidResolutionPolicy(did ?? ''),
+      )
+      if (!didUrl) {
+        throw new Error(
+          'OpenID4VC issuer is configured to sign metadata with its DID, but the DID does not publish the signing key for assertionMethod',
+        )
+      }
+      return { method: 'did' as const, didUrl }
+    }
+
+    return {
+      method: 'x5c' as const,
+      x5c: signingCertificate.development
+        ? signingCertificate.chain
+        : signingCertificate.chain.filter(
+            (certificate, index, chain) =>
+              index !== chain.length - 1 || certificate.subject !== certificate.issuer,
+          ),
+    }
   }
 
   private async createOrUpdateIssuer(signingCertificate: SigningCertificateHandle): Promise<void> {
@@ -240,15 +303,7 @@ export class IssuerService {
       if (!(error instanceof RecordNotFoundError)) throw error
       await this.issuerApi().createIssuer({
         ...metadata,
-        metadataSigner: {
-          method: 'x5c' as const,
-          x5c: signingCertificate.development
-            ? signingCertificate.chain
-            : signingCertificate.chain.filter(
-                (certificate, index, chain) =>
-                  index !== chain.length - 1 || certificate.subject !== certificate.issuer,
-              ),
-        },
+        metadataSigner: await this.buildMetadataSigner(signingCertificate),
       })
       return
     }

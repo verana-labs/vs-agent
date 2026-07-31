@@ -77,6 +77,65 @@ export async function verifyKeyBoundToDid(
   return 'unbound'
 }
 
+/**
+ * The DID URL of the verification method whose key is the signing certificate key, or null when the
+ * DID does not publish it. Needed to sign an authorization request with `method: 'did'`, which is
+ * what lets a wallet trust-resolve the verifier by DID rather than by certificate.
+ */
+export async function findBoundVerificationMethodId(
+  agent: DidResolverAgent,
+  did: string | null,
+  certificatePublicJwk: unknown,
+  purposes: BindingPurpose[],
+  resolutionPolicy: DidResolutionPolicy,
+): Promise<string | null> {
+  if (!did) return null
+
+  let certificateKey: Kms.PublicJwk
+  try {
+    certificateKey = Kms.PublicJwk.fromUnknown(certificatePublicJwk)
+  } catch {
+    return null
+  }
+
+  if (!isResolutionAllowed(did, resolutionPolicy)) return null
+
+  let didDocument
+  try {
+    const resolution = await withTimeout(
+      agent.dids.resolve(did, { useCache: false, persistInCache: false }),
+      resolutionPolicy.timeoutMs,
+    )
+    if (resolution.didResolutionMetadata?.error || !resolution.didDocument) return null
+    if (resolution.didDocument.id !== did) return null
+    didDocument = resolution.didDocument
+  } catch {
+    return null
+  }
+
+  for (const purpose of purposes) {
+    for (const entry of didDocument[purpose] ?? []) {
+      let verificationMethod: VerificationMethod
+      try {
+        verificationMethod =
+          typeof entry === 'string' ? didDocument.dereferenceVerificationMethod(entry) : entry
+      } catch {
+        continue
+      }
+
+      try {
+        if (certificateKey.equals(getPublicJwkFromVerificationMethod(verificationMethod))) {
+          return verificationMethod.id
+        }
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return null
+}
+
 function isResolutionAllowed(did: string, policy: DidResolutionPolicy): boolean {
   if (
     !Number.isInteger(policy.timeoutMs) ||

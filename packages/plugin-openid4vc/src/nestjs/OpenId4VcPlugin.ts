@@ -11,7 +11,10 @@ import { CertificatesController } from './CertificatesController'
 import { IssuerController } from './IssuerController'
 import { VerifierController } from './VerifierController'
 
-type OpenId4VcLifecycleAgent = Pick<BaseAgent, 'dids' | 'genericRecords' | 'kms' | 'x509'> & {
+type OpenId4VcLifecycleAgent = Pick<
+  BaseAgent,
+  'dids' | 'genericRecords' | 'kms' | 'x509' | 'dependencyManager'
+> & {
   did?: string
   publicApiBaseUrl?: string
   modules: OpenId4VcIssuerAgent['modules'] & OpenId4VcVerifierAgent['modules']

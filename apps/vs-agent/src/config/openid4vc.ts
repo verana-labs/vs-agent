@@ -7,6 +7,7 @@ const OPENID4VC_CONFIG_FIELDS = new Set([
   'issuer',
   'verifier',
   'trust',
+  'revocation',
   'credentialConfigurations',
   'verifierPolicies',
 ])

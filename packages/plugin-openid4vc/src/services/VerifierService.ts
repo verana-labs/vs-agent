@@ -12,7 +12,12 @@ import { OpenId4VcVerificationSessionState } from '@credo-ts/openid4vc'
 
 import { findCredentialConfiguration, findVerifierPolicy } from '../config'
 import { TrustClient } from '../trust/TrustClient'
-import { blockingBindingVerdict, ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
+import {
+  blockingBindingVerdict,
+  findBoundVerificationMethodId,
+  ownDidResolutionPolicy,
+  verifyKeyBoundToDid,
+} from '../trust/keyBinding'
 
 import {
   didFromValidatedCertificate,
@@ -100,11 +105,7 @@ export class VerifierService {
     const { authorizationRequest, verificationSession } = await this.verifierApi().createAuthorizationRequest(
       {
         verifierId: this.verifierOptions().id,
-        requestSigner: {
-          method: 'x5c',
-          x5c: this.signingCertificateHandle().chain,
-          clientIdPrefix: 'x509_hash',
-        },
+        requestSigner: await this.buildRequestSigner(),
         responseMode: 'direct_post.jwt',
         dcql: {
           query: {
@@ -368,6 +369,29 @@ export class VerifierService {
       throw new Error('OpenID4VC verifier service is not initialized')
     }
     return this.signingCertificate
+  }
+
+  private async buildRequestSigner() {
+    const certificate = this.signingCertificateHandle()
+    if (this.verifierOptions().requestSigner !== 'did') {
+      return { method: 'x5c' as const, x5c: certificate.chain, clientIdPrefix: 'x509_hash' as const }
+    }
+
+    const did = this.agent.did ?? null
+    const didUrl = await findBoundVerificationMethodId(
+      this.agent,
+      did,
+      certificate.certificate.publicJwk.toJson(),
+      ['authentication'],
+      ownDidResolutionPolicy(did ?? '', this.trustOptions().timeoutMs),
+    )
+    if (!didUrl) {
+      throw new OpenId4VcVerifierRequestError(
+        'verifier is configured to sign requests with its DID, but the DID does not publish the signing key for authentication',
+      )
+    }
+
+    return { method: 'did' as const, didUrl }
   }
 }
 

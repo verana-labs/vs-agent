@@ -9,6 +9,8 @@ export { IssuerController } from './nestjs/IssuerController'
 export { VerifierController } from './nestjs/VerifierController'
 export { CreateOpenId4VcOfferDto, CreateOpenId4VcVerificationRequestDto } from './nestjs/dto'
 export { setupOpenId4Vc } from './sdk/setupOpenId4Vc'
+export { StatusListService } from './services/StatusListService'
+export type { StatusReference } from './services/StatusListService'
 export {
   IssuerService,
   OpenId4VcIssuerRequestError,

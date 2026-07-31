@@ -160,6 +160,16 @@ describe('OpenID4VC application configuration', () => {
     )
   })
 
+  it('accepts the revocation block the issuer reads at runtime', async () => {
+    const withRevocation = { ...validConfig(), revocation: { enabled: true, size: 131072 } }
+    await writeFile(configPath, JSON.stringify(withRevocation))
+
+    await expect(loadOpenId4VcOptions(configPath, publicApiBaseUrl)).resolves.toEqual({
+      ...withRevocation,
+      publicApiBaseUrl,
+    })
+  })
+
   it('rejects unknown top-level keys without including their values', async () => {
     const secretValue = 'unknown-field-secret-value'
     await writeFile(configPath, JSON.stringify({ ...validConfig(), unexpected: secretValue }))
