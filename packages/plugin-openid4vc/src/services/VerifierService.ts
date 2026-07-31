@@ -18,7 +18,9 @@ import {
   didFromValidatedCertificate,
   loadSigningCertificate,
   publishDevelopmentSigningKey,
+  signingCertificateInfo,
   type SigningCertificateHandle,
+  type SigningCertificateInfo,
 } from './CertificateService'
 
 type VerifierApi = Pick<
@@ -123,6 +125,12 @@ export class VerifierService {
       authorizationRequest,
       verificationSessionId: verificationSession.id,
     }
+  }
+
+  /** Public signing-certificate material, for operators wiring verifier
+   *  fingerprint pins (never includes private keys). */
+  public getCertificateInfo(): SigningCertificateInfo {
+    return signingCertificateInfo('verifier', this.signingCertificateHandle())
   }
 
   public async getResult(sessionId: string): Promise<OpenId4VcVerificationResult> {

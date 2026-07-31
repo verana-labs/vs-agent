@@ -124,6 +124,9 @@ jobs:
           - image: vs-agent
             dockerfile: ./apps/vs-agent/Dockerfile
             target: vs-agent
+          - image: vs-agent-openid4vc
+            dockerfile: ./apps/vs-agent/Dockerfile
+            target: vs-agent-openid4vc
           - image: vs-agent-mrtd
             dockerfile: ./apps/vs-agent/Dockerfile
             target: vs-agent-mrtd

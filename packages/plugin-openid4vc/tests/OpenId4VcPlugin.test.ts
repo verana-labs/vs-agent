@@ -133,14 +133,20 @@ describe('OpenId4VcPlugin', () => {
     delete issuerOptions.trust
     const issuer = OpenId4VcPlugin(issuerOptions)
 
-    expect(issuer.controllers?.map(controller => controller.name)).toEqual(['IssuerController'])
+    expect(issuer.controllers?.map(controller => controller.name)).toEqual([
+      'IssuerController',
+      'CertificatesController',
+    ])
     expect((issuer.providers as FactoryProvider[]).map(item => item.provide.name)).toEqual(['IssuerService'])
 
     const verifierOptions = validOptions()
     delete verifierOptions.issuer
     const verifier = OpenId4VcPlugin(verifierOptions)
 
-    expect(verifier.controllers?.map(controller => controller.name)).toEqual(['VerifierController'])
+    expect(verifier.controllers?.map(controller => controller.name)).toEqual([
+      'VerifierController',
+      'CertificatesController',
+    ])
     expect((verifier.providers as FactoryProvider[]).map(item => item.provide.name)).toEqual([
       'VerifierService',
     ])

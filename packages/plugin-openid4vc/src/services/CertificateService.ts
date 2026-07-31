@@ -25,6 +25,28 @@ interface DevelopmentCertificateRecord {
   keyId: string
 }
 
+export interface SigningCertificateInfo {
+  role: SigningRole
+  development: boolean
+  /** SHA256:<hex> of the leaf, the pin format of trust.developmentCertificateFingerprints. */
+  fingerprint: string
+  /** Base64 DER, leaf first. */
+  certificateChain: string[]
+}
+
+export function signingCertificateInfo(
+  role: SigningRole,
+  handle: SigningCertificateHandle,
+): SigningCertificateInfo {
+  const digest = createHash('sha256').update(handle.certificate.rawCertificate).digest('hex')
+  return {
+    role,
+    development: handle.development,
+    fingerprint: `SHA256:${digest}`,
+    certificateChain: handle.chain.map(certificate => certificate.toString('base64')),
+  }
+}
+
 export interface SigningCertificateHandle {
   certificate: X509Certificate
   chain: X509Certificate[]

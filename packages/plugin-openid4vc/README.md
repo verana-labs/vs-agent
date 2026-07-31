@@ -162,12 +162,13 @@ The control and protocol surfaces are intentionally separate.
 | Internal admin | `GET /v1/oid4vc/offers/:id`                                                               | Plugin controller. Returns safe issuance state only.                                                                                                                         |
 | Internal admin | `POST /v1/oid4vc/verifier/requests`                                                       | Plugin controller. Creates a request from `policyId`.                                                                                                                        |
 | Internal admin | `GET /v1/oid4vc/verifier/sessions/:id`                                                    | Plugin controller. Returns protocol state and the bounded trust result.                                                                                                      |
+| Internal admin | `GET /v1/oid4vc/certificates`                                                             | Plugin controller. Returns the configured roles' public signing certificates: leaf fingerprint (`SHA256:` pin format) and base64 chain. Never returns private keys.          |
 | Public         | `GET /oid4vc/vct/:configurationId`                                                        | Plugin route. Returns configured SD-JWT VC type metadata.                                                                                                                    |
 | Public         | dynamic paths below `/.well-known/*`, `/oid4vci/:issuerId/*`, and `/oid4vp/:verifierId/*` | Pinned Credo router. Serves issuer/OAuth metadata, returned offer and request URIs, and wallet token, credential, authorization-request, and authorization-response traffic. |
 
 Credo derives protocol paths from its current route configuration and record IDs. Wallets should follow the URIs returned by the admin API and metadata rather than constructing undocumented paths.
 
-The four admin routes have the default `INTERNAL` access mode. They are absent from the public listener and unavailable through the corporation bearer-authenticated listener. The internal listener is network-trusted by default, so production deployments must isolate it or place it behind an authenticated reverse proxy. Credential offers are bearer capabilities and must not be logged or exposed through a public convenience endpoint.
+The admin routes have the default `INTERNAL` access mode. They are absent from the public listener and unavailable through the corporation bearer-authenticated listener. The internal listener is network-trusted by default, so production deployments must isolate it or place it behind an authenticated reverse proxy. Credential offers are bearer capabilities and must not be logged or exposed through a public convenience endpoint.
 
 ## Trust decision
 

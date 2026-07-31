@@ -7,6 +7,7 @@ import { setupOpenId4Vc } from '../sdk/setupOpenId4Vc'
 import { IssuerService, type OpenId4VcIssuerAgent } from '../services/IssuerService'
 import { VerifierService, type OpenId4VcVerifierAgent } from '../services/VerifierService'
 
+import { CertificatesController } from './CertificatesController'
 import { IssuerController } from './IssuerController'
 import { VerifierController } from './VerifierController'
 
@@ -41,6 +42,7 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlu
     controllers: [
       ...(options.issuer ? [IssuerController] : []),
       ...(options.verifier ? [VerifierController] : []),
+      CertificatesController,
     ],
     providers: [
       ...(options.issuer

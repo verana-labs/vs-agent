@@ -48,6 +48,14 @@ database:
       cpu: 500m
       memory: 512Mi
 
+# OpenID4VC plugin configuration (requires the vs-agent-openid4vc image).
+# When config is non-empty it is rendered into a ConfigMap, mounted read-only,
+# and OID4VC_CONFIG_FILE points at it. The JSON must NOT contain
+# publicApiBaseUrl (injected by VS Agent from PUBLIC_API_BASE_URL).
+oid4vc:
+  config: "" # openid4vc.json content as a string
+  plugins: "" # optional VS_AGENT_PLUGINS override, e.g. "messaging,chat,openid4vc" (the openid4vc image already defaults to it)
+
 redis:
   enabled: false
   image: "redis:alpine"      # Redis container image (pin a tag for reproducible deploys)
