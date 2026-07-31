@@ -232,16 +232,57 @@ describe('CertificateService', () => {
     expect(new Set(savedRecordIds)).toHaveLength(2)
   })
 
-  it('rejects an expired persisted development certificate', async () => {
-    const agent = createAgent({ persistedDevelopmentCertificate: fixtures.expiredAttacker })
+  it('replaces an expired persisted development certificate with a fresh one', async () => {
+    const agent = createAgent({
+      developmentCertificate: fixtures.attacker,
+      persistedDevelopmentCertificate: fixtures.expiredAttacker,
+    })
     agent.did = 'did:web:attacker.example'
     agent.publicApiBaseUrl = 'https://attacker.example/agent'
+
+    const handle = await loadSigningCertificate(agent, {
+      development: { enabled: true, commonName: 'Development Agent' },
+    })
+
+    expect(handle.certificate.equal(fixtures.attacker)).toBe(true)
+    expect(agent.genericRecords.deleteById).toHaveBeenCalledTimes(1)
+    expect(agent.kms.createKey).toHaveBeenCalledTimes(1)
+    expect(agent.genericRecords.save).toHaveBeenCalledTimes(1)
+  })
+
+  it('replaces a persisted development record whose key no KMS backend holds', async () => {
+    const agent = createAgent({
+      developmentCertificate: fixtures.attacker,
+      persistedDevelopmentCertificate: fixtures.attacker,
+    })
+    agent.did = 'did:web:attacker.example'
+    agent.publicApiBaseUrl = 'https://attacker.example/agent'
+    agent.keys.clear()
+
+    const handle = await loadSigningCertificate(agent, {
+      development: { enabled: true, commonName: 'Development Agent' },
+    })
+
+    expect(handle.development).toBe(true)
+    expect(agent.genericRecords.deleteById).toHaveBeenCalledTimes(1)
+    expect(agent.kms.createKey).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not replace a persisted development certificate on a KMS backend fault', async () => {
+    const agent = createAgent({
+      developmentCertificate: fixtures.attacker,
+      persistedDevelopmentCertificate: fixtures.attacker,
+    })
+    agent.did = 'did:web:attacker.example'
+    agent.publicApiBaseUrl = 'https://attacker.example/agent'
+    agent.kms.getPublicKey.mockRejectedValueOnce(new Kms.KeyManagementError('backend unavailable'))
 
     await expect(
       loadSigningCertificate(agent, {
         development: { enabled: true, commonName: 'Development Agent' },
       }),
-    ).rejects.toThrow('expired')
+    ).rejects.toThrow('backend unavailable')
+    expect(agent.genericRecords.deleteById).not.toHaveBeenCalled()
     expect(agent.kms.createKey).not.toHaveBeenCalled()
   })
 })
@@ -303,21 +344,27 @@ function createAgent({
       return { keyId, publicJwk: publicKey }
     }),
   }
+  const deletedIds = new Set<string>()
   const genericRecords = {
-    findById: vi.fn(async (id: string) =>
-      persistedDevelopmentCertificate
-        ? {
-            id,
-            content: {
-              certificate: persistedDevelopmentCertificate.toString('base64'),
-              keyId: 'development-key',
-            },
-          }
-        : (records.get(id) ?? null),
-    ),
+    findById: vi.fn(async (id: string) => {
+      if (persistedDevelopmentCertificate && !deletedIds.has(id) && !records.has(id)) {
+        return {
+          id,
+          content: {
+            certificate: persistedDevelopmentCertificate.toString('base64'),
+            keyId: 'development-key',
+          },
+        }
+      }
+      return records.get(id) ?? null
+    }),
     save: vi.fn(async (record: { id: string; content: Record<string, unknown> }) => {
       records.set(record.id, record)
       return record
+    }),
+    deleteById: vi.fn(async (id: string) => {
+      deletedIds.add(id)
+      records.delete(id)
     }),
   }
   const x509 = {
