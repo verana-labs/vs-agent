@@ -159,6 +159,37 @@ function typeRank(type) {
   return i === -1 ? Infinity : i
 }
 
+const POT_ROW_ORDER = ['ecs-service', 'ecs-org', 'ecs-persona', 'ecs-user-agent']
+function potRowRank(type) {
+  const i = POT_ROW_ORDER.indexOf(type)
+  return i === -1 ? Infinity : i
+}
+
+const ECS_LABELS = {
+  'ecs-service': 'Service credential',
+  'ecs-org': 'Organization credential',
+  'ecs-persona': 'Persona credential',
+  'ecs-user-agent': 'User agent credential',
+}
+
+function credentialIssuer(vc) {
+  return typeof vc?.issuer === 'string' ? vc.issuer : (vc?.issuer?.id ?? '')
+}
+
+function credentialDisplayName(vc, type) {
+  if (ECS_LABELS[type]) return ECS_LABELS[type]
+  const subjectName = vc?.credentialSubject?.name
+  if (typeof subjectName === 'string' && subjectName) return subjectName
+  const types = Array.isArray(vc?.type) ? vc.type.filter(t => t !== 'VerifiableCredential') : []
+  return types[types.length - 1] ?? 'Credential'
+}
+
+/** ISO 3166-1 alpha-2 country code as an emoji flag (e.g. "CH"). */
+function countryFlag(code) {
+  if (typeof code !== 'string' || !/^[A-Za-z]{2}$/.test(code)) return null
+  return String.fromCodePoint(...[...code.toUpperCase()].map(c => 127397 + c.charCodeAt(0)))
+}
+
 function CredentialSection({ title, items, renderItem }) {
   if (items.length === 0) return null
   const sorted = [...items].sort((a, b) => typeRank(a.type) - typeRank(b.type))
@@ -172,45 +203,269 @@ function CredentialSection({ title, items, renderItem }) {
   )
 }
 
-export default function Dashboard() {
-  const agentConfig = getAgentConfig()
-  const [doc, setDoc] = useState(null)
-  const [cvpItems, setCvpItems] = useState([])
-  const [jscItems, setJscItems] = useState([])
-  const [credsLoading, setCredsLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [selected, setSelected] = useState(null)
+/* ─── Icons (stroke style shared with Header) ────────────────────────── */
+
+function Icon({ children, size = 13 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ flexShrink: 0 }}
+    >
+      {children}
+    </svg>
+  )
+}
+
+function ShieldIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+    </Icon>
+  )
+}
+
+function FileTextIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
+      <path d="M14 2v5h5" />
+    </Icon>
+  )
+}
+
+function LockIcon(props) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </Icon>
+  )
+}
+
+function BuildingIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
+      <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+      <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+      <path d="M10 6h4M10 10h4M10 14h4M10 18h4" />
+    </Icon>
+  )
+}
+
+function LayersIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="m12.83 2.18 8.11 4.06c1.42.7 1.42 2.82 0 3.52l-8.11 4.06a1.87 1.87 0 0 1-1.66 0L3.06 9.76c-1.42-.7-1.42-2.82 0-3.52l8.11-4.06a1.87 1.87 0 0 1 1.66 0Z" />
+      <path d="m22 12.5-9.17 4.59a1.87 1.87 0 0 1-1.66 0L2 12.5" />
+    </Icon>
+  )
+}
+
+/* ─── Service profile (shown when an ECS-Service credential is presented) ── */
+
+function ServiceLogo({ uri, name }) {
+  const [failed, setFailed] = useState(false)
+  if (uri && !failed) {
+    return <img className="svc-logo" src={uri} alt="" onError={() => setFailed(true)} />
+  }
+  return <div className="svc-logo svc-logo-fallback">{(name ?? '?').charAt(0).toUpperCase()}</div>
+}
+
+function ServiceHero({ subject }) {
+  const age = Number(subject.minimumAgeRequired)
+  return (
+    <>
+      <div className="svc-hero">
+        <ServiceLogo uri={subject.logoUri} name={subject.name} />
+        <div style={{ minWidth: 0 }}>
+          <div className="svc-title-row">
+            <h1 className="svc-name display">{subject.name ?? 'Unnamed service'}</h1>
+            {subject.type && <span className="chip">{subject.type}</span>}
+          </div>
+          {subject.description && <p className="svc-desc">{subject.description}</p>}
+        </div>
+      </div>
+      <div className="svc-meta">
+        {Number.isFinite(age) && age > 0 && (
+          <span className="meta-chip meta-chip-age">
+            <b>{age}+</b> minimum age to connect
+          </span>
+        )}
+        {subject.termsAndConditionsUri && (
+          <a className="meta-chip" href={subject.termsAndConditionsUri} target="_blank" rel="noopener noreferrer">
+            <FileTextIcon size={12} />
+            Terms and conditions
+          </a>
+        )}
+        {subject.privacyPolicyUri && (
+          <a className="meta-chip" href={subject.privacyPolicyUri} target="_blank" rel="noopener noreferrer">
+            <LockIcon size={12} />
+            Privacy policy
+          </a>
+        )}
+      </div>
+    </>
+  )
+}
+
+function ControllerLogo({ uri, name }) {
+  const [failed, setFailed] = useState(false)
+  if (uri && !failed) {
+    return <img className="op-logo" src={uri} alt="" onError={() => setFailed(true)} />
+  }
+  return <div className="op-logo op-logo-fallback">{(name ?? '?').charAt(0).toUpperCase()}</div>
+}
+
+function ControllerCard({ item, onSelect }) {
+  if (!item) return null
+  const subject = item.credentials[0]?.credentialSubject ?? {}
+  const isOrg = item.type === 'ecs-org'
+  const flag = countryFlag(isOrg ? subject.countryCode : subject.controllerCountryCode)
+  const idParts = [subject.registryId, subject.lei ? `LEI ${subject.lei}` : null].filter(Boolean)
+  const detailParts = isOrg
+    ? [subject.address, subject.organizationKind, subject.legalJurisdiction ? `Jurisdiction ${subject.legalJurisdiction}` : null]
+    : [subject.description, subject.controllerJurisdiction ? `Jurisdiction ${subject.controllerJurisdiction}` : null]
+  const details = detailParts.filter(Boolean).join(' · ')
+
+  return (
+    <div className="op-card">
+      <button className="cred-card-details-btn" onClick={onSelect} title="View details">{'{ }'}</button>
+      <p className="pot-label">
+        <BuildingIcon size={11} />
+        Operated by
+      </p>
+      <div className="op-head">
+        <ControllerLogo uri={isOrg ? subject.logoUri : subject.avatarUri} name={subject.name} />
+        <div style={{ minWidth: 0 }}>
+          <div className="op-name">
+            {flag && <span role="img" aria-label="Country flag" style={{ marginRight: 6 }}>{flag}</span>}
+            {subject.name ?? (isOrg ? 'Unnamed organization' : 'Unnamed persona')}
+          </div>
+          {idParts.length > 0 && <div className="op-sub">{idParts.join(' · ')}</div>}
+        </div>
+      </div>
+      {details && <p className="op-details">{details}</p>}
+    </div>
+  )
+}
+
+function TrustCard({ webDid, cvpItems, jscItems, onSelect }) {
+  const rows = cvpItems
+    .flatMap(item => item.credentials.map(vc => ({ item, vc })))
+    .sort((a, b) => potRowRank(a.item.type) - potRowRank(b.item.type))
+
+  return (
+    <div className="pot-card">
+      <div className="pot-band">
+        <span className="pot-pill pot-pill-trust">
+          <ShieldIcon size={12} />
+          Proof of Trust
+        </span>
+        <span style={{ flex: 1 }} />
+        <span className="pot-pill pot-pill-neutral">Self-declared</span>
+      </div>
+      <div className="pot-section">
+        {webDid && <div className="pot-did"><LinkOrText text={webDid} /></div>}
+        <p className="pot-note">
+          Credentials presented by this service. They have not been verified against a Verana resolver from this page.
+        </p>
+      </div>
+      {rows.length > 0 && (
+        <div className="pot-section">
+          <p className="pot-label">
+            <LayersIcon size={11} />
+            Credentials
+          </p>
+          {rows.map(({ item, vc }, i) => (
+            <div className="pot-row" key={i}>
+              <span className="pot-row-name">{credentialDisplayName(vc, item.type)}</span>
+              <span className="pot-row-issuer">
+                {credentialIssuer(vc) && <>issued by <LinkOrText text={credentialIssuer(vc)} /></>}
+              </span>
+              <button className="pot-row-btn" onClick={() => onSelect(item.vp ?? vc)} title="View details">{'{ }'}</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {jscItems.length > 0 && (
+        <div className="pot-section">
+          <p className="pot-label">
+            <FileTextIcon size={11} />
+            Schemas
+          </p>
+          {jscItems.map((item, i) => (
+            <div className="pot-row" key={i}>
+              <span className="pot-row-name">{ECS_LABELS[item.type] ? ECS_LABELS[item.type].replace(' credential', ' schema') : item.type}</span>
+              <span className="pot-row-issuer">
+                <LinkOrText text={item.service.serviceEndpoint} />
+              </span>
+              <button className="pot-row-btn" onClick={() => onSelect(item.service)} title="View details">{'{ }'}</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ConnectCard({ webDid, endpoints }) {
+  return (
+    <aside className="connect-card">
+      <div className="qr-desktop">
+        <span className="qr-tile qr-tile-sm">
+          <img src={qrUrl} alt="Invitation QR" />
+        </span>
+        <p className="qr-label">Scan to connect</p>
+      </div>
+      <div className="qr-mobile">
+        <a href="/invitation" className="btn btn-primary">Connect</a>
+      </div>
+      {webDid && <div className="connect-did">{webDid}</div>}
+      {endpoints.length > 0 && <div className="connect-endpoints">{endpoints.join(', ')}</div>}
+    </aside>
+  )
+}
+
+function ServiceProfile({ serviceItem, cvpItems, jscItems, webDid, endpoints, onSelect }) {
+  const subject = serviceItem.credentials[0]?.credentialSubject ?? {}
+  const controllerItem =
+    cvpItems.find(i => i.type === 'ecs-org' && i.credentials.length > 0) ??
+    cvpItems.find(i => i.type === 'ecs-persona' && i.credentials.length > 0)
 
   useEffect(() => {
-    getDidDocument()
-      .then(d => {
-        setDoc(d)
-        const vprServices = (d.service ?? []).filter(s => (s.id?.split('#')[1] ?? '').startsWith('vpr'))
-        const cvp = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-c-vp'))
-        const jsc = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-jsc-vp'))
+    if (typeof subject.name === 'string' && subject.name) document.title = subject.name
+  }, [subject.name])
 
-        Promise.all(cvp.map(resolveCVpService)).then(setCvpItems)
-        Promise.all(jsc.map(resolveJscVpService))
-          .then(setJscItems)
-          .finally(() => setCredsLoading(false))
-      })
-      .catch(err => setError(err.message))
-  }, [])
+  return (
+    <div className="profile">
+      <ServiceHero subject={subject} />
+      <div className="profile-grid">
+        <div className="profile-main">
+          <ControllerCard item={controllerItem} onSelect={() => onSelect(controllerItem?.vp)} />
+          <TrustCard webDid={webDid} cvpItems={cvpItems} jscItems={jscItems} onSelect={onSelect} />
+        </div>
+        <ConnectCard webDid={webDid} endpoints={endpoints} />
+      </div>
+    </div>
+  )
+}
 
-  if (error) return <p className="error-msg">{error}</p>
-  if (!doc) return <p className="loading">Loading...</p>
+/* ─── Classic view (no ECS-Service credential presented) ─────────────── */
 
-  const endpoints = (doc.service ?? [])
-    .filter(s => s.type === 'did-communication')
-    .map(s => s.serviceEndpoint)
-  const webDid = (doc.alsoKnownAs ?? []).find(d => d.startsWith('did:webvh:')) ?? doc.id
-
+function ClassicView({ agentConfig, webDid, endpoints, cvpItems, jscItems, credsLoading, onSelect }) {
   const noCredentials = !credsLoading && cvpItems.length === 0 && jscItems.length === 0
 
   return (
     <div>
-      {selected && <JsonModal data={selected} onClose={() => setSelected(null)} />}
-
       {agentConfig.welcomeMessage && (
         <h1 className="welcome display">
           {agentConfig.welcomeMessage}
@@ -270,7 +525,7 @@ export default function Dashboard() {
         items={cvpItems}
         renderItem={(item, i) =>
           item.credentials.map((vc, j) => (
-            <CredentialCard key={`${i}-${j}`} vc={vc} type={item.type} onSelect={() => setSelected(item.vp)} />
+            <CredentialCard key={`${i}-${j}`} vc={vc} type={item.type} onSelect={() => onSelect(item.vp)} />
           ))
         }
       />
@@ -280,7 +535,7 @@ export default function Dashboard() {
         items={jscItems}
         renderItem={(item, i) => (
           <div key={i} className="cred-card">
-            <button className="cred-card-details-btn" onClick={() => setSelected(item.service)} title="View details">{'{ }'}</button>
+            <button className="cred-card-details-btn" onClick={() => onSelect(item.service)} title="View details">{'{ }'}</button>
             <div className="cred-card-type">{item.type}</div>
             <div className="cred-field-value cred-field-mono text-subtle">
               <LinkOrText text={item.service.serviceEndpoint} />
@@ -288,6 +543,69 @@ export default function Dashboard() {
           </div>
         )}
       />
+    </div>
+  )
+}
+
+export default function Dashboard() {
+  const agentConfig = getAgentConfig()
+  const [doc, setDoc] = useState(null)
+  const [cvpItems, setCvpItems] = useState([])
+  const [jscItems, setJscItems] = useState([])
+  const [credsLoading, setCredsLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [selected, setSelected] = useState(null)
+
+  useEffect(() => {
+    getDidDocument()
+      .then(d => {
+        setDoc(d)
+        const vprServices = (d.service ?? []).filter(s => (s.id?.split('#')[1] ?? '').startsWith('vpr'))
+        const cvp = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-c-vp'))
+        const jsc = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-jsc-vp'))
+
+        Promise.all([
+          Promise.all(cvp.map(resolveCVpService)).then(setCvpItems),
+          Promise.all(jsc.map(resolveJscVpService)).then(setJscItems),
+        ]).finally(() => setCredsLoading(false))
+      })
+      .catch(err => setError(err.message))
+  }, [])
+
+  if (error) return <p className="error-msg">{error}</p>
+  if (!doc || credsLoading) return <p className="loading">Loading...</p>
+
+  const endpoints = (doc.service ?? [])
+    .filter(s => s.type === 'did-communication')
+    .map(s => s.serviceEndpoint)
+  const webDid = (doc.alsoKnownAs ?? []).find(d => d.startsWith('did:webvh:')) ?? doc.id
+
+  const serviceItem = cvpItems.find(i => i.type === 'ecs-service' && i.credentials.length > 0)
+
+  return (
+    <div>
+      {selected && <JsonModal data={selected} onClose={() => setSelected(null)} />}
+
+      {serviceItem ? (
+        <ServiceProfile
+          serviceItem={serviceItem}
+          cvpItems={cvpItems}
+          jscItems={jscItems}
+          webDid={webDid}
+          endpoints={endpoints}
+          onSelect={setSelected}
+        />
+      ) : (
+        <ClassicView
+          agentConfig={agentConfig}
+          webDid={webDid}
+          endpoints={endpoints}
+          cvpItems={cvpItems}
+          jscItems={jscItems}
+          credsLoading={false}
+          onSelect={setSelected}
+        />
+      )}
     </div>
   )
 }
