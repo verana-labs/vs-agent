@@ -239,23 +239,36 @@ async function loadDevelopmentSigningCertificate(
   const recordId = developmentRecordId(agent.did, hostname, development.commonName, role)
   const existing = await agent.genericRecords.findById(recordId)
   if (existing) {
-    const stored = parseDevelopmentRecord(existing.content)
-    const certificate = X509Certificate.fromEncodedCertificate(stored.certificate)
-    assertCertificateChainUsable([certificate])
-    assertDevelopmentCertificateIdentity(certificate, agent.did, hostname)
+    try {
+      const stored = parseDevelopmentRecord(existing.content)
+      const certificate = X509Certificate.fromEncodedCertificate(stored.certificate)
+      assertCertificateChainUsable([certificate])
+      assertDevelopmentCertificateIdentity(certificate, agent.did, hostname)
 
-    const storedPublicJwk = await agent.kms.getPublicKey({ keyId: stored.keyId })
-    if (
-      !equalPublicJwk(
-        canonicalP256PublicJwk(storedPublicJwk),
-        canonicalP256PublicJwk(certificate.publicJwk.toJson()),
-      )
-    ) {
-      throw new Error('stored development KMS key does not match its certificate')
+      const storedPublicJwk = await agent.kms.getPublicKey({ keyId: stored.keyId })
+      if (
+        !equalPublicJwk(
+          canonicalP256PublicJwk(storedPublicJwk),
+          canonicalP256PublicJwk(certificate.publicJwk.toJson()),
+        )
+      ) {
+        throw new Error('stored development KMS key does not match its certificate')
+      }
+
+      certificate.keyId = stored.keyId
+      return { certificate, chain: [certificate], keyId: stored.keyId, development: true }
+    } catch (error) {
+      // A KMS backend fault is not stale state: recreating on it would rotate a
+      // healthy certificate and break fingerprints pinned by verifiers.
+      if (error instanceof Kms.KeyManagementError && !(error instanceof Kms.KeyManagementKeyNotFoundError)) {
+        throw error
+      }
+      // Development certificates are disposable. An expired certificate, an
+      // identity that no longer matches the DID or host, or a key id no KMS
+      // backend holds (records written by older builds) must not wedge the
+      // agent: drop the record and mint a fresh certificate below.
+      await agent.genericRecords.deleteById(recordId)
     }
-
-    certificate.keyId = stored.keyId
-    return { certificate, chain: [certificate], keyId: stored.keyId, development: true }
   }
 
   const { keyId, publicJwk } = await agent.kms.createKey({ type: { kty: 'EC', crv: 'P-256' } })
