@@ -226,6 +226,18 @@ describe('VerifierService', () => {
     expect(api.createVerifier).not.toHaveBeenCalled()
   })
 
+  it('retries initialization after a failed first attempt', async () => {
+    const api = verifierApi()
+    api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
+    const service = new VerifierService(agent(api) as never, options())
+    loadSigningCertificate.mockRejectedValueOnce(new Error('storage not ready'))
+
+    await expect(service.ensureInitialized()).rejects.toThrow('storage not ready')
+    await service.ensureInitialized()
+
+    expect(loadSigningCertificate).toHaveBeenCalledTimes(2)
+  })
+
   it('requires an agent DID before loading verifier signing material', async () => {
     const agentWithoutDid = { ...agent(), did: undefined }
     const service = new VerifierService(agentWithoutDid as never, options())

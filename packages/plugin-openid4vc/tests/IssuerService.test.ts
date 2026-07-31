@@ -217,6 +217,18 @@ describe('IssuerService', () => {
     expect(api.createIssuer).not.toHaveBeenCalled()
   })
 
+  it('retries initialization after a failed first attempt', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const service = new IssuerService(agent(api) as never, options())
+    loadSigningCertificate.mockRejectedValueOnce(new Error('storage not ready'))
+
+    await expect(service.ensureInitialized()).rejects.toThrow('storage not ready')
+    await service.ensureInitialized()
+
+    expect(loadSigningCertificate).toHaveBeenCalledTimes(2)
+  })
+
   it('requires an agent DID before loading signing material', async () => {
     const agentWithoutDid = { ...agent(), did: undefined }
     const service = new IssuerService(agentWithoutDid as never, options())

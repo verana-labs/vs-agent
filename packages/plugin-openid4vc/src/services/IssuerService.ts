@@ -74,7 +74,13 @@ export class IssuerService {
   ) {}
 
   public ensureInitialized(): Promise<void> {
-    this.initialization ??= this.initialize()
+    // A rejected initialization must not be cached: a transient boot-time
+    // failure (KMS or storage not ready yet) would otherwise wedge the
+    // process until restart. Reset so the next call retries.
+    this.initialization ??= this.initialize().catch(error => {
+      this.initialization = undefined
+      throw error
+    })
     return this.initialization
   }
 
