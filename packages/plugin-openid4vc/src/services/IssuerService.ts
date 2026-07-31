@@ -303,8 +303,9 @@ export class IssuerService {
       credentialConfigurationsSupported: this.credentialConfigurationsSupported(),
     }
 
+    let existing
     try {
-      await this.issuerApi().getIssuerByIssuerId(issuerId)
+      existing = await this.issuerApi().getIssuerByIssuerId(issuerId)
     } catch (error) {
       if (!(error instanceof RecordNotFoundError)) throw error
       await this.issuerApi().createIssuer({
@@ -312,6 +313,17 @@ export class IssuerService {
         metadataSigner: await this.buildMetadataSigner(signingCertificate),
       })
       return
+    }
+
+    // Credo takes `metadataSigner` on `createIssuer` only. `updateIssuer` re-signs an existing
+    // `signedMetadata` but cannot introduce one, so a record first created without the option
+    // stays unsigned however many times it is redeployed. Silently accepting the configuration
+    // makes a green deploy look like a working one while wallets still see no `signed_metadata`
+    // and have no DID to trust-resolve. Say so instead of pretending.
+    if (this.issuerOptions().metadataSigner === 'did' && !existing.signedMetadata) {
+      throw new Error(
+        `OpenID4VC issuer '${issuerId}' is configured with metadataSigner 'did', but its stored record was created without one and Credo cannot add it on update. Recreate the issuer record (a new issuer id, or clearing the stored record) for the setting to take effect.`,
+      )
     }
 
     await this.issuerApi().updateIssuerMetadata(metadata)
