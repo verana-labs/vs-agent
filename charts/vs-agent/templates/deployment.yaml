@@ -208,6 +208,10 @@ spec:
             {{- if .Values.oid4vc.config }}
             - name: OID4VC_CONFIG_FILE
               value: "/run/config/oid4vc/openid4vc.json"
+            # The agent reads the config file once at boot; baking its hash
+            # into the pod template makes a config-only change roll the pod.
+            - name: OID4VC_CONFIG_CHECKSUM
+              value: {{ sha256sum .Values.oid4vc.config | quote }}
             {{- end }}
             {{- if .Values.oid4vc.plugins }}
             - name: VS_AGENT_PLUGINS
