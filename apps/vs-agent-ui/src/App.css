@@ -1121,12 +1121,15 @@ a.meta-chip:hover {
 
 .acc-perm-type {
   flex-shrink: 0;
-  width: 104px;
+  width: 150px;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .acc-state {
@@ -1149,12 +1152,15 @@ a.meta-chip:hover {
 /* Service endpoints */
 .ep-type {
   flex-shrink: 0;
-  min-width: 104px;
+  width: 150px;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ep-uri {
