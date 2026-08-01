@@ -381,6 +381,44 @@ function CircleCheckIcon(props) {
   )
 }
 
+function CopyIcon(props) {
+  return (
+    <Icon {...props}>
+      <rect x="8" y="8" width="14" height="14" rx="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </Icon>
+  )
+}
+
+function QrCodeIcon(props) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="3" width="5" height="5" rx="1" />
+      <rect x="16" y="3" width="5" height="5" rx="1" />
+      <rect x="3" y="16" width="5" height="5" rx="1" />
+      <path d="M21 16h-3a2 2 0 0 0-2 2v3" />
+      <path d="M21 21v.01" />
+      <path d="M12 7v3a2 2 0 0 1-2 2H7" />
+      <path d="M3 12h.01" />
+      <path d="M12 3h.01" />
+      <path d="M12 16v.01" />
+      <path d="M16 12h1" />
+      <path d="M21 12v.01" />
+      <path d="M12 21v-1" />
+    </Icon>
+  )
+}
+
+function GlobeIcon(props) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M2 12h20" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </Icon>
+  )
+}
+
 function LayersIcon(props) {
   return (
     <Icon {...props}>
@@ -600,25 +638,122 @@ function TrustCard({ webDid, cvpItems, jscItems, acc, network, onSelect }) {
   )
 }
 
-function ConnectCard({ webDid, endpoints }) {
+/* ─── Service endpoints (from the DID document service entries) ──────── */
+
+const DIDCOMM_SERVICE_TYPES = ['did-communication', 'DIDCommMessaging', 'IndyAgent']
+
+function serviceTypesOf(service) {
+  return (Array.isArray(service.type) ? service.type : [service.type]).filter(Boolean)
+}
+
+/** Absolute endpoint URIs of a service entry; relativeRef entries are skipped. */
+function endpointUris(serviceEndpoint) {
+  const out = []
+  const visit = ep => {
+    if (typeof ep === 'string') {
+      out.push(ep)
+      return
+    }
+    if (Array.isArray(ep)) {
+      ep.forEach(visit)
+      return
+    }
+    if (ep && typeof ep === 'object' && typeof ep.uri === 'string') out.push(ep.uri)
+  }
+  visit(serviceEndpoint)
+  return out.filter(uri => /^[a-z][a-z0-9+.-]*:/i.test(uri))
+}
+
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false)
+
+  function copy() {
+    try {
+      navigator.clipboard.writeText(text)
+    } catch {
+      return
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
-    <aside className="connect-card">
-      <div className="qr-desktop">
-        <span className="qr-tile qr-tile-sm">
-          <img src={qrUrl} alt="Invitation QR" />
-        </span>
-        <p className="qr-label">Scan to connect</p>
-      </div>
-      <div className="qr-mobile">
-        <a href="/invitation" className="btn btn-primary">Connect</a>
-      </div>
-      {webDid && <div className="connect-did">{webDid}</div>}
-      {endpoints.length > 0 && <div className="connect-endpoints">{endpoints.join(', ')}</div>}
-    </aside>
+    <button className="icon-btn" onClick={copy} title="Copy endpoint">
+      {copied ? <CircleCheckIcon size={12} /> : <CopyIcon size={12} />}
+    </button>
   )
 }
 
-function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, network, webDid, endpoints, onSelect }) {
+function ServiceEndpointsCard({ services }) {
+  const [qrOpenFor, setQrOpenFor] = useState(null)
+
+  const rows = (services ?? [])
+    .map(service => ({ service, types: serviceTypesOf(service), uris: endpointUris(service.serviceEndpoint) }))
+    .filter(row => !row.types.includes('LinkedVerifiablePresentation') && row.uris.length > 0)
+
+  if (rows.length === 0) return null
+
+  return (
+    <div className="pot-card">
+      <div className="pot-section">
+        <p className="pot-label">
+          <GlobeIcon size={11} />
+          Service endpoints
+        </p>
+        {rows.map(row => {
+          const isDidComm = row.types.some(t => DIDCOMM_SERVICE_TYPES.includes(t))
+          const qrOpen = qrOpenFor === row.service.id
+          return (
+            <div key={row.service.id}>
+              {row.uris.map((uri, i) => (
+                <div className="pot-row" key={uri}>
+                  <span className="ep-type">{i === 0 ? row.types.join(', ') : ''}</span>
+                  <span className="ep-uri" title={uri}>{uri}</span>
+                  {isDidComm && i === 0 && (
+                    <button
+                      className={`icon-btn${qrOpen ? ' icon-btn-active' : ''}`}
+                      onClick={() => setQrOpenFor(qrOpen ? null : row.service.id)}
+                      title="Show connection QR code"
+                    >
+                      <QrCodeIcon size={12} />
+                    </button>
+                  )}
+                  <CopyButton text={uri} />
+                  {/^https?:/.test(uri) && (
+                    <a
+                      className="icon-btn"
+                      href={uri}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open endpoint in a new window"
+                    >
+                      <ExternalLinkIcon size={12} />
+                    </a>
+                  )}
+                </div>
+              ))}
+              {isDidComm && qrOpen && (
+                <div className="ep-qr">
+                  <div className="qr-desktop">
+                    <span className="qr-tile qr-tile-sm">
+                      <img src={qrUrl} alt="Invitation QR" />
+                    </span>
+                    <p className="qr-label">Scan to connect</p>
+                  </div>
+                  <div className="qr-mobile">
+                    <a href="/invitation" className="btn btn-primary">Connect</a>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, network, webDid, services, onSelect }) {
   const subject = serviceItem.credentials[0]?.credentialSubject ?? {}
   const controllerItem =
     cvpItems.find(i => i.type === 'ecs-org' && i.credentials.length > 0) ??
@@ -631,12 +766,10 @@ function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, network, webDid,
   return (
     <div className="profile">
       <ServiceHero subject={subject} />
-      <div className="profile-grid">
-        <div className="profile-main">
-          <ControllerCard item={controllerItem} onSelect={() => onSelect(controllerItem?.vp)} />
-          <TrustCard webDid={webDid} cvpItems={cvpItems} jscItems={jscItems} acc={acc} network={network} onSelect={onSelect} />
-        </div>
-        <ConnectCard webDid={webDid} endpoints={endpoints} />
+      <div className="profile-main">
+        <ControllerCard item={controllerItem} onSelect={() => onSelect(controllerItem?.vp)} />
+        <TrustCard webDid={webDid} cvpItems={cvpItems} jscItems={jscItems} acc={acc} network={network} onSelect={onSelect} />
+        <ServiceEndpointsCard services={services} />
       </div>
     </div>
   )
@@ -801,7 +934,7 @@ export default function Dashboard() {
           acc={acc}
           network={agentConfig.network}
           webDid={webDid}
-          endpoints={endpoints}
+          services={doc.service ?? []}
           onSelect={setSelected}
         />
       ) : (
