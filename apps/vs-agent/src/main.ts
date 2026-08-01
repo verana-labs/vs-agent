@@ -46,6 +46,7 @@ import {
   SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
   SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
   SELF_ISSUED_VTC_SERVICE_TYPE,
+  UI_NETWORK_BADGE,
   UI_WELCOME_MESSAGE,
   AGENT_DIDCOMM_VERSIONS,
   AGENT_LOG_LEVEL,
@@ -136,6 +137,8 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
       const config = {
         label: AGENT_LABEL,
         welcomeMessage: UI_WELCOME_MESSAGE,
+        // Header network badge text (e.g. "Testnet"); no badge when unset.
+        networkBadge: UI_NETWORK_BADGE ?? null,
         // The declared Verana network. The public UI must use this network
         // exclusively (accreditations, deep links); it never derives a
         // network from presented credentials.
