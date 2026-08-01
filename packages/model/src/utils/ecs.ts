@@ -5,19 +5,25 @@ export enum ECS {
   USER_AGENT = 'ecs-user-agent',
 }
 
-const urlMap = new Map<string, string>([
-  ['vpr:verana:vna-mainnet-1', 'https://idx.testnet.verana.network/verana'],
-  ['vpr:verana:vna-testnet-1', 'https://idx.testnet.verana.network/verana'],
-  ['vpr:verana:vna-devnet-1', 'https://idx.devnet.verana.network/verana'],
+// v3 indexers serve the Cosmos REST namespace under /verana/*; v4 indexers
+// drop those paths and serve /v4/* routes on the same host.
+const networkMap = new Map<string, { base: string; api: 'v3' | 'v4' }>([
+  ['vpr:verana:vna-mainnet-1', { base: 'https://idx.testnet.verana.network', api: 'v3' }],
+  ['vpr:verana:vna-testnet-1', { base: 'https://idx.testnet.verana.network', api: 'v3' }],
+  ['vpr:verana:vna-devnet-1', { base: 'https://idx.devnet.verana.network', api: 'v4' }],
 ])
 
 export function mapToEcosystem(input: string): string {
   const canonical = input.match(/^(vpr:verana:[^:/]+):cs:(\d+)$/)
   if (canonical) input = `${canonical[1]}/cs/v1/js/${canonical[2]}`
-  for (const [key, value] of urlMap.entries()) {
-    if (input.includes(key)) {
-      input = input.replace(key, value)
+  for (const [key, network] of networkMap.entries()) {
+    if (!input.includes(key)) continue
+    if (network.api === 'v4') {
+      const js = input.match(/\/cs\/v1\/js\/(\d+)/)
+      if (js) return `${network.base}/v4/credential-schema/js/${js[1]}`
+      return input.replace(key, `${network.base}/v4`)
     }
+    return input.replace(key, `${network.base}/verana`)
   }
   return input
 }
