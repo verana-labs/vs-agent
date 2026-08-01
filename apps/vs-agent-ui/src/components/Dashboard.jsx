@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { resolveVTCType, resolveJSCType, mapToEcosystem } from '@verana-labs/vs-agent-model/ecs'
+import { resolveVTCType, resolveJSCType } from '@verana-labs/vs-agent-model/ecs'
 import { getAgentConfig, getDidDocument, qrUrl } from '../api'
 
 function JsonModal({ data, onClose }) {
@@ -184,9 +184,12 @@ function credentialDisplayName(vc, type) {
   return types[types.length - 1] ?? 'Credential'
 }
 
-/* ─── Accreditations (on-ledger entries of this DID, from the VPR index) ── */
-
-const SCHEMA_REF_RE = /^(vpr:[a-z0-9-]+:[^:/]+)(?::cs:(\d+)|\/cs\/v1\/js\/(\d+))$/
+/* ─── Accreditations (on-ledger entries of this DID, from the VPR index) ──
+   The page is bound to the network declared in the agent's env
+   (VERANA_CHAIN_ID + VERANA_INDEXER_BASE_URL, exposed via
+   window.__VS_AGENT__.network). Networks are never derived from the
+   presented credentials, so credentials anchored elsewhere cannot mix
+   another network into this page. */
 
 const PERM_TYPE_LABELS = {
   ECOSYSTEM: 'Ecosystem',
@@ -229,69 +232,55 @@ function entryStatus(entry) {
   return { state: 'ACTIVE', active: true }
 }
 
-/** Extracts the VPR network a credential schema is anchored in, or null. */
-async function credentialNetwork(vc) {
-  const schemaUrl = vc?.credentialSchema?.id
-  if (!schemaUrl) return null
-  const w3c = await fetchJson(schemaUrl)
-  const ref = w3c?.credentialSubject?.jsonSchema?.$ref
-  const match = typeof ref === 'string' ? ref.match(SCHEMA_REF_RE) : null
-  if (!match) return null
-  const prefix = match[1]
-  const base = mapToEcosystem(prefix)
-  if (base === prefix) return null
-  return { prefix, base, network: prefix.split(':').pop() }
-}
-
 /**
- * Lists the on-ledger accreditations of a DID: its permission entries
- * (VPR v3, /perm/v1) or participant entries (VPR v4, /pp/v1) for credential
- * schemas, with the schema title resolved for display.
+ * Lists the on-ledger accreditations of a DID from the declared network's
+ * indexer: its permission entries (VPR v3, /verana/perm/v1) or participant
+ * entries (VPR v4, /v4/participant) for credential schemas, with the schema
+ * title resolved for display.
  */
-async function resolveDidAccreditations(did, networks) {
+async function resolveDidAccreditations(did, network) {
+  const origin = network.indexerBaseUrl.replace(/\/+$/, '')
+  const v3Base = `${origin}/verana`
+  const v4Base = `${origin}/v4`
+  const q = `did=${encodeURIComponent(did)}&response_max_size=64`
+
+  let raw
+  const v3 = await fetchJson(`${v3Base}/perm/v1/list?${q}`)
+  if (v3?.permissions) {
+    raw = v3.permissions.map(entry => ({ entry, jsUrl: `${v3Base}/cs/v1/js/${entry.schema_id}` }))
+  } else {
+    const v4 = await fetchJson(`${v4Base}/participant/list?${q}`)
+    raw = (v4?.participants ?? []).map(entry => ({
+      entry,
+      jsUrl: `${v4Base}/credential-schema/js/${entry.schema_id}`,
+    }))
+  }
+
   const entries = []
-  for (const { base, network } of networks) {
-    const q = `did=${encodeURIComponent(did)}&response_max_size=64`
-    // v4 indexers serve /v4/* on the same host and drop the v3 paths.
-    const v4Base = `${new URL(base).origin}/v4`
-
-    let raw
-    const v3 = await fetchJson(`${base}/perm/v1/list?${q}`)
-    if (v3?.permissions) {
-      raw = v3.permissions.map(entry => ({ entry, jsUrl: `${base}/cs/v1/js/${entry.schema_id}` }))
-    } else {
-      const v4 = await fetchJson(`${v4Base}/participant/list?${q}`)
-      raw = (v4?.participants ?? []).map(entry => ({
-        entry,
-        jsUrl: `${v4Base}/credential-schema/js/${entry.schema_id}`,
-      }))
-    }
-
-    const schemaCache = new Map()
-    for (const { entry, jsUrl } of raw) {
-      const schemaId = entry.schema_id
-      let schemaTitle = null
-      if (schemaId != null) {
-        if (!schemaCache.has(schemaId)) {
-          const js = await fetchJson(jsUrl)
-          schemaCache.set(schemaId, typeof js?.title === 'string' ? js.title : null)
-        }
-        schemaTitle = schemaCache.get(schemaId)
+  const schemaCache = new Map()
+  const appUrl = APP_URLS[network.chainId]
+  for (const { entry, jsUrl } of raw) {
+    const schemaId = entry.schema_id
+    let schemaTitle = null
+    if (schemaId != null) {
+      if (!schemaCache.has(schemaId)) {
+        const js = await fetchJson(jsUrl)
+        schemaCache.set(schemaId, typeof js?.title === 'string' ? js.title : null)
       }
-      const appUrl = APP_URLS[network]
-      const { state, active } = entryStatus(entry)
-      entries.push({
-        type: entry.type ?? entry.role,
-        state,
-        active,
-        schemaId,
-        schemaTitle,
-        network,
-        schemaUrl: appUrl && schemaId != null ? `${appUrl}/tr/cs/${schemaId}` : null,
-        entryUrl: appUrl && schemaId != null ? `${appUrl}/participants/${schemaId}` : null,
-        raw: entry,
-      })
+      schemaTitle = schemaCache.get(schemaId)
     }
+    const { state, active } = entryStatus(entry)
+    entries.push({
+      type: entry.type ?? entry.role,
+      state,
+      active,
+      schemaId,
+      schemaTitle,
+      network: network.chainId,
+      schemaUrl: appUrl && schemaId != null ? `${appUrl}/tr/cs/${schemaId}` : null,
+      entryUrl: appUrl && schemaId != null ? `${appUrl}/participants/${schemaId}` : null,
+      raw: entry,
+    })
   }
   return entries
 }
@@ -530,7 +519,7 @@ function AccreditationRow({ entry, onSelect }) {
   )
 }
 
-function TrustCard({ webDid, cvpItems, jscItems, acc, onSelect }) {
+function TrustCard({ webDid, cvpItems, jscItems, acc, network, onSelect }) {
   const rows = cvpItems
     .flatMap(item => item.credentials.map(vc => ({ item, vc })))
     .sort((a, b) => potRowRank(a.item.type) - potRowRank(b.item.type))
@@ -543,6 +532,7 @@ function TrustCard({ webDid, cvpItems, jscItems, acc, onSelect }) {
           Proof of Trust
         </span>
         <span style={{ flex: 1 }} />
+        {network?.chainId && <span className="pot-pill pot-pill-net">{network.chainId}</span>}
         <span className="pot-pill pot-pill-neutral">Self-declared</span>
       </div>
       <div className="pot-section">
@@ -628,7 +618,7 @@ function ConnectCard({ webDid, endpoints }) {
   )
 }
 
-function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, webDid, endpoints, onSelect }) {
+function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, network, webDid, endpoints, onSelect }) {
   const subject = serviceItem.credentials[0]?.credentialSubject ?? {}
   const controllerItem =
     cvpItems.find(i => i.type === 'ecs-org' && i.credentials.length > 0) ??
@@ -644,7 +634,7 @@ function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, webDid, endpoint
       <div className="profile-grid">
         <div className="profile-main">
           <ControllerCard item={controllerItem} onSelect={() => onSelect(controllerItem?.vp)} />
-          <TrustCard webDid={webDid} cvpItems={cvpItems} jscItems={jscItems} acc={acc} onSelect={onSelect} />
+          <TrustCard webDid={webDid} cvpItems={cvpItems} jscItems={jscItems} acc={acc} network={network} onSelect={onSelect} />
         </div>
         <ConnectCard webDid={webDid} endpoints={endpoints} />
       </div>
@@ -770,20 +760,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (credsLoading || !doc) return
     const did = (doc.alsoKnownAs ?? []).find(d => d.startsWith('did:webvh:')) ?? doc.id
-    const ecsItems = cvpItems.filter(i => i.type !== 'other' && i.credentials.length > 0)
-    if (!did || ecsItems.length === 0) {
+    const network = agentConfig.network
+    const hasProfile = cvpItems.some(i => i.type === 'ecs-service' && i.credentials.length > 0)
+    if (!did || !network?.indexerBaseUrl || !hasProfile) {
       setAcc([])
       return
     }
     let alive = true
-    Promise.all(ecsItems.map(i => credentialNetwork(i.credentials[0])))
-      .then(nets => {
-        const byPrefix = new Map()
-        for (const net of nets) {
-          if (net && !byPrefix.has(net.prefix)) byPrefix.set(net.prefix, net)
-        }
-        return resolveDidAccreditations(did, [...byPrefix.values()])
-      })
+    resolveDidAccreditations(did, network)
       .then(entries => {
         if (alive) setAcc(entries)
       })
@@ -793,7 +777,7 @@ export default function Dashboard() {
     return () => {
       alive = false
     }
-  }, [credsLoading, cvpItems, doc])
+  }, [credsLoading, cvpItems, doc, agentConfig.network])
 
   if (error) return <p className="error-msg">{error}</p>
   if (!doc || credsLoading) return <p className="loading">Loading...</p>
@@ -815,6 +799,7 @@ export default function Dashboard() {
           cvpItems={cvpItems}
           jscItems={jscItems}
           acc={acc}
+          network={agentConfig.network}
           webDid={webDid}
           endpoints={endpoints}
           onSelect={setSelected}

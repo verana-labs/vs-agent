@@ -133,7 +133,17 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
     .getHttpAdapter()
     .getInstance()
     .get(['/', '/index.html'], (_req: express.Request, res: express.Response) => {
-      const config = { label: AGENT_LABEL, welcomeMessage: UI_WELCOME_MESSAGE }
+      const config = {
+        label: AGENT_LABEL,
+        welcomeMessage: UI_WELCOME_MESSAGE,
+        // The declared Verana network. The public UI must use this network
+        // exclusively (accreditations, deep links); it never derives a
+        // network from presented credentials.
+        network:
+          VERANA_CHAIN_ID && VERANA_INDEXER_BASE_URL
+            ? { chainId: VERANA_CHAIN_ID, indexerBaseUrl: VERANA_INDEXER_BASE_URL.replace(/\/+$/, '') }
+            : null,
+      }
       const script = `<script>window.__VS_AGENT__=${JSON.stringify(config)};</script>`
       const html = fs.readFileSync(indexPath, 'utf-8').replace('</head>', `${script}</head>`)
       res.type('html').send(html)

@@ -1000,6 +1000,13 @@ a.meta-chip:hover {
   color: var(--color-muted);
 }
 
+.pot-pill-net {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary-bright);
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
 .pot-section {
   padding: 14px 20px;
 }
