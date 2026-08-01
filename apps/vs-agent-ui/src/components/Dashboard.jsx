@@ -447,7 +447,6 @@ function ServiceHero({ subject }) {
         <div style={{ minWidth: 0 }}>
           <div className="svc-title-row">
             <h1 className="svc-name display">{subject.name ?? 'Unnamed service'}</h1>
-            {subject.type && <span className="chip">{subject.type}</span>}
           </div>
           {subject.description && <p className="svc-desc">{subject.description}</p>}
         </div>
@@ -762,6 +761,19 @@ function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, network, webDid,
   useEffect(() => {
     if (typeof subject.name === 'string' && subject.name) document.title = subject.name
   }, [subject.name])
+
+  // Use the service logo from the ECS-Service credential as the favicon.
+  useEffect(() => {
+    if (typeof subject.logoUri !== 'string' || !subject.logoUri) return
+    let link = document.querySelector('link[rel="icon"]')
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'icon'
+      document.head.appendChild(link)
+    }
+    link.removeAttribute('type')
+    link.href = subject.logoUri
+  }, [subject.logoUri])
 
   return (
     <div className="profile">

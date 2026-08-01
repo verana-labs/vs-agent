@@ -48,6 +48,8 @@ import {
   SELF_ISSUED_VTC_SERVICE_TYPE,
   UI_NETWORK_BADGE,
   UI_WELCOME_MESSAGE,
+  AGENT_VERSION,
+  VS_AGENT_BUILD,
   AGENT_DIDCOMM_VERSIONS,
   AGENT_LOG_LEVEL,
   AGENT_NAME,
@@ -137,6 +139,9 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
       const config = {
         label: AGENT_LABEL,
         welcomeMessage: UI_WELCOME_MESSAGE,
+        // Container build variant and release version, shown in the footer.
+        build: VS_AGENT_BUILD,
+        version: AGENT_VERSION,
         // Header network badge text (e.g. "Testnet"); no badge when unset.
         networkBadge: UI_NETWORK_BADGE ?? null,
         // The declared Verana network. The public UI must use this network

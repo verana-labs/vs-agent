@@ -8,6 +8,8 @@ import packageJson from '../../package.json'
 dotenv.config()
 
 export const AGENT_VERSION: string = packageJson.version
+// Container build variant (set by the Docker image stage, e.g. vs-agent-mrtd)
+export const VS_AGENT_BUILD = process.env.VS_AGENT_BUILD || 'vs-agent'
 
 // Basic parameters
 

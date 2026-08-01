@@ -1,5 +1,6 @@
 import Header from './components/Header'
 import Dashboard from './components/Dashboard'
+import Footer from './components/Footer'
 export default function App() {
   return (
     <div className="layout">
@@ -7,6 +8,7 @@ export default function App() {
       <div className="content">
         <Dashboard />
       </div>
+      <Footer />
     </div>
   )
 }
