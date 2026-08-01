@@ -26,7 +26,6 @@ const COLUMNS = [
       { label: 'verana.io', href: 'https://verana.io' },
       { label: 'Verana Foundation', href: 'https://veranafoundation.org' },
       { label: 'Verana Council', href: 'https://veranacouncil.org' },
-      { label: '2060', href: 'https://2060.io' },
     ],
   },
 ]
