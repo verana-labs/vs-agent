@@ -38,7 +38,10 @@ type VerifierApi = Pick<
   | 'getVerifiedAuthorizationResponse'
 >
 
-export type OpenId4VcVerifierAgent = Pick<BaseAgent, 'dids' | 'genericRecords' | 'kms' | 'x509'> & {
+export type OpenId4VcVerifierAgent = Pick<
+  BaseAgent,
+  'dids' | 'genericRecords' | 'kms' | 'x509' | 'dependencyManager'
+> & {
   did?: string
   modules: {
     openId4Vc?: {

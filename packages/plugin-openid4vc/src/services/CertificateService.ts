@@ -1,9 +1,10 @@
 import type { OpenId4VcSigningOptions } from '../types'
-import type { DidPurpose } from '@credo-ts/core'
+import type { BaseAgent, DidPurpose } from '@credo-ts/core'
 
 import {
-  type BaseAgent,
+  AgentContext,
   DidDocument,
+  DidRepository,
   Kms,
   tryParseDid,
   VerificationMethod,
@@ -58,6 +59,7 @@ export interface SigningCertificateHandle {
 type DevelopmentDidAgent = {
   did?: string
   dids: Pick<BaseAgent['dids'], 'resolve' | 'update'>
+  dependencyManager: BaseAgent['dependencyManager']
 }
 
 export async function loadSigningCertificate(
@@ -115,6 +117,7 @@ export async function publishDevelopmentSigningKey(
   const basePurpose: DidPurpose = role === 'issuer' ? 'assertionMethod' : 'authentication'
   const purposes = [...new Set<DidPurpose>([basePurpose, ...extraPurposes])]
   const publicJwk = canonicalP256PublicJwk(signingCertificate.certificate.publicJwk.toJson())
+  await ensureCreatedDidRecordKeyMapping(agent, did, methodId, signingCertificate.keyId)
   const existingMethod = resolution.didDocument.verificationMethod?.find(method => method.id === methodId)
   const published = (purpose: DidPurpose) =>
     (resolution.didDocument?.[purpose] ?? []).some(
@@ -157,6 +160,40 @@ export async function publishDevelopmentSigningKey(
   if (update.didState.did !== did || update.didState.didDocument.id !== did) {
     throw new Error('development signing key DID update returned a different DID')
   }
+}
+
+/**
+ * Credo signs "through the DID" by mapping the verification method to a KMS key via the created
+ * DidRecord's `keys` entries (`didDocumentRelativeKeyId` → `kmsKeyId`) — the `kid` published in the
+ * DID document is never consulted, and the fallback is a legacy base58 key id no Askar backend
+ * holds. Registrars do not maintain that mapping on `dids.update` (did:webvh drops `options.keys`
+ * entirely), so record it on the DidRecord directly — also when the method itself is already
+ * published, which repairs documents written by earlier builds.
+ */
+async function ensureCreatedDidRecordKeyMapping(
+  agent: DevelopmentDidAgent,
+  did: string,
+  methodId: string,
+  kmsKeyId: string,
+): Promise<void> {
+  const agentContext = agent.dependencyManager.resolve(AgentContext)
+  const didRepository = agent.dependencyManager.resolve(DidRepository)
+  const didRecord = await didRepository.findCreatedDid(agentContext, did)
+  if (!didRecord) throw new Error('development signing key DID record was not found')
+
+  const didDocumentRelativeKeyId = methodId.slice(did.length)
+  const keys = didRecord.keys ?? []
+  if (
+    keys.some(key => key.didDocumentRelativeKeyId === didDocumentRelativeKeyId && key.kmsKeyId === kmsKeyId)
+  ) {
+    return
+  }
+
+  didRecord.keys = [
+    ...keys.filter(key => key.didDocumentRelativeKeyId !== didDocumentRelativeKeyId),
+    { didDocumentRelativeKeyId, kmsKeyId },
+  ]
+  await didRepository.update(agentContext, didRecord)
 }
 
 async function loadConfiguredSigningCertificate(

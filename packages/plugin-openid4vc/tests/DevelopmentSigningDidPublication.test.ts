@@ -13,6 +13,9 @@ import {
   Agent,
   ConsoleLogger,
   DidDocument,
+  DidDocumentRole,
+  DidRecord,
+  DidRepository,
   DidsModule,
   JsonTransformer,
   LogLevel,
@@ -118,6 +121,9 @@ describe('development signing DID publication', () => {
     expect(verificationMethodIds(document)).toContain(methodId)
     expect(relationshipIds(document.assertionMethod)).toContain(methodId)
     expect(relationshipIds(document.authentication)).toEqual([`${DID_WEB}#${EXISTING_METHOD_SUFFIX}`])
+    expect(await createdDidRecordKeys(agent, DID_WEB)).toEqual([
+      { didDocumentRelativeKeyId: '#openid4vc-development-issuer', kmsKeyId: expect.any(String) },
+    ])
   })
 
   it('publishes the generated verifier key through the generic DID API for did:webvh', async () => {
@@ -130,6 +136,9 @@ describe('development signing DID publication', () => {
     expect(verificationMethodIds(document)).toContain(methodId)
     expect(relationshipIds(document.authentication)).toContain(methodId)
     expect(relationshipIds(document.assertionMethod)).toEqual([`${DID_WEBVH}#${EXISTING_METHOD_SUFFIX}`])
+    expect(await createdDidRecordKeys(agent, DID_WEBVH)).toEqual([
+      { didDocumentRelativeKeyId: '#openid4vc-development-verifier', kmsKeyId: expect.any(String) },
+    ])
   })
 
   it('preserves both role relationships when issuer and verifier share one DID', async () => {
@@ -141,6 +150,15 @@ describe('development signing DID publication', () => {
     expect(relationshipIds(document.assertionMethod)).toContain(`${DID_WEB}#openid4vc-development-issuer`)
     expect(relationshipIds(document.authentication)).toContain(`${DID_WEB}#openid4vc-development-verifier`)
     expect(registry.updateCount).toBe(2)
+    const keys = await createdDidRecordKeys(agent, DID_WEB)
+    expect(keys).toContainEqual({
+      didDocumentRelativeKeyId: '#openid4vc-development-issuer',
+      kmsKeyId: expect.any(String),
+    })
+    expect(keys).toContainEqual({
+      didDocumentRelativeKeyId: '#openid4vc-development-verifier',
+      kmsKeyId: expect.any(String),
+    })
   })
 
   it('reuses persisted development keys without updating an already-published DID', async () => {
@@ -220,6 +238,12 @@ async function createHarness(
   }) as TestAgent
   agent.did = did
   await agent.initialize()
+  await agent.dependencyManager
+    .resolve(DidRepository)
+    .save(
+      agent.context,
+      new DidRecord({ did, role: DidDocumentRole.Created, didDocument: initialDidDocument(did) }),
+    )
   agents.push(agent)
   return { agent, plugin, registry, options }
 }
@@ -279,6 +303,11 @@ function initialDidDocument(did: string): DidDocument {
     },
     DidDocument,
   )
+}
+
+async function createdDidRecordKeys(agent: TestAgent, did: string) {
+  const record = await agent.dependencyManager.resolve(DidRepository).findCreatedDid(agent.context, did)
+  return record?.keys
 }
 
 function cloneDidDocument(document: DidDocument): DidDocument {
