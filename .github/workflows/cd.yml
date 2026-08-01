@@ -79,6 +79,8 @@ jobs:
           fi
 
           if [ -z "$MANUAL_VERSION" ]; then
+            echo "::warning::No publish_version input received; nothing will be published. If you filled the field, note that switching the branch in the Run workflow form resets the inputs: select the branch first, then enter the version."
+            echo "Nothing published: the \`publish_version\` input was empty." >> "$GITHUB_STEP_SUMMARY"
             echo "publish=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
