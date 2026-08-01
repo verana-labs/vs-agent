@@ -1084,31 +1084,33 @@ a.meta-chip:hover {
 }
 
 /* Accreditations */
-.acc-group + .acc-group {
-  margin-top: 12px;
-  border-top: 1px solid var(--color-rule);
-  padding-top: 10px;
-}
-
-.acc-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.acc-schema {
+  flex: 1;
+  min-width: 0;
   font-size: var(--text-sm);
   font-weight: var(--fw-semibold);
-  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.acc-anchor {
-  flex: 1;
+.acc-anchor-inline {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: var(--fw-normal);
   color: var(--color-muted);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-left: 10px;
+}
+
+.acc-entry-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-muted);
+  flex-shrink: 0;
+}
+
+.acc-entry-link:hover {
+  color: var(--color-accent);
 }
 
 .acc-none {

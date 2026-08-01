@@ -184,7 +184,7 @@ function credentialDisplayName(vc, type) {
   return types[types.length - 1] ?? 'Credential'
 }
 
-/* ─── Accreditations (on-ledger permission chain, queried from the VPR index) ── */
+/* ─── Accreditations (on-ledger entries of this DID, from the VPR index) ── */
 
 const SCHEMA_REF_RE = /^(vpr:[a-z0-9-]+:[^:/]+)(?::cs:(\d+)|\/cs\/v1\/js\/(\d+))$/
 
@@ -192,6 +192,16 @@ const PERM_TYPE_LABELS = {
   ECOSYSTEM: 'Ecosystem',
   ISSUER_GRANTOR: 'Issuer grantor',
   ISSUER: 'Issuer',
+  VERIFIER_GRANTOR: 'Verifier grantor',
+  VERIFIER: 'Verifier',
+  HOLDER: 'Holder',
+}
+
+// Verana app base URL per VPR network, for schema / participant deep links.
+const APP_URLS = {
+  'vna-mainnet-1': 'https://app.verana.network',
+  'vna-testnet-1': 'https://app.testnet.verana.network',
+  'vna-devnet-1': 'https://app.devnet.verana.network',
 }
 
 async function fetchJson(url) {
@@ -203,53 +213,71 @@ async function fetchJson(url) {
   }
 }
 
-function permIsActive(perm) {
-  return (perm.perm_state ? perm.perm_state === 'ACTIVE' : true) && !perm.revoked && !perm.slashed
+function entryState(entry) {
+  return entry.perm_state ?? entry.pp_state ?? entry.state ?? 'ACTIVE'
 }
 
-/**
- * Resolves the on-ledger accreditation chain for a credential: the issuer
- * permission for the credential schema, its validator permissions up to the
- * ECOSYSTEM permission, and the trust registry anchoring the schema. Returns
- * null when the schema is not anchored in a known VPR network.
- */
-async function resolveAccreditation(vc) {
-  const schemaUrl = vc?.credentialSchema?.id
-  const issuer = credentialIssuer(vc)
-  if (!schemaUrl || !issuer) return null
+function entryIsActive(entry) {
+  return entryState(entry) === 'ACTIVE' && !entry.revoked && !entry.slashed
+}
 
+/** Extracts the VPR network a credential schema is anchored in, or null. */
+async function credentialNetwork(vc) {
+  const schemaUrl = vc?.credentialSchema?.id
+  if (!schemaUrl) return null
   const w3c = await fetchJson(schemaUrl)
   const ref = w3c?.credentialSubject?.jsonSchema?.$ref
   const match = typeof ref === 'string' ? ref.match(SCHEMA_REF_RE) : null
   if (!match) return null
   const prefix = match[1]
-  const schemaId = match[2] ?? match[3]
   const base = mapToEcosystem(prefix)
   if (base === prefix) return null
-  const network = prefix.split(':').pop()
+  return { prefix, base, network: prefix.split(':').pop() }
+}
 
-  const permList = await fetchJson(
-    `${base}/perm/v1/list?did=${encodeURIComponent(issuer)}&type=ISSUER&schema_id=${schemaId}&response_max_size=1`,
-  )
-  const issuerPerm = permList?.permissions?.[0]
-  if (!issuerPerm) return { network, schemaId, registry: null, chain: [] }
+/**
+ * Lists the on-ledger accreditations of a DID: its permission entries
+ * (VPR v3, /perm/v1) or participant entries (VPR v4, /pp/v1) for credential
+ * schemas, with the schema title resolved for display.
+ */
+async function resolveDidAccreditations(did, networks) {
+  const entries = []
+  for (const { base, network } of networks) {
+    const q = `did=${encodeURIComponent(did)}&response_max_size=64`
+    const v3 = await fetchJson(`${base}/perm/v1/list?${q}`)
+    const raw = v3?.permissions ?? (await fetchJson(`${base}/pp/v1/list?${q}`))?.participants ?? []
 
-  const chain = [issuerPerm]
-  let nextId = issuerPerm.validator_perm_id
-  for (let hops = 0; nextId && hops < 6; hops++) {
-    const perm = (await fetchJson(`${base}/perm/v1/get/${nextId}`))?.permission
-    if (!perm) break
-    chain.push(perm)
-    nextId = perm.validator_perm_id
+    const schemaCache = new Map()
+    for (const entry of raw) {
+      const schemaId = entry.schema_id
+      let schemaTitle = null
+      if (schemaId != null) {
+        if (!schemaCache.has(schemaId)) {
+          const cs = await fetchJson(`${base}/cs/v1/get/${schemaId}`)
+          try {
+            schemaTitle = JSON.parse((cs?.schema ?? cs)?.json_schema)?.title ?? null
+          } catch {
+            schemaTitle = null
+          }
+          schemaCache.set(schemaId, schemaTitle)
+        }
+        schemaTitle = schemaCache.get(schemaId)
+      }
+      const appUrl = APP_URLS[network]
+      entries.push({
+        type: entry.type ?? entry.role,
+        state: entryState(entry),
+        active: entryIsActive(entry),
+        schemaId,
+        schemaTitle,
+        network,
+        schemaUrl: appUrl && schemaId != null ? `${appUrl}/tr/cs/${schemaId}` : null,
+        entryUrl: appUrl && schemaId != null ? `${appUrl}/participants/${schemaId}` : null,
+        raw: entry,
+      })
+    }
   }
-  chain.reverse() // ecosystem first, issuer last
-
-  const cs = await fetchJson(`${base}/cs/v1/get/${schemaId}`)
-  const trId = cs?.schema?.tr_id ?? cs?.tr_id
-  const tr = trId ? await fetchJson(`${base}/tr/v1/get/${trId}`) : null
-  const registry = tr?.trust_registry ?? null
-
-  return { network, schemaId, registry, chain }
+  return entries
 }
 
 /** ISO 3166-1 alpha-2 country code as an emoji flag (e.g. "CH"). */
@@ -325,6 +353,16 @@ function BuildingIcon(props) {
       <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
       <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
       <path d="M10 6h4M10 10h4M10 14h4M10 18h4" />
+    </Icon>
+  )
+}
+
+function ExternalLinkIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M15 3h6v6" />
+      <path d="M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
     </Icon>
   )
 }
@@ -435,52 +473,50 @@ function ControllerCard({ item, onSelect }) {
   )
 }
 
-function AccreditationGroup({ label, acc, onSelect }) {
-  const anchor = [`cs/${acc.schemaId}`, acc.registry?.id != null ? `registry ${acc.registry.id}` : null, acc.network]
-    .filter(Boolean)
-    .join(' · ')
+function AccreditationRow({ entry, onSelect }) {
+  const anchor = [`cs/${entry.schemaId}`, entry.network].filter(Boolean).join(' · ')
+  const title = entry.schemaTitle ?? (entry.schemaId != null ? `Schema ${entry.schemaId}` : 'Unknown schema')
 
   return (
-    <div className="acc-group">
-      <div className="acc-title">
-        <span>{label}</span>
-        <span className="acc-anchor">{anchor}</span>
-        <button className="pot-row-btn" onClick={() => onSelect(acc)} title="View details">{'{ }'}</button>
-      </div>
-      {acc.chain.length === 0 ? (
-        <p className="acc-none">No active issuer permission found in the trust registry.</p>
+    <div className="pot-row">
+      <span className="acc-perm-type">{PERM_TYPE_LABELS[entry.type] ?? entry.type}</span>
+      <span className="acc-schema">
+        {entry.schemaUrl ? (
+          <a className="subtle-link" href={entry.schemaUrl} target="_blank" rel="noopener noreferrer" title="View credential schema in the Verana app">
+            {title}
+          </a>
+        ) : (
+          title
+        )}
+        <span className="acc-anchor-inline">{anchor}</span>
+      </span>
+      {entry.entryUrl && (
+        <a
+          className="acc-entry-link"
+          href={entry.entryUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="View participant entries in the Verana app"
+        >
+          <ExternalLinkIcon size={11} />
+        </a>
+      )}
+      <button className="pot-row-btn" onClick={() => onSelect(entry.raw)} title="View details">{'{ }'}</button>
+      {entry.active ? (
+        <span className="acc-state acc-state-ok" title="Entry active in the trust registry">
+          <CircleCheckIcon size={12} />
+          active
+        </span>
       ) : (
-        acc.chain.map(perm => (
-          <div className="pot-row" key={perm.id}>
-            <span className="acc-perm-type">{PERM_TYPE_LABELS[perm.type] ?? perm.type}</span>
-            <span className="pot-row-issuer">
-              {perm.type === 'ECOSYSTEM' && acc.registry?.aka
-                ? <><LinkOrText text={acc.registry.aka} />{' · '}<LinkOrText text={perm.did ?? ''} /></>
-                : <LinkOrText text={perm.did ?? ''} />}
-            </span>
-            {permIsActive(perm) ? (
-              <span className="acc-state acc-state-ok" title="Permission active in the trust registry">
-                <CircleCheckIcon size={12} />
-                active
-              </span>
-            ) : (
-              <span className="acc-state acc-state-warn">{String(perm.perm_state ?? 'inactive').toLowerCase()}</span>
-            )}
-          </div>
-        ))
+        <span className="acc-state acc-state-warn">{String(entry.state).toLowerCase()}</span>
       )}
     </div>
   )
 }
 
-function TrustCard({ webDid, cvpItems, jscItems, accMap, onSelect }) {
+function TrustCard({ webDid, cvpItems, jscItems, acc, onSelect }) {
   const rows = cvpItems
     .flatMap(item => item.credentials.map(vc => ({ item, vc })))
-    .sort((a, b) => potRowRank(a.item.type) - potRowRank(b.item.type))
-
-  const accEntries = cvpItems
-    .map((item, i) => ({ item, acc: accMap?.[i] }))
-    .filter(e => e.acc)
     .sort((a, b) => potRowRank(a.item.type) - potRowRank(b.item.type))
 
   return (
@@ -496,8 +532,8 @@ function TrustCard({ webDid, cvpItems, jscItems, accMap, onSelect }) {
       <div className="pot-section">
         {webDid && <div className="pot-did"><LinkOrText text={webDid} /></div>}
         <p className="pot-note">
-          {accEntries.length > 0
-            ? 'Credentials presented by this service. Issuer accreditations are read live from the trust registry; credential signatures are not verified from this page.'
+          {(acc?.length ?? 0) > 0
+            ? 'Credentials presented by this service. Accreditations are read live from the trust registry; credential signatures are not verified from this page.'
             : 'Credentials presented by this service. They have not been verified against a Verana resolver from this page.'}
         </p>
       </div>
@@ -518,7 +554,7 @@ function TrustCard({ webDid, cvpItems, jscItems, accMap, onSelect }) {
           ))}
         </div>
       )}
-      {accMap === null ? (
+      {acc === null ? (
         <div className="pot-section">
           <p className="pot-label">
             <ShieldIcon size={11} />
@@ -526,19 +562,14 @@ function TrustCard({ webDid, cvpItems, jscItems, accMap, onSelect }) {
           </p>
           <p className="acc-none">Resolving accreditations from the trust registry...</p>
         </div>
-      ) : accEntries.length > 0 ? (
+      ) : acc.length > 0 ? (
         <div className="pot-section">
           <p className="pot-label">
             <ShieldIcon size={11} />
             Accreditations
           </p>
-          {accEntries.map(({ item, acc }, i) => (
-            <AccreditationGroup
-              key={i}
-              label={ECS_LABELS[item.type] ?? credentialDisplayName(item.credentials[0], item.type)}
-              acc={acc}
-              onSelect={onSelect}
-            />
+          {acc.map((entry, i) => (
+            <AccreditationRow key={i} entry={entry} onSelect={onSelect} />
           ))}
         </div>
       ) : null}
@@ -581,7 +612,7 @@ function ConnectCard({ webDid, endpoints }) {
   )
 }
 
-function ServiceProfile({ serviceItem, cvpItems, jscItems, accMap, webDid, endpoints, onSelect }) {
+function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, webDid, endpoints, onSelect }) {
   const subject = serviceItem.credentials[0]?.credentialSubject ?? {}
   const controllerItem =
     cvpItems.find(i => i.type === 'ecs-org' && i.credentials.length > 0) ??
@@ -597,7 +628,7 @@ function ServiceProfile({ serviceItem, cvpItems, jscItems, accMap, webDid, endpo
       <div className="profile-grid">
         <div className="profile-main">
           <ControllerCard item={controllerItem} onSelect={() => onSelect(controllerItem?.vp)} />
-          <TrustCard webDid={webDid} cvpItems={cvpItems} jscItems={jscItems} accMap={accMap} onSelect={onSelect} />
+          <TrustCard webDid={webDid} cvpItems={cvpItems} jscItems={jscItems} acc={acc} onSelect={onSelect} />
         </div>
         <ConnectCard webDid={webDid} endpoints={endpoints} />
       </div>
@@ -701,8 +732,8 @@ export default function Dashboard() {
   const [credsLoading, setCredsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(null)
-  // null = still resolving, {} onward = resolved (possibly empty)
-  const [accMap, setAccMap] = useState(null)
+  // null = still resolving, array afterward (possibly empty)
+  const [acc, setAcc] = useState(null)
 
   useEffect(() => {
     getDidDocument()
@@ -721,25 +752,32 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    if (credsLoading) return
-    if (cvpItems.length === 0) {
-      setAccMap({})
+    if (credsLoading || !doc) return
+    const did = (doc.alsoKnownAs ?? []).find(d => d.startsWith('did:webvh:')) ?? doc.id
+    const ecsItems = cvpItems.filter(i => i.type !== 'other' && i.credentials.length > 0)
+    if (!did || ecsItems.length === 0) {
+      setAcc([])
       return
     }
     let alive = true
-    Promise.all(
-      cvpItems.map(async (item, i) => {
-        const vc = item.credentials[0]
-        if (!vc || item.type === 'other') return [i, null]
-        return [i, await resolveAccreditation(vc)]
-      }),
-    ).then(entries => {
-      if (alive) setAccMap(Object.fromEntries(entries.filter(([, acc]) => acc)))
-    })
+    Promise.all(ecsItems.map(i => credentialNetwork(i.credentials[0])))
+      .then(nets => {
+        const byPrefix = new Map()
+        for (const net of nets) {
+          if (net && !byPrefix.has(net.prefix)) byPrefix.set(net.prefix, net)
+        }
+        return resolveDidAccreditations(did, [...byPrefix.values()])
+      })
+      .then(entries => {
+        if (alive) setAcc(entries)
+      })
+      .catch(() => {
+        if (alive) setAcc([])
+      })
     return () => {
       alive = false
     }
-  }, [credsLoading, cvpItems])
+  }, [credsLoading, cvpItems, doc])
 
   if (error) return <p className="error-msg">{error}</p>
   if (!doc || credsLoading) return <p className="loading">Loading...</p>
@@ -760,7 +798,7 @@ export default function Dashboard() {
           serviceItem={serviceItem}
           cvpItems={cvpItems}
           jscItems={jscItems}
-          accMap={accMap}
+          acc={acc}
           webDid={webDid}
           endpoints={endpoints}
           onSelect={setSelected}
