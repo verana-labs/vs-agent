@@ -22,6 +22,8 @@ export const UI_WELCOME_MESSAGE = process.env.UI_WELCOME_MESSAGE || 'Welcome to 
 // Text of the network badge shown in the public UI header (e.g. "Testnet").
 // When unset, no badge is shown.
 export const UI_NETWORK_BADGE = process.env.UI_NETWORK_BADGE
+// Show the business wallet placeholder banner on the public UI (default true).
+export const UI_SHOW_PLACEHOLDER_MESSAGE = process.env.UI_SHOW_PLACEHOLDER_MESSAGE !== 'false'
 export const AGENT_INVITATION_IMAGE_URL = process.env.AGENT_INVITATION_IMAGE_URL
 export const AGENT_ENDPOINT = process.env.AGENT_ENDPOINT
 export const AGENT_ENDPOINTS = process.env.AGENT_ENDPOINT

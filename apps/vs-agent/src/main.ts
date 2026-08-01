@@ -46,6 +46,7 @@ import {
   SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
   SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
   SELF_ISSUED_VTC_SERVICE_TYPE,
+  UI_SHOW_PLACEHOLDER_MESSAGE,
   UI_NETWORK_BADGE,
   UI_WELCOME_MESSAGE,
   AGENT_VERSION,
@@ -144,6 +145,8 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
         version: AGENT_VERSION,
         // Header network badge text (e.g. "Testnet"); no badge when unset.
         networkBadge: UI_NETWORK_BADGE ?? null,
+        // Business wallet placeholder banner (UI_SHOW_PLACEHOLDER_MESSAGE env).
+        showPlaceholderMessage: UI_SHOW_PLACEHOLDER_MESSAGE,
         // The declared Verana network. The public UI must use this network
         // exclusively (accreditations, deep links); it never derives a
         // network from presented credentials.
