@@ -1,6 +1,6 @@
 import type { OpenId4VcSigningOptions } from '../src/types'
 
-import { Kms, X509Certificate } from '@credo-ts/core'
+import { AgentContext, DidDocument, DidRepository, Kms, X509Certificate } from '@credo-ts/core'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -168,6 +168,69 @@ describe('CertificateService', () => {
     expect(agent.dids.update).not.toHaveBeenCalled()
   })
 
+  it('records the KMS key id mapping on the created DID record when publishing', async () => {
+    const agent = createAgent({ developmentCertificate: fixtures.attacker })
+    agent.did = 'did:web:attacker.example'
+    agent.publicApiBaseUrl = 'https://attacker.example/agent'
+    const handle = await loadSigningCertificate(agent, {
+      development: { enabled: true, commonName: 'Development Agent' },
+    })
+    agent.dids.resolve.mockResolvedValue({
+      didDocument: DidDocument.fromJSON({ id: 'did:web:attacker.example' }),
+    })
+    agent.dids.update.mockImplementation(async ({ did, didDocument }) => ({
+      didState: { state: 'finished', did, didDocument },
+    }))
+
+    await publishDevelopmentSigningKey(agent, handle, 'issuer')
+
+    expect(agent.dids.update).toHaveBeenCalledTimes(1)
+    expect(agent.didRepository.update).toHaveBeenCalledTimes(1)
+    expect(agent.didRecord.keys).toEqual([
+      { didDocumentRelativeKeyId: '#openid4vc-development-issuer', kmsKeyId: handle.keyId },
+    ])
+  })
+
+  it('repairs a missing KMS key id mapping even when the method is already published', async () => {
+    const agent = createAgent({ developmentCertificate: fixtures.attacker })
+    agent.did = 'did:web:attacker.example'
+    agent.publicApiBaseUrl = 'https://attacker.example/agent'
+    const handle = await loadSigningCertificate(agent, {
+      development: { enabled: true, commonName: 'Development Agent' },
+    })
+    agent.dids.resolve.mockResolvedValue({
+      didDocument: publishedDidDocument('did:web:attacker.example', handle.keyId),
+    })
+
+    await publishDevelopmentSigningKey(agent, handle, 'issuer')
+
+    expect(agent.dids.update).not.toHaveBeenCalled()
+    expect(agent.didRepository.update).toHaveBeenCalledTimes(1)
+    expect(agent.didRecord.keys).toEqual([
+      { didDocumentRelativeKeyId: '#openid4vc-development-issuer', kmsKeyId: handle.keyId },
+    ])
+  })
+
+  it('leaves the DID record untouched when the mapping is already correct', async () => {
+    const agent = createAgent({ developmentCertificate: fixtures.attacker })
+    agent.did = 'did:web:attacker.example'
+    agent.publicApiBaseUrl = 'https://attacker.example/agent'
+    const handle = await loadSigningCertificate(agent, {
+      development: { enabled: true, commonName: 'Development Agent' },
+    })
+    agent.didRecord.keys = [
+      { didDocumentRelativeKeyId: '#openid4vc-development-issuer', kmsKeyId: handle.keyId },
+    ]
+    agent.dids.resolve.mockResolvedValue({
+      didDocument: publishedDidDocument('did:web:attacker.example', handle.keyId),
+    })
+
+    await publishDevelopmentSigningKey(agent, handle, 'issuer')
+
+    expect(agent.dids.update).not.toHaveBeenCalled()
+    expect(agent.didRepository.update).not.toHaveBeenCalled()
+  })
+
   it('extracts the DID URI SAN from a validated certificate', () => {
     expect(didFromValidatedCertificate(fixtures.leaf)).toBe('did:web:issuer.example')
   })
@@ -299,6 +362,21 @@ function configuredSigning(
   }
 }
 
+function publishedDidDocument(did: string, kmsKeyId: string): DidDocument {
+  return DidDocument.fromJSON({
+    id: did,
+    verificationMethod: [
+      {
+        id: `${did}#openid4vc-development-issuer`,
+        type: 'JsonWebKey2020',
+        controller: did,
+        publicKeyJwk: { ...publicJwk(OTHER_PRIVATE_JWK), kid: kmsKeyId },
+      },
+    ],
+    assertionMethod: [`${did}#openid4vc-development-issuer`],
+  })
+}
+
 function publicJwk(privateJwk: Kms.KmsJwkPrivateEc): Kms.KmsJwkPublicEc {
   return {
     kty: privateJwk.kty,
@@ -381,12 +459,31 @@ function createAgent({
     }),
   }
 
+  const didRecord = {
+    keys: undefined as { didDocumentRelativeKeyId: string; kmsKeyId: string }[] | undefined,
+  }
+  const didRepository = {
+    findCreatedDid: vi.fn(async () => didRecord),
+    update: vi.fn(async () => undefined),
+  }
+  const agentContext = {}
+  const dependencyManager = {
+    resolve: vi.fn((token: unknown) => {
+      if (token === DidRepository) return didRepository
+      if (token === AgentContext) return agentContext
+      throw new Error('unexpected dependency requested in test')
+    }),
+  }
+
   const agent = {
     keys,
     dids: { resolve: vi.fn(), update: vi.fn() },
     kms,
     genericRecords,
     x509,
+    dependencyManager,
+    didRepository,
+    didRecord,
     did: undefined as string | undefined,
     publicApiBaseUrl: undefined as string | undefined,
   }

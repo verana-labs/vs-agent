@@ -10,8 +10,11 @@ import type {
 import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 
 import { findCredentialConfiguration, parseOfferClaims } from '../config'
-import { StatusListService } from './StatusListService'
-import { findBoundVerificationMethodId, ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
+import {
+  findBoundVerificationMethodId,
+  ownDidResolutionPolicy,
+  verifyKeyBoundToDid,
+} from '../trust/keyBinding'
 
 import {
   didFromValidatedCertificate,
@@ -21,6 +24,7 @@ import {
   type SigningCertificateHandle,
   type SigningCertificateInfo,
 } from './CertificateService'
+import { StatusListService } from './StatusListService'
 
 type IssuerApi = Pick<
   OpenId4VcIssuerApi,
@@ -277,7 +281,7 @@ export class IssuerService {
       )
       if (!didUrl) {
         throw new Error(
-          'OpenID4VC issuer is configured to sign metadata with its DID, but the DID does not publish the signing key for assertionMethod',
+          'OpenID4VC issuer is configured to sign metadata with its DID, but the DID does not publish the signing key for authentication',
         )
       }
       return { method: 'did' as const, didUrl }
