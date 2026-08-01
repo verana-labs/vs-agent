@@ -116,7 +116,9 @@ jobs:
 
   docker:
     needs: version
-    if: needs.version.outputs.publish == 'true'
+    # !cancelled() keeps the skipped resolve-version (dispatch runs) from propagating a skip
+    # through the version job down to here.
+    if: ${{ !cancelled() && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -200,7 +202,9 @@ jobs:
 
   helm:
     needs: [version, docker]
-    if: needs.version.outputs.publish == 'true'
+    # The explicit docker result check is what a bare !cancelled() would throw away: without it
+    # this would publish charts pointing at images that were never built.
+    if: ${{ !cancelled() && needs.docker.result == 'success' && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     env:
       RELEASE_TYPE: ${{ needs.version.outputs.release-type }}
@@ -256,7 +260,7 @@ jobs:
 
   npm-publish:
     needs: [version]
-    if: needs.version.outputs.publish == 'true'
+    if: ${{ !cancelled() && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     env:
       RELEASE_TYPE: ${{ needs.version.outputs.release-type }}
@@ -311,7 +315,7 @@ jobs:
 
   discord-notify:
     needs: [version, docker, helm]
-    if: needs.version.outputs.publish == 'true' && needs.version.outputs.release-type == 'stable'
+    if: ${{ !cancelled() && needs.docker.result == 'success' && needs.helm.result == 'success' && needs.version.outputs.publish == 'true' && needs.version.outputs.release-type == 'stable' }}
     permissions:
       contents: read
     uses: 2060-io/organization/.github/workflows/discord-release-notify-call.yml@251db2251120e805474da6528dfafd9693379b6e # main
