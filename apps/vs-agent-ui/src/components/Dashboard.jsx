@@ -213,12 +213,20 @@ async function fetchJson(url) {
   }
 }
 
-function entryState(entry) {
-  return entry.perm_state ?? entry.pp_state ?? entry.state ?? 'ACTIVE'
-}
-
-function entryIsActive(entry) {
-  return entryState(entry) === 'ACTIVE' && !entry.revoked && !entry.slashed
+function entryStatus(entry) {
+  // v3 permission entries carry perm_state; v4 participant entries derive
+  // their state from revocation/slashing and the effective date range.
+  if (entry.perm_state) {
+    return { state: entry.perm_state, active: entry.perm_state === 'ACTIVE' && !entry.revoked && !entry.slashed }
+  }
+  if (entry.revoked) return { state: 'REVOKED', active: false }
+  if (entry.slashed && !entry.repaid) return { state: 'SLASHED', active: false }
+  const now = Date.now()
+  const from = entry.effective_from ? Date.parse(entry.effective_from) : NaN
+  const until = entry.effective_until ? Date.parse(entry.effective_until) : null
+  if (Number.isNaN(from) || from > now) return { state: 'PENDING', active: false }
+  if (until !== null && until <= now) return { state: 'EXPIRED', active: false }
+  return { state: 'ACTIVE', active: true }
 }
 
 /** Extracts the VPR network a credential schema is anchored in, or null. */
@@ -244,30 +252,38 @@ async function resolveDidAccreditations(did, networks) {
   const entries = []
   for (const { base, network } of networks) {
     const q = `did=${encodeURIComponent(did)}&response_max_size=64`
+    // v4 indexers serve /v4/* on the same host and drop the v3 paths.
+    const v4Base = `${new URL(base).origin}/v4`
+
+    let raw
     const v3 = await fetchJson(`${base}/perm/v1/list?${q}`)
-    const raw = v3?.permissions ?? (await fetchJson(`${base}/pp/v1/list?${q}`))?.participants ?? []
+    if (v3?.permissions) {
+      raw = v3.permissions.map(entry => ({ entry, jsUrl: `${base}/cs/v1/js/${entry.schema_id}` }))
+    } else {
+      const v4 = await fetchJson(`${v4Base}/participant/list?${q}`)
+      raw = (v4?.participants ?? []).map(entry => ({
+        entry,
+        jsUrl: `${v4Base}/credential-schema/js/${entry.schema_id}`,
+      }))
+    }
 
     const schemaCache = new Map()
-    for (const entry of raw) {
+    for (const { entry, jsUrl } of raw) {
       const schemaId = entry.schema_id
       let schemaTitle = null
       if (schemaId != null) {
         if (!schemaCache.has(schemaId)) {
-          const cs = await fetchJson(`${base}/cs/v1/get/${schemaId}`)
-          try {
-            schemaTitle = JSON.parse((cs?.schema ?? cs)?.json_schema)?.title ?? null
-          } catch {
-            schemaTitle = null
-          }
-          schemaCache.set(schemaId, schemaTitle)
+          const js = await fetchJson(jsUrl)
+          schemaCache.set(schemaId, typeof js?.title === 'string' ? js.title : null)
         }
         schemaTitle = schemaCache.get(schemaId)
       }
       const appUrl = APP_URLS[network]
+      const { state, active } = entryStatus(entry)
       entries.push({
         type: entry.type ?? entry.role,
-        state: entryState(entry),
-        active: entryIsActive(entry),
+        state,
+        active,
         schemaId,
         schemaTitle,
         network,
