@@ -48,6 +48,8 @@ import {
   SELF_ISSUED_VTC_SERVICE_TYPE,
   UI_WELCOME_MESSAGE,
   UI_NETWORK_BADGE,
+  UI_VERANA_CHAIN_ID,
+  UI_VERANA_INDEXER_BASE_URL,
   UI_SHOW_PLACEHOLDER_MESSAGE,
   AGENT_VERSION,
   VS_AGENT_BUILD,
@@ -149,11 +151,16 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
         showPlaceholderMessage: UI_SHOW_PLACEHOLDER_MESSAGE,
         // The declared Verana network. The public UI must use this network
         // exclusively (accreditations, deep links); it never derives a
-        // network from presented credentials.
-        network:
-          VERANA_CHAIN_ID && VERANA_INDEXER_BASE_URL
-            ? { chainId: VERANA_CHAIN_ID, indexerBaseUrl: VERANA_INDEXER_BASE_URL.replace(/\/+$/, '') }
-            : null,
+        // network from presented credentials. UI_VERANA_* binds the page to a
+        // network without configuring the backend indexer integration (which
+        // would hand the linked-credential lifecycle to VPR events).
+        network: (() => {
+          const chainId = UI_VERANA_CHAIN_ID ?? VERANA_CHAIN_ID
+          const indexerBaseUrl = UI_VERANA_INDEXER_BASE_URL ?? VERANA_INDEXER_BASE_URL
+          return chainId && indexerBaseUrl
+            ? { chainId, indexerBaseUrl: indexerBaseUrl.replace(/\/+$/, '') }
+            : null
+        })(),
       }
       const script = `<script>window.__VS_AGENT__=${JSON.stringify(config)};</script>`
       const html = fs.readFileSync(indexPath, 'utf-8').replace('</head>', `${script}</head>`)
