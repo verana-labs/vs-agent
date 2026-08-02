@@ -176,6 +176,25 @@ function credentialIssuer(vc) {
   return typeof vc?.issuer === 'string' ? vc.issuer : (vc?.issuer?.id ?? '')
 }
 
+// The v3 ECS schemas (testnet) name these attributes logo, avatar,
+// termsAndConditions and privacyPolicy; v4 renames them to the *Uri forms.
+// Accept both so the page renders against either schema generation.
+function subjectLogo(subject) {
+  return subject?.logoUri ?? subject?.logo
+}
+
+function subjectAvatar(subject) {
+  return subject?.avatarUri ?? subject?.avatar
+}
+
+function subjectTerms(subject) {
+  return subject?.termsAndConditionsUri ?? subject?.termsAndConditions
+}
+
+function subjectPrivacy(subject) {
+  return subject?.privacyPolicyUri ?? subject?.privacyPolicy
+}
+
 function credentialDisplayName(vc, type) {
   if (ECS_LABELS[type]) return ECS_LABELS[type]
   const subjectName = vc?.credentialSubject?.name
@@ -419,7 +438,7 @@ function ServiceHero({ subject }) {
   return (
     <>
       <div className="svc-hero">
-        <ServiceLogo uri={subject.logoUri} name={subject.name} />
+        <ServiceLogo uri={subjectLogo(subject)} name={subject.name} />
         <div style={{ minWidth: 0 }}>
           <div className="svc-title-row">
             <h1 className="svc-name display">{subject.name ?? 'Unnamed service'}</h1>
@@ -433,14 +452,14 @@ function ServiceHero({ subject }) {
             <b>{age}+</b> minimum age to connect
           </span>
         )}
-        {subject.termsAndConditionsUri && (
-          <a className="meta-chip" href={subject.termsAndConditionsUri} target="_blank" rel="noopener noreferrer">
+        {subjectTerms(subject) && (
+          <a className="meta-chip" href={subjectTerms(subject)} target="_blank" rel="noopener noreferrer">
             <FileTextIcon size={12} />
             Terms and conditions
           </a>
         )}
-        {subject.privacyPolicyUri && (
-          <a className="meta-chip" href={subject.privacyPolicyUri} target="_blank" rel="noopener noreferrer">
+        {subjectPrivacy(subject) && (
+          <a className="meta-chip" href={subjectPrivacy(subject)} target="_blank" rel="noopener noreferrer">
             <LockIcon size={12} />
             Privacy policy
           </a>
@@ -477,7 +496,7 @@ function ControllerCard({ item, onSelect }) {
         Operated by
       </p>
       <div className="op-head">
-        <ControllerLogo uri={isOrg ? subject.logoUri : subject.avatarUri} name={subject.name} />
+        <ControllerLogo uri={isOrg ? subjectLogo(subject) : subjectAvatar(subject)} name={subject.name} />
         <div style={{ minWidth: 0 }}>
           <div className="op-name">
             {flag && <span role="img" aria-label="Country flag" style={{ marginRight: 6 }}>{flag}</span>}
@@ -739,8 +758,9 @@ function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, network, webDid,
   }, [subject.name])
 
   // Use the service logo from the ECS-Service credential as the favicon.
+  const logo = subjectLogo(subject)
   useEffect(() => {
-    if (typeof subject.logoUri !== 'string' || !subject.logoUri) return
+    if (typeof logo !== 'string' || !logo) return
     let link = document.querySelector('link[rel="icon"]')
     if (!link) {
       link = document.createElement('link')
@@ -748,8 +768,8 @@ function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, network, webDid,
       document.head.appendChild(link)
     }
     link.removeAttribute('type')
-    link.href = subject.logoUri
-  }, [subject.logoUri])
+    link.href = logo
+  }, [logo])
 
   return (
     <div className="profile">
