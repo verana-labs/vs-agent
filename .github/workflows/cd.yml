@@ -5,9 +5,13 @@ on:
     branches: [main, 'release/**', 'v[0-9]*']
   workflow_dispatch:
     inputs:
+      publish_version:
+        description: "Build & publish Docker images, Helm charts and npm packages from the selected branch under this version. Must be SemVer with a prerelease identifier, e.g. v1.12.0-oidc4vc.1. Leave empty to skip."
+        required: false
+        type: string
       notify_tag:
-        description: "Release tag to (re)announce on Discord, e.g. v1.2.0"
-        required: true
+        description: "Release tag to (re)announce on Discord, e.g. v1.2.0. Leave empty to skip."
+        required: false
         type: string
 
 permissions:
@@ -25,9 +29,96 @@ jobs:
       # on main this resolves to 'main', matching the reusable workflow's default.
       prerelease-branch: ${{ github.ref_name }}
 
+  # Single source of truth for what gets published. Both the push path (semantic-release, via
+  # resolve-version) and the manual path (workflow_dispatch on any branch) funnel through here,
+  # so the docker / helm / npm-publish jobs below stay identical for both.
+  version:
+    needs: [resolve-version]
+    # resolve-version is skipped on workflow_dispatch; this still needs to run.
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.resolve.outputs.publish }}
+      release-type: ${{ steps.resolve.outputs.release-type }}
+      release-version: ${{ steps.resolve.outputs.release-version }}
+      release-major: ${{ steps.resolve.outputs.release-major }}
+      release-minor: ${{ steps.resolve.outputs.release-minor }}
+      release-patch: ${{ steps.resolve.outputs.release-patch }}
+      is-main: ${{ steps.resolve.outputs.is-main }}
+      npm-dist-tag: ${{ steps.resolve.outputs.npm-dist-tag }}
+    steps:
+      - name: Resolve version
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          NEW_RELEASE_PUBLISHED: ${{ needs.resolve-version.outputs.new-release-published }}
+          RELEASE_TYPE: ${{ needs.resolve-version.outputs.release-type }}
+          RELEASE_VERSION: ${{ needs.resolve-version.outputs.release-version }}
+          RELEASE_MAJOR: ${{ needs.resolve-version.outputs.release-major }}
+          RELEASE_MINOR: ${{ needs.resolve-version.outputs.release-minor }}
+          RELEASE_PATCH: ${{ needs.resolve-version.outputs.release-patch }}
+          MANUAL_VERSION: ${{ inputs.publish_version }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            IS_MAIN=false
+            [ "$REF_NAME" = "main" ] && IS_MAIN=true
+            {
+              echo "publish=${NEW_RELEASE_PUBLISHED}"
+              echo "release-type=${RELEASE_TYPE}"
+              echo "release-version=${RELEASE_VERSION}"
+              echo "release-major=${RELEASE_MAJOR}"
+              echo "release-minor=${RELEASE_MINOR}"
+              echo "release-patch=${RELEASE_PATCH}"
+              echo "is-main=${IS_MAIN}"
+              echo "npm-dist-tag="
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$MANUAL_VERSION" ]; then
+            echo "::warning::No publish_version input received; nothing will be published. If you filled the field, note that switching the branch in the Run workflow form resets the inputs: select the branch first, then enter the version."
+            echo "Nothing published: the \`publish_version\` input was empty." >> "$GITHUB_STEP_SUMMARY"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 'helm package --version' and 'pnpm version' both reject non-SemVer, and Docker tags
+          # reject '+', so build metadata is not supported. The prerelease part is mandatory and
+          # must start with a letter: it keeps a manual build from squatting a release tag
+          # (v1.12.0) that the push path will later want, and it yields a usable npm dist-tag.
+          if ! printf '%s' "$MANUAL_VERSION" | grep -Eq '^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[A-Za-z][0-9A-Za-z.-]*$'; then
+            echo "::error::'${MANUAL_VERSION}' is not accepted. Expected SemVer with a prerelease identifier starting with a letter, e.g. v1.12.0-oidc4vc.1"
+            exit 1
+          fi
+
+          BASE="${MANUAL_VERSION#v}"
+          PRERELEASE="${BASE#*-}"
+          BASE="${BASE%%-*}"
+          # First prerelease identifier only, so successive builds (…-oidc4vc.1, …-oidc4vc.2)
+          # all move the same npm dist-tag rather than leaving one tag per build behind.
+          DIST_TAG=$(printf '%s' "${PRERELEASE%%.*}" | tr '[:upper:]' '[:lower:]')
+
+          {
+            echo "publish=true"
+            echo "release-type=manual"
+            echo "release-version=${MANUAL_VERSION}"
+            echo "release-major=${BASE%%.*}"
+            echo "release-minor=$(printf '%s' "$BASE" | cut -d. -f2)"
+            echo "release-patch=$(printf '%s' "$BASE" | cut -d. -f3)"
+            echo "is-main=false"
+            echo "npm-dist-tag=${DIST_TAG}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Manual publish of \`${MANUAL_VERSION}\` from \`${REF_NAME}\` (npm dist-tag \`${DIST_TAG}\`)." >> "$GITHUB_STEP_SUMMARY"
+
   docker:
-    needs: resolve-version
-    if: needs.resolve-version.outputs.new-release-published == 'true'
+    needs: version
+    # !cancelled() keeps the skipped resolve-version (dispatch runs) from propagating a skip
+    # through the version job down to here.
+    if: ${{ !cancelled() && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -42,11 +133,11 @@ jobs:
             dockerfile: ./examples/chatbot/Dockerfile
 
     env:
-      RELEASE_TYPE: ${{ needs.resolve-version.outputs.release-type }}
-      RELEASE_VERSION: ${{ needs.resolve-version.outputs.release-version }}
-      RELEASE_MAJOR: ${{ needs.resolve-version.outputs.release-major }}
-      RELEASE_MINOR: ${{ needs.resolve-version.outputs.release-minor }}
-      RELEASE_PATCH: ${{ needs.resolve-version.outputs.release-patch }}
+      RELEASE_TYPE: ${{ needs.version.outputs.release-type }}
+      RELEASE_VERSION: ${{ needs.version.outputs.release-version }}
+      RELEASE_MAJOR: ${{ needs.version.outputs.release-major }}
+      RELEASE_MINOR: ${{ needs.version.outputs.release-minor }}
+      RELEASE_PATCH: ${{ needs.version.outputs.release-patch }}
 
     steps:
       - name: Checkout
@@ -55,12 +146,16 @@ jobs:
       - name: Compute tags
         id: tags
         env:
-          IS_MAIN: ${{ github.ref_name == 'main' }}
+          IS_MAIN: ${{ needs.version.outputs.is-main }}
         run: |
           HUB="${{ secrets.DOCKER_HUB_LOGIN }}/${{ matrix.image }}"
           # The fully-qualified, immutable version tag is always published.
           TAGS="${HUB}:${RELEASE_VERSION}"
-          if [ "$RELEASE_TYPE" = "stable" ]; then
+          if [ "$RELEASE_TYPE" = "manual" ]; then
+            # Off-release build from an arbitrary branch: the explicit tag and nothing else, so
+            # no floating pointer ever points at unreleased code.
+            :
+          elif [ "$RELEASE_TYPE" = "stable" ]; then
             # Minor-line pointer (e.g. v1.11): owned by whichever branch maintains that line.
             TAGS="${TAGS}
           ${HUB}:v${RELEASE_MAJOR}.${RELEASE_MINOR}"
@@ -106,15 +201,17 @@ jobs:
           tags: ${{ steps.tags.outputs.list }}
 
   helm:
-    needs: [resolve-version, docker]
-    if: needs.resolve-version.outputs.new-release-published == 'true'
+    needs: [version, docker]
+    # The explicit docker result check is what a bare !cancelled() would throw away: without it
+    # this would publish charts pointing at images that were never built.
+    if: ${{ !cancelled() && needs.docker.result == 'success' && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     env:
-      RELEASE_TYPE: ${{ needs.resolve-version.outputs.release-type }}
-      RELEASE_VERSION: ${{ needs.resolve-version.outputs.release-version }}
-      RELEASE_MAJOR: ${{ needs.resolve-version.outputs.release-major }}
-      RELEASE_MINOR: ${{ needs.resolve-version.outputs.release-minor }}
-      RELEASE_PATCH: ${{ needs.resolve-version.outputs.release-patch }}
+      RELEASE_TYPE: ${{ needs.version.outputs.release-type }}
+      RELEASE_VERSION: ${{ needs.version.outputs.release-version }}
+      RELEASE_MAJOR: ${{ needs.version.outputs.release-major }}
+      RELEASE_MINOR: ${{ needs.version.outputs.release-minor }}
+      RELEASE_PATCH: ${{ needs.version.outputs.release-patch }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -127,7 +224,7 @@ jobs:
 
       - name: Push Helm chart to Docker Hub OCI repo
         run: |
-          if [ "$RELEASE_TYPE" = "stable" ]; then
+          if [ "$RELEASE_TYPE" = "stable" ] || [ "$RELEASE_TYPE" = "manual" ]; then
             TAGS=("${RELEASE_VERSION}")
           else
             TAGS=(
@@ -144,7 +241,7 @@ jobs:
 
       - name: Push Helm chart Chatbot Demo to Docker Hub OCI repo
         run: |
-          if [ "$RELEASE_TYPE" = "stable" ]; then
+          if [ "$RELEASE_TYPE" = "stable" ] || [ "$RELEASE_TYPE" = "manual" ]; then
             TAGS=("${RELEASE_VERSION}")
           else
             TAGS=(
@@ -162,14 +259,15 @@ jobs:
           done
 
   npm-publish:
-    needs: [resolve-version]
-    if: needs.resolve-version.outputs.new-release-published == 'true'
+    needs: [version]
+    if: ${{ !cancelled() && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     env:
-      RELEASE_TYPE: ${{ needs.resolve-version.outputs.release-type }}
-      RELEASE_VERSION: ${{ needs.resolve-version.outputs.release-version }}
-      RELEASE_MAJOR: ${{ needs.resolve-version.outputs.release-major }}
-      RELEASE_MINOR: ${{ needs.resolve-version.outputs.release-minor }}
+      RELEASE_TYPE: ${{ needs.version.outputs.release-type }}
+      RELEASE_VERSION: ${{ needs.version.outputs.release-version }}
+      RELEASE_MAJOR: ${{ needs.version.outputs.release-major }}
+      RELEASE_MINOR: ${{ needs.version.outputs.release-minor }}
+      NPM_DIST_TAG: ${{ needs.version.outputs.npm-dist-tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -185,7 +283,7 @@ jobs:
         run: |
           npm install -g npm@11.11.0
           corepack enable
-          
+
       - name: Install dependencies
         run: |
           pnpm install
@@ -198,7 +296,11 @@ jobs:
       # --no-git-checks is used due to topological version updating.
       - name: Publish NPM packages
         run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
+          if [ "$RELEASE_TYPE" = "manual" ]; then
+            # Off-release build from an arbitrary branch: park it on its own dist-tag so it is
+            # installable by name but never resolves for anyone doing a plain install.
+            pnpm -r publish --no-git-checks --access public --tag "$NPM_DIST_TAG"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
             # Default branch: unchanged behaviour (stable -> 'latest', dev -> 'latest').
             pnpm -r publish --no-git-checks --access public
           elif [ "$RELEASE_TYPE" = "stable" ]; then
@@ -212,18 +314,18 @@ jobs:
 
 
   discord-notify:
-    needs: [resolve-version, docker, helm]
-    if: needs.resolve-version.outputs.new-release-published == 'true' && needs.resolve-version.outputs.release-type == 'stable'
+    needs: [version, docker, helm]
+    if: ${{ !cancelled() && needs.docker.result == 'success' && needs.helm.result == 'success' && needs.version.outputs.publish == 'true' && needs.version.outputs.release-type == 'stable' }}
     permissions:
       contents: read
     uses: 2060-io/organization/.github/workflows/discord-release-notify-call.yml@251db2251120e805474da6528dfafd9693379b6e # main
     with:
-      tag_name: ${{ needs.resolve-version.outputs.release-version }}
+      tag_name: ${{ needs.version.outputs.release-version }}
     secrets:
       DISCORD_UPDATES_WEBHOOK_URL: ${{ secrets.DISCORD_UPDATES_WEBHOOK_URL }}
 
   discord-notify-manual:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.notify_tag != ''
     permissions:
       contents: read
     uses: 2060-io/organization/.github/workflows/discord-release-notify-call.yml@251db2251120e805474da6528dfafd9693379b6e # main
