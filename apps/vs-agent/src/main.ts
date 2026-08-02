@@ -47,6 +47,10 @@ import {
   SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
   SELF_ISSUED_VTC_SERVICE_TYPE,
   UI_WELCOME_MESSAGE,
+  UI_NETWORK_BADGE,
+  UI_SHOW_PLACEHOLDER_MESSAGE,
+  AGENT_VERSION,
+  VS_AGENT_BUILD,
   AGENT_DIDCOMM_VERSIONS,
   AGENT_LOG_LEVEL,
   AGENT_NAME,
@@ -133,7 +137,24 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
     .getHttpAdapter()
     .getInstance()
     .get(['/', '/index.html'], (_req: express.Request, res: express.Response) => {
-      const config = { label: AGENT_LABEL, welcomeMessage: UI_WELCOME_MESSAGE }
+      const config = {
+        label: AGENT_LABEL,
+        welcomeMessage: UI_WELCOME_MESSAGE,
+        // Container build variant and release version, shown in the footer.
+        build: VS_AGENT_BUILD,
+        version: AGENT_VERSION,
+        // Header network badge text (e.g. "Testnet"); no badge when unset.
+        networkBadge: UI_NETWORK_BADGE ?? null,
+        // Business wallet placeholder banner (UI_SHOW_PLACEHOLDER_MESSAGE env).
+        showPlaceholderMessage: UI_SHOW_PLACEHOLDER_MESSAGE,
+        // The declared Verana network. The public UI must use this network
+        // exclusively (accreditations, deep links); it never derives a
+        // network from presented credentials.
+        network:
+          VERANA_CHAIN_ID && VERANA_INDEXER_BASE_URL
+            ? { chainId: VERANA_CHAIN_ID, indexerBaseUrl: VERANA_INDEXER_BASE_URL.replace(/\/+$/, '') }
+            : null,
+      }
       const script = `<script>window.__VS_AGENT__=${JSON.stringify(config)};</script>`
       const html = fs.readFileSync(indexPath, 'utf-8').replace('</head>', `${script}</head>`)
       res.type('html').send(html)
