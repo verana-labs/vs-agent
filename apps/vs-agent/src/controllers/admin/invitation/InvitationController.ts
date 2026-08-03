@@ -192,6 +192,19 @@ export class InvitationController {
           ],
         },
       },
+      schemaName: {
+        summary: 'Using schemaName (any issuer of this schema)',
+        value: {
+          didCommVersion: 'v1',
+          requestedCredentials: [
+            {
+              schemaName: 'ECS-Badge',
+              schemaVersion: '1.0',
+              attributes: ['badgeNumber', 'name', 'title', 'department'],
+            },
+          ],
+        },
+      },
     },
   })
   @ApiOkResponse({
@@ -222,26 +235,43 @@ export class InvitationController {
       throw Error('You must specify a least a requested credential')
     }
 
-    const { credentialDefinitionId, jsonSchemaCredentialId: relatedJsonSchemaCredentialId } =
-      requestedCredentials[0]
+    const {
+      credentialDefinitionId,
+      jsonSchemaCredentialId: relatedJsonSchemaCredentialId,
+      schemaName,
+      schemaVersion,
+    } = requestedCredentials[0]
     let attributes = requestedCredentials[0].attributes
 
-    if (credentialDefinitionId && relatedJsonSchemaCredentialId) {
-      throw new Error('Specify either credentialDefinitionId or jsonSchemaCredentialId, not both')
+    const selectors = [credentialDefinitionId, relatedJsonSchemaCredentialId, schemaName].filter(
+      value => value !== undefined && value !== null && value !== '',
+    )
+    if (selectors.length > 1) {
+      throw new Error('Specify only one of credentialDefinitionId, jsonSchemaCredentialId or schemaName')
     }
 
-    if (!credentialDefinitionId && !relatedJsonSchemaCredentialId) {
-      throw new Error('Either credentialDefinitionId or jsonSchemaCredentialId must be provided')
+    if (selectors.length === 0) {
+      throw new Error('One of credentialDefinitionId, jsonSchemaCredentialId or schemaName must be provided')
     }
 
     if (attributes && !Array.isArray(attributes)) {
       throw new Error('Received attributes is not an array')
     }
 
-    let schema: AnonCredsSchema
+    let schema: AnonCredsSchema | undefined
     let restrictions: AnonCredsProofRequestRestriction[]
 
-    if (relatedJsonSchemaCredentialId) {
+    if (schemaName) {
+      // Schema-name restriction: matches the schema regardless of which
+      // issuer registered it - the natural request when several ecosystem
+      // issuers issue the same credential type on their own registries.
+      // There is no single schema to derive attributes from, so they must
+      // be explicit.
+      if (!attributes || attributes.length === 0) {
+        throw new Error('attributes are required when requesting by schemaName')
+      }
+      restrictions = [{ schema_name: schemaName, ...(schemaVersion ? { schema_version: schemaVersion } : {}) }]
+    } else if (relatedJsonSchemaCredentialId) {
       const jscData = await fetchJson<W3cCredential>(relatedJsonSchemaCredentialId)
       const issuerDid = typeof jscData.issuer === 'string' ? jscData.issuer : jscData.issuer.id
       const schemaResult = await this.credentialTypesService.findAnonCredsSchema({
@@ -278,10 +308,12 @@ export class InvitationController {
 
     // If no attributes are specified, request all of them
     if (!attributes) {
-      attributes = schema.attrNames
+      // schemaName requests always carry explicit attributes; here a schema
+      // is guaranteed.
+      attributes = schema!.attrNames
     }
 
-    if (!attributes.every(item => schema.attrNames.includes(item))) {
+    if (schema && !attributes.every(item => schema.attrNames.includes(item))) {
       throw new Error(
         `Some attributes are not present in the requested credential type: Requested: ${attributes}, Present: ${schema.attrNames}`,
       )
@@ -289,7 +321,7 @@ export class InvitationController {
 
     const requestedAttributes: Record<string, AnonCredsRequestedAttribute> = {}
 
-    requestedAttributes[schema.name] = {
+    requestedAttributes[schema?.name ?? schemaName!] = {
       names: attributes,
       restrictions,
     }

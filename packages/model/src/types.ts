@@ -90,6 +90,12 @@ export interface CreatePresentationRequestOptions {
 export type RequestedCredential = {
   credentialDefinitionId?: string
   jsonSchemaCredentialId?: string
+  /** Request by AnonCreds schema name (any issuer's schema with this name
+   *  matches - e.g. every ecosystem issuer of the same credential type).
+   *  `attributes` is required with this selector. */
+  schemaName?: string
+  /** Optional schema version filter, combined with schemaName. */
+  schemaVersion?: string
   attributes?: string[]
 }
 
