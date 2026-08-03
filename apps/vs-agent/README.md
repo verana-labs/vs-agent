@@ -292,8 +292,8 @@ The Dockerfile produces separate targets for the optional protocol plugins. Choo
 
 | Target          | Image                  | Plugins included                                                    |
 | --------------- | ---------------------- | ------------------------------------------------------------------- |
-| `vs-agent`      | `2060io/vs-agent`      | messaging + chat (openid4vc shipped, enable via `VS_AGENT_PLUGINS`) |
-| `vs-agent-mrtd` | `2060io/vs-agent-mrtd` | messaging + chat + mrtd                                             |
+| `vs-agent`      | `veranalabs/vs-agent`      | messaging + chat (openid4vc shipped, enable via `VS_AGENT_PLUGINS`) |
+| `vs-agent-mrtd` | `veranalabs/vs-agent-mrtd` | messaging + chat + mrtd                                             |
 
 #### Building locally
 
