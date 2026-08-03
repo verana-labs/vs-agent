@@ -14,14 +14,14 @@ This is implementation groundwork, not EUDI certification or a claim of complete
 
 ## Configure VS Agent
 
-Use the `vs-agent-openid4vc` image target. It enables `messaging,chat,openid4vc` and requires `OID4VC_CONFIG_FILE`:
+The plugin ships in the standard `vs-agent` image but is disabled by default. Enable it with `VS_AGENT_PLUGINS=messaging,chat,openid4vc`, which requires `OID4VC_CONFIG_FILE`:
 
 The commands below explicitly select the Colima Docker context. Omit `--context colima` when the active Docker context already points to the intended engine.
 
 ```bash
 docker --context colima build \
-  --target vs-agent-openid4vc \
-  -t vs-agent-openid4vc:dev \
+  --target vs-agent \
+  -t vs-agent:dev \
   -f apps/vs-agent/Dockerfile .
 
 docker --context colima run --rm \
@@ -30,7 +30,8 @@ docker --context colima run --rm \
   -v "$PWD/openid4vc.json:/run/config/openid4vc.json:ro" \
   -p 3000:3000 \
   -p 3001:3001 \
-  vs-agent-openid4vc:dev
+  -e VS_AGENT_PLUGINS=messaging,chat,openid4vc \
+  vs-agent:dev
 ```
 
 Run both commands from the monorepo root. `env-vars` must set an HTTPS `PUBLIC_API_BASE_URL`, an `AGENT_PUBLIC_DID`, and the normal VS Agent wallet and deployment settings. The JSON file must not contain `publicApiBaseUrl`; VS Agent injects the trusted value from `PUBLIC_API_BASE_URL`. An HTTPS base path is supported and is used verbatim when composing protocol URLs. URLs containing a username or password are rejected.

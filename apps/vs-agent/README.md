@@ -228,7 +228,7 @@ VS Agent uses an opt-in plugin architecture. Each plugin is an independent packa
 | `messaging` | _(built-in)_                             | Base credential and proof handlers. Always loaded — cannot be disabled.                                                                                    |
 | `chat`      | `@verana-labs/vs-agent-plugin-chat`      | Chat protocols: text messages, media, reactions, receipts, calls, action menus, user profile.                                                              |
 | `mrtd`      | `@verana-labs/vs-agent-plugin-mrtd`      | eMRTD / ePassport verification. Requires the `vs-agent-mrtd` Docker image.                                                                                 |
-| `openid4vc` | `@verana-labs/vs-agent-plugin-openid4vc` | `dc+sd-jwt` issuance and presentation. Requires the `vs-agent-openid4vc` Docker image and [JSON configuration](../../packages/plugin-openid4vc/README.md). |
+| `openid4vc` | `@verana-labs/vs-agent-plugin-openid4vc` | `dc+sd-jwt` issuance and presentation. Ships in the standard `vs-agent` image (disabled by default) and requires [JSON configuration](../../packages/plugin-openid4vc/README.md). |
 
 ### Selecting plugins
 
@@ -290,11 +290,10 @@ First
 
 The Dockerfile produces separate targets for the optional protocol plugins. Choose the one that matches your needs:
 
-| Target               | Image                  | Plugins included             |
-| -------------------- | ---------------------- | ---------------------------- |
-| `vs-agent`           | `2060io/vs-agent`      | messaging + chat             |
-| `vs-agent-mrtd`      | `2060io/vs-agent-mrtd` | messaging + chat + mrtd      |
-| `vs-agent-openid4vc` | local build target     | messaging + chat + openid4vc |
+| Target          | Image                  | Plugins included                                                    |
+| --------------- | ---------------------- | ------------------------------------------------------------------- |
+| `vs-agent`      | `veranalabs/vs-agent`      | messaging + chat (openid4vc shipped, enable via `VS_AGENT_PLUGINS`) |
+| `vs-agent-mrtd` | `veranalabs/vs-agent-mrtd` | messaging + chat + mrtd                                             |
 
 #### Building locally
 
@@ -304,10 +303,9 @@ The build context must be the **monorepo root**, not the `apps/vs-agent` directo
 # From the repository root
 docker build --target vs-agent      -t vs-agent      -f apps/vs-agent/Dockerfile .
 docker build --target vs-agent-mrtd -t vs-agent-mrtd -f apps/vs-agent/Dockerfile .
-docker build --target vs-agent-openid4vc -t vs-agent-openid4vc -f apps/vs-agent/Dockerfile .
 ```
 
-The OpenID4VC target requires a mounted JSON file and `OID4VC_CONFIG_FILE`. See the [OpenID4VC operator documentation](../../packages/plugin-openid4vc/README.md).
+Enabling the OpenID4VC plugin (`VS_AGENT_PLUGINS=messaging,chat,openid4vc`) requires a mounted JSON file and `OID4VC_CONFIG_FILE`. See the [OpenID4VC operator documentation](../../packages/plugin-openid4vc/README.md).
 
 #### Running a container
 
@@ -329,7 +327,7 @@ services:
     build:
       context: ../.. # repository root
       dockerfile: ./apps/vs-agent/Dockerfile
-      target: vs-agent # choose vs-agent, vs-agent-mrtd, or vs-agent-openid4vc
+      target: vs-agent # choose vs-agent or vs-agent-mrtd
     environment:
       - AGENT_PUBLIC_DID=did:web:myagent.example.com
       - EVENTS_BASE_URL=http://my-backend:5000
