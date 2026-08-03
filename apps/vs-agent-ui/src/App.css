@@ -1033,9 +1033,11 @@ a.meta-chip:hover {
   line-height: var(--lh-normal);
 }
 
-.pot-pill-trust {
-  background: color-mix(in srgb, var(--color-success) 16%, transparent);
-  color: var(--color-success-ink);
+/* Card title chip: neutral on purpose; the success tint is reserved for
+   resolver-verified states. */
+.pot-pill-title {
+  background: var(--color-surface-2);
+  color: var(--color-ink);
 }
 
 .pot-pill-neutral {
