@@ -1,0 +1,11 @@
+--- a/build/dids/WebVhDidCryptoSigner.mjs
++++ b/build/dids/WebVhDidCryptoSigner.mjs
+@@ -23,7 +23,7 @@
+ 	* @returns The DID:key identifier as a string.
+ 	*/
+ 	getVerificationMethodId() {
+-		return `did:key:${this.publicKeyMultibase}`;
++		return `did:key:${this.publicKeyMultibase}#${this.publicKeyMultibase}`;
+ 	}
+ 	/**
+ 	* Signs the provided input document using the Ed25519 secret key.
