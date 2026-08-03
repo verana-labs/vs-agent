@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto'
 
 const DEVELOPMENT_CERTIFICATE_VALIDITY_MS = 365 * 24 * 60 * 60 * 1_000
 const DEVELOPMENT_RECORD_PREFIX = 'openid4vc-development-signing'
+const JSON_WEB_KEY_2020_CONTEXT = 'https://w3id.org/security/suites/jws-2020/v1'
 export type SigningRole = 'issuer' | 'verifier'
 
 type CertificateAgent = Pick<BaseAgent, 'genericRecords' | 'kms' | 'x509'> & {
@@ -123,11 +124,19 @@ export async function publishDevelopmentSigningKey(
     (resolution.didDocument?.[purpose] ?? []).some(
       method => (typeof method === 'string' ? method : method.id) === methodId,
     )
-  if (existingMethod && equalVerificationMethodJwk(existingMethod, publicJwk) && purposes.every(published)) {
+  if (
+    existingMethod &&
+    equalVerificationMethodJwk(existingMethod, publicJwk) &&
+    purposes.every(published) &&
+    contextValues(resolution.didDocument.context).includes(JSON_WEB_KEY_2020_CONTEXT)
+  ) {
     return
   }
 
   const didDocument = DidDocument.fromJSON(resolution.didDocument.toJSON())
+  didDocument.context = [
+    ...new Set([...contextValues(didDocument.context), JSON_WEB_KEY_2020_CONTEXT]),
+  ]
   didDocument.verificationMethod = [
     ...(didDocument.verificationMethod ?? []).filter(method => method.id !== methodId),
     new VerificationMethod({
@@ -380,6 +389,11 @@ function canonicalP256PublicJwk(jwk: unknown): Kms.KmsJwkPublicEc & { crv: 'P-25
 
 function equalPublicJwk(left: Kms.KmsJwkPublicEc, right: Kms.KmsJwkPublicEc): boolean {
   return left.kty === right.kty && left.crv === right.crv && left.x === right.x && left.y === right.y
+}
+
+function contextValues(context: string | string[] | undefined): string[] {
+  if (!context) return []
+  return Array.isArray(context) ? context : [context]
 }
 
 function equalVerificationMethodJwk(method: VerificationMethod, expected: Kms.KmsJwkPublicEc): boolean {

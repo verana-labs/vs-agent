@@ -191,6 +191,53 @@ describe('CertificateService', () => {
     ])
   })
 
+  it('declares the JsonWebKey2020 context alongside the published method', async () => {
+    const agent = createAgent({ developmentCertificate: fixtures.attacker })
+    agent.did = 'did:web:attacker.example'
+    agent.publicApiBaseUrl = 'https://attacker.example/agent'
+    const handle = await loadSigningCertificate(agent, {
+      development: { enabled: true, commonName: 'Development Agent' },
+    })
+    agent.dids.resolve.mockResolvedValue({
+      didDocument: DidDocument.fromJSON({
+        '@context': ['https://www.w3.org/ns/did/v1'],
+        id: 'did:web:attacker.example',
+      }),
+    })
+    agent.dids.update.mockImplementation(async ({ did, didDocument }) => ({
+      didState: { state: 'finished', did, didDocument },
+    }))
+
+    await publishDevelopmentSigningKey(agent, handle, 'issuer')
+
+    expect(agent.dids.update.mock.calls[0][0].didDocument.context).toEqual([
+      'https://www.w3.org/ns/did/v1',
+      'https://w3id.org/security/suites/jws-2020/v1',
+    ])
+  })
+
+  it('republishes a document that already carries the method but not its context', async () => {
+    const agent = createAgent({ developmentCertificate: fixtures.attacker })
+    agent.did = 'did:web:attacker.example'
+    agent.publicApiBaseUrl = 'https://attacker.example/agent'
+    const handle = await loadSigningCertificate(agent, {
+      development: { enabled: true, commonName: 'Development Agent' },
+    })
+    const published = publishedDidDocument('did:web:attacker.example', handle.keyId)
+    published.context = ['https://www.w3.org/ns/did/v1']
+    agent.dids.resolve.mockResolvedValue({ didDocument: published })
+    agent.dids.update.mockImplementation(async ({ did, didDocument }) => ({
+      didState: { state: 'finished', did, didDocument },
+    }))
+
+    await publishDevelopmentSigningKey(agent, handle, 'issuer')
+
+    expect(agent.dids.update).toHaveBeenCalledTimes(1)
+    expect(agent.dids.update.mock.calls[0][0].didDocument.context).toContain(
+      'https://w3id.org/security/suites/jws-2020/v1',
+    )
+  })
+
   it('repairs a missing KMS key id mapping even when the method is already published', async () => {
     const agent = createAgent({ developmentCertificate: fixtures.attacker })
     agent.did = 'did:web:attacker.example'
@@ -364,6 +411,7 @@ function configuredSigning(
 
 function publishedDidDocument(did: string, kmsKeyId: string): DidDocument {
   return DidDocument.fromJSON({
+    '@context': ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/suites/jws-2020/v1'],
     id: did,
     verificationMethod: [
       {
