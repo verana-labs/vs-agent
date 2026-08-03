@@ -93,6 +93,7 @@ FROM node:22.19-slim AS vs-agent
 WORKDIR /www
 ENV RUN_MODE="docker"
 ENV VS_AGENT_PLUGINS=messaging,chat
+ENV VS_AGENT_BUILD=vs-agent
 
 COPY --from=build-vs-agent /www/node_modules ./node_modules
 COPY --from=build-vs-agent /www/packages/model/package.json ./packages/model/package.json
@@ -121,6 +122,7 @@ FROM node:22.19-slim AS vs-agent-mrtd
 WORKDIR /www
 ENV RUN_MODE="docker"
 ENV VS_AGENT_PLUGINS=messaging,chat,mrtd
+ENV VS_AGENT_BUILD=vs-agent-mrtd
 
 COPY --from=build-mrtd /www/node_modules ./node_modules
 COPY --from=build-mrtd /www/packages/model/package.json ./packages/model/package.json

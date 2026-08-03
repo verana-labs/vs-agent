@@ -1,7 +1,48 @@
 import { useEffect, useState } from 'react'
+import { getAgentConfig } from '../api'
 import logoSvg from '../assets/logo.svg'
 
 const THEME_KEY = 'vsa-theme'
+
+// Network status chip: a glowing LED and the badge text from
+// UI_NETWORK_BADGE (e.g. "Testnet"). The LED reflects the reachability of
+// the declared network's indexer: green OK, red down, gray while checking
+// or when no indexer is declared.
+function NetworkChip() {
+  const { networkBadge, network } = getAgentConfig()
+  const [indexer, setIndexer] = useState(null)
+
+  useEffect(() => {
+    if (!network?.indexerBaseUrl) return
+    let alive = true
+    fetch(network.indexerBaseUrl)
+      .then(r => {
+        if (alive) setIndexer(r.ok ? 'ok' : 'down')
+      })
+      .catch(() => {
+        if (alive) setIndexer('down')
+      })
+    return () => {
+      alive = false
+    }
+  }, [network?.indexerBaseUrl])
+
+  if (!networkBadge) return null
+
+  const title = [
+    network?.chainId ? `Connected to ${network.chainId}` : null,
+    indexer === 'down' ? 'indexer unreachable right now' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  return (
+    <span className="net-chip" title={title || undefined}>
+      <span aria-hidden className={`led${indexer === 'ok' ? ' led-ok' : indexer === 'down' ? ' led-down' : ''}`} />
+      {networkBadge}
+    </span>
+  )
+}
 
 export default function Header() {
   const [theme, setTheme] = useState('dark')
@@ -29,6 +70,7 @@ export default function Header() {
         <span className="header-logo-name wordmark">Verana</span>
       </div>
       <div className="header-center" />
+      <NetworkChip />
       <button
         type="button"
         onClick={toggleTheme}
