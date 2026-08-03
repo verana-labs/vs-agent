@@ -19,6 +19,11 @@ overrides:
   '@credo-ts/openid4vc': 0.7.1-pr-2704-20260630143332
   libphonenumber-js: ^1.12.33
 
+patchedDependencies:
+  '@credo-ts/webvh@0.7.1-pr-2704-20260630143332':
+    hash: g3663txpx247txyoxjdkddf6ci
+    path: patches/@credo-ts__webvh@0.7.1-pr-2704-20260630143332.patch
+
 importers:
 
   .:
@@ -73,7 +78,7 @@ importers:
         version: 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
       '@credo-ts/webvh':
         specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
+        version: 0.7.1-pr-2704-20260630143332(patch_hash=g3663txpx247txyoxjdkddf6ci)(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
       '@hyperledger/anoncreds-nodejs':
         specifier: 0.4.0
         version: 0.4.0
@@ -442,7 +447,7 @@ importers:
         version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
       '@credo-ts/webvh':
         specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
+        version: 0.7.1-pr-2704-20260630143332(patch_hash=g3663txpx247txyoxjdkddf6ci)(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
       '@hyperledger/anoncreds-nodejs':
         specifier: 0.4.0
         version: 0.4.0
@@ -5988,7 +5993,7 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/webvh@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)':
+  '@credo-ts/webvh@0.7.1-pr-2704-20260630143332(patch_hash=g3663txpx247txyoxjdkddf6ci)(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)':
     dependencies:
       '@credo-ts/anoncreds': 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
       '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
@@ -6003,7 +6008,7 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/webvh@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)':
+  '@credo-ts/webvh@0.7.1-pr-2704-20260630143332(patch_hash=g3663txpx247txyoxjdkddf6ci)(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)':
     dependencies:
       '@credo-ts/anoncreds': 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
       '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
