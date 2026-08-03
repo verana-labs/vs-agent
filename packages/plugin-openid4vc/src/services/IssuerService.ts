@@ -92,7 +92,7 @@ export class IssuerService {
     credentialConfigurationId: string,
     inputClaims: unknown,
   ): Promise<OpenId4VcOfferResult> {
-    this.assertInitialized()
+    await this.ensureInitialized()
     const configuration = findCredentialConfiguration(this.options, credentialConfigurationId)
     if (!configuration) {
       throw new OpenId4VcIssuerRequestError(`unknown credential configuration '${credentialConfigurationId}'`)
@@ -116,7 +116,7 @@ export class IssuerService {
   }
 
   public async getOfferState(id: string): Promise<OpenId4VcOfferState> {
-    this.assertInitialized()
+    await this.ensureInitialized()
 
     let session: OpenId4VcIssuanceSessionRecord
     try {
