@@ -5,7 +5,7 @@ import {
   AnonCredsSchema,
   dateToTimestamp,
 } from '@credo-ts/anoncreds'
-import { W3cCredential } from '@credo-ts/core'
+import { parseDid, W3cCredential } from '@credo-ts/core'
 import { Controller, Get, Post, Body, Query, Inject, HttpException } from '@nestjs/common'
 import {
   ApiBadRequestResponse,
@@ -23,7 +23,11 @@ import {
 } from '@verana-labs/vs-agent-model'
 import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
 
-import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../config'
+import {
+  AGENT_INVITATION_BASE_URL,
+  AGENT_INVITATION_IMAGE_URL,
+  VERANA_INDEXER_BASE_URL,
+} from '../../../config'
 import { AccessMode } from '../../../security'
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../services/VsAgentService'
@@ -174,7 +178,7 @@ export class InvitationController {
         },
       },
       withRelatedJsonSchema: {
-        summary: 'Using jsonSchemaCredentialId',
+        summary: 'Using jsonSchemaCredentialId (any accredited issuer of this credential type)',
         value: {
           didCommVersion: 'v1',
           requestedCredentials: [
@@ -188,19 +192,6 @@ export class InvitationController {
                 'documentType',
                 'nationality',
               ],
-            },
-          ],
-        },
-      },
-      schemaName: {
-        summary: 'Using schemaName (any issuer of this schema)',
-        value: {
-          didCommVersion: 'v1',
-          requestedCredentials: [
-            {
-              schemaName: 'ECS-Badge',
-              schemaVersion: '1.0',
-              attributes: ['badgeNumber', 'name', 'title', 'department'],
             },
           ],
         },
@@ -235,45 +226,26 @@ export class InvitationController {
       throw Error('You must specify a least a requested credential')
     }
 
-    const {
-      credentialDefinitionId,
-      jsonSchemaCredentialId: relatedJsonSchemaCredentialId,
-      schemaName,
-      schemaVersion,
-    } = requestedCredentials[0]
+    const { credentialDefinitionId, jsonSchemaCredentialId: relatedJsonSchemaCredentialId } =
+      requestedCredentials[0]
     let attributes = requestedCredentials[0].attributes
 
-    const selectors = [credentialDefinitionId, relatedJsonSchemaCredentialId, schemaName].filter(
-      value => value !== undefined && value !== null && value !== '',
-    )
-    if (selectors.length > 1) {
-      throw new Error('Specify only one of credentialDefinitionId, jsonSchemaCredentialId or schemaName')
+    if (credentialDefinitionId && relatedJsonSchemaCredentialId) {
+      throw new Error('Specify either credentialDefinitionId or jsonSchemaCredentialId, not both')
     }
 
-    if (selectors.length === 0) {
-      throw new Error('One of credentialDefinitionId, jsonSchemaCredentialId or schemaName must be provided')
+    if (!credentialDefinitionId && !relatedJsonSchemaCredentialId) {
+      throw new Error('Either credentialDefinitionId or jsonSchemaCredentialId must be provided')
     }
 
     if (attributes && !Array.isArray(attributes)) {
       throw new Error('Received attributes is not an array')
     }
 
-    let schema: AnonCredsSchema | undefined
+    let schema: AnonCredsSchema
     let restrictions: AnonCredsProofRequestRestriction[]
 
-    if (schemaName) {
-      // Schema-name restriction: matches the schema regardless of which
-      // issuer registered it - the natural request when several ecosystem
-      // issuers issue the same credential type on their own registries.
-      // There is no single schema to derive attributes from, so they must
-      // be explicit.
-      if (!attributes || attributes.length === 0) {
-        throw new Error('attributes are required when requesting by schemaName')
-      }
-      restrictions = [
-        { schema_name: schemaName, ...(schemaVersion ? { schema_version: schemaVersion } : {}) },
-      ]
-    } else if (relatedJsonSchemaCredentialId) {
+    if (relatedJsonSchemaCredentialId) {
       const jscData = await fetchJson<W3cCredential>(relatedJsonSchemaCredentialId)
       const issuerDid = typeof jscData.issuer === 'string' ? jscData.issuer : jscData.issuer.id
       const schemaResult = await this.credentialTypesService.findAnonCredsSchema({
@@ -286,7 +258,17 @@ export class InvitationController {
       }
 
       schema = schemaResult.schema
-      restrictions = [{ schema_id: schemaResult.schemaId }]
+
+      // The VTJSC is the canonical identity of the credential type: any
+      // accredited issuer targeting the same jsonSchemaCredentialId is
+      // acceptable. Enumerate the ACTIVE ISSUER permissions on the VPR
+      // schema the VTJSC references and collect each issuer's AnonCreds
+      // schema for it - the restrictions array is an OR-list.
+      const schemaIds = new Set<string>([schemaResult.schemaId])
+      for (const id of await this.findVtjscIssuerSchemaIds(jscData, relatedJsonSchemaCredentialId)) {
+        schemaIds.add(id)
+      }
+      restrictions = [...schemaIds].map(schema_id => ({ schema_id }))
     } else {
       const { credentialDefinition } = await agent.modules.anoncreds.getCredentialDefinition(
         credentialDefinitionId!,
@@ -308,14 +290,12 @@ export class InvitationController {
       restrictions = [{ cred_def_id: credentialDefinitionId! }]
     }
 
-    // If no attributes are specified, request all of them (schemaName
-    // requests always carry explicit attributes, so a schema is available)
+    // If no attributes are specified, request all of them
     if (!attributes) {
-      if (!schema) throw new Error('attributes are required when requesting by schemaName')
       attributes = schema.attrNames
     }
 
-    if (schema && !attributes.every(item => schema.attrNames.includes(item))) {
+    if (!attributes.every(item => schema.attrNames.includes(item))) {
       throw new Error(
         `Some attributes are not present in the requested credential type: Requested: ${attributes}, Present: ${schema.attrNames}`,
       )
@@ -323,7 +303,7 @@ export class InvitationController {
 
     const requestedAttributes: Record<string, AnonCredsRequestedAttribute> = {}
 
-    requestedAttributes[schema?.name ?? schemaName ?? 'credential'] = {
+    requestedAttributes[schema.name] = {
       names: attributes,
       restrictions,
     }
@@ -497,6 +477,63 @@ export class InvitationController {
       }
     } catch (error) {
       throw new HttpException(`Failed to create invitation: ${error}`, 500)
+    }
+  }
+
+  /** All AnonCreds schema ids registered for a VTJSC across its accredited
+   *  issuers: the ACTIVE ISSUER permissions on the VPR schema the VTJSC
+   *  references (via the indexer), then each issuer's public resources
+   *  endpoint filtered by relatedJsonSchemaCredentialId. Best effort - an
+   *  unreachable indexer or issuer narrows the match set, never fails the
+   *  request (the VTJSC's own issuer is always included by the caller). */
+  private async findVtjscIssuerSchemaIds(
+    jscData: W3cCredential,
+    relatedJsonSchemaCredentialId: string,
+  ): Promise<string[]> {
+    if (!VERANA_INDEXER_BASE_URL) return []
+
+    const subject = Array.isArray(jscData.credentialSubject)
+      ? jscData.credentialSubject[0]
+      : jscData.credentialSubject
+    const ref = (subject as { jsonSchema?: { $ref?: string } } | undefined)?.jsonSchema?.$ref
+    const vprSchemaId = typeof ref === 'string' ? ref.match(/\/js\/(\d+)$/)?.[1] : undefined
+    if (!vprSchemaId) return []
+
+    try {
+      const response = await fetch(`${VERANA_INDEXER_BASE_URL}/verana/perm/v1/list?schema_id=${vprSchemaId}`)
+      if (!response.ok) return []
+      const body = (await response.json()) as {
+        permissions?: Array<{ type?: string; perm_state?: string; did?: string }>
+      }
+      const issuerDids = [
+        ...new Set(
+          (body.permissions ?? [])
+            .filter(p => p.type === 'ISSUER' && p.perm_state === 'ACTIVE' && typeof p.did === 'string')
+            .map(p => p.did as string),
+        ),
+      ].slice(0, 20)
+
+      const schemaIds: string[] = []
+      for (const did of issuerDids) {
+        try {
+          const parsed = parseDid(did)
+          if (parsed.method !== 'webvh') continue
+          const issuerPath = parsed.id.split(':').slice(1).join('/')
+          const params = new URLSearchParams({
+            resourceType: 'anonCredsSchema',
+            relatedJsonSchemaCredentialId,
+          })
+          const resourcesResponse = await fetch(`https://${issuerPath}/resources?${params.toString()}`)
+          if (!resourcesResponse.ok) continue
+          const [resource] = (await resourcesResponse.json()) as Array<{ id?: string }>
+          if (resource?.id) schemaIds.push(resource.id)
+        } catch {
+          // skip unreachable issuers
+        }
+      }
+      return schemaIds
+    } catch {
+      return []
     }
   }
 }
