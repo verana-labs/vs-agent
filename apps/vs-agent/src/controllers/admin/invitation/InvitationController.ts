@@ -270,7 +270,9 @@ export class InvitationController {
       if (!attributes || attributes.length === 0) {
         throw new Error('attributes are required when requesting by schemaName')
       }
-      restrictions = [{ schema_name: schemaName, ...(schemaVersion ? { schema_version: schemaVersion } : {}) }]
+      restrictions = [
+        { schema_name: schemaName, ...(schemaVersion ? { schema_version: schemaVersion } : {}) },
+      ]
     } else if (relatedJsonSchemaCredentialId) {
       const jscData = await fetchJson<W3cCredential>(relatedJsonSchemaCredentialId)
       const issuerDid = typeof jscData.issuer === 'string' ? jscData.issuer : jscData.issuer.id
@@ -306,11 +308,11 @@ export class InvitationController {
       restrictions = [{ cred_def_id: credentialDefinitionId! }]
     }
 
-    // If no attributes are specified, request all of them
+    // If no attributes are specified, request all of them (schemaName
+    // requests always carry explicit attributes, so a schema is available)
     if (!attributes) {
-      // schemaName requests always carry explicit attributes; here a schema
-      // is guaranteed.
-      attributes = schema!.attrNames
+      if (!schema) throw new Error('attributes are required when requesting by schemaName')
+      attributes = schema.attrNames
     }
 
     if (schema && !attributes.every(item => schema.attrNames.includes(item))) {
@@ -321,7 +323,7 @@ export class InvitationController {
 
     const requestedAttributes: Record<string, AnonCredsRequestedAttribute> = {}
 
-    requestedAttributes[schema?.name ?? schemaName!] = {
+    requestedAttributes[schema?.name ?? schemaName ?? 'credential'] = {
       names: attributes,
       restrictions,
     }
