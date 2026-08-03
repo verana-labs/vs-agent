@@ -267,15 +267,29 @@ describe('IssuerService', () => {
     expect(api.createIssuer).not.toHaveBeenCalled()
   })
 
-  it('fails offer creation and credential mapping clearly before initialization', async () => {
+  it('fails credential mapping clearly before initialization', async () => {
     const service = new IssuerService(agent() as never, options())
 
-    await expect(service.createOffer('employee', { name: 'Ada', role: 'engineer' })).rejects.toThrow(
-      'not initialized',
-    )
     await expect(
       service.mapCredentialRequest({ credentialConfigurationId: 'employee' } as never),
     ).rejects.toThrow('not initialized')
+  })
+
+  it('initializes on demand when an offer is requested after a failed boot', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    api.createCredentialOffer.mockResolvedValue({
+      credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
+      issuanceSession: { id: 'session-1' },
+    })
+    const service = new IssuerService(agent(api) as never, options())
+    loadSigningCertificate.mockRejectedValueOnce(new Error('storage not ready'))
+
+    await expect(service.ensureInitialized()).rejects.toThrow('storage not ready')
+    await expect(service.createOffer('employee', { name: 'Ada', role: 'engineer' })).resolves.toEqual({
+      credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
+      issuanceSessionId: 'session-1',
+    })
   })
 
   it('creates only a pre-authorized offer with validated claims as issuance metadata', async () => {
