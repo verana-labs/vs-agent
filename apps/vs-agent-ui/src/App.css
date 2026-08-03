@@ -1073,6 +1073,19 @@ a.meta-chip:hover {
   margin-bottom: 8px;
 }
 
+.inherited-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  margin-left: 4px;
+}
+
 .pot-did {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
