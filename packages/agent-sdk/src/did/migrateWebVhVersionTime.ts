@@ -50,7 +50,7 @@ class KmsSigner implements Signer {
   ) {}
 
   public getVerificationMethodId(): string {
-    return `did:key:${this.publicKeyMultibase}`
+    return `did:key:${this.publicKeyMultibase}#${this.publicKeyMultibase}`
   }
 
   public async sign(input: SigningInput): Promise<SigningOutput> {
