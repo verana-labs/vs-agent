@@ -280,6 +280,33 @@ async function resolveDidAccreditations(did, network) {
   return entries
 }
 
+/**
+ * Verifiable-trust-spec: the ECS-Organization or ECS-Persona credential must
+ * be presented either by the service itself or by the service that issued its
+ * ECS-Service credential (the parent). When the service presents none, this
+ * fetches the parent's DID document and linked presentations and returns its
+ * controller credential item, used exclusively to render "Operated by" (it is
+ * never listed among the credentials presented by this service). One hop
+ * only, no recursion.
+ */
+async function resolveParentController(serviceVc) {
+  const issuer = credentialIssuer(serviceVc)
+  const origin = issuer ? didToUrl(issuer) : null
+  if (!origin) return null
+
+  const doc = await fetchJson(`${origin}/.well-known/did.json`)
+  const cvpServices = (doc?.service ?? []).filter(s => {
+    const fragment = s.id?.split('#')[1] ?? ''
+    return fragment.startsWith('vpr') && fragment.endsWith('-c-vp')
+  })
+  const items = await Promise.all(cvpServices.map(resolveCVpService))
+  return (
+    items.find(i => i.type === 'ecs-org' && i.credentials.length > 0) ??
+    items.find(i => i.type === 'ecs-persona' && i.credentials.length > 0) ??
+    null
+  )
+}
+
 /** ISO 3166-1 alpha-2 country code as an emoji flag (e.g. "CH"). */
 function countryFlag(code) {
   if (typeof code !== 'string' || !/^[A-Za-z]{2}$/.test(code)) return null
@@ -477,7 +504,7 @@ function ControllerLogo({ uri, name }) {
   return <div className="op-logo op-logo-fallback">{(name ?? '?').charAt(0).toUpperCase()}</div>
 }
 
-function ControllerCard({ item, onSelect }) {
+function ControllerCard({ item, inherited, onSelect }) {
   if (!item) return null
   const subject = item.credentials[0]?.credentialSubject ?? {}
   const isOrg = item.type === 'ecs-org'
@@ -494,6 +521,14 @@ function ControllerCard({ item, onSelect }) {
       <p className="pot-label">
         <BuildingIcon size={11} />
         Operated by
+        {inherited && (
+          <span
+            className="inherited-badge"
+            title="Presented by the issuer of this service's ECS-Service credential"
+          >
+            Inherited
+          </span>
+        )}
       </p>
       <div className="op-head">
         <ControllerLogo uri={isOrg ? subjectLogo(subject) : subjectAvatar(subject)} name={subject.name} />
@@ -750,11 +785,16 @@ function ServiceEndpointsCard({ services }) {
   )
 }
 
-function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, network, webDid, services, onSelect }) {
+function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, network, parentController, webDid, services, onSelect }) {
   const subject = serviceItem.credentials[0]?.credentialSubject ?? {}
-  const controllerItem =
+  const ownController =
     cvpItems.find(i => i.type === 'ecs-org' && i.credentials.length > 0) ??
     cvpItems.find(i => i.type === 'ecs-persona' && i.credentials.length > 0)
+  // Verifiable-trust-spec: fall back to the controller presented by the
+  // issuer of the ECS-Service credential (rendering only; the parent
+  // credential is never listed among this service's presented credentials).
+  const controllerItem = ownController ?? parentController
+  const inherited = !ownController && Boolean(parentController)
 
   useEffect(() => {
     if (typeof subject.name === 'string' && subject.name) document.title = subject.name
@@ -778,7 +818,7 @@ function ServiceProfile({ serviceItem, cvpItems, jscItems, acc, network, webDid,
     <div className="profile">
       <ServiceHero subject={subject} />
       <div className="profile-main">
-        <ControllerCard item={controllerItem} onSelect={() => onSelect(controllerItem?.vp)} />
+        <ControllerCard item={controllerItem} inherited={inherited} onSelect={() => onSelect(controllerItem?.vp)} />
         <TrustCard webDid={webDid} cvpItems={cvpItems} jscItems={jscItems} acc={acc} network={network} onSelect={onSelect} />
         <ServiceEndpointsCard services={services} />
       </div>
@@ -884,6 +924,9 @@ export default function Dashboard() {
   const [selected, setSelected] = useState(null)
   // null = still resolving, array afterward (possibly empty)
   const [acc, setAcc] = useState(null)
+  // Controller credential presented by the parent (issuer of the ECS-Service
+  // credential); only resolved when the service presents no controller itself.
+  const [parentController, setParentController] = useState(null)
 
   useEffect(() => {
     getDidDocument()
@@ -923,6 +966,29 @@ export default function Dashboard() {
     }
   }, [credsLoading, cvpItems, doc, agentConfig.network])
 
+  useEffect(() => {
+    if (credsLoading) return
+    const hasOwnController = cvpItems.some(
+      i => (i.type === 'ecs-org' || i.type === 'ecs-persona') && i.credentials.length > 0,
+    )
+    const svc = cvpItems.find(i => i.type === 'ecs-service' && i.credentials.length > 0)
+    if (hasOwnController || !svc) {
+      setParentController(null)
+      return
+    }
+    let alive = true
+    resolveParentController(svc.credentials[0])
+      .then(item => {
+        if (alive) setParentController(item)
+      })
+      .catch(() => {
+        if (alive) setParentController(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [credsLoading, cvpItems])
+
   if (error) return <p className="error-msg">{error}</p>
   if (!doc || credsLoading) return <p className="loading">Loading...</p>
 
@@ -944,6 +1010,7 @@ export default function Dashboard() {
           jscItems={jscItems}
           acc={acc}
           network={agentConfig.network}
+          parentController={parentController}
           webDid={webDid}
           services={doc.service ?? []}
           onSelect={setSelected}
