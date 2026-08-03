@@ -300,11 +300,11 @@ async function resolveParentController(serviceVc) {
     return fragment.startsWith('vpr') && fragment.endsWith('-c-vp')
   })
   const items = await Promise.all(cvpServices.map(resolveCVpService))
-  return (
+  const controller =
     items.find(i => i.type === 'ecs-org' && i.credentials.length > 0) ??
     items.find(i => i.type === 'ecs-persona' && i.credentials.length > 0) ??
     null
-  )
+  return controller ? { ...controller, parentDid: issuer } : null
 }
 
 /** ISO 3166-1 alpha-2 country code as an emoji flag (e.g. "CH"). */
@@ -541,6 +541,24 @@ function ControllerCard({ item, inherited, onSelect }) {
         </div>
       </div>
       {details && <p className="op-details">{details}</p>}
+      {inherited && item.parentDid && (
+        <p className="op-parent">
+          via{' '}
+          {didToUrl(item.parentDid) ? (
+            <a
+              className="subtle-link"
+              href={didToUrl(item.parentDid)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open the parent service page in a new window"
+            >
+              {item.parentDid}
+            </a>
+          ) : (
+            item.parentDid
+          )}
+        </p>
+      )}
     </div>
   )
 }

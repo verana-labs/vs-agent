@@ -993,6 +993,14 @@ a.meta-chip:hover {
   word-break: break-all;
 }
 
+.op-parent {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  word-break: break-all;
+  margin-top: 8px;
+}
+
 .op-details {
   font-size: var(--text-sm);
   color: var(--color-muted);
