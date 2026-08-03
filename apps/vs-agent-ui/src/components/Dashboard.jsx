@@ -559,9 +559,12 @@ function TrustCard({ webDid, cvpItems, jscItems, acc, network, onSelect }) {
   return (
     <div className="pot-card">
       <div className="pot-band">
-        <span className="pot-pill pot-pill-trust">
+        {/* Deliberately not "Proof of Trust": nothing on this page verifies
+            credential signatures, so the title stays descriptive until a
+            resolver-backed verdict powers this card. */}
+        <span className="pot-pill pot-pill-title">
           <ShieldIcon size={12} />
-          Proof of Trust
+          Trust information
         </span>
         <span style={{ flex: 1 }} />
         {network?.chainId && <span className="pot-pill pot-pill-net">{network.chainId}</span>}
