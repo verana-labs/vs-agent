@@ -74,14 +74,12 @@ jobs:
               echo "release-patch=${RELEASE_PATCH}"
               echo "is-main=${IS_MAIN}"
               echo "npm-dist-tag="
-            } >> "$GITHUB_OUTPUT"
+            } | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
 
           if [ -z "$MANUAL_VERSION" ]; then
-            echo "::warning::No publish_version input received; nothing will be published. If you filled the field, note that switching the branch in the Run workflow form resets the inputs: select the branch first, then enter the version."
-            echo "Nothing published: the \`publish_version\` input was empty." >> "$GITHUB_STEP_SUMMARY"
-            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "publish=false" | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -110,7 +108,7 @@ jobs:
             echo "release-patch=$(printf '%s' "$BASE" | cut -d. -f3)"
             echo "is-main=false"
             echo "npm-dist-tag=${DIST_TAG}"
-          } >> "$GITHUB_OUTPUT"
+          } | tee -a "$GITHUB_OUTPUT"
 
           echo "Manual publish of \`${MANUAL_VERSION}\` from \`${REF_NAME}\` (npm dist-tag \`${DIST_TAG}\`)." >> "$GITHUB_STEP_SUMMARY"
 

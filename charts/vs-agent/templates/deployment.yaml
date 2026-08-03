@@ -205,6 +205,18 @@ spec:
             - name: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS
               value: {{ .Values.adminApiCorporationAllowedAccounts | quote }}
             {{- end }}
+            {{- if .Values.oid4vc.config }}
+            - name: OID4VC_CONFIG_FILE
+              value: "/run/config/oid4vc/openid4vc.json"
+            # The agent reads the config file once at boot; baking its hash
+            # into the pod template makes a config-only change roll the pod.
+            - name: OID4VC_CONFIG_CHECKSUM
+              value: {{ sha256sum .Values.oid4vc.config | quote }}
+            {{- end }}
+            {{- if .Values.oid4vc.plugins }}
+            - name: VS_AGENT_PLUGINS
+              value: {{ .Values.oid4vc.plugins | quote }}
+            {{- end }}
 {{- with .Values.extraEnv }}
 {{ toYaml . | nindent 12 }}
 {{- end }}
@@ -254,6 +266,11 @@ spec:
             volumeMounts:
             - name: {{ .Values.name }}-vsa-pv
               mountPath: /root/.afj
+            {{- if .Values.oid4vc.config }}
+            - name: {{ .Values.name }}-oid4vc-config
+              mountPath: /run/config/oid4vc
+              readOnly: true
+            {{- end }}
         {{- if .Values.database.enabled }}
          -  name: postgres
             image: postgres:15.2
@@ -305,6 +322,11 @@ spec:
          - name: {{ .Values.name }}-vsa-pv
            persistentVolumeClaim:
              claimName: {{ .Values.name }}-vsa-pv
+        {{- if .Values.oid4vc.config }}
+         - name: {{ .Values.name }}-oid4vc-config
+           configMap:
+             name: {{ .Values.name }}-oid4vc-config
+        {{- end }}
         {{- if .Values.database.enabled }}
          - name: {{ .Values.name }}-pg-pv-main
            persistentVolumeClaim:
