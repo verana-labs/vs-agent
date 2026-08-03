@@ -338,19 +338,24 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     return await didRepository.findCreatedDid(this.context, parsedDid.did)
   }
 
-  // Prefer Ed25519VerificationKey2020 over Multikey: webvh's update Multikey is not ours to use.
+  // The DIDComm key is the one the document itself nominates for authentication; webvh's
+  // update Multikey looks identical by type and must never be picked.
   private findEd25519VerificationMethodId(didDocument: DidDocument): string | undefined {
     const vms = didDocument.verificationMethod ?? []
-    const preferred = vms.find(vm => vm.type === 'Ed25519VerificationKey2020')
-    if (preferred) return preferred.id
-    const fallback = vms.find(
-      vm =>
-        vm.type === 'Ed25519VerificationKey2018' ||
-        (vm.type === 'Multikey' &&
-          typeof vm.publicKeyMultibase === 'string' &&
-          vm.publicKeyMultibase.startsWith('z6Mk')),
-    )
-    return fallback?.id
+    const isEd25519 = (vm: (typeof vms)[number]) =>
+      vm.type === 'Ed25519VerificationKey2020' ||
+      vm.type === 'Ed25519VerificationKey2018' ||
+      (vm.type === 'Multikey' &&
+        typeof vm.publicKeyMultibase === 'string' &&
+        vm.publicKeyMultibase.startsWith('z6Mk'))
+
+    const nominated = [didDocument.authentication, didDocument.assertionMethod]
+      .flat()
+      .find((entry): entry is string => typeof entry === 'string')
+    const nominatedMethod = vms.find(vm => vm.id === nominated && isEd25519(vm))
+    if (nominatedMethod) return nominatedMethod.id
+
+    return vms.find(vm => vm.type === 'Ed25519VerificationKey2020')?.id ?? vms.find(isEd25519)?.id
   }
 
   private getDidCommServices(publicDid: string, ed25519VerificationMethodId: string) {
@@ -476,7 +481,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         controller: publicDid,
         id: verificationMethodId,
         publicKeyMultibase,
-        type: 'Ed25519VerificationKey2020',
+        type: 'Multikey',
       },
       {
         controller: publicDid,
