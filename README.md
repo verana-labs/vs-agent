@@ -12,7 +12,7 @@ VS Agent is a web application that can be used as a framework for building conve
 - Hands-on client for easy integrations in existing backends using NestJS
 - Plugin architecture: load only the features you need (`chat`, `mrtd`, `openid4vc`) via `VS_AGENT_PLUGINS`
 
-The OpenID4VC plugin provides `dc+sd-jwt` issuance and presentation groundwork. Use the `vs-agent-openid4vc` Docker target and see the [operator documentation](./packages/plugin-openid4vc/README.md).
+The OpenID4VC plugin provides `dc+sd-jwt` issuance and presentation groundwork. It ships in the standard `vs-agent` image but is disabled by default; add `openid4vc` to `VS_AGENT_PLUGINS` to enable it and see the [operator documentation](./packages/plugin-openid4vc/README.md).
 
 ---
 
