@@ -522,12 +522,12 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       ...(didDocument.service ?? []),
       ...[
         new DidDocumentService({
-          id: `${publicDid}#vpr-ecs-service-c-vp`,
+          id: `${publicDid}#vpr-schemas-service-vtc-vp`,
           serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-service-c-vp.json`,
           type: 'LinkedVerifiablePresentation',
         }),
         new DidDocumentService({
-          id: `${publicDid}#vpr-ecs-org-c-vp`,
+          id: `${publicDid}#vpr-schemas-org-vtc-vp`,
           serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-org-c-vp.json`,
           type: 'LinkedVerifiablePresentation',
         }),
