@@ -3,6 +3,7 @@ export enum ECS {
   ORG = 'ecs-org',
   PERSONA = 'ecs-persona',
   USER_AGENT = 'ecs-user-agent',
+  BADGE = 'ecs-badge',
 }
 
 const urlMap = new Map<string, string>([
@@ -28,6 +29,7 @@ export const ECS_SCHEMA_DIGESTS: Record<ECS, string> = {
   [ECS.ORG]: 'sha384-UPn4TDqS1nMBAN3FyMzTAZOWp99zBjBD69OjpbhwOKZj7iOrS5qPwJ2SArRz0yzu',
   [ECS.PERSONA]: 'sha384-VfXTfuks02OkoR5USaTfEdc4NU25m4+vNrLATnjC0r0Pn1S3tFTdOvGCfSYdjE2I',
   [ECS.USER_AGENT]: 'sha384-rIWkh3zBD1Ak7CNGpAwZ/ONSmf+ywOYSF3H60ULc9/a1ZYKv6EqiQMJ2dm8dOfjm',
+  [ECS.BADGE]: 'sha384-ZxJ2aRpoF/5DJSILWwOES6bmpMg3RZYOfO2CCF8hC/YDNvU+PhCqAnAXq/66nXCq',
 }
 
 // RFC 8785 JSON Canonicalization Scheme
