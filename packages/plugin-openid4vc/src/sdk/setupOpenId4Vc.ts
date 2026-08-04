@@ -1,4 +1,4 @@
-import type { OpenId4VcPluginOptions } from '../types'
+import type { OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../types'
 
 import { X509Certificate, X509Module } from '@credo-ts/core'
 import {
@@ -42,6 +42,7 @@ export function setupOpenId4Vc(
 
   const app = express()
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
+  if (options.issuer) app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
   if (options.issuer) {
     app.get('/oid4vc/vct/:configurationId', (request, response, next) => {
       try {
@@ -102,6 +103,30 @@ function assertValidWalletAttestationCertificates(certificates: string[]): void 
       throw new Error(`issuer.walletAttestationCertificates[${index}] must be a valid X.509 certificate`)
     }
   })
+}
+
+/** OpenID4VCI 1.0 dropped `format` from the credential request, so draft wallets send
+ *  `{ format, vct }` and Credo answers `unsupported_credential_format`. */
+export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentialConfiguration[]) {
+  return (request: Request, _response: Response, next: NextFunction): void => {
+    const body: unknown = request.body
+    if (request.method !== 'POST' || !request.path.endsWith('/credential') || !isRecord(body)) {
+      next()
+      return
+    }
+    if (body.credential_configuration_id || body.credential_identifier || typeof body.vct !== 'string') {
+      next()
+      return
+    }
+
+    const configuration = configurations.find(candidate => candidate.vct === body.vct)
+    if (configuration) {
+      delete body.format
+      delete body.vct
+      body.credential_configuration_id = configuration.id
+    }
+    next()
+  }
 }
 
 function advertiseWalletAttestationMetadata(request: Request, response: Response, next: NextFunction): void {
