@@ -50,6 +50,12 @@ export type OpenId4VcVerifierAgent = Pick<
   }
 }
 
+/**
+ * Which query language the authorization request carries. DCQL is the OpenID4VP v1 default;
+ * `presentation_exchange` exists for wallets that never implemented DCQL and reject a v1 request.
+ */
+export type OpenId4VcQueryLanguage = 'dcql' | 'presentation_exchange'
+
 export interface OpenId4VcVerificationRequest {
   authorizationRequest: string
   verificationSessionId: string
@@ -97,7 +103,10 @@ export class VerifierService {
     return this.initialization
   }
 
-  public async createRequest(policyId: string): Promise<OpenId4VcVerificationRequest> {
+  public async createRequest(
+    policyId: string,
+    queryLanguage: OpenId4VcQueryLanguage = 'dcql',
+  ): Promise<OpenId4VcVerificationRequest> {
     await this.ensureInitialized()
 
     const policy = findVerifierPolicy(this.options, policyId)
@@ -111,23 +120,36 @@ export class VerifierService {
       )
     }
 
+    // OpenID4VP v1 replaced Presentation Exchange with DCQL and forbids the two together, so a
+    // presentation_definition request has to be minted on the last draft that still admits it.
+    // Wallets predating DCQL reject a v1 request outright rather than degrade.
+    const query =
+      queryLanguage === 'presentation_exchange'
+        ? {
+            version: 'v1.draft21' as const,
+            presentationExchange: { definition: presentationDefinitionFor(configuration, policy) },
+          }
+        : {
+            dcql: {
+              query: {
+                credentials: [
+                  {
+                    id: configuration.id,
+                    format: 'dc+sd-jwt' as const,
+                    meta: { vct_values: [configuration.vct] },
+                    claims: policy.requestedClaims.map(name => ({ path: [name] })),
+                  },
+                ],
+              },
+            },
+          }
+
     const { authorizationRequest, verificationSession } = await this.verifierApi().createAuthorizationRequest(
       {
         verifierId: this.verifierOptions().id,
         requestSigner: await this.buildRequestSigner(),
         responseMode: 'direct_post.jwt',
-        dcql: {
-          query: {
-            credentials: [
-              {
-                id: configuration.id,
-                format: 'dc+sd-jwt',
-                meta: { vct_values: [configuration.vct] },
-                claims: policy.requestedClaims.map(name => ({ path: [name] })),
-              },
-            ],
-          },
-        },
+        ...query,
       },
     )
 
@@ -169,7 +191,10 @@ export class VerifierService {
       return this.blockedResult(session.state, null, null, 'unbound')
     }
 
-    const presentation = verified.dcql?.presentations[configuration.id]?.[0]
+    // Presentation Exchange returns a flat array rather than a map keyed by query id; the policy
+    // match above already established there is exactly one descriptor, so index 0 is that one.
+    const presentation =
+      verified.dcql?.presentations[configuration.id]?.[0] ?? verified.presentationExchange?.presentations[0]
     if (!isX5cSdJwtDcPresentation(presentation)) {
       return this.blockedResult(session.state, null, configuration.vtjscId, 'unbound')
     }
@@ -315,6 +340,10 @@ export class VerifierService {
   private matchConfiguredPolicy(
     verified: OpenId4VpVerifiedAuthorizationResponse,
   ): { policy: OpenId4VcVerifierPolicy } | undefined {
+    if (verified.presentationExchange) {
+      return this.matchPresentationExchangePolicy(verified.presentationExchange.definition)
+    }
+
     const credentials = verified.dcql?.query.credentials
     if (!credentials || credentials.length !== 1) return undefined
 
@@ -332,6 +361,47 @@ export class VerifierService {
       return path.length === 1 && typeof path[0] === 'string' ? path[0] : undefined
     })
     if (!requestedClaims || requestedClaims.some(claim => claim === undefined)) return undefined
+
+    const policy = this.options.verifierPolicies.find(
+      candidate =>
+        candidate.credentialConfigurationId === configuration.id &&
+        equalStrings(candidate.requestedClaims, requestedClaims),
+    )
+    return policy ? { policy } : undefined
+  }
+
+  /** Same acceptance rules as the DCQL path, read off the definition we minted. */
+  private matchPresentationExchangePolicy(
+    definition: unknown,
+  ): { policy: OpenId4VcVerifierPolicy } | undefined {
+    if (!isRecord(definition) || !Array.isArray(definition.input_descriptors)) return undefined
+    if (definition.input_descriptors.length !== 1) return undefined
+
+    const descriptor: unknown = definition.input_descriptors[0]
+    if (!isRecord(descriptor) || typeof descriptor.id !== 'string') return undefined
+
+    const configuration = findCredentialConfiguration(this.options, descriptor.id)
+    if (!configuration) return undefined
+
+    if (!isRecord(descriptor.constraints) || !Array.isArray(descriptor.constraints.fields)) return undefined
+
+    let vctMatched = false
+    const requestedClaims: string[] = []
+    for (const field of descriptor.constraints.fields) {
+      if (!isRecord(field) || !Array.isArray(field.path) || field.path.length !== 1) return undefined
+      const path = field.path[0]
+      if (typeof path !== 'string' || !path.startsWith('$.')) return undefined
+      const name = path.slice(2)
+
+      if (name === 'vct') {
+        const filter = field.filter
+        if (!isRecord(filter) || filter.const !== configuration.vct) return undefined
+        vctMatched = true
+        continue
+      }
+      requestedClaims.push(name)
+    }
+    if (!vctMatched) return undefined
 
     const policy = this.options.verifierPolicies.find(
       candidate =>
@@ -401,6 +471,32 @@ export class VerifierService {
     }
 
     return { method: 'did' as const, didUrl }
+  }
+}
+
+/**
+ * The Presentation Exchange equivalent of the DCQL query above: one input descriptor pinned to the
+ * configuration's vct, disclosing exactly the claims the policy asks for. `limit_disclosure` keeps
+ * the selective-disclosure guarantee DCQL gives implicitly.
+ */
+function presentationDefinitionFor(
+  configuration: { id: string; vct: string },
+  policy: { requestedClaims: string[] },
+) {
+  return {
+    id: `${configuration.id}-presentation-exchange`,
+    input_descriptors: [
+      {
+        id: configuration.id,
+        constraints: {
+          limit_disclosure: 'required' as const,
+          fields: [
+            { path: ['$.vct'], filter: { type: 'string' as const, const: configuration.vct } },
+            ...policy.requestedClaims.map(name => ({ path: [`$.${name}`] })),
+          ],
+        },
+      },
+    ],
   }
 }
 
