@@ -114,7 +114,7 @@ export const setupSelfTr = async ({
     try {
       await generateVerifiablePresentation(
         agent,
-        `${publicApiBaseUrl}/vt/${name}-c-vp.json`,
+        `${publicApiBaseUrl}/vt/${name}-vtc-vp.json`,
         ecsSchemas,
         name,
         ['VerifiableCredential', 'VerifiableTrustCredential'],

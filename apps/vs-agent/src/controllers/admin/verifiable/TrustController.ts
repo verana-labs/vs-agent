@@ -135,7 +135,7 @@ export class TrustController {
       verifiableTrustCredential: {
         summary: 'Verifiable Trust Credential example',
         description: 'A full URL to the Verifiable Trust Credential.',
-        value: 'https://p2801.ovpndev.mobiera.io/vt/ecs-service-c-vp.json',
+        value: 'https://p2801.ovpndev.mobiera.io/vt/ecs-service-vtc-vp.json',
       },
     },
   })
@@ -185,7 +185,7 @@ export class TrustController {
       verifiableTrustCredential: {
         summary: 'JSON Schema Credential example',
         description: 'A full URL identifying the Verifiable Trust Credential to be deleted.',
-        value: 'https://p2801.ovpndev.mobiera.io/vt/ecs-service-c-vp.json',
+        value: 'https://p2801.ovpndev.mobiera.io/vt/ecs-service-vtc-vp.json',
       },
     },
   })
@@ -219,7 +219,7 @@ export class TrustController {
         summary: 'Organization Credential Example',
         description:
           'Creates a Verifiable Trust Credential (VTC) for an organization. ' +
-          'The `schemaBaseId` is used to generate the schema URL (e.g., `https://p2801.ovpndev.mobiera.io/vt/schemas-organization-c-vp.json`).',
+          'The `schemaBaseId` is used to generate the schema URL (e.g., `https://p2801.ovpndev.mobiera.io/vt/schemas-organization-vtc-vp.json`).',
         value: {
           schemaBaseId: 'organization',
           credential: {

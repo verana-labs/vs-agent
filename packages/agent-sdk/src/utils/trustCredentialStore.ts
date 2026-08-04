@@ -192,7 +192,7 @@ export async function createVtc(
   credential: W3cJsonLdVerifiableCredential,
 ) {
   const didRecord = await getDidRecord(agent)
-  const schemaId = `schemas-${id}-c-vp.json`
+  const schemaId = `schemas-${id}-vtc-vp.json`
   const didDocumentServiceId = `${agent.did}#vpr-${schemaId.replace('.json', '')}`
   const serviceEndpoint = `${publicApiBaseUrl}/vt/${schemaId}`
   const unsignedPresentation = createPresentation({
@@ -243,7 +243,7 @@ export async function createJsc(
     id: subjectId,
     claims: subjectClaims,
   }
-  const schemaPresentation = `schemas-${schemaBaseId}-jsc-vp.json`
+  const schemaPresentation = `schemas-${schemaBaseId}-vtjsc-vp.json`
   const schemaCredential = `schemas-${schemaBaseId}-jsc.json`
   const serviceEndpoint = `${publicApiBaseUrl}/vt/${schemaPresentation}`
   const didDocumentServiceId = `${agent.did}#vpr-schemas-${schemaBaseId}-vtjsc-vp`
@@ -358,7 +358,7 @@ export async function rebindEcsCredentialSchema(
   defaults: SelfTrDefaults,
 ): Promise<void> {
   if (!['ecs-service', 'ecs-org'].includes(schemaKey) || !agent.did) return
-  const vpUrl = `${publicApiBaseUrl}/vt/${schemaKey}-c-vp.json`
+  const vpUrl = `${publicApiBaseUrl}/vt/${schemaKey}-vtc-vp.json`
   const jscUrl = `${publicApiBaseUrl}/vt/schemas-${schemaId}-jsc.json`
 
   const didRecord = await getDidRecord(agent)
