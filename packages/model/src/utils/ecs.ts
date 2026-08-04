@@ -6,18 +6,15 @@ export enum ECS {
   BADGE = 'ecs-badge',
 }
 
-const networkMap = new Map<string, { base: string; api: 'v3' | 'v4' }>([
-  ['vpr:verana:vna-testnet-1', { base: 'https://idx.testnet.verana.network', api: 'v3' }],
-  ['vpr:verana:vna-devnet-1', { base: 'https://idx.devnet.verana.network', api: 'v4' }],
+const indexerByChain = new Map<string, string>([
+  ['vpr:verana:vna-testnet-1', 'https://idx.testnet.verana.network'],
+  ['vpr:verana:vna-devnet-1', 'https://idx.devnet.verana.network'],
 ])
 
 export function mapToEcosystem(input: string): string {
-  const ref = input.match(/^(vpr:verana:[^:/]+)(?::cs:|\/cs\/v1\/js\/)(\d+)$/)
-  const network = ref && networkMap.get(ref[1])
-  if (!ref || !network) return input
-  return network.api === 'v4'
-    ? `${network.base}/v4/credential-schema/js/${ref[2]}`
-    : `${network.base}/verana/cs/v1/js/${ref[2]}`
+  const ref = input.match(/^(vpr:verana:[^:/]+):cs:(\d+)$/)
+  const base = ref && indexerByChain.get(ref[1])
+  return base ? `${base}/v4/credential-schema/js/${ref[2]}` : input
 }
 
 // v4 spec [ECS-EC] reference digests
