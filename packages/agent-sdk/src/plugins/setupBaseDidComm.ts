@@ -8,7 +8,7 @@ import {
   AnonCredsModule,
 } from '@credo-ts/anoncreds'
 import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
-import { DidsModule, W3cCredentialsModule } from '@credo-ts/core'
+import { DidsModule, JwkDidResolver, KeyDidResolver, W3cCredentialsModule } from '@credo-ts/core'
 import {
   DidCommAutoAcceptCredential,
   DidCommAutoAcceptProof,
@@ -107,6 +107,10 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
         resolvers: [
           new CachedWebDidResolver({ publicApiBaseUrl: options.publicApiBaseUrl }),
           new SafeWebVhDidResolver(),
+          // Wallets bind a credential-request proof with did:jwk or did:key, which carry
+          // their own key material and resolve without touching the network.
+          new JwkDidResolver(),
+          new KeyDidResolver(),
         ],
         registrars: [new WebDidRegistrar(), new WebVhDidRegistrar()],
       }),
