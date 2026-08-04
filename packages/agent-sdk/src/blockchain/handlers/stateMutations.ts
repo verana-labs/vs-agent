@@ -1,5 +1,3 @@
-import { createHash } from 'crypto'
-
 import { AgentContext } from '@credo-ts/core'
 import {
   VtFlowApi,
@@ -14,7 +12,7 @@ import { identifySchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
-import { SelfTrDefaults } from '../../utils/setupSelfTr'
+import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
 import {
   createJsc,
   deleteMetadataEntry,
@@ -28,11 +26,6 @@ import { IndexerActivity, ValidationState, VeranaSyncState } from '../types'
 
 const DEFAULT_CHAIN_ID = 'vna-testnet-1'
 const PARTICIPANT_ROLE_HOLDER = 6
-
-// digestSRI over the schema exactly as the registry serves it; consumers (verre) verify raw bytes
-function rawSchemaDigestSri(rawJsonSchema: string): string {
-  return `sha384-${createHash('sha384').update(rawJsonSchema).digest('base64')}`
-}
 
 export function applyStateMutation(state: VeranaSyncState, activity: IndexerActivity): void {
   switch (activity.msg) {
@@ -353,7 +346,7 @@ export async function reconcileVtjscPublications(
       const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
       if (!didRecord) return
       const schemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
-      const expectedDigest = rawSchemaDigestSri(schema.json_schema)
+      const expectedDigest = generateDigestSRI(schema.json_schema)
       const existingJsc = findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
       const existingDigest = (
         existingJsc?.credential?.credentialSubject as { digestSRI?: string } | undefined
@@ -423,7 +416,7 @@ export async function publishVtjscIfOwner(
   const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
   const jsonSchemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
 
-  const digestSRI = rawSchemaDigestSri(schema.jsonSchema)
+  const digestSRI = generateDigestSRI(schema.jsonSchema)
 
   try {
     await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
