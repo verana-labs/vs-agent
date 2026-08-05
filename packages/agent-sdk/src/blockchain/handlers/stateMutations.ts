@@ -12,6 +12,7 @@ import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
+import { buildLegacySchemaRef, buildSchemaRef } from '../../utils/util'
 import {
   createJsc,
   deleteMetadataEntry,
@@ -342,10 +343,10 @@ export async function reconcileVtjscPublications(
     for (const schema of await indexer.listCredentialSchemas(ecosystem.id)) {
       const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
       if (!didRecord) return
-      const schemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
+      const schemaRef = buildSchemaRef(chainId, schema.id)
       if (findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)) continue
       try {
-        const legacyRef = `vpr:verana:${chainId}/cs/v1/js/${schema.id}`
+        const legacyRef = buildLegacySchemaRef(chainId, schema.id)
         const legacyEntry = findMetadataEntry(didRecord, '_vt/jsc', '', legacyRef)
         if (legacyEntry) {
           if (legacyEntry.didDocumentServiceId && didRecord.didDocument?.service) {
@@ -386,7 +387,7 @@ export async function publishVtjscIfOwner(
   }
 
   const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
-  const jsonSchemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
+  const jsonSchemaRef = buildSchemaRef(chainId, schema.id)
 
   let digestSRI: string
   try {

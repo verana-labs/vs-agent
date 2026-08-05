@@ -25,7 +25,14 @@ import {
   VERIFIER_GRANTOR_PARTICIPANT_TYPE,
   VERIFIER_PARTICIPANT_TYPE,
 } from '../types'
-import { createCredential, createVtc, findMetadataEntry, removeStoredTrustCredential } from '../utils'
+import {
+  buildLegacySchemaRef,
+  buildSchemaRef,
+  createCredential,
+  createVtc,
+  findMetadataEntry,
+  removeStoredTrustCredential,
+} from '../utils'
 
 import { credentialContentDigest } from './credentialDigest'
 
@@ -285,8 +292,8 @@ export class VtFlowOrchestrator {
     const didRecords = await this.agent.dids.getCreatedDids({ did: this.agent.did! })
     const didRecord = didRecords[0]
     if (!didRecord) throw new Error('Agent DID record not found')
-    const schemaRef = `vpr:verana:${chain.getChainId}:cs:${input.credentialSchemaId}`
-    const legacyRef = `vpr:verana:${chain.getChainId}/cs/v1/js/${input.credentialSchemaId}`
+    const schemaRef = buildSchemaRef(chain.getChainId, input.credentialSchemaId)
+    const legacyRef = buildLegacySchemaRef(chain.getChainId, input.credentialSchemaId)
     const entry =
       (await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)) ??
       (await findMetadataEntry(didRecord, '_vt/jsc', '', legacyRef))

@@ -2,6 +2,7 @@ import { ConsoleLogger, LogLevel } from '@credo-ts/core'
 import {
   ParticipantRole,
   ParticipantState,
+  parseSchemaRef,
   VeranaChainService,
   VeranaIndexerService,
 } from '@verana-labs/vs-agent-sdk'
@@ -18,10 +19,7 @@ import {
   startStack,
   type StartedStack,
 } from '../../../../packages/agent-sdk/tests/e2e/helpers'
-import {
-  buildIssuerRestrictions,
-  extractOnChainSchemaId,
-} from '../../src/controllers/admin/credentials/CredentialTypeService'
+import { buildIssuerRestrictions } from '../../src/controllers/admin/credentials/CredentialTypeService'
 
 const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
 const describeE2E = E2E_ENABLED ? describe : describe.skip
@@ -133,7 +131,7 @@ describeE2E('accredited issuer resolution for issuer-agnostic presentation reque
     'resolves an issuer_id restriction for every accredited active issuer of the schema',
     async () => {
       const jsonSchemaRef = `vpr:verana:${CHAIN_ID}:cs:${schemaId}`
-      const parsedSchemaId = extractOnChainSchemaId(jsonSchemaRef)
+      const parsedSchemaId = parseSchemaRef(jsonSchemaRef)
       expect(parsedSchemaId).toBe(schemaId)
 
       const issuers = await indexer.listParticipants({

@@ -16,6 +16,7 @@ import {
   ParticipantDto,
   ParticipantRole,
   ParticipantState,
+  parseSchemaRef,
   VsAgent,
 } from '@verana-labs/vs-agent-sdk'
 
@@ -34,7 +35,7 @@ export class CredentialTypesService {
   public async resolveAccreditedIssuerRestrictions(
     jsonSchemaRef: string,
   ): Promise<AnonCredsProofRequestRestriction[]> {
-    const schemaId = extractOnChainSchemaId(jsonSchemaRef)
+    const schemaId = parseSchemaRef(jsonSchemaRef)
     const agent = await this.agentService.getAgent()
     if (schemaId === undefined || !agent.indexer) return []
     const issuers = await agent.indexer.listParticipants({
@@ -543,11 +544,6 @@ export class CredentialTypesService {
       throw new Error(`Failed to parse JSON Schema Credential ${jsonSchemaCredentialId}: ${error}`)
     }
   }
-}
-
-export function extractOnChainSchemaId(jsonSchemaRef: string): number | undefined {
-  const match = jsonSchemaRef.match(/:cs:(\d+)$/) ?? jsonSchemaRef.match(/\/cs\/v1\/js\/(\d+)$/)
-  return match ? Number(match[1]) : undefined
 }
 
 export function buildIssuerRestrictions(issuers: ParticipantDto[]): AnonCredsProofRequestRestriction[] {

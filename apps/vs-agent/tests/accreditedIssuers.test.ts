@@ -1,25 +1,23 @@
 import type { ParticipantDto } from '@verana-labs/vs-agent-sdk'
 
+import { parseSchemaRef } from '@verana-labs/vs-agent-sdk'
 import { describe, expect, it } from 'vitest'
 
-import {
-  buildIssuerRestrictions,
-  extractOnChainSchemaId,
-} from '../src/controllers/admin/credentials/CredentialTypeService'
+import { buildIssuerRestrictions } from '../src/controllers/admin/credentials/CredentialTypeService'
 
 const issuer = (did: string | null) => ({ did }) as unknown as ParticipantDto
 
-describe('extractOnChainSchemaId', () => {
+describe('parseSchemaRef', () => {
   it('parses the canonical vpr colon form', () => {
-    expect(extractOnChainSchemaId('vpr:verana:vna-testnet-1:cs:16')).toBe(16)
+    expect(parseSchemaRef('vpr:verana:vna-testnet-1:cs:16')).toBe(16)
   })
 
   it('parses the legacy slash form', () => {
-    expect(extractOnChainSchemaId('vpr:verana:vna-testnet-1/cs/v1/js/42')).toBe(42)
+    expect(parseSchemaRef('vpr:verana:vna-testnet-1/cs/v1/js/42')).toBe(42)
   })
 
   it('returns undefined for an unrecognized ref', () => {
-    expect(extractOnChainSchemaId('https://example.com/schema.json')).toBeUndefined()
+    expect(parseSchemaRef('https://example.com/schema.json')).toBeUndefined()
   })
 })
 
