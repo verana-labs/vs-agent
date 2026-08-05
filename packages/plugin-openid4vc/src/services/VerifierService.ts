@@ -535,7 +535,9 @@ function presentationDefinitionFor(
       {
         id: configuration.id,
         constraints: {
-          limit_disclosure: 'required' as const,
+          // 'preferred', not 'required': MOSIP rejects any other value, and the verifier
+          // already fails closed when a requested claim is missing from the response.
+          limit_disclosure: 'preferred' as const,
           fields: [
             {
               path: ['$.vct'],
