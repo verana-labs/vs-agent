@@ -136,6 +136,59 @@ export async function findBoundVerificationMethodId(
   return null
 }
 
+/**
+ * The id of an Ed25519 verification method the DID publishes for one of `purposes`.
+ *
+ * Some wallets accept only EdDSA-signed authorization requests: MOSIP Inji's OpenID4VP library
+ * declares a `RequestSigningAlgorithm` enum whose single constant is EdDSA, and rejects anything
+ * else with `No enum constant ... RequestSigningAlgorithm.ES256` before reading the request.
+ */
+export async function findEd25519VerificationMethodId(
+  agent: DidResolverAgent,
+  did: string | null,
+  purposes: BindingPurpose[],
+  resolutionPolicy: DidResolutionPolicy,
+): Promise<string | null> {
+  if (!did || !isResolutionAllowed(did, resolutionPolicy)) return null
+
+  let didDocument
+  try {
+    const resolution = await withTimeout(
+      agent.dids.resolve(did, { useCache: false, persistInCache: false }),
+      resolutionPolicy.timeoutMs,
+    )
+    if (resolution.didResolutionMetadata?.error || !resolution.didDocument) return null
+    if (resolution.didDocument.id !== did) return null
+    didDocument = resolution.didDocument
+  } catch {
+    return null
+  }
+
+  for (const purpose of purposes) {
+    for (const entry of didDocument[purpose] ?? []) {
+      let verificationMethod: VerificationMethod
+      try {
+        verificationMethod =
+          typeof entry === 'string' ? didDocument.dereferenceVerificationMethod(entry) : entry
+      } catch {
+        continue
+      }
+
+      try {
+        const jwk = getPublicJwkFromVerificationMethod(verificationMethod).toJson() as {
+          kty?: string
+          crv?: string
+        }
+        if (jwk.kty === 'OKP' && jwk.crv === 'Ed25519') return verificationMethod.id
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return null
+}
+
 function isResolutionAllowed(did: string, policy: DidResolutionPolicy): boolean {
   if (
     !Number.isInteger(policy.timeoutMs) ||
