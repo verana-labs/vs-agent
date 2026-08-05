@@ -118,7 +118,7 @@ export async function publishDevelopmentSigningKey(
   const basePurpose: DidPurpose = role === 'issuer' ? 'assertionMethod' : 'authentication'
   const purposes = [...new Set<DidPurpose>([basePurpose, ...extraPurposes])]
   const publicJwk = canonicalP256PublicJwk(signingCertificate.certificate.publicJwk.toJson())
-  await ensureCreatedDidRecordKeyMapping(agent, did, methodId, signingCertificate.keyId)
+  await ensureCreatedDidRecordKeyMapping(agent, did, methodId.slice(did.length), signingCertificate.keyId)
   const existingMethod = resolution.didDocument.verificationMethod?.find(method => method.id === methodId)
   const published = (purpose: DidPurpose) =>
     (resolution.didDocument?.[purpose] ?? []).some(
@@ -134,9 +134,7 @@ export async function publishDevelopmentSigningKey(
   }
 
   const didDocument = DidDocument.fromJSON(resolution.didDocument.toJSON())
-  didDocument.context = [
-    ...new Set([...contextValues(didDocument.context), JSON_WEB_KEY_2020_CONTEXT]),
-  ]
+  didDocument.context = [...new Set([...contextValues(didDocument.context), JSON_WEB_KEY_2020_CONTEXT])]
   didDocument.verificationMethod = [
     ...(didDocument.verificationMethod ?? []).filter(method => method.id !== methodId),
     new VerificationMethod({
@@ -179,10 +177,10 @@ export async function publishDevelopmentSigningKey(
  * entirely), so record it on the DidRecord directly — also when the method itself is already
  * published, which repairs documents written by earlier builds.
  */
-async function ensureCreatedDidRecordKeyMapping(
-  agent: DevelopmentDidAgent,
+export async function ensureCreatedDidRecordKeyMapping(
+  agent: Pick<DevelopmentDidAgent, 'dependencyManager'>,
   did: string,
-  methodId: string,
+  didDocumentRelativeKeyId: string,
   kmsKeyId: string,
 ): Promise<void> {
   const agentContext = agent.dependencyManager.resolve(AgentContext)
@@ -190,7 +188,6 @@ async function ensureCreatedDidRecordKeyMapping(
   const didRecord = await didRepository.findCreatedDid(agentContext, did)
   if (!didRecord) throw new Error('development signing key DID record was not found')
 
-  const didDocumentRelativeKeyId = methodId.slice(did.length)
   const keys = didRecord.keys ?? []
   if (
     keys.some(key => key.didDocumentRelativeKeyId === didDocumentRelativeKeyId && key.kmsKeyId === kmsKeyId)

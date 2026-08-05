@@ -19,6 +19,7 @@ import {
   ownDidResolutionPolicy,
   verifyKeyBoundToDid,
 } from '../trust/keyBinding'
+import { publishParallelWebSigningKey } from '../trust/parallelWebSigningKey'
 
 import {
   didFromValidatedCertificate,
@@ -84,6 +85,7 @@ export class UnknownVerificationSessionError extends Error {}
 export class VerifierService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
+  private parallelWebSigningDidUrl?: string
   private initialized = false
   private readonly trustClient: TrustClient
 
@@ -258,6 +260,11 @@ export class VerifierService {
       throw new Error('OpenID4VC verifier certificate DID does not match the agent DID')
     }
     await publishDevelopmentSigningKey(this.agent, signingCertificate, 'verifier')
+
+    this.parallelWebSigningDidUrl = await publishParallelWebSigningKey(
+      this.agent,
+      this.trustOptions().timeoutMs,
+    )
 
     const binding = await verifyKeyBoundToDid(
       this.agent,
@@ -469,6 +476,9 @@ export class VerifierService {
     // signature. DCQL keeps the certificate-bound key and the did:webvh identifier, so the
     // wallets already verified against it are untouched.
     if (queryLanguage === 'presentation_exchange') {
+      if (this.parallelWebSigningDidUrl) {
+        return { method: 'did' as const, didUrl: this.parallelWebSigningDidUrl }
+      }
       const ed25519DidUrl = await findEd25519VerificationMethodId(
         this.agent,
         did,
