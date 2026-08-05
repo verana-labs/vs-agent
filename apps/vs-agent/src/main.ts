@@ -34,6 +34,7 @@ import {
   AGENT_ENDPOINT,
   AGENT_ENDPOINTS,
   AGENT_INVITATION_IMAGE_URL,
+  DEFAULT_SELF_ISSUED_VTC_RESOURCES,
   SELF_ISSUED_VTC_SERVICE_LOGOURI,
   AGENT_LABEL,
   SELF_ISSUED_VTC_ORG_ADDRESS,
@@ -417,12 +418,17 @@ const run = async () => {
   // Initialize Self-Trust Registry
   const selfTrDefaults = {
     agentLabel: AGENT_LABEL,
-    serviceLogoUri: SELF_ISSUED_VTC_SERVICE_LOGOURI,
+    serviceLogoUri:
+      SELF_ISSUED_VTC_SERVICE_LOGOURI ?? DEFAULT_SELF_ISSUED_VTC_RESOURCES.logoUri(publicApiBaseUrl),
     serviceType: SELF_ISSUED_VTC_SERVICE_TYPE,
     serviceDescription: SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
     serviceMinimumAgeRequired: SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
-    serviceTermsAndConditions: SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
-    servicePrivacyPolicy: SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
+    serviceTermsAndConditions:
+      SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS ??
+      DEFAULT_SELF_ISSUED_VTC_RESOURCES.termsAndConditions(publicApiBaseUrl),
+    servicePrivacyPolicy:
+      SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY ??
+      DEFAULT_SELF_ISSUED_VTC_RESOURCES.privacyPolicy(publicApiBaseUrl),
     orgRegistryId: SELF_ISSUED_VTC_ORG_REGISTRYID,
     orgRegistryUrl: SELF_ISSUED_VTC_ORG_REGISTRYURL,
     orgAddress: SELF_ISSUED_VTC_ORG_ADDRESS,

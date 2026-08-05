@@ -3,6 +3,7 @@ import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
   CredentialTypesService,
+  DefaultResourcesController,
   DidWebController,
   InvitationRoutesController,
   SelfTrController,
@@ -18,7 +19,12 @@ export class PublicModule {
     return {
       module: PublicModule,
       imports: [],
-      controllers: [InvitationRoutesController, SelfTrController, DidWebController],
+      controllers: [
+        InvitationRoutesController,
+        SelfTrController,
+        DidWebController,
+        DefaultResourcesController,
+      ],
       providers: [
         {
           provide: 'VSAGENT',

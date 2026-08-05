@@ -110,12 +110,19 @@ export const SELF_ISSUED_VTC_SERVICE_DESCRIPTION =
 export const SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED = Number(
   process.env.SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED ?? 18,
 )
+// unset means the agent serves its own placeholder, resolved against publicApiBaseUrl at startup:
+// the self-issued credentials hash these resources, so they must be fetchable
 export const SELF_ISSUED_VTC_SERVICE_LOGOURI =
-  process.env.SELF_ISSUED_VTC_SERVICE_LOGOURI ?? AGENT_INVITATION_IMAGE_URL ?? 'https://example.com/logo.png'
+  process.env.SELF_ISSUED_VTC_SERVICE_LOGOURI ?? AGENT_INVITATION_IMAGE_URL
 export const SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS =
-  process.env.SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS ?? 'https://example.com/terms'
-export const SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY =
-  process.env.SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY ?? 'https://example.com/privacy'
+  process.env.SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS
+export const SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY = process.env.SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY
+
+export const DEFAULT_SELF_ISSUED_VTC_RESOURCES = {
+  logoUri: (baseUrl: string) => `${baseUrl}/vt/default/logo.svg`,
+  termsAndConditions: (baseUrl: string) => `${baseUrl}/vt/default/terms.html`,
+  privacyPolicy: (baseUrl: string) => `${baseUrl}/vt/default/privacy.html`,
+}
 
 // Utils params
 export const MASTER_LIST_CSCA_LOCATION = process.env.MASTER_LIST_CSCA_LOCATION
