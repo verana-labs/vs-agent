@@ -59,9 +59,14 @@ export async function publishParallelWebSigningKey(
 
     await ensureCreatedDidRecordKeyMapping(agent, did, PARALLEL_WEB_SIGNING_KEY_FRAGMENT, kmsKeyId)
 
+    // The sign callback dereferences the didUrl restricted to `authentication`
+    // (getPublicJwkFromDid), so publishing the method alone is not enough: it must also be
+    // referenced there. And the boot self-heal strips foreign entries from `authentication` on
+    // every restart, so membership is re-checked and re-added each initialization, the same way
+    // publishDevelopmentSigningKey survives it.
     const signerReady = async () => {
       try {
-        await agent.dids.resolveVerificationMethodFromCreatedDidRecord(methodId)
+        await agent.dids.resolveVerificationMethodFromCreatedDidRecord(methodId, ['authentication'])
         return true
       } catch (error) {
         logger.warn(
@@ -74,7 +79,10 @@ export async function publishParallelWebSigningKey(
     }
 
     const existing = (recordDocument.verificationMethod ?? []).find(method => method.id === methodId)
-    if (existing?.publicKeyMultibase === sourceMethod.publicKeyMultibase) {
+    const referencedInAuthentication = (recordDocument.authentication ?? []).some(
+      entry => (typeof entry === 'string' ? entry : entry.id) === methodId,
+    )
+    if (existing?.publicKeyMultibase === sourceMethod.publicKeyMultibase && referencedInAuthentication) {
       return (await signerReady()) ? methodId : undefined
     }
 
@@ -87,6 +95,12 @@ export async function publishParallelWebSigningKey(
         controller: did,
         publicKeyMultibase: sourceMethod.publicKeyMultibase,
       }),
+    ]
+    didDocument.authentication = [
+      ...(didDocument.authentication ?? []).filter(
+        entry => (typeof entry === 'string' ? entry : entry.id) !== methodId,
+      ),
+      methodId,
     ]
 
     const update = await agent.dids.update({ did, didDocument })
