@@ -15,6 +15,7 @@ import { TrustClient } from '../trust/TrustClient'
 import {
   blockingBindingVerdict,
   findBoundVerificationMethodId,
+  findEd25519VerificationMethodId,
   ownDidResolutionPolicy,
   verifyKeyBoundToDid,
 } from '../trust/keyBinding'
@@ -27,6 +28,9 @@ import {
   type SigningCertificateHandle,
   type SigningCertificateInfo,
 } from './CertificateService'
+
+// What the issuer signs with (IssuerService credential_signing_alg_values_supported).
+const PRESENTATION_ALGORITHMS = ['ES256'] as const
 
 type VerifierApi = Pick<
   OpenId4VcVerifierApi,
@@ -147,7 +151,7 @@ export class VerifierService {
     const { authorizationRequest, verificationSession } = await this.verifierApi().createAuthorizationRequest(
       {
         verifierId: this.verifierOptions().id,
-        requestSigner: await this.buildRequestSigner(),
+        requestSigner: await this.buildRequestSigner(queryLanguage),
         responseMode: 'direct_post.jwt',
         ...query,
       },
@@ -450,13 +454,28 @@ export class VerifierService {
     return this.signingCertificate
   }
 
-  private async buildRequestSigner() {
+  private async buildRequestSigner(queryLanguage: OpenId4VcQueryLanguage) {
     const certificate = this.signingCertificateHandle()
     if (this.verifierOptions().requestSigner !== 'did') {
       return { method: 'x5c' as const, x5c: certificate.chain, clientIdPrefix: 'x509_hash' as const }
     }
 
     const did = this.agent.did ?? null
+
+    // Presentation Exchange is the rail for wallets predating DCQL, and some of them verify the
+    // request with an EdDSA-only implementation. Sign that rail with the DID's Ed25519
+    // authentication key where it publishes one; DCQL keeps the certificate-bound key, so the
+    // wallets already verified against it are untouched.
+    if (queryLanguage === 'presentation_exchange') {
+      const ed25519DidUrl = await findEd25519VerificationMethodId(
+        this.agent,
+        did,
+        ['authentication'],
+        ownDidResolutionPolicy(did ?? '', this.trustOptions().timeoutMs),
+      )
+      if (ed25519DidUrl) return { method: 'did' as const, didUrl: ed25519DidUrl }
+    }
+
     const didUrl = await findBoundVerificationMethodId(
       this.agent,
       did,
@@ -478,6 +497,11 @@ export class VerifierService {
  * The Presentation Exchange equivalent of the DCQL query above: one input descriptor pinned to the
  * configuration's vct, disclosing exactly the claims the policy asks for. `limit_disclosure` keeps
  * the selective-disclosure guarantee DCQL gives implicitly.
+ *
+ * `format` mirrors what the DCQL branch declares, so a wallet can see which proof types are
+ * accepted: some read its absence as "matches nothing" and report no matching credential without
+ * ever showing the request. It says `vc+sd-jwt` even though we issue `dc+sd-jwt`, because the
+ * Presentation Exchange schema admits no `dc+sd-jwt` key and PEX rejects the definition outright.
  */
 function presentationDefinitionFor(
   configuration: { id: string; vct: string },
@@ -485,6 +509,12 @@ function presentationDefinitionFor(
 ) {
   return {
     id: `${configuration.id}-presentation-exchange`,
+    format: {
+      'vc+sd-jwt': {
+        'sd-jwt_alg_values': [...PRESENTATION_ALGORITHMS],
+        'kb-jwt_alg_values': [...PRESENTATION_ALGORITHMS],
+      },
+    },
     input_descriptors: [
       {
         id: configuration.id,
