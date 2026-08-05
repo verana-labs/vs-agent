@@ -16,13 +16,10 @@ import {
   ParticipantDto,
   ParticipantRole,
   ParticipantState,
-  VeranaIndexerService,
   VsAgent,
 } from '@verana-labs/vs-agent-sdk'
 
-import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { TsLogger } from '../../../utils'
 
 type Tags = TagsBase & {
   type?: never
@@ -31,7 +28,6 @@ type Tags = TagsBase & {
 
 export class CredentialTypesService {
   private readonly logger = new Logger(CredentialTypesService.name)
-  private indexerService?: VeranaIndexerService
 
   constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
 
@@ -39,23 +35,14 @@ export class CredentialTypesService {
     jsonSchemaRef: string,
   ): Promise<AnonCredsProofRequestRestriction[]> {
     const schemaId = extractOnChainSchemaId(jsonSchemaRef)
-    if (schemaId === undefined || !VERANA_INDEXER_BASE_URL) return []
-    const issuers = await this.getIndexer().listParticipants({
+    const agent = await this.agentService.getAgent()
+    if (schemaId === undefined || !agent.indexer) return []
+    const issuers = await agent.indexer.listParticipants({
       schemaId,
       role: ParticipantRole.Issuer,
       participantState: ParticipantState.Active,
     })
     return buildIssuerRestrictions(issuers)
-  }
-
-  private getIndexer(): VeranaIndexerService {
-    if (!this.indexerService) {
-      this.indexerService = new VeranaIndexerService({
-        baseUrl: VERANA_INDEXER_BASE_URL!,
-        logger: new TsLogger(ADMIN_LOG_LEVEL, 'VeranaIndexer'),
-      })
-    }
-    return this.indexerService
   }
 
   public async deleteRevocationRegistry(

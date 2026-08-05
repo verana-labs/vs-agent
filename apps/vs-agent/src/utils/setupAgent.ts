@@ -189,6 +189,7 @@ export const setupAgent = async ({
     displayPictureUrl,
     label,
     veranaChain,
+    indexer,
     authorizationService,
     discoveryOptions,
     adminApiServiceEndpoint,
