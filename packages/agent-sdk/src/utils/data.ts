@@ -1,204 +1,218 @@
+// Verbatim copies of the published v4 Essential Credential Schemas
+// https://verana-labs.github.io/verifiable-trust-spec/schemas/v4/
 export function getEcsSchemas(publicApiBaseUrl: string): Record<string, string> {
   return {
     'ecs-org': `{
   "$id": "${publicApiBaseUrl}/vt/cs/v1/js/ecs-org",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "OrganizationCredential",
   "description": "Identifies a legal organization that operates one or more Verifiable Services.",
-  "type": "object",
   "properties": {
     "credentialSubject": {
-      "type": "object",
       "properties": {
-        "id": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 2048
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 512
-        },
-        "logo": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 1400000,
-          "pattern": "^data:image/(png|jpeg|svg\\\\+xml);base64,"
-        },
-        "registryId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 256
-        },
-        "registryUri": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 4096
-        },
         "address": {
-          "type": "string",
+          "maxLength": 1024,
           "minLength": 1,
-          "maxLength": 1024
+          "type": "string"
         },
         "countryCode": {
-          "type": "string",
-          "minLength": 2,
           "maxLength": 2,
-          "pattern": "^[A-Z]{2}$"
+          "minLength": 2,
+          "pattern": "^[A-Z]{2}$",
+          "type": "string"
+        },
+        "id": {
+          "format": "uri",
+          "maxLength": 2048,
+          "type": "string"
         },
         "legalJurisdiction": {
-          "type": "string",
-          "minLength": 1,
           "maxLength": 64,
-          "pattern": "^[A-Z]{2}(-[A-Z0-9]{1,3})?$"
-        },
-        "organizationKind": {
-          "type": "string",
           "minLength": 1,
-          "maxLength": 64
+          "pattern": "^[A-Z]{2}(-[A-Z0-9]{1,3})?$",
+          "type": "string"
         },
         "lei": {
-          "type": "string",
-          "pattern": "^[A-Z0-9]{20}$"
+          "pattern": "^[A-Z0-9]{20}$",
+          "type": "string"
+        },
+        "logoDigestSri": {
+          "maxLength": 256,
+          "type": "string"
+        },
+        "logoUri": {
+          "format": "uri",
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "organizationKind": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "registryId": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "registryUri": {
+          "format": "uri",
+          "maxLength": 4096,
+          "type": "string"
         }
       },
       "required": [
         "id",
         "name",
-        "logo",
+        "logoUri",
+        "logoDigestSri",
         "registryId",
         "address",
         "countryCode"
-      ]
+      ],
+      "type": "object"
     }
-  }
+  },
+  "title": "OrganizationCredential",
+  "type": "object"
 }`,
-    'ecs-person': `{
-  "$id": "${publicApiBaseUrl}/vt/cs/v1/js/ecs-person",
+    'ecs-persona': `{
+  "$id": "${publicApiBaseUrl}/vt/cs/v1/js/ecs-persona",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "PersonaCredential",
   "description": "Identifies a Persona (human-controlled avatar) that operates one or more Verifiable Services.",
-  "type": "object",
   "properties": {
     "credentialSubject": {
-      "type": "object",
+      "dependentRequired": {
+        "avatarUri": [
+          "avatarDigestSri"
+        ]
+      },
       "properties": {
-        "id": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 2048
+        "avatarDigestSri": {
+          "maxLength": 256,
+          "type": "string"
         },
-        "name": {
-          "type": "string",
+        "avatarUri": {
+          "format": "uri",
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "controllerCountryCode": {
+          "maxLength": 2,
+          "minLength": 2,
+          "pattern": "^[A-Z]{2}$",
+          "type": "string"
+        },
+        "controllerJurisdiction": {
+          "maxLength": 64,
           "minLength": 1,
-          "maxLength": 256
-        },
-        "avatar": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 1400000,
-          "pattern": "^data:image/(png|jpeg|svg\\\\+xml);base64,"
+          "pattern": "^[A-Z]{2}(-[A-Z0-9]{1,3})?$",
+          "type": "string"
         },
         "description": {
-          "type": "string",
+          "maxLength": 16384,
           "minLength": 0,
-          "maxLength": 16384
+          "type": "string"
         },
         "descriptionFormat": {
-          "type": "string",
+          "default": "text/plain",
           "enum": [
             "text/plain",
             "text/markdown"
           ],
-          "default": "text/plain"
+          "type": "string"
         },
-        "controllerCountryCode": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 2,
-          "pattern": "^[A-Z]{2}$"
+        "id": {
+          "format": "uri",
+          "maxLength": 2048,
+          "type": "string"
         },
-        "controllerJurisdiction": {
-          "type": "string",
+        "name": {
+          "maxLength": 256,
           "minLength": 1,
-          "maxLength": 64,
-          "pattern": "^[A-Z]{2}(-[A-Z0-9]{1,3})?$"
+          "type": "string"
         }
       },
       "required": [
         "id",
         "name",
         "controllerCountryCode"
-      ]
+      ],
+      "type": "object"
     }
-  }
+  },
+  "title": "PersonaCredential",
+  "type": "object"
 }`,
     'ecs-service': `{
   "$id": "${publicApiBaseUrl}/vt/cs/v1/js/ecs-service",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ServiceCredential",
   "description": "Identifies a Verifiable Service and defines the minimum trust and access requirements required to interact with it.",
-  "type": "object",
   "properties": {
     "credentialSubject": {
-      "type": "object",
       "properties": {
-        "id": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 2048
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 512
-        },
-        "type": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
-        },
         "description": {
-          "type": "string",
-          "maxLength": 4096
+          "maxLength": 4096,
+          "type": "string"
         },
         "descriptionFormat": {
-          "type": "string",
+          "default": "text/plain",
           "enum": [
             "text/plain",
             "text/markdown"
           ],
-          "default": "text/plain"
+          "type": "string"
         },
-        "logo": {
-          "type": "string",
+        "id": {
           "format": "uri",
-          "maxLength": 1400000,
-          "pattern": "^data:image/(png|jpeg|svg\\\\+xml);base64,"
+          "maxLength": 2048,
+          "type": "string"
+        },
+        "logoDigestSri": {
+          "maxLength": 256,
+          "type": "string"
+        },
+        "logoUri": {
+          "format": "uri",
+          "maxLength": 4096,
+          "type": "string"
         },
         "minimumAgeRequired": {
-          "type": "integer",
+          "maximum": 255,
           "minimum": 0,
-          "maximum": 255
+          "type": "integer"
         },
-        "termsAndConditions": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 4096
-        },
-        "termsAndConditionsDigestSri": {
-          "type": "string",
-          "maxLength": 256
-        },
-        "privacyPolicy": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 4096
+        "name": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
         },
         "privacyPolicyDigestSri": {
-          "type": "string",
-          "maxLength": 256
+          "maxLength": 256,
+          "type": "string"
+        },
+        "privacyPolicyUri": {
+          "format": "uri",
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "termsAndConditionsDigestSri": {
+          "maxLength": 256,
+          "type": "string"
+        },
+        "termsAndConditionsUri": {
+          "format": "uri",
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "type": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
         }
       },
       "required": [
@@ -206,46 +220,46 @@ export function getEcsSchemas(publicApiBaseUrl: string): Record<string, string> 
         "name",
         "type",
         "description",
-        "logo",
+        "logoUri",
+        "logoDigestSri",
         "minimumAgeRequired",
-        "termsAndConditions",
-        "privacyPolicy"
-      ]
+        "termsAndConditionsUri",
+        "termsAndConditionsDigestSri",
+        "privacyPolicyUri",
+        "privacyPolicyDigestSri"
+      ],
+      "type": "object"
     }
-  }
+  },
+  "title": "ServiceCredential",
+  "type": "object"
 }`,
     'ecs-user-agent': `{
   "$id": "${publicApiBaseUrl}/vt/cs/v1/js/ecs-user-agent",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "UserAgentCredential",
   "description": "Identifies a User Agent instance and the software version it runs. The issuer identifies the software product line.",
-  "type": "object",
   "properties": {
     "credentialSubject": {
-      "type": "object",
       "properties": {
-        "id": {
-          "type": "string",
-          "format": "uri",
-          "maxLength": 2048
+        "build": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
         },
         "version": {
-          "type": "string",
+          "maxLength": 64,
           "minLength": 1,
-          "maxLength": 64
-        },
-        "build": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
+          "type": "string"
         }
       },
       "required": [
-        "id",
         "version"
-      ]
+      ],
+      "type": "object"
     }
-  }
+  },
+  "title": "UserAgentCredential",
+  "type": "object"
 }`,
   }
 }

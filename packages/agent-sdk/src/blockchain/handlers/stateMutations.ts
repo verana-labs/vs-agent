@@ -15,7 +15,6 @@ import { getEcsSchemas } from '../../utils/data'
 import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
 import {
   createJsc,
-  deleteMetadataEntry,
   findMetadataEntry,
   rebindEcsCredentialSchema,
   removeStoredTrustCredential,
@@ -353,16 +352,6 @@ export async function reconcileVtjscPublications(
       )?.digestSRI
       if (!existingJsc || existingDigest !== expectedDigest) {
         try {
-          const legacyRef = `vpr:verana:${chainId}/cs/v1/js/${schema.id}`
-          const legacyEntry = findMetadataEntry(didRecord, '_vt/jsc', '', legacyRef)
-          if (legacyEntry) {
-            if (legacyEntry.didDocumentServiceId && didRecord.didDocument?.service) {
-              didRecord.didDocument.service = didRecord.didDocument.service.filter(
-                service => service.id !== legacyEntry.didDocumentServiceId,
-              )
-            }
-            await deleteMetadataEntry(agent, legacyRef, didRecord, '_vt/jsc', agent.publicApiBaseUrl)
-          }
           await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
             schemaBaseId: String(schema.id),
             jsonSchemaRef: schemaRef,
