@@ -152,6 +152,20 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       // TODO: Make DIDComm version, keys, etc. configurable. Keys can also be imported
       const domain = parsedDid.id.includes(':') ? parsedDid.id.split(':')[1] : parsedDid.id
 
+      // A webvh agent carries its did:web form as an `alternativeDids` tag, never as a record of
+      // its own. A separate did:web record for the same domain hijacks resolution of the agent's
+      // own DID: `dids.resolve(<webvh did>)` answers with the did:web document, and every check
+      // comparing the resolved id against the configured DID then fails. Runs before anything
+      // reads a record, and matches on any role, since an imported one is not marked created.
+      if (parsedDid.method === 'webvh') {
+        const didRepository = this.dependencyManager.resolve(DidRepository)
+        const shadows = await didRepository.findByQuery(this.context, { method: 'web', domain })
+        for (const shadow of shadows.filter(record => record.did === `did:web:${domain}`)) {
+          this.logger.warn(`Removing did:web record shadowing the agent DID: ${shadow.did}`)
+          await didRepository.delete(this.context, shadow)
+        }
+      }
+
       const existingRecord = await this.findCreatedDid(parsedDid)
 
       // DID has not been created yet. Let's do it
@@ -224,19 +238,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         }
 
         return
-      }
-
-      // A webvh agent must own no created did:web record for the same domain. Creation deletes one
-      // when upgrading, but a record written afterwards leaves two created DIDs, and the public DID
-      // then resolves to whichever is found first: the agent tries to update the did:web, that
-      // cannot persist, and it crash-loops on "resolution returned a different DID".
-      if (parsedDid.method === 'webvh') {
-        const didRepository = this.dependencyManager.resolve(DidRepository)
-        const strayDidWeb = await didRepository.findCreatedDid(this.agentContext, `did:web:${domain}`)
-        if (strayDidWeb) {
-          this.logger.warn(`Removing stray did:web record shadowing ${existingRecord.did}`)
-          await didRepository.delete(this.agentContext, strayDidWeb)
-        }
       }
 
       // Ensure the stored did:webvh log is resolvable under the current didwebvh-ts version:
