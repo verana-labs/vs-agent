@@ -32,6 +32,17 @@ import {
 // What the issuer signs with (IssuerService credential_signing_alg_values_supported).
 const PRESENTATION_ALGORITHMS = ['ES256'] as const
 
+/**
+ * The parallel did:web name for a did:webvh verification method, per
+ * https://identity.foundation/didwebvh/v1.0/#publishing-a-parallel-didweb-did. The agent already
+ * serves that document at /.well-known/did.json with `alsoKnownAs` pointing back, so both names
+ * denote the same key. Anything that is not a did:webvh URL is returned unchanged.
+ */
+function asParallelDidWebUrl(didUrl: string): string {
+  const match = /^did:webvh:([^:]+):/.exec(didUrl)
+  return match ? didUrl.replace(`did:webvh:${match[1]}`, 'did:web') : didUrl
+}
+
 type VerifierApi = Pick<
   OpenId4VcVerifierApi,
   | 'getVerifierByVerifierId'
@@ -462,9 +473,11 @@ export class VerifierService {
 
     const did = this.agent.did ?? null
 
-    // Presentation Exchange is the rail for wallets predating DCQL, and some of them verify the
-    // request with an EdDSA-only implementation. Sign that rail with the DID's Ed25519
-    // authentication key where it publishes one; DCQL keeps the certificate-bound key, so the
+    // Presentation Exchange is the rail for wallets predating DCQL, and those wallets tend to
+    // verify the request with an EdDSA-only implementation that resolves did:web but not
+    // did:webvh. Sign that rail with the Ed25519 authentication key, named by the parallel
+    // did:web the agent already publishes, so such a wallet can fetch the key and check the
+    // signature. DCQL keeps the certificate-bound key and the did:webvh identifier, so the
     // wallets already verified against it are untouched.
     if (queryLanguage === 'presentation_exchange') {
       const ed25519DidUrl = await findEd25519VerificationMethodId(
@@ -473,7 +486,7 @@ export class VerifierService {
         ['authentication'],
         ownDidResolutionPolicy(did ?? '', this.trustOptions().timeoutMs),
       )
-      if (ed25519DidUrl) return { method: 'did' as const, didUrl: ed25519DidUrl }
+      if (ed25519DidUrl) return { method: 'did' as const, didUrl: asParallelDidWebUrl(ed25519DidUrl) }
     }
 
     const didUrl = await findBoundVerificationMethodId(
