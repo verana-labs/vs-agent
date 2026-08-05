@@ -38,13 +38,14 @@ import {
   DidCommProofV2Protocol,
 } from '@credo-ts/didcomm'
 import { VtFlowModule } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
+import { DIDLog, multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
-import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
+import { KmsVerifier, migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
 import { migrateWebVhVersionTimeIfBroken } from '../did/migrateWebVhVersionTime'
+import { restoreShadowedWebVhDidDocument } from '../did/restoreShadowedWebVhDidDocument'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { connectionEvents } from '../events/ConnectionEvents'
 import { vtFlowEvents } from '../events/VtFlowEvents'
@@ -153,16 +154,17 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       const domain = parsedDid.id.includes(':') ? parsedDid.id.split(':')[1] : parsedDid.id
 
       // A webvh agent carries its did:web form as an `alternativeDids` tag, never as a record of
-      // its own. A separate did:web record for the same domain hijacks resolution of the agent's
-      // own DID: `dids.resolve(<webvh did>)` answers with the did:web document, and every check
-      // comparing the resolved id against the configured DID then fails. Runs before anything
-      // reads a record, and matches on any role, since an imported one is not marked created.
+      // its own; a record whose own did IS the did:web form double-matches every alternativeDids
+      // lookup. Matched via the `did` tag: DidRecords carry no `domain` tag, and their `method`
+      // tag derives from record.did, so a {method: 'web', domain} query can never hit one.
       if (parsedDid.method === 'webvh') {
         const didRepository = this.dependencyManager.resolve(DidRepository)
-        const shadows = await didRepository.findByQuery(this.context, { method: 'web', domain })
-        for (const shadow of shadows.filter(record => record.did === `did:web:${domain}`)) {
-          this.logger.warn(`Removing did:web record shadowing the agent DID: ${shadow.did}`)
-          await didRepository.delete(this.context, shadow)
+        const strays = await didRepository.findByQuery(this.context, { did: `did:web:${domain}` })
+        for (const stray of strays) {
+          this.logger.warn(
+            `Removing did:web record shadowing the agent DID: ${stray.did} (role ${stray.role})`,
+          )
+          await didRepository.delete(this.context, stray)
         }
       }
 
@@ -255,6 +257,28 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             }`,
           )
           throw error
+        }
+      }
+
+      // A dids.import of the agent's parallel did:web finds the webvh record itself through its
+      // alternativeDids tag and overwrites its document in place, leaving record.did pointing at
+      // a document with a different id. The webvh log in the record metadata is the one piece
+      // such an import never touches, so the document is rebuilt from it.
+      if (parsedDid.method === 'webvh') {
+        const shadowedBy = existingRecord.didDocument?.id
+        const restored = await restoreShadowedWebVhDidDocument({
+          did: existingRecord.did,
+          didDocument: existingRecord.didDocument,
+          log: existingRecord.metadata.get('log') as DIDLog | undefined,
+          verifier: new KmsVerifier(this.agentContext),
+        })
+        if (restored) {
+          existingRecord.didDocument = restored
+          const didRepository = this.dependencyManager.resolve(DidRepository)
+          await didRepository.update(this.context, existingRecord)
+          this.logger.warn(
+            `Restored the did document of ${existingRecord.did} from its webvh log; it was shadowed by ${shadowedBy}`,
+          )
         }
       }
 

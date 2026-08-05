@@ -18,7 +18,7 @@ import {
 /**
  * Verifier that delegates Ed25519 verification to the agent's KMS.
  */
-class KmsVerifier implements Verifier {
+export class KmsVerifier implements Verifier {
   public constructor(private readonly agentContext: AgentContext) {}
 
   public async verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Promise<boolean> {
