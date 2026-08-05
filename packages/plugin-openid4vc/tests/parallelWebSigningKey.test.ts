@@ -133,7 +133,7 @@ describe('publishParallelWebSigningKey', () => {
     const relationshipIds = (document.authentication ?? []).map(entry =>
       typeof entry === 'string' ? entry : entry.id,
     )
-    expect(relationshipIds).not.toContain(methodId)
+    expect(relationshipIds).toContain(methodId)
 
     expect(await createdDidRecordKeys(agent)).toContainEqual({
       didDocumentRelativeKeyId: PARALLEL_WEB_SIGNING_KEY_FRAGMENT,
