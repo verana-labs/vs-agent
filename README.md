@@ -1,16 +1,47 @@
 # VS Agent
 
-VS Agent is a web application that can be used as a framework for building conversational **Verifiable Services (VS)** that integrate seamlessly with the [Hologram Messaging App](https://hologram.chat) and other compatible [DIDCommm](https://didcomm.org) agents. It enables developers to create, deploy, and manage agents that provide trustworthy, verifiable information and actions in chat conversations.
+VS Agent is the reference implementation of a **Verifiable Service (VS)**: a
+self-hosted container that packs everything a service needs to be verifiable
+under the [Verifiable Trust model](https://verana-labs.github.io/verifiable-trust-spec/versions/v4/) -
+a resolvable DID, credential lifecycle management, trust resolution against
+the [Verana](https://verana.io) infrastructure, and secure peer-to-peer
+communication over [DIDComm](https://didcomm.org) and
+[OpenID4VC](https://openid.net/sg/openid4vc/).
+
+Run it alongside your backend and expose any service shape under one
+verified identity: a conversational DIDComm agent, an MCP tool server, an
+A2A agent, or a plain HTTP API. Peers resolve your DID, verify who operates
+the service and under which governance, and only then connect.
 
 ---
 
 ## Features
 
-- Simple REST API to send messages and receive events from connected users. No need to have knowledge on DIDComm: all the complexity is managed internally!
-- Issue and verify AnonCreds credentials, with revocation support
-- Built-in [Verifiable Trust](https://verana.foundation/page/learn-vt-demystified/) implementation
-- Hands-on client for easy integrations in existing backends using NestJS
-- Plugin architecture: load only the features you need (`chat`, `mrtd`) via `VS_AGENT_PLUGINS`
+- **Verifiable Trust built in**: the agent maintains its DID Document with
+  Linked Verifiable Presentations of its ECS credentials (what the service
+  is, who operates it), and resolves the trust of every peer before
+  exchanging data.
+- **Holder, issuer and verifier in one runtime**: issue, hold and verify
+  credentials under ecosystem accreditation, with revocation support.
+- **Dual transport**:
+  - **DIDComm** (v1 and v2 envelopes): Issue Credential v2, Present Proof v2,
+    and the [vt-flow protocol](https://github.com/verana-labs/verana-spec/blob/main/v4/vt-flow-protocol/spec.md)
+    for ecosystem-driven flows - onboarding triggers issuance, on-chain
+    revocation is pushed to holders and cleaned up automatically.
+  - **OpenID4VCI / OpenID4VP** (`openid4vc` plugin): `dc+sd-jwt` issuance
+    and presentation with DCQL and Presentation Exchange, IETF Token Status
+    List revocation, and Verana trust checks before any presentation is
+    accepted. See the [operator documentation](./packages/plugin-openid4vc/README.md).
+- **The right credential format for each use**: W3C JSON-LD credentials for
+  public credentials (digest-anchored on the Verana ledger), AnonCreds for
+  private credentials that must stay unlinkable (ZKP, selective disclosure),
+  and IETF SD-JWT VC for OpenID4VC interoperability.
+- **Simple REST API and typed clients**: send messages, issue credentials
+  and receive events without knowing anything about DIDComm - all the
+  complexity is managed internally. A [NestJS client](./packages/nestjs-client/)
+  and a [base JS client](./packages/client) are provided.
+- **Plugin architecture**: load only the features you need (`chat`, `mrtd`,
+  `openid4vc`) via `VS_AGENT_PLUGINS`.
 
 ---
 
