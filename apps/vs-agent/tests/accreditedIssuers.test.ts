@@ -33,11 +33,7 @@ describe('buildIssuerRestrictions', () => {
 
   it('deduplicates repeated issuers and drops null DIDs', () => {
     expect(
-      buildIssuerRestrictions([
-        issuer('did:webvh:issuer-a'),
-        issuer('did:webvh:issuer-a'),
-        issuer(null),
-      ]),
+      buildIssuerRestrictions([issuer('did:webvh:issuer-a'), issuer('did:webvh:issuer-a'), issuer(null)]),
     ).toEqual([{ issuer_id: 'did:webvh:issuer-a' }])
   })
 

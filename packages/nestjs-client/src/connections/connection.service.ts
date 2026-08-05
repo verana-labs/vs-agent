@@ -28,7 +28,7 @@ export class ConnectionsEventService {
           await this.repository.updateMetadata(event.connectionId, event.metadata)
         await this.handleNewConnection(event.connectionId)
         break
-      case ExtendedDidExchangeState.Completed:
+      case ExtendedDidExchangeState.Completed: {
         const newConnection = new ConnectionEntity()
         newConnection.id = event.connectionId
         newConnection.createdTs = event.timestamp
@@ -36,6 +36,7 @@ export class ConnectionsEventService {
         newConnection.metadata = event.metadata
         await this.repository.create(newConnection)
         break
+      }
       case ExtendedDidExchangeState.Terminated:
         await this.repository.updateStatus(event.connectionId, event.state)
 

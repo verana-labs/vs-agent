@@ -198,12 +198,13 @@ export class TrustService {
       validateSchema(parsedSchema, claims)
 
       switch (format) {
-        case 'jsonld':
+        case 'jsonld': {
           if (!did)
             throw new HttpException('did must be present for JSON-LD credentials', HttpStatus.BAD_REQUEST)
           const credential = await this.issueW3cJsonLd(agent, didRecord, did, jsonSchemaCredentialId, claims)
           return { status: 200, didcommInvitationUrl: '', credential }
-        case 'anoncreds':
+        }
+        case 'anoncreds': {
           const { credentialDefinitionId } =
             await this.credentialTypesService.getOrRegisterAnonCredsCredentialDefinition({
               relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
@@ -251,6 +252,7 @@ export class TrustService {
             didcommInvitationUrl,
             jsonSchemaCredentialId,
           }
+        }
         default:
           throw new HttpException(`Invalid credential type: ${format}`, HttpStatus.BAD_REQUEST)
       }
