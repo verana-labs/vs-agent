@@ -59,8 +59,24 @@ export async function publishParallelWebSigningKey(
 
     await ensureCreatedDidRecordKeyMapping(agent, did, PARALLEL_WEB_SIGNING_KEY_FRAGMENT, kmsKeyId)
 
+    const signerReady = async () => {
+      try {
+        await agent.dids.resolveVerificationMethodFromCreatedDidRecord(methodId)
+        return true
+      } catch (error) {
+        logger.warn(
+          `published parallel did:web method is not reachable as ${methodId}; presentation-exchange requests keep the ${did} name: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+        return false
+      }
+    }
+
     const existing = (recordDocument.verificationMethod ?? []).find(method => method.id === methodId)
-    if (existing?.publicKeyMultibase === sourceMethod.publicKeyMultibase) return methodId
+    if (existing?.publicKeyMultibase === sourceMethod.publicKeyMultibase) {
+      return (await signerReady()) ? methodId : undefined
+    }
 
     const didDocument = DidDocument.fromJSON(recordDocument.toJSON())
     didDocument.verificationMethod = [
@@ -78,7 +94,7 @@ export async function publishParallelWebSigningKey(
       logger.warn(`parallel did:web signing key publication did not finish for ${did}`)
       return undefined
     }
-    return methodId
+    return (await signerReady()) ? methodId : undefined
   } catch (error) {
     logger.warn(
       `parallel did:web signing key publication failed for ${did}: ${

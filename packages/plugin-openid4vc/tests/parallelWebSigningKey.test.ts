@@ -165,11 +165,20 @@ describe('publishParallelWebSigningKey', () => {
     expect(registry.updateCount).toBe(0)
     expect(await createdDidRecordKeys(agent)).toBeUndefined()
   })
+
+  it('returns undefined when the record is not reachable under the did:web name', async () => {
+    const { agent } = await createHarness(DID_WEBVH, { seedAlternativeDids: false })
+
+    expect(await publishParallelWebSigningKey(agent, 5_000)).toBeUndefined()
+  })
 })
 
 async function createHarness(
   did: string,
-  { seedKeyMapping = true }: { seedKeyMapping?: boolean } = {},
+  {
+    seedKeyMapping = true,
+    seedAlternativeDids = true,
+  }: { seedKeyMapping?: boolean; seedAlternativeDids?: boolean } = {},
 ): Promise<{ agent: TestAgent; registry: MutableDidRegistry }> {
   const registry = new MutableDidRegistry(new Map([[did, initialDidDocument(did)]]))
   const agent = new Agent({
@@ -190,17 +199,18 @@ async function createHarness(
   }) as TestAgent
   agent.did = did
   await agent.initialize()
-  await agent.dependencyManager.resolve(DidRepository).save(
-    agent.context,
-    new DidRecord({
-      did,
-      role: DidDocumentRole.Created,
-      didDocument: initialDidDocument(did),
-      keys: seedKeyMapping
-        ? [{ didDocumentRelativeKeyId: `#${SOURCE_METHOD_SUFFIX}`, kmsKeyId: SOURCE_KMS_KEY_ID }]
-        : undefined,
-    }),
-  )
+  const didRecord = new DidRecord({
+    did,
+    role: DidDocumentRole.Created,
+    didDocument: initialDidDocument(did),
+    keys: seedKeyMapping
+      ? [{ didDocumentRelativeKeyId: `#${SOURCE_METHOD_SUFFIX}`, kmsKeyId: SOURCE_KMS_KEY_ID }]
+      : undefined,
+  })
+  if (seedAlternativeDids && did.startsWith('did:webvh:')) {
+    didRecord.setTag('alternativeDids', [DID_WEB])
+  }
+  await agent.dependencyManager.resolve(DidRepository).save(agent.context, didRecord)
   agents.push(agent)
   return { agent, registry }
 }
