@@ -108,10 +108,15 @@ describe('presentation-exchange request signing for a webvh verifier', () => {
     const { service, fetchRequestJwt } = await startWebvhVerifier({ seedAlternativeDids: true })
 
     const request = await service.createRequest('employee-check', 'presentation_exchange')
-    const header = await fetchRequestJwt(request.authorizationRequest)
+    const { header, payload } = await fetchRequestJwt(request.authorizationRequest)
 
     expect(header.alg).toBe('EdDSA')
     expect(header.kid).toBe(`${WEB_DID}#openid4vc-parallel-web`)
+
+    const filter = payload.presentation_definition?.input_descriptors?.[0]?.constraints?.fields?.[0]
+      ?.filter as { const?: string; pattern?: string } | undefined
+    expect(filter?.const).toBe(CONFIGURATION.vct)
+    expect(filter?.pattern).toBe(CONFIGURATION.vct.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   })
 
   it('falls back to the webvh-named key when the parallel record lookup fails', async () => {
@@ -120,7 +125,7 @@ describe('presentation-exchange request signing for a webvh verifier', () => {
     })
 
     const request = await service.createRequest('employee-check', 'presentation_exchange')
-    const header = await fetchRequestJwt(request.authorizationRequest)
+    const { header } = await fetchRequestJwt(request.authorizationRequest)
 
     expect(header.alg).toBe('EdDSA')
     expect(header.kid).toBe(ed25519MethodId)
@@ -277,9 +282,14 @@ async function startWebvhVerifier({ seedAlternativeDids }: { seedAlternativeDids
     const requestUri = url.searchParams.get('request_uri')
     if (!requestUri) throw new Error(`no request_uri in ${authorizationRequest}`)
     const jwt = await (await fetch(requestUri)).text()
-    return JSON.parse(Buffer.from(jwt.split('.')[0], 'base64url').toString()) as {
-      alg: string
-      kid: string
+    const [headerPart, payloadPart] = jwt.split('.')
+    return {
+      header: JSON.parse(Buffer.from(headerPart, 'base64url').toString()) as {
+        alg: string
+        kid: string
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: raw JWT payload probing
+      payload: JSON.parse(Buffer.from(payloadPart, 'base64url').toString()) as any,
     }
   }
 

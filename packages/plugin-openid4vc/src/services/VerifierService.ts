@@ -515,6 +515,10 @@ export class VerifierService {
  * ever showing the request. It says `vc+sd-jwt` even though we issue `dc+sd-jwt`, because the
  * Presentation Exchange schema admits no `dc+sd-jwt` key and PEX rejects the definition outright.
  */
+function escapeForFilterPattern(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function presentationDefinitionFor(
   configuration: { id: string; vct: string },
   policy: { requestedClaims: string[] },
@@ -533,7 +537,17 @@ function presentationDefinitionFor(
         constraints: {
           limit_disclosure: 'required' as const,
           fields: [
-            { path: ['$.vct'], filter: { type: 'string' as const, const: configuration.vct } },
+            {
+              path: ['$.vct'],
+              // `pattern` next to `const`: MOSIP's Presentation Exchange parser requires
+              // filter.pattern and knows no other filter key, while wallets reading the
+              // credential type back out of the definition follow `const`.
+              filter: {
+                type: 'string' as const,
+                const: configuration.vct,
+                pattern: escapeForFilterPattern(configuration.vct),
+              },
+            },
             ...policy.requestedClaims.map(name => ({ path: [`$.${name}`] })),
           ],
         },
