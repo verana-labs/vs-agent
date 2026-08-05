@@ -1,5 +1,6 @@
 import {
   AnonCredsCredentialDefinitionRepository,
+  AnonCredsProofRequestRestriction,
   AnonCredsRevocationRegistryDefinitionPrivateRepository,
   AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchema,
@@ -9,9 +10,19 @@ import { JsonObject, parseDid, Proof, TagsBase, utils, W3cCredential } from '@cr
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
-import { deleteTailsFile, fetchJson, VsAgent } from '@verana-labs/vs-agent-sdk'
+import {
+  deleteTailsFile,
+  fetchJson,
+  ParticipantDto,
+  ParticipantRole,
+  ParticipantState,
+  VeranaIndexerService,
+  VsAgent,
+} from '@verana-labs/vs-agent-sdk'
 
+import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
+import { TsLogger } from '../../../utils'
 
 type Tags = TagsBase & {
   type?: never
@@ -20,8 +31,32 @@ type Tags = TagsBase & {
 
 export class CredentialTypesService {
   private readonly logger = new Logger(CredentialTypesService.name)
+  private indexerService?: VeranaIndexerService
 
   constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
+
+  public async resolveAccreditedIssuerRestrictions(
+    jsonSchemaRef: string,
+  ): Promise<AnonCredsProofRequestRestriction[]> {
+    const schemaId = extractOnChainSchemaId(jsonSchemaRef)
+    if (schemaId === undefined || !VERANA_INDEXER_BASE_URL) return []
+    const issuers = await this.getIndexer().listParticipants({
+      schemaId,
+      role: ParticipantRole.Issuer,
+      participantState: ParticipantState.Active,
+    })
+    return buildIssuerRestrictions(issuers)
+  }
+
+  private getIndexer(): VeranaIndexerService {
+    if (!this.indexerService) {
+      this.indexerService = new VeranaIndexerService({
+        baseUrl: VERANA_INDEXER_BASE_URL!,
+        logger: new TsLogger(ADMIN_LOG_LEVEL, 'VeranaIndexer'),
+      })
+    }
+    return this.indexerService
+  }
 
   public async deleteRevocationRegistry(
     agent: VsAgent,
@@ -521,4 +556,14 @@ export class CredentialTypesService {
       throw new Error(`Failed to parse JSON Schema Credential ${jsonSchemaCredentialId}: ${error}`)
     }
   }
+}
+
+export function extractOnChainSchemaId(jsonSchemaRef: string): number | undefined {
+  const match = jsonSchemaRef.match(/:cs:(\d+)$/) ?? jsonSchemaRef.match(/\/cs\/v1\/js\/(\d+)$/)
+  return match ? Number(match[1]) : undefined
+}
+
+export function buildIssuerRestrictions(issuers: ParticipantDto[]): AnonCredsProofRequestRestriction[] {
+  const dids = [...new Set(issuers.map(issuer => issuer.did).filter((did): did is string => !!did))]
+  return dids.map(did => ({ issuer_id: did }))
 }

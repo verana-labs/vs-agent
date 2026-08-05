@@ -254,7 +254,14 @@ export class InvitationController {
       }
 
       schema = schemaResult.schema
-      restrictions = [{ schema_id: schemaResult.schemaId }]
+
+      const jsonSchemaRef = extractJsonSchemaRef(jscData)
+      const accreditedIssuerRestrictions = jsonSchemaRef
+        ? await this.credentialTypesService.resolveAccreditedIssuerRestrictions(jsonSchemaRef)
+        : []
+      restrictions = accreditedIssuerRestrictions.length
+        ? accreditedIssuerRestrictions
+        : [{ schema_id: schemaResult.schemaId }]
     } else {
       const { credentialDefinition } = await agent.modules.anoncreds.getCredentialDefinition(
         credentialDefinitionId!,
@@ -465,4 +472,11 @@ export class InvitationController {
       throw new HttpException(`Failed to create invitation: ${error}`, 500)
     }
   }
+}
+
+function extractJsonSchemaRef(jsc: W3cCredential): string | undefined {
+  const subject = (
+    Array.isArray(jsc.credentialSubject) ? jsc.credentialSubject[0] : jsc.credentialSubject
+  ) as Record<string, any>
+  return subject?.jsonSchema?.$ref
 }
