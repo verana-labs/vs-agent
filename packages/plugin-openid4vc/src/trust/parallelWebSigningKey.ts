@@ -82,16 +82,23 @@ export async function publishParallelWebSigningKey(
     const referencedInAuthentication = (recordDocument.authentication ?? []).some(
       entry => (typeof entry === 'string' ? entry : entry.id) === methodId,
     )
-    if (existing?.publicKeyMultibase === sourceMethod.publicKeyMultibase && referencedInAuthentication) {
+    if (
+      existing?.type === 'Ed25519VerificationKey2020' &&
+      existing.publicKeyMultibase === sourceMethod.publicKeyMultibase &&
+      referencedInAuthentication
+    ) {
       return (await signerReady()) ? methodId : undefined
     }
 
     const didDocument = DidDocument.fromJSON(recordDocument.toJSON())
     didDocument.verificationMethod = [
       ...(didDocument.verificationMethod ?? []).filter(method => method.id !== methodId),
+      // Ed25519VerificationKey2020, not Multikey: MOSIP's key resolver maps the method `type`
+      // to a JCA algorithm and knows only RsaVerificationKey2018 and Ed25519VerificationKey2018/
+      // 2020 — a Multikey method fails its multibase path with "null algorithm name".
       new VerificationMethod({
         id: methodId,
-        type: 'Multikey',
+        type: 'Ed25519VerificationKey2020',
         controller: did,
         publicKeyMultibase: sourceMethod.publicKeyMultibase,
       }),

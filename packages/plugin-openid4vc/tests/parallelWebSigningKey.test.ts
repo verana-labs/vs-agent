@@ -126,7 +126,7 @@ describe('publishParallelWebSigningKey', () => {
     const methods = document.verificationMethod ?? []
     const published = methods[methods.length - 1]
     expect(published?.id).toBe(methodId)
-    expect(published?.type).toBe('Multikey')
+    expect(published?.type).toBe('Ed25519VerificationKey2020')
     expect(published?.controller).toBe(DID_WEBVH)
     expect(published?.publicKeyMultibase).toBe(SOURCE_MULTIBASE)
 
