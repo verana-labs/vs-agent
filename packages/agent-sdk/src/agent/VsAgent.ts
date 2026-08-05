@@ -283,16 +283,25 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       }
 
       // Make sure did:webvh record has the did:web form as an alternative, in order to support
-      // implicit invitations
-      if (
-        parsedDid.method === 'webvh' &&
-        !(existingRecord?.getTag('alternativeDids') as string[])?.includes(`did:web:${domain}`)
-      ) {
-        this.logger?.debug('Adding did:web form as an alternative DID')
-
-        existingRecord.setTag('alternativeDids', [`did:web:${domain}`])
+      // implicit invitations. Checked by querying the stored tag rows, not getTag: only the rows
+      // are visible to findCreatedDid/getCreatedDids, and a record whose value carries the tag
+      // while its rows lost it (an overwrite-import clears them) passes a getTag check forever
+      // while every did:web lookup keeps failing.
+      if (parsedDid.method === 'webvh') {
         const didRepository = this.dependencyManager.resolve(DidRepository)
-        await didRepository.update(this.agentContext, existingRecord)
+        const webDid = `did:web:${domain}`
+        const [taggedRow] = await didRepository.findByQuery(this.context, { alternativeDids: [webDid] })
+        if (!taggedRow) {
+          this.logger.warn(`Restoring the alternativeDids tag rows of ${existingRecord.did}`)
+          existingRecord.setTag('alternativeDids', [webDid])
+          await didRepository.update(this.context, existingRecord)
+          const [verifiedRow] = await didRepository.findByQuery(this.context, {
+            alternativeDids: [webDid],
+          })
+          if (!verifiedRow) {
+            this.logger.error(`alternativeDids tag rows of ${existingRecord.did} did not persist`)
+          }
+        }
       }
       // Fix a legacy webvh update-key mapping before the self-heal update below relies on it.
       if (parsedDid.method === 'webvh') await this.repairWebvhUpdateKeyMapping(existingRecord)
