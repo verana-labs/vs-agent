@@ -12,7 +12,6 @@ import { OpenId4VcVerificationSessionState } from '@credo-ts/openid4vc'
 
 import { findCredentialConfiguration, findVerifierPolicy } from '../config'
 import { TrustClient } from '../trust/TrustClient'
-import { asParallelDidWeb, registerParallelDidWeb } from '../trust/parallelDidWeb'
 import {
   blockingBindingVerdict,
   findBoundVerificationMethodId,
@@ -86,7 +85,6 @@ export class VerifierService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
   private initialized = false
-  private parallelDidWeb?: string
   private readonly trustClient: TrustClient
 
   public constructor(
@@ -260,8 +258,6 @@ export class VerifierService {
       throw new Error('OpenID4VC verifier certificate DID does not match the agent DID')
     }
     await publishDevelopmentSigningKey(this.agent, signingCertificate, 'verifier')
-
-    this.parallelDidWeb = await registerParallelDidWeb(this.agent, this.options.publicApiBaseUrl)
 
     const binding = await verifyKeyBoundToDid(
       this.agent,
@@ -479,9 +475,6 @@ export class VerifierService {
         ['authentication'],
         ownDidResolutionPolicy(did ?? '', this.trustOptions().timeoutMs),
       )
-      if (ed25519DidUrl && this.parallelDidWeb) {
-        return { method: 'did' as const, didUrl: asParallelDidWeb(ed25519DidUrl) }
-      }
       if (ed25519DidUrl) return { method: 'did' as const, didUrl: ed25519DidUrl }
     }
 

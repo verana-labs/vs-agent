@@ -226,6 +226,19 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         return
       }
 
+      // A webvh agent must own no created did:web record for the same domain. Creation deletes one
+      // when upgrading, but a record written afterwards leaves two created DIDs, and the public DID
+      // then resolves to whichever is found first: the agent tries to update the did:web, that
+      // cannot persist, and it crash-loops on "resolution returned a different DID".
+      if (parsedDid.method === 'webvh') {
+        const didRepository = this.dependencyManager.resolve(DidRepository)
+        const strayDidWeb = await didRepository.findCreatedDid(this.agentContext, `did:web:${domain}`)
+        if (strayDidWeb) {
+          this.logger.warn(`Removing stray did:web record shadowing ${existingRecord.did}`)
+          await didRepository.delete(this.agentContext, strayDidWeb)
+        }
+      }
+
       // Ensure the stored did:webvh log is resolvable under the current didwebvh-ts version:
       // <2.7.4 wrote broken entry hashes (SCID placeholder), and >=2.8.0 rejects the
       // same-second versionTimes the old create+update-at-init flow produced. Both migrations
