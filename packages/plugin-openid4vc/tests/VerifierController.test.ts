@@ -57,7 +57,7 @@ describe('VerifierController', () => {
       authorizationRequest: 'openid4vp://?request_uri=opaque',
       verificationSessionId: 'session-id',
     })
-    expect(service.createRequest).toHaveBeenCalledWith('employee-name')
+    expect(service.createRequest).toHaveBeenCalledWith('employee-name', undefined)
     expect(Reflect.getMetadata('adminAccessMode', VerifierController)).toBeUndefined()
     expect(Reflect.getMetadata('adminAccessMode', VerifierController.prototype.createRequest)).toBeUndefined()
   })
