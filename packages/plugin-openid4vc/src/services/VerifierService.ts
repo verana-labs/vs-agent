@@ -154,7 +154,11 @@ export class VerifierService {
       {
         verifierId: this.verifierOptions().id,
         requestSigner: await this.buildRequestSigner(queryLanguage),
-        responseMode: 'direct_post.jwt',
+        // JARM only on the DCQL rail. Credo hardcodes a P-256 encryption key, and the wallets
+        // that need Presentation Exchange either have no JWE at all or can only wrap to an
+        // X25519 one, so an encrypted response is unconstructable for them and the share fails
+        // after the user consents. The response still travels to the verifier over TLS.
+        responseMode: queryLanguage === 'presentation_exchange' ? 'direct_post' : 'direct_post.jwt',
         ...query,
       },
     )

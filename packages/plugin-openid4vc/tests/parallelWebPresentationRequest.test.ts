@@ -117,6 +117,12 @@ describe('presentation-exchange request signing for a webvh verifier', () => {
       ?.filter as { const?: string; pattern?: string } | undefined
     expect(filter?.const).toBe(CONFIGURATION.vct)
     expect(filter?.pattern).toBe(CONFIGURATION.vct.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    expect(payload.presentation_definition?.input_descriptors?.[0]?.constraints?.limit_disclosure).toBe(
+      'preferred',
+    )
+    // No JARM on this rail: the wallets that need it cannot build the encrypted response.
+    expect(payload.response_mode).toBe('direct_post')
+    expect(payload.client_metadata?.jwks).toBeUndefined()
   })
 
   it('falls back to the webvh-named key when the parallel record lookup fails', async () => {
