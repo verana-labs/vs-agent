@@ -12,6 +12,7 @@ import { OpenId4VcVerificationSessionState } from '@credo-ts/openid4vc'
 
 import { findCredentialConfiguration, findVerifierPolicy } from '../config'
 import { TrustClient } from '../trust/TrustClient'
+import { asParallelDidWeb, registerParallelDidWeb } from '../trust/parallelDidWeb'
 import {
   blockingBindingVerdict,
   findBoundVerificationMethodId,
@@ -31,17 +32,6 @@ import {
 
 // What the issuer signs with (IssuerService credential_signing_alg_values_supported).
 const PRESENTATION_ALGORITHMS = ['ES256'] as const
-
-/**
- * The parallel did:web name for a did:webvh verification method, per
- * https://identity.foundation/didwebvh/v1.0/#publishing-a-parallel-didweb-did. The agent already
- * serves that document at /.well-known/did.json with `alsoKnownAs` pointing back, so both names
- * denote the same key. Anything that is not a did:webvh URL is returned unchanged.
- */
-function asParallelDidWebUrl(didUrl: string): string {
-  const match = /^did:webvh:([^:]+):/.exec(didUrl)
-  return match ? didUrl.replace(`did:webvh:${match[1]}`, 'did:web') : didUrl
-}
 
 type VerifierApi = Pick<
   OpenId4VcVerifierApi,
@@ -96,6 +86,7 @@ export class VerifierService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
   private initialized = false
+  private parallelDidWeb?: string
   private readonly trustClient: TrustClient
 
   public constructor(
@@ -269,6 +260,8 @@ export class VerifierService {
       throw new Error('OpenID4VC verifier certificate DID does not match the agent DID')
     }
     await publishDevelopmentSigningKey(this.agent, signingCertificate, 'verifier')
+
+    this.parallelDidWeb = await registerParallelDidWeb(this.agent, this.options.publicApiBaseUrl)
 
     const binding = await verifyKeyBoundToDid(
       this.agent,
@@ -486,7 +479,10 @@ export class VerifierService {
         ['authentication'],
         ownDidResolutionPolicy(did ?? '', this.trustOptions().timeoutMs),
       )
-      if (ed25519DidUrl) return { method: 'did' as const, didUrl: asParallelDidWebUrl(ed25519DidUrl) }
+      if (ed25519DidUrl && this.parallelDidWeb) {
+        return { method: 'did' as const, didUrl: asParallelDidWeb(ed25519DidUrl) }
+      }
+      if (ed25519DidUrl) return { method: 'did' as const, didUrl: ed25519DidUrl }
     }
 
     const didUrl = await findBoundVerificationMethodId(
