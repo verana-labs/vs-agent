@@ -21,6 +21,7 @@ import {
   VerifiableCredentialSubmittedProofItem,
 } from '@verana-labs/vs-agent-model'
 
+import { ParticipantRole } from '../blockchain/types'
 import { getRecordId } from '../utils/agent'
 
 import { emitVsAgentEvent, msgToEvent, VsAgentEventTypes } from './VsAgentEvents'
@@ -72,6 +73,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             const errorMap: Record<string, PresentationState> = {
               'Request declined': PresentationState.REFUSED,
               'e.req.no-compatible-credentials': PresentationState.NO_COMPATIBLE_CREDENTIALS,
+              'e.p.untrusted-issuer': PresentationState.UNTRUSTED_ISSUER,
             }
             emitVsAgentEvent(
               agent,
@@ -106,6 +108,51 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
           )
           const formatData = await agent.didcomm.proofs.getFormatData(record.id)
 
+          const callbackParameters = record.metadata.get('_2060/callbackParameters') as
+            | { ref?: string; callbackUrl?: string }
+            | undefined
+
+          const emitPresentationState = (state: PresentationState, claims?: Claim[]) => {
+            if (!callbackParameters?.callbackUrl) return
+            emitVsAgentEvent(
+              agent,
+              VsAgentEventTypes.PresentationStateUpdated,
+              new PresentationStateUpdated({
+                proofExchangeId: record.id,
+                callbackUrl: callbackParameters.callbackUrl,
+                claims,
+                state,
+                verified: state === PresentationState.OK,
+                ref: callbackParameters.ref,
+              }),
+            )
+          }
+
+          const trustRegistry = record.metadata.get('_2060/trustRegistry') as
+            | { schemaId?: number }
+            | undefined
+
+          if (trustRegistry?.schemaId !== undefined) {
+            const untrustedIssuers = await findPresentationUntrustedIssuers(
+              agent,
+              formatData,
+              trustRegistry.schemaId,
+            )
+
+            if (untrustedIssuers.length) {
+              logger.warn(`Presentation issued by unaccredited issuers: ${untrustedIssuers.join(', ')}`)
+
+              await agent.didcomm.proofs.sendProblemReport({
+                proofExchangeRecordId: record.id,
+                description: 'e.p.untrusted-issuer',
+              })
+
+              emitPresentationState(PresentationState.UNTRUSTED_ISSUER)
+
+              return
+            }
+          }
+
           const revealedAttributes =
             formatData.presentation?.anoncreds?.requested_proof.revealed_attrs ??
             formatData.presentation?.indy?.requested_proof.revealed_attrs
@@ -129,24 +176,10 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             }
           }
 
-          const callbackParameters = record.metadata.get('_2060/callbackParameters') as
-            | { ref?: string; callbackUrl?: string }
-            | undefined
-
-          if (callbackParameters && callbackParameters.callbackUrl) {
-            emitVsAgentEvent(
-              agent,
-              VsAgentEventTypes.PresentationStateUpdated,
-              new PresentationStateUpdated({
-                proofExchangeId: record.id,
-                callbackUrl: callbackParameters.callbackUrl,
-                claims,
-                state: record.isVerified ? PresentationState.OK : PresentationState.VERIFICATION_ERROR,
-                verified: record.isVerified ?? false,
-                ref: callbackParameters.ref,
-              }),
-            )
-          }
+          emitPresentationState(
+            record.isVerified ? PresentationState.OK : PresentationState.VERIFICATION_ERROR,
+            claims,
+          )
 
           const msg = new IdentityProofSubmitMessage({
             submittedProofItems: [
@@ -217,4 +250,37 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
       }
     },
   )
+}
+
+type PresentationFormatData = Awaited<
+  ReturnType<VsAgent<BaseAgentModules>['didcomm']['proofs']['getFormatData']>
+>
+
+async function findPresentationUntrustedIssuers(
+  agent: VsAgent<BaseAgentModules>,
+  formatData: PresentationFormatData,
+  schemaId: number,
+): Promise<string[]> {
+  const identifiers =
+    formatData.presentation?.anoncreds?.identifiers ?? formatData.presentation?.indy?.identifiers ?? []
+
+  const credentialDefinitionIds = [...new Set(identifiers.map(identifier => identifier.cred_def_id))]
+
+  const unresolvedCredentialDefinitionIds: string[] = []
+  const issuerDids: string[] = []
+
+  for (const credentialDefinitionId of credentialDefinitionIds) {
+    const { credentialDefinition } =
+      await agent.modules.anoncreds.getCredentialDefinition(credentialDefinitionId)
+    if (credentialDefinition) issuerDids.push(credentialDefinition.issuerId)
+    else unresolvedCredentialDefinitionIds.push(credentialDefinitionId)
+  }
+
+  const unaccreditedIssuers = await agent.indexer.findUnaccreditedDids(
+    issuerDids,
+    ParticipantRole.Issuer,
+    schemaId,
+  )
+
+  return [...unresolvedCredentialDefinitionIds, ...unaccreditedIssuers]
 }

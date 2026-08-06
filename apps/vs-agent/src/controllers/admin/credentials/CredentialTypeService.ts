@@ -1,6 +1,5 @@
 import {
   AnonCredsCredentialDefinitionRepository,
-  AnonCredsProofRequestRestriction,
   AnonCredsRevocationRegistryDefinitionPrivateRepository,
   AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchema,
@@ -8,14 +7,12 @@ import {
 } from '@credo-ts/anoncreds'
 import { JsonObject, parseDid, Proof, TagsBase, utils, W3cCredential } from '@credo-ts/core'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
-import { Inject, Logger } from '@nestjs/common'
+import { BadRequestException, Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import {
   deleteTailsFile,
   fetchJson,
-  ParticipantDto,
   ParticipantRole,
-  ParticipantState,
   parseSchemaRef,
   VsAgent,
 } from '@verana-labs/vs-agent-sdk'
@@ -32,18 +29,44 @@ export class CredentialTypesService {
 
   constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
 
-  public async resolveAccreditedIssuerRestrictions(
-    jsonSchemaRef: string,
-  ): Promise<AnonCredsProofRequestRestriction[]> {
-    const schemaId = parseSchemaRef(jsonSchemaRef)
+  public async resolveTrustRegistrySchemaId(jsonSchemaCredentialId: string): Promise<number | undefined> {
+    const jsc = await fetchJson<W3cCredential>(jsonSchemaCredentialId)
+    const subject = (
+      Array.isArray(jsc.credentialSubject) ? jsc.credentialSubject[0] : jsc.credentialSubject
+    ) as Record<string, any> | undefined
+    const jsonSchemaRef = subject?.jsonSchema?.$ref
+    return jsonSchemaRef ? parseSchemaRef(jsonSchemaRef) : undefined
+  }
+
+  public async resolveTrustRegistrySchemaIdForCredentialDefinition(
+    credentialDefinitionId: string,
+  ): Promise<number | undefined> {
     const agent = await this.agentService.getAgent()
-    if (schemaId === undefined || !agent.indexer) return []
-    const issuers = await agent.indexer.listParticipants({
-      schemaId,
-      role: ParticipantRole.Issuer,
-      participantState: ParticipantState.Active,
+
+    const [credentialDefinition] = await agent.modules.anoncreds.getCreatedCredentialDefinitions({
+      credentialDefinitionId,
     })
-    return buildIssuerRestrictions(issuers)
+    if (!credentialDefinition) return undefined
+
+    const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({
+      schemaId: credentialDefinition.credentialDefinition.schemaId,
+    })
+    const jsonSchemaCredentialId = schemaRecord?.getTag('relatedJsonSchemaCredentialId') as string | undefined
+    if (!jsonSchemaCredentialId) return undefined
+
+    return this.resolveTrustRegistrySchemaId(jsonSchemaCredentialId)
+  }
+
+  public async assertAccreditedForSchema(schemaId: number | undefined, role: ParticipantRole): Promise<void> {
+    if (schemaId === undefined) return
+
+    const agent = await this.agentService.getAgent()
+    if (!agent.did) return
+
+    const [unaccredited] = await agent.indexer.findUnaccreditedDids([agent.did], role, schemaId)
+    if (unaccredited) {
+      throw new BadRequestException(`${agent.did} is not an active ${role} for credential schema ${schemaId}`)
+    }
   }
 
   public async deleteRevocationRegistry(
@@ -544,9 +567,4 @@ export class CredentialTypesService {
       throw new Error(`Failed to parse JSON Schema Credential ${jsonSchemaCredentialId}: ${error}`)
     }
   }
-}
-
-export function buildIssuerRestrictions(issuers: ParticipantDto[]): AnonCredsProofRequestRestriction[] {
-  const dids = [...new Set(issuers.map(issuer => issuer.did).filter((did): did is string => !!did))]
-  return dids.map(did => ({ issuer_id: did }))
 }

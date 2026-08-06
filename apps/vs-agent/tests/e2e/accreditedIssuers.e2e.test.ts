@@ -19,7 +19,6 @@ import {
   startStack,
   type StartedStack,
 } from '../../../../packages/agent-sdk/tests/e2e/helpers'
-import { buildIssuerRestrictions } from '../../src/controllers/admin/credentials/CredentialTypeService'
 
 const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
 const describeE2E = E2E_ENABLED ? describe : describe.skip
@@ -47,7 +46,7 @@ async function until<T>(fn: () => Promise<T | undefined>, timeoutMs = 120_000): 
   throw new Error('condition did not resolve in time')
 }
 
-describeE2E('accredited issuer resolution for issuer-agnostic presentation requests', () => {
+describeE2E('accredited issuer verification of received presentations', () => {
   let stack: StartedStack
   let chain: VeranaTestChain
   let seeder: VeranaChainService
@@ -128,23 +127,23 @@ describeE2E('accredited issuer resolution for issuer-agnostic presentation reque
   })
 
   it(
-    'resolves an issuer_id restriction for every accredited active issuer of the schema',
+    'accepts every accredited active issuer of the schema and rejects the rest',
     async () => {
       const jsonSchemaRef = `vpr:verana:${CHAIN_ID}:cs:${schemaId}`
       const parsedSchemaId = parseSchemaRef(jsonSchemaRef)
       expect(parsedSchemaId).toBe(schemaId)
 
-      const issuers = await indexer.listParticipants({
-        schemaId: parsedSchemaId,
-        role: ParticipantRole.Issuer,
-        participantState: ParticipantState.Active,
-      })
-      const restrictions = buildIssuerRestrictions(issuers)
+      await expect(
+        indexer.findUnaccreditedDids([didIssuerA, didIssuerB], ParticipantRole.Issuer, parsedSchemaId),
+      ).resolves.toEqual([])
 
-      expect(restrictions).toEqual(
-        expect.arrayContaining([{ issuer_id: didIssuerA }, { issuer_id: didIssuerB }]),
-      )
-      expect(restrictions).not.toContainEqual({ issuer_id: didIssuerPending })
+      await expect(
+        indexer.findUnaccreditedDids([didIssuerA, didIssuerPending], ParticipantRole.Issuer, parsedSchemaId),
+      ).resolves.toEqual([didIssuerPending])
+
+      await expect(
+        indexer.findUnaccreditedDids([`did:example:rogue-${RUN_ID}`], ParticipantRole.Issuer, parsedSchemaId),
+      ).resolves.toEqual([`did:example:rogue-${RUN_ID}`])
     },
     SETUP_TIMEOUT_MS,
   )

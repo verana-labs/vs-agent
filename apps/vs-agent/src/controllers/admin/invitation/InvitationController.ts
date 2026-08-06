@@ -21,7 +21,7 @@ import {
   CreateInvitationResult,
   ReceiveInvitationResult,
 } from '@verana-labs/vs-agent-model'
-import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
+import { createInvitation, fetchJson, ParticipantRole, parseSchemaRef } from '@verana-labs/vs-agent-sdk'
 
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../config'
 import { AccessMode } from '../../../security'
@@ -240,6 +240,7 @@ export class InvitationController {
 
     let schema: AnonCredsSchema
     let restrictions: AnonCredsProofRequestRestriction[]
+    let trustRegistrySchemaId: number | undefined
 
     if (relatedJsonSchemaCredentialId) {
       const jscData = await fetchJson<W3cCredential>(relatedJsonSchemaCredentialId)
@@ -254,14 +255,15 @@ export class InvitationController {
       }
 
       schema = schemaResult.schema
+      restrictions = [{ schema_id: schemaResult.schemaId }]
 
       const jsonSchemaRef = extractJsonSchemaRef(jscData)
-      const accreditedIssuerRestrictions = jsonSchemaRef
-        ? await this.credentialTypesService.resolveAccreditedIssuerRestrictions(jsonSchemaRef)
-        : []
-      restrictions = accreditedIssuerRestrictions.length
-        ? accreditedIssuerRestrictions
-        : [{ schema_id: schemaResult.schemaId }]
+      trustRegistrySchemaId = jsonSchemaRef ? parseSchemaRef(jsonSchemaRef) : undefined
+
+      await this.credentialTypesService.assertAccreditedForSchema(
+        trustRegistrySchemaId,
+        ParticipantRole.Verifier,
+      )
     } else {
       const { credentialDefinition } = await agent.modules.anoncreds.getCredentialDefinition(
         credentialDefinitionId!,
@@ -321,6 +323,7 @@ export class InvitationController {
 
     request.proofRecord.metadata.set('_2060/requestedCredentials', requestedCredentials)
     request.proofRecord.metadata.set('_2060/callbackParameters', { ref, callbackUrl })
+    request.proofRecord.metadata.set('_2060/trustRegistry', { schemaId: trustRegistrySchemaId })
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { url } = await createInvitation({
@@ -433,6 +436,13 @@ export class InvitationController {
         `Some claims are not present in the requested credential type: Requested: ${claims.map(item => item.name)}, Present: ${schema.attrNames}`,
       )
     }
+
+    await this.credentialTypesService.assertAccreditedForSchema(
+      await this.credentialTypesService.resolveTrustRegistrySchemaIdForCredentialDefinition(
+        credentialDefinitionId,
+      ),
+      ParticipantRole.Issuer,
+    )
 
     try {
       const request = await agent.didcomm.credentials.createOffer({

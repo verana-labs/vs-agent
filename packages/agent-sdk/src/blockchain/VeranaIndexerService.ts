@@ -118,6 +118,24 @@ export class VeranaIndexerService {
     return data.participants
   }
 
+  async findUnaccreditedDids(dids: string[], role: ParticipantRole, schemaId?: number): Promise<string[]> {
+    const uniqueDids = [...new Set(dids)]
+
+    const checks = await Promise.all(
+      uniqueDids.map(async did => {
+        const participants = await this.listParticipants({
+          did,
+          schemaId,
+          role,
+          participantState: ParticipantState.Active,
+        })
+        return participants.length > 0 ? undefined : did
+      }),
+    )
+
+    return checks.filter((did): did is string => did !== undefined)
+  }
+
   async getDigest(digest: string): Promise<DigestDto | undefined> {
     this.config.logger.debug(`[VeranaIndexer] getDigest digest=${digest}`)
     const data = await fetchJson<{ digest: DigestDto }>(
