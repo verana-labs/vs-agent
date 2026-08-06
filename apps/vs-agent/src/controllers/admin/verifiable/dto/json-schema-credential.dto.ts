@@ -12,7 +12,7 @@ export class JsonSchemaCredentialDto {
     example: 'example-service',
   })
   @IsString()
-  @Matches(/^[a-z0-9-]+$/i, {
+  @Matches(/^[a-z0-9\-]+$/i, {
     message: 'schemaBaseId must contain only letters, numbers, or hyphens.',
   })
   schemaBaseId!: string
