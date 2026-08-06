@@ -42,6 +42,13 @@ export interface OpenId4VcPluginOptions {
      * issuer record created under a different value keeps it until the record is recreated.
      */
     metadataSigner?: 'x5c' | 'did'
+    /**
+     * Trust anchors for OpenID4VCI key attestations. A wallet that can only prove possession
+     * through an attested key - the EUDI reference wallet is one - sends a `key-attestation+jwt`
+     * signed by its wallet provider, and this is what that attestation must chain to. Absent, the
+     * `attestation` proof type is neither advertised nor accepted.
+     */
+    keyAttestationCertificates?: string[]
   }
   verifier?: {
     id: string

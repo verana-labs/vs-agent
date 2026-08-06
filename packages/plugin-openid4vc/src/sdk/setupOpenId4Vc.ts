@@ -42,8 +42,7 @@ export function setupOpenId4Vc(
 
   const app = express()
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
-  if (options.issuer) app.use(normalizeMetadataAcceptHeader)
-  if (options.issuer) app.use(advertiseKeyAttestationRequirement)
+  if (options.issuer) app.use(accommodateOpenId4VciKt)
   if (options.issuer) app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
   if (options.issuer) {
     app.get('/oid4vc/vct/:configurationId', (request, response, next) => {
@@ -131,20 +130,36 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
   }
 }
 
-/** openid4vci-kt refuses issuer metadata whose `jwt` or `attestation` proof type lacks
- *  `key_attestations_required`, treating the OID4VCI 1.0 optional member as mandatory. Advertise
- *  it unconstrained (`{}`) on the JSON variant when Credo left it out; wallets that never
- *  implemented key attestation ignore the member entirely. */
-export function advertiseKeyAttestationRequirement(
-  request: Request,
-  response: Response,
-  next: NextFunction,
-): void {
-  if (request.method !== 'GET' || !request.path.includes('/.well-known/openid-credential-issuer')) {
+/**
+ * openid4vci-kt - the OID4VCI library inside the EUDI reference wallet - reads issuer metadata
+ * more strictly than the spec requires, in two ways that no other client shares:
+ *
+ *   - it asks with `Accept: application/jwt; application/json`, a semicolon where a comma belongs,
+ *     which parses as `application/jwt` alone and draws the signed metadata JWT it then cannot
+ *     verify, since Credo signs that with a DID kid and no x5c chain;
+ *   - it refuses any proof type that omits `key_attestations_required`, treating the OID4VCI 1.0
+ *     optional member as mandatory.
+ *
+ * Both accommodations are scoped to that client, recognised by the malformed accept header it
+ * sends. Advertising the member to everyone is not an option: a Credo holder that sees it stops
+ * binding a plain JWK and demands a key attestation, which would break every wallet that signs
+ * its own proof.
+ */
+export function accommodateOpenId4VciKt(request: Request, response: Response, next: NextFunction): void {
+  const accept = request.headers.accept
+  const isOpenId4VciKt =
+    typeof accept === 'string' && accept.includes('application/jwt') && accept.includes('application/json')
+
+  if (
+    request.method !== 'GET' ||
+    !request.path.includes('/.well-known/openid-credential-issuer') ||
+    !isOpenId4VciKt
+  ) {
     next()
     return
   }
 
+  request.headers.accept = 'application/json'
   const send = response.send.bind(response)
   response.send = ((body?: unknown) =>
     send(typeof body === 'string' ? withKeyAttestationRequirement(body) : body)) as Response['send']
@@ -168,12 +183,6 @@ function withKeyAttestationRequirement(body: string): string {
               : [type, meta],
           ),
         )
-        // The same validator also insists both proof types are advertised together, so a
-        // jwt-only issuer additionally mirrors its jwt entry as `attestation`.
-        const jwt = proofTypes.jwt
-        if (isRecord(jwt) && !('attestation' in proofTypes)) {
-          proofTypes.attestation = { ...jwt }
-        }
         return [id, { ...configuration, proof_types_supported: proofTypes }]
       }),
     )
@@ -181,25 +190,6 @@ function withKeyAttestationRequirement(body: string): string {
   } catch {
     return body
   }
-}
-
-/** openid4vci-kt sends `Accept: application/jwt; application/json` - a semicolon where a comma
- *  belongs - which parses as `application/jwt` alone and draws the signed metadata JWT it then
- *  cannot verify, since Credo signs it with a DID kid and no x5c chain. A client naming both
- *  formats can use either, so serve it the JSON it can read; clients that need the JWT ask for
- *  `application/jwt` alone. */
-export function normalizeMetadataAcceptHeader(request: Request, _response: Response, next: NextFunction): void {
-  const accept = request.headers.accept
-  if (
-    request.method === 'GET' &&
-    request.path.includes('/.well-known/openid-credential-issuer') &&
-    typeof accept === 'string' &&
-    accept.includes('application/jwt') &&
-    accept.includes('application/json')
-  ) {
-    request.headers.accept = 'application/json'
-  }
-  next()
 }
 
 function advertiseWalletAttestationMetadata(request: Request, response: Response, next: NextFunction): void {

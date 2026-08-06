@@ -590,7 +590,7 @@ function configuredDisclosedClaims(
 ): Record<string, unknown> | undefined {
   const disclosedClaims: Record<string, unknown> = {}
   for (const name of requestedClaims) {
-    if (!Object.prototype.hasOwnProperty.call(claims, name)) return undefined
+    if (!Object.hasOwn(claims, name)) return undefined
     disclosedClaims[name] = claims[name]
   }
   return disclosedClaims

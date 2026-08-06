@@ -33,6 +33,10 @@ export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void 
     ) {
       throw new Error('issuer.walletAttestationCertificates is required when wallet attestation is enabled')
     }
+
+    if (options.issuer.keyAttestationCertificates !== undefined) {
+      assertStringArray(options.issuer.keyAttestationCertificates, 'issuer.keyAttestationCertificates')
+    }
   }
 
   if (options.verifier) {
