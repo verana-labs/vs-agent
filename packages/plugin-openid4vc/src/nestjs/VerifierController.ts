@@ -24,7 +24,7 @@ export class VerifierController {
   @Post('requests')
   public async createRequest(@Body() dto: CreateOpenId4VcVerificationRequestDto) {
     try {
-      return await this.verifierService.createRequest(dto.policyId, dto.queryLanguage)
+      return await this.verifierService.createRequest(dto.policyId, dto.queryLanguage, dto.requestSigner)
     } catch (error) {
       if (error instanceof OpenId4VcVerifierRequestError) {
         throw new BadRequestException(error.message)

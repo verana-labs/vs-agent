@@ -112,6 +112,7 @@ export class VerifierService {
   public async createRequest(
     policyId: string,
     queryLanguage: OpenId4VcQueryLanguage = 'dcql',
+    requestSigner?: 'x5c' | 'did',
   ): Promise<OpenId4VcVerificationRequest> {
     await this.ensureInitialized()
 
@@ -153,7 +154,7 @@ export class VerifierService {
     const { authorizationRequest, verificationSession } = await this.verifierApi().createAuthorizationRequest(
       {
         verifierId: this.verifierOptions().id,
-        requestSigner: await this.buildRequestSigner(queryLanguage),
+        requestSigner: await this.buildRequestSigner(queryLanguage, requestSigner),
         // JARM only on the DCQL rail. Credo hardcodes a P-256 encryption key, and the wallets
         // that need Presentation Exchange either have no JWE at all or can only wrap to an
         // X25519 one, so an encrypted response is unconstructable for them and the share fails
@@ -465,9 +466,9 @@ export class VerifierService {
     return this.signingCertificate
   }
 
-  private async buildRequestSigner(queryLanguage: OpenId4VcQueryLanguage) {
+  private async buildRequestSigner(queryLanguage: OpenId4VcQueryLanguage, override?: 'x5c' | 'did') {
     const certificate = this.signingCertificateHandle()
-    if (this.verifierOptions().requestSigner !== 'did') {
+    if ((override ?? this.verifierOptions().requestSigner) !== 'did') {
       return { method: 'x5c' as const, x5c: certificate.chain, clientIdPrefix: 'x509_hash' as const }
     }
 

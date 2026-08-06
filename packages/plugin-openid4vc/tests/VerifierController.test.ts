@@ -57,9 +57,34 @@ describe('VerifierController', () => {
       authorizationRequest: 'openid4vp://?request_uri=opaque',
       verificationSessionId: 'session-id',
     })
-    expect(service.createRequest).toHaveBeenCalledWith('employee-name', undefined)
+    expect(service.createRequest).toHaveBeenCalledWith('employee-name', undefined, undefined)
     expect(Reflect.getMetadata('adminAccessMode', VerifierController)).toBeUndefined()
     expect(Reflect.getMetadata('adminAccessMode', VerifierController.prototype.createRequest)).toBeUndefined()
+  })
+
+  it('passes a request signer override through to the service', async () => {
+    const service = {
+      createRequest: vi.fn().mockResolvedValue({
+        authorizationRequest: 'openid4vp://?request_uri=opaque',
+        verificationSessionId: 'session-id',
+      }),
+      getResult: vi.fn(),
+    }
+    const nestApp = await createApp(service)
+
+    const response = await request(nestApp.getHttpServer())
+      .post('/v1/oid4vc/verifier/requests')
+      .send({ policyId: 'employee-name', requestSigner: 'x5c' })
+
+    expect(response.status).toBe(201)
+    expect(service.createRequest).toHaveBeenCalledWith('employee-name', undefined, 'x5c')
+
+    const { validate } = await import('class-validator')
+    const dto = Object.assign(new CreateOpenId4VcVerificationRequestDto(), {
+      policyId: 'employee-name',
+      requestSigner: 'rsa',
+    })
+    expect(await validate(dto)).toHaveLength(1)
   })
 
   it('registers internal GET /v1/oid4vc/verifier/sessions/:id', async () => {
