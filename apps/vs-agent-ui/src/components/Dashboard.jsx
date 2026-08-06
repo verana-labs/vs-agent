@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { resolveVTCType, resolveJSCType } from '@verana-labs/vs-agent-model/ecs'
+import { resolveVTCType, resolveJSCType, mapToEcosystem } from '@verana-labs/vs-agent-model/ecs'
 import { getAgentConfig, getDidDocument, qrUrl } from '../api'
 
 function JsonModal({ data, onClose }) {
@@ -127,6 +127,30 @@ function CredentialCard({ vc, type, onSelect }) {
   )
 }
 
+// Titles of the JSON schemas credentials are based on, keyed by
+// credentialSchema.id (one fetch chain per distinct schema).
+const schemaTitleCache = new Map()
+
+/**
+ * Resolves the title of the JSON schema a credential is based on:
+ * credentialSchema.id -> VTJSC -> jsonSchema.$ref -> schema title.
+ */
+async function resolveCredentialSchemaTitle(vc) {
+  const schemaUrl = vc?.credentialSchema?.id
+  if (!schemaUrl) return null
+  if (!schemaTitleCache.has(schemaUrl)) {
+    let title = null
+    const w3c = await fetchJson(schemaUrl)
+    const ref = w3c?.credentialSubject?.jsonSchema?.$ref
+    if (typeof ref === 'string') {
+      const schema = await fetchJson(mapToEcosystem(ref))
+      if (typeof schema?.title === 'string' && schema.title) title = schema.title
+    }
+    schemaTitleCache.set(schemaUrl, title)
+  }
+  return schemaTitleCache.get(schemaUrl)
+}
+
 async function resolveCVpService(service) {
   try {
     const vp = await fetch(service.serviceEndpoint).then(r => r.ok ? r.json() : null)
@@ -134,7 +158,8 @@ async function resolveCVpService(service) {
     const raw = vp.verifiableCredential
     const vcs = Array.isArray(raw) ? raw : (raw ? [raw] : [])
     const type = vcs.length > 0 ? await resolveVTCType({ credential: vcs[0] }) : 'other'
-    return { service, type, credentials: vcs, vp }
+    const titles = await Promise.all(vcs.map(resolveCredentialSchemaTitle))
+    return { service, type, credentials: vcs, titles, vp }
   } catch {
     return { service, type: 'other', credentials: [], vp: null }
   }
@@ -606,7 +631,7 @@ function AccreditationRow({ entry, onSelect }) {
 
 function TrustCard({ webDid, cvpItems, jscItems, acc, network, onSelect }) {
   const rows = cvpItems
-    .flatMap(item => item.credentials.map(vc => ({ item, vc })))
+    .flatMap(item => item.credentials.map((vc, i) => ({ item, vc, title: item.titles?.[i] ?? null })))
     .sort((a, b) => potRowRank(a.item.type) - potRowRank(b.item.type))
 
   return (
@@ -637,9 +662,9 @@ function TrustCard({ webDid, cvpItems, jscItems, acc, network, onSelect }) {
             <LayersIcon size={11} />
             Credentials
           </p>
-          {rows.map(({ item, vc }, i) => (
+          {rows.map(({ item, vc, title }, i) => (
             <div className="pot-row" key={i}>
-              <span className="pot-row-name">{credentialDisplayName(vc, item.type)}</span>
+              <span className="pot-row-name">{title ?? credentialDisplayName(vc, item.type)}</span>
               <span className="pot-row-issuer">
                 {credentialIssuer(vc) && <>issued by <LinkOrText text={credentialIssuer(vc)} /></>}
               </span>
