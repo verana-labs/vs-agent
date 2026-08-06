@@ -40,9 +40,9 @@ export interface SelfTrDefaults {
   serviceTermsAndConditions: string
   servicePrivacyPolicy: string
   orgRegistryId: string
-  orgRegistryUrl: string
+  orgRegistryUri: string
   orgAddress: string
-  orgType: string
+  orgOrganizationKind: string
   orgCountryCode: string
 }
 
@@ -421,9 +421,9 @@ export async function getClaims(
           logoUri,
           logoDigestSri: (claims?.logoDigestSri as string) ?? (await urlDigestSri(logoUri)),
           registryId: claims?.registryId ?? defaults.orgRegistryId,
-          registryUri: claims?.registryUri ?? defaults.orgRegistryUrl,
+          registryUri: claims?.registryUri ?? defaults.orgRegistryUri,
           address: claims?.address ?? defaults.orgAddress,
-          organizationKind: claims?.organizationKind ?? defaults.orgType,
+          organizationKind: claims?.organizationKind ?? defaults.orgOrganizationKind,
           countryCode: claims?.countryCode ?? defaults.orgCountryCode,
         }
 
