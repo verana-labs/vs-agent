@@ -168,6 +168,12 @@ function withKeyAttestationRequirement(body: string): string {
               : [type, meta],
           ),
         )
+        // The same validator also insists both proof types are advertised together, so a
+        // jwt-only issuer additionally mirrors its jwt entry as `attestation`.
+        const jwt = proofTypes.jwt
+        if (isRecord(jwt) && !('attestation' in proofTypes)) {
+          proofTypes.attestation = { ...jwt }
+        }
         return [id, { ...configuration, proof_types_supported: proofTypes }]
       }),
     )
