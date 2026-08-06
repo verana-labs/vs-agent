@@ -295,6 +295,8 @@ export class VtFlowOrchestrator {
     const entry =
       (await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)) ??
       (await findMetadataEntry(didRecord, '_vt/jsc', '', legacyRef))
+    const schemaRef = `vpr:verana:${chain.getChainId}:cs:${input.credentialSchemaId}`
+    const entry = await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
     if (!entry) throw new Error(`No stored VTJSC found for ${schemaRef}`)
     const { data } = entry
 

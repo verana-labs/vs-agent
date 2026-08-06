@@ -3,30 +3,27 @@ export enum ECS {
   ORG = 'ecs-org',
   PERSONA = 'ecs-persona',
   USER_AGENT = 'ecs-user-agent',
+  BADGE = 'ecs-badge',
 }
 
-const urlMap = new Map<string, string>([
-  ['vpr:verana:vna-mainnet-1', 'https://idx.testnet.verana.network/verana'],
-  ['vpr:verana:vna-testnet-1', 'https://idx.testnet.verana.network/verana'],
-  ['vpr:verana:vna-devnet-1', 'https://idx.devnet.verana.network/verana'],
+const indexerByChain = new Map<string, string>([
+  ['vpr:verana:vna-testnet-1', 'https://idx.testnet.verana.network'],
+  ['vpr:verana:vna-devnet-1', 'https://idx.devnet.verana.network'],
 ])
 
 export function mapToEcosystem(input: string): string {
-  const canonical = input.match(/^(vpr:verana:[^:/]+):cs:(\d+)$/)
-  if (canonical) input = `${canonical[1]}/cs/v1/js/${canonical[2]}`
-  for (const [key, value] of urlMap.entries()) {
-    if (input.includes(key)) {
-      input = input.replace(key, value)
-    }
-  }
-  return input
+  const ref = input.match(/^(vpr:verana:[^:/]+):cs:(\d+)$/)
+  const base = ref && indexerByChain.get(ref[1])
+  return base ? `${base}/v4/credential-schema/js/${ref[2]}` : input
 }
 
+// v4 spec [ECS-EC] reference digests
 export const ECS_SCHEMA_DIGESTS: Record<ECS, string> = {
-  [ECS.SERVICE]: 'sha384-PVseqJJjEGMVRcht77rE2yLqRnCiLBRLOklSuAshSEXK3eyITmUpDBhpQryJ/XIx',
-  [ECS.ORG]: 'sha384-XF10SsOaav+i+hBaXP29coZWZeaCZocFvfP9ZeHh9B7++q7YGA2QLTbFZqtYs/zA',
-  [ECS.PERSONA]: 'sha384-4vkQl6Ro6fudr+g5LL2NQJWVxaSTaYkyf0yVPVUmzA2leNNn0sJIsM07NlOAG/2I',
-  [ECS.USER_AGENT]: 'sha384-yLRK2mCokVjRlGX0nVzdEYQ1o6YWpQqgdg6+HlSxCePP+D7wvs0+70TJACLZfbF/',
+  [ECS.SERVICE]: 'sha384-0v+BAFGpnBX/RVqH9dUlMglxMrD4AKy4qUtb1lMN4iW9I2gO7XjcUfmGOf0oInP3',
+  [ECS.ORG]: 'sha384-UPn4TDqS1nMBAN3FyMzTAZOWp99zBjBD69OjpbhwOKZj7iOrS5qPwJ2SArRz0yzu',
+  [ECS.PERSONA]: 'sha384-VfXTfuks02OkoR5USaTfEdc4NU25m4+vNrLATnjC0r0Pn1S3tFTdOvGCfSYdjE2I',
+  [ECS.USER_AGENT]: 'sha384-rIWkh3zBD1Ak7CNGpAwZ/ONSmf+ywOYSF3H60ULc9/a1ZYKv6EqiQMJ2dm8dOfjm',
+  [ECS.BADGE]: 'sha384-ZxJ2aRpoF/5DJSILWwOES6bmpMg3RZYOfO2CCF8hC/YDNvU+PhCqAnAXq/66nXCq',
 }
 
 // RFC 8785 JSON Canonicalization Scheme
