@@ -143,6 +143,17 @@ export class IssuerService {
     return signingCertificateInfo('issuer', this.signingCertificateHandle())
   }
 
+  /** SD-JWT VC issuer metadata. Credentials are signed with `x5c`, so a holder that
+   *  anchors the issuer on its origin rather than on the DID needs the signing key
+   *  published here to accept them at all. */
+  public getJwtVcIssuerMetadata(): Record<string, unknown> {
+    this.assertInitialized()
+    return {
+      issuer: this.options.publicApiBaseUrl,
+      jwks: { keys: [this.signingCertificateHandle().certificate.publicJwk.toJson()] },
+    }
+  }
+
   /** SD-JWT VC type metadata, extended with the Verifiable Trust link: the
    *  ecosystem's VTJSC (relatedJsonSchemaCredentialId) is THE schema anchor -
    *  wallets verify the VTJSC signature and resolve the schema through their

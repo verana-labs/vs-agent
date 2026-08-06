@@ -16,6 +16,7 @@ const ATTESTATION_ALGORITHMS = ['ES256']
 export interface OpenId4VcIssuerRequestMapper {
   mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper
   getVctMetadata: (configurationId: string) => Record<string, unknown> | undefined
+  getJwtVcIssuerMetadata: () => Record<string, unknown>
 }
 
 export interface OpenId4VcAgentModules {
@@ -45,6 +46,17 @@ export function setupOpenId4Vc(
   if (options.issuer) app.use(accommodateOpenId4VciKt)
   if (options.issuer) app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
   if (options.issuer) {
+    // Credo serves no SD-JWT VC issuer metadata, and a wallet that anchors an x5c-signed
+    // credential on the issuer origin rather than on the DID has nowhere else to look.
+    app.get('/.well-known/jwt-vc-issuer', (_request, response, next) => {
+      try {
+        if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
+        response.json(getIssuerService().getJwtVcIssuerMetadata())
+      } catch (error) {
+        next(error)
+      }
+    })
+
     app.get('/oid4vc/vct/:configurationId', (request, response, next) => {
       try {
         if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
