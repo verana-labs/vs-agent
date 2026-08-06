@@ -95,11 +95,12 @@ export const REDIRECT_DEFAULT_URL_TO_INVITATION_URL =
 export const USER_PROFILE_AUTODISCLOSE = process.env.USER_PROFILE_AUTODISCLOSE === 'true'
 
 // Values for Organization credential
-export const SELF_ISSUED_VTC_ORG_TYPE = process.env.SELF_ISSUED_VTC_ORG_TYPE ?? 'PUBLIC'
+export const SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND =
+  process.env.SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND ?? 'PUBLIC'
 export const SELF_ISSUED_VTC_ORG_COUNTRYCODE = process.env.SELF_ISSUED_VTC_ORG_COUNTRYCODE ?? 'EE'
 export const SELF_ISSUED_VTC_ORG_REGISTRYID = process.env.SELF_ISSUED_VTC_ORG_REGISTRYID ?? 'ID-123'
-export const SELF_ISSUED_VTC_ORG_REGISTRYURL =
-  process.env.SELF_ISSUED_VTC_ORG_REGISTRYURL ?? 'https://example.com/registry'
+export const SELF_ISSUED_VTC_ORG_REGISTRYURI =
+  process.env.SELF_ISSUED_VTC_ORG_REGISTRYURI ?? 'https://example.com/registry'
 export const SELF_ISSUED_VTC_ORG_ADDRESS = process.env.SELF_ISSUED_VTC_ORG_ADDRESS ?? 'Some address'
 
 // Values for Service credential
@@ -120,8 +121,8 @@ export const SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY = process.env.SELF_ISSUED_VTC
 
 export const DEFAULT_SELF_ISSUED_VTC_RESOURCES = {
   logoUri: (baseUrl: string) => `${baseUrl}/vt/default/logo.svg`,
-  termsAndConditions: (baseUrl: string) => `${baseUrl}/vt/default/terms.html`,
-  privacyPolicy: (baseUrl: string) => `${baseUrl}/vt/default/privacy.html`,
+  termsAndConditionsUri: (baseUrl: string) => `${baseUrl}/vt/default/terms.html`,
+  privacyPolicyUri: (baseUrl: string) => `${baseUrl}/vt/default/privacy.html`,
 }
 
 // Utils params

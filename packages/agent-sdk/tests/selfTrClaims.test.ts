@@ -23,9 +23,9 @@ const defaults: SelfTrDefaults = {
   serviceTermsAndConditions: 'https://cdn.example/terms',
   servicePrivacyPolicy: 'https://cdn.example/privacy',
   orgRegistryId: 'REG-1',
-  orgRegistryUrl: 'https://registry.example',
+  orgRegistryUri: 'https://registry.example',
   orgAddress: '1 Demo Street',
-  orgType: 'PUBLIC',
+  orgOrganizationKind: 'PUBLIC',
   orgCountryCode: 'US',
 }
 

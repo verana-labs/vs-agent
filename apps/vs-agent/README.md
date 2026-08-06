@@ -159,10 +159,10 @@ To enable the Self-Verifiable Trust Registry API endpoints, you must set the fol
 
 | Variable                                     | Description                              | Example Value                            |
 | -------------------------------------------- | ---------------------------------------- | ---------------------------------------- |
-| `SELF_ISSUED_VTC_ORG_TYPE`                   | Organization type for example credential | `PRIVATE`                                |
+| `SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND`       | Organization kind for example credential | `PRIVATE`                                |
 | `SELF_ISSUED_VTC_ORG_COUNTRYCODE`            | Organization country code                | `EE`                                     |
 | `SELF_ISSUED_VTC_ORG_REGISTRYID`             | Organization registry ID                 | `1234567890`                             |
-| `SELF_ISSUED_VTC_ORG_REGISTRYURL`            | Organization registry URL                | `https://registry.example.com`           |
+| `SELF_ISSUED_VTC_ORG_REGISTRYURI`            | Organization registry URI                | `https://registry.example.com`           |
 | `SELF_ISSUED_VTC_ORG_ADDRESS`                | Organization address                     | `Ahtri tn 12 10151 Tallinn, Estonia`     |
 | `SELF_ISSUED_VTC_SERVICE_TYPE`               | Service type for example credential      | `HealthCheckService`                     |
 | `SELF_ISSUED_VTC_SERVICE_DESCRIPTION`        | Service description                      | `Health Verification Service`            |
