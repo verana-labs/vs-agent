@@ -304,6 +304,38 @@ describe('VerifierService', () => {
     })
   })
 
+  it('honours a per-request x5c signer override on a did-signing verifier', async () => {
+    const api = verifierApi()
+    api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
+    api.createAuthorizationRequest.mockResolvedValue({
+      authorizationRequest: 'openid4vp://?request_uri=opaque',
+      verificationSession: session('RequestCreated'),
+    })
+    const didSigning: OpenId4VcPluginOptions = {
+      ...options(),
+      verifier: {
+        id: 'verifier',
+        displayName: 'Example Verifier',
+        signing: { development: { enabled: true, commonName: 'Example Verifier' } },
+        requestSigner: 'did',
+      },
+    }
+    const service = new VerifierService(agent(api) as never, didSigning)
+    await service.ensureInitialized()
+
+    await service.createRequest('employee-name', 'dcql', 'x5c')
+
+    expect(api.createAuthorizationRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestSigner: {
+          method: 'x5c',
+          x5c: [signingLeaf, signingRoot],
+          clientIdPrefix: 'x509_hash',
+        },
+      }),
+    )
+  })
+
   it('fails unknown policies clearly without creating a request', async () => {
     const api = verifierApi()
     api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })

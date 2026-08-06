@@ -20,4 +20,9 @@ export class CreateOpenId4VcVerificationRequestDto {
   @IsOptional()
   @IsIn(['dcql', 'presentation_exchange'])
   queryLanguage?: OpenId4VcQueryLanguage
+
+  /** Overrides the verifier's configured signer for this request only; `x5c` yields an `x509_hash:` client_id for a wallet that cannot resolve DIDs. */
+  @IsOptional()
+  @IsIn(['x5c', 'did'])
+  requestSigner?: 'x5c' | 'did'
 }
