@@ -226,7 +226,7 @@ async function startWebvhVerifier({ seedAlternativeDids }: { seedAlternativeDids
   if (!plugin.publicMiddleware) throw new Error('plugin did not expose public middleware')
   app.use(plugin.publicMiddleware)
 
-  const logger = new ConsoleLogger(LogLevel.off)
+  const logger = new ConsoleLogger(LogLevel.Off)
   const agent = new Agent({
     config: { logger, allowInsecureHttpUrls: true },
     dependencies: agentDependencies,

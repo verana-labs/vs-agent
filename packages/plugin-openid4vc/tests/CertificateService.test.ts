@@ -536,5 +536,7 @@ function createAgent({
     publicApiBaseUrl: undefined as string | undefined,
   }
 
-  return agent as unknown as typeof agent & Parameters<typeof loadSigningCertificate>[0]
+  return agent as unknown as typeof agent &
+    Parameters<typeof loadSigningCertificate>[0] &
+    Parameters<typeof publishDevelopmentSigningKey>[0]
 }
