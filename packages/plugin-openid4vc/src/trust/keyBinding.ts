@@ -68,9 +68,7 @@ export async function verifyKeyBoundToDid(
       try {
         const methodKey = getPublicJwkFromVerificationMethod(verificationMethod)
         if (certificateKey.equals(methodKey)) return 'bound'
-      } catch {
-        continue
-      }
+      } catch {}
     }
   }
 
@@ -127,9 +125,7 @@ export async function findBoundVerificationMethodId(
         if (certificateKey.equals(getPublicJwkFromVerificationMethod(verificationMethod))) {
           return verificationMethod.id
         }
-      } catch {
-        continue
-      }
+      } catch {}
     }
   }
 
@@ -180,9 +176,7 @@ export async function findEd25519VerificationMethodId(
           crv?: string
         }
         if (jwk.kty === 'OKP' && jwk.crv === 'Ed25519') return verificationMethod.id
-      } catch {
-        continue
-      }
+      } catch {}
     }
   }
 

@@ -25,6 +25,12 @@ export function trustedCertificatesForVerification(
       : undefined
   }
 
+  if (verification.type === 'openId4VciKeyAttestation') {
+    return options.issuer?.keyAttestationCertificates?.length
+      ? options.issuer.keyAttestationCertificates
+      : undefined
+  }
+
   return undefined
 }
 

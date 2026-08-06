@@ -221,16 +221,17 @@ describe('validateOpenId4VcOptions', () => {
     expect(() => validateOpenId4VcOptions(options)).toThrow('duplicate credential issuer certificate')
   })
 
-  it.each(['SHA256:example', `sha256:${'0'.repeat(64)}`, `SHA256:${'A'.repeat(64)}`])(
-    'rejects malformed development certificate fingerprint %s',
-    fingerprint => {
-      const options = validOptions()
-      options.trust!.credentialIssuerCertificates = []
-      options.trust!.developmentCertificateFingerprints = [fingerprint]
+  it.each([
+    'SHA256:example',
+    `sha256:${'0'.repeat(64)}`,
+    `SHA256:${'A'.repeat(64)}`,
+  ])('rejects malformed development certificate fingerprint %s', fingerprint => {
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = []
+    options.trust!.developmentCertificateFingerprints = [fingerprint]
 
-      expect(() => validateOpenId4VcOptions(options)).toThrow('SHA256')
-    },
-  )
+    expect(() => validateOpenId4VcOptions(options)).toThrow('SHA256')
+  })
 
   it('rejects duplicate development certificate fingerprints', () => {
     const fingerprint = `SHA256:${'0'.repeat(64)}`

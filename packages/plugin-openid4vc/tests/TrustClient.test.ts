@@ -48,17 +48,18 @@ describe('TrustClient', () => {
     expect(fetchImplementation).not.toHaveBeenCalled()
   })
 
-  it.each(['TRUSTED', 'PARTIAL', 'UNTRUSTED'] as const)(
-    'accepts only the declared %s trust status',
-    async trustStatus => {
-      const fetchImplementation = vi.fn(async () => response(200, { trustStatus })) as unknown as typeof fetch
+  it.each([
+    'TRUSTED',
+    'PARTIAL',
+    'UNTRUSTED',
+  ] as const)('accepts only the declared %s trust status', async trustStatus => {
+    const fetchImplementation = vi.fn(async () => response(200, { trustStatus })) as unknown as typeof fetch
 
-      await expect(clientWith(fetchImplementation).resolve(DID)).resolves.toEqual({
-        status: 'ok',
-        trustStatus,
-      })
-    },
-  )
+    await expect(clientWith(fetchImplementation).resolve(DID)).resolves.toEqual({
+      status: 'ok',
+      trustStatus,
+    })
+  })
 
   it.each([
     ['404', vi.fn(async () => response(404)), 'UNTRUSTED'],
@@ -112,19 +113,17 @@ describe('TrustClient', () => {
     })
   })
 
-  it.each(['PARTIAL', 'UNTRUSTED'] as const)(
-    'does not query authorization after a %s resolution',
-    async trustStatus => {
-      const fetchImplementation = vi.fn(async () => response(200, { trustStatus })) as unknown as typeof fetch
+  it.each([
+    'PARTIAL',
+    'UNTRUSTED',
+  ] as const)('does not query authorization after a %s resolution', async trustStatus => {
+    const fetchImplementation = vi.fn(async () => response(200, { trustStatus })) as unknown as typeof fetch
 
-      await expect(
-        clientWith(fetchImplementation).verdictFor('issuer', DID, VTJSC_ID),
-      ).resolves.toMatchObject({
-        verdict: 'UNTRUSTED',
-      })
-      expect(fetchImplementation).toHaveBeenCalledOnce()
-    },
-  )
+    await expect(clientWith(fetchImplementation).verdictFor('issuer', DID, VTJSC_ID)).resolves.toMatchObject({
+      verdict: 'UNTRUSTED',
+    })
+    expect(fetchImplementation).toHaveBeenCalledOnce()
+  })
 
   it('builds unambiguous endpoint URLs and encoded query parameters', async () => {
     const fetchMock = vi

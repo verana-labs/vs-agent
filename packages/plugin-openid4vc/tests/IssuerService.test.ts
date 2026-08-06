@@ -107,6 +107,23 @@ describe('IssuerService', () => {
     verifyKeyBoundToDid.mockResolvedValue('bound')
   })
 
+  it('advertises the attestation proof type only where a key-attestation root is configured', async () => {
+    const withRoot = issuerApi()
+    withRoot.getIssuerByIssuerId.mockRejectedValue(
+      new RecordNotFoundError('issuer not found', { recordType: 'OpenId4VcIssuerRecord' }),
+    )
+    const configured = options()
+    if (!configured.issuer) throw new Error('issuer options missing')
+    configured.issuer.keyAttestationCertificates = ['wallet-provider-root']
+
+    await new IssuerService(agent(withRoot) as never, configured).ensureInitialized()
+
+    const proofTypes =
+      withRoot.createIssuer.mock.calls[0][0].credentialConfigurationsSupported.employee.proof_types_supported
+    expect(Object.keys(proofTypes).sort()).toEqual(['attestation', 'jwt'])
+    expect(proofTypes.attestation).toEqual({ proof_signing_alg_values_supported: ['ES256'] })
+  })
+
   it('creates the configured issuer with only dc+sd-jwt, ES256, and JWK holder binding', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockRejectedValue(
