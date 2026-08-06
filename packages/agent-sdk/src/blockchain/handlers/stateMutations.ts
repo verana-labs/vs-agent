@@ -12,7 +12,7 @@ import { identifySchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
-import { buildLegacySchemaRef, buildSchemaRef } from '../../utils/util'
+import { buildSchemaRef } from '../../utils/util'
 import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
 import {
   createJsc,
@@ -345,7 +345,7 @@ export async function reconcileVtjscPublications(
     for (const schema of await indexer.listCredentialSchemas(ecosystem.id)) {
       const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
       if (!didRecord) return
-      const schemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
+      const schemaRef = buildSchemaRef(chainId, schema.id)
       const expectedDigest = generateDigestSRI(schema.json_schema)
       const existingJsc = findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
       const existingDigest = (

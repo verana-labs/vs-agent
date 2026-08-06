@@ -44,9 +44,9 @@ import {
 })
 export class InvitationController {
   constructor(
-    private readonly agentService: VsAgentService,
-    private readonly urlShortenerService: UrlShorteningService,
-    private readonly credentialTypesService: CredentialTypesService,
+    @Inject(VsAgentService) private readonly agentService: VsAgentService,
+    @Inject(UrlShorteningService) private readonly urlShortenerService: UrlShorteningService,
+    @Inject(CredentialTypesService) private readonly credentialTypesService: CredentialTypesService,
     @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
   ) {}
 

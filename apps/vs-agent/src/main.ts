@@ -483,9 +483,12 @@ const run = async () => {
     }
 
     if (VERANA_CORPORATION_ID) {
-      void reconcileVtjscPublications(agent, agent.indexer, Number(VERANA_CORPORATION_ID), selfTrDefaults).catch(
-        (error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`),
-      )
+      void reconcileVtjscPublications(
+        agent,
+        agent.indexer,
+        Number(VERANA_CORPORATION_ID),
+        selfTrDefaults,
+      ).catch((error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`))
     }
   }
 
