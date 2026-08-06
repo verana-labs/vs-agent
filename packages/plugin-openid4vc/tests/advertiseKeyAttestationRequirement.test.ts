@@ -35,21 +35,25 @@ const run = (body: string, overrides: Partial<Request> = {}) => {
 }
 
 describe('advertiseKeyAttestationRequirement', () => {
-  it('adds an unconstrained requirement to a jwt proof type that lacks one', () => {
+  it('adds an unconstrained requirement and mirrors jwt as attestation', () => {
     const { sent, next } = run(metadata({ jwt: { proof_signing_alg_values_supported: ['ES256'] } }))
 
-    const parsed = JSON.parse(sent)
-    expect(
-      parsed.credential_configurations_supported['demo-credential'].proof_types_supported.jwt,
-    ).toEqual({ proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} })
+    const expected = { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} }
+    const proofTypes =
+      JSON.parse(sent).credential_configurations_supported['demo-credential'].proof_types_supported
+    expect(proofTypes).toEqual({ jwt: expected, attestation: expected })
     expect(next).toHaveBeenCalledOnce()
   })
 
-  it('keeps an existing requirement untouched', () => {
+  it('keeps an existing requirement and an existing attestation entry untouched', () => {
     const existing = {
       jwt: {
         proof_signing_alg_values_supported: ['ES256'],
         key_attestations_required: { key_storage: ['iso_18045_high'] },
+      },
+      attestation: {
+        proof_signing_alg_values_supported: ['ES384'],
+        key_attestations_required: {},
       },
     }
     const { sent } = run(metadata(existing))
