@@ -43,6 +43,7 @@ export function setupOpenId4Vc(
   const app = express()
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
   if (options.issuer) app.use(normalizeMetadataAcceptHeader)
+  if (options.issuer) app.use(advertiseKeyAttestationRequirement)
   if (options.issuer) app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
   if (options.issuer) {
     app.get('/oid4vc/vct/:configurationId', (request, response, next) => {
@@ -127,6 +128,52 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
       body.credential_configuration_id = configuration.id
     }
     next()
+  }
+}
+
+/** openid4vci-kt refuses issuer metadata whose `jwt` or `attestation` proof type lacks
+ *  `key_attestations_required`, treating the OID4VCI 1.0 optional member as mandatory. Advertise
+ *  it unconstrained (`{}`) on the JSON variant when Credo left it out; wallets that never
+ *  implemented key attestation ignore the member entirely. */
+export function advertiseKeyAttestationRequirement(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): void {
+  if (request.method !== 'GET' || !request.path.includes('/.well-known/openid-credential-issuer')) {
+    next()
+    return
+  }
+
+  const send = response.send.bind(response)
+  response.send = ((body?: unknown) =>
+    send(typeof body === 'string' ? withKeyAttestationRequirement(body) : body)) as Response['send']
+  next()
+}
+
+function withKeyAttestationRequirement(body: string): string {
+  try {
+    const metadata: unknown = JSON.parse(body)
+    if (!isRecord(metadata) || !isRecord(metadata.credential_configurations_supported)) return body
+
+    const configurations = Object.fromEntries(
+      Object.entries(metadata.credential_configurations_supported).map(([id, configuration]) => {
+        if (!isRecord(configuration) || !isRecord(configuration.proof_types_supported)) {
+          return [id, configuration]
+        }
+        const proofTypes = Object.fromEntries(
+          Object.entries(configuration.proof_types_supported).map(([type, meta]) =>
+            isRecord(meta) && !('key_attestations_required' in meta) && (type === 'jwt' || type === 'attestation')
+              ? [type, { ...meta, key_attestations_required: {} }]
+              : [type, meta],
+          ),
+        )
+        return [id, { ...configuration, proof_types_supported: proofTypes }]
+      }),
+    )
+    return JSON.stringify({ ...metadata, credential_configurations_supported: configurations })
+  } catch {
+    return body
   }
 }
 
