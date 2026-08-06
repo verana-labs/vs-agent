@@ -42,6 +42,7 @@ export function setupOpenId4Vc(
 
   const app = express()
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
+  if (options.issuer) app.use(normalizeMetadataAcceptHeader)
   if (options.issuer) app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
   if (options.issuer) {
     app.get('/oid4vc/vct/:configurationId', (request, response, next) => {
@@ -127,6 +128,25 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
     }
     next()
   }
+}
+
+/** openid4vci-kt sends `Accept: application/jwt; application/json` - a semicolon where a comma
+ *  belongs - which parses as `application/jwt` alone and draws the signed metadata JWT it then
+ *  cannot verify, since Credo signs it with a DID kid and no x5c chain. A client naming both
+ *  formats can use either, so serve it the JSON it can read; clients that need the JWT ask for
+ *  `application/jwt` alone. */
+export function normalizeMetadataAcceptHeader(request: Request, _response: Response, next: NextFunction): void {
+  const accept = request.headers.accept
+  if (
+    request.method === 'GET' &&
+    request.path.includes('/.well-known/openid-credential-issuer') &&
+    typeof accept === 'string' &&
+    accept.includes('application/jwt') &&
+    accept.includes('application/json')
+  ) {
+    request.headers.accept = 'application/json'
+  }
+  next()
 }
 
 function advertiseWalletAttestationMetadata(request: Request, response: Response, next: NextFunction): void {
