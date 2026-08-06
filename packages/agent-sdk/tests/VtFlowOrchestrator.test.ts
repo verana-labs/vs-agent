@@ -14,18 +14,17 @@ const record = {
 const activeIssuer = { id: 10, role: 'ISSUER', participant_state: 'ACTIVE', schema_id: 5 }
 
 function verify(indexer: Record<string, unknown>) {
-  const agent = {
-    dependencyManager: { resolve: () => ({ findById: async () => record }) },
-    didcomm: { credentials: { getFormatData: async () => ({ credential: { jsonld: {} } }) } },
-  } as never
   const defaults = {
     getParticipantSession: async () => ({ session_records: [{ issuer_participant_id: 10 }] }),
     getParticipant: async () => activeIssuer,
     getDigest: async () => ({ digest: 'sha384-anchored' }),
   }
-  return new VtFlowOrchestrator(agent, {
-    indexer: { ...defaults, ...indexer } as never,
-  }).verifyOfferedCredential('rec-1')
+  const agent = {
+    dependencyManager: { resolve: () => ({ findById: async () => record }) },
+    didcomm: { credentials: { getFormatData: async () => ({ credential: { jsonld: {} } }) } },
+    indexer: { ...defaults, ...indexer },
+  } as never
+  return new VtFlowOrchestrator(agent).verifyOfferedCredential('rec-1')
 }
 
 describe('VtFlowOrchestrator.verifyOfferedCredential', () => {

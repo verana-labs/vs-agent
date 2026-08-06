@@ -1,9 +1,10 @@
 import '@openwallet-foundation/askar-nodejs'
 
+import { ConsoleLogger, LogLevel } from '@credo-ts/core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { VsAgent } from '../../src/agent'
-import { IndexerWebSocketService } from '../../src/blockchain'
+import { IndexerWebSocketService, VeranaIndexerService } from '../../src/blockchain'
 import { IndexerActivity } from '../../src/blockchain/types'
 import { VsAgentEventTypes } from '../../src/events'
 import { startAgent } from '../__mocks__/startTestAgent'
@@ -38,7 +39,14 @@ describeE2E('Verana blockchain integration (node + indexer, CosmJS + WebSocket)'
     stack = await startStack()
     chain = await VeranaTestChain.connect(stack.rpcUrl, COOLUSER_MNEMONIC)
     subscriber = await IndexerSubscriber.connect(stack.indexerWsUrl)
-    agent = await startAgent({ label: 'IndexerAgent', domain: 'indexeragent' })
+    agent = await startAgent({
+      label: 'IndexerAgent',
+      domain: 'indexeragent',
+      indexer: new VeranaIndexerService({
+        baseUrl: stack.indexerWsUrl.replace(/^ws/, 'http'),
+        logger: new ConsoleLogger(LogLevel.Warn),
+      }),
+    })
     await agent.initialize()
   }, SETUP_TIMEOUT_MS)
 

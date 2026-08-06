@@ -16,7 +16,6 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { BaseAgentModules, VsAgent } from '../agent'
-import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { ParticipantRole, ParticipantState } from '../blockchain/types'
 import {
   HOLDER_PARTICIPANT_TYPE,
@@ -38,7 +37,6 @@ import { credentialContentDigest } from './credentialDigest'
 
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
-  indexer?: VeranaIndexerService
   agentParticipantId?: number
   walletAgentParticipantId?: number
 }
@@ -229,7 +227,7 @@ export class VtFlowOrchestrator {
   } | null> {
     const chain = this.requireChain()
     if (!this.agent.did) throw new Error('Agent has no public DID')
-    const indexer = this.requireIndexer()
+    const indexer = this.agent.indexer
 
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(vtFlowRecordId)
@@ -324,7 +322,7 @@ export class VtFlowOrchestrator {
     if (!record.credentialExchangeRecordId) {
       throw new Error('Record has no credentialExchangeRecordId; nothing to verify')
     }
-    const indexer = this.requireIndexer()
+    const indexer = this.agent.indexer
 
     const session = await indexer.getParticipantSession(record.participantSessionId)
     if (!session) {
@@ -406,13 +404,6 @@ export class VtFlowOrchestrator {
     )?.jsonld
     if (!credentialJson) throw new Error('Offered credential has no JSON-LD body to verify')
     return credentialJson
-  }
-
-  private requireIndexer(): VeranaIndexerService {
-    if (!this.options.indexer) {
-      throw new Error('Agent has no indexer configured (set VERANA_INDEXER_BASE_URL)')
-    }
-    return this.options.indexer
   }
 
   async publishCredentialAsLinkedVp(vtFlowRecordId: string): Promise<void> {
