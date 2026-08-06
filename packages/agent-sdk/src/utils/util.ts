@@ -164,8 +164,6 @@ export async function fetchJson<T>(
   }
 }
 
-// TODO: Once all schema refs are migrated to the v4 `:cs:` format, remove the legacy
-// `/cs/v1/js/` protection here (buildLegacySchemaRef and the legacy branch in parseSchemaRef).
 export function buildSchemaRef(chainId: string, schemaId: number | string): string {
   return `vpr:verana:${chainId}:cs:${schemaId}`
 }
