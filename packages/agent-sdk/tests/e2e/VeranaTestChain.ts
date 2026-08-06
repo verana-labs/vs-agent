@@ -167,7 +167,7 @@ export class VeranaTestChain {
       typeUrl: veranaTypeUrls.MsgGrantOperatorAuthorization,
       value: MsgGrantOperatorAuthorization.fromPartial({
         corporation: policyAddress,
-        operator: '',
+        operator: policyAddress,
         grantee: this.address,
         msgTypes: OPERATOR_GRANT_MSG_TYPES,
       }),

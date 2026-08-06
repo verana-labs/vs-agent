@@ -151,6 +151,7 @@ export interface CredentialSchemaDto {
   id: number
   ecosystem_id: number
   json_schema: string
+  digest_algorithm: string
   issuer_onboarding_mode?: string
   verifier_onboarding_mode?: string
   archived: string | null

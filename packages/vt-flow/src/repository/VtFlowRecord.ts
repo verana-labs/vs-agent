@@ -36,6 +36,7 @@ export interface VtFlowStorageProps {
 
   agentParticipantId: string
   walletAgentParticipantId: string
+  issuerParticipantId?: number
 
   participantId?: string
   schemaId?: string
@@ -66,6 +67,7 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
 
   public agentParticipantId!: string
   public walletAgentParticipantId!: string
+  public issuerParticipantId?: number
 
   public participantId?: string
   public schemaId?: string
@@ -97,6 +99,7 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
 
       this.agentParticipantId = props.agentParticipantId
       this.walletAgentParticipantId = props.walletAgentParticipantId
+      this.issuerParticipantId = props.issuerParticipantId
 
       this.participantId = props.participantId
       this.schemaId = props.schemaId

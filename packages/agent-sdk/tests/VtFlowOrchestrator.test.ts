@@ -21,7 +21,8 @@ function verify(indexer: Record<string, unknown>) {
   const defaults = {
     getParticipantSession: async () => ({ session_records: [{ issuer_participant_id: 10 }] }),
     getParticipant: async () => activeIssuer,
-    getDigest: async () => ({ digest: 'sha384-anchored' }),
+    getCredentialSchema: async () => ({ id: 5, digest_algorithm: 'sha384' }),
+    getDigest: async () => ({ digest: 'anchored' }),
   }
   return new VtFlowOrchestrator(agent, {
     indexer: { ...defaults, ...indexer } as never,
@@ -53,6 +54,24 @@ describe('VtFlowOrchestrator.verifyOfferedCredential', () => {
 
   it('rejects when the credential digest is not anchored on-chain', async () => {
     await expect(verify({ getDigest: async () => undefined })).rejects.toThrow(/not anchored on-chain/)
+  })
+
+  it('refuses to guess an algorithm when the schema does not declare one', async () => {
+    await expect(verify({ getCredentialSchema: async () => ({ id: 5 }) })).rejects.toThrow(
+      /has no digest_algorithm/,
+    )
+  })
+
+  it('digests the credential without an algorithm prefix', async () => {
+    let looked: string | undefined
+    await verify({
+      getDigest: async (d: string) => {
+        looked = d
+        return { digest: d }
+      },
+    })
+    expect(looked).toBeDefined()
+    expect(looked).not.toMatch(/^sha\d+-/)
   })
 })
 
