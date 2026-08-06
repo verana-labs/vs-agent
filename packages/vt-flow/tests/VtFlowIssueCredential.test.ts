@@ -16,8 +16,6 @@ const buildApi = (options: VtFlowModuleConfigOptions) => {
   const protocol = {
     version: 'v2',
     acceptRequest: vi.fn(async () => ({ message: { setThread: () => undefined } })),
-    findRequestMessage: vi.fn(async () => ({})),
-    findOfferMessage: vi.fn(async () => ({})),
     getFormatData: vi.fn(async () => ({ credential: { jsonld: SIGNED_CREDENTIAL } })),
   }
 

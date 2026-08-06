@@ -297,15 +297,6 @@ export class VtFlowApi {
       : undefined
     connectionRecord?.assertReady()
 
-    const requestMessage = await protocol.findRequestMessage(this.agentContext, credentialExchangeRecord.id)
-    if (!requestMessage) {
-      throw new CredoError(`No request message found for credential record '${credentialExchangeRecord.id}'`)
-    }
-    const offerMessage = await protocol.findOfferMessage(this.agentContext, credentialExchangeRecord.id)
-    if (!offerMessage) {
-      throw new CredoError(`No offer message found for credential record '${credentialExchangeRecord.id}'`)
-    }
-
     // unlike DidCommCredentialsApi.acceptRequest, this signs without sending
     const { message } = await protocol.acceptRequest(this.agentContext, {
       credentialExchangeRecord,
@@ -337,8 +328,6 @@ export class VtFlowApi {
       message,
       connectionRecord,
       associatedRecord: credentialExchangeRecord,
-      lastReceivedMessage: requestMessage,
-      lastSentMessage: offerMessage,
     })
     await this.messageSender.sendMessage(outboundMessageContext)
 
