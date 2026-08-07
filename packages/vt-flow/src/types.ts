@@ -86,6 +86,7 @@ export interface OfferCredentialForSessionOptions {
   vtFlowRecordId: string
   credentialFormats: { jsonld: DidCommJsonLdCredentialDetailFormat }
   credentialDigest?: string
+  issuerParticipantId?: number
   comment?: string
   goal?: string
   goalCode?: string

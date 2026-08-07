@@ -100,7 +100,8 @@ export const setupAgent = async ({
     ? [
         {
           id: `vpr:verana:${VERANA_CHAIN_ID}`,
-          baseUrls: [`${indexerBaseUrl}/verana`],
+          scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
+          api: [VERANA_INDEXER_BASE_URL],
           production: true,
         },
       ]
@@ -128,6 +129,12 @@ export const setupAgent = async ({
             } catch (error) {
               logger.error(`[vt-flow] direct issuance offer failed: ${(error as Error).message}`)
               return null
+            }
+          },
+          onBeforeCredentialIssued: async ({ record, credential }) => {
+            if (!orchestrator) throw new Error('[vt-flow] orchestrator not ready, refusing to issue')
+            return {
+              credentialDigest: await orchestrator.onCredentialIssued(record.id, credential as never),
             }
           },
           assertVerifiableService: verifiablePublicRegistries

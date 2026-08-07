@@ -1,4 +1,4 @@
-import type { JsonObject } from '@credo-ts/core'
+import type { JsonObject, W3cVerifiableCredential } from '@credo-ts/core'
 
 import { JsonTransformer, W3cJsonLdVerifiableCredential, utils } from '@credo-ts/core'
 import {
@@ -14,6 +14,7 @@ import {
   VtFlowVariant,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { BaseAgentModules, VsAgent } from '../agent'
 import { ParticipantRole, ParticipantState } from '../blockchain/types'
@@ -32,8 +33,6 @@ import {
   findMetadataEntry,
   removeStoredTrustCredential,
 } from '../utils'
-
-import { credentialContentDigest } from './credentialDigest'
 
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
@@ -167,7 +166,7 @@ export class VtFlowOrchestrator {
     if (!holderParticipant) throw new Error(`Holder participant ${holderParticipantId} not found on chain`)
     if (!holderParticipant.did) throw new Error('Holder participant has no DID')
 
-    const { unsignedCredentialJson, digest } = await this.buildCredential({
+    const unsignedCredentialJson = await this.buildCredential({
       credentialSchemaId: input.credentialSchemaId,
       subjectDid: holderParticipant.did,
       claims: (record.claims ?? {}) as JsonObject,
@@ -175,22 +174,10 @@ export class VtFlowOrchestrator {
       credentialContext: input.credentialContext,
     })
 
-    // The chain requires a null op_summary_digest for HOLDER participants (MOD-PP-MSG-3).
+    // op_summary_digest (MOD-PP-MSG-3) digests the applicant's submission, not the credential
     await chain.setParticipantOPToValidated({
       id: holderParticipantId,
-      opSummaryDigest: holderParticipant.role === HOLDER_PARTICIPANT_TYPE ? undefined : digest,
       corporation: holderParticipant.corporation,
-    })
-    await chain.createOrUpdateParticipantSession({
-      id: record.participantSessionId,
-      issuerParticipantId: Number(holderParticipant.validatorParticipantId),
-      agentParticipantId:
-        Number(record.agentParticipantId ?? 0) ||
-        (input.agentParticipantId ?? this.options.agentParticipantId ?? 0),
-      walletAgentParticipantId:
-        Number(record.walletAgentParticipantId ?? 0) ||
-        (input.walletAgentParticipantId ?? this.options.walletAgentParticipantId ?? 0),
-      digest,
     })
 
     await vtFlowApi.acceptOnboardingRequest(record.id)
@@ -198,7 +185,7 @@ export class VtFlowOrchestrator {
 
     const { record: offered } = await vtFlowApi.offerCredentialForSession({
       vtFlowRecordId: record.id,
-      credentialDigest: digest,
+      issuerParticipantId: Number(holderParticipant.validatorParticipantId),
       credentialFormats: {
         jsonld: {
           credential: unsignedCredentialJson,
@@ -223,7 +210,7 @@ export class VtFlowOrchestrator {
 
   async buildDirectIssuanceOffer(vtFlowRecordId: string): Promise<{
     credentialFormats: { jsonld: DidCommJsonLdCredentialDetailFormat }
-    credentialDigest: string
+    issuerParticipantId: number
   } | null> {
     const chain = this.requireChain()
     if (!this.agent.did) throw new Error('Agent has no public DID')
@@ -254,18 +241,10 @@ export class VtFlowOrchestrator {
     const connection = await this.agent.didcomm.connections.findById(record.connectionId)
     if (!connection?.theirDid) throw new Error('Flow connection has no peer DID')
 
-    const { unsignedCredentialJson, digest } = await this.buildCredential({
+    const unsignedCredentialJson = await this.buildCredential({
       credentialSchemaId: String(record.schemaId),
       subjectDid: connection.theirDid,
       claims: (record.claims ?? {}) as JsonObject,
-    })
-
-    await chain.createOrUpdateParticipantSession({
-      id: record.participantSessionId,
-      issuerParticipantId: issuer.id,
-      agentParticipantId: Number(record.agentParticipantId ?? 0) || 0,
-      walletAgentParticipantId: Number(record.walletAgentParticipantId ?? 0) || 0,
-      digest,
     })
 
     return {
@@ -275,7 +254,7 @@ export class VtFlowOrchestrator {
           options: { proofType: 'Ed25519Signature2020', proofPurpose: 'assertionMethod' },
         },
       },
-      credentialDigest: digest,
+      issuerParticipantId: issuer.id,
     }
   }
 
@@ -285,7 +264,7 @@ export class VtFlowOrchestrator {
     claims: JsonObject
     credentialType?: string[]
     credentialContext?: string[]
-  }): Promise<{ unsignedCredentialJson: JsonCredential; digest: string }> {
+  }): Promise<JsonCredential> {
     const chain = this.requireChain()
     const didRecords = await this.agent.dids.getCreatedDids({ did: this.agent.did! })
     const didRecord = didRecords[0]
@@ -310,8 +289,42 @@ export class VtFlowOrchestrator {
       type: 'JsonSchemaCredential',
     }
 
-    const unsignedCredentialJson = JsonTransformer.toJSON(unsignedCredential) as JsonCredential
-    return { unsignedCredentialJson, digest: credentialContentDigest(unsignedCredentialJson) }
+    return JsonTransformer.toJSON(unsignedCredential) as JsonCredential
+  }
+
+  /** Per the spec the algorithm comes from the schema, never from the digest value. */
+  private async digestAlgorithmForSchema(schemaId: number): Promise<string> {
+    const schema = await this.requireIndexer().getCredentialSchema(schemaId)
+    if (!schema.digest_algorithm) {
+      throw new Error(`Credential schema ${schemaId} has no digest_algorithm`)
+    }
+    return schema.digest_algorithm
+  }
+
+  /** Fired after signing and before delivery, so a failure here must abort the issuance. */
+  async onCredentialIssued(vtFlowRecordId: string, signedCredential: JsonCredential): Promise<string> {
+    const chain = this.requireChain()
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(vtFlowRecordId)
+    if (!record) throw new Error(`vt-flow record ${vtFlowRecordId} not found`)
+    if (record.issuerParticipantId == null) {
+      throw new Error(`vt-flow record ${vtFlowRecordId} has no issuerParticipantId to anchor against`)
+    }
+
+    const issuer = await this.requireIndexer().getParticipant(record.issuerParticipantId)
+    const algorithm = await this.digestAlgorithmForSchema(issuer.schema_id)
+    const digest = computeCredentialDigestJCS(
+      signedCredential as unknown as W3cVerifiableCredential,
+      algorithm,
+    )
+    await chain.createOrUpdateParticipantSession({
+      id: record.participantSessionId,
+      issuerParticipantId: record.issuerParticipantId,
+      agentParticipantId: Number(record.agentParticipantId ?? 0) || 0,
+      walletAgentParticipantId: Number(record.walletAgentParticipantId ?? 0) || 0,
+      digest,
+    })
+    return digest
   }
 
   async verifyOfferedCredential(vtFlowRecordId: string): Promise<void> {
@@ -352,7 +365,8 @@ export class VtFlowOrchestrator {
     }
 
     const credentialJson = await this.getOfferedCredentialJson(record.credentialExchangeRecordId)
-    const digest = credentialContentDigest(credentialJson)
+    const algorithm = await this.digestAlgorithmForSchema(issuer.schema_id)
+    const digest = computeCredentialDigestJCS(credentialJson as unknown as W3cVerifiableCredential, algorithm)
     const anchored = await indexer.getDigest(digest)
     if (!anchored) {
       throw new Error(`Credential digest ${digest} is not anchored on-chain`)
