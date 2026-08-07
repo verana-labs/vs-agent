@@ -339,6 +339,9 @@ export class IssuerService {
         {
           format: 'dc+sd-jwt' as const,
           vct: configuration.vct,
+          // OID4VCI makes `scope` optional; wwWallet's metadata schema requires it and fails
+          // resolution outright without one.
+          scope: configuration.id,
           cryptographic_binding_methods_supported: ['jwk'],
           credential_signing_alg_values_supported: ['ES256'],
           // Only `jwt` goes on the record. `attestation` is added per-request for the one client
