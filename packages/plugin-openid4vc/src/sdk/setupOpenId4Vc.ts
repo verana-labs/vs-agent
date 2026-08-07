@@ -162,8 +162,14 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
 export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
   return (request: Request, response: Response, next: NextFunction): void => {
     const accept = request.headers.accept
+    // Both types inside ONE media range, which only the semicolon typo produces. A correct
+    // `application/json, application/jwt` is two ranges and belongs to an ordinary client -
+    // swiyu sends exactly that, and matching it fed swiyu the EUDI-only accommodations.
     const isOpenId4VciKt =
-      typeof accept === 'string' && accept.includes('application/jwt') && accept.includes('application/json')
+      typeof accept === 'string' &&
+      accept
+        .split(',')
+        .some(range => range.includes('application/jwt') && range.includes('application/json'))
 
     if (
       request.method !== 'GET' ||

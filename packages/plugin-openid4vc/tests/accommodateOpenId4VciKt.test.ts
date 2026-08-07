@@ -81,6 +81,15 @@ describe('accommodateOpenId4VciKt', () => {
     expect(Object.keys(proofTypesOf(absent.sent))).toEqual(['jwt'])
   })
 
+  // swiyu asks for `application/json, application/jwt` - two correct ranges, not the typo. It was
+  // being read as openid4vci-kt and served an `attestation` its closed enum cannot parse.
+  it('does not mistake a correctly spelled multi-range accept for openid4vci-kt', () => {
+    const swiyu = run('application/json, application/jwt', metadata(jwtOnly))
+
+    expect(swiyu.accept).toBe('application/json, application/jwt')
+    expect(Object.keys(proofTypesOf(swiyu.sent))).toEqual(['jwt'])
+  })
+
   it('leaves other paths, unknown proof types and non-JSON bodies alone', () => {
     expect(run(OPENID4VCI_KT_ACCEPT, '{"plain":true}', { path: '/oid4vci/demo-did/credential' }).sent).toBe(
       '{"plain":true}',
