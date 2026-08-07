@@ -14,7 +14,12 @@ const metadata = (proofTypes: Record<string, unknown>) =>
     },
   })
 
-const run = (accept: string | undefined, body: string, overrides: Partial<Request> = {}) => {
+const run = (
+  accept: string | undefined,
+  body: string,
+  overrides: Partial<Request> = {},
+  hasAnchor = true,
+) => {
   const request = {
     method: 'GET',
     path: '/oid4vci/demo-did/.well-known/openid-credential-issuer',
@@ -29,7 +34,7 @@ const run = (accept: string | undefined, body: string, overrides: Partial<Reques
     },
   } as unknown as Response
   const next = vi.fn() as unknown as NextFunction
-  accommodateOpenId4VciKt(request, response, next)
+  accommodateOpenId4VciKt(hasAnchor)(request, response, next)
   response.send(body)
   return { sent: sent as string, accept: request.headers.accept, next }
 }
@@ -41,10 +46,7 @@ const jwtOnly = { jwt: { proof_signing_alg_values_supported: ['ES256'] } }
 
 describe('accommodateOpenId4VciKt', () => {
   it('serves JSON and an unconstrained key-attestation requirement to openid4vci-kt', () => {
-    const { sent, accept, next } = run(
-      OPENID4VCI_KT_ACCEPT,
-      metadata({ ...jwtOnly, attestation: { proof_signing_alg_values_supported: ['ES256'] } }),
-    )
+    const { sent, accept, next } = run(OPENID4VCI_KT_ACCEPT, metadata(jwtOnly))
 
     const expected = { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} }
     expect(accept).toBe('application/json')
@@ -64,16 +66,28 @@ describe('accommodateOpenId4VciKt', () => {
   })
 
   it('never invents a proof type the issuer does not accept', () => {
-    const { sent } = run(OPENID4VCI_KT_ACCEPT, metadata(jwtOnly))
+    const { sent } = run(OPENID4VCI_KT_ACCEPT, metadata(jwtOnly), {}, false)
 
     expect(Object.keys(proofTypesOf(sent))).toEqual(['jwt'])
+  })
+
+  // swiyu models proof_types_supported as a closed enum, so an `attestation` member it does not
+  // know makes it throw while deserializing and the credential offer dies before it renders.
+  it('keeps attestation away from every client but openid4vci-kt', () => {
+    const json = run('application/json', metadata(jwtOnly))
+    const absent = run(undefined, metadata(jwtOnly))
+
+    expect(Object.keys(proofTypesOf(json.sent))).toEqual(['jwt'])
+    expect(Object.keys(proofTypesOf(absent.sent))).toEqual(['jwt'])
   })
 
   it('leaves other paths, unknown proof types and non-JSON bodies alone', () => {
     expect(run(OPENID4VCI_KT_ACCEPT, '{"plain":true}', { path: '/oid4vci/demo-did/credential' }).sent).toBe(
       '{"plain":true}',
     )
-    expect(proofTypesOf(run(OPENID4VCI_KT_ACCEPT, metadata({ ldp_vp: {} })).sent)).toEqual({ ldp_vp: {} })
+    expect(proofTypesOf(run(OPENID4VCI_KT_ACCEPT, metadata({ ldp_vp: {} }), {}, false).sent)).toEqual({
+      ldp_vp: {},
+    })
     expect(run(OPENID4VCI_KT_ACCEPT, 'eyJhbGciOiJFUzI1NiJ9.e30.sig').sent).toBe('eyJhbGciOiJFUzI1NiJ9.e30.sig')
   })
 })

@@ -43,7 +43,8 @@ export function setupOpenId4Vc(
 
   const app = express()
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
-  if (options.issuer) app.use(accommodateOpenId4VciKt)
+  if (options.issuer)
+    app.use(accommodateOpenId4VciKt(Boolean(options.issuer.keyAttestationCertificates?.length)))
   if (options.issuer) app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
   if (options.issuer) {
     // Credo serves no SD-JWT VC issuer metadata, and a wallet that anchors an x5c-signed
@@ -152,33 +153,38 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
  *   - it refuses any proof type that omits `key_attestations_required`, treating the OID4VCI 1.0
  *     optional member as mandatory.
  *
- * Both accommodations are scoped to that client, recognised by the malformed accept header it
- * sends. Advertising the member to everyone is not an option: a Credo holder that sees it stops
- * binding a plain JWK and demands a key attestation, which would break every wallet that signs
- * its own proof.
+ * All three accommodations are scoped to that client, recognised by the malformed accept header it
+ * sends. Advertising any of them to everyone is not an option: a Credo holder that sees
+ * `key_attestations_required` stops binding a plain JWK and demands a key attestation, and swiyu
+ * models `proof_types_supported` as a closed enum, so an `attestation` member makes it throw while
+ * parsing the metadata and the offer dies before the wallet renders anything.
  */
-export function accommodateOpenId4VciKt(request: Request, response: Response, next: NextFunction): void {
-  const accept = request.headers.accept
-  const isOpenId4VciKt =
-    typeof accept === 'string' && accept.includes('application/jwt') && accept.includes('application/json')
+export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
+  return (request: Request, response: Response, next: NextFunction): void => {
+    const accept = request.headers.accept
+    const isOpenId4VciKt =
+      typeof accept === 'string' && accept.includes('application/jwt') && accept.includes('application/json')
 
-  if (
-    request.method !== 'GET' ||
-    !request.path.includes('/.well-known/openid-credential-issuer') ||
-    !isOpenId4VciKt
-  ) {
+    if (
+      request.method !== 'GET' ||
+      !request.path.includes('/.well-known/openid-credential-issuer') ||
+      !isOpenId4VciKt
+    ) {
+      next()
+      return
+    }
+
+    request.headers.accept = 'application/json'
+    const send = response.send.bind(response)
+    response.send = ((body?: unknown) =>
+      send(
+        typeof body === 'string' ? withKeyAttestationRequirement(body, hasKeyAttestationAnchor) : body,
+      )) as Response['send']
     next()
-    return
   }
-
-  request.headers.accept = 'application/json'
-  const send = response.send.bind(response)
-  response.send = ((body?: unknown) =>
-    send(typeof body === 'string' ? withKeyAttestationRequirement(body) : body)) as Response['send']
-  next()
 }
 
-function withKeyAttestationRequirement(body: string): string {
+function withKeyAttestationRequirement(body: string, hasKeyAttestationAnchor: boolean): string {
   try {
     const metadata: unknown = JSON.parse(body)
     if (!isRecord(metadata) || !isRecord(metadata.credential_configurations_supported)) return body
@@ -188,8 +194,14 @@ function withKeyAttestationRequirement(body: string): string {
         if (!isRecord(configuration) || !isRecord(configuration.proof_types_supported)) {
           return [id, configuration]
         }
+        const advertised = hasKeyAttestationAnchor
+          ? {
+              ...configuration.proof_types_supported,
+              attestation: { proof_signing_alg_values_supported: ['ES256'] },
+            }
+          : configuration.proof_types_supported
         const proofTypes = Object.fromEntries(
-          Object.entries(configuration.proof_types_supported).map(([type, meta]) =>
+          Object.entries(advertised).map(([type, meta]) =>
             isRecord(meta) && !('key_attestations_required' in meta) && (type === 'jwt' || type === 'attestation')
               ? [type, { ...meta, key_attestations_required: {} }]
               : [type, meta],

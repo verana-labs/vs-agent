@@ -341,15 +341,11 @@ export class IssuerService {
           vct: configuration.vct,
           cryptographic_binding_methods_supported: ['jwk'],
           credential_signing_alg_values_supported: ['ES256'],
-          // `attestation` is advertised only where a key-attestation trust anchor is configured,
-          // since accepting that proof means verifying it. Wallets that sign their own proof keep
-          // using `jwt` and are untouched - `key_attestations_required` is deliberately absent
-          // here, because on the record it makes a Credo holder refuse plain JWK binding.
+          // Only `jwt` goes on the record. `attestation` is added per-request for the one client
+          // that needs it: swiyu's ProofType is a closed enum and any other member makes it throw
+          // while parsing the metadata, killing the offer before the wallet ever sees it.
           proof_types_supported: {
             jwt: { proof_signing_alg_values_supported: ['ES256'] },
-            ...(this.issuerOptions().keyAttestationCertificates?.length
-              ? { attestation: { proof_signing_alg_values_supported: ['ES256'] } }
-              : {}),
           },
           credential_metadata: {
             display: [
