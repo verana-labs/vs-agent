@@ -46,15 +46,11 @@ export class SelfTrController {
   @ApiParam({ name: 'schemaId', required: true, description: 'Schema identifier', example: 'ecs-org' })
   @ApiResponse({ status: 200, description: 'JSON schema returned' })
   async getSchema(@Param('schemaId') schemaId: string) {
-    try {
-      if (!schemaId) {
-        throw new HttpException('Schema not found', HttpStatus.NOT_FOUND)
-      }
-      return this.ecsSchemas[schemaId]
-    } catch (error) {
-      this.logger.error(`Error loading schema file: ${error.message}`)
-      throw new HttpException('Failed to load schema', HttpStatus.INTERNAL_SERVER_ERROR)
+    const schema = this.ecsSchemas[schemaId]
+    if (!schema) {
+      throw new HttpException('Schema not found', HttpStatus.NOT_FOUND)
     }
+    return schema
   }
 
   @Get('perm/v1/list')
