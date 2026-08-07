@@ -124,6 +124,25 @@ describe('setupOpenId4Vc', () => {
     expect(response.body.jwks.keys).toHaveLength(1)
   })
 
+  // RFC 8615 inserts the issuer path after the well-known segment; answering only the bare
+  // form made every wwWallet issuance show a metadata-fetch failure above the trust card.
+  it('serves the SD-JWT VC issuer metadata at the path-inserted well-known form', async () => {
+    const setup = setupOpenId4Vc(validOptions(), () => ({
+      getVctMetadata: () => undefined,
+      getJwtVcIssuerMetadata: () => ({ issuer: 'https://issuer.example', jwks: { keys: [] } }),
+      mapCredentialRequest: () => {
+        throw new Error('not implemented')
+      },
+    }))
+
+    const response = await request(setup.publicMiddleware).get(
+      '/.well-known/jwt-vc-issuer/oid4vci/demo-did',
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.body.issuer).toBe('https://issuer.example')
+  })
+
   it('does not advertise wallet attestation metadata by default', async () => {
     const options = validOptions()
     options.issuer!.walletAttestationCertificates = ['unused-while-attestation-is-not-required']

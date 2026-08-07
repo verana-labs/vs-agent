@@ -51,7 +51,10 @@ export function setupOpenId4Vc(
   if (options.issuer) {
     // Credo serves no SD-JWT VC issuer metadata, and a wallet that anchors an x5c-signed
     // credential on the issuer origin rather than on the DID has nowhere else to look.
-    app.get('/.well-known/jwt-vc-issuer', (_request, response, next) => {
+    // RFC 8615 puts the issuer path AFTER the well-known segment, so a holder whose issuer
+    // identifier carries a path asks for `/.well-known/jwt-vc-issuer/oid4vci/<id>`. Answering
+    // only the bare form makes every issuance show a metadata-fetch failure.
+    app.get(['/.well-known/jwt-vc-issuer', '/.well-known/jwt-vc-issuer/*'], (_request, response, next) => {
       try {
         if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
         response.json(getIssuerService().getJwtVcIssuerMetadata())
