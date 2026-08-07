@@ -12,6 +12,7 @@ import { trustedCertificatesForVerification } from '../trust/CertificateTrust'
 
 const ATTESTATION_AUTH_METHOD = 'attest_jwt_client_auth'
 const ATTESTATION_ALGORITHMS = ['ES256']
+const DPOP_ALGORITHMS = ['ES256']
 
 export interface OpenId4VcIssuerRequestMapper {
   mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper
@@ -42,6 +43,7 @@ export function setupOpenId4Vc(
   }
 
   const app = express()
+  if (options.issuer) app.use(advertiseDpopSupport)
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
   if (options.issuer)
     app.use(accommodateOpenId4VciKt(Boolean(options.issuer.keyAttestationCertificates?.length)))
@@ -217,6 +219,30 @@ function withKeyAttestationRequirement(body: string, hasKeyAttestationAnchor: bo
       }),
     )
     return JSON.stringify({ ...metadata, credential_configurations_supported: configurations })
+  } catch {
+    return body
+  }
+}
+
+/** Credo omits `dpop_signing_alg_values_supported`. wwWallet reads the absent member and then
+ *  dereferences its DPoP params unconditionally, throwing before any consent screen renders. */
+function advertiseDpopSupport(request: Request, response: Response, next: NextFunction): void {
+  if (request.method !== 'GET' || !isAuthorizationServerMetadataPath(request.path)) {
+    next()
+    return
+  }
+
+  const send = response.send.bind(response)
+  response.send = ((body?: unknown) =>
+    send(typeof body === 'string' ? withDpopAlgorithms(body) : body)) as Response['send']
+  next()
+}
+
+function withDpopAlgorithms(body: string): string {
+  try {
+    const metadata: unknown = JSON.parse(body)
+    if (!isRecord(metadata) || metadata.dpop_signing_alg_values_supported) return body
+    return JSON.stringify({ ...metadata, dpop_signing_alg_values_supported: DPOP_ALGORITHMS })
   } catch {
     return body
   }

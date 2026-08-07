@@ -146,6 +146,7 @@ describe('IssuerService', () => {
         employee: {
           format: 'dc+sd-jwt',
           vct: 'https://agent.example/oid4vc/vct/employee',
+          scope: 'employee',
           cryptographic_binding_methods_supported: ['jwk'],
           credential_signing_alg_values_supported: ['ES256'],
           proof_types_supported: { jwt: { proof_signing_alg_values_supported: ['ES256'] } },
