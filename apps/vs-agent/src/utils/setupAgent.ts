@@ -101,7 +101,7 @@ export const setupAgent = async ({
         {
           id: `vpr:verana:${VERANA_CHAIN_ID}`,
           scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
-          api: [VERANA_INDEXER_BASE_URL],
+          api: [indexerBaseUrl],
           production: true,
         },
       ]

@@ -3,7 +3,7 @@ import '@openwallet-foundation/askar-nodejs'
 import '@hyperledger/anoncreds-nodejs'
 
 import { ConsoleLogger, LogLevel } from '@credo-ts/core'
-import { DidCommConnectionRecord } from '@credo-ts/didcomm'
+import { DidCommConnectionRecord, DidCommCredentialState, DidCommProofState } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { INestApplication } from '@nestjs/common'
 import { Claim, CredentialIssuanceMessage, PresentationState } from '@verana-labs/vs-agent-model'
@@ -32,12 +32,7 @@ import {
   type StartedStack,
 } from '../../../../packages/agent-sdk/tests/e2e/helpers'
 import { MessageService, TrustService } from '../../src/controllers'
-import {
-  FakeDidResolver,
-  isCredentialStateChangedEvent,
-  startAgent,
-  startServersTesting,
-} from '../__mocks__'
+import { FakeDidResolver, isCredentialStateChangedEvent, startAgent, startServersTesting } from '../__mocks__'
 import {
   makeConnection,
   SubjectInboundTransport,
@@ -291,13 +286,15 @@ describeE2E('issuer-agnostic presentation verification against the Verana trust 
     // ContentApproved only auto-accepts what answers a previous proposal, so the holder accepts the
     // offer explicitly, the same way a wallet would.
     const offered = await until(async () => {
-      const [record] = await holderAgent.didcomm.credentials.findAllByQuery({ state: 'offer-received' })
+      const [record] = await holderAgent.didcomm.credentials.findAllByQuery({
+        state: DidCommCredentialState.OfferReceived,
+      })
       return record ?? undefined
     }, 60_000)
     await holderAgent.didcomm.credentials.acceptOffer({ credentialExchangeRecordId: offered.id })
     await until(async () => {
       const record = await holderAgent.didcomm.credentials.getById(offered.id)
-      return record.state === 'done' ? true : undefined
+      return record.state === DidCommCredentialState.Done ? true : undefined
     }, 60_000)
   }, SETUP_TIMEOUT_MS)
 
@@ -318,7 +315,7 @@ describeE2E('issuer-agnostic presentation verification against the Verana trust 
   const isFinalStateFor =
     (proofExchangeId: string) =>
     (arg: unknown): arg is { payload: { event: { state: PresentationState } } } => {
-      const event = (arg as { type?: string; payload?: { event?: Record<string, unknown> } })
+      const event = arg as { type?: string; payload?: { event?: Record<string, unknown> } }
       if (event?.type !== VsAgentEventTypes.PresentationStateUpdated) return false
       if (event.payload?.event?.proofExchangeId !== proofExchangeId) return false
       return !IN_FLIGHT_STATES.includes(event.payload.event.state as PresentationState)
@@ -340,7 +337,9 @@ describeE2E('issuer-agnostic presentation verification against the Verana trust 
 
     // Same as above: the holder drives the presentation explicitly.
     const requested = await until(async () => {
-      const [record] = await holderAgent.didcomm.proofs.findAllByQuery({ state: 'request-received' })
+      const [record] = await holderAgent.didcomm.proofs.findAllByQuery({
+        state: DidCommProofState.RequestReceived,
+      })
       return record ?? undefined
     }, 60_000)
     await holderAgent.didcomm.proofs.acceptRequest({ proofExchangeRecordId: requested.id })

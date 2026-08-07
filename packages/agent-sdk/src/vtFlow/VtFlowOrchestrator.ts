@@ -294,7 +294,7 @@ export class VtFlowOrchestrator {
 
   /** Per the spec the algorithm comes from the schema, never from the digest value. */
   private async digestAlgorithmForSchema(schemaId: number): Promise<string> {
-    const schema = await this.requireIndexer().getCredentialSchema(schemaId)
+    const schema = await this.agent.indexer.getCredentialSchema(schemaId)
     if (!schema.digest_algorithm) {
       throw new Error(`Credential schema ${schemaId} has no digest_algorithm`)
     }
@@ -311,7 +311,7 @@ export class VtFlowOrchestrator {
       throw new Error(`vt-flow record ${vtFlowRecordId} has no issuerParticipantId to anchor against`)
     }
 
-    const issuer = await this.requireIndexer().getParticipant(record.issuerParticipantId)
+    const issuer = await this.agent.indexer.getParticipant(record.issuerParticipantId)
     const algorithm = await this.digestAlgorithmForSchema(issuer.schema_id)
     const digest = computeCredentialDigestJCS(
       signedCredential as unknown as W3cVerifiableCredential,
