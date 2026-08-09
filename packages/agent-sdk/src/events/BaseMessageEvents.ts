@@ -74,6 +74,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
               'Request declined': PresentationState.REFUSED,
               'e.req.no-compatible-credentials': PresentationState.NO_COMPATIBLE_CREDENTIALS,
               'e.p.untrusted-issuer': PresentationState.UNTRUSTED_ISSUER,
+              'e.p.trust-registry-unavailable': PresentationState.VERIFICATION_ERROR,
             }
             emitVsAgentEvent(
               agent,
@@ -133,21 +134,35 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             | undefined
 
           if (trustRegistry?.schemaId !== undefined) {
-            const untrustedIssuers = await findPresentationUntrustedIssuers(
+            const { untrusted, unchecked } = await findPresentationUntrustedIssuers(
               agent,
               formatData,
               trustRegistry.schemaId,
-            )
+            ).catch(error => {
+              logger.error(`Trust registry check failed: ${error}`)
+              return { untrusted: [], unchecked: ['the presented credentials'] }
+            })
 
-            if (untrustedIssuers.length) {
-              logger.warn(`Presentation issued by unaccredited issuers: ${untrustedIssuers.join(', ')}`)
+            if (untrusted.length || unchecked.length) {
+              const rejected = untrusted.length > 0
+              logger.warn(
+                rejected
+                  ? `Presentation issued by unaccredited issuers: ${untrusted.join(', ')}`
+                  : `Could not verify issuer accreditation of: ${unchecked.join(', ')}`,
+              )
 
-              await agent.didcomm.proofs.sendProblemReport({
-                proofExchangeRecordId: record.id,
-                description: 'e.p.untrusted-issuer',
-              })
+              emitPresentationState(
+                rejected ? PresentationState.UNTRUSTED_ISSUER : PresentationState.VERIFICATION_ERROR,
+              )
 
-              emitPresentationState(PresentationState.UNTRUSTED_ISSUER)
+              try {
+                await agent.didcomm.proofs.sendProblemReport({
+                  proofExchangeRecordId: record.id,
+                  description: rejected ? 'e.p.untrusted-issuer' : 'e.p.trust-registry-unavailable',
+                })
+              } catch (error) {
+                logger.error(`Could not send the presentation problem report: ${error}`)
+              }
 
               return
             }
@@ -260,27 +275,31 @@ async function findPresentationUntrustedIssuers(
   agent: VsAgent<BaseAgentModules>,
   formatData: PresentationFormatData,
   schemaId: number,
-): Promise<string[]> {
+): Promise<{ untrusted: string[]; unchecked: string[] }> {
   const identifiers =
     formatData.presentation?.anoncreds?.identifiers ?? formatData.presentation?.indy?.identifiers ?? []
 
   const credentialDefinitionIds = [...new Set(identifiers.map(identifier => identifier.cred_def_id))]
 
-  const unresolvedCredentialDefinitionIds: string[] = []
+  const untrusted: string[] = []
+  const unchecked: string[] = []
   const issuerDids: string[] = []
 
   for (const credentialDefinitionId of credentialDefinitionIds) {
-    const { credentialDefinition } =
-      await agent.modules.anoncreds.getCredentialDefinition(credentialDefinitionId)
-    if (credentialDefinition) issuerDids.push(credentialDefinition.issuerId)
-    else unresolvedCredentialDefinitionIds.push(credentialDefinitionId)
+    try {
+      const { credentialDefinition } =
+        await agent.modules.anoncreds.getCredentialDefinition(credentialDefinitionId)
+      if (credentialDefinition) issuerDids.push(credentialDefinition.issuerId)
+      else untrusted.push(credentialDefinitionId)
+    } catch {
+      unchecked.push(credentialDefinitionId)
+    }
   }
 
-  const unaccreditedIssuers = await agent.indexer.findUnaccreditedDids(
-    issuerDids,
-    ParticipantRole.Issuer,
-    schemaId,
-  )
+  const accreditation = await agent.indexer.findUnaccreditedDids(issuerDids, ParticipantRole.Issuer, schemaId)
 
-  return [...unresolvedCredentialDefinitionIds, ...unaccreditedIssuers]
+  return {
+    untrusted: [...untrusted, ...accreditation.unaccredited],
+    unchecked: [...unchecked, ...accreditation.unchecked],
+  }
 }

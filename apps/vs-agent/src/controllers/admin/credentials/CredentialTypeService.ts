@@ -7,7 +7,7 @@ import {
 } from '@credo-ts/anoncreds'
 import { JsonObject, parseDid, Proof, TagsBase, utils, W3cCredential } from '@credo-ts/core'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
-import { BadRequestException, Inject, Logger } from '@nestjs/common'
+import { BadRequestException, Inject, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import {
   deleteTailsFile,
@@ -63,8 +63,13 @@ export class CredentialTypesService {
     const agent = await this.agentService.getAgent()
     if (!agent.did) return
 
-    const [unaccredited] = await agent.indexer.findUnaccreditedDids([agent.did], role, schemaId)
-    if (unaccredited) {
+    const { unaccredited, unchecked } = await agent.indexer.findUnaccreditedDids([agent.did], role, schemaId)
+    if (unchecked.length) {
+      throw new ServiceUnavailableException(
+        `Cannot verify ${role} accreditation of ${agent.did} for credential schema ${schemaId}: the Verana indexer is unreachable`,
+      )
+    }
+    if (unaccredited.length) {
       throw new BadRequestException(`${agent.did} is not an active ${role} for credential schema ${schemaId}`)
     }
   }

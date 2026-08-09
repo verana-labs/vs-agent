@@ -32,15 +32,15 @@ describe('parseSchemaRef', () => {
 })
 
 describe('VeranaIndexerService.findUnaccreditedDids', () => {
-  it('returns nothing when every issuer is an active accredited issuer of the schema', async () => {
+  it('reports nothing when every issuer is an active accredited issuer of the schema', async () => {
     const indexer = indexerWith(['did:webvh:issuer-a', 'did:webvh:issuer-b'])
 
     await expect(
       indexer.findUnaccreditedDids(['did:webvh:issuer-a', 'did:webvh:issuer-b'], ParticipantRole.Issuer, 16),
-    ).resolves.toEqual([])
+    ).resolves.toEqual({ unaccredited: [], unchecked: [] })
   })
 
-  it('returns the issuers that are not accredited for the schema', async () => {
+  it('reports the issuers the registry holds no accreditation for', async () => {
     const indexer = indexerWith(['did:webvh:issuer-a'])
 
     await expect(
@@ -49,7 +49,41 @@ describe('VeranaIndexerService.findUnaccreditedDids', () => {
         ParticipantRole.Issuer,
         16,
       ),
-    ).resolves.toEqual(['did:webvh:issuer-rogue'])
+    ).resolves.toEqual({ unaccredited: ['did:webvh:issuer-rogue'], unchecked: [] })
+  })
+
+  it('reports an unreachable indexer as unchecked instead of as accredited', async () => {
+    const indexer = new VeranaIndexerService({
+      baseUrl: 'http://indexer.invalid',
+      logger: new ConsoleLogger(LogLevel.Off),
+    })
+    vi.spyOn(indexer, 'listParticipants').mockRejectedValue(new Error('ECONNREFUSED'))
+
+    await expect(
+      indexer.findUnaccreditedDids(['did:webvh:issuer-a'], ParticipantRole.Issuer, 16),
+    ).resolves.toEqual({ unaccredited: [], unchecked: ['did:webvh:issuer-a'] })
+  })
+
+  it('keeps checking the reachable dids when one lookup fails', async () => {
+    const indexer = new VeranaIndexerService({
+      baseUrl: 'http://indexer.invalid',
+      logger: new ConsoleLogger(LogLevel.Off),
+    })
+    vi.spyOn(indexer, 'listParticipants').mockImplementation(async ({ did }) => {
+      if (did === 'did:webvh:issuer-flaky') throw new Error('timeout')
+      return did === 'did:webvh:issuer-a' ? [accredited(did)] : []
+    })
+
+    await expect(
+      indexer.findUnaccreditedDids(
+        ['did:webvh:issuer-a', 'did:webvh:issuer-flaky', 'did:webvh:issuer-rogue'],
+        ParticipantRole.Issuer,
+        16,
+      ),
+    ).resolves.toEqual({
+      unaccredited: ['did:webvh:issuer-rogue'],
+      unchecked: ['did:webvh:issuer-flaky'],
+    })
   })
 
   it('queries the indexer once per distinct issuer', async () => {
@@ -70,8 +104,11 @@ describe('VeranaIndexerService.findUnaccreditedDids', () => {
     })
   })
 
-  it('returns nothing when there are no dids to check', async () => {
-    await expect(indexerWith([]).findUnaccreditedDids([], ParticipantRole.Issuer, 16)).resolves.toEqual([])
+  it('reports nothing when there are no dids to check', async () => {
+    await expect(indexerWith([]).findUnaccreditedDids([], ParticipantRole.Issuer, 16)).resolves.toEqual({
+      unaccredited: [],
+      unchecked: [],
+    })
   })
 
   it('checks the requested role, so the same did can pass as issuer and fail as verifier', async () => {
@@ -85,9 +122,9 @@ describe('VeranaIndexerService.findUnaccreditedDids', () => {
 
     await expect(
       indexer.findUnaccreditedDids(['did:webvh:agent'], ParticipantRole.Issuer, 16),
-    ).resolves.toEqual([])
+    ).resolves.toEqual({ unaccredited: [], unchecked: [] })
     await expect(
       indexer.findUnaccreditedDids(['did:webvh:agent'], ParticipantRole.Verifier, 16),
-    ).resolves.toEqual(['did:webvh:agent'])
+    ).resolves.toEqual({ unaccredited: ['did:webvh:agent'], unchecked: [] })
   })
 })
