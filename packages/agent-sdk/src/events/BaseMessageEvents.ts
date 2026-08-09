@@ -10,6 +10,7 @@ import {
   DidCommMessageProcessedEvent,
   DidCommPresentationV2Message,
   DidCommPresentationV2ProblemReportMessage,
+  DidCommProofState,
 } from '@credo-ts/didcomm'
 import {
   Claim,
@@ -151,6 +152,16 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
                   : `Could not verify issuer accreditation of: ${unchecked.join(', ')}`,
               )
 
+              const description = rejected ? 'e.p.untrusted-issuer' : 'e.p.trust-registry-unavailable'
+
+              try {
+                record.errorMessage = description
+                record.state = DidCommProofState.Abandoned
+                await agent.didcomm.proofs.update(record)
+              } catch (error) {
+                logger.error(`Could not persist the presentation rejection: ${error}`)
+              }
+
               emitPresentationState(
                 rejected ? PresentationState.UNTRUSTED_ISSUER : PresentationState.VERIFICATION_ERROR,
               )
@@ -158,13 +169,17 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
               try {
                 await agent.didcomm.proofs.sendProblemReport({
                   proofExchangeRecordId: record.id,
-                  description: rejected ? 'e.p.untrusted-issuer' : 'e.p.trust-registry-unavailable',
+                  description,
                 })
               } catch (error) {
                 logger.error(`Could not send the presentation problem report: ${error}`)
               }
 
               return
+            }
+
+            if (record.state === DidCommProofState.PresentationReceived) {
+              await agent.didcomm.proofs.acceptPresentation({ proofExchangeRecordId: record.id })
             }
           }
 

@@ -6,6 +6,7 @@ import {
   dateToTimestamp,
 } from '@credo-ts/anoncreds'
 import { W3cCredential } from '@credo-ts/core'
+import { DidCommAutoAcceptProof } from '@credo-ts/didcomm'
 import { Controller, Get, Post, Body, Query, Inject, HttpException } from '@nestjs/common'
 import {
   ApiBadRequestResponse,
@@ -311,6 +312,7 @@ export class InvitationController {
 
     const request = await agent.didcomm.proofs.createRequest({
       protocolVersion: 'v2',
+      autoAcceptProof: trustRegistrySchemaId !== undefined ? DidCommAutoAcceptProof.Never : undefined,
       proofFormats: {
         anoncreds: {
           name: 'proof-request',

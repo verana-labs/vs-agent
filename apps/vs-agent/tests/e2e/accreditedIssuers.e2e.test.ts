@@ -345,7 +345,7 @@ describeE2E('issuer-agnostic presentation verification against the Verana trust 
     await holderAgent.didcomm.proofs.acceptRequest({ proofExchangeRecordId: requested.id })
 
     // waitForEvent polls forever, so cap it to fail fast instead of hanging the suite.
-    return Promise.race([
+    const event = await Promise.race([
       waitForEvent(issuerEvents, isFinalStateFor(proofExchangeId)),
       new Promise<never>((_, reject) =>
         setTimeout(async () => {
@@ -363,13 +363,17 @@ describeE2E('issuer-agnostic presentation verification against the Verana trust 
         }, 60_000),
       ),
     ])
+
+    return { event, record: await issuerAgent.didcomm.proofs.getById(proofExchangeId) }
   }
 
   it(
     'accepts a presentation whose issuer is an active accredited issuer of the schema',
     async () => {
-      const event = await requestPresentation()
+      const { event, record } = await requestPresentation()
       expect(event.payload.event.state).toBe(PresentationState.OK)
+      expect(record.state).toBe(DidCommProofState.Done)
+      expect(record.isVerified).toBe(true)
     },
     SETUP_TIMEOUT_MS,
   )
@@ -388,8 +392,11 @@ describeE2E('issuer-agnostic presentation verification against the Verana trust 
         return issuers.some(participant => participant.did === issuerDid) ? undefined : true
       })
 
-      const event = await requestPresentation()
+      const { event, record } = await requestPresentation()
       expect(event.payload.event.state).toBe(PresentationState.UNTRUSTED_ISSUER)
+      // The rejection has to survive on the record: no ack was sent, so the exchange is abandoned.
+      expect(record.state).toBe(DidCommProofState.Abandoned)
+      expect(record.errorMessage).toBe('e.p.untrusted-issuer')
     },
     SETUP_TIMEOUT_MS,
   )
