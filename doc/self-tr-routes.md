@@ -34,10 +34,12 @@ curl http://localhost:3001/vt/cs/v1/js/ecs-service
 
 ---
 
-### GET `/vt/ecs-service-c-vp.json`  
-### GET `/vt/ecs-org-c-vp.json`
+### GET `/vt/{schemaId}-vtc-vp.json`
+### GET `/vt/{schemaId}-vtjsc-vp.json`
+### GET `/vt/{schemaId}-jsc.json`
 
-Retrieve a signed Verifiable Presentation for ECS Service or Organization.
+Retrieve a signed Verifiable Presentation for a Verifiable Trust Credential, its JSON Schema
+Credential presentation, or the JSON Schema Credential itself. Any other suffix is rejected.
 
 ---
 

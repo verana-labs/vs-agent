@@ -168,7 +168,7 @@ export class VeranaTestChain {
       value: MsgGrantOperatorAuthorization.fromPartial({
         corporation: policyAddress,
         operator: policyAddress,
-        grantee,
+        grantee: this.address,
         msgTypes: OPERATOR_GRANT_MSG_TYPES,
       }),
     }

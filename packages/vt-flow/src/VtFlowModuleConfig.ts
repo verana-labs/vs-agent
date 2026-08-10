@@ -8,6 +8,14 @@ export interface VtFlowCredentialLifecycleContext {
   credentialExchangeRecord: DidCommCredentialExchangeRecord
 }
 
+export interface VtFlowBeforeCredentialIssuedContext extends VtFlowCredentialLifecycleContext {
+  credential: Record<string, unknown>
+}
+
+export type VtFlowBeforeCredentialIssuedHook = (
+  ctx: VtFlowBeforeCredentialIssuedContext,
+) => Promise<{ credentialDigest?: string } | void>
+
 /** Applicant hook fired on `credential-received`; return `true` to auto-Ack, `false`/omit to leave the Ack to the caller. */
 export type VtFlowVerifyCredentialHook = (ctx: VtFlowCredentialLifecycleContext) => Promise<boolean>
 
@@ -27,6 +35,7 @@ export interface VtFlowBuildCredentialOfferContext {
 export interface VtFlowCredentialOfferPayload {
   credentialFormats: { jsonld: DidCommJsonLdCredentialDetailFormat }
   credentialDigest?: string
+  issuerParticipantId?: number
   comment?: string
   goal?: string
   goalCode?: string
@@ -62,6 +71,7 @@ export interface VtFlowModuleConfigOptions {
   buildCredentialOffer?: VtFlowBuildCredentialOfferHook
   autoAcceptCredentialOffer?: boolean
   autoIssueCredentialOnRequest?: boolean
+  onBeforeCredentialIssued?: VtFlowBeforeCredentialIssuedHook
   assertVerifiableService?: VtFlowAssertVerifiableServiceHook
 }
 
@@ -115,6 +125,10 @@ export class VtFlowModuleConfig {
 
   public get autoAcceptCredentialOffer(): boolean {
     return this.options.autoAcceptCredentialOffer ?? false
+  }
+
+  public get onBeforeCredentialIssued(): VtFlowBeforeCredentialIssuedHook | undefined {
+    return this.options.onBeforeCredentialIssued
   }
 
   public get autoIssueCredentialOnRequest(): boolean {

@@ -128,6 +128,20 @@ export class VtFlowApi {
     return record
   }
 
+  public async terminateSessionAsValidator(options: ProblemReportDispatchOptions): Promise<VtFlowRecord> {
+    const { record, problemReport } = await this.vtFlowService.terminateByValidator(
+      this.agentContext,
+      options.vtFlowRecordId,
+      {
+        code: options.code,
+        enDescription: options.enDescription,
+        fixHintEn: options.fixHintEn,
+      },
+    )
+    await this.dispatchMessage(record.connectionId, problemReport, record)
+    return record
+  }
+
   public async terminateByChainEvent(options: {
     vtFlowRecordId: string
     code: VtFlowErrorCode
@@ -247,7 +261,75 @@ export class VtFlowApi {
       record.id,
       credentialExchangeRecord,
       options.credentialDigest,
+      options.issuerParticipantId,
     )
+
+    return {
+      record: await this.vtFlowService.getById(this.agentContext, record.id),
+      credentialExchangeRecord,
+    }
+  }
+
+  /** The spec forbids delivering a credential whose digest is not anchored, so a throwing hook must abort. */
+  public async issueCredentialForSession(options: {
+    vtFlowRecordId: string
+    credentialExchangeRecordId: string
+    comment?: string
+  }): Promise<{ record: VtFlowRecord; credentialExchangeRecord: DidCommCredentialExchangeRecord }> {
+    const record = await this.vtFlowService.getById(this.agentContext, options.vtFlowRecordId)
+    record.assertRole(VtFlowRole.Validator)
+
+    const credentialExchangeRecord = await this.credentialExchangeRepository.getById(
+      this.agentContext,
+      options.credentialExchangeRecordId,
+    )
+    const protocol = this.credentialsModuleConfig.credentialProtocols.find(
+      p => p.version === credentialExchangeRecord.protocolVersion,
+    )
+    if (!protocol) {
+      throw new CredoError(
+        `No credential protocol registered for version '${credentialExchangeRecord.protocolVersion}'`,
+      )
+    }
+
+    const connectionRecord = credentialExchangeRecord.connectionId
+      ? await this.connectionService.getById(this.agentContext, credentialExchangeRecord.connectionId)
+      : undefined
+    connectionRecord?.assertReady()
+
+    // unlike DidCommCredentialsApi.acceptRequest, this signs without sending
+    const { message } = await protocol.acceptRequest(this.agentContext, {
+      credentialExchangeRecord,
+      comment: options.comment,
+    })
+
+    const hook = this.config.onBeforeCredentialIssued
+    if (hook) {
+      const formatData = await protocol.getFormatData(this.agentContext, credentialExchangeRecord.id)
+      // the attachment, which is the exact JSON the holder will digest
+      const credential = (formatData.credential as { jsonld?: Record<string, unknown> })?.jsonld
+      if (!credential) {
+        throw new CredoError(
+          `Issued credential for '${credentialExchangeRecord.id}' has no jsonld body to anchor`,
+        )
+      }
+      const result = await hook({
+        agentContext: this.agentContext,
+        record,
+        credentialExchangeRecord,
+        credential,
+      })
+      if (result?.credentialDigest) {
+        await this.vtFlowService.setCredentialDigest(this.agentContext, record.id, result.credentialDigest)
+      }
+    }
+
+    const outboundMessageContext = await getOutboundDidCommMessageContext(this.agentContext, {
+      message,
+      connectionRecord,
+      associatedRecord: credentialExchangeRecord,
+    })
+    await this.messageSender.sendMessage(outboundMessageContext)
 
     return {
       record: await this.vtFlowService.getById(this.agentContext, record.id),

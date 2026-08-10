@@ -7,8 +7,8 @@ vs-agent-ui provides a lightweight read-only web interface to monitor a vs-agent
 ## Dashboard
 
 - Agent name, public DID, and QR code to connect.
-- Linked Credentials (`vpr*-c-vp` services) grouped by ECS type.
-- Schema Credentials (`vpr*-jsc-vp` services) grouped by ECS type.
+- Linked Credentials (`vpr*-vtc-vp` services) grouped by ECS type.
+- Schema Credentials (`vpr*-vtjsc-vp` services) grouped by ECS type.
 
 Click any credential card to see the full JSON.
 

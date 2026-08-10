@@ -186,8 +186,8 @@ export default function Dashboard() {
       .then(d => {
         setDoc(d)
         const vprServices = (d.service ?? []).filter(s => (s.id?.split('#')[1] ?? '').startsWith('vpr'))
-        const cvp = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-c-vp'))
-        const jsc = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-jsc-vp'))
+        const cvp = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-vtc-vp'))
+        const jsc = vprServices.filter(s => (s.id?.split('#')[1] ?? '').endsWith('-vtjsc-vp'))
 
         Promise.all(cvp.map(resolveCVpService)).then(setCvpItems)
         Promise.all(jsc.map(resolveJscVpService))

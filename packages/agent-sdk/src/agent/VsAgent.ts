@@ -522,13 +522,13 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       ...(didDocument.service ?? []),
       ...[
         new DidDocumentService({
-          id: `${publicDid}#vpr-ecs-service-c-vp`,
-          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-service-c-vp.json`,
+          id: `${publicDid}#vpr-schemas-service-vtc-vp`,
+          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-service-vtc-vp.json`,
           type: 'LinkedVerifiablePresentation',
         }),
         new DidDocumentService({
-          id: `${publicDid}#vpr-ecs-org-c-vp`,
-          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-org-c-vp.json`,
+          id: `${publicDid}#vpr-schemas-org-vtc-vp`,
+          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-org-vtc-vp.json`,
           type: 'LinkedVerifiablePresentation',
         }),
       ],
@@ -551,7 +551,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       ...[
         new DidDocumentService({
           id: `${publicDid}#whois`,
-          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-service-c-vp.json`,
+          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-service-vtc-vp.json`,
           type: 'LinkedVerifiablePresentation',
         }),
         new DidDocumentService({

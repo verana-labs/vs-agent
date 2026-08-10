@@ -159,16 +159,17 @@ To enable the Self-Verifiable Trust Registry API endpoints, you must set the fol
 
 | Variable                                     | Description                              | Example Value                            |
 | -------------------------------------------- | ---------------------------------------- | ---------------------------------------- |
-| `SELF_ISSUED_VTC_ORG_TYPE`                   | Organization type for example credential | `PRIVATE`                                |
+| `SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND`       | Organization kind for example credential | `PRIVATE`                                |
 | `SELF_ISSUED_VTC_ORG_COUNTRYCODE`            | Organization country code                | `EE`                                     |
 | `SELF_ISSUED_VTC_ORG_REGISTRYID`             | Organization registry ID                 | `1234567890`                             |
-| `SELF_ISSUED_VTC_ORG_REGISTRYURL`            | Organization registry URL                | `https://registry.example.com`           |
+| `SELF_ISSUED_VTC_ORG_REGISTRYURI`            | Organization registry URI                | `https://registry.example.com`           |
 | `SELF_ISSUED_VTC_ORG_ADDRESS`                | Organization address                     | `Ahtri tn 12 10151 Tallinn, Estonia`     |
 | `SELF_ISSUED_VTC_SERVICE_TYPE`               | Service type for example credential      | `HealthCheckService`                     |
 | `SELF_ISSUED_VTC_SERVICE_DESCRIPTION`        | Service description                      | `Health Verification Service`            |
 | `SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED` | Minimum age required for service         | `18`                                     |
-| `SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS` | Terms and conditions URL                 | `https://service.example.com/terminos`   |
-| `SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY`      | Privacy policy URL                       | `https://service.example.com/privacidad` |
+| `SELF_ISSUED_VTC_SERVICE_LOGOURI`            | Service logo URL. Must be fetchable, its digest goes in the credential. Falls back to `AGENT_INVITATION_IMAGE_URL`, then to a placeholder the agent serves at `/vt/default/logo.svg` | none |
+| `SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS` | Terms and conditions URL. Must be fetchable. Defaults to a placeholder the agent serves at `/vt/default/terms.html` | none |
+| `SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY`      | Privacy policy URL. Must be fetchable. Defaults to a placeholder the agent serves at `/vt/default/privacy.html` | none |
 
 > **Note:**  
 > This Self-Verifiable Trust Registry API and its configuration are **unstable** and intended for testing and development only. These endpoints and related environment variables may be removed or changed in future releases **without prior notice**.

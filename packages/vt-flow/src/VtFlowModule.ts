@@ -13,6 +13,7 @@ import {
 } from '@credo-ts/didcomm'
 
 import { VtFlowApi } from './VtFlowApi'
+import { VtFlowErrorCode } from './errors'
 import { VtFlowModuleConfig, type VtFlowModuleConfigOptions } from './VtFlowModuleConfig'
 import {
   CredentialStateChangeHandler,
@@ -113,14 +114,30 @@ export class VtFlowModule implements Module {
             service
               .getLogger()
               .debug(`[vt-flow] auto-issuing credential for ${record.id} (autoIssueCredentialOnRequest=true)`)
-            const credentialsApi = agentContext.dependencyManager.resolve(DidCommCredentialsApi)
-            await credentialsApi.acceptRequest({
+            await agentContext.dependencyManager.resolve(VtFlowApi).issueCredentialForSession({
+              vtFlowRecordId: record.id,
               credentialExchangeRecordId: credentialExchangeRecord.id,
             })
           } catch (error) {
+            // the credential was deliberately not delivered, so tell the applicant
             service
               .getLogger()
               .error(`[vt-flow] auto-issue threw for ${record.id}`, error as Record<string, unknown>)
+            await agentContext.dependencyManager
+              .resolve(VtFlowApi)
+              .terminateSessionAsValidator({
+                vtFlowRecordId: record.id,
+                code: VtFlowErrorCode.InternalError,
+                enDescription: 'Credential issuance aborted: the digest could not be anchored',
+              })
+              .catch(terminationError =>
+                service
+                  .getLogger()
+                  .error(
+                    `[vt-flow] failed to terminate ${record.id} after auto-issue error`,
+                    terminationError as Record<string, unknown>,
+                  ),
+              )
           }
         }
       },
@@ -242,14 +259,7 @@ export class VtFlowModule implements Module {
           const payload$ = await config.buildCredentialOffer({ agentContext, record })
           if (payload$) {
             const api = agentContext.dependencyManager.resolve(VtFlowApi)
-            await api.offerCredentialForSession({
-              vtFlowRecordId: record.id,
-              credentialFormats: payload$.credentialFormats,
-              credentialDigest: payload$.credentialDigest,
-              comment: payload$.comment,
-              goal: payload$.goal,
-              goalCode: payload$.goalCode,
-            })
+            await api.offerCredentialForSession({ vtFlowRecordId: record.id, ...payload$ })
           }
         }
       } catch (error) {

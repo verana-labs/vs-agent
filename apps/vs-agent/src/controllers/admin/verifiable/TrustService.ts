@@ -129,7 +129,7 @@ export class TrustService {
     try {
       const { agent } = await this.getDidRecord()
       const verifiablePresentation = await createVtc(agent, this.publicApiBaseUrl, id, credential)
-      this.logger.log(`Metadata for "schemas-${id}-c-vp.json" updated successfully.`)
+      this.logger.log(`Metadata for "schemas-${id}-vtc-vp.json" updated successfully.`)
       return verifiablePresentation
     } catch (error) {
       this.handleError(error, 'Error create credential')

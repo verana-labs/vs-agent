@@ -8,14 +8,15 @@ import {
   VtFlowState,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
+import { identifySchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
+import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
 import {
   createJsc,
-  deleteMetadataEntry,
   findMetadataEntry,
+  rebindEcsCredentialSchema,
   removeStoredTrustCredential,
 } from '../../utils/trustCredentialStore'
 import { VtFlowOrchestrator } from '../../vtFlow'
@@ -332,6 +333,7 @@ export async function reconcileVtjscPublications(
   agent: VsAgent,
   indexer: VeranaIndexerService,
   corporationId: number,
+  selfTrDefaults?: SelfTrDefaults,
 ): Promise<void> {
   if (!agent.did || !agent.publicApiBaseUrl) return
 
@@ -343,28 +345,43 @@ export async function reconcileVtjscPublications(
       const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
       if (!didRecord) return
       const schemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
-      if (findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)) continue
-      try {
-        const legacyRef = `vpr:verana:${chainId}/cs/v1/js/${schema.id}`
-        const legacyEntry = findMetadataEntry(didRecord, '_vt/jsc', '', legacyRef)
-        if (legacyEntry) {
-          if (legacyEntry.didDocumentServiceId && didRecord.didDocument?.service) {
-            didRecord.didDocument.service = didRecord.didDocument.service.filter(
-              service => service.id !== legacyEntry.didDocumentServiceId,
-            )
-          }
-          await deleteMetadataEntry(agent, legacyRef, didRecord, '_vt/jsc', agent.publicApiBaseUrl)
+      const expectedDigest = generateDigestSRI(schema.json_schema)
+      const existingJsc = findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
+      const existingDigest = (
+        existingJsc?.credential?.credentialSubject as { digestSRI?: string } | undefined
+      )?.digestSRI
+      if (!existingJsc || existingDigest !== expectedDigest) {
+        try {
+          await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
+            schemaBaseId: String(schema.id),
+            jsonSchemaRef: schemaRef,
+            precomputedDigestSRI: expectedDigest,
+          })
+          agent.config.logger.info(
+            `[VTJSC] Reconciled VTJSC for schema ${schema.id} (ecosystem ${ecosystem.id})`,
+          )
+        } catch (e) {
+          agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
+          continue
         }
-        await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
-          schemaBaseId: String(schema.id),
-          jsonSchemaRef: schemaRef,
-          precomputedDigestSRI: await computeSchemaDigest(JSON.parse(schema.json_schema)),
-        })
-        agent.config.logger.info(
-          `[VTJSC] Reconciled VTJSC for schema ${schema.id} (ecosystem ${ecosystem.id})`,
-        )
-      } catch (e) {
-        agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
+      }
+      if (selfTrDefaults) {
+        try {
+          const ecsKey = await identifySchema(JSON.parse(schema.json_schema))
+          if (!ecsKey) continue
+          await rebindEcsCredentialSchema(
+            agent,
+            agent.publicApiBaseUrl,
+            String(schema.id),
+            ecsKey,
+            selfTrDefaults,
+          )
+        } catch (e) {
+          agent.config.logger.error(
+            `[VTJSC] Failed to rebind ECS credential for schema ${schema.id}`,
+            e as Error,
+          )
+        }
       }
     }
   }
@@ -388,13 +405,7 @@ export async function publishVtjscIfOwner(
   const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
   const jsonSchemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
 
-  let digestSRI: string
-  try {
-    digestSRI = await computeSchemaDigest(JSON.parse(schema.jsonSchema))
-  } catch (e) {
-    agent.config.logger.error(`[VTJSC] Failed to parse/digest schema ${schemaEntityId}`, e as Error)
-    return
-  }
+  const digestSRI = generateDigestSRI(schema.jsonSchema)
 
   try {
     await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {

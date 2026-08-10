@@ -34,13 +34,14 @@ import {
   AGENT_ENDPOINT,
   AGENT_ENDPOINTS,
   AGENT_INVITATION_IMAGE_URL,
+  DEFAULT_SELF_ISSUED_VTC_RESOURCES,
+  SELF_ISSUED_VTC_SERVICE_LOGOURI,
   AGENT_LABEL,
-  FALLBACK_BASE64,
   SELF_ISSUED_VTC_ORG_ADDRESS,
   SELF_ISSUED_VTC_ORG_COUNTRYCODE,
   SELF_ISSUED_VTC_ORG_REGISTRYID,
-  SELF_ISSUED_VTC_ORG_REGISTRYURL,
-  SELF_ISSUED_VTC_ORG_TYPE,
+  SELF_ISSUED_VTC_ORG_REGISTRYURI,
+  SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND,
   SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
   SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
   SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
@@ -415,25 +416,30 @@ const run = async () => {
   }
 
   // Initialize Self-Trust Registry
+  const selfTrDefaults = {
+    agentLabel: AGENT_LABEL,
+    serviceLogoUri:
+      SELF_ISSUED_VTC_SERVICE_LOGOURI ?? DEFAULT_SELF_ISSUED_VTC_RESOURCES.logoUri(publicApiBaseUrl),
+    serviceType: SELF_ISSUED_VTC_SERVICE_TYPE,
+    serviceDescription: SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
+    serviceMinimumAgeRequired: SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
+    serviceTermsAndConditions:
+      SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS ??
+      DEFAULT_SELF_ISSUED_VTC_RESOURCES.termsAndConditionsUri(publicApiBaseUrl),
+    servicePrivacyPolicy:
+      SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY ??
+      DEFAULT_SELF_ISSUED_VTC_RESOURCES.privacyPolicyUri(publicApiBaseUrl),
+    orgRegistryId: SELF_ISSUED_VTC_ORG_REGISTRYID,
+    orgRegistryUri: SELF_ISSUED_VTC_ORG_REGISTRYURI,
+    orgAddress: SELF_ISSUED_VTC_ORG_ADDRESS,
+    orgOrganizationKind: SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND,
+    orgCountryCode: SELF_ISSUED_VTC_ORG_COUNTRYCODE,
+  }
   if (agent.did)
     await setupSelfTr({
       agent,
       publicApiBaseUrl,
-      defaults: {
-        agentLabel: AGENT_LABEL,
-        agentInvitationImageUrl: AGENT_INVITATION_IMAGE_URL,
-        fallbackBase64: FALLBACK_BASE64,
-        serviceType: SELF_ISSUED_VTC_SERVICE_TYPE,
-        serviceDescription: SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
-        serviceMinimumAgeRequired: SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
-        serviceTermsAndConditions: SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
-        servicePrivacyPolicy: SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
-        orgRegistryId: SELF_ISSUED_VTC_ORG_REGISTRYID,
-        orgRegistryUrl: SELF_ISSUED_VTC_ORG_REGISTRYURL,
-        orgAddress: SELF_ISSUED_VTC_ORG_ADDRESS,
-        orgType: SELF_ISSUED_VTC_ORG_TYPE,
-        orgCountryCode: SELF_ISSUED_VTC_ORG_COUNTRYCODE,
-      },
+      defaults: selfTrDefaults,
     })
 
   // Deliver domain events emitted on the agent bus to the configured webhook endpoint
@@ -478,9 +484,12 @@ const run = async () => {
     }
 
     if (indexerService && VERANA_CORPORATION_ID) {
-      void reconcileVtjscPublications(agent, indexerService, Number(VERANA_CORPORATION_ID)).catch(
-        (error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`),
-      )
+      void reconcileVtjscPublications(
+        agent,
+        indexerService,
+        Number(VERANA_CORPORATION_ID),
+        selfTrDefaults,
+      ).catch((error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`))
     }
   }
 

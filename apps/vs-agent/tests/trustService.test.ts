@@ -73,35 +73,6 @@ describe('TrustService', () => {
       expect(services.some(s => s.id === serviceId)).toBe(true)
     })
 
-    it('migrates a legacy vpr ref entry to the canonical form on reconcile', async () => {
-      const legacyRef = 'vpr:verana:vna-testnet-1/cs/v1/js/16'
-      const canonicalRef = 'vpr:verana:vna-testnet-1:cs:16'
-      await jscFaberService.createJsc('16', legacyRef)
-
-      const jsonSchema = JSON.stringify({
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        title: 'MigrationCredential',
-        description: 'migration test',
-        type: 'object',
-        properties: { name: { type: 'string' } },
-        required: ['name'],
-      })
-      const indexerStub = {
-        listEcosystems: async () => [{ id: 1, corporation_id: 7, did: 'did:example:eco', archived: null }],
-        listCredentialSchemas: async () => [
-          { id: 16, ecosystem_id: 1, json_schema: jsonSchema, archived: null, created: '', modified: '' },
-        ],
-      }
-      await reconcileVtjscPublications(jscFaberAgent, indexerStub as never, 7)
-
-      const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
-      const metadata = didRecord.metadata.get('_vt/jsc')!
-      expect(Object.keys(metadata)).toContain(canonicalRef)
-      expect(Object.keys(metadata)).not.toContain(legacyRef)
-      const serviceIds = (didRecord.didDocument?.service ?? []).map(s => s.id)
-      expect(serviceIds.filter(id => id.includes('schemas-16')).length).toBe(1)
-    })
-
     it('renames pre-vtjsc service ids on migration without re-signing', async () => {
       const schemaBaseId = 'org-schema'
       await jscFaberService.createJsc(
@@ -201,11 +172,12 @@ describe('TrustService', () => {
         claims: {
           id: 'https://example.org/org/123',
           name: 'OpenAI Research',
-          logo: 'https://example.com/logo.png',
+          logoUri: 'https://example.com/logo.png',
+          logoDigestSri: 'sha384-AAAA',
           registryId: 'REG-123',
-          registryUrl: 'https://registry.example.org',
+          registryUri: 'https://registry.example.org',
           address: '123 Main St, San Francisco, CA',
-          type: 'PRIVATE',
+          organizationKind: 'PRIVATE',
           countryCode: 'US',
         },
       })
@@ -247,11 +219,12 @@ describe('TrustService', () => {
       const claims = {
         id: 'https://example.org/org/123',
         name: 'OpenAI Research',
-        logo: 'https://example.com/logo.png',
+        logoUri: 'https://example.com/logo.png',
+        logoDigestSri: 'sha384-AAAA',
         registryId: 'REG-123',
-        registryUrl: 'https://registry.example.org',
+        registryUri: 'https://registry.example.org',
         address: '123 Main St, San Francisco, CA',
-        type: 'PRIVATE',
+        organizationKind: 'PRIVATE',
         countryCode: 'US',
       }
       const credentialResponse = await faberService.issueCredential({

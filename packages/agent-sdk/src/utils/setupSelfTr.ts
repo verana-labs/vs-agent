@@ -14,12 +14,12 @@ import {
 } from '@credo-ts/core'
 // No type definitions available for this library
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-//@ts-ignore
+//@ts-expect-error
 import { purposes } from '@digitalcredentials/jsonld-signatures'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
-import axios, { isAxiosError } from 'axios'
+import axios from 'axios'
 import { createHash } from 'crypto'
 
 import { VsAgent } from '../agent/VsAgent'
@@ -29,19 +29,20 @@ import { getEcsSchemas } from './data'
 const ajv = new Ajv({ strict: false })
 addFormats(ajv)
 
-interface SelfTrDefaults {
+const DIGEST_FETCH_TIMEOUT_MS = 5000
+
+export interface SelfTrDefaults {
   agentLabel: string
-  agentInvitationImageUrl?: string
-  fallbackBase64?: string
+  serviceLogoUri: string
   serviceType: string
   serviceDescription: string
   serviceMinimumAgeRequired: number
   serviceTermsAndConditions: string
   servicePrivacyPolicy: string
   orgRegistryId: string
-  orgRegistryUrl: string
+  orgRegistryUri: string
   orgAddress: string
-  orgType: string
+  orgOrganizationKind: string
   orgCountryCode: string
 }
 
@@ -86,6 +87,10 @@ export const createJsonSubjectRef = (id: string): W3cCredentialSubject => ({
   },
 })
 
+// fragment format per [VT-CRED-W3C-LINKED-VP]
+export const linkedVpFragment = (schemaKey: string): string =>
+  `vpr-schemas-${schemaKey.replace(/^ecs-/, '')}-vtc-vp`
+
 export const mapToSelfTr = (url: string, publicApiBaseUrl: string): string =>
   url.replace('ecosystem', `${publicApiBaseUrl}/vt`)
 
@@ -103,35 +108,44 @@ export const setupSelfTr = async ({
   defaults: SelfTrDefaults
 }) => {
   const ecsSchemas = getEcsSchemas(publicApiBaseUrl)
+  const logger = agent.config.logger
 
   for (const { name, schemaUrl } of presentations) {
-    await generateVerifiablePresentation(
-      agent,
-      `${publicApiBaseUrl}/vt/${name}-c-vp.json`,
-      ecsSchemas,
-      name,
-      ['VerifiableCredential', 'VerifiableTrustCredential'],
-      {
-        id: mapToSelfTr(schemaUrl, publicApiBaseUrl),
-        type: 'JsonSchemaCredential',
-      },
-      defaults,
-    )
+    try {
+      await generateVerifiablePresentation(
+        agent,
+        `${publicApiBaseUrl}/vt/${name}-vtc-vp.json`,
+        ecsSchemas,
+        name,
+        ['VerifiableCredential', 'VerifiableTrustCredential'],
+        {
+          id: mapToSelfTr(schemaUrl, publicApiBaseUrl),
+          type: 'JsonSchemaCredential',
+        },
+        defaults,
+      )
+    } catch (error) {
+      logger.warn(`Skipping self-issued ${name}: ${error instanceof Error ? error.message : error}`)
+    }
   }
 
   for (const { name, credUrl, schemaUrl } of credentials) {
     const id = mapToSelfTr(schemaUrl, publicApiBaseUrl)
     const ref = mapToSelfTr(credUrl, publicApiBaseUrl)
-    await generateVerifiableCredential(
-      agent,
-      id,
-      ecsSchemas,
-      name,
-      ['VerifiableCredential', 'JsonSchemaCredential'],
-      createJsonSubjectRef(ref),
-      createJsonSchema,
-      defaults,
-    )
+    try {
+      await generateVerifiableCredential(
+        agent,
+        id,
+        ecsSchemas,
+        name,
+        ['VerifiableCredential', 'JsonSchemaCredential'],
+        createJsonSubjectRef(ref),
+        createJsonSchema,
+        defaults,
+      )
+    } catch (error) {
+      logger.warn(`Skipping self-issued ${name}: ${error instanceof Error ? error.message : error}`)
+    }
   }
 }
 
@@ -310,7 +324,7 @@ export async function generateVerifiablePresentation(
   if (!didDocument) throw Error('The DID Document be set up')
   const claims = await getClaims(agent.config.logger, ecsSchemas, { id: agent.did }, schemaKey, defaults)
   // Use full input for integrityData to ensure update detection
-  const didDocumentServiceId = `${agent.did}#vpr-${schemaKey}-c-vp`
+  const didDocumentServiceId = `${agent.did}#${linkedVpFragment(schemaKey)}`
   const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
   const record = didRecord.metadata.get('_vt/vtc') ?? {}
   const metadata = record[credentialSchema.id]
@@ -382,32 +396,34 @@ export async function getClaims(
   defaults: SelfTrDefaults,
 ) {
   // Default claims fallback
+  const logoUri = (claims?.logoUri as string) ?? defaults.serviceLogoUri
+  const termsAndConditionsUri =
+    (claims?.termsAndConditionsUri as string) ?? defaults.serviceTermsAndConditions
+  const privacyPolicyUri = (claims?.privacyPolicyUri as string) ?? defaults.servicePrivacyPolicy
   claims =
     schemaKey === 'ecs-service'
       ? {
           name: claims?.name ?? defaults.agentLabel,
           type: claims?.type ?? defaults.serviceType,
           description: claims?.description ?? defaults.serviceDescription,
-          logo: await urlToBase64(
-            logger,
-            (claims?.logo as string) ?? defaults.agentInvitationImageUrl,
-            defaults.fallbackBase64 ?? '',
-          ),
+          logoUri,
+          logoDigestSri: (claims?.logoDigestSri as string) ?? (await urlDigestSri(logoUri)),
           minimumAgeRequired: claims?.minimumAgeRequired ?? defaults.serviceMinimumAgeRequired,
-          termsAndConditions: claims?.termsAndConditions ?? defaults.serviceTermsAndConditions,
-          privacyPolicy: claims?.privacyPolicy ?? defaults.servicePrivacyPolicy,
+          termsAndConditionsUri,
+          termsAndConditionsDigestSri:
+            (claims?.termsAndConditionsDigestSri as string) ?? (await urlDigestSri(termsAndConditionsUri)),
+          privacyPolicyUri,
+          privacyPolicyDigestSri:
+            (claims?.privacyPolicyDigestSri as string) ?? (await urlDigestSri(privacyPolicyUri)),
         }
       : {
           name: claims?.name ?? defaults.agentLabel,
-          logo: await urlToBase64(
-            logger,
-            (claims?.logo as string) ?? defaults.agentInvitationImageUrl,
-            defaults.fallbackBase64 ?? '',
-          ),
+          logoUri,
+          logoDigestSri: (claims?.logoDigestSri as string) ?? (await urlDigestSri(logoUri)),
           registryId: claims?.registryId ?? defaults.orgRegistryId,
-          registryUrl: claims?.registryUrl ?? defaults.orgRegistryUrl,
+          registryUri: claims?.registryUri ?? defaults.orgRegistryUri,
           address: claims?.address ?? defaults.orgAddress,
-          type: claims?.type ?? defaults.orgType,
+          organizationKind: claims?.organizationKind ?? defaults.orgOrganizationKind,
           countryCode: claims?.countryCode ?? defaults.orgCountryCode,
         }
 
@@ -438,7 +454,7 @@ export function validateSchema(ecsSchema: AnySchemaObject, credentialSubject: Re
       params: e.params,
     }))
 
-    throw new Error(`Invalid claims for ${ecsSchema.id}: ${JSON.stringify(errorDetails, null, 2)}`)
+    throw new Error(`Invalid claims for ${ecsSchema.$id}: ${JSON.stringify(errorDetails, null, 2)}`)
   }
 }
 
@@ -511,44 +527,12 @@ export function generateDigestSRI(content: string, algorithm: string = 'sha384')
 }
 
 /**
- * Converts an image URL to a Base64-encoded data URI string.
- *
- * @param url - The image URL to convert.
- * @returns A Base64 data URI string, or a fallback placeholder if the image cannot be fetched or is invalid.
+ * Digest of the resource a credential references. Throws rather than attest content it could
+ * not read: a wrong digestSRI is a false integrity claim in a signed credential.
  */
-export async function urlToBase64(
-  logger: Logger,
-  url: string | undefined,
-  fallback: string,
-): Promise<string> {
-  if (!url) {
-    logger.warn('No URL provided for image conversion.')
-    return fallback
-  }
-
-  try {
-    const response = await axios.get(url, { responseType: 'arraybuffer' })
-
-    const contentType = response.headers['content-type']
-    if (!contentType || !contentType.startsWith('image/')) {
-      logger.warn(`The fetched resource is not an image. Content-Type: ${contentType}`)
-      return fallback
-    }
-
-    const base64 = Buffer.from(response.data).toString('base64')
-    return `data:${contentType};base64,${base64}`
-  } catch (error) {
-    if (isAxiosError(error)) {
-      logger.error(
-        `Failed to convert URL to Base64. URL: ${url}. ` +
-          `Status: ${error.response?.status ?? 'N/A'}. ` +
-          `Message: ${error.message}`,
-      )
-    } else {
-      logger.error(`Unexpected error converting URL to Base64: ${error}`)
-    }
-    return fallback
-  }
+export async function urlDigestSri(url: string): Promise<string> {
+  const response = await axios.get(url, { responseType: 'arraybuffer', timeout: DIGEST_FETCH_TIMEOUT_MS })
+  return `sha384-${createHash('sha384').update(Buffer.from(response.data)).digest('base64')}`
 }
 
 export function getVerificationMethodId(logger: Logger, didRecord: DidRecord): string {

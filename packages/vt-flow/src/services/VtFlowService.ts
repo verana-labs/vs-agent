@@ -392,6 +392,30 @@ export class VtFlowService {
     return { record, problemReport }
   }
 
+  /** Validator-side termination producing a problem-report lands in `TERMINATED_BY_VALIDATOR`. */
+  public async terminateByValidator(
+    agentContext: AgentContext,
+    recordId: string,
+    params: Partial<RejectRequestParams> = {},
+  ): Promise<{ record: VtFlowRecord; problemReport: ReturnType<typeof buildVtFlowProblemReport> }> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+
+    const code = params.code ?? VtFlowErrorCode.SessionTerminated
+    const problemReport = buildVtFlowProblemReport({
+      code,
+      threadId: record.threadId,
+      enDescription: params.enDescription,
+      fixHintEn: params.fixHintEn,
+    })
+
+    record.errorMessage = params.enDescription ?? code
+
+    await this.updateState(agentContext, record, VtFlowState.TerminatedByValidator)
+
+    return { record, problemReport }
+  }
+
   /** On-chain revoke/slash termination producing a problem-report; lands in `PARTICIPANT_REVOKED` or `PARTICIPANT_SLASHED`. */
   public async terminateByChainEvent(
     agentContext: AgentContext,
@@ -484,6 +508,7 @@ export class VtFlowService {
     recordId: string,
     credentialExchangeRecord: DidCommCredentialExchangeRecord,
     credentialDigest?: string,
+    issuerParticipantId?: number,
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
@@ -496,9 +521,22 @@ export class VtFlowService {
 
     record.credentialExchangeRecordId = credentialExchangeRecord.id
     if (credentialDigest) record.credentialDigest = credentialDigest
+    if (issuerParticipantId !== undefined) record.issuerParticipantId = issuerParticipantId
     record.subprotocolThid = credentialExchangeRecord.threadId
 
     await this.updateState(agentContext, record, VtFlowState.CredOffered)
+    return record
+  }
+
+  public async setCredentialDigest(
+    agentContext: AgentContext,
+    recordId: string,
+    credentialDigest: string,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.credentialDigest = credentialDigest
+    await this.repository.update(agentContext, record)
     return record
   }
 

@@ -38,7 +38,8 @@ export class TrustController {
           claims: {
             id: 'https://example.org/org/123',
             name: 'OpenAI Research',
-            logo: 'data:image/png;base64,iVBORw0KGgoAAAANSU...',
+            logoUri: 'https://example.org/logo.png',
+            logoDigestSri: 'sha384-...',
             registryId: 'REG-123',
             registryUri: 'https://registry.example.org',
             address: '123 Main St, San Francisco, CA',
@@ -54,7 +55,8 @@ export class TrustController {
           claims: {
             id: 'https://example.org/org/123',
             name: 'OpenAI Research',
-            logo: 'data:image/png;base64,iVBORw0KGgoAAAANSU...',
+            logoUri: 'https://example.org/logo.png',
+            logoDigestSri: 'sha384-...',
             registryId: 'REG-123',
             registryUri: 'https://registry.example.org',
             address: '123 Main St, San Francisco, CA',
@@ -133,7 +135,7 @@ export class TrustController {
       verifiableTrustCredential: {
         summary: 'Verifiable Trust Credential example',
         description: 'A full URL to the Verifiable Trust Credential.',
-        value: 'https://p2801.ovpndev.mobiera.io/vt/ecs-service-c-vp.json',
+        value: 'https://myservice.verana.io/vt/ecs-service-vtc-vp.json',
       },
     },
   })
@@ -183,7 +185,7 @@ export class TrustController {
       verifiableTrustCredential: {
         summary: 'JSON Schema Credential example',
         description: 'A full URL identifying the Verifiable Trust Credential to be deleted.',
-        value: 'https://p2801.ovpndev.mobiera.io/vt/ecs-service-c-vp.json',
+        value: 'https://myservice.verana.io/vt/ecs-service-vtc-vp.json',
       },
     },
   })
@@ -217,7 +219,7 @@ export class TrustController {
         summary: 'Organization Credential Example',
         description:
           'Creates a Verifiable Trust Credential (VTC) for an organization. ' +
-          'The `schemaBaseId` is used to generate the schema URL (e.g., `https://p2801.ovpndev.mobiera.io/vt/schemas-organization-c-vp.json`).',
+          'The `schemaBaseId` is used to generate the schema URL (e.g., `https://myservice.verana.io/vt/schemas-organization-vtc-vp.json`).',
         value: {
           schemaBaseId: 'organization',
           credential: {
@@ -229,7 +231,8 @@ export class TrustController {
             credentialSubject: {
               id: 'did:example:org123',
               name: 'OpenAI Research',
-              logo: 'data:image/png;base64,iVBORw0KGgoAAAANSU...',
+              logoUri: 'https://example.org/logo.png',
+              logoDigestSri: 'sha384-...',
               registryId: 'REG-123',
               registryUri: 'https://registry.example.org',
               address: '123 Main St, San Francisco, CA',

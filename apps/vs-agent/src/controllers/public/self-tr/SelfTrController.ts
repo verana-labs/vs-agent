@@ -25,13 +25,13 @@ export class SelfTrController {
   async getCredentials(@Param('schemaId') schemaId: string) {
     try {
       const baseUrl = `${this.publicApiBaseUrl}/vt/${schemaId}`
-      if (schemaId.endsWith('-c-vp.json'))
+      if (schemaId.endsWith('-vtc-vp.json'))
         return await this.trustService.getVerifiableTrustCredential(baseUrl)
-      else if (schemaId.endsWith('-jsc-vp.json') || schemaId.endsWith('-jsc.json'))
+      else if (schemaId.endsWith('-vtjsc-vp.json') || schemaId.endsWith('-jsc.json'))
         return await this.trustService.getJsonSchemaCredential(baseUrl)
       else
         throw new HttpException(
-          'Invalid schemaId: must end with -c-vp.json, -jsc-vp.json, or -jsc.json',
+          'Invalid schemaId: must end with -vtc-vp.json, -vtjsc-vp.json, or -jsc.json',
           HttpStatus.BAD_REQUEST,
         )
     } catch (error) {
