@@ -7,7 +7,7 @@ import {
 } from '@credo-ts/anoncreds'
 import { W3cCredential } from '@credo-ts/core'
 import { DidCommAutoAcceptProof } from '@credo-ts/didcomm'
-import { Controller, Get, Post, Body, Query, Inject, HttpException } from '@nestjs/common'
+import { Controller, Get, Post, Body, Query, Inject, HttpException, HttpStatus } from '@nestjs/common'
 import {
   ApiBadRequestResponse,
   ApiBody,
@@ -260,6 +260,13 @@ export class InvitationController {
 
       const jsonSchemaRef = extractJsonSchemaRef(jscData)
       trustRegistrySchemaId = jsonSchemaRef ? parseSchemaRef(jsonSchemaRef) : undefined
+
+      if (trustRegistrySchemaId === undefined) {
+        throw new HttpException(
+          `Cannot resolve a Verana credential schema for jsonSchemaCredentialId: ${relatedJsonSchemaCredentialId}`,
+          HttpStatus.BAD_REQUEST,
+        )
+      }
 
       await this.credentialTypesService.assertAccreditedForSchema(
         trustRegistrySchemaId,

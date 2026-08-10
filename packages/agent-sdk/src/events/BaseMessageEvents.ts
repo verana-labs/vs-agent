@@ -103,6 +103,9 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
       ) {
         logger.info('Presentation received')
 
+        let stateEmitted = false
+        let emitPresentationState: (state: PresentationState, claims?: Claim[]) => void = () => {}
+
         try {
           const record = await agent.didcomm.proofs.getByThreadAndConnectionId(
             message.threadId,
@@ -114,7 +117,9 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             | { ref?: string; callbackUrl?: string }
             | undefined
 
-          const emitPresentationState = (state: PresentationState, claims?: Claim[]) => {
+          emitPresentationState = (state: PresentationState, claims?: Claim[]) => {
+            if (stateEmitted) return
+            stateEmitted = true
             if (!callbackParameters?.callbackUrl) return
             emitVsAgentEvent(
               agent,
@@ -179,7 +184,9 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             }
 
             if (record.state === DidCommProofState.PresentationReceived) {
-              await agent.didcomm.proofs.acceptPresentation({ proofExchangeRecordId: record.id })
+              await agent.didcomm.proofs
+                .acceptPresentation({ proofExchangeRecordId: record.id })
+                .catch(error => logger.error(`Could not acknowledge the accepted presentation: ${error}`))
             }
           }
 
@@ -229,6 +236,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
           emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
         } catch (error) {
           logger.error(`Error processing presentation message: ${error}`)
+          emitPresentationState(PresentationState.UNSPECIFIED_ERROR)
         }
       }
     },
