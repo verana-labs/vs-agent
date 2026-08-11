@@ -114,7 +114,7 @@ jobs:
 
   docker:
     needs: version
-    if: needs.version.outputs.publish == 'true'
+    if: ${{ !cancelled() && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -198,7 +198,7 @@ jobs:
 
   helm:
     needs: [version, docker]
-    if: needs.version.outputs.publish == 'true'
+    if: ${{ !cancelled() && needs.docker.result == 'success' && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     env:
       RELEASE_TYPE: ${{ needs.version.outputs.release-type }}
@@ -254,7 +254,7 @@ jobs:
 
   npm-publish:
     needs: [version]
-    if: needs.version.outputs.publish == 'true'
+    if: ${{ !cancelled() && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     env:
       RELEASE_TYPE: ${{ needs.version.outputs.release-type }}
