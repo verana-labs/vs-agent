@@ -20,14 +20,11 @@ import {
   type StartedStack,
 } from './helpers'
 
-const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
-const describeE2E = E2E_ENABLED ? describe : describe.skip
-
 const RUN_ID = String(Date.now())
 const CORP_DID = `did:example:corporation-${RUN_ID}`
 const ECO_DID = `did:example:ecosystem-${RUN_ID}`
 
-describeE2E('Verana blockchain integration (node + indexer, CosmJS + WebSocket)', () => {
+describe('Verana blockchain integration (node + indexer, CosmJS + WebSocket)', () => {
   let stack: StartedStack
   let chain: VeranaTestChain
   let subscriber: IndexerSubscriber

@@ -29,7 +29,7 @@
     "prepublishOnly": "pnpm run build",
     "version": "pnpm version --allow-same-version",
     "test": "vitest",
-    "test:e2e": "RUN_FLOW_E2E=1 vitest run tests/e2e"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "@cosmjs/amino": "^0.32.4",
