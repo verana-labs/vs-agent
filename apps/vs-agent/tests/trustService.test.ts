@@ -3,11 +3,7 @@ import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { INestApplication } from '@nestjs/common'
 import { Claim, CredentialIssuanceMessage } from '@verana-labs/vs-agent-model'
-import {
-  type BaseAgentModules,
-  type VsAgent,
-  migrateVtjscServiceIds,
-} from '@verana-labs/vs-agent-sdk'
+import { type BaseAgentModules, type VsAgent, migrateVtjscServiceIds } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import request from 'supertest'
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
