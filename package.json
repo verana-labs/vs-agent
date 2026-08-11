@@ -23,7 +23,7 @@
     "test": "pnpm -r run test",
     "test:e2e": "pnpm --filter @verana-labs/vs-agent-sdk test:e2e",
     "lint": "biome lint --write .",
-    "validate": "pnpm lint && pnpm check-types && pnpm check-format",
+    "validate": "biome ci . && pnpm check-types",
     "prepare": "corepack enable"
   },
   "devDependencies": {

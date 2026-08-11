@@ -6,7 +6,8 @@ import {
   dateToTimestamp,
 } from '@credo-ts/anoncreds'
 import { W3cCredential } from '@credo-ts/core'
-import { Controller, Get, Post, Body, Query, Inject, HttpException } from '@nestjs/common'
+import { DidCommAutoAcceptProof } from '@credo-ts/didcomm'
+import { Controller, Get, Post, Body, Query, Inject, HttpException, HttpStatus } from '@nestjs/common'
 import {
   ApiBadRequestResponse,
   ApiBody,
@@ -21,7 +22,7 @@ import {
   CreateInvitationResult,
   ReceiveInvitationResult,
 } from '@verana-labs/vs-agent-model'
-import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
+import { createInvitation, fetchJson, ParticipantRole, parseSchemaRef } from '@verana-labs/vs-agent-sdk'
 
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../config'
 import { AccessMode } from '../../../security'
@@ -44,9 +45,9 @@ import {
 })
 export class InvitationController {
   constructor(
-    private readonly agentService: VsAgentService,
-    private readonly urlShortenerService: UrlShorteningService,
-    private readonly credentialTypesService: CredentialTypesService,
+    @Inject(VsAgentService) private readonly agentService: VsAgentService,
+    @Inject(UrlShorteningService) private readonly urlShortenerService: UrlShorteningService,
+    @Inject(CredentialTypesService) private readonly credentialTypesService: CredentialTypesService,
     @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
   ) {}
 
@@ -240,6 +241,7 @@ export class InvitationController {
 
     let schema: AnonCredsSchema
     let restrictions: AnonCredsProofRequestRestriction[]
+    let trustRegistrySchemaId: number | undefined
 
     if (relatedJsonSchemaCredentialId) {
       const jscData = await fetchJson<W3cCredential>(relatedJsonSchemaCredentialId)
@@ -255,6 +257,21 @@ export class InvitationController {
 
       schema = schemaResult.schema
       restrictions = [{ schema_id: schemaResult.schemaId }]
+
+      const jsonSchemaRef = extractJsonSchemaRef(jscData)
+      trustRegistrySchemaId = jsonSchemaRef ? parseSchemaRef(jsonSchemaRef) : undefined
+
+      if (trustRegistrySchemaId === undefined) {
+        throw new HttpException(
+          `Cannot resolve a Verana credential schema for jsonSchemaCredentialId: ${relatedJsonSchemaCredentialId}`,
+          HttpStatus.BAD_REQUEST,
+        )
+      }
+
+      await this.credentialTypesService.assertAccreditedForSchema(
+        trustRegistrySchemaId,
+        ParticipantRole.Verifier,
+      )
     } else {
       const { credentialDefinition } = await agent.modules.anoncreds.getCredentialDefinition(
         credentialDefinitionId!,
@@ -302,6 +319,7 @@ export class InvitationController {
 
     const request = await agent.didcomm.proofs.createRequest({
       protocolVersion: 'v2',
+      autoAcceptProof: trustRegistrySchemaId !== undefined ? DidCommAutoAcceptProof.Never : undefined,
       proofFormats: {
         anoncreds: {
           name: 'proof-request',
@@ -314,6 +332,7 @@ export class InvitationController {
 
     request.proofRecord.metadata.set('_2060/requestedCredentials', requestedCredentials)
     request.proofRecord.metadata.set('_2060/callbackParameters', { ref, callbackUrl })
+    request.proofRecord.metadata.set('_2060/trustRegistry', { schemaId: trustRegistrySchemaId })
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { url } = await createInvitation({
@@ -427,6 +446,13 @@ export class InvitationController {
       )
     }
 
+    await this.credentialTypesService.assertAccreditedForSchema(
+      await this.credentialTypesService.resolveTrustRegistrySchemaIdForCredentialDefinition(
+        credentialDefinitionId,
+      ),
+      ParticipantRole.Issuer,
+    )
+
     try {
       const request = await agent.didcomm.credentials.createOffer({
         protocolVersion: 'v2',
@@ -465,4 +491,11 @@ export class InvitationController {
       throw new HttpException(`Failed to create invitation: ${error}`, 500)
     }
   }
+}
+
+function extractJsonSchemaRef(jsc: W3cCredential): string | undefined {
+  const subject = (
+    Array.isArray(jsc.credentialSubject) ? jsc.credentialSubject[0] : jsc.credentialSubject
+  ) as Record<string, any>
+  return subject?.jsonSchema?.$ref
 }

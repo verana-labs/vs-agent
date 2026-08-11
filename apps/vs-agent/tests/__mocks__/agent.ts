@@ -3,7 +3,7 @@ import { LogLevel, utils } from '@credo-ts/core'
 import { type DidCommVersion } from '@credo-ts/didcomm'
 import { agentDependencies } from '@credo-ts/node'
 import { type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { createVsAgent, setupBaseDidComm, VsAgent } from '@verana-labs/vs-agent-sdk'
+import { createVsAgent, setupBaseDidComm, VeranaIndexerService, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { TsLogger } from '../../src/utils'
 
@@ -12,13 +12,16 @@ export const startAgent = async ({
   domain,
   vtFlowOptions,
   didcommVersions,
+  indexerBaseUrl = 'http://indexer.invalid',
 }: {
   label: string
   domain: string
   vtFlowOptions?: VtFlowModuleConfigOptions
   didcommVersions?: DidCommVersion[]
+  indexerBaseUrl?: string
 }): Promise<VsAgent<any>> => {
   const walletConfig = getAskarStoreConfig(label, { inMemory: true })
+  const logger = new TsLogger(LogLevel.Off, label)
 
   const [chatSetup, mrtdSetup] = await Promise.all([
     import('@verana-labs/vs-agent-plugin-chat').catch(() => null),
@@ -37,14 +40,13 @@ export const startAgent = async ({
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol()] : []),
     ],
-    config: {
-      logger: new TsLogger(LogLevel.Off, label),
-    },
+    config: { logger },
     walletConfig,
     did: `did:webvh:${domain}`,
     dependencies: agentDependencies,
     publicApiBaseUrl: `https://${domain}`,
     label,
+    indexer: new VeranaIndexerService({ baseUrl: indexerBaseUrl, logger }),
   })
   return agent as unknown as VsAgent<any>
 }

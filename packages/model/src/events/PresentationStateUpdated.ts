@@ -12,6 +12,7 @@ export enum PresentationState {
   SCANNED = 'scanned',
   REFUSED = 'refused',
   NO_COMPATIBLE_CREDENTIALS = 'no-compatible-credentials',
+  UNTRUSTED_ISSUER = 'untrusted-issuer',
   VERIFICATION_ERROR = 'verification-error',
   UNSPECIFIED_ERROR = 'unspecified-error',
 }

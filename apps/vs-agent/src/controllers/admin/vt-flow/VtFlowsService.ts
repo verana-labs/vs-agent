@@ -20,17 +20,13 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { VeranaIndexerService, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
-import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { TsLogger } from '../../../utils'
 
 import { ListFlowsQueryDto } from './dto/flow-requests.dto'
 import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
 @Injectable()
 export class VtFlowsService {
-  private indexerService?: VeranaIndexerService
-
   public constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
 
   public async listFlows(query: ListFlowsQueryDto): Promise<VtFlowRecordDto[]> {
@@ -161,7 +157,7 @@ export class VtFlowsService {
     }
     if (!record.participantId) throw new BadRequestException('Record has no participantId')
 
-    const holderParticipant = await this.getIndexer().getParticipant(Number(record.participantId))
+    const holderParticipant = await agent.indexer.getParticipant(Number(record.participantId))
     if (!holderParticipant)
       throw new BadRequestException(`Holder participant ${record.participantId} not found on indexer`)
     if (holderParticipant.schema_id == null)
@@ -201,21 +197,6 @@ export class VtFlowsService {
       )
     }
     return agent.veranaChain
-  }
-
-  private getIndexer(): VeranaIndexerService {
-    if (!this.indexerService) {
-      if (!VERANA_INDEXER_BASE_URL) {
-        throw new BadRequestException(
-          'Indexer not configured (set VERANA_INDEXER_BASE_URL); required for vt-flow',
-        )
-      }
-      this.indexerService = new VeranaIndexerService({
-        baseUrl: VERANA_INDEXER_BASE_URL,
-        logger: new TsLogger(ADMIN_LOG_LEVEL, 'VeranaIndexer'),
-      })
-    }
-    return this.indexerService
   }
 }
 

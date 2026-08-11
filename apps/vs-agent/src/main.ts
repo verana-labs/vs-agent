@@ -300,16 +300,14 @@ const run = async () => {
     VtFlowNestPlugin,
   ]
 
-  const indexerService = VERANA_INDEXER_BASE_URL
-    ? new VeranaIndexerService({ baseUrl: VERANA_INDEXER_BASE_URL, logger: serverLogger })
-    : undefined
+  const indexerService = new VeranaIndexerService({ baseUrl: VERANA_INDEXER_BASE_URL!, logger: serverLogger })
 
   // Connect to Verana blockchain for on-chain transactions
   let veranaChain: VeranaChainService | undefined
   let authorizationService: AuthorizationService | undefined
   if (VERANA_RPC_ENDPOINT_URL && VERANA_ACCOUNT_MNEMONIC) {
     let corporationAddress: string | undefined
-    if (VERANA_CORPORATION_ID && indexerService) {
+    if (VERANA_CORPORATION_ID) {
       const corporation = await indexerService.getCorporation(VERANA_CORPORATION_ID).catch(() => undefined)
       corporationAddress = corporation?.policy_address ?? undefined
       if (!corporationAddress) {
@@ -376,7 +374,7 @@ const run = async () => {
     }
   })()
 
-  const { agent, indexer, verifyPeer } = await setupAgent({
+  const { agent, verifyPeer } = await setupAgent({
     endpoints,
     discoveryOptions,
     port: AGENT_PORT,
@@ -395,6 +393,7 @@ const run = async () => {
     masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
     veranaChain,
+    indexerBaseUrl: VERANA_INDEXER_BASE_URL!,
     authorizationService,
     adminApiServiceEndpoint,
   })
@@ -483,10 +482,10 @@ const run = async () => {
       )
     }
 
-    if (indexerService && VERANA_CORPORATION_ID) {
+    if (VERANA_CORPORATION_ID) {
       void reconcileVtjscPublications(
         agent,
-        indexerService,
+        agent.indexer,
         Number(VERANA_CORPORATION_ID),
         selfTrDefaults,
       ).catch((error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`))
@@ -495,7 +494,7 @@ const run = async () => {
 
   const ecsBootstrap = new EcsBootstrapService(
     agent,
-    indexer,
+    agent.indexer,
     {
       mode: AGENT_MODE as 'standalone' | 'delegated',
       trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS.length ? TRUSTED_ECS_ECOSYSTEM_DIDS : undefined,

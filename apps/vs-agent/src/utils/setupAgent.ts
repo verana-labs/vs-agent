@@ -25,7 +25,6 @@ import {
   ENABLE_PUBLIC_API_SWAGGER,
   ENABLED_PLUGINS,
   VERANA_CHAIN_ID,
-  VERANA_INDEXER_BASE_URL,
 } from '../config'
 import { MessageService } from '../controllers/admin/message/MessageService'
 
@@ -44,6 +43,7 @@ export const setupAgent = async ({
   masterListCscaLocation,
   autoUpdateStorageOnStartup,
   veranaChain,
+  indexerBaseUrl,
   authorizationService,
   discoveryOptions,
   adminApiServiceEndpoint,
@@ -60,6 +60,7 @@ export const setupAgent = async ({
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
   veranaChain?: VeranaChainService
+  indexerBaseUrl: string
   authorizationService?: AuthorizationService
   discoveryOptions?: DidCommFeatureQueryOptions[]
   adminApiServiceEndpoint?: string
@@ -95,21 +96,18 @@ export const setupAgent = async ({
       : null,
   ])
 
-  const verifiablePublicRegistries =
-    VERANA_INDEXER_BASE_URL && VERANA_CHAIN_ID
-      ? [
-          {
-            id: `vpr:verana:${VERANA_CHAIN_ID}`,
-            scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
-            api: [VERANA_INDEXER_BASE_URL],
-            production: true,
-          },
-        ]
-      : undefined
-
-  const indexer = VERANA_INDEXER_BASE_URL
-    ? new VeranaIndexerService({ baseUrl: VERANA_INDEXER_BASE_URL, logger })
+  const verifiablePublicRegistries = VERANA_CHAIN_ID
+    ? [
+        {
+          id: `vpr:verana:${VERANA_CHAIN_ID}`,
+          scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
+          api: [indexerBaseUrl],
+          production: true,
+        },
+      ]
     : undefined
+
+  const indexer = new VeranaIndexerService({ baseUrl: indexerBaseUrl, logger })
   // eslint-disable-next-line prefer-const
   let orchestrator: VtFlowOrchestrator | undefined
 
@@ -196,6 +194,7 @@ export const setupAgent = async ({
     displayPictureUrl,
     label,
     veranaChain,
+    indexer,
     authorizationService,
     discoveryOptions,
     adminApiServiceEndpoint,
@@ -215,7 +214,7 @@ export const setupAgent = async ({
     )
   }
 
-  orchestrator = new VtFlowOrchestrator(agent, { indexer, publicApiBaseUrl })
+  orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl })
 
   await agent.initialize()
 

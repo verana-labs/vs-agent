@@ -17,7 +17,6 @@ import {
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { BaseAgentModules, VsAgent } from '../agent'
-import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { ParticipantRole, ParticipantState } from '../blockchain/types'
 import {
   HOLDER_PARTICIPANT_TYPE,
@@ -26,11 +25,17 @@ import {
   VERIFIER_GRANTOR_PARTICIPANT_TYPE,
   VERIFIER_PARTICIPANT_TYPE,
 } from '../types'
-import { createCredential, createVtc, findMetadataEntry, removeStoredTrustCredential } from '../utils'
+import {
+  buildLegacySchemaRef,
+  buildSchemaRef,
+  createCredential,
+  createVtc,
+  findMetadataEntry,
+  removeStoredTrustCredential,
+} from '../utils'
 
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
-  indexer?: VeranaIndexerService
   agentParticipantId?: number
   walletAgentParticipantId?: number
 }
@@ -209,7 +214,7 @@ export class VtFlowOrchestrator {
   } | null> {
     const chain = this.requireChain()
     if (!this.agent.did) throw new Error('Agent has no public DID')
-    const indexer = this.requireIndexer()
+    const indexer = this.agent.indexer
 
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(vtFlowRecordId)
@@ -264,8 +269,11 @@ export class VtFlowOrchestrator {
     const didRecords = await this.agent.dids.getCreatedDids({ did: this.agent.did! })
     const didRecord = didRecords[0]
     if (!didRecord) throw new Error('Agent DID record not found')
-    const schemaRef = `vpr:verana:${chain.getChainId}:cs:${input.credentialSchemaId}`
-    const entry = await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
+    const schemaRef = buildSchemaRef(chain.getChainId, input.credentialSchemaId)
+    const legacyRef = buildLegacySchemaRef(chain.getChainId, input.credentialSchemaId)
+    const entry =
+      (await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)) ??
+      (await findMetadataEntry(didRecord, '_vt/jsc', '', legacyRef))
     if (!entry) throw new Error(`No stored VTJSC found for ${schemaRef}`)
     const { data } = entry
 
@@ -286,7 +294,7 @@ export class VtFlowOrchestrator {
 
   /** Per the spec the algorithm comes from the schema, never from the digest value. */
   private async digestAlgorithmForSchema(schemaId: number): Promise<string> {
-    const schema = await this.requireIndexer().getCredentialSchema(schemaId)
+    const schema = await this.agent.indexer.getCredentialSchema(schemaId)
     if (!schema.digest_algorithm) {
       throw new Error(`Credential schema ${schemaId} has no digest_algorithm`)
     }
@@ -303,7 +311,7 @@ export class VtFlowOrchestrator {
       throw new Error(`vt-flow record ${vtFlowRecordId} has no issuerParticipantId to anchor against`)
     }
 
-    const issuer = await this.requireIndexer().getParticipant(record.issuerParticipantId)
+    const issuer = await this.agent.indexer.getParticipant(record.issuerParticipantId)
     const algorithm = await this.digestAlgorithmForSchema(issuer.schema_id)
     const digest = computeCredentialDigestJCS(
       signedCredential as unknown as W3cVerifiableCredential,
@@ -327,7 +335,7 @@ export class VtFlowOrchestrator {
     if (!record.credentialExchangeRecordId) {
       throw new Error('Record has no credentialExchangeRecordId; nothing to verify')
     }
-    const indexer = this.requireIndexer()
+    const indexer = this.agent.indexer
 
     const session = await indexer.getParticipantSession(record.participantSessionId)
     if (!session) {
@@ -410,13 +418,6 @@ export class VtFlowOrchestrator {
     )?.jsonld
     if (!credentialJson) throw new Error('Offered credential has no JSON-LD body to verify')
     return credentialJson
-  }
-
-  private requireIndexer(): VeranaIndexerService {
-    if (!this.options.indexer) {
-      throw new Error('Agent has no indexer configured (set VERANA_INDEXER_BASE_URL)')
-    }
-    return this.options.indexer
   }
 
   async publishCredentialAsLinkedVp(vtFlowRecordId: string): Promise<void> {

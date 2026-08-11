@@ -21,6 +21,7 @@ import {
   findMetadataEntry,
   getEcsSchemas,
   getVerificationMethodId,
+  ParticipantRole,
   removeTrustCredential,
   signerW3c,
   validateSchema,
@@ -217,6 +218,11 @@ export class TrustService {
               HttpStatus.BAD_REQUEST,
             )
           }
+          await this.credentialTypesService.assertAccreditedForSchema(
+            await this.credentialTypesService.resolveTrustRegistrySchemaId(jsonSchemaCredentialId),
+            ParticipantRole.Issuer,
+          )
+
           const providedAttributes = Object.entries(claims)
             .filter(([, v]) => v !== undefined && v !== null)
             .map(([name, value]) => ({ name, mimeType: 'text/plain', value: String(value) }))
