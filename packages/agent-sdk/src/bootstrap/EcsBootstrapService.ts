@@ -224,7 +224,7 @@ export class EcsBootstrapService {
       did: this.agent.did,
       participantState: ParticipantState.Active,
     })
-    return candidates.find(p => !p.revoked && !p.slashed)
+    return candidates.find(p => !p.revoked && !p.slashed && p.did === this.agent.did)
   }
 
   // Self-validation is spec-legal: [MOD-PP-MSG-3-2-1] checks only the validator side, and
