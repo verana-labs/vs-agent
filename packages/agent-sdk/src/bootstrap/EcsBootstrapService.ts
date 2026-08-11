@@ -174,6 +174,17 @@ export class EcsBootstrapService {
     schema: CredentialSchemaDto,
     credentialType: ECS,
   ): Promise<void> {
+    // This agent can be the ecosystem's own root agent. It can control the schema's ECOSYSTEM
+    // root. In this case, no external ISSUER exists for it to get a HOLDER credential from.
+    // [VS-REQ-3] and [CIB-3] (verifiable-trust-spec v4) require proof of authorization from the
+    // Ecosystem controller for a self-issued Org/Persona credential. So this agent must become the
+    // ISSUER itself. This is the same pattern as ensureServiceIssuer below.
+    const ownRoot = await this.findOwnActiveRoot(indexer, schema.id)
+    if (ownRoot) {
+      await this.ensureSelfIssuedParticipant(chain, indexer, schema, credentialType, ownRoot)
+      return
+    }
+
     const existing = await indexer.listParticipants({
       schemaId: schema.id,
       did: this.agent.did,
@@ -201,6 +212,68 @@ export class EcsBootstrapService {
     })
     this.logger.info(
       `[EcsBootstrap] started HOLDER onboarding ${participantId} for the ECS ${credentialType} schema with validator ${validator.id}`,
+    )
+  }
+
+  // Find the agent's own active ECOSYSTEM root for a schema. findActiveValidator excludes the
+  // agent's own DID, so do not use it here.
+  private async findOwnActiveRoot(
+    indexer: VeranaIndexerService,
+    schemaId: number,
+  ): Promise<ParticipantDto | undefined> {
+    if (!this.agent.did) return undefined
+    const candidates = await indexer.listParticipants({
+      schemaId,
+      role: ParticipantRole.Ecosystem,
+      did: this.agent.did,
+      participantState: ParticipantState.Active,
+    })
+    return candidates.find(p => !p.revoked && !p.slashed)
+  }
+
+  // Onboard this agent as ISSUER for its own ECOSYSTEM root schema. Then validate the request at
+  // once. This is self-validation.
+  //
+  // [MOD-PP-MSG-3-2-1] (verifiable-trust-vpr-spec v4) allows this. The AUTHZ-CHECK for
+  // SetParticipantOPtoValidated tests only the validator side. The applicant and the validator can
+  // be the same corporation.
+  //
+  // [MOD-PP-MSG-1-1] supports this design. An ECOSYSTEM participant can grant its operator only
+  // one right: SetParticipantOPtoValidated. This lets a root's operator validate requests against
+  // its own root, including its own request.
+  private async ensureSelfIssuedParticipant(
+    chain: VeranaChainService,
+    indexer: VeranaIndexerService,
+    schema: CredentialSchemaDto,
+    credentialType: ECS,
+    root: ParticipantDto,
+  ): Promise<void> {
+    const existing = await indexer.listParticipants({
+      schemaId: schema.id,
+      did: this.agent.did,
+      role: ParticipantRole.Issuer,
+    })
+    const usable = existing.find(p => this.isUsableParticipant(p))
+    if (usable) {
+      this.logger.info(
+        `[EcsBootstrap] reusing self-issued ISSUER participant ${usable.id} for the ECS ${credentialType} schema`,
+      )
+      return
+    }
+
+    const { participantId } = await chain.startParticipantOP({
+      role: ISSUER_PARTICIPANT_TYPE,
+      validatorParticipantId: root.id,
+      did: this.agent.did!,
+    })
+    await chain.setParticipantOPToValidated({
+      id: participantId,
+      validationFees: 0,
+      issuanceFees: 0,
+      verificationFees: 0,
+    })
+    this.logger.info(
+      `[EcsBootstrap] self-issued ISSUER participant ${participantId} for the ECS ${credentialType} schema (ecosystem root ${root.id})`,
     )
   }
 
