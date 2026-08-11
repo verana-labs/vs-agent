@@ -291,7 +291,9 @@ export class EcsBootstrapService {
           `operator ${chain.address} has no OperatorAuthorization covering MsgSelfCreateParticipant (required for OPEN issuer onboarding)`,
         )
       }
-      const root = await this.findActiveValidator(indexer, schema.id, ParticipantRole.Ecosystem)
+      const root =
+        (await this.findOwnActiveRoot(indexer, schema.id)) ??
+        (await this.findActiveValidator(indexer, schema.id, ParticipantRole.Ecosystem))
       if (!root) throw new Error(`no active ECOSYSTEM participant found for Service schema ${schema.id}`)
       const { participantId } = await chain.selfCreateParticipant({
         role: ISSUER_PARTICIPANT_TYPE,
