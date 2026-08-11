@@ -174,11 +174,8 @@ export class EcsBootstrapService {
     schema: CredentialSchemaDto,
     credentialType: ECS,
   ): Promise<void> {
-    // This agent can be the ecosystem's own root agent. It can control the schema's ECOSYSTEM
-    // root. In this case, no external ISSUER exists for it to get a HOLDER credential from.
-    // [VS-REQ-3] and [CIB-3] (verifiable-trust-spec v4) require proof of authorization from the
-    // Ecosystem controller for a self-issued Org/Persona credential. So this agent must become the
-    // ISSUER itself. This is the same pattern as ensureServiceIssuer below.
+    // If this agent controls the schema's ECOSYSTEM root, it has no external ISSUER to seek a
+    // HOLDER credential from — it must become the ISSUER itself (see ensureSelfIssuedParticipant).
     const ownRoot = await this.findOwnActiveRoot(indexer, schema.id)
     if (ownRoot) {
       await this.ensureSelfIssuedParticipant(chain, indexer, schema, credentialType, ownRoot)
@@ -215,8 +212,7 @@ export class EcsBootstrapService {
     )
   }
 
-  // Find the agent's own active ECOSYSTEM root for a schema. findActiveValidator excludes the
-  // agent's own DID, so do not use it here.
+  // Unlike findActiveValidator, this does not exclude the agent's own DID.
   private async findOwnActiveRoot(
     indexer: VeranaIndexerService,
     schemaId: number,
@@ -231,16 +227,8 @@ export class EcsBootstrapService {
     return candidates.find(p => !p.revoked && !p.slashed)
   }
 
-  // Onboard this agent as ISSUER for its own ECOSYSTEM root schema. Then validate the request at
-  // once. This is self-validation.
-  //
-  // [MOD-PP-MSG-3-2-1] (verifiable-trust-vpr-spec v4) allows this. The AUTHZ-CHECK for
-  // SetParticipantOPtoValidated tests only the validator side. The applicant and the validator can
-  // be the same corporation.
-  //
-  // [MOD-PP-MSG-1-1] supports this design. An ECOSYSTEM participant can grant its operator only
-  // one right: SetParticipantOPtoValidated. This lets a root's operator validate requests against
-  // its own root, including its own request.
+  // Self-validation is spec-legal: [MOD-PP-MSG-3-2-1] checks only the validator side, and
+  // [MOD-PP-MSG-1-1] grants an ECOSYSTEM root's own operator the right to validate against it.
   private async ensureSelfIssuedParticipant(
     chain: VeranaChainService,
     indexer: VeranaIndexerService,
