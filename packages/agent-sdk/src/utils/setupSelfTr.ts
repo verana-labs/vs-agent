@@ -35,11 +35,14 @@ const DIGEST_FETCH_TIMEOUT_MS = 5000
 export interface SelfTrDefaults {
   agentLabel: string
   serviceLogoUri: string
+  serviceLogoDigestSri?: string
   serviceType: string
   serviceDescription: string
   serviceMinimumAgeRequired: number
   serviceTermsAndConditions: string
+  serviceTermsAndConditionsDigestSri?: string
   servicePrivacyPolicy: string
+  servicePrivacyPolicyDigestSri?: string
   orgRegistryId: string
   orgRegistryUri: string
   orgAddress: string
@@ -426,19 +429,25 @@ export async function getClaims(
           type: claims?.type ?? defaults.serviceType,
           description: claims?.description ?? defaults.serviceDescription,
           logoUri,
-          logoDigestSri: (claims?.logoDigestSri as string) ?? (await urlDigestSri(logoUri)),
+          logoDigestSri:
+            (claims?.logoDigestSri as string) ?? defaults.serviceLogoDigestSri ?? (await urlDigestSri(logoUri)),
           minimumAgeRequired: claims?.minimumAgeRequired ?? defaults.serviceMinimumAgeRequired,
           termsAndConditionsUri,
           termsAndConditionsDigestSri:
-            (claims?.termsAndConditionsDigestSri as string) ?? (await urlDigestSri(termsAndConditionsUri)),
+            (claims?.termsAndConditionsDigestSri as string) ??
+            defaults.serviceTermsAndConditionsDigestSri ??
+            (await urlDigestSri(termsAndConditionsUri)),
           privacyPolicyUri,
           privacyPolicyDigestSri:
-            (claims?.privacyPolicyDigestSri as string) ?? (await urlDigestSri(privacyPolicyUri)),
+            (claims?.privacyPolicyDigestSri as string) ??
+            defaults.servicePrivacyPolicyDigestSri ??
+            (await urlDigestSri(privacyPolicyUri)),
         }
       : {
           name: claims?.name ?? defaults.agentLabel,
           logoUri,
-          logoDigestSri: (claims?.logoDigestSri as string) ?? (await urlDigestSri(logoUri)),
+          logoDigestSri:
+            (claims?.logoDigestSri as string) ?? defaults.serviceLogoDigestSri ?? (await urlDigestSri(logoUri)),
           registryId: claims?.registryId ?? defaults.orgRegistryId,
           registryUri: claims?.registryUri ?? defaults.orgRegistryUri,
           address: claims?.address ?? defaults.orgAddress,

@@ -18,6 +18,7 @@ import {
   registerAuthorizationHandlers,
   EcsBootstrapService,
   reconcileVtjscPublications,
+  generateDigestSRI,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -35,6 +36,9 @@ import {
   AGENT_ENDPOINTS,
   AGENT_INVITATION_IMAGE_URL,
   DEFAULT_SELF_ISSUED_VTC_RESOURCES,
+  DEFAULT_LOGO_SVG,
+  DEFAULT_TERMS_HTML,
+  DEFAULT_PRIVACY_HTML,
   SELF_ISSUED_VTC_SERVICE_LOGOURI,
   AGENT_LABEL,
   SELF_ISSUED_VTC_ORG_ADDRESS,
@@ -415,20 +419,27 @@ const run = async () => {
     )
   }
 
-  // Initialize Self-Trust Registry
+  // Initialize Self-Trust Registry  
   const selfTrDefaults = {
     agentLabel: AGENT_LABEL,
     serviceLogoUri:
       SELF_ISSUED_VTC_SERVICE_LOGOURI ?? DEFAULT_SELF_ISSUED_VTC_RESOURCES.logoUri(publicApiBaseUrl),
+    serviceLogoDigestSri: SELF_ISSUED_VTC_SERVICE_LOGOURI ? undefined : generateDigestSRI(DEFAULT_LOGO_SVG),
     serviceType: SELF_ISSUED_VTC_SERVICE_TYPE,
     serviceDescription: SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
     serviceMinimumAgeRequired: SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
     serviceTermsAndConditions:
       SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS ??
       DEFAULT_SELF_ISSUED_VTC_RESOURCES.termsAndConditionsUri(publicApiBaseUrl),
+    serviceTermsAndConditionsDigestSri: SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS
+      ? undefined
+      : generateDigestSRI(DEFAULT_TERMS_HTML),
     servicePrivacyPolicy:
       SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY ??
       DEFAULT_SELF_ISSUED_VTC_RESOURCES.privacyPolicyUri(publicApiBaseUrl),
+    servicePrivacyPolicyDigestSri: SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY
+      ? undefined
+      : generateDigestSRI(DEFAULT_PRIVACY_HTML),
     orgRegistryId: SELF_ISSUED_VTC_ORG_REGISTRYID,
     orgRegistryUri: SELF_ISSUED_VTC_ORG_REGISTRYURI,
     orgAddress: SELF_ISSUED_VTC_ORG_ADDRESS,

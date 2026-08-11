@@ -125,6 +125,50 @@ export const DEFAULT_SELF_ISSUED_VTC_RESOURCES = {
   privacyPolicyUri: (baseUrl: string) => `${baseUrl}/vt/default/privacy.html`,
 }
 
+// Content served at the DEFAULT_SELF_ISSUED_VTC_RESOURCES URLs above (by
+// DefaultResourcesController) and hashed for the corresponding *DigestSri
+// self-tr claim (see main.ts). Defined here, once, so both sides use the
+// exact same bytes without the agent having to fetch its own public URL over
+// HTTP to hash content it already has in memory — self-fetching that URL at
+// startup raced the ingress and 503'd intermittently right after a restart.
+// kept in sync with apps/vs-agent-ui/src/assets/logo.svg
+export const DEFAULT_LOGO_SVG = `<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Matches Tailwind's bg-gradient-to-br from #763EF0 to #9F7AEA -->
+    <linearGradient id="veranaHeaderGradient" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#763EF0"/>
+      <stop offset="100%" stop-color="#9F7AEA"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Purple gradient capsule -->
+  <rect x="0" y="0" width="64" height="64" rx="12" fill="url(#veranaHeaderGradient)"/>
+
+  <!-- White Verana mark scaled to the header proportion -->
+  <g transform="translate(32 33) scale(0.76923) translate(-27 -27)" fill="white">
+    <path d="M26.9932 51.6972L5.805 11.0977L2.91263 16.2161L0 10.6048L5.98725 0L26.9932 40.2483L47.9993 0L54 10.6217L51.0773 16.2161L48.1849 11.0977L26.9932 51.6972Z"/>
+    <path d="M13.696 0L26.9935 25.4637L39.9367 0H13.696Z"/>
+  </g>
+</svg>
+`
+
+const defaultResourcePage = (title: string, body: string) => `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>${title}</title></head>
+<body><h1>${title}</h1><p>${body}</p></body>
+</html>
+`
+
+export const DEFAULT_TERMS_HTML = defaultResourcePage(
+  'Terms and Conditions',
+  'This Verifiable Service has not published its own terms and conditions yet.',
+)
+
+export const DEFAULT_PRIVACY_HTML = defaultResourcePage(
+  'Privacy Policy',
+  'This Verifiable Service has not published its own privacy policy yet.',
+)
+
 // Utils params
 export const MASTER_LIST_CSCA_LOCATION = process.env.MASTER_LIST_CSCA_LOCATION
 
