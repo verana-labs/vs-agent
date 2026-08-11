@@ -23,7 +23,7 @@ cd apps/vs-agent
 pnpm test:e2e
 ```
 
-Requires Docker and the `veranalabs/verana-node:v0.10.1-dev.25` and `veranalabs/verana-indexer:dev` images. First run pulls them; the stack starts and stops per run.
+Requires Docker and the `veranalabs/verana-node:v0.10.1` and `veranalabs/verana-indexer:dev` images. First run pulls them; the stack starts and stops per run.
 
 ## Local demo environment
 
@@ -50,27 +50,48 @@ Endpoints once healthy:
 
 ### Seed the chain
 
-The demo chain starts empty apart from the funded `cooluser` account. Once both agents are up, seed the corporation, ecosystem, ECS schemas, root participants, and the validator grant. The seed needs the validator's operator address, which the agent prints at startup:
+The demo chain starts empty apart from the funded `cooluser` account. Once both agents are up, seed the three corporations, the ecosystem, the ECS schemas, the root participants, and the operator grants. Until the seed runs, each agent logs that it cannot resolve its corporation and that it skipped its bootstrap; that is expected.
+
+The seed creates three corporations, and each one holds a single role:
+
+| Corporation | Holds |
+|---|---|
+| Validator | the validator's participants |
+| Ecosystem | the ecosystem, the ECS schemas and the root participants |
+| Applicant | the applicant's participants |
+
+The ecosystem needs a corporation of its own, and no agent operates for it. An agent publishes a VTJSC for every schema its own corporation owns, and such a credential references the schema on chain. Both agents here present self-issued credentials that must reference only their own URLs, so neither may own a schema.
+
+The validator and the applicant also need separate corporations from each other. A participant OP is unique per (schema, role, validator, authority), so one shared corporation makes the applicant's Service onboarding collide with the validator's.
+
+The seed needs both agents' operator addresses, which each agent derives from its mnemonic and prints at startup:
 
 ```bash
 docker logs $(docker compose -f docker-compose.demo.yml ps -q agent-validator) 2>&1 | grep vs_operator
+docker logs $(docker compose -f docker-compose.demo.yml ps -q agent-applicant) 2>&1 | grep vs_operator
 ```
 
-Then run the seed with that address:
+The two agents must use distinct mnemonics, and neither may reuse the `cooluser` mnemonic the seed itself signs with: the seed grants the validator a VSOA on its participant OP and the applicant an OperatorAuthorization, and the chain rejects an account that would end up holding both on one corporation. The defaults in `.env.demo.example` already satisfy this.
+
+Then run the seed with both addresses:
 
 ```bash
 cd apps/vs-agent
-SEED_DEMO=1 DEMO_VALIDATOR_OPERATOR=<validator operator address> \
+SEED_DEMO=1 \
+  DEMO_VALIDATOR_OPERATOR=<validator operator address> \
+  DEMO_APPLICANT_OPERATOR=<applicant operator address> \
   pnpm exec vitest run tests/e2e/demoSeed.e2e.test.ts
 ```
 
-The seed prints the corporation id, ecosystem DID, schema ids, and validator participant id. Put the ecosystem DID in `TRUSTED_ECS_ECOSYSTEM_DIDS` and the corporation id in `APPLICANT_CORPORATION_ID` in `.env`, then restart the applicant:
+The seed prints the three corporation ids, the ecosystem DID, the schema ids, and the validator participant ids. Only `validatorCorporationId` and `applicantCorporationId` go into `.env`; no agent uses the ecosystem corporation. A fresh chain produces the ids that `.env.demo.example` already carries, so confirm them against that output and correct `.env` if they differ. Then restart both agents, because each agent reads the chain only at startup:
 
 ```bash
-docker compose -f docker-compose.demo.yml --env-file .env up -d agent-applicant
+docker compose -f docker-compose.demo.yml --env-file .env restart agent-validator agent-applicant
 ```
 
-Its ECS bootstrap self-onboards and sends the onboarding request to the validator over DIDComm.
+Use `restart` here, not `up -d`. Compose recreates a container only when its configuration changes, and `.env` already holds the seeded values.
+
+The applicant's ECS bootstrap self-onboards and sends the onboarding request to the validator over DIDComm.
 
 ### Drive the flow
 

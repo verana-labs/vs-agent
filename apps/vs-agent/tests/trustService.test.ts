@@ -7,7 +7,6 @@ import {
   type BaseAgentModules,
   type VsAgent,
   migrateVtjscServiceIds,
-  reconcileVtjscPublications,
 } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import request from 'supertest'
