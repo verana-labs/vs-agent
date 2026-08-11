@@ -37,9 +37,6 @@ import {
   type SubjectMessage,
 } from '../helpers'
 
-const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
-const describeE2E = E2E_ENABLED ? describe : describe.skip
-
 const RUN_ID = String(Date.now())
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
 const PP_SESSION = '/verana.pp.v1.MsgCreateOrUpdateParticipantSession'
@@ -64,7 +61,7 @@ async function until<T>(fn: () => Promise<T | undefined>, timeoutMs = 120_000): 
   throw new Error('condition did not resolve in time')
 }
 
-describeE2E('v4 full lifecycle on a live chain and indexer', () => {
+describe('v4 full lifecycle on a live chain and indexer', () => {
   let stack: StartedStack
   let chainA: VeranaTestChain
   let seederChain: VeranaChainService

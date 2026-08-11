@@ -4,7 +4,7 @@ services:
     platform: linux/amd64
     entrypoint: ['/bin/bash', '/init/verana-node-init.sh']
     volumes:
-      - ./docker/verana-node-init.sh:/init/verana-node-init.sh:ro
+      - ./verana-node-init.sh:/init/verana-node-init.sh:ro
       - verana-node-data:/root/.verana
     ports:
       - '26658:26657'
@@ -81,7 +81,7 @@ services:
   caddy:
     image: caddy:2-alpine
     volumes:
-      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
     networks:
       default:
@@ -96,7 +96,7 @@ services:
 
   agent-validator:
     build:
-      context: .
+      context: ../../../..
       dockerfile: apps/vs-agent/Dockerfile
       target: vs-agent
     depends_on:
@@ -130,7 +130,7 @@ services:
 
   agent-applicant:
     build:
-      context: .
+      context: ../../../..
       dockerfile: apps/vs-agent/Dockerfile
       target: vs-agent
     depends_on:

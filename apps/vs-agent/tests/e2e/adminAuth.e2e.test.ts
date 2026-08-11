@@ -26,9 +26,6 @@ import { AdminAuthService, challengePayload } from '../../src/security/AdminAuth
 import { AuthController } from '../../src/security/AuthController'
 import { AccessMode } from '../../src/security/accessMode'
 
-const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
-const describeE2E = E2E_ENABLED ? describe : describe.skip
-
 const RUN_ID = String(Date.now())
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
 const MINIMAL_SCHEMA = JSON.stringify({
@@ -78,7 +75,7 @@ async function authenticate(app: INestApplication, wallet: Secp256k1HdWallet, ac
   return token
 }
 
-describeE2E('admin API auth (V4): ADR-036 challenge to authorized call against a live chain', () => {
+describe('admin API auth (V4): ADR-036 challenge to authorized call against a live chain', () => {
   let stack: StartedStack
   let chainA: VeranaTestChain
   let veranaChain: VeranaChainService
