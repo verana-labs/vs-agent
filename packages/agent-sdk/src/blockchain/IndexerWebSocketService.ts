@@ -30,6 +30,8 @@ const MAX_RECONNECT_DELAY_MS = 300_000
 const WS_PATHNAME = 'v4/indexer/subscribe'
 const REST_PAGE_LIMIT = 500
 const MAX_SYNC_BUFFER = 10_000
+const SUBSCRIBE_TIMEOUT_MS = 5_000
+const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 // The indexer pings every 30 seconds, so a longer gap means the socket is dead.
 const LIVENESS_TIMEOUT_MS = 90_000
 
@@ -43,6 +45,7 @@ export class IndexerWebSocketService {
   private generation = 0
   private chain: Promise<void> = Promise.resolve()
   private syncBuffer: IndexerEventRecord[] = []
+  private subscribeSent: (() => void) | null = null
   private readonly indexer: VeranaIndexerService
   private readonly handlerRegistry: IndexerHandlerRegistry
 
@@ -80,7 +83,12 @@ export class IndexerWebSocketService {
     this.syncing = true
     this.syncBuffer = []
 
+    const subscribed = new Promise<void>(resolve => {
+      this.subscribeSent = resolve
+    })
     this.openWebSocket()
+    await Promise.race([subscribed, delay(SUBSCRIBE_TIMEOUT_MS)])
+    if (this.stopped || generation !== this.generation) return
 
     try {
       await this.syncRest(generation)
@@ -109,6 +117,13 @@ export class IndexerWebSocketService {
     ws.on('open', () => {
       if (ws === this.ws) this.logger.info(`[IndexerWS] Connected to indexer`)
     })
+
+    const releaseSubscribeWait = (): void => {
+      this.subscribeSent?.()
+      this.subscribeSent = null
+    }
+    ws.on('error', releaseSubscribeWait)
+    ws.on('close', releaseSubscribeWait)
 
     ws.on('ping', () => {
       if (ws === this.ws) this.armWatchdog()
@@ -146,7 +161,10 @@ export class IndexerWebSocketService {
         this.options.corporationId != null
           ? { action: 'subscribe', corporationId: this.options.corporationId }
           : { action: 'subscribe', dids: this.options.agent.did ? [this.options.agent.did] : undefined }
-      ws.send(JSON.stringify(subscribe))
+      ws.send(JSON.stringify(subscribe), () => {
+        this.subscribeSent?.()
+        this.subscribeSent = null
+      })
       return
     }
     if (message.type !== 'block') return
