@@ -153,7 +153,7 @@ async function resolveJscVpService(service) {
   }
 }
 
-const TYPE_ORDER = ['ecs-org', 'ecs-persona', 'ecs-service', 'ecs-user-agent']
+const TYPE_ORDER = ['ecs-org', 'ecs-persona', 'ecs-service', 'ecs-user-agent', 'ecs-badge']
 function typeRank(type) {
   const i = TYPE_ORDER.indexOf(type)
   return i === -1 ? Infinity : i

@@ -29,8 +29,9 @@ const { FakeWebSocket } = vi.hoisted(() => {
     emit(event: string, ...args: unknown[]): void {
       ;(this.listeners[event] ?? []).forEach(cb => cb(...args))
     }
-    send(data: string): void {
+    send(data: string, cb?: () => void): void {
       this.sent.push(data)
+      cb?.()
     }
     close(): void {
       this.emit('close')
@@ -139,7 +140,9 @@ describe('IndexerWebSocketService', () => {
       agent,
       handlerRegistry: registry,
     })
-    return service.start()
+    const started = service.start()
+    FakeWebSocket.instances.at(-1)?.emit('message', readyFrame())
+    return started
   }
 
   const lastWs = (): InstanceType<typeof FakeWebSocket> => FakeWebSocket.instances.at(-1)!
@@ -151,6 +154,23 @@ describe('IndexerWebSocketService', () => {
     expect(subscribe).toContainEqual({ action: 'subscribe', dids: ['did:web:agent.test'] })
   })
 
+  it('waits for subscribe to be sent before reading old events', async () => {
+    service = new IndexerWebSocketService({
+      indexerUrl: 'http://indexer.test',
+      agent,
+      handlerRegistry: registry,
+    })
+    const started = service.start()
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(fetchJsonMock).not.toHaveBeenCalled()
+
+    lastWs().emit('message', readyFrame())
+    await started
+
+    expect(fetchJsonMock).toHaveBeenCalled()
+  })
+
   it('sends a corp-scoped subscribe and catch-up when corporationId is set', async () => {
     registry.register({ msg: 'TestMsg', handle: async () => undefined })
     service = new IndexerWebSocketService({
@@ -159,7 +179,9 @@ describe('IndexerWebSocketService', () => {
       handlerRegistry: registry,
       corporationId: 42,
     })
-    await service.start()
+    const corpStarted = service.start()
+    lastWs().emit('message', readyFrame())
+    await corpStarted
 
     const catchupUrl = fetchJsonMock.mock.calls.at(0)?.[0] as string
     expect(catchupUrl).toContain('corporation_id=42')
@@ -352,9 +374,10 @@ describe('IndexerWebSocketService', () => {
       agent,
       handlerRegistry: registry,
     })
-    await session1.start()
+    const s1 = session1.start()
+    lastWs().emit('message', readyFrame())
+    await s1
     const ws1 = lastWs()
-    ws1.emit('message', readyFrame())
     ws1.emit('message', blockFrame(50, [tail]))
     await vi.waitFor(() => expect(dispatched).toEqual(['A']))
     session1.stop()
@@ -372,7 +395,9 @@ describe('IndexerWebSocketService', () => {
       agent,
       handlerRegistry: registry2,
     })
-    await session2.start()
+    const s2 = session2.start()
+    lastWs().emit('message', readyFrame())
+    await s2
     session2.stop()
 
     expect(dispatched).toEqual(['A'])
