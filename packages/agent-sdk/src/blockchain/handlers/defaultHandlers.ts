@@ -54,7 +54,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
       ctx.agent.config.logger.info(
         `[IndexerWS] CreateNewCredentialSchema entity=${activity.entity_id} block=${ctx.blockHeight}`,
       )
-      await publishVtjscIfOwner(ctx.state, ctx.agent, String(activity.entity_id))
+      await publishVtjscIfOwner(ctx.state, ctx.agent, String(activity.entity_id), ctx.agentCorporationId)
     },
   },
   {

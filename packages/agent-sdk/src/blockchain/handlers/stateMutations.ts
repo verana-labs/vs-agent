@@ -391,15 +391,25 @@ export async function publishVtjscIfOwner(
   state: VeranaSyncState,
   agent: VsAgent,
   schemaEntityId: string,
+  agentCorporationId?: number,
 ): Promise<void> {
   const schema = state.credentialSchemas[schemaEntityId]
   if (!schema) {
     agent.config.logger.warn(`[VTJSC] Schema ${schemaEntityId} not found in state`)
+    return
   }
 
   const ecosystem = state.ecosystems[String(schema.ecosystemId)]
   if (!ecosystem) {
     agent.config.logger.warn(`[VTJSC] Ecosystem ${schema.ecosystemId} not found in state`)
+    return
+  }
+
+  if (ecosystem.corporationId !== agentCorporationId) {
+    agent.config.logger.debug(
+      `[VTJSC] Skipping schema ${schema.id}: ecosystem ${ecosystem.id} belongs to corporation ${ecosystem.corporationId}`,
+    )
+    return
   }
 
   const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
