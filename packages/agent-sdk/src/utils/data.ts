@@ -261,5 +261,69 @@ export function getEcsSchemas(publicApiBaseUrl: string): Record<string, string> 
   "title": "UserAgentCredential",
   "type": "object"
 }`,
+    'ecs-badge': `{
+  "$id": "${publicApiBaseUrl}/vt/cs/v1/js/ecs-badge",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Identifies a human, such as an employee or member of the organization that operates a Verifiable Service. The issuer identifies the organization or persona the holder represents.",
+  "properties": {
+    "credentialSubject": {
+      "dependentRequired": {
+        "biometricPattern": [
+          "biometricPatternScheme"
+        ]
+      },
+      "properties": {
+        "badgeNumber": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "biometricPattern": {
+          "contentEncoding": "base64",
+          "maxLength": 262144,
+          "type": "string"
+        },
+        "biometricPatternScheme": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "birthDate": {
+          "maximum": 99991231,
+          "minimum": 10000101,
+          "type": "integer"
+        },
+        "department": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "photo": {
+          "maxLength": 262144,
+          "pattern": "^data:image/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "badgeNumber",
+        "name",
+        "photo"
+      ],
+      "type": "object"
+    }
+  },
+  "title": "BadgeCredential",
+  "type": "object"
+}`,
   }
 }

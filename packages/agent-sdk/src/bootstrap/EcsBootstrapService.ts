@@ -30,6 +30,7 @@ const ECS_TITLE_BY_TYPE: Record<string, ECS> = {
   OrganizationCredential: ECS.ORG,
   PersonaCredential: ECS.PERSONA,
   UserAgentCredential: ECS.USER_AGENT,
+  BadgeCredential: ECS.BADGE,
 }
 
 const DELEGATED_OUTCOME_TIMEOUT_MS = 15 * 60_000

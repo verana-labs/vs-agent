@@ -1,5 +1,5 @@
-import { Controller, Get, Param, Query, HttpException, HttpStatus, Logger, Inject } from '@nestjs/common'
-import { ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { Controller, Get, Param, HttpException, HttpStatus, Logger, Inject } from '@nestjs/common'
+import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { getEcsSchemas } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
@@ -46,38 +46,10 @@ export class SelfTrController {
   @ApiParam({ name: 'schemaId', required: true, description: 'Schema identifier', example: 'ecs-org' })
   @ApiResponse({ status: 200, description: 'JSON schema returned' })
   async getSchema(@Param('schemaId') schemaId: string) {
-    try {
-      if (!schemaId) {
-        throw new HttpException('Schema not found', HttpStatus.NOT_FOUND)
-      }
-      return this.ecsSchemas[schemaId]
-    } catch (error) {
-      this.logger.error(`Error loading schema file: ${error.message}`)
-      throw new HttpException('Failed to load schema', HttpStatus.INTERNAL_SERVER_ERROR)
+    const schema = this.ecsSchemas[schemaId]
+    if (!schema) {
+      throw new HttpException('Schema not found', HttpStatus.NOT_FOUND)
     }
-  }
-
-  @Get('perm/v1/list')
-  @ApiOperation({ summary: 'Get permissions by DID and type' })
-  @ApiQuery({ name: 'did', required: true, description: 'DID to query' })
-  @ApiQuery({ name: 'type', required: true, description: 'Permission type' })
-  @ApiQuery({ name: 'response_max_size', required: false })
-  @ApiQuery({ name: 'schema_id', required: false })
-  @ApiResponse({ status: 200, description: 'Permission list returned' })
-  findWithDid(@Query('did') did: string, @Query('type') type: string) {
-    try {
-      if (!did || type !== 'ISSUER') return { permissions: [] }
-      return {
-        permissions: [
-          {
-            type: 'ISSUER',
-            did,
-            created: '2000-11-18T15:26:01.487Z',
-          },
-        ],
-      }
-    } catch {
-      return { permissions: [] }
-    }
+    return schema
   }
 }
