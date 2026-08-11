@@ -86,6 +86,8 @@ This can be used regardless the software stack you use in your backend. See [VS 
 
 See [examples](./examples) for fully working demos that can be run locally using Docker.
 
+For the full v4 trust flow (chain, indexer and two agents onboarding each other over DIDComm), see [examples/vt-flow-demo](./examples/vt-flow-demo/README.md).
+
 ---
 
 ## Contributing

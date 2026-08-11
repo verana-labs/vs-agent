@@ -1,0 +1,20 @@
+{
+  "name": "vt-flow-demo",
+  "private": true,
+  "version": "1.12.0",
+  "description": "Local v4 lifecycle demo environment: chain, indexer and two VS Agents",
+  "scripts": {
+    "seed": "ts-node scripts/seed.ts"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^18.19.130",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.2"
+  },
+  "dependencies": {
+    "@credo-ts/core": "0.7.1-pr-2704-20260630143332",
+    "@verana-labs/vs-agent-sdk": "workspace:*"
+  },
+  "packageManager": "pnpm@9.15.3"
+}

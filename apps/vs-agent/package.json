@@ -53,8 +53,7 @@
     "start:prod": "node build/src/main",
     "version": "pnpm version --allow-same-version",
     "test": "vitest",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "demo:seed": "ts-node examples/vt-flow-demo/seed.ts"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "@credo-ts/anoncreds": "0.7.1-pr-2704-20260630143332",

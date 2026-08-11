@@ -4,8 +4,8 @@ import { getEcsSchemas, VeranaChainService } from '@verana-labs/vs-agent-sdk'
 import {
   PARTICIPANT_ROLE_ISSUER,
   VeranaTestChain,
-} from '../../../../packages/agent-sdk/tests/e2e/VeranaTestChain'
-import { COOLUSER_MNEMONIC } from '../../../../packages/agent-sdk/tests/e2e/helpers'
+} from '../../../packages/agent-sdk/tests/e2e/VeranaTestChain'
+import { COOLUSER_MNEMONIC } from '../../../packages/agent-sdk/tests/e2e/helpers'
 
 const RPC_URL = process.env.DEMO_RPC_URL ?? 'http://localhost:26658'
 const VALIDATOR_PUBLIC_URL = process.env.DEMO_VALIDATOR_URL ?? 'http://localhost:4001'

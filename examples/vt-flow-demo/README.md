@@ -1,4 +1,4 @@
-# v4 lifecycle: e2e test and local demo
+# vt-flow demo: local v4 lifecycle environment
 
 Two ways to exercise the full v4 flow against a real chain and indexer: an automated test for CI and regression, and a local demo environment for hands-on exploration.
 
@@ -32,12 +32,12 @@ Runs the same stack for manual use: verana chain, indexer, and two VS Agents (a 
 ### Start
 
 ```bash
-cd apps/vs-agent/examples/vt-flow-demo
+cd examples/vt-flow-demo
 cp .env.example .env
-docker compose --env-file .env up --build -d
+docker compose -f docker/docker-compose.yml --env-file .env up --build -d
 ```
 
-All the demo commands below run from `apps/vs-agent/examples/vt-flow-demo`.
+All the demo commands below run from `examples/vt-flow-demo`.
 
 Endpoints once healthy:
 
@@ -70,8 +70,8 @@ The validator and the applicant also need separate corporations from each other.
 The seed needs both agents' operator addresses, which each agent derives from its mnemonic and prints at startup:
 
 ```bash
-docker logs $(docker compose ps -q agent-validator) 2>&1 | grep vs_operator
-docker logs $(docker compose ps -q agent-applicant) 2>&1 | grep vs_operator
+docker logs $(docker compose -f docker/docker-compose.yml ps -q agent-validator) 2>&1 | grep vs_operator
+docker logs $(docker compose -f docker/docker-compose.yml ps -q agent-applicant) 2>&1 | grep vs_operator
 ```
 
 The two agents must use distinct mnemonics, and neither may reuse the `cooluser` mnemonic the seed itself signs with: the seed grants the validator a VSOA on its participant OP and the applicant an OperatorAuthorization, and the chain rejects an account that would end up holding both on one corporation. The defaults in `.env.example` already satisfy this.
@@ -79,16 +79,15 @@ The two agents must use distinct mnemonics, and neither may reuse the `cooluser`
 Then run the seed with both addresses:
 
 ```bash
-cd apps/vs-agent
 DEMO_VALIDATOR_OPERATOR=<validator operator address> \
   DEMO_APPLICANT_OPERATOR=<applicant operator address> \
-  pnpm demo:seed
+  pnpm seed
 ```
 
 The seed prints the three corporation ids, the ecosystem DID, the schema ids, and the validator participant ids. Only `validatorCorporationId` and `applicantCorporationId` go into `.env`; no agent uses the ecosystem corporation. A fresh chain produces the ids that `.env.example` already carries, so confirm them against that output and correct `.env` if they differ. Then restart both agents, because each agent reads the chain only at startup:
 
 ```bash
-docker compose --env-file .env restart agent-validator agent-applicant
+docker compose -f docker/docker-compose.yml --env-file .env restart agent-validator agent-applicant
 ```
 
 Use `restart` here, not `up -d`. Compose recreates a container only when its configuration changes, and `.env` already holds the seeded values.
@@ -103,4 +102,4 @@ Use each agent's Swagger (`/api` on the admin port). The flow surface is under `
 
 A Caddy container with an internal CA terminates TLS for `agent-validator.demo` and `agent-applicant.demo` (network aliases on the compose network). Each agent boots with a real `did:webvh` DID on its hostname and trusts the CA via `NODE_EXTRA_CA_CERTS`, so the containers resolve each other's DID documents over HTTPS and DIDComm works container-to-container. The hostnames only resolve inside the compose network; from the host, use the mapped ports above.
 
-Wallets persist in named volumes (`agent-validator-data`, `agent-applicant-data`), so DIDs and credentials survive container recreation. Run `docker compose down -v` to reset everything.
+Wallets persist in named volumes (`agent-validator-data`, `agent-applicant-data`), so DIDs and credentials survive container recreation. Run `docker compose -f docker/docker-compose.yml down -v` to reset everything.

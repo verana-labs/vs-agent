@@ -4,7 +4,7 @@ services:
     platform: linux/amd64
     entrypoint: ['/bin/bash', '/init/verana-node-init.sh']
     volumes:
-      - ./verana-node-init.sh:/init/verana-node-init.sh:ro
+      - ../scripts/verana-node-init.sh:/init/verana-node-init.sh:ro
       - verana-node-data:/root/.verana
     ports:
       - '26658:26657'
@@ -96,7 +96,7 @@ services:
 
   agent-validator:
     build:
-      context: ../../../..
+      context: ../../..
       dockerfile: apps/vs-agent/Dockerfile
       target: vs-agent
     depends_on:
@@ -130,7 +130,7 @@ services:
 
   agent-applicant:
     build:
-      context: ../../../..
+      context: ../../..
       dockerfile: apps/vs-agent/Dockerfile
       target: vs-agent
     depends_on:
