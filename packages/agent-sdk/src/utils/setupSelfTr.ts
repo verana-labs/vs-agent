@@ -332,7 +332,8 @@ export async function generateVerifiablePresentation(
   const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
   const record = didRecord.metadata.get('_vt/vtc') ?? {}
   const metadata = record[credentialSchema.id]
-  if (metadata?.integrityData === integrityData && metadata.attached) return metadata.verifiablePresentation
+  const attached = metadata?.attached ?? true
+  if (metadata?.integrityData === integrityData) return metadata.verifiablePresentation
 
   const presentation = createPresentation({
     id,
@@ -351,19 +352,20 @@ export async function generateVerifiablePresentation(
     presentation,
   )
   // Update linked VP when the presentation has changed
-  didDocument.service = didDocument.service?.map(s => {
-    if (typeof s.serviceEndpoint !== 'string') return s
-    if (s.serviceEndpoint.includes(schemaKey) && s.id !== `${agent.did}#whois`) {
-      s.id = didDocumentServiceId
-      s.serviceEndpoint = id
-    }
-    return s
-  })
+  if (attached)
+    didDocument.service = didDocument.service?.map(s => {
+      if (typeof s.serviceEndpoint !== 'string') return s
+      if (s.serviceEndpoint.includes(schemaKey) && s.id !== `${agent.did}#whois`) {
+        s.id = didDocumentServiceId
+        s.serviceEndpoint = id
+      }
+      return s
+    })
   // Resolvers only discover the credential through the [VT-CRED-W3C-LINKED-VP] fragment, and
   // #whois does not match it. The rename above only covers documents that already carry the
   // service, so publish it here when nothing declared it yet.
   let didDocumentChanged = false
-  if (!didDocument.service?.some(s => s.id === didDocumentServiceId)) {
+  if (attached && !didDocument.service?.some(s => s.id === didDocumentServiceId)) {
     didDocument.service = [
       ...(didDocument.service ?? []),
       new DidDocumentService({
@@ -380,7 +382,7 @@ export async function generateVerifiablePresentation(
     verifiablePresentation,
     didDocumentServiceId,
     integrityData,
-    attached: true,
+    attached,
   }
   didRecord.metadata.set('_vt/vtc', record)
   await agent.context.dependencyManager.resolve(DidRepository).update(agent.context, didRecord)

@@ -112,8 +112,9 @@ export async function saveMetadataEntry(
   if (service && verifiablePresentation.id?.includes('service'))
     service.serviceEndpoint = verifiablePresentation.id!
 
-  // When a new VTC has been added, remove the self VTCs
-  updateVtcEntries(didRecord, false, publicApiBaseUrl)
+  // A JSON schema credential says nothing about this agent's own ECS identity, so only a real
+  // trust credential replaces the self-issued ones.
+  if (key === '_vt/vtc') updateVtcEntries(didRecord, false, publicApiBaseUrl)
   await updateDidRecord(agent, didRecord)
 }
 
