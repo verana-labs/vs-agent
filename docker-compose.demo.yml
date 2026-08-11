@@ -1,6 +1,6 @@
 services:
   verana-node:
-    image: ${VERANA_NODE_IMAGE:-veranalabs/verana-node:v0.10.1-dev.25}
+    image: ${VERANA_NODE_IMAGE:-veranalabs/verana-node:v0.10.1}
     platform: linux/amd64
     entrypoint: ['/bin/bash', '/init/verana-node-init.sh']
     volumes:
@@ -51,7 +51,7 @@ services:
       NODE_ENV: production
       SERVICEDIR: dist/src/services
       SERVICES: '**/*.service.js'
-      CHAIN_ID: vna-testnet-1
+      CHAIN_ID: vna-demo-1
       RPC_ENDPOINT: http://verana-node:26657/
       LCD_ENDPOINT: http://verana-node:1317
       POSTGRES_HOST: postgres
@@ -66,6 +66,17 @@ services:
       - caddy-data:/caddy:ro
     ports:
       - '3011:3001'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://localhost:3001/', r => process.exit(0)).on('error', () => process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 40
 
   caddy:
     image: caddy:2-alpine
@@ -90,7 +101,7 @@ services:
       target: vs-agent
     depends_on:
       indexer:
-        condition: service_started
+        condition: service_healthy
       caddy:
         condition: service_healthy
     volumes:
@@ -108,7 +119,7 @@ services:
       ADMIN_API_AUTH_MODE: internal
       AGENT_MODE: standalone
       VERANA_RPC_ENDPOINT_URL: http://verana-node:26657
-      VERANA_CHAIN_ID: vna-testnet-1
+      VERANA_CHAIN_ID: vna-demo-1
       VERANA_INDEXER_BASE_URL: http://indexer:3001
       VERANA_ACCOUNT_MNEMONIC: ${VALIDATOR_MNEMONIC:?set VALIDATOR_MNEMONIC in .env}
       VERANA_CORPORATION_ID: ${VALIDATOR_CORPORATION_ID:-}
@@ -124,7 +135,7 @@ services:
       target: vs-agent
     depends_on:
       indexer:
-        condition: service_started
+        condition: service_healthy
       caddy:
         condition: service_healthy
     volumes:
@@ -142,7 +153,7 @@ services:
       ADMIN_API_AUTH_MODE: internal
       AGENT_MODE: standalone
       VERANA_RPC_ENDPOINT_URL: http://verana-node:26657
-      VERANA_CHAIN_ID: vna-testnet-1
+      VERANA_CHAIN_ID: vna-demo-1
       VERANA_INDEXER_BASE_URL: http://indexer:3001
       VERANA_ACCOUNT_MNEMONIC: ${APPLICANT_MNEMONIC:?set APPLICANT_MNEMONIC in .env}
       VERANA_CORPORATION_ID: ${APPLICANT_CORPORATION_ID:-}

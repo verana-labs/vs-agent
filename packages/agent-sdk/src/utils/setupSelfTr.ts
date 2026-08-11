@@ -2,6 +2,7 @@ import {
   W3cCredential,
   W3cPresentation,
   W3cCredentialSchema,
+  DidDocumentService,
   DidRepository,
   ClaimFormat,
   W3cCredentialSubject,
@@ -355,6 +356,21 @@ export async function generateVerifiablePresentation(
     }
     return s
   })
+  // Resolvers only discover the credential through the [VT-CRED-W3C-LINKED-VP] fragment, and
+  // #whois does not match it. The rename above only covers documents that already carry the
+  // service, so publish it here when nothing declared it yet.
+  let didDocumentChanged = false
+  if (!didDocument.service?.some(s => s.id === didDocumentServiceId)) {
+    didDocument.service = [
+      ...(didDocument.service ?? []),
+      new DidDocumentService({
+        id: didDocumentServiceId,
+        serviceEndpoint: id,
+        type: 'LinkedVerifiablePresentation',
+      }),
+    ]
+    didDocumentChanged = true
+  }
   const credential = verifiablePresentation.verifiableCredential[0]
   record[credentialSchema.id] = {
     credential,
@@ -365,6 +381,9 @@ export async function generateVerifiablePresentation(
   }
   didRecord.metadata.set('_vt/vtc', record)
   await agent.context.dependencyManager.resolve(DidRepository).update(agent.context, didRecord)
+  if (didDocumentChanged) {
+    await agent.dids.update({ did: didRecord.did, didDocument })
+  }
   return verifiablePresentation
 }
 

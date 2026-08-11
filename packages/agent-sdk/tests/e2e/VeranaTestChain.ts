@@ -162,14 +162,18 @@ export class VeranaTestChain {
     )
   }
 
-  async grantOperatorAuthorization(policyAddress: string, grantee = this.address): Promise<void> {
+  async grantOperatorAuthorization(
+    policyAddress: string,
+    grantee = this.address,
+    msgTypes = OPERATOR_GRANT_MSG_TYPES,
+  ): Promise<void> {
     const grant = {
       typeUrl: veranaTypeUrls.MsgGrantOperatorAuthorization,
       value: MsgGrantOperatorAuthorization.fromPartial({
         corporation: policyAddress,
         operator: policyAddress,
-        grantee: this.address,
-        msgTypes: OPERATOR_GRANT_MSG_TYPES,
+        grantee,
+        msgTypes,
       }),
     }
 

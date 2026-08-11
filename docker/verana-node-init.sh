@@ -3,7 +3,7 @@ set -e
 HOME_DIR=/root/.verana
 GENESIS=$HOME_DIR/config/genesis.json
 SENTINEL=$HOME_DIR/.init-complete
-CHAIN_ID=vna-testnet-1
+CHAIN_ID=vna-demo-1
 MONIKER=validator1
 KEY=cooluser
 MNEMONIC="pink glory help gown abstract eight nice crazy forward ketchup skill cheese"
