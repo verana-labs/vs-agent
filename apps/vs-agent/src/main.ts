@@ -419,7 +419,7 @@ const run = async () => {
     )
   }
 
-  // Initialize Self-Trust Registry  
+  // Initialize Self-Trust Registry
   const selfTrDefaults = {
     agentLabel: AGENT_LABEL,
     serviceLogoUri:

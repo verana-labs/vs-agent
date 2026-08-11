@@ -430,7 +430,9 @@ export async function getClaims(
           description: claims?.description ?? defaults.serviceDescription,
           logoUri,
           logoDigestSri:
-            (claims?.logoDigestSri as string) ?? defaults.serviceLogoDigestSri ?? (await urlDigestSri(logoUri)),
+            (claims?.logoDigestSri as string) ??
+            defaults.serviceLogoDigestSri ??
+            (await urlDigestSri(logoUri)),
           minimumAgeRequired: claims?.minimumAgeRequired ?? defaults.serviceMinimumAgeRequired,
           termsAndConditionsUri,
           termsAndConditionsDigestSri:
@@ -447,7 +449,9 @@ export async function getClaims(
           name: claims?.name ?? defaults.agentLabel,
           logoUri,
           logoDigestSri:
-            (claims?.logoDigestSri as string) ?? defaults.serviceLogoDigestSri ?? (await urlDigestSri(logoUri)),
+            (claims?.logoDigestSri as string) ??
+            defaults.serviceLogoDigestSri ??
+            (await urlDigestSri(logoUri)),
           registryId: claims?.registryId ?? defaults.orgRegistryId,
           registryUri: claims?.registryUri ?? defaults.orgRegistryUri,
           address: claims?.address ?? defaults.orgAddress,
