@@ -486,6 +486,7 @@ const run = async () => {
         agent,
         handlerRegistry,
         corporationId: indexerCorporationId,
+        agentCorporationId: Number(VERANA_CORPORATION_ID),
       })
       await indexerWs.start()
     } else {

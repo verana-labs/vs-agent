@@ -72,8 +72,24 @@ export class TrustController {
       'The response includes either the JSON-LD W3C Credential contents, directly to transmit to the recipient, or the DIDComm Invitation and Credential Exchange ID associated in case of AnonCreds for further tracking through events interface.',
   })
   async issueCredential(@Body() body: IssueCredentialRequestDto) {
-    const { format, did, jsonSchemaCredentialId, claims } = body
-    return await this.trustService.issueCredential({ format, jsonSchemaCredentialId, claims, did })
+    const {
+      format,
+      did,
+      jsonSchemaCredentialId,
+      claims,
+      participantSessionId,
+      agentParticipantId,
+      walletAgentParticipantId,
+    } = body
+    return await this.trustService.issueCredential({
+      format,
+      jsonSchemaCredentialId,
+      claims,
+      did,
+      participantSessionId,
+      agentParticipantId,
+      walletAgentParticipantId,
+    })
   }
 
   @Post('revoke-credential')

@@ -174,6 +174,14 @@ export class EcsBootstrapService {
     schema: CredentialSchemaDto,
     credentialType: ECS,
   ): Promise<void> {
+    // If this agent controls the schema's ECOSYSTEM root, it has no external ISSUER to seek a
+    // HOLDER credential from — it must become the ISSUER itself (see ensureSelfIssuedParticipant).
+    const ownRoot = await this.findOwnActiveRoot(indexer, schema.id)
+    if (ownRoot) {
+      await this.ensureSelfIssuedParticipant(chain, indexer, schema, credentialType, ownRoot)
+      return
+    }
+
     const existing = await indexer.listParticipants({
       schemaId: schema.id,
       did: this.agent.did,
@@ -204,6 +212,59 @@ export class EcsBootstrapService {
     )
   }
 
+  // Unlike findActiveValidator, this does not exclude the agent's own DID.
+  private async findOwnActiveRoot(
+    indexer: VeranaIndexerService,
+    schemaId: number,
+  ): Promise<ParticipantDto | undefined> {
+    if (!this.agent.did) return undefined
+    const candidates = await indexer.listParticipants({
+      schemaId,
+      role: ParticipantRole.Ecosystem,
+      did: this.agent.did,
+      participantState: ParticipantState.Active,
+    })
+    return candidates.find(p => !p.revoked && !p.slashed && p.did === this.agent.did)
+  }
+
+  // Self-validation is spec-legal: [MOD-PP-MSG-3-2-1] checks only the validator side, and
+  // [MOD-PP-MSG-1-1] grants an ECOSYSTEM root's own operator the right to validate against it.
+  private async ensureSelfIssuedParticipant(
+    chain: VeranaChainService,
+    indexer: VeranaIndexerService,
+    schema: CredentialSchemaDto,
+    credentialType: ECS,
+    root: ParticipantDto,
+  ): Promise<void> {
+    const existing = await indexer.listParticipants({
+      schemaId: schema.id,
+      did: this.agent.did,
+      role: ParticipantRole.Issuer,
+    })
+    const usable = existing.find(p => this.isUsableParticipant(p))
+    if (usable) {
+      this.logger.info(
+        `[EcsBootstrap] reusing self-issued ISSUER participant ${usable.id} for the ECS ${credentialType} schema`,
+      )
+      return
+    }
+
+    const { participantId } = await chain.startParticipantOP({
+      role: ISSUER_PARTICIPANT_TYPE,
+      validatorParticipantId: root.id,
+      did: this.agent.did!,
+    })
+    await chain.setParticipantOPToValidated({
+      id: participantId,
+      validationFees: 0,
+      issuanceFees: 0,
+      verificationFees: 0,
+    })
+    this.logger.info(
+      `[EcsBootstrap] self-issued ISSUER participant ${participantId} for the ECS ${credentialType} schema (ecosystem root ${root.id})`,
+    )
+  }
+
   private async ensureServiceIssuer(
     chain: VeranaChainService,
     indexer: VeranaIndexerService,
@@ -230,7 +291,9 @@ export class EcsBootstrapService {
           `operator ${chain.address} has no OperatorAuthorization covering MsgSelfCreateParticipant (required for OPEN issuer onboarding)`,
         )
       }
-      const root = await this.findActiveValidator(indexer, schema.id, ParticipantRole.Ecosystem)
+      const root =
+        (await this.findOwnActiveRoot(indexer, schema.id)) ??
+        (await this.findActiveValidator(indexer, schema.id, ParticipantRole.Ecosystem))
       if (!root) throw new Error(`no active ECOSYSTEM participant found for Service schema ${schema.id}`)
       const { participantId } = await chain.selfCreateParticipant({
         role: ISSUER_PARTICIPANT_TYPE,

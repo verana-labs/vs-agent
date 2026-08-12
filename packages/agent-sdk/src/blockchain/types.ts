@@ -247,6 +247,7 @@ export interface CredentialSchema {
   id: number
   ecosystemId: number
   jsonSchema: string
+  digestAlgorithm: string
   issuerOnboardingMode: number
   verifierOnboardingMode: number
   holderOnboardingMode: number

@@ -176,7 +176,13 @@ export const jsonSchemaV2Mock = {
   type: 'object',
 }
 
+export const jsonSchemaCredentialVprMock = JSON.parse(
+  '{"@context": ["https://www.w3.org/2018/credentials/v1", "https://www.w3.org/2018/credentials/examples/v1"], "id": "https://example.org/vt/schemas-vpr-org-jsc.json", "type": ["VerifiableCredential", "JsonSchemaCredential"], "issuer": "did:webvh:QmZq5CvJVgNk6k2gzze6A7z7PNrpYdpPxjeWD6rFxjfdzY:dm.chatbot.demos.dev.2060.io", "issuanceDate": "2025-11-05T20:52:22.688Z", "expirationDate": "2035-11-03T20:52:22.688Z", "credentialSubject": {"type": "JsonSchema", "jsonSchema": {"$ref": "vpr:verana:vna-test-1:cs:7"}, "digestSRI": "sha256-ttE9qtGhU8GrPI33/6Y0sc0AT5XEaBLo0O4z9AMeTBM=", "id": "vpr:verana:vna-test-1:cs:7"}, "credentialSchema": {"id": "https://www.w3.org/ns/credentials/json-schema/v2.json", "type": "JsonSchema", "digestSRI": "sha256-qm/TCo3y3vnDW3lvcF42wTannkJbyU+uUxWHyl23NKM="}, "proof": {"verificationMethod": "did:webvh:QmZq5CvJVgNk6k2gzze6A7z7PNrpYdpPxjeWD6rFxjfdzY:dm.chatbot.demos.dev.2060.io#z6MkukriSiZbUxTaiPMPQz6Lu6vEL6vB9vjwfRi4gjFLCx18", "type": "Ed25519Signature2020", "created": "2025-11-05T20:52:22Z", "proofPurpose": "assertionMethod", "proofValue": "zDAvpiww2mMp9XaUcWqpmjwEAds3KqauKE3oMVMnZfSWMfYb5vUwon8FfM4twZ6x5Hvcbga7U56HkHzp14GX46J4"}}',
+)
+
 export const mockResponses: { [key: string]: any } = {
+  'https://example.org/vt/schemas-vpr-org-jsc.json': jsonSchemaCredentialVprMock,
+  'vpr:verana:vna-test-1:cs:7': jsonSchemaOrgMock,
   'https://example.org/vt/schemas-example-org-jsc.json': jsonSchemaCredentialMock,
   'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-org': jsonSchemaOrgMock,
   'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-service': jsonSchemaServiceMock,
