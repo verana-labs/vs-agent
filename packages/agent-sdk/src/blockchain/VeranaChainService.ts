@@ -202,7 +202,6 @@ export class VeranaChainService {
       id: s.id,
       ecosystemId: s.ecosystemId,
       jsonSchema: s.jsonSchema,
-      digestAlgorithm: s.digestAlgorithm,
       issuerOnboardingMode: s.issuerOnboardingMode,
       verifierOnboardingMode: s.verifierOnboardingMode,
       holderOnboardingMode: s.holderOnboardingMode,
