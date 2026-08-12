@@ -87,6 +87,13 @@ export class VeranaChainService {
   private chainId!: string
   private corporationAddress!: string
 
+  // Second, optional signing identity used only for MsgCreateOrUpdateParticipantSession (CSPS).
+  // A corporation account can never hold both a blanket OperatorAuthorization and a
+  // VSOperatorAuthorization, so real credential delivery needs a distinct signer from
+  // `operatorAddress`/`signingClient` — see VeranaChainConfig.vsOperatorMnemonic.
+  private vsOperatorAddress?: string
+  private vsOperatorSigningClient?: SigningStargateClient
+
   private ppQuery!: ParticipantQueryClient
   private deQuery!: DelegationQueryClient
   private ecQuery!: EcosystemQueryClient
@@ -97,6 +104,10 @@ export class VeranaChainService {
 
   get address(): string {
     return this.operatorAddress
+  }
+
+  get vsOperator(): string | undefined {
+    return this.vsOperatorAddress
   }
 
   get getChainId(): string {
@@ -121,14 +132,17 @@ export class VeranaChainService {
     this.operatorAddress = account.address
     this.corporationAddress = this.config.corporationAddress ?? account.address
     logger.info(
-      `[VeranaChain] vs_operator address: ${this.operatorAddress} (fund this address with VNA to enable on-chain operations)`,
+      `[VeranaChain] operator address: ${this.operatorAddress} (fund this address with VNA to enable on-chain operations)`,
     )
 
     const cometClient = await connectComet(rpcUrl)
+    const registry = createVeranaRegistry()
+    const aminoTypes = createVeranaAminoTypes()
+    const resolvedGasPrice = GasPrice.fromString(gasPrice ?? '1uvna')
     this.signingClient = await SigningStargateClient.createWithSigner(cometClient, wallet, {
-      registry: createVeranaRegistry(),
-      aminoTypes: createVeranaAminoTypes(),
-      gasPrice: GasPrice.fromString(gasPrice ?? '1uvna'),
+      registry,
+      aminoTypes,
+      gasPrice: resolvedGasPrice,
     })
 
     this.chainId = await this.signingClient.getChainId()
@@ -136,6 +150,22 @@ export class VeranaChainService {
       throw new Error(`[VeranaChain] Chain ID mismatch: expected "${chainId}", got "${this.chainId}"`)
     }
     logger.info(`[VeranaChain] Connected to chain: ${this.chainId}`)
+
+    if (this.config.vsOperatorMnemonic) {
+      const vsOperatorWallet = await DirectSecp256k1HdWallet.fromMnemonic(this.config.vsOperatorMnemonic, {
+        prefix: VERANA_BECH32_PREFIX,
+      })
+      const [vsOperatorAccount] = await vsOperatorWallet.getAccounts()
+      this.vsOperatorAddress = vsOperatorAccount.address
+      this.vsOperatorSigningClient = await SigningStargateClient.createWithSigner(
+        cometClient,
+        vsOperatorWallet,
+        { registry, aminoTypes, gasPrice: resolvedGasPrice },
+      )
+      logger.info(
+        `[VeranaChain] vs_operator (CSPS) address: ${this.vsOperatorAddress} (fund this address with VNA to enable on-chain operations)`,
+      )
+    }
 
     const queryClient = new QueryClient(cometClient)
     const rpc = createProtobufRpcClient(queryClient)
@@ -245,6 +275,7 @@ export class VeranaChainService {
       verificationFees: params.verificationFees,
       vsOperator: params.vsOperator ?? '',
       vsOperatorAuthzMsgTypes: params.vsOperatorAuthzMsgTypes ?? [],
+      vsOperatorAuthzWithFeegrant: params.vsOperatorAuthzWithFeegrant ?? false,
     })
     const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgStartParticipantOP, value })
     const participantId = Number(
@@ -331,9 +362,15 @@ export class VeranaChainService {
   async createOrUpdateParticipantSession(
     params: CreateOrUpdateParticipantSessionParams,
   ): Promise<{ txHash: string }> {
+    // CSPS must be signed by the issuer participant's declared vs_operator (chain-enforced,
+    // x/pp/keeper/csps.go). Sign with the dedicated vs_operator identity when configured;
+    // otherwise fall back to the main operator (works only if the issuer never declared a
+    // separate vs_operator — e.g. it self-signs its own credentials).
+    const signerAddress = this.vsOperatorAddress ?? this.operatorAddress
+    const signingClient = this.vsOperatorSigningClient ?? this.signingClient
     const value = MsgCreateOrUpdateParticipantSession.fromPartial({
       corporation: this.corporationAddress,
-      operator: this.operatorAddress,
+      operator: signerAddress,
       id: params.id,
       issuerParticipantId: params.issuerParticipantId,
       verifierParticipantId: params.verifierParticipantId,
@@ -341,10 +378,10 @@ export class VeranaChainService {
       walletAgentParticipantId: params.walletAgentParticipantId,
       digest: params.digest,
     })
-    const result = await this.broadcastMsg({
-      typeUrl: veranaTypeUrls.MsgCreateOrUpdateParticipantSession,
-      value,
-    })
+    const result = await this.broadcastMsg(
+      { typeUrl: veranaTypeUrls.MsgCreateOrUpdateParticipantSession, value },
+      { address: signerAddress, client: signingClient },
+    )
     return { txHash: result.transactionHash }
   }
 
@@ -380,11 +417,17 @@ export class VeranaChainService {
     return { txHash: result.transactionHash }
   }
 
-  private async broadcastMsg(options: { typeUrl: string; value: object }): Promise<DeliverTxResponse> {
+  private async broadcastMsg(
+    options: { typeUrl: string; value: object },
+    signer: { address: string; client: SigningStargateClient } = {
+      address: this.operatorAddress,
+      client: this.signingClient,
+    },
+  ): Promise<DeliverTxResponse> {
     const { typeUrl, value } = options
     const msg = { typeUrl, value }
-    this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl} as ${this.operatorAddress}`)
-    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], 'auto')
+    this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl} as ${signer.address}`)
+    const result = await signer.client.signAndBroadcast(signer.address, [msg], 'auto')
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result

@@ -22,6 +22,12 @@ import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
 const START_OP_MSG = '/verana.pp.v1.MsgStartParticipantOP'
 const SELF_CREATE_MSG = '/verana.pp.v1.MsgSelfCreateParticipant'
 
+// x/pp/types/types.go vsoaPermittedMsgTypes: the only two msg types an ISSUER-role VSOA may cover.
+const ISSUER_VSOA_MSG_TYPES = [
+  '/verana.pp.v1.MsgCreateOrUpdateParticipantSession',
+  '/verana.pp.v1.MsgSetParticipantOPToValidated',
+]
+
 const ISSUER_ONBOARDING_MODE_OPEN = 1
 const ISSUER_ONBOARDING_MODE_GRANTOR = 3
 
@@ -253,6 +259,13 @@ export class EcsBootstrapService {
       role: ISSUER_PARTICIPANT_TYPE,
       validatorParticipantId: root.id,
       did: this.agent.did!,
+      ...(chain.vsOperator
+        ? {
+            vsOperator: chain.vsOperator,
+            vsOperatorAuthzMsgTypes: ISSUER_VSOA_MSG_TYPES,
+            vsOperatorAuthzWithFeegrant: true,
+          }
+        : {}),
     })
     await chain.setParticipantOPToValidated({
       id: participantId,
@@ -301,6 +314,13 @@ export class EcsBootstrapService {
         validatorParticipantId: root.id,
         did: this.agent.did!,
         effectiveUntil: root.effective_until ? new Date(root.effective_until) : undefined,
+        ...(chain.vsOperator
+          ? {
+              vsOperator: chain.vsOperator,
+              vsOperatorAuthzMsgTypes: ISSUER_VSOA_MSG_TYPES,
+              vsOperatorAuthzWithFeegrant: true,
+            }
+          : {}),
       })
       await this.triggerResolverBestEffort(chain, participantId)
       this.logger.info(`[EcsBootstrap] self-created Service ISSUER participant ${participantId}`)

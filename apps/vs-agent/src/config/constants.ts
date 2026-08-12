@@ -181,6 +181,10 @@ export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFOR
 // Verana network
 export const VERANA_INDEXER_BASE_URL = process.env.VERANA_INDEXER_BASE_URL
 export const VERANA_ACCOUNT_MNEMONIC = process.env.VERANA_ACCOUNT_MNEMONIC
+// Optional: a second, dedicated signing identity used only for MsgCreateOrUpdateParticipantSession
+// (CSPS), so this agent can deliver real (not self-issued) credentials. See
+// VeranaChainConfig.vsOperatorMnemonic for why it must differ from VERANA_ACCOUNT_MNEMONIC.
+export const VS_OPERATOR_MNEMONIC = process.env.VS_OPERATOR_MNEMONIC
 export const VERANA_RPC_ENDPOINT_URL = process.env.VERANA_RPC_ENDPOINT_URL
 export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID
 export const VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE: string[] = (
