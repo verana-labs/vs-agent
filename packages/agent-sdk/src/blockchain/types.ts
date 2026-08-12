@@ -251,7 +251,7 @@ export interface CredentialSchema {
   issuerOnboardingMode: number
   verifierOnboardingMode: number
   holderOnboardingMode: number
-    archived: Date | undefined
+  archived: Date | undefined
 }
 
 export interface OperatorAuthorization {
