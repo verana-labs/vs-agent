@@ -311,6 +311,7 @@ export async function signerW3c(
  * @param schemaKey - Unique identifier for the presentation type and metadata key.
  * @param type - Array of credential types to include.
  * @param credentialSchema - Schema definition for the credential.
+ * @param beforePublish - Step that must succeed before a linked presentation counts as published.
  * @returns The signed verifiable presentation, with integrity metadata.
  */
 export async function generateVerifiablePresentation(
@@ -321,6 +322,7 @@ export async function generateVerifiablePresentation(
   type: string[],
   credentialSchema: W3cCredentialSchema,
   defaults: SelfTrDefaults,
+  beforePublish?: (verifiablePresentation: any) => Promise<void>,
 ) {
   if (!agent.did) throw Error('The DID must be set up')
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
@@ -333,7 +335,11 @@ export async function generateVerifiablePresentation(
   const record = didRecord.metadata.get('_vt/vtc') ?? {}
   const metadata = record[credentialSchema.id]
   const attached = metadata?.attached ?? true
-  if (metadata?.integrityData === integrityData) return metadata.verifiablePresentation
+  if (metadata?.integrityData === integrityData) {
+    // the presentation is already public, so a failed beforePublish step still needs a retry here
+    if (attached) await beforePublish?.(metadata.verifiablePresentation)
+    return metadata.verifiablePresentation
+  }
 
   const presentation = createPresentation({
     id,
@@ -351,6 +357,8 @@ export async function generateVerifiablePresentation(
     defaults,
     presentation,
   )
+  // nothing is persisted yet, so a failure here leaves no public presentation behind
+  if (attached) await beforePublish?.(verifiablePresentation)
   // Update linked VP when the presentation has changed
   if (attached)
     didDocument.service = didDocument.service?.map(s => {

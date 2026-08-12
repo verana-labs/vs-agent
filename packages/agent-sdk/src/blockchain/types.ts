@@ -254,6 +254,11 @@ export interface CredentialSchema {
   archived: Date | undefined
 }
 
+export interface StoredDigest {
+  digest: string
+  created: Date | undefined
+}
+
 export interface OperatorAuthorization {
   id: number
   corporationId: number
@@ -295,6 +300,10 @@ export interface EcosystemQueryClient {
 
 export interface CredentialSchemaQueryClient {
   GetCredentialSchema(req: { id: number }): Promise<{ schema?: CredentialSchema }>
+}
+
+export interface DigestQueryClient {
+  GetDigest(req: { digest: string }): Promise<{ digest?: StoredDigest }>
 }
 
 export interface DelegationQueryClient {

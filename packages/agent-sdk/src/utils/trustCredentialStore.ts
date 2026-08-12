@@ -356,17 +356,18 @@ async function anchorCredentialDigest(
   schemaId: number,
   credential: W3cJsonLdVerifiableCredential | undefined,
 ): Promise<void> {
-  if (!agent.veranaChain || !credential) return
-  try {
-    const schema = await agent.veranaChain.getCredentialSchema(schemaId)
-    if (!schema) return
-    const digest = computeCredentialDigestJCS(credential, schema.digestAlgorithm)
-    await agent.veranaChain.storeDigest(digest)
-  } catch (e) {
-    agent.config.logger.warn(`[SelfTR] Failed to anchor credential digest for schema ${schemaId}`, {
-      error: e as Error,
-    })
-  }
+  if (!agent.veranaChain) return
+  if (!credential) throw new Error(`[DigestAnchor] The presentation for schema ${schemaId} has no credential`)
+
+  const schema = await agent.veranaChain.getCredentialSchema(schemaId)
+  if (!schema) throw new Error(`[DigestAnchor] Credential schema ${schemaId} is not on chain`)
+
+  const digest = computeCredentialDigestJCS(credential, schema.digestAlgorithm)
+  // the same credential gives the same digest on each run, so an anchored digest needs no second transaction
+  if (await agent.veranaChain.getDigest(digest)) return
+
+  const { txHash } = await agent.veranaChain.storeDigest(digest)
+  agent.config.logger.info(`[DigestAnchor] Anchored digest ${digest} for schema ${schemaId} (tx ${txHash})`)
 }
 
 // replaces the self-TR example JSC binding with the on-chain VTJSC so resolvers can link the credential to the VPR
@@ -399,7 +400,7 @@ export async function rebindEcsCredentialSchema(
     await updateDidRecord(agent, didRecord)
   }
 
-  const verifiablePresentation = await generateVerifiablePresentation(
+  await generateVerifiablePresentation(
     agent,
     vpUrl,
     getEcsSchemas(publicApiBaseUrl),
@@ -407,12 +408,13 @@ export async function rebindEcsCredentialSchema(
     ['VerifiableCredential', 'VerifiableTrustCredential'],
     { id: jscUrl, type: 'JsonSchemaCredential' },
     defaults,
+    async verifiablePresentation =>
+      await anchorCredentialDigest(
+        agent,
+        Number(schemaId),
+        verifiablePresentation?.verifiableCredential?.[0] as W3cJsonLdVerifiableCredential | undefined,
+      ),
   )
-
-  const embeddedCredential = verifiablePresentation?.verifiableCredential?.[0] as
-    | W3cJsonLdVerifiableCredential
-    | undefined
-  await anchorCredentialDigest(agent, Number(schemaId), embeddedCredential)
 
   const freshRecord = await getDidRecord(agent)
   const doc = freshRecord.didDocument
