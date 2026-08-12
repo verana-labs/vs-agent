@@ -56,6 +56,7 @@ const { MsgStoreDigest } = require('@verana-labs/verana-types/codec/verana/di/v1
 
 // ParticipantRole.HOLDER (x/pp/types); the only role whose vs_operator may send TriggerResolver (chain Path 1).
 const PARTICIPANT_ROLE_HOLDER = 6
+const PARTICIPANT_ROLE_ISSUER = 1
 
 function mapParticipant(p: RawParticipant): Participant {
   return {
@@ -201,6 +202,7 @@ export class VeranaChainService {
       id: s.id,
       ecosystemId: s.ecosystemId,
       jsonSchema: s.jsonSchema,
+      digestAlgorithm: s.digestAlgorithm,
       issuerOnboardingMode: s.issuerOnboardingMode,
       verifierOnboardingMode: s.verifierOnboardingMode,
       holderOnboardingMode: s.holderOnboardingMode,
@@ -333,6 +335,19 @@ export class VeranaChainService {
     const { participants } = await this.ppQuery.FindParticipantsWithDID(request)
     return participants.find(
       p => p.did === did && p.role === PARTICIPANT_ROLE_HOLDER && !p.revoked && !p.slashed,
+    )?.id
+  }
+
+  async findActiveIssuerParticipantId(did: string, schemaId: number): Promise<number | undefined> {
+    const request = QueryFindParticipantsWithDIDRequest.fromPartial({ did })
+    const { participants } = await this.ppQuery.FindParticipantsWithDID(request)
+    return participants.find(
+      p =>
+        p.did === did &&
+        p.role === PARTICIPANT_ROLE_ISSUER &&
+        p.schemaId === schemaId &&
+        !p.revoked &&
+        !p.slashed,
     )?.id
   }
 

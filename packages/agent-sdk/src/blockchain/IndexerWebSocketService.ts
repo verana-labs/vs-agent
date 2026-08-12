@@ -24,6 +24,7 @@ export interface IndexerWebSocketServiceOptions {
   agent: VsAgent
   handlerRegistry?: IndexerHandlerRegistry
   corporationId?: number
+  agentCorporationId?: number
 }
 
 const MAX_RECONNECT_DELAY_MS = 300_000
@@ -272,6 +273,7 @@ export class IndexerWebSocketService {
       agent: this.options.agent,
       blockHeight: block,
       operatorAddress: event.payload.sender,
+      agentCorporationId: this.options.agentCorporationId,
       state: syncState,
       txHash: event.tx_hash,
     })

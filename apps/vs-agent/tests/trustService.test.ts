@@ -10,6 +10,8 @@ import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 
 import { MessageService, TrustService } from '../src/controllers'
 
+import { computeCredentialDigestJCS } from '@verana-labs/verre'
+
 import { isCredentialStateChangedEvent, startAgent, startServersTesting } from './__mocks__'
 import {
   makeConnection,
@@ -133,8 +135,17 @@ describe('TrustService', () => {
   })
 
   describe('Testing for message exchange with VsAgent', async () => {
+    let sessionMock: ReturnType<typeof vi.fn>
+    let fakeChain: Record<string, unknown>
     beforeEach(async () => {
-      faberAgent = await startAgent({ label: 'Faber Test', domain: 'faber' })
+      sessionMock = vi.fn(async () => ({ txHash: 'tx-1' }))
+      fakeChain = {
+        getChainId: 'vna-test-1',
+        findActiveIssuerParticipantId: vi.fn(async () => 12),
+        getCredentialSchema: vi.fn(async () => ({ digestAlgorithm: 'sha384' })),
+        createOrUpdateParticipantSession: sessionMock,
+      }
+      faberAgent = await startAgent({ label: 'Faber Test', domain: 'faber', veranaChain: fakeChain as never })
       faberAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(faberMessages))
       faberAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
       await faberAgent.initialize()
@@ -163,7 +174,8 @@ describe('TrustService', () => {
       const credentialResponse = await faberService.issueCredential({
         format: 'jsonld',
         did: 'did:web:example.com',
-        jsonSchemaCredentialId: 'https://example.org/vt/schemas-example-org-jsc.json',
+        participantSessionId: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
+        jsonSchemaCredentialId: 'https://example.org/vt/schemas-vpr-org-jsc.json',
         claims: {
           id: 'https://example.org/org/123',
           name: 'OpenAI Research',
@@ -185,6 +197,84 @@ describe('TrustService', () => {
           proofValue: expect.any(String),
         }),
       )
+      expect(credentialResponse.digestJCS).toBe(
+        computeCredentialDigestJCS(credentialResponse.credential as never, 'sha384'),
+      )
+      expect(sessionMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
+          issuerParticipantId: 12,
+          digest: credentialResponse.digestJCS,
+        }),
+      )
+    })
+
+    it('rejects a jsonld issuance without a participantSessionId', async () => {
+      await expect(
+        faberService.issueCredential({
+          format: 'jsonld',
+          did: 'did:web:example.com',
+          jsonSchemaCredentialId: 'https://example.org/vt/schemas-vpr-org-jsc.json',
+          claims: {
+            id: 'https://example.org/org/123',
+            name: 'OpenAI Research',
+            logoUri: 'https://example.com/logo.png',
+            logoDigestSri: 'sha384-AAAA',
+            registryId: 'REG-123',
+            registryUri: 'https://registry.example.org',
+            address: '123 Main St, San Francisco, CA',
+            organizationKind: 'PRIVATE',
+            countryCode: 'US',
+          },
+        }),
+      ).rejects.toThrow(/participantSessionId/)
+      expect(sessionMock).not.toHaveBeenCalled()
+    })
+
+    it('returns no credential when the anchoring transaction fails', async () => {
+      sessionMock.mockRejectedValueOnce(new Error('tx rejected'))
+      await expect(
+        faberService.issueCredential({
+          format: 'jsonld',
+          did: 'did:web:example.com',
+          participantSessionId: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
+          jsonSchemaCredentialId: 'https://example.org/vt/schemas-vpr-org-jsc.json',
+          claims: {
+            id: 'https://example.org/org/123',
+            name: 'OpenAI Research',
+            logoUri: 'https://example.com/logo.png',
+            logoDigestSri: 'sha384-AAAA',
+            registryId: 'REG-123',
+            registryUri: 'https://registry.example.org',
+            address: '123 Main St, San Francisco, CA',
+            organizationKind: 'PRIVATE',
+            countryCode: 'US',
+          },
+        }),
+      ).rejects.toThrow(/ANCHORING_FAILED/)
+    })
+
+    it('rejects a schema that is not governed by the configured chain', async () => {
+      await expect(
+        faberService.issueCredential({
+          format: 'jsonld',
+          did: 'did:web:example.com',
+          participantSessionId: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
+          jsonSchemaCredentialId: 'https://example.org/vt/schemas-example-org-jsc.json',
+          claims: {
+            id: 'https://example.org/org/123',
+            name: 'OpenAI Research',
+            logoUri: 'https://example.com/logo.png',
+            logoDigestSri: 'sha384-AAAA',
+            registryId: 'REG-123',
+            registryUri: 'https://registry.example.org',
+            address: '123 Main St, San Francisco, CA',
+            organizationKind: 'PRIVATE',
+            countryCode: 'US',
+          },
+        }),
+      ).rejects.toThrow(/ANCHORING_FAILED/)
+      expect(sessionMock).not.toHaveBeenCalled()
     })
 
     it('should issue a valid anoncreds credential', async () => {
