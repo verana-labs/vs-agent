@@ -250,6 +250,7 @@ export interface CredentialSchema {
   issuerOnboardingMode: number
   verifierOnboardingMode: number
   holderOnboardingMode: number
+  digestAlgorithm: string
   archived: Date | undefined
 }
 

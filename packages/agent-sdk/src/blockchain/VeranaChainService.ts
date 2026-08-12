@@ -52,6 +52,7 @@ const {
   MsgSelfCreateParticipant,
   MsgSelfCreateParticipantResponse,
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/tx')
+const { MsgStoreDigest } = require('@verana-labs/verana-types/codec/verana/di/v1/tx')
 
 // ParticipantRole.HOLDER (x/pp/types); the only role whose vs_operator may send TriggerResolver (chain Path 1).
 const PARTICIPANT_ROLE_HOLDER = 6
@@ -203,6 +204,7 @@ export class VeranaChainService {
       issuerOnboardingMode: s.issuerOnboardingMode,
       verifierOnboardingMode: s.verifierOnboardingMode,
       holderOnboardingMode: s.holderOnboardingMode,
+      digestAlgorithm: s.digestAlgorithm,
       archived: s.archived,
     }
   }
@@ -276,6 +278,16 @@ export class VeranaChainService {
     const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgSelfCreateParticipant, value })
     const participantId = Number(MsgSelfCreateParticipantResponse.decode(result.msgResponses[0].value).id)
     return { participantId, txHash: result.transactionHash }
+  }
+
+  async storeDigest(digest: string): Promise<{ txHash: string }> {
+    const value = MsgStoreDigest.fromPartial({
+      authority: this.corporationAddress,
+      operator: this.operatorAddress,
+      digest,
+    })
+    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgStoreDigest, value })
+    return { txHash: result.transactionHash }
   }
 
   async setParticipantOPToValidated(params: SetParticipantOPToValidatedParams): Promise<{ txHash: string }> {

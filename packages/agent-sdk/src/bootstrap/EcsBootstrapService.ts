@@ -260,6 +260,7 @@ export class EcsBootstrapService {
       issuanceFees: 0,
       verificationFees: 0,
     })
+    await this.triggerResolverBestEffort(chain, participantId)
     this.logger.info(
       `[EcsBootstrap] self-issued ISSUER participant ${participantId} for the ECS ${credentialType} schema (ecosystem root ${root.id})`,
     )
@@ -301,6 +302,7 @@ export class EcsBootstrapService {
         did: this.agent.did!,
         effectiveUntil: root.effective_until ? new Date(root.effective_until) : undefined,
       })
+      await this.triggerResolverBestEffort(chain, participantId)
       this.logger.info(`[EcsBootstrap] self-created Service ISSUER participant ${participantId}`)
       return
     }
@@ -335,6 +337,16 @@ export class EcsBootstrapService {
       participantState: ParticipantState.Active,
     })
     return candidates.find(p => !p.revoked && !p.slashed && p.did !== this.agent.did)
+  }
+
+  private async triggerResolverBestEffort(chain: VeranaChainService, participantId: number): Promise<void> {
+    try {
+      await chain.triggerResolver(participantId)
+    } catch (error) {
+      this.logger.warn(
+        `[EcsBootstrap] TriggerResolver failed for participant ${participantId}: ${(error as Error).message}`,
+      )
+    }
   }
 
   private isUsableParticipant(p: ParticipantDto): boolean {

@@ -7,6 +7,7 @@ import {
   W3cJsonLdVerifiableCredential,
   W3cJsonLdVerifiablePresentation,
 } from '@credo-ts/core'
+import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { VsAgent } from '../agent/VsAgent'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
@@ -349,6 +350,24 @@ export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc
   return findMetadataEntry(didRecord, key, schemaId)
 }
 
+async function anchorCredentialDigest(
+  agent: VsAgent,
+  schemaId: number,
+  credential: W3cJsonLdVerifiableCredential | undefined,
+): Promise<void> {
+  if (!agent.veranaChain || !credential) return
+  try {
+    const schema = await agent.veranaChain.getCredentialSchema(schemaId)
+    if (!schema) return
+    const digest = computeCredentialDigestJCS(credential, schema.digestAlgorithm)
+    await agent.veranaChain.storeDigest(digest)
+  } catch (e) {
+    agent.config.logger.warn(`[SelfTR] Failed to anchor credential digest for schema ${schemaId}`, {
+      error: e as Error,
+    })
+  }
+}
+
 // replaces the self-TR example JSC binding with the on-chain VTJSC so resolvers can link the credential to the VPR
 export async function rebindEcsCredentialSchema(
   agent: VsAgent,
@@ -379,7 +398,7 @@ export async function rebindEcsCredentialSchema(
     await updateDidRecord(agent, didRecord)
   }
 
-  await generateVerifiablePresentation(
+  const verifiablePresentation = await generateVerifiablePresentation(
     agent,
     vpUrl,
     getEcsSchemas(publicApiBaseUrl),
@@ -388,6 +407,11 @@ export async function rebindEcsCredentialSchema(
     { id: jscUrl, type: 'JsonSchemaCredential' },
     defaults,
   )
+
+  const embeddedCredential = verifiablePresentation?.verifiableCredential?.[0] as
+    | W3cJsonLdVerifiableCredential
+    | undefined
+  await anchorCredentialDigest(agent, Number(schemaId), embeddedCredential)
 
   const freshRecord = await getDidRecord(agent)
   const doc = freshRecord.didDocument
