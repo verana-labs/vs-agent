@@ -1,6 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { mapToSelfTr, presentations } from '../src/utils/setupSelfTr'
+vi.mock('axios', () => ({
+  default: { get: vi.fn(async (url: string) => ({ data: Buffer.from(`bytes of ${url}`) })) },
+}))
+
+import { getEcsSchemas } from '../src/utils/data'
+import {
+  generateDigestSRI,
+  generateVerifiablePresentation,
+  getClaims,
+  linkedVpFragment,
+  mapToSelfTr,
+  presentations,
+  SelfTrDefaults,
+} from '../src/utils/setupSelfTr'
 import { saveMetadataEntry } from '../src/utils/trustCredentialStore'
 
 const PUBLIC_URL = 'https://agent.example'
@@ -62,6 +75,83 @@ const presentation = { id: `${PUBLIC_URL}/vt/cred-1-vp.json` } as never
 const storeReal = (record: ReturnType<typeof makeRecord>, key: '_vt/vtc' | '_vt/jsc') =>
   saveMetadataEntry(agent, record as never, credential, presentation, `${DID}#vpr-real`, key, PUBLIC_URL)
 
+const target = presentations[0]
+const schemaKey = target.name
+const targetSchemaId = mapToSelfTr(target.schemaUrl, PUBLIC_URL)
+const linkedServiceId = `${DID}#${linkedVpFragment(schemaKey)}`
+const VP_ID = `${PUBLIC_URL}/vt/${schemaKey}-vtc-vp.json`
+const TYPE = ['VerifiableCredential', 'VerifiableTrustCredential']
+const targetCredentialSchema = { id: targetSchemaId, type: 'JsonSchemaCredential' } as never
+const schemas = getEcsSchemas(PUBLIC_URL)
+const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() }
+
+const defaults: SelfTrDefaults = {
+  agentLabel: 'Agent',
+  serviceLogoUri: 'https://cdn.example/logo.png',
+  serviceType: 'ECommerce',
+  serviceDescription: 'demo',
+  serviceMinimumAgeRequired: 18,
+  serviceTermsAndConditions: 'https://cdn.example/terms',
+  servicePrivacyPolicy: 'https://cdn.example/privacy',
+  orgRegistryId: 'REG-1',
+  orgRegistryUri: 'https://registry.example',
+  orgAddress: '1 Demo Street',
+  orgOrganizationKind: 'PUBLIC',
+  orgCountryCode: 'US',
+}
+
+async function unchangedIntegrityData() {
+  const claims = await getClaims(logger as never, schemas, { id: DID }, schemaKey, defaults)
+  const data = { id: VP_ID, type: TYPE, credentialSchema: targetCredentialSchema, claims }
+  return generateDigestSRI(JSON.stringify(data, Object.keys(data).sort()))
+}
+
+function agentAfterRealCredential(integrityData: string) {
+  const vm = `${DID}#key-1`
+  const didDocument = {
+    verificationMethod: [{ id: vm, type: 'Ed25519VerificationKey2020', controller: DID }],
+    assertionMethod: [vm],
+    service: [] as { id: string }[],
+  }
+  const store: Record<string, unknown> = {
+    '_vt/vtc': {
+      [targetSchemaId]: {
+        integrityData,
+        attached: false,
+        verifiablePresentation: { id: VP_ID },
+        didDocumentServiceId: linkedServiceId,
+      },
+    },
+  }
+  const didRecord = {
+    did: DID,
+    didDocument,
+    metadata: {
+      get: (k: string) => store[k],
+      set: (k: string, v: unknown) => {
+        store[k] = v
+      },
+    },
+  }
+  return {
+    agent: {
+      did: DID,
+      config: { logger },
+      dids: { getCreatedDids: async () => [didRecord], update: vi.fn() },
+      w3cCredentials: {
+        signCredential: async (o: never) => ({ ...(o as { credential: object }).credential, proof: {} }),
+        signPresentation: async (o: never) => ({
+          ...(o as { presentation: object }).presentation,
+          id: VP_ID,
+          proof: {},
+        }),
+      },
+      context: { dependencyManager: { resolve: () => ({ update: vi.fn() }) } },
+    },
+    didDocument,
+  }
+}
+
 describe('self-issued VTC attach state', () => {
   it('keeps the self-issued entries when a json schema credential is stored', async () => {
     const record = makeRecord()
@@ -69,5 +159,21 @@ describe('self-issued VTC attach state', () => {
 
     expect(record.attachedFlags()).toEqual([true, true])
     expect(record.didDocument.service.map(s => s.id)).toContain(serviceIdFor(selfIds[0]))
+  })
+
+  it('does not republish a detached self-issued service on the next boot', async () => {
+    const { agent, didDocument } = agentAfterRealCredential(await unchangedIntegrityData())
+
+    await generateVerifiablePresentation(
+      agent as never,
+      VP_ID,
+      schemas,
+      schemaKey,
+      TYPE,
+      targetCredentialSchema,
+      defaults,
+    )
+
+    expect(didDocument.service.map(s => s.id)).not.toContain(linkedServiceId)
   })
 })
