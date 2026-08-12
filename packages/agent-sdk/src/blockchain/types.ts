@@ -247,11 +247,11 @@ export interface CredentialSchema {
   id: number
   ecosystemId: number
   jsonSchema: string
+  digestAlgorithm: string
   issuerOnboardingMode: number
   verifierOnboardingMode: number
   holderOnboardingMode: number
-  digestAlgorithm: string
-  archived: Date | undefined
+    archived: Date | undefined
 }
 
 export interface OperatorAuthorization {
