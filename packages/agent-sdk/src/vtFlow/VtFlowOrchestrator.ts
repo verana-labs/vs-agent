@@ -320,6 +320,15 @@ export class VtFlowOrchestrator {
       walletAgentParticipantId: Number(record.walletAgentParticipantId ?? 0) || 0,
       digest,
     })
+
+    try {
+      await this.triggerResolver(record)
+    } catch (error) {
+      this.agent.config.logger.warn(
+        `[vt-flow] TriggerResolver failed for participant ${record.participantId}: ${(error as Error).message}`,
+      )
+    }
+
     return digest
   }
 
