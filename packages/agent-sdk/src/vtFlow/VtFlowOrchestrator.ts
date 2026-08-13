@@ -321,14 +321,6 @@ export class VtFlowOrchestrator {
       digest,
     })
 
-    try {
-      await this.triggerResolver(record)
-    } catch (error) {
-      this.agent.config.logger.warn(
-        `[vt-flow] TriggerResolver failed for participant ${record.participantId}: ${(error as Error).message}`,
-      )
-    }
-
     return digest
   }
 
