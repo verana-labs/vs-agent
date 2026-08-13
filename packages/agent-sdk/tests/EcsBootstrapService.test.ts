@@ -2,7 +2,7 @@ import type { VsAgent } from '../src/agent/VsAgent'
 import type { VeranaIndexerService } from '../src/blockchain'
 
 import { VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ParticipantRole, ParticipantState } from '../src/blockchain'
 import { EcsBootstrapService, type EcsBootstrapOptions } from '../src/bootstrap/EcsBootstrapService'
@@ -63,6 +63,10 @@ function makeMocks() {
     events: {
       on: (_type: string, cb: (event: { payload: Record<string, unknown> }) => void) => {
         eventHandlers.push(cb)
+      },
+      off: (_type: string, cb: (event: { payload: Record<string, unknown> }) => void) => {
+        const index = eventHandlers.indexOf(cb)
+        if (index !== -1) eventHandlers.splice(index, 1)
       },
     },
     dependencyManager: { resolve: () => vtFlowApi },
@@ -250,6 +254,50 @@ describe('EcsBootstrapService standalone', () => {
 describe('EcsBootstrapService delegated', () => {
   const delegated = { mode: 'delegated' as const, delegatedParentVsDid: 'did:web:parent' }
 
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('waits for its own DID document to be resolvable before contacting the parent', async () => {
+    const mocks = makeMocks()
+    mocks.indexer.listParticipants.mockResolvedValue([{ id: 3, schema_id: 5 }])
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: true })
+    vi.stubGlobal('fetch', fetchMock)
+    const service = makeService(mocks, { ...delegated, verifyPeer: async () => true })
+
+    const outcome = service.run()
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 5000 })
+    expect(fetchMock).toHaveBeenCalledWith('https://agent/.well-known/did.json')
+
+    await vi.waitFor(() => expect(mocks.vtFlowApi.sendIssuanceRequest).toHaveBeenCalled())
+    for (const cb of mocks.eventHandlers) {
+      void cb({ payload: { vtFlowRecordId: 'rec-1', state: VtFlowState.Completed } })
+    }
+    await expect(outcome).resolves.toBeUndefined()
+  }, 8000)
+
+  it('checks did.jsonl instead of did.json for a did:webvh agent', async () => {
+    const mocks = makeMocks()
+    mocks.agent.did = 'did:webvh:Qm123:agent.example.com'
+    mocks.indexer.listParticipants.mockResolvedValue([{ id: 3, schema_id: 5 }])
+    const service = makeService(mocks, { ...delegated, verifyPeer: async () => true })
+
+    const outcome = service.run()
+    await vi.waitFor(() => expect(mocks.vtFlowApi.sendIssuanceRequest).toHaveBeenCalled())
+    expect(fetch).toHaveBeenCalledWith('https://agent/.well-known/did.jsonl')
+    for (const cb of mocks.eventHandlers) {
+      void cb({ payload: { vtFlowRecordId: 'rec-1', state: VtFlowState.Completed } })
+    }
+    await expect(outcome).resolves.toBeUndefined()
+  })
+
   it('fails when peer verification is not configured', async () => {
     const mocks = makeMocks()
     const service = makeService(mocks, delegated)
@@ -274,8 +322,11 @@ describe('EcsBootstrapService delegated', () => {
     mocks.indexer.listParticipants.mockResolvedValue([{ id: 3, schema_id: 5 }])
     mocks.agent.didcomm.oob.receiveImplicitInvitation.mockRejectedValue(new Error('no endpoint'))
     const service = makeService(mocks, { ...delegated, verifyPeer: async () => true })
+
     await expect(service.run()).rejects.toThrow('did:web:parent is unreachable: no endpoint')
-  })
+    // Retries every failed attempt, including connection-level failures, before giving up.
+    expect(mocks.agent.didcomm.oob.receiveImplicitInvitation).toHaveBeenCalledTimes(2)
+  }, 15000)
 
   it('sends the issuance request and resolves when the flow completes', async () => {
     const mocks = makeMocks()
