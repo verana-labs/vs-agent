@@ -26,7 +26,13 @@ import {
   VERIFIER_GRANTOR_PARTICIPANT_TYPE,
   VERIFIER_PARTICIPANT_TYPE,
 } from '../types'
-import { createCredential, createVtc, findMetadataEntry, removeStoredTrustCredential } from '../utils'
+import {
+  createCredential,
+  createVtc,
+  findMetadataEntry,
+  removeStoredTrustCredential,
+  validateSchema,
+} from '../utils'
 
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
@@ -272,6 +278,11 @@ export class VtFlowOrchestrator {
     const entry = await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
     if (!entry) throw new Error(`No stored VTJSC found for ${schemaRef}`)
     const { data } = entry
+
+    // A credential whose claims don't satisfy the schema's required fields is not a valid
+    // instance of that credential type — reject it here rather than issue an empty shell.
+    const schema = await this.requireIndexer().getCredentialSchema(input.credentialSchemaId)
+    validateSchema(JSON.parse(schema.json_schema), { id: input.subjectDid, ...input.claims })
 
     const unsignedCredential = createCredential({
       id: `${this.agent.did}#${utils.uuid()}`,
