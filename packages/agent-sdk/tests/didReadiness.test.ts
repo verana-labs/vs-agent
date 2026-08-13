@@ -1,3 +1,4 @@
+import { Logger } from '@credo-ts/core'
 import { describe, expect, it, vi, afterEach } from 'vitest'
 
 import { waitUntilOwnDidIsPubliclyResolvable } from '../src/utils/didReadiness'
@@ -7,7 +8,14 @@ function makeAgent(did: string) {
 }
 
 function makeLogger() {
-  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trace: vi.fn(), fatal: vi.fn() }
+  return {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    trace: vi.fn(),
+    fatal: vi.fn(),
+  } as unknown as Logger
 }
 
 describe('waitUntilOwnDidIsPubliclyResolvable', () => {
