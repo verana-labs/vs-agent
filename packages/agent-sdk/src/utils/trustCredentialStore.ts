@@ -362,7 +362,10 @@ async function anchorCredentialDigest(
   const schema = await agent.veranaChain.getCredentialSchema(schemaId)
   if (!schema) throw new Error(`[DigestAnchor] Credential schema ${schemaId} is not on chain`)
 
-  const digest = computeCredentialDigestJCS(credential, schema.digestAlgorithm)
+  const digest = computeCredentialDigestJCS(
+    JsonTransformer.toJSON(credential) as unknown as W3cJsonLdVerifiableCredential,
+    schema.digestAlgorithm,
+  )
   // the same credential gives the same digest on each run, so an anchored digest needs no second transaction
   if (await agent.veranaChain.getDigest(digest)) return
 
