@@ -102,4 +102,32 @@ describe('generateVerifiablePresentation beforePublish step', () => {
     expect(didsUpdate).not.toHaveBeenCalled()
     expect(metadata.get('_vt/vtc')).toBeUndefined()
   })
+
+  it('regenerates when claims change, and skips when they do not', async () => {
+    // beforePublish always fires, cache hit or not (it's how a failed publish retries), so
+    // regeneration is observed via repositoryUpdate: it only runs when content actually changes.
+    const { agent, repositoryUpdate } = makeAgent()
+    const beforePublish = vi.fn(async () => {})
+
+    await publish(agent, beforePublish)
+    expect(repositoryUpdate).toHaveBeenCalledTimes(1)
+
+    // Same claims again: cache hit, no regeneration.
+    await publish(agent, beforePublish)
+    expect(repositoryUpdate).toHaveBeenCalledTimes(1)
+
+    // A changed claim must invalidate the cache and regenerate.
+    const changed: SelfTrDefaults = { ...defaults, serviceDescription: 'a different description' }
+    await generateVerifiablePresentation(
+      agent as never,
+      VP_URL,
+      getEcsSchemas('https://agent.example'),
+      'ecs-service',
+      ['VerifiableCredential', 'VerifiableTrustCredential'],
+      { id: JSC_URL, type: 'JsonSchemaCredential' },
+      changed,
+      beforePublish,
+    )
+    expect(repositoryUpdate).toHaveBeenCalledTimes(2)
+  })
 })

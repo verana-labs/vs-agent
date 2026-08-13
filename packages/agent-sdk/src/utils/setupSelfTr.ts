@@ -98,8 +98,26 @@ export const linkedVpFragment = (schemaKey: string): string =>
 export const mapToSelfTr = (url: string, publicApiBaseUrl: string): string =>
   url.replace('ecosystem', `${publicApiBaseUrl}/vt`)
 
+// A plain array replacer only allowlists property names, applied at every
+// nesting level — nested objects like `claims` and `credentialSchema` would
+// serialize to `{}` since none of their own keys appear in a top-level
+// key list. Sort keys recursively instead, so the hash actually reflects
+// nested content and changes to claims invalidate the cache correctly.
+const sortKeysDeep = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(sortKeysDeep)
+  if (value !== null && typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = sortKeysDeep((value as Record<string, unknown>)[key])
+        return acc
+      }, {})
+  }
+  return value
+}
+
 const buildIntegrityData = (data: Record<string, unknown>) => {
-  return generateDigestSRI(JSON.stringify(data, Object.keys(data).sort()))
+  return generateDigestSRI(JSON.stringify(sortKeysDeep(data)))
 }
 
 export const setupSelfTr = async ({
