@@ -12,6 +12,7 @@ import { identifySchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { getEcsSchemas } from '../../utils/data'
+import { waitUntilOwnDidIsPubliclyResolvable } from '../../utils/didReadiness'
 import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
 import {
   createJsc,
@@ -320,6 +321,7 @@ export async function startParticipantOPAutoFlow(agent: VsAgent, activity: Index
   const holderParticipant = await chain.getParticipant(applicantParticipantId)
   if (!holderParticipant || holderParticipant.did !== agent.did) return
   try {
+    await waitUntilOwnDidIsPubliclyResolvable(agent, agent.config.logger)
     const orchestrator = new VtFlowOrchestrator(agent)
     await orchestrator.startOnboardingProcess({ applicantParticipantId })
   } catch (err) {
