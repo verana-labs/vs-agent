@@ -18,6 +18,7 @@ import {
   VeranaIndexerService,
 } from '../blockchain'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
+import { waitUntilOwnDidIsPubliclyResolvable } from '../utils/didReadiness'
 
 const START_OP_MSG = '/verana.pp.v1.MsgStartParticipantOP'
 const SELF_CREATE_MSG = '/verana.pp.v1.MsgSelfCreateParticipant'
@@ -34,15 +35,8 @@ const ECS_TITLE_BY_TYPE: Record<string, ECS> = {
 }
 
 const DELEGATED_OUTCOME_TIMEOUT_MS = 15 * 60_000
-// On a fresh deployment, the ingress route to this agent's own public endpoint
-// can lag a few seconds behind the process becoming ready (e.g. a k8s Service
-// has not finished propagating the new pod IP yet). The parent VS resolves our
-// DID as part of processing the delegated request, so we wait for our own DID
-// document to be publicly fetchable before sending anything.
-const OWN_DID_READY_TIMEOUT_MS = 60_000
-const OWN_DID_READY_POLL_INTERVAL_MS = 2_000
 // Thin safety net for any remaining transient failure (e.g. a network blip from
-// the parent's vantage point), on top of the readiness wait above.
+// the parent's vantage point), on top of the readiness wait in waitUntilOwnDidIsPubliclyResolvable.
 const DELEGATED_REQUEST_MAX_ATTEMPTS = 2
 const DELEGATED_REQUEST_ATTEMPT_TIMEOUT_MS = 60_000
 const DELEGATED_REQUEST_RETRY_DELAY_MS = 5_000
@@ -382,7 +376,7 @@ export class EcsBootstrapService {
       )
     }
 
-    await this.waitUntilOwnDidIsPubliclyResolvable()
+    await waitUntilOwnDidIsPubliclyResolvable(this.agent, this.logger)
 
     const verified = await this.options.verifyPeer(parentDid).catch(() => false)
     if (!verified) {
@@ -407,34 +401,6 @@ export class EcsBootstrapService {
       }
     }
     throw lastError ?? new Error(`parent VS ${parentDid} did not complete the issuance in time`)
-  }
-
-  // Waits until this agent's own DID document is fetchable at its public endpoint, so the
-  // parent VS can resolve us as soon as we reach out to it. Checks the same file a peer's
-  // resolver would fetch: did.jsonl for did:webvh, did.json for did:web. Logs and moves on
-  // if the deadline passes, rather than blocking bootstrap forever on a misconfigured deployment.
-  private async waitUntilOwnDidIsPubliclyResolvable(): Promise<void> {
-    const did = this.agent.did
-    if (!did || !this.agent.publicApiBaseUrl) return
-
-    const wellKnownFile = did.startsWith('did:web:') ? 'did.json' : 'did.jsonl'
-    const url = `${this.agent.publicApiBaseUrl}/.well-known/${wellKnownFile}`
-
-    const deadline = Date.now() + OWN_DID_READY_TIMEOUT_MS
-    let lastStatus: number | string = 'unreachable'
-    while (Date.now() < deadline) {
-      try {
-        const response = await fetch(url)
-        if (response.ok) return
-        lastStatus = response.status
-      } catch (error) {
-        lastStatus = (error as Error).message
-      }
-      await new Promise(resolve => setTimeout(resolve, OWN_DID_READY_POLL_INTERVAL_MS))
-    }
-    this.logger.warn(
-      `[EcsBootstrap] own DID document at ${url} was not publicly resolvable after ${OWN_DID_READY_TIMEOUT_MS}ms (last: ${lastStatus}); proceeding anyway`,
-    )
   }
 
   private async requestDelegatedServiceCredential(
