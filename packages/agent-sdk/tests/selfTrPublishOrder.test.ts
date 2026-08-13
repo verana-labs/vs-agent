@@ -2,7 +2,7 @@ import { DidDocument, VerificationMethod } from '@credo-ts/core'
 import { describe, expect, it, vi } from 'vitest'
 
 import { getEcsSchemas } from '../src/utils/data'
-import { generateVerifiablePresentation, SelfTrDefaults } from '../src/utils/setupSelfTr'
+import { generateVerifiablePresentation, SelfTrDefaults, sortKeysDeep } from '../src/utils/setupSelfTr'
 
 const DID = 'did:web:agent.example'
 const VP_URL = 'https://agent.example/vt/ecs-service-vtc-vp.json'
@@ -129,5 +129,22 @@ describe('generateVerifiablePresentation beforePublish step', () => {
       beforePublish,
     )
     expect(repositoryUpdate).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('sortKeysDeep', () => {
+  it('sorts keys at every nesting level, including inside arrays', () => {
+    const a = { b: 1, a: { d: 1, c: 2 }, list: [{ z: 1, a: 2 }] }
+    const b = { a: { c: 2, d: 1 }, list: [{ a: 2, z: 1 }], b: 1 }
+
+    // Differently-ordered but equivalent inputs must serialize identically.
+    expect(JSON.stringify(sortKeysDeep(a))).toBe(JSON.stringify(sortKeysDeep(b)))
+    expect(JSON.stringify(sortKeysDeep(a))).toBe('{"a":{"c":2,"d":1},"b":1,"list":[{"a":2,"z":1}]}')
+  })
+
+  it('leaves primitive and null values unchanged', () => {
+    expect(sortKeysDeep('value')).toBe('value')
+    expect(sortKeysDeep(42)).toBe(42)
+    expect(sortKeysDeep(null)).toBeNull()
   })
 })

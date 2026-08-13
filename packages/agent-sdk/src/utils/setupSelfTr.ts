@@ -103,7 +103,7 @@ export const mapToSelfTr = (url: string, publicApiBaseUrl: string): string =>
 // serialize to `{}` since none of their own keys appear in a top-level
 // key list. Sort keys recursively instead, so the hash actually reflects
 // nested content and changes to claims invalidate the cache correctly.
-const sortKeysDeep = (value: unknown): unknown => {
+export const sortKeysDeep = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(sortKeysDeep)
   if (value !== null && typeof value === 'object') {
     return Object.keys(value as Record<string, unknown>)
