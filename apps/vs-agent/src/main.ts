@@ -16,6 +16,7 @@ import {
   IndexerWebSocketService,
   buildDefaultIndexerHandlerRegistry,
   registerAuthorizationHandlers,
+  registerSelfIssuanceAnchorHandlers,
   EcsBootstrapService,
   reconcileVtjscPublications,
   generateDigestSRI,
@@ -78,7 +79,6 @@ import {
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
   VERANA_INDEXER_BASE_URL,
   VERANA_ACCOUNT_MNEMONIC,
-  VS_OPERATOR_MNEMONIC,
   VERANA_RPC_ENDPOINT_URL,
   VERANA_CHAIN_ID,
   VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE,
@@ -208,11 +208,6 @@ const run = async () => {
   if (!VERANA_ACCOUNT_MNEMONIC) {
     configErrors.push('VERANA_ACCOUNT_MNEMONIC is required')
   }
-  if (VS_OPERATOR_MNEMONIC && VS_OPERATOR_MNEMONIC === VERANA_ACCOUNT_MNEMONIC) {
-    configErrors.push(
-      'VS_OPERATOR_MNEMONIC must be a different account than VERANA_ACCOUNT_MNEMONIC (the chain forbids one account from holding both a blanket OperatorAuthorization and a VSOperatorAuthorization)',
-    )
-  }
   if (!['standalone', 'delegated'].includes(AGENT_MODE)) {
     configErrors.push(`AGENT_MODE must be 'standalone' or 'delegated' (got '${AGENT_MODE}')`)
   }
@@ -332,7 +327,6 @@ const run = async () => {
       rpcUrl: VERANA_RPC_ENDPOINT_URL,
       chainId: VERANA_CHAIN_ID,
       mnemonic: VERANA_ACCOUNT_MNEMONIC,
-      vsOperatorMnemonic: VS_OPERATOR_MNEMONIC,
       corporationAddress,
       logger: serverLogger,
       autoTriggerResolver: VERANA_AUTO_TRIGGER_RESOLVER,
@@ -482,6 +476,14 @@ const run = async () => {
       )
     }
     if (authorizationService) registerAuthorizationHandlers(handlerRegistry, authorizationService)
+    if (indexerService && VERANA_CORPORATION_ID) {
+      registerSelfIssuanceAnchorHandlers(
+        handlerRegistry,
+        indexerService,
+        Number(VERANA_CORPORATION_ID),
+        selfTrDefaults,
+      )
+    }
 
     const indexerCorporationId =
       VERANA_INDEXER_SUBSCRIPTION_SCOPE === 'corporation' && VERANA_CORPORATION_ID

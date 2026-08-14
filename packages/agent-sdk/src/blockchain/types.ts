@@ -233,6 +233,8 @@ export interface RawParticipant {
   opSummaryDigest?: string
   revoked: Date | undefined
   slashed: Date | undefined
+  /** Account the participant delegates its VS operations to; empty when it declares none. */
+  vsOperator?: string
 }
 
 export interface Ecosystem {
@@ -327,13 +329,6 @@ export interface VeranaChainConfig {
   gasPrice?: string
   corporationAddress?: string
   autoTriggerResolver?: boolean
-  /**
-   * Mnemonic for a second, dedicated signing identity used only for
-   * MsgCreateOrUpdateParticipantSession (CSPS). A corporation account can never hold both a
-   * blanket OperatorAuthorization and a VSOperatorAuthorization, so real (CSPS-delivered, not
-   * self-issued) credential delivery requires this to be a different account than `mnemonic`.
-   */
-  vsOperatorMnemonic?: string
 }
 
 /** Wrapper for optional uint64 values per `verana.pp.v1.OptionalUInt64`. */
@@ -350,7 +345,6 @@ export interface StartParticipantOPParams {
   verificationFees?: OptionalUInt64
   vsOperator?: string
   vsOperatorAuthzMsgTypes?: string[]
-  vsOperatorAuthzWithFeegrant?: boolean
 }
 
 export interface SetParticipantOPToValidatedParams {

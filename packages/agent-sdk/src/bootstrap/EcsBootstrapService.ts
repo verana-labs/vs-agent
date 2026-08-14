@@ -23,12 +23,6 @@ import { waitUntilOwnDidIsPubliclyResolvable } from '../utils/didReadiness'
 const START_OP_MSG = '/verana.pp.v1.MsgStartParticipantOP'
 const SELF_CREATE_MSG = '/verana.pp.v1.MsgSelfCreateParticipant'
 
-// x/pp/types/types.go vsoaPermittedMsgTypes: the only two msg types an ISSUER-role VSOA may cover.
-const ISSUER_VSOA_MSG_TYPES = [
-  '/verana.pp.v1.MsgCreateOrUpdateParticipantSession',
-  '/verana.pp.v1.MsgSetParticipantOPToValidated',
-]
-
 const ISSUER_ONBOARDING_MODE_OPEN = 1
 const ISSUER_ONBOARDING_MODE_GRANTOR = 3
 
@@ -68,6 +62,10 @@ export class EcsBootstrapService {
   }
 
   private async runStandalone(): Promise<void> {
+    // Re-driving an interrupted offer signs nothing on chain, so it also runs for a deployment
+    // whose participants the Corporation operator provisions out of band.
+    await this.acceptPendingOffers()
+
     const skip = await this.preflight()
     if (skip) {
       this.logger.info(`[EcsBootstrap] standalone bootstrap skipped: ${skip}`)
@@ -76,7 +74,6 @@ export class EcsBootstrapService {
     const chain = this.agent.veranaChain!
     const indexer = this.indexer!
 
-    await this.acceptPendingOffers()
     const { credential, credentialType, service } = await this.discoverEcsSchemas(indexer)
     await this.ensureHolderParticipant(chain, indexer, credential, credentialType)
     await this.ensureServiceIssuer(chain, indexer, service)
@@ -89,9 +86,12 @@ export class EcsBootstrapService {
     if (!this.indexer) return 'the Verana indexer is not configured'
     if (!this.options.trustedEcosystemDids?.length) return 'TRUSTED_ECS_ECOSYSTEM_DIDS is not set'
 
+    // An account that holds only a VSOperatorAuthorization cannot send participant lifecycle
+    // messages, and the chain forbids it from holding both. Such a deployment provisions its
+    // participants through the Corporation operator instead, so this is a normal condition.
     const operatorAuths = await chain.listOperatorAuthorizations()
     if (!operatorAuths.some(a => a.msgTypes.includes(START_OP_MSG))) {
-      return `operator ${chain.address} has no OperatorAuthorization covering MsgStartParticipantOP`
+      return `operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP; this agent expects its participants to be provisioned out of band`
     }
     const balance = await chain.getBalance()
     if (Number(balance.amount) === 0) {
@@ -265,13 +265,6 @@ export class EcsBootstrapService {
       role: ISSUER_PARTICIPANT_TYPE,
       validatorParticipantId: root.id,
       did: this.agent.did!,
-      ...(chain.vsOperator
-        ? {
-            vsOperator: chain.vsOperator,
-            vsOperatorAuthzMsgTypes: ISSUER_VSOA_MSG_TYPES,
-            vsOperatorAuthzWithFeegrant: true,
-          }
-        : {}),
     })
     await chain.setParticipantOPToValidated({
       id: participantId,
@@ -320,13 +313,6 @@ export class EcsBootstrapService {
         validatorParticipantId: root.id,
         did: this.agent.did!,
         effectiveUntil: root.effective_until ? new Date(root.effective_until) : undefined,
-        ...(chain.vsOperator
-          ? {
-              vsOperator: chain.vsOperator,
-              vsOperatorAuthzMsgTypes: ISSUER_VSOA_MSG_TYPES,
-              vsOperatorAuthzWithFeegrant: true,
-            }
-          : {}),
       })
       await this.triggerResolverBestEffort(chain, participantId)
       this.logger.info(`[EcsBootstrap] self-created Service ISSUER participant ${participantId}`)

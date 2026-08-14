@@ -231,14 +231,10 @@ export class VtFlowOrchestrator {
       role: ParticipantRole.Issuer,
       participantState: ParticipantState.Active,
     })
-    // CSPS signs as chain.vsOperator when a dedicated vs_operator identity is configured
-    // (see VeranaChainService.createOrUpdateParticipantSession); only an issuer participant
-    // declaring that same address can actually have its credential delivered.
-    const signerAddress = chain.vsOperator ?? chain.address
-    const issuer = issuers.find(p => !p.revoked && !p.slashed && p.vs_operator === signerAddress)
+    const issuer = issuers.find(p => !p.revoked && !p.slashed && p.vs_operator === chain.address)
     if (!issuer) {
       this.agent.config.logger.warn(
-        `[vt-flow] no active issuer participant with vs_operator ${signerAddress} for schema ${record.schemaId}; not offering`,
+        `[vt-flow] no active issuer participant with vs_operator ${chain.address} for schema ${record.schemaId}; not offering`,
       )
       return null
     }
@@ -331,7 +327,6 @@ export class VtFlowOrchestrator {
       walletAgentParticipantId: Number(record.walletAgentParticipantId ?? 0) || 0,
       digest,
     })
-
     return digest
   }
 
