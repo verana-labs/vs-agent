@@ -29,8 +29,8 @@ import {
 import {
   createCredential,
   createVtc,
-  findMetadataEntry,
   removeStoredTrustCredential,
+  resolveJsonSchemaCredentialId,
   validateSchema,
 } from '../utils'
 
@@ -266,14 +266,7 @@ export class VtFlowOrchestrator {
     credentialType?: string[]
     credentialContext?: string[]
   }): Promise<JsonCredential> {
-    const chain = this.requireChain()
-    const didRecords = await this.agent.dids.getCreatedDids({ did: this.agent.did! })
-    const didRecord = didRecords[0]
-    if (!didRecord) throw new Error('Agent DID record not found')
-    const schemaRef = `vpr:verana:${chain.getChainId}:cs:${input.credentialSchemaId}`
-    const entry = await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
-    if (!entry) throw new Error(`No stored VTJSC found for ${schemaRef}`)
-    const { data } = entry
+    const jsonSchemaCredentialId = await this.resolveJsonSchemaCredentialId(input.credentialSchemaId)
 
     // A credential whose claims don't satisfy the schema's required fields is not a valid
     // instance of that credential type — reject it here rather than issue an empty shell.
@@ -288,11 +281,20 @@ export class VtFlowOrchestrator {
     })
     if (input.credentialContext) unsignedCredential.context = input.credentialContext
     unsignedCredential.credentialSchema = {
-      id: data.verifiableCredential?.[0]?.id,
+      id: jsonSchemaCredentialId,
       type: 'JsonSchemaCredential',
     }
 
     return JsonTransformer.toJSON(unsignedCredential) as JsonCredential
+  }
+
+  private async resolveJsonSchemaCredentialId(credentialSchemaId: string): Promise<string> {
+    return resolveJsonSchemaCredentialId(
+      this.agent,
+      this.requireIndexer(),
+      credentialSchemaId,
+      this.requireChain().getChainId,
+    )
   }
 
   /** Per the spec the algorithm comes from the schema, never from the digest value. */

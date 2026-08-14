@@ -400,16 +400,22 @@ async function anchorCredentialDigest(
 }
 
 // replaces the self-TR example JSC binding with the on-chain VTJSC so resolvers can link the credential to the VPR
+/**
+ * @param jsonSchemaCredentialId the VTJSC the Ecosystem published for this schema. Only the
+ * Ecosystem publishes it, so an agent that issues against another Corporation's Ecosystem must
+ * resolve it there — see resolveJsonSchemaCredentialId.
+ */
 export async function rebindEcsCredentialSchema(
   agent: VsAgent,
   publicApiBaseUrl: string,
   schemaId: string,
   schemaKey: string,
   defaults: SelfTrDefaults,
+  jsonSchemaCredentialId: string,
 ): Promise<void> {
   if (!['ecs-service', 'ecs-org'].includes(schemaKey) || !agent.did) return
   const vpUrl = `${publicApiBaseUrl}/vt/${schemaKey}-vtc-vp.json`
-  const jscUrl = `${publicApiBaseUrl}/vt/schemas-${schemaId}-jsc.json`
+  const jscUrl = jsonSchemaCredentialId
 
   const didRecord = await getDidRecord(agent)
   const record = didRecord.metadata.get('_vt/vtc') ?? {}

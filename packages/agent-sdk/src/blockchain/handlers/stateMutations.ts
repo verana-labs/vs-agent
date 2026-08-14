@@ -20,9 +20,10 @@ import {
   rebindEcsCredentialSchema,
   removeStoredTrustCredential,
 } from '../../utils/trustCredentialStore'
+import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'
-import { IndexerActivity, ValidationState, VeranaSyncState } from '../types'
+import { IndexerActivity, ParticipantRole, ParticipantState, ValidationState, VeranaSyncState } from '../types'
 
 const DEFAULT_CHAIN_ID = 'vna-testnet-1'
 const PARTICIPANT_ROLE_HOLDER = 6
@@ -367,24 +368,61 @@ export async function reconcileVtjscPublications(
           continue
         }
       }
-      if (selfTrDefaults) {
-        try {
-          const ecsKey = await identifySchema(JSON.parse(schema.json_schema))
-          if (!ecsKey) continue
-          await rebindEcsCredentialSchema(
-            agent,
-            agent.publicApiBaseUrl,
-            String(schema.id),
-            ecsKey,
-            selfTrDefaults,
-          )
-        } catch (e) {
-          agent.config.logger.error(
-            `[VTJSC] Failed to rebind ECS credential for schema ${schema.id}`,
-            e as Error,
-          )
-        }
-      }
+    }
+  }
+
+  if (selfTrDefaults) await reconcileSelfIssuedEcsCredentials(agent, indexer, selfTrDefaults)
+}
+
+/**
+ * Rebinds and anchors this agent's own ECS credentials.
+ *
+ * It follows the ISSUER Participant entries the agent holds, not the Ecosystems its Corporation
+ * controls: an agent may issue against an Ecosystem that another Corporation owns, and an
+ * Ecosystem controller may hold no ISSUER entry at all. An entry is usable only when it names
+ * this agent's account as its vs_operator, because the chain accepts the anchoring
+ * CreateOrUpdateParticipantSession from no other signer.
+ */
+async function reconcileSelfIssuedEcsCredentials(
+  agent: VsAgent,
+  indexer: VeranaIndexerService,
+  selfTrDefaults: SelfTrDefaults,
+): Promise<void> {
+  const chain = agent.veranaChain
+  if (!chain || !agent.did || !agent.publicApiBaseUrl) return
+  const chainId = chain.getChainId ?? DEFAULT_CHAIN_ID
+
+  const issuers = await indexer.listParticipants({
+    did: agent.did,
+    role: ParticipantRole.Issuer,
+    participantState: ParticipantState.Active,
+  })
+
+  for (const issuer of issuers) {
+    if (issuer.revoked || issuer.slashed || issuer.vs_operator !== chain.address) continue
+    try {
+      const schema = await indexer.getCredentialSchema(issuer.schema_id)
+      const ecsKey = await identifySchema(JSON.parse(schema.json_schema))
+      if (!ecsKey) continue
+      const jsonSchemaCredentialId = await resolveJsonSchemaCredentialId(
+        agent,
+        indexer,
+        schema.id,
+        chainId,
+      )
+      await rebindEcsCredentialSchema(
+        agent,
+        agent.publicApiBaseUrl,
+        String(schema.id),
+        ecsKey,
+        selfTrDefaults,
+        jsonSchemaCredentialId,
+      )
+    } catch (e) {
+      agent.config.logger.error(
+        `[SelfTR] Failed to rebind the ECS credential of schema ${issuer.schema_id}`,
+        e as Error,
+      )
     }
   }
 }

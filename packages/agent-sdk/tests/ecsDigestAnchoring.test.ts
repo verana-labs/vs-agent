@@ -64,8 +64,18 @@ function makeChain(overrides: Record<string, unknown> = {}) {
   }
 }
 
+const JSC_ID = 'https://ecosystem.example/vt/schemas-5-jsc.json'
+
 async function rebind(agent: unknown) {
-  await rebindEcsCredentialSchema(agent as never, 'https://agent.example', '5', 'ecs-service', defaults)
+  // The VTJSC comes from the Ecosystem, which may be another party entirely.
+  await rebindEcsCredentialSchema(
+    agent as never,
+    'https://agent.example',
+    '5',
+    'ecs-service',
+    defaults,
+    JSC_ID,
+  )
 }
 
 describe('ECS credential digest anchoring', () => {
