@@ -48,21 +48,21 @@ describe('self-issuance anchor handlers', () => {
     reconcileVtjscPublications.mockResolvedValue(undefined)
   })
 
-  it.each(['SetParticipantOPToValidated', 'SelfCreateParticipant'])(
-    'reconciles the ECS credentials when %s makes the agent an ISSUER',
-    async msg => {
-      const { original } = await dispatch(msg, { id: 42, did: DID, role: 'ISSUER' })
+  it.each([
+    'SetParticipantOPToValidated',
+    'SelfCreateParticipant',
+  ])('reconciles the ECS credentials when %s makes the agent an ISSUER', async msg => {
+    const { original } = await dispatch(msg, { id: 42, did: DID, role: 'ISSUER' })
 
-      expect(original).toHaveBeenCalledTimes(1)
-      expect(reconcileVtjscPublications).toHaveBeenCalledTimes(1)
-      expect(reconcileVtjscPublications).toHaveBeenCalledWith(
-        expect.objectContaining({ did: DID }),
-        expect.anything(),
-        7,
-        defaults,
-      )
-    },
-  )
+    expect(original).toHaveBeenCalledTimes(1)
+    expect(reconcileVtjscPublications).toHaveBeenCalledTimes(1)
+    expect(reconcileVtjscPublications).toHaveBeenCalledWith(
+      expect.objectContaining({ did: DID }),
+      expect.anything(),
+      7,
+      defaults,
+    )
+  })
 
   it('ignores a participant of another DID', async () => {
     await dispatch('SelfCreateParticipant', { id: 42, did: 'did:web:other.example', role: 'ISSUER' })

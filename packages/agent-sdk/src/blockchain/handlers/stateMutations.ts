@@ -23,7 +23,13 @@ import {
 import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'
-import { IndexerActivity, ParticipantRole, ParticipantState, ValidationState, VeranaSyncState } from '../types'
+import {
+  IndexerActivity,
+  ParticipantRole,
+  ParticipantState,
+  ValidationState,
+  VeranaSyncState,
+} from '../types'
 
 const DEFAULT_CHAIN_ID = 'vna-testnet-1'
 const PARTICIPANT_ROLE_HOLDER = 6
@@ -404,12 +410,7 @@ async function reconcileSelfIssuedEcsCredentials(
       const schema = await indexer.getCredentialSchema(issuer.schema_id)
       const ecsKey = await identifySchema(JSON.parse(schema.json_schema))
       if (!ecsKey) continue
-      const jsonSchemaCredentialId = await resolveJsonSchemaCredentialId(
-        agent,
-        indexer,
-        schema.id,
-        chainId,
-      )
+      const jsonSchemaCredentialId = await resolveJsonSchemaCredentialId(agent, indexer, schema.id, chainId)
       await rebindEcsCredentialSchema(
         agent,
         agent.publicApiBaseUrl,
