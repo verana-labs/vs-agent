@@ -355,14 +355,16 @@ export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc
 /**
  * Anchors a self-issued ECS credential, the same way as any other issuance: through
  * CreateOrUpdateParticipantSession, which stores the digest in the `di` module keeper-to-keeper.
- * The issuer therefore needs an active ISSUER participant for the schema that names this agent's
- * account as its vs_operator. The Corporation operator provisions that entry out of band, so it
- * may appear after the agent starts; the caller retries on the matching chain events.
+ *
+ * `issuerParticipantId` must name an active ISSUER participant of this agent for the schema, whose
+ * vs_operator is this agent's account — the chain accepts the session from no other signer. The
+ * caller resolves it, because it already lists the agent's participants to decide what to rebind.
  */
 async function anchorCredentialDigest(
   agent: VsAgent,
   schemaId: number,
   credential: W3cJsonLdVerifiableCredential | undefined,
+  issuerParticipantId: number,
 ): Promise<void> {
   const chain = agent.veranaChain
   if (!chain) return
@@ -378,13 +380,6 @@ async function anchorCredentialDigest(
   )
   // the same credential gives the same digest on each run, so an anchored digest needs no second transaction
   if (await chain.getDigest(digest)) return
-
-  const issuerParticipantId = await chain.findActiveIssuerParticipantId(agent.did, schemaId)
-  if (issuerParticipantId === undefined) {
-    throw new Error(
-      `[DigestAnchor] no active ISSUER participant for schema ${schemaId} with vs_operator ${chain.address}`,
-    )
-  }
 
   // A self-issued credential has no counterparty, so the session names only the issuer.
   const { txHash } = await chain.createOrUpdateParticipantSession({
@@ -404,6 +399,8 @@ async function anchorCredentialDigest(
  * @param jsonSchemaCredentialId the VTJSC the Ecosystem published for this schema. Only the
  * Ecosystem publishes it, so an agent that issues against another Corporation's Ecosystem must
  * resolve it there — see resolveJsonSchemaCredentialId.
+ * @param issuerParticipantId this agent's ISSUER participant for the schema, which anchors the
+ * credential digest.
  */
 export async function rebindEcsCredentialSchema(
   agent: VsAgent,
@@ -412,6 +409,7 @@ export async function rebindEcsCredentialSchema(
   schemaKey: string,
   defaults: SelfTrDefaults,
   jsonSchemaCredentialId: string,
+  issuerParticipantId: number,
 ): Promise<void> {
   if (!['ecs-service', 'ecs-org'].includes(schemaKey) || !agent.did) return
   const vpUrl = `${publicApiBaseUrl}/vt/${schemaKey}-vtc-vp.json`
@@ -448,6 +446,7 @@ export async function rebindEcsCredentialSchema(
         agent,
         Number(schemaId),
         verifiablePresentation?.verifiableCredential?.[0] as W3cJsonLdVerifiableCredential | undefined,
+        issuerParticipantId,
       ),
   )
 

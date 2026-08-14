@@ -42,7 +42,7 @@ const {
 } = require('@verana-labs/verana-types/codec/verana/ec/v1/query')
 const {
   QueryClientImpl: PpQueryClientImpl,
-  QueryFindParticipantsWithDIDRequest,
+  QueryListParticipantsRequest,
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/query')
 const {
   MsgSetParticipantOPToValidated,
@@ -59,6 +59,10 @@ const {
 // ParticipantRole.HOLDER (x/pp/types); the only role whose vs_operator may send TriggerResolver (chain Path 1).
 const PARTICIPANT_ROLE_HOLDER = 6
 const PARTICIPANT_ROLE_ISSUER = 1
+
+// QueryListParticipantsRequest.response_max_size caps at 1024 and defaults to 64. The node applies
+// the other filters loosely, so ask for the largest page and match the fields again here.
+const PARTICIPANT_QUERY_MAX_SIZE = 1024
 
 // the chain answers a query for an unknown record with a NotFound error, not with an empty result
 function isNotFoundError(error: unknown): boolean {
@@ -339,8 +343,12 @@ export class VeranaChainService {
 
   async findActiveHolderParticipantIdByDid(did: string): Promise<number | undefined> {
     // fromPartial fills the unused fields with defaults so the request encodes correctly.
-    const request = QueryFindParticipantsWithDIDRequest.fromPartial({ did })
-    const { participants } = await this.ppQuery.FindParticipantsWithDID(request)
+    const request = QueryListParticipantsRequest.fromPartial({
+      did,
+      role: PARTICIPANT_ROLE_HOLDER,
+      responseMaxSize: PARTICIPANT_QUERY_MAX_SIZE,
+    })
+    const { participants } = await this.ppQuery.ListParticipants(request)
     return participants.find(
       p => p.did === did && p.role === PARTICIPANT_ROLE_HOLDER && !p.revoked && !p.slashed,
     )?.id
@@ -352,8 +360,14 @@ export class VeranaChainService {
    * of no use to this agent.
    */
   async findActiveIssuerParticipantId(did: string, schemaId: number): Promise<number | undefined> {
-    const request = QueryFindParticipantsWithDIDRequest.fromPartial({ did })
-    const { participants } = await this.ppQuery.FindParticipantsWithDID(request)
+    const request = QueryListParticipantsRequest.fromPartial({
+      did,
+      schemaId,
+      role: PARTICIPANT_ROLE_ISSUER,
+      grantee: this.operatorAddress,
+      responseMaxSize: PARTICIPANT_QUERY_MAX_SIZE,
+    })
+    const { participants } = await this.ppQuery.ListParticipants(request)
     return participants.find(
       p =>
         p.did === did &&

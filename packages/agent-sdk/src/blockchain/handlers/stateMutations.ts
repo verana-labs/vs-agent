@@ -418,6 +418,7 @@ async function reconcileSelfIssuedEcsCredentials(
         ecsKey,
         selfTrDefaults,
         jsonSchemaCredentialId,
+        issuer.id,
       )
     } catch (e) {
       agent.config.logger.error(

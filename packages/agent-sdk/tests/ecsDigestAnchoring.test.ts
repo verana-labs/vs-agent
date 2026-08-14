@@ -58,16 +58,17 @@ function makeChain(overrides: Record<string, unknown> = {}) {
     address: 'verana1operator',
     getCredentialSchema: vi.fn(async () => ({ id: 5, digestAlgorithm: 'sha256' })),
     getDigest: vi.fn(async () => undefined),
-    findActiveIssuerParticipantId: vi.fn(async () => 42),
     createOrUpdateParticipantSession: vi.fn(async () => ({ txHash: 'ABC' })),
     ...overrides,
   }
 }
 
 const JSC_ID = 'https://ecosystem.example/vt/schemas-5-jsc.json'
+const ISSUER_PARTICIPANT_ID = 42
 
 async function rebind(agent: unknown) {
-  // The VTJSC comes from the Ecosystem, which may be another party entirely.
+  // The VTJSC comes from the Ecosystem, which may be another party entirely, and the caller
+  // supplies the ISSUER participant that anchors the digest.
   await rebindEcsCredentialSchema(
     agent as never,
     'https://agent.example',
@@ -75,6 +76,7 @@ async function rebind(agent: unknown) {
     'ecs-service',
     defaults,
     JSC_ID,
+    ISSUER_PARTICIPANT_ID,
   )
 }
 
@@ -96,9 +98,8 @@ describe('ECS credential digest anchoring', () => {
 
     await rebind(agent)
 
-    expect(chain.findActiveIssuerParticipantId).toHaveBeenCalledWith(DID, 5)
     expect(chain.createOrUpdateParticipantSession).toHaveBeenCalledWith(
-      expect.objectContaining({ digest: DIGEST, issuerParticipantId: 42 }),
+      expect.objectContaining({ digest: DIGEST, issuerParticipantId: ISSUER_PARTICIPANT_ID }),
     )
   })
 
@@ -134,15 +135,6 @@ describe('ECS credential digest anchoring', () => {
     const { agent, didsUpdate } = makeAgent(chain)
 
     await expect(rebind(agent)).rejects.toThrow('chain is unreachable')
-    expect(didsUpdate).not.toHaveBeenCalled()
-  })
-
-  it('publishes nothing while the agent holds no ISSUER participant for the schema', async () => {
-    const chain = makeChain({ findActiveIssuerParticipantId: vi.fn(async () => undefined) })
-    const { agent, didsUpdate } = makeAgent(chain)
-
-    await expect(rebind(agent)).rejects.toThrow('no active ISSUER participant')
-    expect(chain.createOrUpdateParticipantSession).not.toHaveBeenCalled()
     expect(didsUpdate).not.toHaveBeenCalled()
   })
 
