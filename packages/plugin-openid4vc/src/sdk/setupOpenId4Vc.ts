@@ -158,34 +158,43 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
  *   - it refuses any proof type that omits `key_attestations_required`, treating the OID4VCI 1.0
  *     optional member as mandatory.
  *
- * All three accommodations are scoped to that client, recognised by the malformed accept header it
- * sends. Advertising any of them to everyone is not an option: a Credo holder that sees
+ * The payload accommodation is scoped to that client, recognised by the malformed accept header it
+ * sends. Advertising it to everyone is not an option: a Credo holder that sees
  * `key_attestations_required` stops binding a plain JWK and demands a key attestation, and swiyu
  * models `proof_types_supported` as a closed enum, so an `attestation` member makes it throw while
  * parsing the metadata and the offer dies before the wallet renders anything.
+ *
+ * The accept rewrite is wider: any client that offers both types can read JSON, and swiyu must be
+ * served JSON because its resolver rejects our did:webvh SCID and so can never verify the signed
+ * JWT. A client asking for `application/jwt` alone still receives it.
  */
 export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
   return (request: Request, response: Response, next: NextFunction): void => {
     const accept = request.headers.accept
-    // Both types inside ONE media range, which only the semicolon typo produces. A correct
-    // `application/json, application/jwt` is two ranges and belongs to an ordinary client -
-    // swiyu sends exactly that, and matching it fed swiyu the EUDI-only accommodations.
-    const isOpenId4VciKt =
-      typeof accept === 'string' &&
-      accept
-        .split(',')
-        .some(range => range.includes('application/jwt') && range.includes('application/json'))
+    const ranges = typeof accept === 'string' ? accept.split(',') : []
+    const isOpenId4VciKt = ranges.some(
+      range => range.includes('application/jwt') && range.includes('application/json'),
+    )
+    const prefersPlainMetadata =
+      isOpenId4VciKt ||
+      (ranges.some(range => range.includes('application/jwt')) &&
+        ranges.some(range => range.includes('application/json')))
 
     if (
       request.method !== 'GET' ||
       !request.path.includes('/.well-known/openid-credential-issuer') ||
-      !isOpenId4VciKt
+      !prefersPlainMetadata
     ) {
       next()
       return
     }
 
     request.headers.accept = 'application/json'
+    if (!isOpenId4VciKt) {
+      next()
+      return
+    }
+
     const send = response.send.bind(response)
     response.send = ((body?: unknown) =>
       send(
