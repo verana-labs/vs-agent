@@ -167,7 +167,12 @@ export class VtFlowsService {
     if (holderParticipant.schema_id == null)
       throw new BadRequestException('Holder participant has no schema_id')
 
-    const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
+    // The orchestrator reads the schema and the Ecosystem VTJSC through the indexer, so it fails
+    // with "Agent has no indexer configured" when this omits it.
+    const orchestrator = new VtFlowOrchestrator(agent, {
+      publicApiBaseUrl: agent.publicApiBaseUrl,
+      indexer: this.getIndexer(),
+    })
     try {
       const offered = await orchestrator.validateAndOfferCredential({
         vtFlowRecordId: record.id,

@@ -575,7 +575,11 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    record.assertState([VtFlowState.Validating, VtFlowState.CredRevoked])
+    // AWAITING_OR is the state the validator sits in while it decides. It is also the only state
+    // from which it can validate, and validation accepts, validates and offers the credential in
+    // one step. Without AWAITING_OR here the validator has no moment to set the claims that the
+    // credential carries.
+    record.assertState([VtFlowState.AwaitingOr, VtFlowState.Validating, VtFlowState.CredRevoked])
     record.claims = claims
     await this.updateRecord(agentContext, record)
     return record
