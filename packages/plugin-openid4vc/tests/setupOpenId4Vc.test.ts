@@ -33,6 +33,7 @@ describe('setupOpenId4Vc', () => {
   it('creates a fresh non-global Express application for every setup', () => {
     const first = setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
+      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -40,6 +41,7 @@ describe('setupOpenId4Vc', () => {
     }))
     const second = setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
+      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -57,6 +59,7 @@ describe('setupOpenId4Vc', () => {
     delete issuerOnly.trust
     const issuerSetup = setupOpenId4Vc(issuerOnly, () => ({
       getVctMetadata: () => undefined,
+      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -83,6 +86,7 @@ describe('setupOpenId4Vc', () => {
   it('delegates X.509 trust only to configured trust anchors', async () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
+      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -108,6 +112,7 @@ describe('setupOpenId4Vc', () => {
   it('serves the SD-JWT VC issuer metadata that x5c-anchoring holders resolve', async () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
+      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({
         issuer: 'https://issuer.example',
         jwks: { keys: [{ kty: 'EC', crv: 'P-256' }] },
@@ -129,18 +134,71 @@ describe('setupOpenId4Vc', () => {
   it('serves the SD-JWT VC issuer metadata at the path-inserted well-known form', async () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
+      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({ issuer: 'https://issuer.example', jwks: { keys: [] } }),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
     }))
 
-    const response = await request(setup.publicMiddleware).get(
-      '/.well-known/jwt-vc-issuer/oid4vci/demo-did',
-    )
+    const response = await request(setup.publicMiddleware).get('/.well-known/jwt-vc-issuer/oid4vci/demo-did')
 
     expect(response.status).toBe(200)
     expect(response.body.issuer).toBe('https://issuer.example')
+  })
+
+  const withSignedMetadata = (signedMetadataJwt: string | undefined) =>
+    setupOpenId4Vc(validOptions(), () => ({
+      getVctMetadata: () => undefined,
+      getSignedMetadataJwt: () => signedMetadataJwt,
+      getJwtVcIssuerMetadata: () => ({}),
+      mapCredentialRequest: () => {
+        throw new Error('not implemented')
+      },
+    }))
+
+  it.each([
+    '/.well-known/openid-credential-issuer/oid4vci/issuer',
+    '/oid4vci/issuer/.well-known/openid-credential-issuer',
+  ])('serves the certificate-bound signed metadata at %s', async path => {
+    const setup = withSignedMetadata('header.payload.signature')
+
+    const response = await request(setup.publicMiddleware).get(path).set('accept', 'application/jwt')
+
+    expect(response.status).toBe(200)
+    expect(response.headers['content-type']).toContain('application/jwt')
+    expect(response.text).toBe('header.payload.signature')
+  })
+
+  // Every client that reads JSON is served JSON, so the signed JWT only ever reaches a client
+  // asking for it alone. Answering the others would hand swiyu a JWT it cannot verify.
+  it.each(['application/json, application/jwt', 'application/jwt; application/json', 'application/json'])(
+    'leaves %s to the plain metadata endpoint',
+    async accept => {
+      const setup = withSignedMetadata('header.payload.signature')
+
+      const response = await request(setup.publicMiddleware)
+        .get('/.well-known/openid-credential-issuer/oid4vci/issuer')
+        .set('accept', accept)
+
+      expect(response.status).toBe(404)
+    },
+  )
+
+  it('falls through when no signed metadata exists or the path is not issuer metadata', async () => {
+    const absent = await request(withSignedMetadata(undefined).publicMiddleware)
+      .get('/.well-known/openid-credential-issuer/oid4vci/issuer')
+      .set('accept', 'application/jwt')
+    const otherPath = await request(withSignedMetadata('header.payload.signature').publicMiddleware)
+      .get('/oid4vci/issuer/credential')
+      .set('accept', 'application/jwt')
+    const noAccept = await request(withSignedMetadata('header.payload.signature').publicMiddleware).get(
+      '/.well-known/openid-credential-issuer/oid4vci/issuer',
+    )
+
+    expect(absent.status).toBe(404)
+    expect(otherPath.status).toBe(404)
+    expect(noAccept.status).toBe(404)
   })
 
   it('does not advertise wallet attestation metadata by default', async () => {
@@ -148,6 +206,7 @@ describe('setupOpenId4Vc', () => {
     options.issuer!.walletAttestationCertificates = ['unused-while-attestation-is-not-required']
     const setup = setupOpenId4Vc(options, () => ({
       getVctMetadata: () => undefined,
+      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -175,6 +234,7 @@ describe('setupOpenId4Vc', () => {
     options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]
     const setup = setupOpenId4Vc(options, () => ({
       getVctMetadata: () => undefined,
+      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -207,7 +267,8 @@ describe('setupOpenId4Vc', () => {
     expect(() =>
       setupOpenId4Vc(options, () => ({
         getVctMetadata: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
+        getSignedMetadataJwt: () => undefined,
+        getJwtVcIssuerMetadata: () => ({}),
         mapCredentialRequest: () => {
           throw new Error('not implemented')
         },
