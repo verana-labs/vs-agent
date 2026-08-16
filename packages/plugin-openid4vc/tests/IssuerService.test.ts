@@ -1,6 +1,6 @@
 import type { OpenId4VcPluginOptions } from '../src/types'
 
-import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
+import { AgentContext, ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { IssuerService } from '../src/services/IssuerService'
@@ -65,16 +65,34 @@ function issuerApi() {
     updateIssuerMetadata: vi.fn(),
     createCredentialOffer: vi.fn(),
     getIssuanceSessionById: vi.fn(),
+    getIssuerMetadata: vi.fn().mockResolvedValue({ signedMetadataJwt: undefined }),
   }
 }
 
-function agent(api = issuerApi(), did: string | undefined = AGENT_DID) {
+const AGENT_CONTEXT = Symbol('agent-context')
+const METADATA_PAYLOAD = {
+  credential_issuer: 'https://agent.example/oid4vci/issuer',
+  sub: 'https://agent.example/oid4vci/issuer',
+  iat: 1_784_635_200,
+}
+
+function credoSignedMetadata(header: Record<string, unknown>): string {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
+  return `${encode(header)}.${encode(METADATA_PAYLOAD)}.signature`
+}
+
+function jwsService() {
+  return { createJwsCompact: vi.fn().mockResolvedValue('re-signed.metadata.jwt') }
+}
+
+function agent(api = issuerApi(), did: string | undefined = AGENT_DID, jws = jwsService()) {
   return {
     did,
     dids: { resolve: vi.fn() },
     genericRecords: {},
     kms: {},
     x509: {},
+    dependencyManager: { resolve: (token: unknown) => (token === AgentContext ? AGENT_CONTEXT : jws) },
     modules: { openId4Vc: { issuer: api } },
   }
 }
@@ -207,6 +225,96 @@ describe('IssuerService', () => {
         },
       }),
     )
+  })
+
+  it('re-signs the DID-signed metadata under both kid and the certificate chain', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    api.getIssuerMetadata.mockResolvedValue({
+      signedMetadataJwt: credoSignedMetadata({
+        alg: 'ES256',
+        typ: 'openidvci-issuer-metadata+jwt',
+        kid: `${AGENT_DID}#openid4vc-development-issuer`,
+      }),
+    })
+    const jws = jwsService()
+    const service = new IssuerService(agent(api, AGENT_DID, jws) as never, options())
+
+    await service.ensureInitialized()
+
+    expect(jws.createJwsCompact).toHaveBeenCalledWith(AGENT_CONTEXT, {
+      payload: Buffer.from(JSON.stringify(METADATA_PAYLOAD), 'utf8'),
+      keyId: 'issuer-key',
+      protectedHeaderOptions: {
+        alg: 'ES256',
+        typ: 'openidvci-issuer-metadata+jwt',
+        kid: `${AGENT_DID}#openid4vc-development-issuer`,
+        x5c: ['leaf-certificate'],
+      },
+    })
+    expect(service.getSignedMetadataJwt()).toBe('re-signed.metadata.jwt')
+  })
+
+  // The demo cast signs in development mode, where the whole chain is one self-signed leaf. Filtering
+  // it as a trust anchor would leave an empty x5c, which NL Wallet rejects as a non-empty vector.
+  it('carries the development self-signed leaf as the whole metadata certificate chain', async () => {
+    loadSigningCertificate.mockResolvedValue({
+      ...signingHandle(),
+      chain: [leafCertificate],
+      development: true,
+    })
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    api.getIssuerMetadata.mockResolvedValue({
+      signedMetadataJwt: credoSignedMetadata({
+        alg: 'ES256',
+        typ: 'openidvci-issuer-metadata+jwt',
+        kid: `${AGENT_DID}#openid4vc-development-issuer`,
+      }),
+    })
+    const jws = jwsService()
+
+    await new IssuerService(agent(api, AGENT_DID, jws) as never, options()).ensureInitialized()
+
+    const { protectedHeaderOptions } = jws.createJwsCompact.mock.calls[0][1]
+    expect(protectedHeaderOptions.x5c).toEqual(['leaf-certificate'])
+    expect(protectedHeaderOptions.kid).toBe(`${AGENT_DID}#openid4vc-development-issuer`)
+  })
+
+  it('keeps the self-signed trust anchor out of the metadata certificate chain', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    api.getIssuerMetadata.mockResolvedValue({
+      signedMetadataJwt: credoSignedMetadata({ alg: 'ES256', typ: 'openidvci-issuer-metadata+jwt' }),
+    })
+    const jws = jwsService()
+
+    await new IssuerService(agent(api, AGENT_DID, jws) as never, options()).ensureInitialized()
+
+    const { protectedHeaderOptions } = jws.createJwsCompact.mock.calls[0][1]
+    expect(protectedHeaderOptions.x5c).toEqual(['leaf-certificate'])
+    expect(protectedHeaderOptions.kid).toBeUndefined()
+  })
+
+  it('serves no signed metadata when the issuer record carries none', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const jws = jwsService()
+    const service = new IssuerService(agent(api, AGENT_DID, jws) as never, options())
+
+    await service.ensureInitialized()
+
+    expect(jws.createJwsCompact).not.toHaveBeenCalled()
+    expect(service.getSignedMetadataJwt()).toBeUndefined()
+  })
+
+  it('fails initialization on a signed metadata header it cannot read', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    api.getIssuerMetadata.mockResolvedValue({ signedMetadataJwt: 'not-a-jwt.payload.signature' })
+    const service = new IssuerService(agent(api) as never, options())
+
+    await expect(service.ensureInitialized()).rejects.toThrow('unreadable protected header')
   })
 
   it('updates an existing configured issuer and initializes only once under concurrency', async () => {

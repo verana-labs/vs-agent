@@ -52,6 +52,7 @@ function validAgent() {
           updateIssuerMetadata: vi.fn(),
           createCredentialOffer: vi.fn(),
           getIssuanceSessionById: vi.fn(),
+          getIssuerMetadata: vi.fn().mockResolvedValue({ signedMetadataJwt: undefined }),
         },
         verifier: {
           getVerifierByVerifierId: vi.fn().mockResolvedValue({ verifierId: 'verifier' }),

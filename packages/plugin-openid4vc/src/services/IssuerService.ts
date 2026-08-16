@@ -1,5 +1,11 @@
 import type { OpenId4VcPluginOptions } from '../types'
-import type { BaseAgent, SdJwtVcTypeMetadata } from '@credo-ts/core'
+import type {
+  BaseAgent,
+  JwsProtectedHeaderOptions,
+  Kms,
+  SdJwtVcTypeMetadata,
+  X509Certificate,
+} from '@credo-ts/core'
 import type {
   OpenId4VcIssuanceSessionRecord,
   OpenId4VcIssuerApi,
@@ -7,7 +13,7 @@ import type {
   OpenId4VciCredentialRequestToCredentialMapper,
 } from '@credo-ts/openid4vc'
 
-import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
+import { AgentContext, ClaimFormat, JwsService, RecordNotFoundError } from '@credo-ts/core'
 
 import { findCredentialConfiguration, parseOfferClaims } from '../config'
 import {
@@ -33,6 +39,7 @@ type IssuerApi = Pick<
   | 'updateIssuerMetadata'
   | 'createCredentialOffer'
   | 'getIssuanceSessionById'
+  | 'getIssuerMetadata'
 >
 
 export type OpenId4VcIssuerAgent = Pick<
@@ -70,6 +77,7 @@ export class IssuerService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
   private statusListService?: StatusListService
+  private signedMetadataJwt?: string
   private initialized = false
 
   public constructor(
@@ -152,6 +160,12 @@ export class IssuerService {
       issuer: this.options.publicApiBaseUrl,
       jwks: { keys: [this.signingCertificateHandle().certificate.publicJwk.toJson()] },
     }
+  }
+
+  /** Signed issuer metadata re-signed to carry the certificate chain beside Credo's `kid`: NL Wallet
+   *  requires `x5c` in that header, swiyu requires `kid`, and RFC 7515 makes both independent. */
+  public getSignedMetadataJwt(): string | undefined {
+    return this.signedMetadataJwt
   }
 
   /** SD-JWT VC type metadata, extended with the Verifiable Trust link: the
@@ -254,6 +268,7 @@ export class IssuerService {
     }
 
     await this.createOrUpdateIssuer(signingCertificate)
+    this.signedMetadataJwt = await this.buildCertificateBoundSignedMetadata(signingCertificate)
 
     if (this.options.revocation?.enabled) {
       this.statusListService = new StatusListService(
@@ -298,15 +313,26 @@ export class IssuerService {
       return { method: 'did' as const, didUrl }
     }
 
-    return {
-      method: 'x5c' as const,
-      x5c: signingCertificate.development
-        ? signingCertificate.chain
-        : signingCertificate.chain.filter(
-            (certificate, index, chain) =>
-              index !== chain.length - 1 || certificate.subject !== certificate.issuer,
-          ),
-    }
+    return { method: 'x5c' as const, x5c: metadataCertificateChain(signingCertificate) }
+  }
+
+  private async buildCertificateBoundSignedMetadata(
+    signingCertificate: SigningCertificateHandle,
+  ): Promise<string | undefined> {
+    const { signedMetadataJwt } = await this.issuerApi().getIssuerMetadata(this.issuerOptions().id)
+    if (!signedMetadataJwt) return undefined
+
+    const [encodedHeader, encodedPayload] = signedMetadataJwt.split('.')
+    const agentContext = this.agent.dependencyManager.resolve(AgentContext)
+
+    return await this.agent.dependencyManager.resolve(JwsService).createJwsCompact(agentContext, {
+      payload: Buffer.from(encodedPayload, 'base64url'),
+      keyId: signingCertificate.keyId,
+      protectedHeaderOptions: {
+        ...parseProtectedHeader(encodedHeader),
+        x5c: metadataCertificateChain(signingCertificate).map(certificate => certificate.toString('base64')),
+      },
+    })
   }
 
   private async createOrUpdateIssuer(signingCertificate: SigningCertificateHandle): Promise<void> {
@@ -388,4 +414,33 @@ export class IssuerService {
       throw new Error('OpenID4VC issuer service is not initialized')
     }
   }
+}
+
+/** HAIP forbids the trust anchor inside `x5c`, and NL Wallet enforces it, so a configured chain
+ *  drops its self-signed root. A development chain is the self-signed leaf itself and stays whole. */
+function metadataCertificateChain(signingCertificate: SigningCertificateHandle): X509Certificate[] {
+  if (signingCertificate.development) return signingCertificate.chain
+
+  return signingCertificate.chain.filter(
+    (certificate, index, chain) => index !== chain.length - 1 || certificate.subject !== certificate.issuer,
+  )
+}
+
+function parseProtectedHeader(encoded: string): JwsProtectedHeaderOptions {
+  let header: unknown
+  try {
+    header = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'))
+  } catch {
+    throw new Error('signed issuer metadata carries an unreadable protected header')
+  }
+  if (header === null || typeof header !== 'object' || Array.isArray(header)) {
+    throw new Error('signed issuer metadata carries an unreadable protected header')
+  }
+
+  const { alg } = header as { alg?: unknown }
+  if (typeof alg !== 'string') {
+    throw new Error('signed issuer metadata carries no signature algorithm')
+  }
+
+  return { ...(header as Record<string, unknown>), alg: alg as Kms.KnownJwaSignatureAlgorithm }
 }

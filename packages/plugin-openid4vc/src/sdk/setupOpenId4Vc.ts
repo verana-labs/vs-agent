@@ -18,6 +18,7 @@ export interface OpenId4VcIssuerRequestMapper {
   mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper
   getVctMetadata: (configurationId: string) => Record<string, unknown> | undefined
   getJwtVcIssuerMetadata: () => Record<string, unknown>
+  getSignedMetadataJwt: () => string | undefined
 }
 
 export interface OpenId4VcAgentModules {
@@ -47,6 +48,7 @@ export function setupOpenId4Vc(
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
   if (options.issuer)
     app.use(accommodateOpenId4VciKt(Boolean(options.issuer.keyAttestationCertificates?.length)))
+  if (options.issuer) app.use(serveCertificateBoundIssuerMetadata(getIssuerService))
   if (options.issuer) app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
   if (options.issuer) {
     // Credo serves no SD-JWT VC issuer metadata, and a wallet that anchors an x5c-signed
@@ -204,6 +206,37 @@ export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
   }
 }
 
+/** Credo derives this header from the signer alone, so a DID signer yields `kid` and no `x5c`, which
+ *  NL Wallet's core rejects while parsing. IssuerService re-signs the payload under both members. */
+export function serveCertificateBoundIssuerMetadata(getIssuerService?: () => OpenId4VcIssuerRequestMapper) {
+  return (request: Request, response: Response, next: NextFunction): void => {
+    if (
+      request.method !== 'GET' ||
+      !request.path.includes('/.well-known/openid-credential-issuer') ||
+      !acceptsSignedMetadataOnly(request.headers.accept)
+    ) {
+      next()
+      return
+    }
+
+    const signedMetadataJwt = getIssuerService?.().getSignedMetadataJwt()
+    if (!signedMetadataJwt) {
+      next()
+      return
+    }
+
+    response.type('application/jwt').status(200).send(signedMetadataJwt)
+  }
+}
+
+function acceptsSignedMetadataOnly(accept: string | string[] | undefined): boolean {
+  const ranges = typeof accept === 'string' ? accept.split(',') : []
+  return (
+    ranges.some(range => range.includes('application/jwt')) &&
+    !ranges.some(range => range.includes('application/json'))
+  )
+}
+
 function withKeyAttestationRequirement(body: string, hasKeyAttestationAnchor: boolean): string {
   try {
     const metadata: unknown = JSON.parse(body)
@@ -222,7 +255,9 @@ function withKeyAttestationRequirement(body: string, hasKeyAttestationAnchor: bo
           : configuration.proof_types_supported
         const proofTypes = Object.fromEntries(
           Object.entries(advertised).map(([type, meta]) =>
-            isRecord(meta) && !('key_attestations_required' in meta) && (type === 'jwt' || type === 'attestation')
+            isRecord(meta) &&
+            !('key_attestations_required' in meta) &&
+            (type === 'jwt' || type === 'attestation')
               ? [type, { ...meta, key_attestations_required: {} }]
               : [type, meta],
           ),
