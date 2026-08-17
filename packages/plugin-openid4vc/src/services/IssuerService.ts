@@ -47,8 +47,9 @@ export type OpenId4VcIssuerAgent = Pick<
   }
 }
 
-export type VtSdJwtVcTypeMetadata = SdJwtVcTypeMetadata & {
+export type VtSdJwtVcTypeMetadata = Omit<SdJwtVcTypeMetadata, 'display'> & {
   relatedJsonSchemaCredentialId: string
+  display?: (NonNullable<SdJwtVcTypeMetadata['display']>[number] & { lang?: string })[]
 }
 
 export interface OpenId4VcOfferResult {
@@ -170,6 +171,9 @@ export class IssuerService {
       ...(configuration.description ? { description: configuration.description } : {}),
       display: [
         {
+          // sd-jwt-vc deprecated `lang` in favour of `locale` and accepts either; swiyu predates
+          // the rename and rejects the whole document when `lang` is absent.
+          lang: 'en',
           locale: 'en',
           name: configuration.name,
           ...(configuration.description ? { description: configuration.description } : {}),

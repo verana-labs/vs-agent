@@ -504,6 +504,7 @@ describe('IssuerService', () => {
       description: 'Proof of employment',
       display: [
         {
+          lang: 'en',
           locale: 'en',
           name: 'Employee credential',
           description: 'Proof of employment',
