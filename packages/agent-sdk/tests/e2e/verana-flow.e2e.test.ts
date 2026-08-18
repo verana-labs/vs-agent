@@ -100,4 +100,33 @@ describe('Verana blockchain integration (node + indexer, CosmJS + WebSocket)', (
     },
     SETUP_TIMEOUT_MS,
   )
+
+  it(
+    'waits for the indexer subscribed acknowledgement before draining the catch-up',
+    async () => {
+      const logger = agent.config.logger
+      const debugSpy = vi.spyOn(logger, 'debug')
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      const service = new IndexerWebSocketService({
+        indexerUrl: stack.indexerWsUrl.replace(/^ws:/, 'http:'),
+        agent,
+      })
+
+      try {
+        await service.start()
+      } finally {
+        service.stop()
+      }
+
+      const messages = (spy: typeof debugSpy) => spy.mock.calls.map(call => String(call[0]))
+
+      expect(messages(debugSpy).some(m => m.includes('[IndexerWS] Subscription active'))).toBe(true)
+      expect(messages(warnSpy).some(m => m.includes("No 'subscribed' acknowledgement"))).toBe(false)
+
+      debugSpy.mockRestore()
+      warnSpy.mockRestore()
+    },
+    SETUP_TIMEOUT_MS,
+  )
 })

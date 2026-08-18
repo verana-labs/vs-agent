@@ -16,6 +16,7 @@ import {
   IndexerEventRecord,
   IndexerReadyMessage,
   IndexerSubscribeMessage,
+  IndexerSubscribedMessage,
   VeranaSyncState,
 } from './types'
 
@@ -32,6 +33,7 @@ const WS_PATHNAME = 'v4/indexer/subscribe'
 const REST_PAGE_LIMIT = 500
 const MAX_SYNC_BUFFER = 10_000
 const SUBSCRIBE_TIMEOUT_MS = 5_000
+type SubscribeOutcome = 'acknowledged' | 'timed-out' | 'disconnected'
 const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 // The indexer pings every 30 seconds, so a longer gap means the socket is dead.
 const LIVENESS_TIMEOUT_MS = 90_000
@@ -46,7 +48,7 @@ export class IndexerWebSocketService {
   private generation = 0
   private chain: Promise<void> = Promise.resolve()
   private syncBuffer: IndexerEventRecord[] = []
-  private subscribeSent: (() => void) | null = null
+  private settleSubscribed: ((outcome: SubscribeOutcome) => void) | null = null
   private readonly indexer: VeranaIndexerService
   private readonly handlerRegistry: IndexerHandlerRegistry
 
@@ -84,12 +86,21 @@ export class IndexerWebSocketService {
     this.syncing = true
     this.syncBuffer = []
 
-    const subscribed = new Promise<void>(resolve => {
-      this.subscribeSent = resolve
+    const subscribed = new Promise<SubscribeOutcome>(resolve => {
+      this.settleSubscribed = resolve
     })
     this.openWebSocket()
-    await Promise.race([subscribed, delay(SUBSCRIBE_TIMEOUT_MS)])
+    const outcome = await Promise.race([
+      subscribed,
+      delay(SUBSCRIBE_TIMEOUT_MS).then((): SubscribeOutcome => 'timed-out'),
+    ])
     if (this.stopped || generation !== this.generation) return
+    if (outcome === 'disconnected') return
+    if (outcome === 'timed-out') {
+      this.logger.warn(
+        `[IndexerWS] No 'subscribed' acknowledgement within ${SUBSCRIBE_TIMEOUT_MS}ms; starting the catch-up anyway. Events landing before the subscription becomes active may be missed.`,
+      )
+    }
 
     try {
       await this.syncRest(generation)
@@ -119,12 +130,9 @@ export class IndexerWebSocketService {
       if (ws === this.ws) this.logger.info(`[IndexerWS] Connected to indexer`)
     })
 
-    const releaseSubscribeWait = (): void => {
-      this.subscribeSent?.()
-      this.subscribeSent = null
-    }
-    ws.on('error', releaseSubscribeWait)
-    ws.on('close', releaseSubscribeWait)
+    const abandonSubscribeWait = (): void => this.resolveSubscribed('disconnected')
+    ws.on('error', abandonSubscribeWait)
+    ws.on('close', abandonSubscribeWait)
 
     ws.on('ping', () => {
       if (ws === this.ws) this.armWatchdog()
@@ -147,8 +155,13 @@ export class IndexerWebSocketService {
     })
   }
 
+  private resolveSubscribed(outcome: SubscribeOutcome): void {
+    this.settleSubscribed?.(outcome)
+    this.settleSubscribed = null
+  }
+
   private handleMessage(ws: WebSocket, data: WebSocket.RawData): void {
-    let message: IndexerReadyMessage | IndexerBlockMessage
+    let message: IndexerReadyMessage | IndexerSubscribedMessage | IndexerBlockMessage
     try {
       message = JSON.parse(data.toString())
     } catch {
@@ -162,12 +175,16 @@ export class IndexerWebSocketService {
         this.options.corporationId != null
           ? { action: 'subscribe', corporationId: this.options.corporationId }
           : { action: 'subscribe', dids: this.options.agent.did ? [this.options.agent.did] : undefined }
-      ws.send(JSON.stringify(subscribe), () => {
-        this.subscribeSent?.()
-        this.subscribeSent = null
-      })
+      ws.send(JSON.stringify(subscribe))
       return
     }
+
+    if (message.type === 'subscribed') {
+      this.logger.debug(`[IndexerWS] Subscription active, delivery starts at block ${message.block}`)
+      this.resolveSubscribed('acknowledged')
+      return
+    }
+
     if (message.type !== 'block') return
 
     const generation = this.generation

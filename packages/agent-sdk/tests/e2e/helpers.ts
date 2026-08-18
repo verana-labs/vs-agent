@@ -4,6 +4,7 @@ import type {
   IndexerEventRecord,
   IndexerReadyMessage,
   IndexerSubscribeMessage,
+  IndexerSubscribedMessage,
 } from '../../src/blockchain/types'
 
 import { configureChainIndexers } from '@verana-labs/vs-agent-model'
@@ -27,6 +28,7 @@ const POSTGRES_DB = 'verana_indexer_e2e'
 const POLL_TIMEOUT_MS = Number(process.env.FLOW_POLL_TIMEOUT_MS || 300_000)
 const POLL_INTERVAL_MS = Number(process.env.FLOW_POLL_INTERVAL_MS || 3_000)
 const WS_PATHNAME = 'v4/indexer/subscribe'
+const SUBSCRIBED_TIMEOUT_MS = Number(process.env.FLOW_SUBSCRIBED_TIMEOUT_MS || 10_000)
 
 export const CHAIN_ID = 'vna-testnet-1'
 export const COOLUSER_MNEMONIC = 'pink glory help gown abstract eight nice crazy forward ketchup skill cheese'
@@ -205,16 +207,37 @@ export class IndexerSubscriber {
       const ws = new WebSocket(`${baseWsUrl}/${WS_PATHNAME}`)
       const subscriber = new IndexerSubscriber(ws)
 
+      let settled = false
+      const ready = (): void => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(subscriber)
+      }
+      const timer = setTimeout(() => {
+        console.warn(
+          `[flow] no 'subscribed' acknowledgement within ${SUBSCRIBED_TIMEOUT_MS}ms; continuing without it`,
+        )
+        ready()
+      }, SUBSCRIBED_TIMEOUT_MS)
+
       ws.on('message', (data: WebSocket.RawData) => {
-        const message = JSON.parse(data.toString()) as IndexerReadyMessage | IndexerBlockMessage
+        const message = JSON.parse(data.toString()) as
+          | IndexerReadyMessage
+          | IndexerSubscribedMessage
+          | IndexerBlockMessage
         if (message.type === 'ready') {
           ws.send(JSON.stringify({ action: 'subscribe', ...filter } as IndexerSubscribeMessage))
-          resolve(subscriber)
+        } else if (message.type === 'subscribed') {
+          ready()
         } else if (message.type === 'block') {
           for (const event of message.events) subscriber.handleEvent(event)
         }
       })
-      ws.on('error', reject)
+      ws.on('error', error => {
+        clearTimeout(timer)
+        reject(error)
+      })
     })
   }
 

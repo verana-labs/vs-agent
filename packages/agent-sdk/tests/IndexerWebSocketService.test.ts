@@ -11,8 +11,10 @@ const { FakeWebSocket } = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void
   class FakeWebSocket {
     static instances: FakeWebSocket[] = []
+    static autoAcknowledgeSubscribe = true
     static reset(): void {
       FakeWebSocket.instances = []
+      FakeWebSocket.autoAcknowledgeSubscribe = true
     }
     private listeners: Record<string, Listener[]> = {}
     url: string
@@ -32,6 +34,17 @@ const { FakeWebSocket } = vi.hoisted(() => {
     send(data: string, cb?: () => void): void {
       this.sent.push(data)
       cb?.()
+      if (!FakeWebSocket.autoAcknowledgeSubscribe) return
+      let action: unknown
+      try {
+        action = (JSON.parse(data) as { action?: unknown }).action
+      } catch {
+        return
+      }
+      if (action !== 'subscribe') return
+      queueMicrotask(() =>
+        this.emit('message', Buffer.from(JSON.stringify({ type: 'subscribed', block: 2 }))),
+      )
     }
     close(): void {
       this.emit('close')
@@ -154,7 +167,7 @@ describe('IndexerWebSocketService', () => {
     expect(subscribe).toContainEqual({ action: 'subscribe', dids: ['did:web:agent.test'] })
   })
 
-  it('waits for subscribe to be sent before reading old events', async () => {
+  it('waits for the subscribed acknowledgement before reading old events', async () => {
     service = new IndexerWebSocketService({
       indexerUrl: 'http://indexer.test',
       agent,
@@ -169,6 +182,61 @@ describe('IndexerWebSocketService', () => {
     await started
 
     expect(fetchJsonMock).toHaveBeenCalled()
+  })
+
+  it('starts the catch-up anyway when the indexer never acknowledges the subscribe', async () => {
+    FakeWebSocket.autoAcknowledgeSubscribe = false
+    vi.useFakeTimers()
+    service = new IndexerWebSocketService({
+      indexerUrl: 'http://indexer.test',
+      agent,
+      handlerRegistry: registry,
+    })
+    const started = service.start()
+    lastWs().emit('message', readyFrame())
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchJsonMock).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    await started
+
+    expect(fetchJsonMock).toHaveBeenCalled()
+  })
+
+  it('skips the catch-up when the socket closes before the acknowledgement', async () => {
+    FakeWebSocket.autoAcknowledgeSubscribe = false
+    vi.useFakeTimers()
+    service = new IndexerWebSocketService({
+      indexerUrl: 'http://indexer.test',
+      agent,
+      handlerRegistry: registry,
+    })
+    const started = service.start()
+    lastWs().emit('message', readyFrame())
+    lastWs().close()
+    await started
+
+    expect(fetchJsonMock).not.toHaveBeenCalled()
+  })
+
+  it('buffers a block that arrives before the acknowledgement instead of dropping it', async () => {
+    FakeWebSocket.autoAcknowledgeSubscribe = false
+    const dispatched: string[] = []
+    registry.register({ msg: 'TestMsg', handle: async a => void dispatched.push(String(a.entity_id)) })
+    service = new IndexerWebSocketService({
+      indexerUrl: 'http://indexer.test',
+      agent,
+      handlerRegistry: registry,
+    })
+    const started = service.start()
+    const ws = lastWs()
+    ws.emit('message', readyFrame())
+    ws.emit('message', blockFrame(11, [mkEvent({ block_height: 10, tx_hash: 'aa', entity_id: 'A' })]))
+    ws.emit('message', Buffer.from(JSON.stringify({ type: 'subscribed', block: 8 })))
+    await started
+
+    await vi.waitFor(() => expect(dispatched).toEqual(['A']))
   })
 
   it('sends a corp-scoped subscribe and catch-up when corporationId is set', async () => {
