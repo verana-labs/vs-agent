@@ -233,7 +233,6 @@ export interface RawParticipant {
   opSummaryDigest?: string
   revoked: Date | undefined
   slashed: Date | undefined
-  /** Account the participant delegates its VS operations to; empty when it declares none. */
   vsOperator?: string
 }
 

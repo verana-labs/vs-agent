@@ -361,11 +361,6 @@ export class VeranaChainService {
     )?.id
   }
 
-  /**
-   * The chain accepts a CreateOrUpdateParticipantSession only from the issuer participant's own
-   * declared vs_operator (x/pp/keeper/csps.go), so an entry that delegates to another account is
-   * of no use to this agent.
-   */
   async findActiveIssuerParticipantId(did: string, schemaId: number): Promise<number | undefined> {
     const request = QueryListParticipantsRequest.fromPartial({
       did,
@@ -400,11 +395,7 @@ export class VeranaChainService {
     const { typeUrl, value } = options
     const msg = { typeUrl, value }
     this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl} as ${this.operatorAddress}`)
-    const result = await this.signingClient.signAndBroadcast(
-      this.operatorAddress,
-      [msg],
-      this.gasAdjustment,
-    )
+    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], this.gasAdjustment)
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result

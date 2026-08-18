@@ -86,9 +86,6 @@ export class EcsBootstrapService {
     if (!this.indexer) return 'the Verana indexer is not configured'
     if (!this.options.trustedEcosystemDids?.length) return 'TRUSTED_ECS_ECOSYSTEM_DIDS is not set'
 
-    // An account that holds only a VSOperatorAuthorization cannot send participant lifecycle
-    // messages, and the chain forbids it from holding both. Such a deployment provisions its
-    // participants through the Corporation operator instead, so this is a normal condition.
     const operatorAuths = await chain.listOperatorAuthorizations()
     if (!operatorAuths.some(a => a.msgTypes.includes(START_OP_MSG))) {
       return `operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP; this agent expects its participants to be provisioned out of band`
