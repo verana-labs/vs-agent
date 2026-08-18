@@ -61,6 +61,12 @@ describe('publishVtjscIfOwner', () => {
     expect(createJsc).not.toHaveBeenCalled()
   })
 
+  it('skips publication when the agent is not connected to a chain', async () => {
+    const { agent } = makeAgent()
+    await publishVtjscIfOwner(stateWith(7), { ...agent, veranaChain: undefined } as never, '5', 7)
+    expect(createJsc).not.toHaveBeenCalled()
+  })
+
   it('returns without throwing when the schema is not in state', async () => {
     const { agent } = makeAgent()
     await expect(publishVtjscIfOwner(stateWith(7), agent as never, '404', 7)).resolves.toBeUndefined()

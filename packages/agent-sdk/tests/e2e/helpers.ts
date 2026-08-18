@@ -6,6 +6,7 @@ import type {
   IndexerSubscribeMessage,
 } from '../../src/blockchain/types'
 
+import { configureChainIndexers } from '@verana-labs/vs-agent-model'
 import { GenericContainer, Network, Wait, type StartedTestContainer } from 'testcontainers'
 import WebSocket from 'ws'
 
@@ -176,6 +177,7 @@ export async function startStack(): Promise<StartedStack> {
     containers.push(indexer)
 
     const indexerWsUrl = `ws://${indexer.getHost()}:${indexer.getMappedPort(3001)}`
+    configureChainIndexers({ [CHAIN_ID]: indexerWsUrl.replace(/^ws/, 'http') })
     return { rpcUrl, indexerWsUrl, stop }
   } catch (error) {
     await stop()

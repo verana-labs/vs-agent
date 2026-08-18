@@ -24,7 +24,6 @@ import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'
 import { IndexerActivity, ValidationState, VeranaSyncState } from '../types'
 
-const DEFAULT_CHAIN_ID = 'vna-testnet-1'
 const PARTICIPANT_ROLE_HOLDER = 6
 
 export function applyStateMutation(state: VeranaSyncState, activity: IndexerActivity): void {
@@ -339,7 +338,11 @@ export async function reconcileVtjscPublications(
 ): Promise<void> {
   if (!agent.did || !agent.publicApiBaseUrl) return
 
-  const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
+  const chainId = agent.veranaChain?.getChainId
+  if (!chainId) {
+    agent.config.logger.warn('[VTJSC] Skipping reconciliation: the agent is not connected to a chain')
+    return
+  }
 
   const ecosystems = await indexer.listEcosystems()
   for (const ecosystem of ecosystems.filter(entry => Number(entry.corporation_id) === corporationId)) {
@@ -414,7 +417,11 @@ export async function publishVtjscIfOwner(
     return
   }
 
-  const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
+  const chainId = agent.veranaChain?.getChainId
+  if (!chainId) {
+    agent.config.logger.warn(`[VTJSC] Skipping schema ${schema.id}: the agent is not connected to a chain`)
+    return
+  }
   const jsonSchemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
 
   const digestSRI = generateDigestSRI(schema.jsonSchema)

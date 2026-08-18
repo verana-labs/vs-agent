@@ -47,8 +47,14 @@ const ecsSchema = (title: string) =>
     title,
     description: `lifecycle ${title}`,
     type: 'object',
-    properties: { name: { type: 'string' } },
-    required: ['name'],
+    properties: {
+      credentialSubject: {
+        type: 'object',
+        properties: { id: { type: 'string' }, name: { type: 'string' } },
+        required: ['name'],
+      },
+    },
+    required: ['credentialSubject'],
   })
 
 async function until<T>(fn: () => Promise<T | undefined>, timeoutMs = 120_000): Promise<T> {
@@ -169,7 +175,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
 
     await createJsc(validator, validator.publicApiBaseUrl, getEcsSchemas(validator.publicApiBaseUrl), {
       schemaBaseId: String(orgSchemaId),
-      jsonSchemaRef: `vpr:verana:${validatorChain.getChainId}/cs/v1/js/${orgSchemaId}`,
+      jsonSchemaRef: `vpr:verana:${validatorChain.getChainId}:cs:${orgSchemaId}`,
       precomputedDigestSRI: await computeSchemaDigest(JSON.parse(ecsSchema('OrganizationCredential'))),
     })
 
@@ -380,7 +386,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
 
       await createJsc(applicant, applicant.publicApiBaseUrl, getEcsSchemas(applicant.publicApiBaseUrl), {
         schemaBaseId: String(serviceSchemaId),
-        jsonSchemaRef: `vpr:verana:${seederChain.getChainId}/cs/v1/js/${serviceSchemaId}`,
+        jsonSchemaRef: `vpr:verana:${seederChain.getChainId}:cs:${serviceSchemaId}`,
         precomputedDigestSRI: await computeSchemaDigest(JSON.parse(ecsSchema('ServiceCredential'))),
       })
       await until(async () => {
