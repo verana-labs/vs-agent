@@ -204,6 +204,22 @@ describe('IndexerWebSocketService', () => {
     expect(fetchJsonMock).toHaveBeenCalled()
   })
 
+  it('skips the catch-up when the socket closes before the acknowledgement', async () => {
+    FakeWebSocket.autoAcknowledgeSubscribe = false
+    vi.useFakeTimers()
+    service = new IndexerWebSocketService({
+      indexerUrl: 'http://indexer.test',
+      agent,
+      handlerRegistry: registry,
+    })
+    const started = service.start()
+    lastWs().emit('message', readyFrame())
+    lastWs().close()
+    await started
+
+    expect(fetchJsonMock).not.toHaveBeenCalled()
+  })
+
   it('buffers a block that arrives before the acknowledgement instead of dropping it', async () => {
     FakeWebSocket.autoAcknowledgeSubscribe = false
     const dispatched: string[] = []

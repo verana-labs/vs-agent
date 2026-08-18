@@ -33,6 +33,7 @@ const WS_PATHNAME = 'v4/indexer/subscribe'
 const REST_PAGE_LIMIT = 500
 const MAX_SYNC_BUFFER = 10_000
 const SUBSCRIBE_TIMEOUT_MS = 5_000
+type SubscribeOutcome = 'acknowledged' | 'timed-out' | 'disconnected'
 const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 // The indexer pings every 30 seconds, so a longer gap means the socket is dead.
 const LIVENESS_TIMEOUT_MS = 90_000
@@ -47,7 +48,7 @@ export class IndexerWebSocketService {
   private generation = 0
   private chain: Promise<void> = Promise.resolve()
   private syncBuffer: IndexerEventRecord[] = []
-  private settleSubscribed: ((acknowledged: boolean) => void) | null = null
+  private settleSubscribed: ((outcome: SubscribeOutcome) => void) | null = null
   private readonly indexer: VeranaIndexerService
   private readonly handlerRegistry: IndexerHandlerRegistry
 
@@ -85,13 +86,17 @@ export class IndexerWebSocketService {
     this.syncing = true
     this.syncBuffer = []
 
-    const subscribed = new Promise<boolean>(resolve => {
+    const subscribed = new Promise<SubscribeOutcome>(resolve => {
       this.settleSubscribed = resolve
     })
     this.openWebSocket()
-    const acknowledged = await Promise.race([subscribed, delay(SUBSCRIBE_TIMEOUT_MS).then(() => false)])
+    const outcome = await Promise.race([
+      subscribed,
+      delay(SUBSCRIBE_TIMEOUT_MS).then((): SubscribeOutcome => 'timed-out'),
+    ])
     if (this.stopped || generation !== this.generation) return
-    if (!acknowledged) {
+    if (outcome === 'disconnected') return
+    if (outcome === 'timed-out') {
       this.logger.warn(
         `[IndexerWS] No 'subscribed' acknowledgement within ${SUBSCRIBE_TIMEOUT_MS}ms; starting the catch-up anyway. Events landing before the subscription becomes active may be missed.`,
       )
@@ -125,7 +130,7 @@ export class IndexerWebSocketService {
       if (ws === this.ws) this.logger.info(`[IndexerWS] Connected to indexer`)
     })
 
-    const abandonSubscribeWait = (): void => this.resolveSubscribed(false)
+    const abandonSubscribeWait = (): void => this.resolveSubscribed('disconnected')
     ws.on('error', abandonSubscribeWait)
     ws.on('close', abandonSubscribeWait)
 
@@ -150,8 +155,8 @@ export class IndexerWebSocketService {
     })
   }
 
-  private resolveSubscribed(acknowledged: boolean): void {
-    this.settleSubscribed?.(acknowledged)
+  private resolveSubscribed(outcome: SubscribeOutcome): void {
+    this.settleSubscribed?.(outcome)
     this.settleSubscribed = null
   }
 
@@ -176,7 +181,7 @@ export class IndexerWebSocketService {
 
     if (message.type === 'subscribed') {
       this.logger.debug(`[IndexerWS] Subscription active, delivery starts at block ${message.block}`)
-      this.resolveSubscribed(true)
+      this.resolveSubscribed('acknowledged')
       return
     }
 
