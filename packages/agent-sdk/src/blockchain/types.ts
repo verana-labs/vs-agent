@@ -65,6 +65,11 @@ export interface IndexerSubscribeMessage {
   corporationId?: number
 }
 
+export interface IndexerSubscribedMessage {
+  type: 'subscribed'
+  block: number
+}
+
 export interface IndexerEventsResponse {
   events: IndexerEventRecord[]
   count: number
