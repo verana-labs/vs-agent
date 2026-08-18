@@ -328,6 +328,7 @@ export interface VeranaChainConfig {
   mnemonic: string
   logger: BaseLogger
   gasPrice?: string
+  gasAdjustment?: number
   corporationAddress?: string
   autoTriggerResolver?: boolean
 }

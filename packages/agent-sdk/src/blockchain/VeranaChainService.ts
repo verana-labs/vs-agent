@@ -64,6 +64,11 @@ const PARTICIPANT_ROLE_ISSUER = 1
 // the other filters loosely, so ask for the largest page and match the fields again here.
 const PARTICIPANT_QUERY_MAX_SIZE = 1024
 
+// A simulation signs with an empty signature and runs against the state of the moment, so it
+// reports less gas than the delivery consumes. Cosmos SDK 0.47 made the difference larger (see
+// cosmos-sdk#16020), and cosmjs answers it with a default multiplier of 1.4. Not always enough.
+const DEFAULT_GAS_ADJUSTMENT = 1.5
+
 // the chain answers a query for an unknown record with a NotFound error, not with an empty result
 function isNotFoundError(error: unknown): boolean {
   return /not found|NotFound|key not found/i.test((error as Error)?.message ?? '')
@@ -89,6 +94,7 @@ export class VeranaChainService {
   private operatorAddress!: string
   private chainId!: string
   private corporationAddress!: string
+  private gasAdjustment!: number
 
   private ppQuery!: ParticipantQueryClient
   private deQuery!: DelegationQueryClient
@@ -127,6 +133,7 @@ export class VeranaChainService {
       `[VeranaChain] vs_operator address: ${this.operatorAddress} (fund this address with VNA to enable on-chain operations)`,
     )
 
+    this.gasAdjustment = this.config.gasAdjustment ?? DEFAULT_GAS_ADJUSTMENT
     const cometClient = await connectComet(rpcUrl)
     this.signingClient = await SigningStargateClient.createWithSigner(cometClient, wallet, {
       registry: createVeranaRegistry(),
@@ -393,7 +400,11 @@ export class VeranaChainService {
     const { typeUrl, value } = options
     const msg = { typeUrl, value }
     this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl} as ${this.operatorAddress}`)
-    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], 'auto')
+    const result = await this.signingClient.signAndBroadcast(
+      this.operatorAddress,
+      [msg],
+      this.gasAdjustment,
+    )
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result

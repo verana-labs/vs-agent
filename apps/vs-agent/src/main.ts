@@ -85,6 +85,7 @@ import {
   VERANA_CORPORATION_ID,
   VERANA_INDEXER_SUBSCRIPTION_SCOPE,
   VERANA_AUTO_TRIGGER_RESOLVER,
+  VERANA_GAS_ADJUSTMENT,
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
@@ -330,6 +331,7 @@ const run = async () => {
       corporationAddress,
       logger: serverLogger,
       autoTriggerResolver: VERANA_AUTO_TRIGGER_RESOLVER,
+      gasAdjustment: VERANA_GAS_ADJUSTMENT,
     })
     await veranaChain.start()
 
