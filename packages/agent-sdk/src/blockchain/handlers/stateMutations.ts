@@ -371,7 +371,6 @@ export async function reconcileVtjscPublications(
           )
         } catch (e) {
           agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
-          continue
         }
       }
     }

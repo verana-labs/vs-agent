@@ -209,6 +209,12 @@ const run = async () => {
   if (!VERANA_ACCOUNT_MNEMONIC) {
     configErrors.push('VERANA_ACCOUNT_MNEMONIC is required')
   }
+  if (
+    VERANA_GAS_ADJUSTMENT !== undefined &&
+    (!Number.isFinite(VERANA_GAS_ADJUSTMENT) || VERANA_GAS_ADJUSTMENT <= 0)
+  ) {
+    configErrors.push('VERANA_GAS_ADJUSTMENT must be a positive number')
+  }
   if (!['standalone', 'delegated'].includes(AGENT_MODE)) {
     configErrors.push(`AGENT_MODE must be 'standalone' or 'delegated' (got '${AGENT_MODE}')`)
   }

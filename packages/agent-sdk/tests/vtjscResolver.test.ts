@@ -68,7 +68,7 @@ describe('resolveJsonSchemaCredentialId', () => {
 
     expect(id).toBe(JSC_ID)
     expect(agent.resolve).toHaveBeenCalledWith(ECOSYSTEM_DID)
-    expect(fetchMock).toHaveBeenCalledWith(VP_URL)
+    expect(fetchMock).toHaveBeenCalledWith(VP_URL, expect.objectContaining({ signal: expect.anything() }))
   })
 
   it('fails when the Ecosystem publishes no VTJSC for the schema', async () => {

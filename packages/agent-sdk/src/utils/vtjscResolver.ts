@@ -2,6 +2,14 @@ import type { VsAgent } from '../agent/VsAgent'
 import type { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 
 import { findMetadataEntry } from './trustCredentialStore'
+import { fetchJson } from './util'
+
+const VTJSC_FETCH_TIMEOUT_MS = 30_000
+
+/** Minimal shape of the Linked Verifiable Presentation that carries a VTJSC. */
+interface VtjscPresentation {
+  verifiableCredential?: Array<{ id?: string }>
+}
 
 /**
  * Resolves the VTJSC that a credential of a given schema must name as its `credentialSchema`.
@@ -51,11 +59,8 @@ export async function resolveJsonSchemaCredentialId(
     )
   }
 
-  const response = await fetch(endpoint)
-  if (!response.ok) {
-    throw new Error(`Could not fetch the VTJSC of schema ${schemaId} from ${endpoint}`)
-  }
-  const presentation = (await response.json()) as { verifiableCredential?: Array<{ id?: string }> }
+  // fetchJson applies the timeout and turns a non-2xx answer into an error that names the URL.
+  const presentation = await fetchJson<VtjscPresentation>(endpoint, VTJSC_FETCH_TIMEOUT_MS)
   const jsonSchemaCredentialId = presentation.verifiableCredential?.[0]?.id
   if (!jsonSchemaCredentialId) {
     throw new Error(`The VTJSC presentation at ${endpoint} carries no credential`)
