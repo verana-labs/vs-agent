@@ -6,15 +6,42 @@ export enum ECS {
   BADGE = 'ecs-badge',
 }
 
-const indexerByChain = new Map<string, string>([
-  ['vpr:verana:vna-testnet-1', 'https://idx.testnet.verana.network'],
-  ['vpr:verana:vna-devnet-1', 'https://idx.devnet.verana.network'],
-])
+const DEFAULT_CHAIN_INDEXERS: Record<string, string> = {
+  'vna-testnet-1': 'https://idx.testnet.verana.network',
+  'vna-devnet-1': 'https://idx.devnet.verana.network',
+}
 
+const indexerByChain = new Map<string, string>(Object.entries(DEFAULT_CHAIN_INDEXERS))
+
+/**
+ * Registers the indexer base URL that serves schema references for a given chain id.
+ * Entries override the built-in defaults, so an agent connected to any chain can
+ * dereference `vpr:verana:<chain>:cs:<id>` references through its own indexer.
+ */
+export function configureChainIndexers(entries: Record<string, string | undefined>): void {
+  for (const [chainId, baseUrl] of Object.entries(entries)) {
+    if (!chainId || !baseUrl) continue
+    indexerByChain.set(chainId, baseUrl.replace(/\/+$/, ''))
+  }
+}
+
+/**
+ * Resolves a schema reference to a fetchable URL. VPR URIs are mapped to the indexer
+ * registered for their chain; any other input (e.g. an HTTPS URL) is returned as is.
+ *
+ * @throws Error if the input is a VPR URI that cannot be mapped to an indexer URL.
+ */
 export function mapToEcosystem(input: string): string {
-  const ref = input.match(/^(vpr:verana:[^:/]+):cs:(\d+)$/)
-  const base = ref && indexerByChain.get(ref[1])
-  return base ? `${base}/v4/credential-schema/js/${ref[2]}` : input
+  if (!input.startsWith('vpr:verana:')) return input
+
+  const ref = input.match(/^vpr:verana:([^:/]+):cs:(\d+)$/)
+  if (!ref) throw new Error(`Malformed VPR schema reference "${input}"`)
+
+  const base = indexerByChain.get(ref[1])
+  if (!base) {
+    throw new Error(`No indexer configured for chain "${ref[1]}" needed to resolve "${input}"`)
+  }
+  return `${base}/v4/credential-schema/js/${ref[2]}`
 }
 
 // v4 spec [ECS-EC] reference digests

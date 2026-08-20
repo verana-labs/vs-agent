@@ -518,6 +518,16 @@ export function validateSchema(ecsSchema: AnySchemaObject, credentialSubject: Re
   }
 }
 
+async function fetchSchemaContent(id: string): Promise<{ content?: string; error?: string }> {
+  try {
+    const response = await fetch(mapToEcosystem(id))
+    if (!response.ok) return { error: `${response.status} ${response.statusText}` }
+    return { content: await response.text() }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 /**
  * Adds a Subresource Integrity (SRI) digest to the provided data using the schema content
  * fetched from the provided URL or from a local schema map as fallback.
@@ -537,16 +547,14 @@ export async function addDigestSRI<T extends object>(
   if (!id || !data) {
     throw new Error(`id and data has requiered`)
   }
-  const response = await fetch(mapToEcosystem(id))
+  const fetched = await fetchSchemaContent(id)
   const key = id.split('/').pop()
   const fallbackSchema = key && ecsSchemas?.[key]
 
-  const schemaContent = response.ok ? await response.text() : fallbackSchema
+  const schemaContent = fetched.content ?? fallbackSchema
 
   if (!schemaContent) {
-    throw new Error(
-      `Failed to fetch schema from ${id}: ${response.status} ${response.statusText}, and no local fallback found.`,
-    )
+    throw new Error(`Failed to fetch schema from ${id}: ${fetched.error}, and no local fallback found.`)
   }
   assertValidSchema(schemaContent, id)
 

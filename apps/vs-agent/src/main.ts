@@ -3,6 +3,7 @@ import 'reflect-metadata'
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
+import { configureChainIndexers } from '@verana-labs/vs-agent-model'
 import {
   AuthorizationService,
   HttpInboundTransport,
@@ -340,6 +341,7 @@ const run = async () => {
       gasAdjustment: VERANA_GAS_ADJUSTMENT,
     })
     await veranaChain.start()
+    configureChainIndexers({ [veranaChain.getChainId]: VERANA_INDEXER_BASE_URL })
 
     authorizationService = new AuthorizationService({
       chain: veranaChain,
