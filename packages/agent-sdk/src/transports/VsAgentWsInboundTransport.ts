@@ -114,7 +114,10 @@ export class VsAgentWsInboundTransport implements DidCommInboundTransport {
         const messageReceiver = agentContext.dependencyManager.resolve(DidCommMessageReceiver)
         await messageReceiver.receiveMessage(JSON.parse(event.data), { session })
       } catch (error) {
-        this.logger.error('Error processing message')
+        this.logger.error(
+          `Error processing inbound message: ${error instanceof Error ? error.message : String(error)}`,
+          { error },
+        )
       }
     })
   }

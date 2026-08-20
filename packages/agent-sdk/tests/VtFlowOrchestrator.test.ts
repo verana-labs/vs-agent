@@ -97,13 +97,18 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
       config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
       veranaChain: { getParticipant: vi.fn(async (id: number) => (id === 5 ? holder : validator)) },
       dependencyManager: { resolve: () => vtFlowApi },
+      context: { resolve: () => ({ update: vi.fn().mockResolvedValue(undefined) }) },
       didcomm: {
         connections: {
           findById: vi.fn().mockResolvedValue(previousConnection),
+          findAllByQuery: vi.fn().mockResolvedValue([]),
           returnWhenIsConnected: vi.fn().mockResolvedValue({ id: 'conn-new' }),
+          deleteById: vi.fn().mockResolvedValue(undefined),
         },
         oob: {
-          receiveImplicitInvitation: vi.fn().mockResolvedValue({ connectionRecord: { id: 'conn-new' } }),
+          receiveImplicitInvitation: vi
+            .fn()
+            .mockResolvedValue({ connectionRecord: { id: 'conn-new', setTag: vi.fn() } }),
         },
       },
     }

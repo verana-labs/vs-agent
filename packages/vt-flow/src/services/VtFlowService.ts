@@ -346,7 +346,10 @@ export class VtFlowService {
     agentContext: AgentContext,
     recordId: string,
     params: RejectRequestParams,
-  ): Promise<{ record: VtFlowRecord; problemReport: ReturnType<typeof buildVtFlowProblemReport> }> {
+  ): Promise<{
+    record: VtFlowRecord
+    problemReport: ReturnType<typeof buildVtFlowProblemReport>
+  }> {
     const record = await this.repository.getById(agentContext, recordId)
 
     const problemReport = buildVtFlowProblemReport({
@@ -373,7 +376,10 @@ export class VtFlowService {
     agentContext: AgentContext,
     recordId: string,
     params: Partial<RejectRequestParams> = {},
-  ): Promise<{ record: VtFlowRecord; problemReport: ReturnType<typeof buildVtFlowProblemReport> }> {
+  ): Promise<{
+    record: VtFlowRecord
+    problemReport: ReturnType<typeof buildVtFlowProblemReport>
+  }> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Applicant)
 
@@ -397,7 +403,10 @@ export class VtFlowService {
     agentContext: AgentContext,
     recordId: string,
     params: Partial<RejectRequestParams> = {},
-  ): Promise<{ record: VtFlowRecord; problemReport: ReturnType<typeof buildVtFlowProblemReport> }> {
+  ): Promise<{
+    record: VtFlowRecord
+    problemReport: ReturnType<typeof buildVtFlowProblemReport>
+  }> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
 
@@ -425,7 +434,10 @@ export class VtFlowService {
       state: VtFlowState.ParticipantRevoked | VtFlowState.ParticipantSlashed
       enDescription?: string
     },
-  ): Promise<{ record: VtFlowRecord; problemReport: ReturnType<typeof buildVtFlowProblemReport> }> {
+  ): Promise<{
+    record: VtFlowRecord
+    problemReport: ReturnType<typeof buildVtFlowProblemReport>
+  }> {
     const record = await this.repository.getById(agentContext, recordId)
 
     const problemReport = buildVtFlowProblemReport({
@@ -745,7 +757,11 @@ export class VtFlowService {
     }
     let permitted = false
     try {
-      permitted = await hook({ agentContext, peerDid, connectionId: connection.id })
+      permitted = await hook({
+        agentContext,
+        peerDid,
+        connectionId: connection.id,
+      })
     } catch (error) {
       throw new CredoError(
         `vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check (${(error as Error).message})`,
@@ -753,6 +769,13 @@ export class VtFlowService {
     }
     if (!permitted) {
       throw new CredoError(`vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check`)
+    }
+
+    // Tag the record with the public DID of the peer. The agent reads that tag to reuse
+    // this connection, instead of adding a second record for the same pair of DIDs.
+    if (connection.getTag('publicDid') !== peerDid) {
+      connection.setTag('publicDid', peerDid)
+      await agentContext.resolve(DidCommConnectionRepository).update(agentContext, connection)
     }
   }
 }

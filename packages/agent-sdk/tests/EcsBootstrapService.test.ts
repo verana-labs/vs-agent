@@ -70,9 +70,18 @@ function makeMocks() {
       },
     },
     dependencyManager: { resolve: () => vtFlowApi },
+    context: { resolve: () => ({ update: vi.fn().mockResolvedValue(undefined) }) },
     didcomm: {
-      oob: { receiveImplicitInvitation: vi.fn().mockResolvedValue({ connectionRecord: { id: 'conn-1' } }) },
-      connections: { returnWhenIsConnected: vi.fn().mockResolvedValue({ id: 'conn-1' }) },
+      oob: {
+        receiveImplicitInvitation: vi
+          .fn()
+          .mockResolvedValue({ connectionRecord: { id: 'conn-1', setTag: vi.fn() } }),
+      },
+      connections: {
+        findAllByQuery: vi.fn().mockResolvedValue([]),
+        returnWhenIsConnected: vi.fn().mockResolvedValue({ id: 'conn-1' }),
+        deleteById: vi.fn().mockResolvedValue(undefined),
+      },
       credentials: { acceptOffer: vi.fn().mockResolvedValue(undefined) },
     },
   }

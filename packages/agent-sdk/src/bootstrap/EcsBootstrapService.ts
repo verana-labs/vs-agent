@@ -18,6 +18,7 @@ import {
   VeranaIndexerService,
 } from '../blockchain'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
+import { connectToPublicDid } from '../utils/agent'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../utils/didReadiness'
 
 const START_OP_MSG = '/verana.pp.v1.MsgStartParticipantOP'
@@ -413,15 +414,7 @@ export class EcsBootstrapService {
   ): Promise<void> {
     let connectionId: string
     try {
-      const { connectionRecord } = await this.agent.didcomm.oob.receiveImplicitInvitation({
-        did: parentDid,
-        ourDid: this.agent.did,
-        label: this.agent.label,
-        didCommVersion: 'v2',
-      })
-      if (!connectionRecord) throw new Error('no connection record returned')
-      const ready = await this.agent.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
-      connectionId = ready.id
+      connectionId = await connectToPublicDid(this.agent, parentDid)
     } catch (error) {
       throw new Error(`parent VS ${parentDid} is unreachable: ${(error as Error).message}`)
     }
