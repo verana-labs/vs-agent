@@ -398,7 +398,7 @@ async function reconcileSelfIssuedEcsCredentials(
 ): Promise<void> {
   const chain = agent.veranaChain
   if (!chain || !agent.did || !agent.publicApiBaseUrl) return
-  const chainId = chain.getChainId ?? DEFAULT_CHAIN_ID
+  const chainId = chain.getChainId
 
   const issuers = await indexer.listParticipants({
     did: agent.did,
