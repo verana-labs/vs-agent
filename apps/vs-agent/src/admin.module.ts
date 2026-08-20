@@ -3,12 +3,17 @@ import { APP_GUARD } from '@nestjs/core'
 import { VsAgent, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import {
+  AgentV2Controller,
+  AnoncredsV2Controller,
+  AuthV2Controller,
   ConnectionController,
   CredentialExchangesController,
   CredentialTypesController,
   CredentialTypesService,
+  DidcommV2Controller,
   HealthController,
   InvitationController,
+  Openid4vcV2Controller,
   PresentationsController,
   QrController,
   ServiceEndpointsController,
@@ -16,6 +21,7 @@ import {
   TrustController,
   TrustService,
   VsAgentController,
+  VtV2Controller,
   MESSAGE_HANDLERS,
 } from './controllers'
 import { AdminAuthGuard, AdminAuthService, AuthController } from './security'
@@ -43,6 +49,15 @@ export class VsAgentModule {
       ConnectionController,
       PresentationsController,
       ServiceEndpointsController,
+    ]
+
+    const v2Controllers = [
+      AuthV2Controller,
+      AgentV2Controller,
+      DidcommV2Controller,
+      Openid4vcV2Controller,
+      AnoncredsV2Controller,
+      VtV2Controller,
     ]
 
     const baseProviders = [
@@ -83,6 +98,7 @@ export class VsAgentModule {
       imports: nestPlugins.flatMap(p => p.imports ?? []),
       controllers: [
         ...baseControllers,
+        ...v2Controllers,
         ...securityControllers,
         ...nestPlugins.flatMap(p => p.controllers ?? []),
       ],
