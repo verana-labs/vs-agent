@@ -30,7 +30,7 @@ const POLL_INTERVAL_MS = Number(process.env.FLOW_POLL_INTERVAL_MS || 3_000)
 const WS_PATHNAME = 'v4/indexer/subscribe'
 const SUBSCRIBED_TIMEOUT_MS = Number(process.env.FLOW_SUBSCRIBED_TIMEOUT_MS || 10_000)
 
-export const CHAIN_ID = 'vna-testnet-1'
+export const CHAIN_ID = 'vna-e2enet-1'
 export const COOLUSER_MNEMONIC = 'pink glory help gown abstract eight nice crazy forward ketchup skill cheese'
 export const SETUP_TIMEOUT_MS = Number(process.env.FLOW_SETUP_TIMEOUT_MS || 1_200_000)
 export const EVENT_TIMEOUT_MS = Number(process.env.FLOW_EVENT_TIMEOUT_MS || 120_000)
@@ -40,7 +40,7 @@ set -e
 HOME_DIR=/root/.verana
 GENESIS=$HOME_DIR/config/genesis.json
 SENTINEL=$HOME_DIR/.init-complete
-CHAIN_ID=vna-testnet-1
+CHAIN_ID=${CHAIN_ID}
 MONIKER=validator1
 KEY=cooluser
 MNEMONIC="pink glory help gown abstract eight nice crazy forward ketchup skill cheese"
