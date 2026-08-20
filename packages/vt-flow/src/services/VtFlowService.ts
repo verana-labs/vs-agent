@@ -575,7 +575,7 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    record.assertState([VtFlowState.Validating, VtFlowState.CredRevoked])
+    record.assertState([VtFlowState.AwaitingOr, VtFlowState.Validating, VtFlowState.CredRevoked])
     record.claims = claims
     await this.updateRecord(agentContext, record)
     return record

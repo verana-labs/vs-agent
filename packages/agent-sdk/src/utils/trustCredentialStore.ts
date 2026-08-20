@@ -6,6 +6,7 @@ import {
   W3cCredential,
   W3cJsonLdVerifiableCredential,
   W3cJsonLdVerifiablePresentation,
+  utils,
 } from '@credo-ts/core'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
@@ -351,15 +352,26 @@ export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc
   return findMetadataEntry(didRecord, key, schemaId)
 }
 
+/**
+ * Anchors a self-issued ECS credential, the same way as any other issuance: through
+ * CreateOrUpdateParticipantSession, which stores the digest in the `di` module keeper-to-keeper.
+ *
+ * `issuerParticipantId` must name an active ISSUER participant of this agent for the schema, whose
+ * vs_operator is this agent's account — the chain accepts the session from no other signer. The
+ * caller resolves it, because it already lists the agent's participants to decide what to rebind.
+ */
 async function anchorCredentialDigest(
   agent: VsAgent,
   schemaId: number,
   credential: W3cJsonLdVerifiableCredential | undefined,
+  issuerParticipantId: number,
 ): Promise<void> {
-  if (!agent.veranaChain) return
+  const chain = agent.veranaChain
+  if (!chain) return
   if (!credential) throw new Error(`[DigestAnchor] The presentation for schema ${schemaId} has no credential`)
+  if (!agent.did) throw new Error('[DigestAnchor] The agent has no public DID')
 
-  const schema = await agent.veranaChain.getCredentialSchema(schemaId)
+  const schema = await chain.getCredentialSchema(schemaId)
   if (!schema) throw new Error(`[DigestAnchor] Credential schema ${schemaId} is not on chain`)
 
   const digest = computeCredentialDigestJCS(
@@ -367,23 +379,41 @@ async function anchorCredentialDigest(
     schema.digestAlgorithm,
   )
   // the same credential gives the same digest on each run, so an anchored digest needs no second transaction
-  if (await agent.veranaChain.getDigest(digest)) return
+  if (await chain.getDigest(digest)) return
 
-  const { txHash } = await agent.veranaChain.storeDigest(digest)
-  agent.config.logger.info(`[DigestAnchor] Anchored digest ${digest} for schema ${schemaId} (tx ${txHash})`)
+  // A self-issued credential has no counterparty, so the session names only the issuer.
+  const { txHash } = await chain.createOrUpdateParticipantSession({
+    id: utils.uuid(),
+    issuerParticipantId,
+    agentParticipantId: 0,
+    walletAgentParticipantId: 0,
+    digest,
+  })
+  agent.config.logger.info(
+    `[DigestAnchor] Anchored digest ${digest} for schema ${schemaId} against issuer participant ${issuerParticipantId} (tx ${txHash})`,
+  )
 }
 
 // replaces the self-TR example JSC binding with the on-chain VTJSC so resolvers can link the credential to the VPR
+/**
+ * @param jsonSchemaCredentialId the VTJSC the Ecosystem published for this schema. Only the
+ * Ecosystem publishes it, so an agent that issues against another Corporation's Ecosystem must
+ * resolve it there — see resolveJsonSchemaCredentialId.
+ * @param issuerParticipantId this agent's ISSUER participant for the schema, which anchors the
+ * credential digest.
+ */
 export async function rebindEcsCredentialSchema(
   agent: VsAgent,
   publicApiBaseUrl: string,
   schemaId: string,
   schemaKey: string,
   defaults: SelfTrDefaults,
+  jsonSchemaCredentialId: string,
+  issuerParticipantId: number,
 ): Promise<void> {
   if (!['ecs-service', 'ecs-org'].includes(schemaKey) || !agent.did) return
   const vpUrl = `${publicApiBaseUrl}/vt/${schemaKey}-vtc-vp.json`
-  const jscUrl = `${publicApiBaseUrl}/vt/schemas-${schemaId}-jsc.json`
+  const jscUrl = jsonSchemaCredentialId
 
   const didRecord = await getDidRecord(agent)
   const record = didRecord.metadata.get('_vt/vtc') ?? {}
@@ -416,6 +446,7 @@ export async function rebindEcsCredentialSchema(
         agent,
         Number(schemaId),
         verifiablePresentation?.verifiableCredential?.[0] as W3cJsonLdVerifiableCredential | undefined,
+        issuerParticipantId,
       ),
   )
 

@@ -238,6 +238,7 @@ export interface RawParticipant {
   opSummaryDigest?: string
   revoked: Date | undefined
   slashed: Date | undefined
+  vsOperator?: string
 }
 
 export interface Ecosystem {
@@ -295,7 +296,8 @@ export interface VsOperatorAuthorization {
 
 export interface ParticipantQueryClient {
   GetParticipant(req: { id: number }): Promise<{ participant?: RawParticipant }>
-  FindParticipantsWithDID(req: object): Promise<{ participants: RawParticipant[] }>
+  /** The `pp` module exposes no query by DID alone; filter through ListParticipants instead. */
+  ListParticipants(req: object): Promise<{ participants: RawParticipant[] }>
   GetParticipantSession(req: { id: string }): Promise<{ session?: unknown }>
 }
 
@@ -330,6 +332,7 @@ export interface VeranaChainConfig {
   mnemonic: string
   logger: BaseLogger
   gasPrice?: string
+  gasAdjustment?: number
   corporationAddress?: string
   autoTriggerResolver?: boolean
 }

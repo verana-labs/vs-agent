@@ -55,15 +55,29 @@ function makeAgent(chain?: Record<string, unknown>) {
 
 function makeChain(overrides: Record<string, unknown> = {}) {
   return {
+    address: 'verana1operator',
     getCredentialSchema: vi.fn(async () => ({ id: 5, digestAlgorithm: 'sha256' })),
     getDigest: vi.fn(async () => undefined),
-    storeDigest: vi.fn(async () => ({ txHash: 'ABC' })),
+    createOrUpdateParticipantSession: vi.fn(async () => ({ txHash: 'ABC' })),
     ...overrides,
   }
 }
 
+const JSC_ID = 'https://ecosystem.example/vt/schemas-5-jsc.json'
+const ISSUER_PARTICIPANT_ID = 42
+
 async function rebind(agent: unknown) {
-  await rebindEcsCredentialSchema(agent as never, 'https://agent.example', '5', 'ecs-service', defaults)
+  // The VTJSC comes from the Ecosystem, which may be another party entirely, and the caller
+  // supplies the ISSUER participant that anchors the digest.
+  await rebindEcsCredentialSchema(
+    agent as never,
+    'https://agent.example',
+    '5',
+    'ecs-service',
+    defaults,
+    JSC_ID,
+    ISSUER_PARTICIPANT_ID,
+  )
 }
 
 describe('ECS credential digest anchoring', () => {
@@ -84,7 +98,23 @@ describe('ECS credential digest anchoring', () => {
 
     await rebind(agent)
 
-    expect(chain.storeDigest).toHaveBeenCalledWith(DIGEST)
+    expect(chain.createOrUpdateParticipantSession).toHaveBeenCalledWith(
+      expect.objectContaining({ digest: DIGEST, issuerParticipantId: ISSUER_PARTICIPANT_ID }),
+    )
+  })
+
+  it('names only the issuer, because a self-issued credential has no counterparty', async () => {
+    const chain = makeChain()
+    const { agent } = makeAgent(chain)
+
+    await rebind(agent)
+
+    const [session] = chain.createOrUpdateParticipantSession.mock.calls[0] as unknown as [
+      Record<string, unknown>,
+    ]
+    expect(session.agentParticipantId).toBe(0)
+    expect(session.walletAgentParticipantId).toBe(0)
+    expect(session.id).toEqual(expect.any(String))
   })
 
   it('sends no transaction when the digest is already anchored', async () => {
@@ -93,12 +123,12 @@ describe('ECS credential digest anchoring', () => {
 
     await rebind(agent)
 
-    expect(chain.storeDigest).not.toHaveBeenCalled()
+    expect(chain.createOrUpdateParticipantSession).not.toHaveBeenCalled()
   })
 
   it('publishes nothing when the agent cannot anchor the digest', async () => {
     const chain = makeChain({
-      storeDigest: vi.fn(async () => {
+      createOrUpdateParticipantSession: vi.fn(async () => {
         throw new Error('chain is unreachable')
       }),
     })
@@ -113,7 +143,7 @@ describe('ECS credential digest anchoring', () => {
     const { agent } = makeAgent(chain)
 
     await expect(rebind(agent)).rejects.toThrow('not on chain')
-    expect(chain.storeDigest).not.toHaveBeenCalled()
+    expect(chain.createOrUpdateParticipantSession).not.toHaveBeenCalled()
   })
 
   it('publishes the credential of an agent that has no chain connection', async () => {

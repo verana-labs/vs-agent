@@ -62,6 +62,10 @@ export class EcsBootstrapService {
   }
 
   private async runStandalone(): Promise<void> {
+    // Re-driving an interrupted offer signs nothing on chain, so it also runs for a deployment
+    // whose participants the Corporation operator provisions out of band.
+    await this.acceptPendingOffers()
+
     const skip = await this.preflight()
     if (skip) {
       this.logger.info(`[EcsBootstrap] standalone bootstrap skipped: ${skip}`)
@@ -70,7 +74,6 @@ export class EcsBootstrapService {
     const chain = this.agent.veranaChain!
     const indexer = this.indexer!
 
-    await this.acceptPendingOffers()
     const { credential, credentialType, service } = await this.discoverEcsSchemas(indexer)
     await this.ensureHolderParticipant(chain, indexer, credential, credentialType)
     await this.ensureServiceIssuer(chain, indexer, service)
@@ -85,7 +88,7 @@ export class EcsBootstrapService {
 
     const operatorAuths = await chain.listOperatorAuthorizations()
     if (!operatorAuths.some(a => a.msgTypes.includes(START_OP_MSG))) {
-      return `operator ${chain.address} has no OperatorAuthorization covering MsgStartParticipantOP`
+      return `operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP; this agent expects its participants to be provisioned out of band`
     }
     const balance = await chain.getBalance()
     if (Number(balance.amount) === 0) {

@@ -17,6 +17,7 @@ import {
   IndexerWebSocketService,
   buildDefaultIndexerHandlerRegistry,
   registerAuthorizationHandlers,
+  registerSelfIssuanceAnchorHandlers,
   EcsBootstrapService,
   reconcileVtjscPublications,
   generateDigestSRI,
@@ -85,6 +86,7 @@ import {
   VERANA_CORPORATION_ID,
   VERANA_INDEXER_SUBSCRIPTION_SCOPE,
   VERANA_AUTO_TRIGGER_RESOLVER,
+  VERANA_GAS_ADJUSTMENT,
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
@@ -208,6 +210,12 @@ const run = async () => {
   if (!VERANA_ACCOUNT_MNEMONIC) {
     configErrors.push('VERANA_ACCOUNT_MNEMONIC is required')
   }
+  if (
+    VERANA_GAS_ADJUSTMENT !== undefined &&
+    (!Number.isFinite(VERANA_GAS_ADJUSTMENT) || VERANA_GAS_ADJUSTMENT <= 0)
+  ) {
+    configErrors.push('VERANA_GAS_ADJUSTMENT must be a positive number')
+  }
   if (!['standalone', 'delegated'].includes(AGENT_MODE)) {
     configErrors.push(`AGENT_MODE must be 'standalone' or 'delegated' (got '${AGENT_MODE}')`)
   }
@@ -330,6 +338,7 @@ const run = async () => {
       corporationAddress,
       logger: serverLogger,
       autoTriggerResolver: VERANA_AUTO_TRIGGER_RESOLVER,
+      gasAdjustment: VERANA_GAS_ADJUSTMENT,
     })
     await veranaChain.start()
     configureChainIndexers({ [veranaChain.getChainId]: VERANA_INDEXER_BASE_URL })
@@ -477,6 +486,14 @@ const run = async () => {
       )
     }
     if (authorizationService) registerAuthorizationHandlers(handlerRegistry, authorizationService)
+    if (indexerService && VERANA_CORPORATION_ID) {
+      registerSelfIssuanceAnchorHandlers(
+        handlerRegistry,
+        indexerService,
+        Number(VERANA_CORPORATION_ID),
+        selfTrDefaults,
+      )
+    }
 
     const indexerCorporationId =
       VERANA_INDEXER_SUBSCRIPTION_SCOPE === 'corporation' && VERANA_CORPORATION_ID

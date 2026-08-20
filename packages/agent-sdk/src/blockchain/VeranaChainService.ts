@@ -42,7 +42,7 @@ const {
 } = require('@verana-labs/verana-types/codec/verana/ec/v1/query')
 const {
   QueryClientImpl: PpQueryClientImpl,
-  QueryFindParticipantsWithDIDRequest,
+  QueryListParticipantsRequest,
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/query')
 const {
   MsgSetParticipantOPToValidated,
@@ -55,11 +55,19 @@ const {
   MsgSelfCreateParticipant,
   MsgSelfCreateParticipantResponse,
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/tx')
-const { MsgStoreDigest } = require('@verana-labs/verana-types/codec/verana/di/v1/tx')
 
 // ParticipantRole.HOLDER (x/pp/types); the only role whose vs_operator may send TriggerResolver (chain Path 1).
 const PARTICIPANT_ROLE_HOLDER = 6
 const PARTICIPANT_ROLE_ISSUER = 1
+
+// QueryListParticipantsRequest.response_max_size caps at 1024 and defaults to 64. The node applies
+// the other filters loosely, so ask for the largest page and match the fields again here.
+const PARTICIPANT_QUERY_MAX_SIZE = 1024
+
+// A simulation signs with an empty signature and runs against the state of the moment, so it
+// reports less gas than the delivery consumes. Cosmos SDK 0.47 made the difference larger (see
+// cosmos-sdk#16020), and cosmjs answers it with a default multiplier of 1.4. Not always enough.
+const DEFAULT_GAS_ADJUSTMENT = 1.5
 
 // the chain answers a query for an unknown record with a NotFound error, not with an empty result
 function isNotFoundError(error: unknown): boolean {
@@ -86,6 +94,7 @@ export class VeranaChainService {
   private operatorAddress!: string
   private chainId!: string
   private corporationAddress!: string
+  private gasAdjustment!: number
 
   private ppQuery!: ParticipantQueryClient
   private deQuery!: DelegationQueryClient
@@ -124,6 +133,7 @@ export class VeranaChainService {
       `[VeranaChain] vs_operator address: ${this.operatorAddress} (fund this address with VNA to enable on-chain operations)`,
     )
 
+    this.gasAdjustment = this.config.gasAdjustment ?? DEFAULT_GAS_ADJUSTMENT
     const cometClient = await connectComet(rpcUrl)
     this.signingClient = await SigningStargateClient.createWithSigner(cometClient, wallet, {
       registry: createVeranaRegistry(),
@@ -301,16 +311,6 @@ export class VeranaChainService {
     return { participantId, txHash: result.transactionHash }
   }
 
-  async storeDigest(digest: string): Promise<{ txHash: string }> {
-    const value = MsgStoreDigest.fromPartial({
-      authority: this.corporationAddress,
-      operator: this.operatorAddress,
-      digest,
-    })
-    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgStoreDigest, value })
-    return { txHash: result.transactionHash }
-  }
-
   async setParticipantOPToValidated(params: SetParticipantOPToValidatedParams): Promise<{ txHash: string }> {
     const value = MsgSetParticipantOPToValidated.fromPartial({
       corporation: this.corporationAddress,
@@ -350,21 +350,32 @@ export class VeranaChainService {
 
   async findActiveHolderParticipantIdByDid(did: string): Promise<number | undefined> {
     // fromPartial fills the unused fields with defaults so the request encodes correctly.
-    const request = QueryFindParticipantsWithDIDRequest.fromPartial({ did })
-    const { participants } = await this.ppQuery.FindParticipantsWithDID(request)
+    const request = QueryListParticipantsRequest.fromPartial({
+      did,
+      role: PARTICIPANT_ROLE_HOLDER,
+      responseMaxSize: PARTICIPANT_QUERY_MAX_SIZE,
+    })
+    const { participants } = await this.ppQuery.ListParticipants(request)
     return participants.find(
       p => p.did === did && p.role === PARTICIPANT_ROLE_HOLDER && !p.revoked && !p.slashed,
     )?.id
   }
 
   async findActiveIssuerParticipantId(did: string, schemaId: number): Promise<number | undefined> {
-    const request = QueryFindParticipantsWithDIDRequest.fromPartial({ did })
-    const { participants } = await this.ppQuery.FindParticipantsWithDID(request)
+    const request = QueryListParticipantsRequest.fromPartial({
+      did,
+      schemaId,
+      role: PARTICIPANT_ROLE_ISSUER,
+      grantee: this.operatorAddress,
+      responseMaxSize: PARTICIPANT_QUERY_MAX_SIZE,
+    })
+    const { participants } = await this.ppQuery.ListParticipants(request)
     return participants.find(
       p =>
         p.did === did &&
         p.role === PARTICIPANT_ROLE_ISSUER &&
         p.schemaId === schemaId &&
+        p.vsOperator === this.operatorAddress &&
         !p.revoked &&
         !p.slashed,
     )?.id
@@ -384,7 +395,7 @@ export class VeranaChainService {
     const { typeUrl, value } = options
     const msg = { typeUrl, value }
     this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl} as ${this.operatorAddress}`)
-    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], 'auto')
+    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], this.gasAdjustment)
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result
