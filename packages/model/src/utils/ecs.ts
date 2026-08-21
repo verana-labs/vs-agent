@@ -94,6 +94,34 @@ export async function identifySchema(schemaObj: Record<string, unknown>): Promis
   return null
 }
 
+// Devnet and testnet ecosystems publish schemas that drift from the canonical ECS ones, so a
+// digest miss falls back to the schema title before giving up.
+const ECS_TITLE_BY_TYPE: Record<string, ECS> = {
+  ServiceCredential: ECS.SERVICE,
+  OrganizationCredential: ECS.ORG,
+  PersonaCredential: ECS.PERSONA,
+  UserAgentCredential: ECS.USER_AGENT,
+  BadgeCredential: ECS.BADGE,
+}
+
+/**
+ * Identifies the ECS type of a raw JSON schema string, as stored in a VPR `CredentialSchema`
+ * entry, by digest and then by title.
+ *
+ * @returns The matching ECS type, or null when the string is not parseable or matches nothing.
+ */
+export async function classifyEcsSchema(jsonSchema: string): Promise<ECS | null> {
+  try {
+    const parsed = JSON.parse(jsonSchema) as Record<string, unknown>
+    const byDigest = await identifySchema(parsed)
+    if (byDigest) return byDigest
+    const title = typeof parsed.title === 'string' ? parsed.title : ''
+    return ECS_TITLE_BY_TYPE[title] ?? null
+  } catch {
+    return null
+  }
+}
+
 type W3CCred = {
   credentialSubject?: { jsonSchema?: { $ref?: string } }
 }

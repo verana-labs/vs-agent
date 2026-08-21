@@ -97,11 +97,33 @@ Use `up -d`, not `restart`: `restart` keeps the old environment, so the new `TRU
 
 The applicant's ECS bootstrap then self-onboards and sends the onboarding request to the validator over DIDComm. That request is driven by a single indexer event and is never retried, so a failed first attempt needs a `down -v` and a fresh seed.
 
-The validator currently rejects that request with `vt-flow.not-a-verifiable-service`: VS-CONN-VS runs on the inbound onboarding request, and an applicant that has not onboarded yet holds no anchored credentials, so it resolves as `not-trusted`. The validator side resolves as `verified` and the applicant accepts it, but the flow cannot complete until it is settled whether the gate should apply to an inbound onboarding request.
+The applicant resolves as `not-trusted` at that point — it has not onboarded yet, so it holds no anchored credentials — and the validator logs the rejection:
+
+```
+[vt-flow] VS-CONN-VS rejected 'did:webvh:...:agent-applicant.demo': verified=true outcome=not-trusted
+```
+
+It accepts the request anyway, under the [VS-CONN-VS] ECS issuance exemption: the applicant owns a `PENDING` Participant entry that names the validator as its validator, on an ECS schema of the ecosystem in `TRUSTED_ECS_ECOSYSTEM_DIDS`. The flow lands in `AWAITING_OR` on the validator and `OR_SENT` on the applicant. The exemption is one-way: the applicant still requires the validator to resolve as `verified`, which is why the ecosystem agent has to publish its VTJSCs first.
 
 ### Drive the flow
 
 Use each agent's Swagger (`/api` on the admin port). The flow surface is under `/v1/vt/flows`: list flows, edit claims, send OOB links, validate, and revoke.
+
+The ECS Organization schema requires claims the applicant does not send, so set them before validating (`<sid>` is the flow's `participantSessionId`):
+
+```bash
+curl -X PUT http://localhost:4000/v1/vt/flows/<sid>/claims -H 'Content-Type: application/json' \
+  -d '{"claims":{"name":"Applicant Demo Org","logoUri":"https://agent-applicant.demo/vt/default/logo.svg","logoDigestSri":"sha384-AAAA","registryId":"DEMO-1","address":"1 Demo Street","countryCode":"ES"}}'
+curl -X POST http://localhost:4000/v1/vt/flows/<sid>/validate -H 'Content-Type: application/json' -d '{}'
+```
+
+Both sides then reach `COMPLETED` and the applicant's HOLDER participant goes `VALIDATED` / `ACTIVE` on chain.
+
+### Known gaps
+
+- The applicant's second bootstrap leg (an ISSUER participant on the Service schema) stays `PENDING`. Its validator is the ecosystem root participant, which the seed creates with a `did:example:` DID, so there is no DIDComm peer to onboard against.
+- On completion the applicant logs `onCompleted failed: authorization check failed`: the seed grants it no authorization for the post-issuance on-chain call, so it never links the VP or triggers the resolver.
+- Both agents log webhook errors for `http://localhost:5000`; the demo runs no backend.
 
 ### TLS and DIDs
 

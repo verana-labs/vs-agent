@@ -153,3 +153,104 @@ describe('VtFlowService.updateClaims', () => {
     await expect(service.updateClaims({} as never, completed.id, {})).rejects.toThrow()
   })
 })
+
+function makeGatedService(config: Record<string, unknown>) {
+  const repository = {
+    findByParticipantSessionId: vi.fn().mockResolvedValue(null),
+    save: vi.fn(),
+    update: vi.fn(),
+  }
+  const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  const service = new VtFlowService(
+    repository as never,
+    { emit: vi.fn() } as never,
+    logger as never,
+    config as never,
+  )
+  return { service, repository, logger }
+}
+
+const readyConnection = { id: 'conn-new', theirDid: 'did:web:agent-peer' }
+
+describe('VtFlowService VS-CONN-VS gate', () => {
+  it('rejects an unverifiable peer when no purpose is given', async () => {
+    const allowUnverifiedPeerForEcsIssuance = vi.fn().mockResolvedValue(true)
+    const { service } = makeGatedService({
+      assertVerifiableService: async () => false,
+      allowUnverifiedPeerForEcsIssuance,
+    })
+
+    await expect(service.checkIsVerifiableService({} as never, readyConnection as never)).rejects.toThrow(
+      /not-a-verifiable-service/,
+    )
+    expect(allowUnverifiedPeerForEcsIssuance).not.toHaveBeenCalled()
+  })
+
+  it('admits an unverifiable peer whose onboarding request qualifies for the ECS issuance exemption', async () => {
+    const allowUnverifiedPeerForEcsIssuance = vi.fn().mockResolvedValue(true)
+    const { service } = makeGatedService({
+      assertVerifiableService: async () => false,
+      allowUnverifiedPeerForEcsIssuance,
+    })
+
+    await expect(
+      service.checkIsVerifiableService({} as never, readyConnection as never, { participantId: '42' }),
+    ).resolves.toBeUndefined()
+    expect(allowUnverifiedPeerForEcsIssuance).toHaveBeenCalledWith(
+      expect.objectContaining({ peerDid: 'did:web:agent-peer', purpose: { participantId: '42' } }),
+    )
+  })
+
+  it('rejects an unverifiable peer the exemption does not cover', async () => {
+    const { service } = makeGatedService({
+      assertVerifiableService: async () => false,
+      allowUnverifiedPeerForEcsIssuance: async () => false,
+    })
+
+    await expect(
+      service.checkIsVerifiableService({} as never, readyConnection as never, { schemaId: '5' }),
+    ).rejects.toThrow(/not-a-verifiable-service/)
+  })
+
+  it('keeps the resolution error in the rejection when the exemption does not apply', async () => {
+    const { service } = makeGatedService({
+      assertVerifiableService: async () => {
+        throw new Error('did not resolve')
+      },
+      allowUnverifiedPeerForEcsIssuance: async () => false,
+    })
+
+    await expect(
+      service.checkIsVerifiableService({} as never, readyConnection as never, { participantId: '42' }),
+    ).rejects.toThrow(/did not resolve/)
+  })
+
+  it('swallows an exemption failure and rejects the peer', async () => {
+    const { service, logger } = makeGatedService({
+      assertVerifiableService: async () => false,
+      allowUnverifiedPeerForEcsIssuance: async () => {
+        throw new Error('indexer unreachable')
+      },
+    })
+
+    await expect(
+      service.checkIsVerifiableService({} as never, readyConnection as never, { participantId: '42' }),
+    ).rejects.toThrow(/not-a-verifiable-service/)
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('indexer unreachable'))
+  })
+
+  it('passes the onboarding request participant id to the exemption', async () => {
+    const allowUnverifiedPeerForEcsIssuance = vi.fn().mockResolvedValue(true)
+    const { service, repository } = makeGatedService({
+      assertVerifiableService: async () => false,
+      allowUnverifiedPeerForEcsIssuance,
+    })
+
+    await service.processReceiveOnboardingRequest(makeMessageContext({}) as never)
+
+    expect(allowUnverifiedPeerForEcsIssuance).toHaveBeenCalledWith(
+      expect.objectContaining({ purpose: { participantId: '42' } }),
+    )
+    expect(repository.save).toHaveBeenCalled()
+  })
+})

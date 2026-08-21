@@ -6,6 +6,7 @@ import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import {
+  allowEcsIssuanceExemption,
   assertVerifiableService,
   createVsAgent,
   HttpInboundTransport,
@@ -25,6 +26,7 @@ import {
   AGENT_DIDCOMM_VERSIONS,
   ENABLE_PUBLIC_API_SWAGGER,
   ENABLED_PLUGINS,
+  TRUSTED_ECS_ECOSYSTEM_DIDS,
   VERANA_CHAIN_ID,
   VERANA_INDEXER_BASE_URL,
 } from '../config'
@@ -113,6 +115,8 @@ export const setupAgent = async ({
     : undefined
   // eslint-disable-next-line prefer-const
   let orchestrator: VtFlowOrchestrator | undefined
+  // A did:webvh agent only knows its SCID-bearing DID once it has initialized.
+  let ownDid: string | undefined = publicDid
 
   const agent = createVsAgent({
     plugins: [
@@ -143,6 +147,15 @@ export const setupAgent = async ({
           assertVerifiableService: verifiablePublicRegistries
             ? assertVerifiableService({ verifiablePublicRegistries })
             : undefined,
+          allowUnverifiedPeerForEcsIssuance:
+            indexer && publicDid
+              ? allowEcsIssuanceExemption({
+                  indexer,
+                  ownDid: () => ownDid,
+                  trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS,
+                  logger,
+                })
+              : undefined,
           autoAcceptCredentialOffer: true,
           verifyCredential: async ({ record }) => {
             if (!orchestrator) {
@@ -219,6 +232,8 @@ export const setupAgent = async ({
   orchestrator = new VtFlowOrchestrator(agent, { indexer, publicApiBaseUrl })
 
   await agent.initialize()
+
+  ownDid = agent.did ?? ownDid
 
   migrateLegacyTailsFiles(agent.context)
 

@@ -8,7 +8,7 @@ import type {
 import { CredoError, EventEmitter, InjectionSymbols, inject, injectable } from '@credo-ts/core'
 import { DidCommConnectionRepository, DidCommCredentialState } from '@credo-ts/didcomm'
 
-import { VtFlowModuleConfig } from '../VtFlowModuleConfig'
+import { VtFlowModuleConfig, type VtFlowRequestPurpose } from '../VtFlowModuleConfig'
 import { type BuildVtFlowProblemReportOptions, VtFlowErrorCode, buildVtFlowProblemReport } from '../errors'
 import {
   CredentialStateChangeMessage,
@@ -170,7 +170,7 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    await this.checkIsVerifiableService(agentContext, connection)
+    await this.checkIsVerifiableService(agentContext, connection, { participantId: message.participantId })
 
     const existing = await this.repository.findByParticipantSessionId(
       agentContext,
@@ -223,7 +223,7 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    await this.checkIsVerifiableService(agentContext, connection)
+    await this.checkIsVerifiableService(agentContext, connection, { schemaId: message.schemaId })
 
     const existing = await this.repository.findByParticipantSessionId(
       agentContext,
@@ -728,10 +728,11 @@ export class VtFlowService {
     return buildVtFlowProblemReport(options)
   }
 
-  /** Spec Verifiable Service Identity Check: invokes the caller-provided VS-CONN-VS hook. Throws `vt-flow.not-a-verifiable-service` when the peer fails the check. When no hook is configured, logs a warning and permits. */
+  /** Spec Verifiable Service Identity Check: invokes the caller-provided VS-CONN-VS hook. Throws `vt-flow.not-a-verifiable-service` when the peer fails the check. When no hook is configured, logs a warning and permits. A `purpose` is passed on the Validator side only, and lets a rejected peer through the ECS issuance exemption. */
   public async checkIsVerifiableService(
     agentContext: AgentContext,
     connection: DidCommConnectionRecord,
+    purpose?: VtFlowRequestPurpose,
   ): Promise<void> {
     const peerDid = connection.theirDid
     if (!peerDid) throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
@@ -744,15 +745,41 @@ export class VtFlowService {
       return
     }
     let permitted = false
+    let failure: string | undefined
     try {
       permitted = await hook({ agentContext, peerDid, connectionId: connection.id })
     } catch (error) {
-      throw new CredoError(
-        `vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check (${(error as Error).message})`,
-      )
+      failure = (error as Error).message
     }
-    if (!permitted) {
-      throw new CredoError(`vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check`)
+    if (permitted) return
+
+    if (purpose && (await this.isExemptFromVsConnVs(agentContext, connection, peerDid, purpose))) {
+      this.logger.info(
+        `[vt-flow] peer '${peerDid}' is not (yet) a Verifiable Service, but the request qualifies for the VS-CONN-VS ECS issuance exemption`,
+      )
+      return
+    }
+
+    throw new CredoError(
+      `vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check${failure ? ` (${failure})` : ''}`,
+    )
+  }
+
+  private async isExemptFromVsConnVs(
+    agentContext: AgentContext,
+    connection: DidCommConnectionRecord,
+    peerDid: string,
+    purpose: VtFlowRequestPurpose,
+  ): Promise<boolean> {
+    const exemption = this.config.allowUnverifiedPeerForEcsIssuance
+    if (!exemption) return false
+    try {
+      return await exemption({ agentContext, peerDid, connectionId: connection.id, purpose })
+    } catch (error) {
+      this.logger.warn(
+        `[vt-flow] VS-CONN-VS exemption check failed for peer '${peerDid}': ${(error as Error).message}`,
+      )
+      return false
     }
   }
 }
