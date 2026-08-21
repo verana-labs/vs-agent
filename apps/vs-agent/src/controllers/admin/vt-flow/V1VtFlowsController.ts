@@ -21,7 +21,7 @@ import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
 @ApiTags('vt-flow')
 @Controller({ path: 'vt/flows', version: '1' })
-export class VtFlowsController {
+export class V1VtFlowsController {
   public constructor(private readonly service: VtFlowsService) {}
 
   @Get()

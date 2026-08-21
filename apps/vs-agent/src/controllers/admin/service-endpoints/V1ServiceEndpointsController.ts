@@ -25,7 +25,7 @@ import {
 @AccessMode('INTERNAL')
 @Controller({ path: 'vt/service-endpoints', version: '1' })
 @UseFilters(ServiceEndpointExceptionFilter)
-export class ServiceEndpointsController {
+export class V1ServiceEndpointsController {
   constructor(private readonly service: ServiceEndpointsService) {}
 
   @Get('/')

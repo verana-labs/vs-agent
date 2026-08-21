@@ -1,1 +1,1 @@
-export * from './AuthV2Controller'
+export * from './V2AuthController'

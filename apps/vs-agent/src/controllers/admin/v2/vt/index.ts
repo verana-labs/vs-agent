@@ -1,1 +1,1 @@
-export * from './VtV2Controller'
+export * from './V2VtController'

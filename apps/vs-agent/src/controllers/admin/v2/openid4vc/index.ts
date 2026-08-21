@@ -1,1 +1,1 @@
-export * from './Openid4vcV2Controller'
+export * from './V2Openid4vcController'

@@ -227,7 +227,7 @@ export const ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS = (
 
 // Active plugins: comma-separated list of plugin names.
 // Available:
-//   'messaging' — base MessageController + credential/proof handlers (always required)
+//   'messaging' — base V1MessageController + credential/proof handlers (always required)
 //   'chat'      — chat Credo modules + chat message handlers
 //   'mrtd'      — eMRTD Credo module + MRTD message handlers
 //

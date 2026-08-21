@@ -30,8 +30,8 @@ import { PresentationDataDto } from './dto/presentation-data.dto'
   path: 'presentations',
   version: '1',
 })
-export class PresentationsController {
-  private readonly logger = new Logger(PresentationsController.name)
+export class V1PresentationsController {
+  private readonly logger = new Logger(V1PresentationsController.name)
 
   constructor(private readonly agentService: VsAgentService) {}
 

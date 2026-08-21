@@ -3,7 +3,7 @@ import { ApiTags } from '@nestjs/swagger'
 
 import { AccessMode } from '../../../../security'
 
-@ApiTags('v2/agent')
+@ApiTags('v2/auth')
 @AccessMode('INTERNAL')
-@Controller({ path: 'agent', version: '2' })
-export class AgentV2Controller {}
+@Controller({ path: 'auth', version: '2' })
+export class V2AuthController {}

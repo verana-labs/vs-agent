@@ -1,1 +1,1 @@
-export * from './AgentV2Controller'
+export * from './V2AgentController'

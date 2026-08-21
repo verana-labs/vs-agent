@@ -6,4 +6,4 @@ import { AccessMode } from '../../../../security'
 @ApiTags('v2/vt')
 @AccessMode('INTERNAL')
 @Controller({ path: 'vt', version: '2' })
-export class VtV2Controller {}
+export class V2VtController {}

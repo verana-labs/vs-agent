@@ -1,3 +1,3 @@
-export * from './InvitationController'
+export * from './V1InvitationController'
 export * from './InvitationDto'
-export * from './QrController'
+export * from './V1QrController'

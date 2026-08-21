@@ -1,1 +1,1 @@
-export * from './DidcommV2Controller'
+export * from './V2DidcommController'

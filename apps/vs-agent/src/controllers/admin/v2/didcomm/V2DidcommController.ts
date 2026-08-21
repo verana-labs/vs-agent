@@ -6,4 +6,4 @@ import { AccessMode } from '../../../../security'
 @ApiTags('v2/didcomm')
 @AccessMode('INTERNAL')
 @Controller({ path: 'didcomm', version: '2' })
-export class DidcommV2Controller {}
+export class V2DidcommController {}

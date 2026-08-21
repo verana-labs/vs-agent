@@ -31,7 +31,7 @@ export class TokenRequestDto {
 
 @ApiTags('auth')
 @Controller({ path: 'auth', version: '1' })
-export class AuthController {
+export class V1AuthController {
   constructor(@Inject(AdminAuthService) private readonly authService: AdminAuthService) {}
 
   @Post('challenge')

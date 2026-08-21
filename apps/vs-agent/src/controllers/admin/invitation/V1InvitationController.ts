@@ -42,7 +42,7 @@ import {
   path: 'invitation',
   version: '1',
 })
-export class InvitationController {
+export class V1InvitationController {
   constructor(
     private readonly agentService: VsAgentService,
     private readonly urlShortenerService: UrlShorteningService,

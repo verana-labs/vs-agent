@@ -20,8 +20,8 @@ import { MessageServiceFactory } from './services/MessageServiceFactory'
 @ApiTags('message')
 @AccessMode('INTERNAL')
 @Controller({ path: 'message', version: '1' })
-export class MessageController {
-  private readonly logger = new Logger(MessageController.name)
+export class V1MessageController {
+  private readonly logger = new Logger(V1MessageController.name)
 
   constructor(
     private readonly messageServiceFactory: MessageServiceFactory,

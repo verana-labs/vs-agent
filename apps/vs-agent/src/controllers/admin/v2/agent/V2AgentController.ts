@@ -3,7 +3,7 @@ import { ApiTags } from '@nestjs/swagger'
 
 import { AccessMode } from '../../../../security'
 
-@ApiTags('v2/openid4vc')
+@ApiTags('v2/agent')
 @AccessMode('INTERNAL')
-@Controller({ path: 'openid4vc', version: '2' })
-export class Openid4vcV2Controller {}
+@Controller({ path: 'agent', version: '2' })
+export class V2AgentController {}

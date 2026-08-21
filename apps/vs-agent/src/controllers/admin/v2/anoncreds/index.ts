@@ -1,1 +1,1 @@
-export * from './AnoncredsV2Controller'
+export * from './V2AnoncredsController'

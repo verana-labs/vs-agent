@@ -33,8 +33,8 @@ interface AnonCredsCredentialMetadata {
   path: 'credential-exchanges',
   version: '1',
 })
-export class CredentialExchangesController {
-  private readonly logger = new Logger(CredentialExchangesController.name)
+export class V1CredentialExchangesController {
+  private readonly logger = new Logger(V1CredentialExchangesController.name)
 
   constructor(private readonly agentService: VsAgentService) {}
 

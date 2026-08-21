@@ -14,7 +14,7 @@ import { VsAgentService } from '../../../services/VsAgentService'
   path: 'qr',
   version: '1',
 })
-export class QrController {
+export class V1QrController {
   constructor(private readonly agentService: VsAgentService) {}
 
   @Get('/')
