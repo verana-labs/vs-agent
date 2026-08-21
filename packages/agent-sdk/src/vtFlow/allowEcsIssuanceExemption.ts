@@ -49,7 +49,10 @@ async function schemaOfPendingOnboarding(
   peerDid: string,
   ownDid: string,
 ): Promise<number | undefined> {
-  const participant = await indexer.getParticipant(participantId)
+  const id = toEntityId(participantId)
+  if (id === undefined) return undefined
+
+  const participant = await indexer.getParticipant(id)
   if (!participant || participant.did !== peerDid) return undefined
   if (participant.op_state !== PENDING_OP_STATE) return undefined
   if (participant.revoked || participant.slashed) return undefined
@@ -68,9 +71,8 @@ async function schemaOfDirectIssuance(
   schemaId: string | undefined,
   ownDid: string,
 ): Promise<number | undefined> {
-  if (!schemaId) return undefined
-  const id = Number(schemaId)
-  if (!Number.isInteger(id)) return undefined
+  const id = schemaId === undefined ? undefined : toEntityId(schemaId)
+  if (id === undefined) return undefined
 
   const issuers = await indexer.listParticipants({
     schemaId: id,
@@ -94,6 +96,11 @@ async function isTrustedEcsSchema(
   if (!trustedEcosystemDids?.length) return true
   const ecosystem = await indexer.getEcosystem(schema.ecosystem_id)
   return Boolean(ecosystem && !ecosystem.archived && trustedEcosystemDids.includes(ecosystem.did))
+}
+
+function toEntityId(value: string): number | undefined {
+  const id = Number(value)
+  return Number.isInteger(id) && id > 0 ? id : undefined
 }
 
 function isUsableIssuer(participant: ParticipantDto): boolean {

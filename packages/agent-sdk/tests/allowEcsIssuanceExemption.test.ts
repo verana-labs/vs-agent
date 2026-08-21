@@ -147,6 +147,19 @@ describe('allowEcsIssuanceExemption: onboarding request', () => {
     expect(indexer.getParticipant).not.toHaveBeenCalled()
   })
 
+  it.each([
+    '1/../../v4/ecosystem/list',
+    '1abc',
+    '',
+    '-1',
+    '1.5',
+  ])('denies the malformed participant id %j without querying the indexer', async participantId => {
+    const indexer = makeIndexer()
+
+    await expect(makeHook(indexer)(onboarding(participantId))).resolves.toBe(false)
+    expect(indexer.getParticipant).not.toHaveBeenCalled()
+  })
+
   it('denies and logs when the indexer cannot be reached', async () => {
     const indexer = makeIndexer({
       getParticipant: vi.fn().mockRejectedValue(new Error('indexer unreachable')),
@@ -184,6 +197,13 @@ describe('allowEcsIssuanceExemption: direct issuance request', () => {
     })
 
     await expect(makeHook(indexer)(issuance(String(serviceSchema.id)))).resolves.toBe(false)
+  })
+
+  it('denies a malformed schema id without querying the indexer', async () => {
+    const indexer = makeIndexer()
+
+    await expect(makeHook(indexer)(issuance('5/../../v4/ecosystem/list'))).resolves.toBe(false)
+    expect(indexer.listParticipants).not.toHaveBeenCalled()
   })
 
   it('denies a request that carries no purpose the exemption can anchor on', async () => {
