@@ -157,3 +157,99 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
     expect(agent.didcomm.oob.receiveImplicitInvitation).not.toHaveBeenCalled()
   })
 })
+
+describe('VtFlowOrchestrator onboarding validation', () => {
+  const validatorRecord = {
+    id: 'rec-v',
+    role: VtFlowRole.Validator,
+    variant: 'onboarding-process',
+    state: 'AWAITING_OR',
+    participantId: '94',
+    claims: {},
+  }
+
+  function makeAgent(role: number) {
+    const vtFlowApi = {
+      findById: vi.fn(async () => validatorRecord),
+      acceptOnboardingRequest: vi.fn(async () => validatorRecord),
+      markValidated: vi.fn(async () => ({ ...validatorRecord, state: 'VALIDATED' })),
+      markCompleted: vi.fn(async () => ({ ...validatorRecord, state: 'COMPLETED' })),
+      offerCredentialForSession: vi.fn(async () => ({
+        record: { ...validatorRecord, state: 'CRED_OFFERED' },
+      })),
+    }
+    const agent = {
+      did: 'did:web:validator',
+      config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
+      dependencyManager: { resolve: () => vtFlowApi },
+      veranaChain: {
+        getParticipant: vi.fn(async () => ({
+          id: 94,
+          role,
+          did: 'did:web:applicant',
+          corporation: 'verana1corp',
+          validatorParticipantId: 93,
+        })),
+        setParticipantOPToValidated: vi.fn(async () => undefined),
+      },
+    }
+    return { agent, vtFlowApi }
+  }
+
+  it('validateOnboardingProcess records the outcome on-chain and offers no credential', async () => {
+    const { agent, vtFlowApi } = makeAgent(1) // ISSUER
+
+    const { record, participant } = await new VtFlowOrchestrator(agent as never).validateOnboardingProcess({
+      vtFlowRecordId: 'rec-v',
+    })
+
+    expect(agent.veranaChain.setParticipantOPToValidated).toHaveBeenCalledWith({
+      id: 94,
+      corporation: 'verana1corp',
+    })
+    expect(vtFlowApi.acceptOnboardingRequest).toHaveBeenCalledWith('rec-v')
+    expect(vtFlowApi.markValidated).toHaveBeenCalledWith('rec-v')
+    expect(vtFlowApi.offerCredentialForSession).not.toHaveBeenCalled()
+    expect(record.state).toBe('VALIDATED')
+    // The caller decides what follows from the role.
+    expect(participant.role).toBe(1)
+  })
+
+  it('validateOnboardingProcess reports the HOLDER role so the caller can offer a credential', async () => {
+    const { agent } = makeAgent(6) // HOLDER
+
+    const { participant } = await new VtFlowOrchestrator(agent as never).validateOnboardingProcess({
+      vtFlowRecordId: 'rec-v',
+    })
+
+    expect(participant.role).toBe(6)
+  })
+
+  it('offerOnboardingCredential offers against the validator participant', async () => {
+    const { agent, vtFlowApi } = makeAgent(6) // HOLDER
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+    // buildCredential needs an indexer and a schema; assert the wiring, not the credential body.
+    ;(orchestrator as unknown as { buildCredential: unknown }).buildCredential = vi.fn(async () => ({
+      id: 'urn:cred',
+    }))
+
+    const offered = await orchestrator.offerOnboardingCredential({
+      vtFlowRecordId: 'rec-v',
+      credentialSchemaId: '22',
+    })
+
+    expect(vtFlowApi.offerCredentialForSession).toHaveBeenCalledWith(
+      expect.objectContaining({ vtFlowRecordId: 'rec-v', issuerParticipantId: 93 }),
+    )
+    expect(offered.state).toBe('CRED_OFFERED')
+  })
+
+  it('completeOnboardingProcess closes a flow that carries no credential', async () => {
+    const { agent, vtFlowApi } = makeAgent(1) // ISSUER
+
+    const completed = await new VtFlowOrchestrator(agent as never).completeOnboardingProcess('rec-v')
+
+    expect(vtFlowApi.markCompleted).toHaveBeenCalledWith('rec-v')
+    expect(completed.state).toBe('COMPLETED')
+  })
+})
