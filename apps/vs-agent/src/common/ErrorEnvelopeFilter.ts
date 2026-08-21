@@ -37,6 +37,8 @@ export class ErrorEnvelopeFilter extends BaseExceptionFilter {
     }
 
     const response = http.getResponse<Response>()
+    if (response.headersSent) return
+
     response.status(envelope.status).json({ error: { code: envelope.code, message: envelope.message } })
   }
 
@@ -74,11 +76,29 @@ export class ErrorEnvelopeFilter extends BaseExceptionFilter {
       }
     }
 
+    const status = this.statusOf(exception)
+    if (status) {
+      return {
+        status,
+        code: this.codeForStatus(status),
+        message:
+          status >= HttpStatus.INTERNAL_SERVER_ERROR
+            ? INTERNAL_MESSAGE
+            : ((exception as Error).message ?? INTERNAL_MESSAGE),
+      }
+    }
+
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       code: AdminApiErrorCode.Internal,
       message: INTERNAL_MESSAGE,
     }
+  }
+
+  private statusOf(exception: unknown): number | undefined {
+    const candidate = exception as { status?: unknown; statusCode?: unknown } | null
+    const status = typeof candidate?.status === 'number' ? candidate.status : candidate?.statusCode
+    return typeof status === 'number' && status >= 400 && status <= 599 ? status : undefined
   }
 
   private codeForStatus(status: number): string {

@@ -159,6 +159,26 @@ describe('v2 error envelope', () => {
     expect(Object.keys(response.body)).toEqual(['error'])
   })
 
+  it('envelopes what the body parser rejects before any v2 method runs', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/v2/didcomm/send-message')
+      .set('Content-Type', 'application/json')
+      .send('{"connectionId": ')
+
+    expect(response.status).toBe(400)
+    expect(response.body.error.code).toBe('INVALID_INPUT')
+  })
+
+  it('envelopes a body that exceeds the size limit', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/v2/didcomm/send-message')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ connectionId: 'x'.repeat(6 * 1024 * 1024) }))
+
+    expect(response.status).toBe(413)
+    expect(response.body.error.code).toBe('INVALID_INPUT')
+  })
+
   it('envelopes the 404 that the router raises on a path that no v2 method serves', async () => {
     const response = await request(app.getHttpServer()).get('/v2/didcomm/there-is-no-such-method')
 
