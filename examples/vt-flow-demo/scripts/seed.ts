@@ -9,6 +9,7 @@ import { COOLUSER_MNEMONIC } from '../../../packages/agent-sdk/tests/e2e/helpers
 
 const RPC_URL = process.env.DEMO_RPC_URL ?? 'http://localhost:26658'
 const VALIDATOR_PUBLIC_URL = process.env.DEMO_VALIDATOR_URL ?? 'http://localhost:4001'
+const ECOSYSTEM_PUBLIC_URL = process.env.DEMO_ECOSYSTEM_URL ?? 'http://localhost:4201'
 const VALIDATOR_OPERATOR = process.env.DEMO_VALIDATOR_OPERATOR ?? ''
 const APPLICANT_OPERATOR = process.env.DEMO_APPLICANT_OPERATOR ?? ''
 
@@ -16,6 +17,11 @@ const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
 const PP_SESSION = '/verana.pp.v1.MsgCreateOrUpdateParticipantSession'
 
 const ECS_SCHEMAS = getEcsSchemas(process.env.DEMO_ECS_SCHEMA_BASE_URL ?? 'https://agent-validator.demo')
+
+async function readAgentDid(publicUrl: string): Promise<string> {
+  const didLog = await fetch(`${publicUrl}/.well-known/did.jsonl`).then(r => r.text())
+  return JSON.parse(didLog.split('\n')[0]).state.id as string
+}
 
 async function seed() {
   if (!VALIDATOR_OPERATOR) throw new Error('set DEMO_VALIDATOR_OPERATOR to the validator operator address')
@@ -27,8 +33,8 @@ async function seed() {
     )
   }
 
-  const didLog = await fetch(`${VALIDATOR_PUBLIC_URL}/.well-known/did.jsonl`).then(r => r.text())
-  const validatorDid = JSON.parse(didLog.split('\n')[0]).state.id as string
+  const validatorDid = await readAgentDid(VALIDATOR_PUBLIC_URL)
+  const ecosystemDid = await readAgentDid(ECOSYSTEM_PUBLIC_URL)
 
   const chain = await VeranaTestChain.connect(RPC_URL, COOLUSER_MNEMONIC)
   // The corporation each agent operates for. Each one holds only its own participants.
@@ -36,16 +42,17 @@ async function seed() {
   await chain.fundCorporation(corp.policyAddress)
   await chain.grantOperatorAuthorization(corp.policyAddress)
 
-  // The ecosystem belongs to a corporation of its own, and no agent operates for it. An agent
-  // publishes a VTJSC for every schema its own corporation owns, and a Verifiable Service that
-  // presents self-issued credentials owns no schema, so it must reference only its own URLs.
+  // The ecosystem belongs to a corporation of its own, operated by agent-ecosystem. That agent
+  // publishes a VTJSC for every schema this corporation owns, which is what lets the validator and
+  // the applicant rebind their self-issued ECS credentials onto `vpr:verana:` references. Without
+  // it their references stay https URLs, resolve as NOT_TRUSTED, and fail VS-CONN-VS.
+  // It needs no funds and no OperatorAuthorization: publishing a VTJSC signs nothing on chain, and
+  // its own ECS bootstrap skips on preflight for exactly that reason.
   const ecosystemCorp = await chain.createCorporation({ did: 'did:example:demo-ecosystem-corp' })
   await chain.fundCorporation(ecosystemCorp.policyAddress)
   await chain.grantOperatorAuthorization(ecosystemCorp.policyAddress)
 
-  const eco = await chain.createEcosystem(ecosystemCorp.policyAddress, {
-    did: 'did:example:demo-ecosystem',
-  })
+  const eco = await chain.createEcosystem(ecosystemCorp.policyAddress, { did: ecosystemDid })
   const orgSchema = await chain.createCredentialSchema(ecosystemCorp.policyAddress, {
     ecosystemId: eco.ecosystemId,
     jsonSchema: ECS_SCHEMAS['ecs-org'],
@@ -112,7 +119,7 @@ async function seed() {
     validatorCorporationId: corp.corporationId,
     applicantCorporationId: applicantCorp.corporationId,
     ecosystemCorporationId: ecosystemCorp.corporationId,
-    ecosystemDid: 'did:example:demo-ecosystem',
+    ecosystemDid,
     orgSchemaId: orgSchema.schemaId,
     serviceSchemaId: serviceSchema.schemaId,
     validatorDid,

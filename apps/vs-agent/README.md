@@ -135,6 +135,12 @@ These variables connect the agent to the Verana network (permission management, 
 
 > The agent maintains a persistent WebSocket connection to the indexer to receive updates about permissions, trust registries, and credential schemas. These events are used to keep the agent state in sync with the ledger.
 
+##### VS-CONN-VS trust gate
+
+Every vt-flow session is gated on trust resolution: the peer DID must resolve to a Verifiable Service whose trust chain reaches a production registry. A self-signed ECS credential is not enough.
+
+As allowed by [VS-CONN-VS], a Validator still accepts a peer that is not a Verifiable Service yet when the request is an ECS Organization, Persona or Service issuance — otherwise no agent could ever onboard. The exemption is not granted on the peer's word: for an onboarding request the peer must own a `PENDING` Participant entry naming this agent as its validator, and for a direct issuance request this agent must hold an active ISSUER Participant for the requested schema. In both cases the schema must be an ECS Organization, Persona or Service schema of an ecosystem listed in `TRUSTED_ECS_ECOSYSTEM_DIDS`. An Applicant never exempts its Validator: the peer it contacts must always be a Verifiable Service.
+
 #### Admin API authentication
 
 The Admin API can run two listeners: an unauthenticated internal one (trusted by network reachability) and an authenticated external one. External callers get a bearer token by signing a challenge with their Verana account key (ADR-036) via `POST /v1/auth/challenge` and `POST /v1/auth/token`.
