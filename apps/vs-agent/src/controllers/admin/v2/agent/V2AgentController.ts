@@ -4,11 +4,13 @@ import { ApiOkResponse, ApiOperation, ApiServiceUnavailableResponse, ApiTags } f
 import { AdminApiError, AdminApiErrorCode, BOOTSTRAP_STATE, BootstrapState } from '../../../../common'
 import { AccessMode } from '../../../../security'
 
+import { LivenessDto, ReadinessDto } from './health.dto'
+
 @ApiTags('v2/agent')
 @AccessMode('INTERNAL')
 @Controller({ path: 'agent', version: '2' })
 export class V2AgentController {
-  constructor(@Inject(BOOTSTRAP_STATE) private readonly bootstrapState: BootstrapState) {}
+  public constructor(@Inject(BOOTSTRAP_STATE) private readonly bootstrapState: BootstrapState) {}
 
   @Get('health/live')
   @AccessMode('PUBLIC')
@@ -17,8 +19,8 @@ export class V2AgentController {
     description:
       'Answers as soon as the HTTP listener accepts a connection. Never fails because an external dependency failed.',
   })
-  @ApiOkResponse({ description: 'The agent process is alive' })
-  getLiveness() {
+  @ApiOkResponse({ description: 'The agent process is alive', type: LivenessDto })
+  public getLiveness(): LivenessDto {
     return { status: 'live' }
   }
 
@@ -29,9 +31,9 @@ export class V2AgentController {
     description:
       'Answers 200 once every bootstrap step completed and the agent is up to date with the indexer.',
   })
-  @ApiOkResponse({ description: 'The agent is ready to serve' })
+  @ApiOkResponse({ description: 'The agent is ready to serve', type: ReadinessDto })
   @ApiServiceUnavailableResponse({ description: 'A bootstrap step is still pending' })
-  getReadiness() {
+  public getReadiness(): ReadinessDto {
     const { ready, message } = this.bootstrapState.readiness
 
     if (!ready) {

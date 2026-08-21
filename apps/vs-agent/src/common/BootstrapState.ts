@@ -25,42 +25,42 @@ export class BootstrapState {
   private indexerSyncStatus?: () => IndexerSyncStatus
   private ecsBootstrap?: EcsBootstrapRecord
 
-  require(step: BootstrapStep): void {
+  public require(step: BootstrapStep): void {
     this.steps.set(step, 'pending')
   }
 
-  complete(step: BootstrapStep): void {
+  public complete(step: BootstrapStep): void {
     this.steps.set(step, 'completed')
     this.failures.delete(step)
   }
 
-  skip(step: BootstrapStep): void {
+  public skip(step: BootstrapStep): void {
     this.steps.set(step, 'skipped')
     this.failures.delete(step)
   }
 
-  fail(step: BootstrapStep, reason: string): void {
+  public fail(step: BootstrapStep, reason: string): void {
     this.steps.set(step, 'failed')
     this.failures.set(step, reason)
   }
 
-  watchIndexer(probe: () => IndexerSyncStatus): void {
+  public watchIndexer(probe: () => IndexerSyncStatus): void {
     this.indexerSyncStatus = probe
   }
 
-  recordEcsBootstrap(mode: string, outcome: EcsBootstrapOutcome, reason?: string): void {
+  public recordEcsBootstrap(mode: string, outcome: EcsBootstrapOutcome, reason?: string): void {
     this.ecsBootstrap = { mode, outcome, reason }
   }
 
-  get stepStates(): Record<string, BootstrapStepState> {
+  public get stepStates(): Record<string, BootstrapStepState> {
     return Object.fromEntries(this.steps)
   }
 
-  get ecsBootstrapRecord(): EcsBootstrapRecord | undefined {
+  public get ecsBootstrapRecord(): EcsBootstrapRecord | undefined {
     return this.ecsBootstrap
   }
 
-  get readiness(): ReadinessResult {
+  public get readiness(): ReadinessResult {
     for (const [step, state] of this.steps) {
       if (state === 'pending') return { ready: false, message: `bootstrap step '${step}' has not completed` }
       if (state === 'failed') return { ready: false, message: `bootstrap step '${step}' failed` }
