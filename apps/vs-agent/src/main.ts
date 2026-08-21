@@ -31,6 +31,7 @@ import * as path from 'path'
 import packageJson from '../package.json'
 
 import { VsAgentModule } from './admin.module'
+import { BootstrapState } from './common'
 import {
   ADMIN_LOG_LEVEL,
   ADMIN_PORT,
@@ -103,15 +104,16 @@ import {
 } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
-  const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
+  const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [], bootstrapState } = serverConfig
 
   // Nest's global level governs the plain @nestjs/common loggers (the credo agent uses AGENT_LOG_LEVEL).
   const nestLogLevels = toNestLogLevels(ADMIN_LOG_LEVEL)
 
   if (ADMIN_API_AUTH_MODE.includes('internal')) {
-    const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins), {
-      logger: nestLogLevels,
-    })
+    const adminApp = await NestFactory.create(
+      VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins, { bootstrapState }),
+      { logger: nestLogLevels },
+    )
     commonAppConfig(adminApp, cors)
     await adminApp.listen(port)
   }
@@ -121,6 +123,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
       VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins, {
         external: true,
         allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
+        bootstrapState,
       }),
       { logger: nestLogLevels },
     )
@@ -414,6 +417,13 @@ const run = async () => {
     adminApiServiceEndpoint,
   })
 
+  const bootstrapState = new BootstrapState()
+  if (agent.did) {
+    bootstrapState.require('vtjsc-service-id-migration')
+    bootstrapState.require('self-trust-registry')
+  }
+  if (VERANA_INDEXER_BASE_URL) bootstrapState.require('indexer-subscription')
+
   const conf: ServerConfig = {
     port: ADMIN_PORT,
     cors: USE_CORS,
@@ -421,12 +431,17 @@ const run = async () => {
     publicApiBaseUrl,
     endpoints,
     nestPlugins,
+    bootstrapState,
   }
   const { httpServer, webSocketServer } = await startServers(agent, conf)
 
   if (agent.did) {
-    await migrateVtjscServiceIds(agent).catch((error: Error) =>
-      serverLogger.error(`[VTJSC] service id migration failed: ${error.message}`),
+    await migrateVtjscServiceIds(agent).then(
+      () => bootstrapState.complete('vtjsc-service-id-migration'),
+      (error: Error) => {
+        bootstrapState.fail('vtjsc-service-id-migration', error.message)
+        serverLogger.error(`[VTJSC] service id migration failed: ${error.message}`)
+      },
     )
   }
 
@@ -457,12 +472,14 @@ const run = async () => {
     orgOrganizationKind: SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND,
     orgCountryCode: SELF_ISSUED_VTC_ORG_COUNTRYCODE,
   }
-  if (agent.did)
+  if (agent.did) {
     await setupSelfTr({
       agent,
       publicApiBaseUrl,
       defaults: selfTrDefaults,
     })
+    bootstrapState.complete('self-trust-registry')
+  }
 
   // Deliver domain events emitted on the agent bus to the configured webhook endpoint
   webhookEvent(agent, EVENTS_BASE_URL, serverLogger)
@@ -507,8 +524,11 @@ const run = async () => {
         corporationId: indexerCorporationId,
         agentCorporationId: Number(VERANA_CORPORATION_ID),
       })
+      bootstrapState.watchIndexer(() => indexerWs.syncStatus)
+      bootstrapState.complete('indexer-subscription')
       await indexerWs.start()
     } else {
+      bootstrapState.skip('indexer-subscription')
       serverLogger.warn(
         '[IndexerWS] subscription skipped: agent has no public DID and VERANA_INDEXER_SUBSCRIPTION_SCOPE is not corporation',
       )
@@ -535,10 +555,15 @@ const run = async () => {
     },
     serverLogger,
   )
-  void ecsBootstrap.run().catch((error: Error) => {
-    serverLogger.error(`[EcsBootstrap] ${error.message}`)
-    if (AGENT_MODE === 'delegated') process.exit(1)
-  })
+  bootstrapState.recordEcsBootstrap(AGENT_MODE, 'pending')
+  void ecsBootstrap.run().then(
+    () => bootstrapState.recordEcsBootstrap(AGENT_MODE, 'completed'),
+    (error: Error) => {
+      bootstrapState.recordEcsBootstrap(AGENT_MODE, 'failed', error.message)
+      serverLogger.error(`[EcsBootstrap] ${error.message}`)
+      if (AGENT_MODE === 'delegated') process.exit(1)
+    },
+  )
 
   // Accept incoming DIDComm only after the catch-up, so the agent does not act on stale chain state.
   if (webSocketServer) {
