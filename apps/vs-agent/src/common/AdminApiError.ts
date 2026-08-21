@@ -5,6 +5,7 @@ export enum AdminApiErrorCode {
   Forbidden = 'FORBIDDEN',
   UnknownId = 'UNKNOWN_ID',
   InvalidState = 'INVALID_STATE',
+  NotReady = 'NOT_READY',
   Internal = 'INTERNAL',
 }
 
