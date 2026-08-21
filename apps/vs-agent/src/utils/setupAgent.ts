@@ -4,6 +4,7 @@ import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { LogLevel, ParsedDid } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
+import { HttpAdapterHost } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import {
   allowEcsIssuanceExemption,
@@ -21,6 +22,7 @@ import {
 import express from 'express'
 import WebSocket from 'ws'
 
+import { ErrorEnvelopeFilter } from '../common'
 import {
   ADMIN_V2_TAGS,
   AGENT_DIDCOMM_VERSIONS,
@@ -285,6 +287,9 @@ export function commonAppConfig(
 
   // Pipes
   app.useGlobalPipes(new ValidationPipe())
+
+  // Error envelope for every v2 route
+  app.useGlobalFilters(new ErrorEnvelopeFilter(app.get(HttpAdapterHost).httpAdapter))
 
   // CORS
   if (cors) {

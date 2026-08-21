@@ -27,6 +27,7 @@ import {
   VERIFIER_PARTICIPANT_TYPE,
 } from '../types'
 import {
+  connectToPublicDid,
   createCredential,
   createVtc,
   removeStoredTrustCredential,
@@ -125,15 +126,7 @@ export class VtFlowOrchestrator {
       if (connection?.isReady) connectionId = connection.id
     }
     if (!connectionId) {
-      const { connectionRecord } = await this.agent.didcomm.oob.receiveImplicitInvitation({
-        did: validatorParticipant.did,
-        ourDid: this.agent.did,
-        label: this.agent.label,
-        didCommVersion: 'v2',
-      })
-      if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
-      const ready = await this.agent.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
-      connectionId = ready.id
+      connectionId = await connectToPublicDid(this.agent, validatorParticipant.did)
     }
 
     return vtFlowApi.sendOnboardingRequest({
