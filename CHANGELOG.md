@@ -1,5 +1,49 @@
 # Changelog
 
+## [2.0.0](https://github.com/verana-labs/vs-agent/compare/v1.12.0...v2.0.0) (2026-08-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* bump resolve-version in CI
+* **vt-flow:** anchor the signed credential digest via verre ([#565](https://github.com/verana-labs/vs-agent/issues/565))
+* **vs-agent:** rename self-issued org env vars to v4 names ([#567](https://github.com/verana-labs/vs-agent/issues/567))
+* **vs-agent:** enforce required v4 env config ([#527](https://github.com/verana-labs/vs-agent/issues/527))
+
+### Features
+
+* admin api add a v2 api router ([#621](https://github.com/verana-labs/vs-agent/issues/621)) ([3220c91](https://github.com/verana-labs/vs-agent/commit/3220c91a2f6dfa8c3bd6ed404e0f01928d2005af))
+* **agent-sdk:** serve the ECS badge schema and 404 unknown schemaIds ([#573](https://github.com/verana-labs/vs-agent/issues/573)) ([217d984](https://github.com/verana-labs/vs-agent/commit/217d9849ec50bdfa9f195c8fa3399d57f68b8a43))
+* **vs-agent:** anchor digestJCS in admin jsonld issuance ([#586](https://github.com/verana-labs/vs-agent/issues/586)) ([4dfa8e4](https://github.com/verana-labs/vs-agent/commit/4dfa8e4a7c76fdd56c97c1318e7254e8d08f3cf8))
+* **vs-agent:** enforce required v4 env config ([#527](https://github.com/verana-labs/vs-agent/issues/527)) ([769d931](https://github.com/verana-labs/vs-agent/commit/769d931f208a8b60aa604f5abde7dab1731c9052))
+* **vs-agent:** full v4 lifecycle e2e and local demo environment ([#520](https://github.com/verana-labs/vs-agent/issues/520)) ([b6a4831](https://github.com/verana-labs/vs-agent/commit/b6a48316f8a2463d2048f7fc6a50680a69c7dfc5))
+* **vs-agent:** rename self-issued org env vars to v4 names ([#567](https://github.com/verana-labs/vs-agent/issues/567)) ([ac09461](https://github.com/verana-labs/vs-agent/commit/ac09461092d16c19e0e055953cd7dcf2f32be2fe))
+* **vs-agent:** require mnemonic and standalone trusted ECS DIDs ([#529](https://github.com/verana-labs/vs-agent/issues/529)) ([fe92358](https://github.com/verana-labs/vs-agent/commit/fe92358568e7d4041de4b88797f17dda48ee45cb))
+* **vt-flow:** anchor the signed credential digest via verre ([#565](https://github.com/verana-labs/vs-agent/issues/565)) ([6f0ed05](https://github.com/verana-labs/vs-agent/commit/6f0ed0574b80ca528926a515201bdf84069464a5))
+
+
+### Bug Fixes
+
+* admin api global error envelope and code vocabulary ([#622](https://github.com/verana-labs/vs-agent/issues/622)) ([35927bf](https://github.com/verana-labs/vs-agent/commit/35927bf7cfe71d4eb2e565998f1f1dbfbee66a60))
+* **agent-sdk:** check schema ownership before publishing a VTJSC ([#583](https://github.com/verana-labs/vs-agent/issues/583)) ([2d7510f](https://github.com/verana-labs/vs-agent/commit/2d7510fe02b3c508c86686cd79cf81c87884acb1))
+* **agent-sdk:** keep self-issued ECS credentials detached once a real one is stored ([#585](https://github.com/verana-labs/vs-agent/issues/585)) ([86a760b](https://github.com/verana-labs/vs-agent/commit/86a760bc8002167a3fc2df8bec5a350990b46e2a))
+* **agent-sdk:** let the ecosystem's own agent self-issue its Org/Persona credential ([#587](https://github.com/verana-labs/vs-agent/issues/587)) ([6b3c647](https://github.com/verana-labs/vs-agent/commit/6b3c647c49053d17f9622e7cea917cc013c355d5))
+* **agent-sdk:** pin the e2e chain to dev.30 for the operator grant convention ([#572](https://github.com/verana-labs/vs-agent/issues/572)) ([74be218](https://github.com/verana-labs/vs-agent/commit/74be21891b5de35447c6adb91331d0d2ff617409))
+* **agent-sdk:** send subscribe before draining indexer catch-up ([#575](https://github.com/verana-labs/vs-agent/issues/575)) ([2d3b3ba](https://github.com/verana-labs/vs-agent/commit/2d3b3ba33b488e9a6e9c1561184e3f8f6b82383e))
+* **agent-sdk:** spec-compliant ECS publication and VTJSC digestSRI ([#523](https://github.com/verana-labs/vs-agent/issues/523)) ([f116333](https://github.com/verana-labs/vs-agent/commit/f1163333dcba5fce03180bc88432a10a64b68242))
+* bump resolve-version in CI ([3a2b952](https://github.com/verana-labs/vs-agent/commit/3a2b9528fedfe57fbbc975c775753ccd7b1eccac))
+* calculate digest over plain JSON object ([#590](https://github.com/verana-labs/vs-agent/issues/590)) ([c798f55](https://github.com/verana-labs/vs-agent/commit/c798f55562b28f5f1868dc342d415ab7c3c90512))
+* ECS credential anchoring, cross-Corporation issuers, and four fixes found on devnet ([#589](https://github.com/verana-labs/vs-agent/issues/589)) ([dba0af9](https://github.com/verana-labs/vs-agent/commit/dba0af99c48d93789c5c2f71d98d93a94bb7b540))
+* precompute SRI of default content ([#584](https://github.com/verana-labs/vs-agent/issues/584)) ([aa48f8a](https://github.com/verana-labs/vs-agent/commit/aa48f8a44ced01db11f155b26c3b289c927e57d0))
+* prevent duplicated connections by using publicDid tag ([#618](https://github.com/verana-labs/vs-agent/issues/618)) ([50918d0](https://github.com/verana-labs/vs-agent/commit/50918d02594a7e0bf0da15c21d0277a7f147314c))
+* resolve VPR schema references on any chain ([#595](https://github.com/verana-labs/vs-agent/issues/595)) ([ba1aa92](https://github.com/verana-labs/vs-agent/commit/ba1aa9294239b5962fe2203700a7b34d6b93084f))
+* self-tr integrity data calculation ([#593](https://github.com/verana-labs/vs-agent/issues/593)) ([cdb5d46](https://github.com/verana-labs/vs-agent/commit/cdb5d4698e22d3627ddb5d2ff13adadd154964ca))
+* store digest of ECS credentials (self issuing case)  ([#588](https://github.com/verana-labs/vs-agent/issues/588)) ([4cd617e](https://github.com/verana-labs/vs-agent/commit/4cd617e7e2cd64205d84cd14edceb08ccc1bf828))
+* **vs-agent:** align ECS test mocks and self-tr docs with v4 ([#566](https://github.com/verana-labs/vs-agent/issues/566)) ([f9313ab](https://github.com/verana-labs/vs-agent/commit/f9313ab347a2177a0942bf7cd3ecc42c0ccb3681))
+* **vt-flow:** validate schema before issuing credential ([#592](https://github.com/verana-labs/vs-agent/issues/592)) ([347d501](https://github.com/verana-labs/vs-agent/commit/347d5011f01356a21130dd0ee0598902bf30ea35))
+* wait for DID Document availability on delegated mode ([#591](https://github.com/verana-labs/vs-agent/issues/591)) ([5b2b2b5](https://github.com/verana-labs/vs-agent/commit/5b2b2b554ac498f164dd848ef30d18a840c54dc1))
+* wait for the indexer subscribed acknowledgement before the catch-up ([#594](https://github.com/verana-labs/vs-agent/issues/594)) ([e00c8aa](https://github.com/verana-labs/vs-agent/commit/e00c8aa832a855a3dad5b36806cc39e3436d93ae))
+
 ## [1.12.0](https://github.com/verana-labs/vs-agent/compare/v1.11.0...v1.12.0) (2026-07-26)
 
 
