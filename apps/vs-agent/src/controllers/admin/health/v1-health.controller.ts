@@ -6,7 +6,7 @@ import { AccessMode } from '../../../security'
 @ApiTags('Health')
 @AccessMode('INTERNAL')
 @Controller({ path: 'health', version: '1' })
-export class HealthController {
+export class V1HealthController {
   @Get()
   getHealth() {
     return {

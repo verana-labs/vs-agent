@@ -11,7 +11,7 @@ import { VsAgentInfoDto } from './dto'
 @ApiExtraModels(VsAgentInfoDto)
 @AccessMode('INTERNAL')
 @Controller({ path: 'agent', version: '1' })
-export class VsAgentController {
+export class V1VsAgentController {
   constructor(private readonly vsAgentService: VsAgentService) {}
 
   @Get('/')

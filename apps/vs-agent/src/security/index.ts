@@ -1,4 +1,4 @@
 export * from './AdminAuthGuard'
 export * from './AdminAuthService'
-export * from './AuthController'
+export * from './V1AuthController'
 export * from './accessMode'

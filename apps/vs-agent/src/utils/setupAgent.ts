@@ -21,6 +21,7 @@ import express from 'express'
 import WebSocket from 'ws'
 
 import {
+  ADMIN_V2_TAGS,
   AGENT_DIDCOMM_VERSIONS,
   ENABLE_PUBLIC_API_SWAGGER,
   ENABLED_PLUGINS,
@@ -243,12 +244,16 @@ export function commonAppConfig(
   })
 
   // Swagger
-  const config = new DocumentBuilder()
+  const builder = new DocumentBuilder()
     .setTitle('API Documentation')
     .setDescription('API Documentation')
     .setVersion('1.0')
-    .build()
-  const document = SwaggerModule.createDocument(app, config)
+
+  if (!publicApp) {
+    for (const [name, description] of Object.entries(ADMIN_V2_TAGS)) builder.addTag(name, description)
+  }
+
+  const document = SwaggerModule.createDocument(app, builder.build())
 
   // Inject dynamic message examples from registered handlers
   if (!publicApp) {

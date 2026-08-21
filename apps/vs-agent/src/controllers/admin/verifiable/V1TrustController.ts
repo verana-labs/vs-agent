@@ -16,8 +16,8 @@ import {
 @ApiTags('Verifiable Trust')
 @AccessMode('INTERNAL')
 @Controller({ path: 'vt', version: '1' })
-export class TrustController {
-  private readonly logger = new Logger(TrustController.name)
+export class V1TrustController {
+  private readonly logger = new Logger(V1TrustController.name)
 
   constructor(private readonly trustService: TrustService) {}
 

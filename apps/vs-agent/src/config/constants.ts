@@ -169,6 +169,19 @@ export const DEFAULT_PRIVACY_HTML = defaultResourcePage(
   'This Verifiable Service has not published its own privacy policy yet.',
 )
 
+// Swagger tags for the v2 admin scopes.
+const v2ScopeTag = (summary: string) =>
+  `${summary} Reserved for the v2 migration; no methods implemented yet.`
+
+export const ADMIN_V2_TAGS: Record<string, string> = {
+  'v2/auth': v2ScopeTag('Exchanges an account signature for a bearer token.'),
+  'v2/agent': v2ScopeTag('Identifies the agent and reports its state to an orchestrator.'),
+  'v2/didcomm': v2ScopeTag('Operates on the wire-level DIDComm state of the agent.'),
+  'v2/openid4vc': v2ScopeTag('Operates on the OpenID4VC state of the agent.'),
+  'v2/anoncreds': v2ScopeTag('Manages the AnonCreds artifacts of the agent.'),
+  'v2/vt': v2ScopeTag('Manages the Verifiable Trust state of the agent.'),
+}
+
 // Utils params
 export const MASTER_LIST_CSCA_LOCATION = process.env.MASTER_LIST_CSCA_LOCATION
 
@@ -214,7 +227,7 @@ export const ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS = (
 
 // Active plugins: comma-separated list of plugin names.
 // Available:
-//   'messaging' — base MessageController + credential/proof handlers (always required)
+//   'messaging' — base V1MessageController + credential/proof handlers (always required)
 //   'chat'      — chat Credo modules + chat message handlers
 //   'mrtd'      — eMRTD Credo module + MRTD message handlers
 //

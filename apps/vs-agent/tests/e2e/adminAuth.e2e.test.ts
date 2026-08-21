@@ -23,7 +23,7 @@ import {
 } from '../../../../packages/agent-sdk/tests/e2e/helpers'
 import { AdminAuthGuard } from '../../src/security/AdminAuthGuard'
 import { AdminAuthService, challengePayload } from '../../src/security/AdminAuthService'
-import { AuthController } from '../../src/security/AuthController'
+import { V1AuthController } from '../../src/security/V1AuthController'
 import { AccessMode } from '../../src/security/accessMode'
 
 const RUN_ID = String(Date.now())
@@ -143,7 +143,7 @@ describe('admin API auth (V4): ADR-036 challenge to authorized call against a li
     }
 
     const moduleRef = await Test.createTestingModule({
-      controllers: [AuthController, TestFlowsController],
+      controllers: [V1AuthController, TestFlowsController],
       providers: [
         AdminAuthService,
         { provide: 'VSAGENT', useValue: agentStub },

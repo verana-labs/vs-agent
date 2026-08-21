@@ -55,8 +55,8 @@ import { CredentialTypesService } from './CredentialTypeService'
   path: 'credential-types',
   version: '1',
 })
-export class CredentialTypesController {
-  private readonly logger = new Logger(CredentialTypesController.name)
+export class V1CredentialTypesController {
+  private readonly logger = new Logger(V1CredentialTypesController.name)
 
   constructor(
     private readonly agentService: VsAgentService,

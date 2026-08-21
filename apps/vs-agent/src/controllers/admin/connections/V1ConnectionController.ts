@@ -37,7 +37,7 @@ import { ConnectionDto } from './dto/connection.dto'
   path: 'connections',
   version: '1',
 })
-export class ConnectionController {
+export class V1ConnectionController {
   constructor(private readonly agentService: VsAgentService) {}
 
   /**
