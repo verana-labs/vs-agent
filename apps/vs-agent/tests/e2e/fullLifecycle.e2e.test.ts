@@ -297,12 +297,18 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         isVtFlowStateChangedEvent(VtFlowState.Completed),
       )
       const validatorFlow = (await flowsService.listFlows({ role: VtFlowRole.Validator }))[0]
-      const validated = await new VtFlowOrchestrator(validator, {
+      const orchestrator = new VtFlowOrchestrator(validator, {
         indexer,
         publicApiBaseUrl: validator.publicApiBaseUrl,
-      }).validateAndOfferCredential({
+      })
+      // This applicant is a HOLDER, so the validation is followed by a credential offer.
+      const { record: validatedRecord, participant } = await orchestrator.validateOnboardingProcess({
         vtFlowRecordId: validatorFlow.id,
+      })
+      const validated = await orchestrator.offerOnboardingCredential({
+        vtFlowRecordId: validatedRecord.id,
         credentialSchemaId: String(orgSchemaId),
+        participant,
       })
       expect(validated.state).toBe(VtFlowState.CredOffered)
       await applicantCompleted

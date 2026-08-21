@@ -18,7 +18,7 @@ import {
   VtFlowVariant,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { VeranaIndexerService, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
+import { HOLDER_PARTICIPANT_TYPE, VeranaIndexerService, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
 import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
@@ -161,20 +161,32 @@ export class VtFlowsService {
     }
     if (!record.participantId) throw new BadRequestException('Record has no participantId')
 
-    const holderParticipant = await this.getIndexer().getParticipant(Number(record.participantId))
-    if (!holderParticipant)
-      throw new BadRequestException(`Holder participant ${record.participantId} not found on indexer`)
-    if (holderParticipant.schema_id == null)
-      throw new BadRequestException('Holder participant has no schema_id')
+    const applicant = await this.getIndexer().getParticipant(Number(record.participantId))
+    if (!applicant)
+      throw new BadRequestException(`Applicant participant ${record.participantId} not found on indexer`)
+    if (applicant.schema_id == null) throw new BadRequestException('Applicant participant has no schema_id')
 
     const orchestrator = new VtFlowOrchestrator(agent, {
       publicApiBaseUrl: agent.publicApiBaseUrl,
       indexer: this.getIndexer(),
     })
     try {
-      const offered = await orchestrator.validateAndOfferCredential({
+      const { record: validated, participant } = await orchestrator.validateOnboardingProcess({
         vtFlowRecordId: record.id,
-        credentialSchemaId: String(holderParticipant.schema_id),
+      })
+
+      // Only a HOLDER receives a credential. For every other role the chain records the outcome
+      // with SetParticipantOPToValidated, and the process ends there. The schema of an ISSUER
+      // entry describes what that issuer will give to others, so building a credential from it
+      // for the issuer itself fails on the required subject claims.
+      if (participant.role !== HOLDER_PARTICIPANT_TYPE) {
+        return toDto(await orchestrator.completeOnboardingProcess(validated.id))
+      }
+
+      const offered = await orchestrator.offerOnboardingCredential({
+        vtFlowRecordId: validated.id,
+        credentialSchemaId: String(applicant.schema_id),
+        participant,
       })
       return toDto(offered)
     } catch (error) {
