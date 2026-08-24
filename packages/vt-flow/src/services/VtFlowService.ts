@@ -514,6 +514,25 @@ export class VtFlowService {
     return record
   }
 
+  /**
+   * Close an onboarding process that carries no credential exchange. Only a HOLDER receives a
+   * credential; for every other role the chain records the outcome with
+   * SetParticipantOPToValidated, and nothing else follows. Both sides use this, so it asserts no
+   * role: the validator calls it after it validates, and the applicant reaches it from the chain
+   * event.
+   */
+  public async markCompleted(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertVariant(VtFlowVariant.OnboardingProcess)
+    if (record.state === VtFlowState.Completed) return record
+    if (isVtFlowTerminalState(record.state)) {
+      throw new CredoError(`VtFlow record is in terminal state '${record.state}'; cannot complete it.`)
+    }
+
+    await this.updateState(agentContext, record, VtFlowState.Completed)
+    return record
+  }
+
   /** Link a Credo exchange record to the session and transition to `CRED_OFFERED`. */
   public async attachCredentialExchangeRecord(
     agentContext: AgentContext,

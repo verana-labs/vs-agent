@@ -216,6 +216,10 @@ export class VtFlowApi {
     return this.vtFlowService.markValidated(this.agentContext, vtFlowRecordId)
   }
 
+  public markCompleted(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    return this.vtFlowService.markCompleted(this.agentContext, vtFlowRecordId)
+  }
+
   public async offerCredentialForSession(
     options: OfferCredentialForSessionOptions,
   ): Promise<{ record: VtFlowRecord; credentialExchangeRecord: DidCommCredentialExchangeRecord }> {

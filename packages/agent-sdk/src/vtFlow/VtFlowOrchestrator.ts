@@ -18,7 +18,7 @@ import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { BaseAgentModules, VsAgent } from '../agent'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
-import { ParticipantRole, ParticipantState } from '../blockchain/types'
+import { Participant, ParticipantRole, ParticipantState } from '../blockchain/types'
 import {
   HOLDER_PARTICIPANT_TYPE,
   ISSUER_GRANTOR_PARTICIPANT_TYPE,
@@ -48,13 +48,24 @@ export interface StartOnboardingProcessInput {
   claims?: Record<string, unknown>
 }
 
-export interface ValidateAndOfferCredentialInput {
+export interface ValidateOnboardingProcessInput {
   vtFlowRecordId: string
+  /** Only for a HOLDER. It defaults to the schema of the applicant participant. */
+  credentialSchemaId?: string
   credentialType?: string[]
   credentialContext?: string[]
-  credentialSchemaId: string
-  agentParticipantId?: number
-  walletAgentParticipantId?: number
+}
+
+export interface OfferOnboardingCredentialInput {
+  vtFlowRecordId: string
+  /** The credential validateOnboardingProcess built. Without it the method builds one. */
+  credential?: JsonCredential
+  /** It defaults to the schema of the applicant participant. */
+  credentialSchemaId?: string
+  /** The participant validateOnboardingProcess returned; saves a second chain read. */
+  participant?: Participant
+  credentialType?: string[]
+  credentialContext?: string[]
 }
 
 export interface AcceptCredentialInput {
@@ -139,7 +150,22 @@ export class VtFlowOrchestrator {
     })
   }
 
-  async validateAndOfferCredential(input: ValidateAndOfferCredentialInput): Promise<VtFlowRecord> {
+  /**
+   * Validate an onboarding process: record the outcome on-chain, accept the onboarding request and
+   * move the record to VALIDATED. It sends no credential. Only a HOLDER takes part in a credential
+   * exchange; an ISSUER, a VERIFIER or a grantor joins the Ecosystem, and SetParticipantOPToValidated
+   * is the whole of it. The caller decides what follows, from the role of the returned participant.
+   *
+   * For a HOLDER it builds the credential before the chain write, and returns it for
+   * offerOnboardingCredential. Claims that do not satisfy the schema, or a schema fetch that fails,
+   * must stop the process while the chain holds no outcome yet and the caller can repeat the call.
+   *
+   * A record that is already VALIDATED and has no credential exchange keeps the chain outcome and
+   * only builds the credential again. A repeat call thus re-drives an offer that did not complete.
+   */
+  async validateOnboardingProcess(
+    input: ValidateOnboardingProcessInput,
+  ): Promise<{ record: VtFlowRecord; participant: Participant; credential?: JsonCredential }> {
     const chain = this.requireChain()
     if (!this.agent.did) throw new Error('Agent has no public DID')
 
@@ -150,36 +176,69 @@ export class VtFlowOrchestrator {
     if (record.variant !== VtFlowVariant.OnboardingProcess) {
       throw new Error(`Record variant is '${record.variant}', expected OnboardingProcess`)
     }
-    if (record.state !== VtFlowState.AwaitingOr) {
-      throw new Error(`Record state is '${record.state}', expected '${VtFlowState.AwaitingOr}'`)
+    const resumeOffer = record.state === VtFlowState.Validated && !record.credentialExchangeRecordId
+    if (record.state !== VtFlowState.AwaitingOr && !resumeOffer) {
+      throw new Error(
+        `Record state is '${record.state}', expected '${VtFlowState.AwaitingOr}', or ` +
+          `'${VtFlowState.Validated}' with no credential exchange`,
+      )
     }
     if (!record.participantId) throw new Error('Record has no participantId')
 
-    const holderParticipantId = Number(record.participantId)
-    const holderParticipant = await chain.getParticipant(holderParticipantId)
-    if (!holderParticipant) throw new Error(`Holder participant ${holderParticipantId} not found on chain`)
-    if (!holderParticipant.did) throw new Error('Holder participant has no DID')
+    const participantId = Number(record.participantId)
+    const participant = await chain.getParticipant(participantId)
+    if (!participant) throw new Error(`Applicant participant ${participantId} not found on chain`)
+    if (!participant.did) throw new Error('Applicant participant has no DID')
 
-    const unsignedCredentialJson = await this.buildCredential({
-      credentialSchemaId: input.credentialSchemaId,
-      subjectDid: holderParticipant.did,
-      claims: (record.claims ?? {}) as JsonObject,
-      credentialType: input.credentialType,
-      credentialContext: input.credentialContext,
-    })
+    const credential =
+      Number(participant.role) === HOLDER_PARTICIPANT_TYPE
+        ? await this.buildCredential({
+            credentialSchemaId: input.credentialSchemaId ?? String(participant.schemaId),
+            subjectDid: participant.did,
+            claims: (record.claims ?? {}) as JsonObject,
+            credentialType: input.credentialType,
+            credentialContext: input.credentialContext,
+          })
+        : undefined
+
+    if (resumeOffer) return { record, participant, credential }
 
     // op_summary_digest (MOD-PP-MSG-3) digests the applicant's submission, not the credential
-    await chain.setParticipantOPToValidated({
-      id: holderParticipantId,
-      corporation: holderParticipant.corporation,
-    })
+    await chain.setParticipantOPToValidated({ id: participantId, corporation: participant.corporation })
 
     await vtFlowApi.acceptOnboardingRequest(record.id)
-    await vtFlowApi.markValidated(record.id)
+    const validated = await vtFlowApi.markValidated(record.id)
+    return { record: validated, participant, credential }
+  }
+
+  /**
+   * Offer the credential of an onboarding process to its applicant. Call it only for a HOLDER, and
+   * only after validateOnboardingProcess has moved the record to VALIDATED. Give it the credential
+   * that validateOnboardingProcess built, so that the process does not build the credential twice.
+   */
+  async offerOnboardingCredential(input: OfferOnboardingCredentialInput): Promise<VtFlowRecord> {
+    const chain = this.requireChain()
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(input.vtFlowRecordId)
+    if (!record) throw new Error(`vt-flow record ${input.vtFlowRecordId} not found`)
+    if (!record.participantId) throw new Error('Record has no participantId')
+
+    const participant = input.participant ?? (await chain.getParticipant(Number(record.participantId)))
+    if (!participant?.did) throw new Error('Applicant participant has no DID')
+
+    const unsignedCredentialJson =
+      input.credential ??
+      (await this.buildCredential({
+        credentialSchemaId: input.credentialSchemaId ?? String(participant.schemaId),
+        subjectDid: participant.did,
+        claims: (record.claims ?? {}) as JsonObject,
+        credentialType: input.credentialType,
+        credentialContext: input.credentialContext,
+      }))
 
     const { record: offered } = await vtFlowApi.offerCredentialForSession({
       vtFlowRecordId: record.id,
-      issuerParticipantId: Number(holderParticipant.validatorParticipantId),
+      issuerParticipantId: Number(participant.validatorParticipantId),
       credentialFormats: {
         jsonld: {
           credential: unsignedCredentialJson,
@@ -188,6 +247,14 @@ export class VtFlowOrchestrator {
       },
     })
     return offered
+  }
+
+  /**
+   * Close an onboarding process that carries no credential exchange, on the validator side. The
+   * applicant reaches the same state from the SetParticipantOPToValidated chain event.
+   */
+  async completeOnboardingProcess(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    return this.resolveVtFlowApi().markCompleted(vtFlowRecordId)
   }
 
   async acceptCredential(input: AcceptCredentialInput): Promise<VtFlowRecord> {

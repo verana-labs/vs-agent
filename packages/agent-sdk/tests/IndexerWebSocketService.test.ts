@@ -127,6 +127,9 @@ const readyFrame = (): Buffer =>
 const blockFrame = (block: number, events: IndexerEventRecord[]): Buffer =>
   Buffer.from(JSON.stringify({ type: 'block', block, blockTime: '', events }))
 
+const lastWs = (): InstanceType<typeof FakeWebSocket> =>
+  FakeWebSocket.instances.at(-1) as InstanceType<typeof FakeWebSocket>
+
 describe('IndexerWebSocketService', () => {
   let agent: VsAgent
   let registry: IndexerHandlerRegistry
@@ -157,8 +160,6 @@ describe('IndexerWebSocketService', () => {
     FakeWebSocket.instances.at(-1)?.emit('message', readyFrame())
     return started
   }
-
-  const lastWs = (): InstanceType<typeof FakeWebSocket> => FakeWebSocket.instances.at(-1)!
 
   it('sends a DID-scoped subscribe when the indexer is ready', async () => {
     await startWith(async () => undefined)
@@ -469,5 +470,96 @@ describe('IndexerWebSocketService', () => {
     session2.stop()
 
     expect(dispatched).toEqual(['A'])
+  })
+
+  describe('syncStatus', () => {
+    const makeService = (): IndexerWebSocketService =>
+      new IndexerWebSocketService({ indexerUrl: 'http://indexer.test', agent, handlerRegistry: registry })
+
+    it('reports never-synced until the first catch-up completes, then synced', async () => {
+      service = makeService()
+      const started = service.start()
+
+      expect(service.syncStatus).toBe('never-synced')
+
+      lastWs().emit('message', readyFrame())
+      await started
+
+      expect(service.syncStatus).toBe('synced')
+    })
+
+    it('stays never-synced when the socket closes before the acknowledgement', async () => {
+      FakeWebSocket.autoAcknowledgeSubscribe = false
+      vi.useFakeTimers()
+      service = makeService()
+      const started = service.start()
+      lastWs().emit('message', readyFrame())
+      lastWs().close()
+      await started
+
+      expect(service.syncStatus).toBe('never-synced')
+    })
+
+    it('reports catching-up while the REST catch-up is running', async () => {
+      let releaseCatchUp: () => void = () => undefined
+      fetchJsonMock.mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            releaseCatchUp = () => resolve({ events: [], count: 0, after_block_height: 0 })
+          }),
+      )
+      service = makeService()
+      const started = service.start()
+      lastWs().emit('message', readyFrame())
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(service.syncStatus).toBe('catching-up')
+
+      releaseCatchUp()
+      await started
+
+      expect(service.syncStatus).toBe('synced')
+    })
+
+    it('reports disconnected, not catching-up, when the socket drops after a successful sync', async () => {
+      service = makeService()
+      const started = service.start()
+      lastWs().emit('message', readyFrame())
+      await started
+      expect(service.syncStatus).toBe('synced')
+
+      lastWs().close()
+
+      expect(service.syncStatus).toBe('disconnected')
+    })
+    it('goes through catching-up again after a reconnection, then back to synced', async () => {
+      vi.useFakeTimers()
+      service = makeService()
+      const started = service.start()
+      lastWs().emit('message', readyFrame())
+      await started
+      expect(service.syncStatus).toBe('synced')
+
+      lastWs().close()
+      expect(service.syncStatus).toBe('disconnected')
+
+      let releaseCatchUp: () => void = () => undefined
+      fetchJsonMock.mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            releaseCatchUp = () => resolve({ events: [], count: 0, after_block_height: 0 })
+          }),
+      )
+      await vi.advanceTimersByTimeAsync(1_000)
+      lastWs().emit('message', readyFrame())
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(service.syncStatus).toBe('catching-up')
+
+      releaseCatchUp()
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(service.syncStatus).toBe('synced')
+    })
   })
 })
