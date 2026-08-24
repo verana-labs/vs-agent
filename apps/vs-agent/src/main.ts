@@ -24,7 +24,7 @@ import {
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
-import { IncomingMessage } from 'http'
+import { IncomingMessage, Server } from 'http'
 import { Socket } from 'net'
 import * as path from 'path'
 
@@ -104,7 +104,7 @@ import {
 } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
-  const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [], bootstrapState } = serverConfig
+  const { port, cors, publicApiBaseUrl, nestPlugins = [], bootstrapState } = serverConfig
 
   // Nest's global level governs the plain @nestjs/common loggers (the credo agent uses AGENT_LOG_LEVEL).
   const nestLogLevels = toNestLogLevels(ADMIN_LOG_LEVEL)
@@ -152,18 +152,26 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   publicApp.use(express.static(publicDir))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
-  const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
-
   const webSocketServer = agent.didcomm.inboundTransports
     .find(x => x instanceof VsAgentWsInboundTransport)
     ?.getServer()
   const httpInboundTransport = agent.didcomm.inboundTransports.find(x => x instanceof HttpInboundTransport)
 
-  if (enableHttp) {
-    httpInboundTransport?.setApp(publicApp.getHttpAdapter().getInstance())
+  // When HTTP inbound DIDComm is enabled, the transport listens with the public app itself,
+  // so the DID document routes are servable before (never after) inbound DIDComm starts
+  let publicAppServer: Server | undefined
+  if (httpInboundTransport) {
+    await publicApp.init()
+    httpInboundTransport.setApp(publicApp.getHttpAdapter().getInstance())
+  } else {
+    publicAppServer = await publicApp.listen(AGENT_PORT)
   }
 
-  const httpServer = httpInboundTransport ? httpInboundTransport.server : await publicApp.listen(AGENT_PORT)
+  for (const transport of agent.didcomm.inboundTransports) {
+    await transport.start(agent.context)
+  }
+
+  const httpServer = httpInboundTransport ? httpInboundTransport.server : publicAppServer
 
   return { httpServer, webSocketServer }
 }
@@ -582,4 +590,7 @@ const run = async () => {
   )
 }
 
-run()
+run().catch((error: Error) => {
+  new TsLogger(ADMIN_LOG_LEVEL, 'Server').error(`Failed to start VS Agent: ${error.message}`)
+  process.exit(1)
+})

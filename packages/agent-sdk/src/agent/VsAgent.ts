@@ -15,6 +15,7 @@ import {
   DidCommV1Service,
   DidDocument,
   DidDocumentKey,
+  DidDocumentRole,
   DidDocumentService,
   DidRecord,
   DidRepository,
@@ -157,6 +158,18 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
       const existingRecord = await this.findCreatedDid(parsedDid)
 
+      if (existingRecord) {
+        const persistedLocation =
+          parsedDid.method === 'webvh'
+            ? (existingRecord.getTag('domain') as string | undefined)
+            : parseDid(existingRecord.did).id
+        if (persistedLocation !== location) {
+          throw new CredoError(
+            `Persisted public DID '${existingRecord.did}' was created for location '${persistedLocation}', but PUBLIC_API_BASE_URL now derives location '${location}'. Refusing to start: restore the previous URL or deliberately reset the wallet.`,
+          )
+        }
+      }
+
       // DID has not been created yet. Let's do it
       if (!existingRecord) {
         if (parsedDid.method === 'web') {
@@ -190,12 +203,12 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             await didRepository.delete(this.context, existingDidWebRecord)
           }
 
-          const {
-            didState: { did: publicDid, didDocument },
-          } = await this.dids.create({ method: 'webvh', domain, path })
+          const createResult = await this.dids.create({ method: 'webvh', domain, path })
+          const { did: publicDid, didDocument } = createResult.didState
           if (!publicDid || !didDocument) {
-            this.logger.error('Failed to create did:webvh record')
-            process.exit(1)
+            throw new CredoError(
+              `Failed to create did:webvh record: ${(createResult.didState as { reason?: string }).reason ?? 'unknown reason'}`,
+            )
           }
 
           // Add DIDComm services and keys
@@ -217,8 +230,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
           const result = await this.dids.update({ did: publicDid, didDocument })
           if (result.didState.state !== 'finished') {
-            this.logger.error(`Cannot update DID ${publicDid}`)
-            process.exit(1)
+            throw new CredoError(
+              `Cannot update DID ${publicDid}: ${(result.didState as { reason?: string }).reason ?? 'unknown reason'}`,
+            )
           }
           this.logger?.debug('Public did:webvh record created')
           this.did = publicDid
@@ -332,16 +346,12 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   private async findCreatedDid(parsedDid: ParsedDid) {
     const didRepository = this.dependencyManager.resolve(DidRepository)
 
-    // Particular case of webvh: parsedDid does not include the SCID, so we'll need to find it by
-    // its location, which the registrar stores as the 'domain' tag (domain[%3Aport][:path...])
-    if (parsedDid.method === 'webvh') {
-      return await didRepository.findSingleByQuery(this.context, {
-        method: 'webvh',
-        domain: parsedDid.id,
-      })
-    }
-
-    return await didRepository.findCreatedDid(this.context, parsedDid.did)
+    // Method-scoped on purpose: a location change must surface as a mismatch error in
+    // initialize, never as a lookup miss that silently mints a second DID
+    return await didRepository.findSingleByQuery(this.context, {
+      method: parsedDid.method,
+      role: DidDocumentRole.Created,
+    })
   }
 
   // Prefer Ed25519VerificationKey2020 over Multikey: webvh's update Multikey is not ours to use.

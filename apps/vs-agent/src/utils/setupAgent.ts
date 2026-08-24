@@ -189,6 +189,12 @@ export const setupAgent = async ({
     adminApiServiceEndpoint,
   })
 
+  orchestrator = new VtFlowOrchestrator(agent, { indexer, publicApiBaseUrl })
+
+  await agent.initialize()
+
+  // Registered only after initialize so the public DID is created and persisted before any
+  // inbound DIDComm processing; startServers starts them once the public app is ready.
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
   if (enableHttp) {
     logger.info('Inbound HTTP transport enabled')
@@ -202,10 +208,6 @@ export const setupAgent = async ({
       new VsAgentWsInboundTransport({ server: new WebSocket.Server({ noServer: true }) }),
     )
   }
-
-  orchestrator = new VtFlowOrchestrator(agent, { indexer, publicApiBaseUrl })
-
-  await agent.initialize()
 
   migrateLegacyTailsFiles(agent.context)
 
