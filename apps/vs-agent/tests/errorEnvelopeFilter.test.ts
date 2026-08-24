@@ -25,6 +25,7 @@ import {
   ServiceEndpointErrorCode,
 } from '../src/controllers/admin/service-endpoints/ServiceEndpointsService'
 import { AccessMode, AdminAuthGuard, AdminAuthService } from '../src/security'
+import { VsAgentService } from '../src/services/VsAgentService'
 import { commonAppConfig } from '../src/utils/setupAgent'
 
 class SendMessageDto {
@@ -122,7 +123,8 @@ describe('v2 error envelope', () => {
       ],
       providers: [
         AdminAuthService,
-        { provide: 'VSAGENT', useValue: {} },
+        VsAgentService,
+        { provide: 'VSAGENT', useValue: { isInitialized: true } },
         { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: [] },
         { provide: BOOTSTRAP_STATE, useValue: bootstrapState },
         { provide: APP_GUARD, useClass: AdminAuthGuard },
