@@ -11,6 +11,7 @@ import {
 import { identifySchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
+import { HOLDER_PARTICIPANT_TYPE } from '../../types'
 import { getEcsSchemas } from '../../utils/data'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../../utils/didReadiness'
 import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
@@ -209,6 +210,33 @@ export async function markVtFlowRecordsValidated(agent: VsAgent, participantId: 
       return 'VALIDATED'
     },
     'Failed to markValidated',
+  )
+}
+
+/**
+ * Close the onboarding records of a participant that receives no credential.
+ *
+ * Only a HOLDER takes part in a credential exchange, and the exchange is what moves a record to
+ * COMPLETED. An ISSUER, a VERIFIER or a grantor is finished the moment the chain records
+ * SetParticipantOPToValidated, so without this both sides would sit at OR_SENT and VALIDATED for
+ * ever. The applicant reaches its own record here, because it watches the same chain event.
+ */
+export async function completeVtFlowRecordsWithoutCredential(
+  agent: VsAgent,
+  participantId: string,
+): Promise<void> {
+  const participant = await agent.veranaChain?.getParticipant(Number(participantId))
+  if (!participant || participant.role === HOLDER_PARTICIPANT_TYPE) return
+
+  await reconcileVtFlowRecordsForParticipant(
+    agent,
+    participantId,
+    async (record, service, agentContext) => {
+      if (record.state === VtFlowState.Completed || isVtFlowTerminalState(record.state)) return null
+      await service.markCompleted(agentContext, record.id)
+      return 'COMPLETED'
+    },
+    'Failed to mark COMPLETED',
   )
 }
 
