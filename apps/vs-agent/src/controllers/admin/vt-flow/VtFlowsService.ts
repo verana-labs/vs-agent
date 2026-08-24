@@ -21,7 +21,7 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { HOLDER_PARTICIPANT_TYPE, VeranaIndexerService, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
-import { AdminApiError, Page, paginate } from '../../../common'
+import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../common'
 import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
 import { TsLogger } from '../../../utils'
@@ -146,14 +146,26 @@ export class VtFlowsService {
 
   private async revokeIssuedCredential(agent: VsAgent, record: VtFlowRecord): Promise<void> {
     record.assertState([VtFlowState.Completed, VtFlowState.CredRevoked])
-    if (!record.credentialExchangeRecordId) return
+    if (!record.credentialExchangeRecordId) {
+      throw new AdminApiError(
+        AdminApiErrorCode.UnsupportedFormat,
+        HttpStatus.BAD_REQUEST,
+        'the flow holds no credential exchange to revoke',
+      )
+    }
     const credential = await agent.didcomm.credentials.findById(record.credentialExchangeRecordId)
-    if (!credential) return
+    if (!credential) {
+      throw new AdminApiError(
+        AdminApiErrorCode.UnsupportedFormat,
+        HttpStatus.BAD_REQUEST,
+        'the credential exchange of the flow no longer exists',
+      )
+    }
     const registryId = credential.getTag('anonCredsRevocationRegistryId')
     const revocationId = credential.getTag('anonCredsCredentialRevocationId')
     if (typeof registryId !== 'string' || !revocationId) {
       throw new AdminApiError(
-        'UNSUPPORTED_FORMAT',
+        AdminApiErrorCode.UnsupportedFormat,
         HttpStatus.BAD_REQUEST,
         'the credential of the flow supports no credential-level revocation',
       )
