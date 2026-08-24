@@ -218,39 +218,28 @@ spec:
             resources:
 {{- toYaml .Values.resources | nindent 14 }}
             {{- end }}
-            {{- if contains "internal" (.Values.adminApiAuthMode | default "internal") }}
+            {{- $probePort := ternary .Values.adminPort (.Values.adminApiExternalPort | default 3010) (contains "internal" (.Values.adminApiAuthMode | default "internal")) }}
+            startupProbe:
+              httpGet:
+                path: /v2/agent/health/live
+                port: {{ $probePort }}
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 60
             livenessProbe:
               httpGet:
-                path: /v1/health
-                port: {{ .Values.adminPort }}
-              initialDelaySeconds: 30
+                path: /v2/agent/health/live
+                port: {{ $probePort }}
               periodSeconds: 60
               timeoutSeconds: 5
               failureThreshold: 2
             readinessProbe:
               httpGet:
-                path: /v1/health
-                port: {{ .Values.adminPort }}
-              initialDelaySeconds: 15
-              periodSeconds: 60
+                path: /v2/agent/health/ready
+                port: {{ $probePort }}
+              periodSeconds: 15
               timeoutSeconds: 5
               failureThreshold: 2
-            {{- else }}
-            livenessProbe:
-              tcpSocket:
-                port: {{ .Values.adminApiExternalPort | default 3010 }}
-              initialDelaySeconds: 30
-              periodSeconds: 60
-              timeoutSeconds: 5
-              failureThreshold: 2
-            readinessProbe:
-              tcpSocket:
-                port: {{ .Values.adminApiExternalPort | default 3010 }}
-              initialDelaySeconds: 15
-              periodSeconds: 60
-              timeoutSeconds: 5
-              failureThreshold: 2
-            {{- end }}
             volumeMounts:
             - name: {{ .Values.name }}-vsa-pv
               mountPath: /root/.afj

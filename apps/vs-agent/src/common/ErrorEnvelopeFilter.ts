@@ -32,7 +32,7 @@ export class ErrorEnvelopeFilter extends BaseExceptionFilter {
     }
 
     const envelope = this.envelopeFor(exception)
-    if (envelope.status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (envelope.code === AdminApiErrorCode.Internal) {
       this.logger.error(`${request.method} ${this.pathOf(request)} failed`, exception as Error)
     }
 
