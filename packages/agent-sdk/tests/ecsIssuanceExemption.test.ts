@@ -3,7 +3,7 @@ import type { VeranaIndexerService } from '../src/blockchain'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ParticipantRole, ParticipantState } from '../src/blockchain'
-import { allowEcsIssuanceExemption } from '../src/vtFlow/allowEcsIssuanceExemption'
+import { isEcsIssuanceExempt } from '../src/vtFlow/ecsIssuanceExemption'
 
 const OWN_DID = 'did:web:validator'
 const PEER_DID = 'did:web:applicant'
@@ -68,13 +68,20 @@ function makeIndexer(overrides: Record<string, unknown> = {}) {
   } as unknown as VeranaIndexerService
 }
 
-function makeHook(indexer: VeranaIndexerService, trustedEcosystemDids?: string[]) {
-  return allowEcsIssuanceExemption({
+type ExemptionContext = Parameters<typeof isEcsIssuanceExempt>[1]
+
+function makeHook(
+  indexer: VeranaIndexerService,
+  trustedEcosystemDids?: string[],
+  agent: { did?: string } = { did: OWN_DID },
+) {
+  const options = {
     indexer,
-    ownDid: () => OWN_DID,
+    agent,
     trustedEcosystemDids: trustedEcosystemDids ?? [ECOSYSTEM_DID],
     logger: logger as never,
-  })
+  }
+  return (context: ExemptionContext) => isEcsIssuanceExempt(options, context)
 }
 
 function onboarding(participantId = '42') {
@@ -136,14 +143,8 @@ describe('allowEcsIssuanceExemption: onboarding request', () => {
 
   it('denies while the agent has not resolved its own DID yet', async () => {
     const indexer = makeIndexer()
-    const hook = allowEcsIssuanceExemption({
-      indexer,
-      ownDid: () => undefined,
-      trustedEcosystemDids: [ECOSYSTEM_DID],
-      logger: logger as never,
-    })
 
-    await expect(hook(onboarding())).resolves.toBe(false)
+    await expect(makeHook(indexer, undefined, {})(onboarding())).resolves.toBe(false)
     expect(indexer.getParticipant).not.toHaveBeenCalled()
   })
 

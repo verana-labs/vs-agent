@@ -1,5 +1,5 @@
 import type { BaseLogger } from '@credo-ts/core'
-import type { VtFlowUnverifiedPeerExemptionHook } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import type { VtFlowUnverifiedPeerExemptionContext } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
@@ -9,35 +9,34 @@ import { ParticipantDto, ParticipantRole, ParticipantState } from '../blockchain
 const EXEMPT_ECS_TYPES: ECS[] = [ECS.ORG, ECS.PERSONA, ECS.SERVICE]
 const PENDING_OP_STATE = 'PENDING'
 
-export interface AllowEcsIssuanceExemptionOptions {
+export interface EcsIssuanceExemptionOptions {
   indexer: VeranaIndexerService
-  // Resolved per call: a did:webvh agent only knows its SCID-bearing DID once it has initialized.
-  ownDid: () => string | undefined
+  // Read on each call: a did:webvh agent only knows its SCID-bearing DID once it has initialized.
+  agent: { readonly did?: string }
   trustedEcosystemDids?: string[]
   logger?: BaseLogger
 }
 
 // VS-CONN-VS exemption: an applicant onboarding for its first ECS credentials cannot be a Verifiable
 // Service yet, so the peer is admitted on on-chain evidence instead of on its credentials.
-export function allowEcsIssuanceExemption(
-  options: AllowEcsIssuanceExemptionOptions,
-): VtFlowUnverifiedPeerExemptionHook {
-  const { indexer, trustedEcosystemDids } = options
-  return async ({ agentContext, peerDid, purpose }) => {
-    const logger = options.logger ?? agentContext.config.logger
-    const ownDid = options.ownDid()
-    if (!ownDid) return false
-    try {
-      const schemaId = purpose.participantId
-        ? await schemaOfPendingOnboarding(indexer, purpose.participantId, peerDid, ownDid)
-        : await schemaOfDirectIssuance(indexer, purpose.schemaId, ownDid)
-      if (schemaId === undefined) return false
+export async function isEcsIssuanceExempt(
+  options: EcsIssuanceExemptionOptions,
+  { agentContext, peerDid, purpose }: VtFlowUnverifiedPeerExemptionContext,
+): Promise<boolean> {
+  const { indexer, agent, trustedEcosystemDids } = options
+  const logger = options.logger ?? agentContext.config.logger
+  if (!agent.did) return false
 
-      return await isTrustedEcsSchema(indexer, schemaId, trustedEcosystemDids)
-    } catch (error) {
-      logger.warn(`[vt-flow] VS-CONN-VS exemption denied to '${peerDid}': ${(error as Error).message}`)
-      return false
-    }
+  try {
+    const schemaId = purpose.participantId
+      ? await schemaOfPendingOnboarding(indexer, purpose.participantId, peerDid, agent.did)
+      : await schemaOfDirectIssuance(indexer, purpose.schemaId, agent.did)
+    if (schemaId === undefined) return false
+
+    return await isTrustedEcsSchema(indexer, schemaId, trustedEcosystemDids)
+  } catch (error) {
+    logger.warn(`[vt-flow] VS-CONN-VS exemption denied to '${peerDid}': ${(error as Error).message}`)
+    return false
   }
 }
 

@@ -344,3 +344,35 @@ describe('VtFlowOrchestrator onboarding validation', () => {
     expect(completed.state).toBe('COMPLETED')
   })
 })
+
+describe('VtFlowOrchestrator.allowEcsIssuanceExemption', () => {
+  const context = {
+    agentContext: { config: { logger: { warn: vi.fn() } } },
+    peerDid: 'did:web:peer',
+    purpose: { participantId: '42' },
+  } as never
+
+  it('refuses the exemption when no indexer is configured', async () => {
+    const orchestrator = new VtFlowOrchestrator({ did: 'did:web:agent' } as never)
+
+    await expect(orchestrator.allowEcsIssuanceExemption(context)).resolves.toBe(false)
+  })
+
+  it('resolves the peer participant against the indexer with the agent DID known at call time', async () => {
+    const agent = { did: undefined as string | undefined }
+    const indexer = {
+      getParticipant: vi.fn().mockResolvedValue(undefined),
+      getCredentialSchema: vi.fn(),
+      getEcosystem: vi.fn(),
+      listParticipants: vi.fn(),
+    }
+    const orchestrator = new VtFlowOrchestrator(agent as never, { indexer } as never)
+
+    await expect(orchestrator.allowEcsIssuanceExemption(context)).resolves.toBe(false)
+    expect(indexer.getParticipant).not.toHaveBeenCalled()
+
+    agent.did = 'did:webvh:scid:agent.example'
+    await expect(orchestrator.allowEcsIssuanceExemption(context)).resolves.toBe(false)
+    expect(indexer.getParticipant).toHaveBeenCalledWith(42)
+  })
+})

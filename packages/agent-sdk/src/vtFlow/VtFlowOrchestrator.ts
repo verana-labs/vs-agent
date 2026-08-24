@@ -13,10 +13,12 @@ import {
   VtFlowState,
   VtFlowVariant,
   isVtFlowTerminalState,
+  type VtFlowUnverifiedPeerExemptionContext,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { BaseAgentModules, VsAgent } from '../agent'
+import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { Participant, ParticipantRole, ParticipantState } from '../blockchain/types'
 import {
@@ -38,6 +40,7 @@ import {
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
   indexer?: VeranaIndexerService
+  trustedEcosystemDids?: string[]
   agentParticipantId?: number
   walletAgentParticipantId?: number
 }
@@ -483,6 +486,17 @@ export class VtFlowOrchestrator {
     )?.jsonld
     if (!credentialJson) throw new Error('Offered credential has no JSON-LD body to verify')
     return credentialJson
+  }
+
+  // VS-CONN-VS gate: consulted only after trust resolution rejected the peer.
+  async allowEcsIssuanceExemption(context: VtFlowUnverifiedPeerExemptionContext): Promise<boolean> {
+    const indexer = this.options.indexer
+    if (!indexer) return false
+
+    return isEcsIssuanceExempt(
+      { indexer, agent: this.agent, trustedEcosystemDids: this.options.trustedEcosystemDids },
+      context,
+    )
   }
 
   private requireIndexer(): VeranaIndexerService {

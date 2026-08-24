@@ -7,7 +7,6 @@ import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common
 import { HttpAdapterHost } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import {
-  allowEcsIssuanceExemption,
   assertVerifiableService,
   createVsAgent,
   HttpInboundTransport,
@@ -117,8 +116,6 @@ export const setupAgent = async ({
     : undefined
   // eslint-disable-next-line prefer-const
   let orchestrator: VtFlowOrchestrator | undefined
-  // A did:webvh agent only knows its SCID-bearing DID once it has initialized.
-  let ownDid: string | undefined = publicDid
 
   const agent = createVsAgent({
     plugins: [
@@ -149,15 +146,8 @@ export const setupAgent = async ({
           assertVerifiableService: verifiablePublicRegistries
             ? assertVerifiableService({ verifiablePublicRegistries })
             : undefined,
-          allowUnverifiedPeerForEcsIssuance:
-            indexer && publicDid
-              ? allowEcsIssuanceExemption({
-                  indexer,
-                  ownDid: () => ownDid,
-                  trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS,
-                  logger,
-                })
-              : undefined,
+          allowUnverifiedPeerForEcsIssuance: async context =>
+            (await orchestrator?.allowEcsIssuanceExemption(context)) ?? false,
           autoAcceptCredentialOffer: true,
           verifyCredential: async ({ record }) => {
             if (!orchestrator) {
@@ -231,11 +221,13 @@ export const setupAgent = async ({
     )
   }
 
-  orchestrator = new VtFlowOrchestrator(agent, { indexer, publicApiBaseUrl })
+  orchestrator = new VtFlowOrchestrator(agent, {
+    indexer,
+    publicApiBaseUrl,
+    trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS,
+  })
 
   await agent.initialize()
-
-  ownDid = agent.did ?? ownDid
 
   migrateLegacyTailsFiles(agent.context)
 

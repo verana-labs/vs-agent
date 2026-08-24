@@ -1,3 +1,3 @@
 export * from './VtFlowOrchestrator'
 export * from './assertVerifiableService'
-export * from './allowEcsIssuanceExemption'
+export * from './ecsIssuanceExemption'
