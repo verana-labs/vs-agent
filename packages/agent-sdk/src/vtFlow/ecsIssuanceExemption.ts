@@ -1,5 +1,5 @@
 import type { BaseLogger } from '@credo-ts/core'
-import type { VtFlowUnverifiedPeerExemptionContext } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import type { VtFlowEcsIssuanceExemptionContext } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
@@ -21,7 +21,7 @@ export interface EcsIssuanceExemptionOptions {
 // Service yet, so the peer is admitted on on-chain evidence instead of on its credentials.
 export async function isEcsIssuanceExempt(
   options: EcsIssuanceExemptionOptions,
-  { agentContext, peerDid, purpose }: VtFlowUnverifiedPeerExemptionContext,
+  { agentContext, peerDid, purpose }: VtFlowEcsIssuanceExemptionContext,
 ): Promise<boolean> {
   const { indexer, agent, trustedEcosystemDids } = options
   const logger = options.logger ?? agentContext.config.logger

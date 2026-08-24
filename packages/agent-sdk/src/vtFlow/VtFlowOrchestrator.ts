@@ -13,7 +13,7 @@ import {
   VtFlowState,
   VtFlowVariant,
   isVtFlowTerminalState,
-  type VtFlowUnverifiedPeerExemptionContext,
+  type VtFlowEcsIssuanceExemptionContext,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
@@ -39,8 +39,6 @@ import {
 
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
-  indexer?: VeranaIndexerService
-  trustedEcosystemDids?: string[]
   agentParticipantId?: number
   walletAgentParticipantId?: number
 }
@@ -489,21 +487,21 @@ export class VtFlowOrchestrator {
   }
 
   // VS-CONN-VS gate: consulted only after trust resolution rejected the peer.
-  async allowEcsIssuanceExemption(context: VtFlowUnverifiedPeerExemptionContext): Promise<boolean> {
-    const indexer = this.options.indexer
+  async checkEcsIssuanceExemption(context: VtFlowEcsIssuanceExemptionContext): Promise<boolean> {
+    const indexer = this.agent.indexer
     if (!indexer) return false
 
     return isEcsIssuanceExempt(
-      { indexer, agent: this.agent, trustedEcosystemDids: this.options.trustedEcosystemDids },
+      { indexer, agent: this.agent, trustedEcosystemDids: this.agent.trustedEcosystemDids },
       context,
     )
   }
 
   private requireIndexer(): VeranaIndexerService {
-    if (!this.options.indexer) {
+    if (!this.agent.indexer) {
       throw new Error('Agent has no indexer configured (set VERANA_INDEXER_BASE_URL)')
     }
-    return this.options.indexer
+    return this.agent.indexer
   }
 
   async publishCredentialAsLinkedVp(vtFlowRecordId: string): Promise<void> {

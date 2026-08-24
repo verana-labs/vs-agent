@@ -63,14 +63,12 @@ export interface VtFlowRequestPurpose {
   schemaId?: string
 }
 
-export interface VtFlowUnverifiedPeerExemptionContext extends VtFlowAssertVerifiableServiceContext {
+export interface VtFlowEcsIssuanceExemptionContext extends VtFlowAssertVerifiableServiceContext {
   purpose: VtFlowRequestPurpose
 }
 
 /** VS-CONN-VS exemption: a Validator MAY accept a peer that is not yet a Verifiable Service when the purpose of the request is the issuance of an ECS Organization, Persona or Service credential. Consulted only on the Validator side, only after `assertVerifiableService` rejected the peer; return `true` to let the flow proceed. */
-export type VtFlowUnverifiedPeerExemptionHook = (
-  ctx: VtFlowUnverifiedPeerExemptionContext,
-) => Promise<boolean>
+export type VtFlowEcsIssuanceExemptionHook = (ctx: VtFlowEcsIssuanceExemptionContext) => Promise<boolean>
 
 /** Options accepted by VtFlowModule; all flags default to false, `oobExpirationDays` defaults to 7, `terminalRetentionDays` to 90. */
 export interface VtFlowModuleConfigOptions {
@@ -88,7 +86,7 @@ export interface VtFlowModuleConfigOptions {
   autoIssueCredentialOnRequest?: boolean
   onBeforeCredentialIssued?: VtFlowBeforeCredentialIssuedHook
   assertVerifiableService?: VtFlowAssertVerifiableServiceHook
-  allowUnverifiedPeerForEcsIssuance?: VtFlowUnverifiedPeerExemptionHook
+  checkEcsIssuanceExemption?: VtFlowEcsIssuanceExemptionHook
 }
 
 /** Read-only view over VtFlowModuleConfigOptions with defaults applied. */
@@ -155,7 +153,7 @@ export class VtFlowModuleConfig {
     return this.options.assertVerifiableService
   }
 
-  public get allowUnverifiedPeerForEcsIssuance(): VtFlowUnverifiedPeerExemptionHook | undefined {
-    return this.options.allowUnverifiedPeerForEcsIssuance
+  public get checkEcsIssuanceExemption(): VtFlowEcsIssuanceExemptionHook | undefined {
+    return this.options.checkEcsIssuanceExemption
   }
 }

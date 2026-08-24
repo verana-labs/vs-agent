@@ -42,6 +42,7 @@ import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
+import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
 import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
 import { migrateWebVhVersionTimeIfBroken } from '../did/migrateWebVhVersionTime'
@@ -93,6 +94,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public displayPictureUrl?: string
   public label: string
   public veranaChain?: VeranaChainService
+  public indexer?: VeranaIndexerService
+  public trustedEcosystemDids?: string[]
   public authorizationService?: AuthorizationService
   public discoveryOptions?: DidCommFeatureQueryOptions[]
 
@@ -105,6 +108,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       displayPictureUrl?: string
       label: string
       veranaChain?: VeranaChainService
+      indexer?: VeranaIndexerService
+      trustedEcosystemDids?: string[]
       authorizationService?: AuthorizationService
       discoveryOptions?: DidCommFeatureQueryOptions[]
     },
@@ -117,6 +122,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.displayPictureUrl = options.displayPictureUrl
     this.label = options.label
     this.veranaChain = options.veranaChain
+    this.indexer = options.indexer
+    this.trustedEcosystemDids = options.trustedEcosystemDids
     this.authorizationService = options.authorizationService
     this.discoveryOptions = options.discoveryOptions
   }

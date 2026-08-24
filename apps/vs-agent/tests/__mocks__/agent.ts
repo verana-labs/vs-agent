@@ -3,7 +3,13 @@ import { LogLevel, utils } from '@credo-ts/core'
 import { type DidCommVersion } from '@credo-ts/didcomm'
 import { agentDependencies } from '@credo-ts/node'
 import { type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { createVsAgent, setupBaseDidComm, VsAgent, type VeranaChainService } from '@verana-labs/vs-agent-sdk'
+import {
+  createVsAgent,
+  setupBaseDidComm,
+  VsAgent,
+  type VeranaChainService,
+  type VeranaIndexerService,
+} from '@verana-labs/vs-agent-sdk'
 
 import { TsLogger } from '../../src/utils'
 
@@ -13,12 +19,14 @@ export const startAgent = async ({
   vtFlowOptions,
   didcommVersions,
   veranaChain,
+  indexer,
 }: {
   label: string
   domain: string
   vtFlowOptions?: VtFlowModuleConfigOptions
   didcommVersions?: DidCommVersion[]
   veranaChain?: VeranaChainService
+  indexer?: VeranaIndexerService
 }): Promise<VsAgent<any>> => {
   const walletConfig = getAskarStoreConfig(label, { inMemory: true })
 
@@ -48,6 +56,7 @@ export const startAgent = async ({
     publicApiBaseUrl: `https://${domain}`,
     label,
     veranaChain,
+    indexer,
   })
   return agent as unknown as VsAgent<any>
 }

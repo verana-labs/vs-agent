@@ -806,7 +806,7 @@ export class VtFlowService {
     peerDid: string,
     purpose: VtFlowRequestPurpose,
   ): Promise<boolean> {
-    const exemption = this.config.allowUnverifiedPeerForEcsIssuance
+    const exemption = this.config.checkEcsIssuanceExemption
     if (!exemption) return false
     try {
       return await exemption({ agentContext, peerDid, connectionId: connection.id, purpose })

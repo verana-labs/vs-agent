@@ -14,19 +14,18 @@ const record = {
 const activeIssuer = { id: 10, role: 'ISSUER', participant_state: 'ACTIVE', schema_id: 5 }
 
 function verify(indexer: Record<string, unknown>) {
-  const agent = {
+  const agent: Record<string, unknown> = {
     dependencyManager: { resolve: () => ({ findById: async () => record }) },
     didcomm: { credentials: { getFormatData: async () => ({ credential: { jsonld: {} } }) } },
-  } as never
+  }
   const defaults = {
     getParticipantSession: async () => ({ session_records: [{ issuer_participant_id: 10 }] }),
     getParticipant: async () => activeIssuer,
     getCredentialSchema: async () => ({ id: 5, digest_algorithm: 'sha384' }),
     getDigest: async () => ({ digest: 'anchored' }),
   }
-  return new VtFlowOrchestrator(agent, {
-    indexer: { ...defaults, ...indexer } as never,
-  }).verifyOfferedCredential('rec-1')
+  agent.indexer = { ...defaults, ...indexer }
+  return new VtFlowOrchestrator(agent as never).verifyOfferedCredential('rec-1')
 }
 
 describe('VtFlowOrchestrator.verifyOfferedCredential', () => {
@@ -352,27 +351,27 @@ describe('VtFlowOrchestrator.allowEcsIssuanceExemption', () => {
     purpose: { participantId: '42' },
   } as never
 
-  it('refuses the exemption when no indexer is configured', async () => {
+  it('refuses the exemption when the agent has no indexer', async () => {
     const orchestrator = new VtFlowOrchestrator({ did: 'did:web:agent' } as never)
 
-    await expect(orchestrator.allowEcsIssuanceExemption(context)).resolves.toBe(false)
+    await expect(orchestrator.checkEcsIssuanceExemption(context)).resolves.toBe(false)
   })
 
   it('resolves the peer participant against the indexer with the agent DID known at call time', async () => {
-    const agent = { did: undefined as string | undefined }
     const indexer = {
       getParticipant: vi.fn().mockResolvedValue(undefined),
       getCredentialSchema: vi.fn(),
       getEcosystem: vi.fn(),
       listParticipants: vi.fn(),
     }
-    const orchestrator = new VtFlowOrchestrator(agent as never, { indexer } as never)
+    const agent = { did: undefined as string | undefined, indexer }
+    const orchestrator = new VtFlowOrchestrator(agent as never)
 
-    await expect(orchestrator.allowEcsIssuanceExemption(context)).resolves.toBe(false)
+    await expect(orchestrator.checkEcsIssuanceExemption(context)).resolves.toBe(false)
     expect(indexer.getParticipant).not.toHaveBeenCalled()
 
     agent.did = 'did:webvh:scid:agent.example'
-    await expect(orchestrator.allowEcsIssuanceExemption(context)).resolves.toBe(false)
+    await expect(orchestrator.checkEcsIssuanceExemption(context)).resolves.toBe(false)
     expect(indexer.getParticipant).toHaveBeenCalledWith(42)
   })
 })

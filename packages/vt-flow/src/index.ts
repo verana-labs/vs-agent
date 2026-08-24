@@ -73,8 +73,8 @@ export type {
   VtFlowModuleConfigOptions,
   VtFlowOnCompletedHook,
   VtFlowRequestPurpose,
-  VtFlowUnverifiedPeerExemptionContext,
-  VtFlowUnverifiedPeerExemptionHook,
+  VtFlowEcsIssuanceExemptionContext,
+  VtFlowEcsIssuanceExemptionHook,
   VtFlowVerifyCredentialHook,
 } from './VtFlowModuleConfig'
 
