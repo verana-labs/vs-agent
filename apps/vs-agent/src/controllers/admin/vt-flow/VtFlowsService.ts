@@ -18,11 +18,9 @@ import {
   VtFlowVariant,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { HOLDER_PARTICIPANT_TYPE, VeranaIndexerService, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
+import { HOLDER_PARTICIPANT_TYPE, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
-import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { TsLogger } from '../../../utils'
 
 import { ListFlowsQueryDto } from './dto/flow-requests.dto'
 import { VtFlowRecordDto } from './dto/vt-flow-record.dto'

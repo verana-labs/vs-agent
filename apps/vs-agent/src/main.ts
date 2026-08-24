@@ -237,9 +237,6 @@ const run = async () => {
   if (!AGENT_DIDCOMM_VERSIONS.includes('v2')) {
     configErrors.push('vt-flow requires DIDComm v2: add v2 to AGENT_DIDCOMM_VERSIONS')
   }
-  if (!VERANA_INDEXER_BASE_URL) {
-    configErrors.push('VERANA_INDEXER_BASE_URL is required')
-  }
   if (configErrors.length > 0) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
     process.exit(1)
