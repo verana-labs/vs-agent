@@ -240,8 +240,7 @@ const run = async () => {
   if (!VERANA_INDEXER_BASE_URL) {
     configErrors.push('VERANA_INDEXER_BASE_URL is required')
   }
-  // The second check repeats the one above so the compiler narrows the value past this exit.
-  if (configErrors.length > 0 || !VERANA_INDEXER_BASE_URL) {
+  if (configErrors.length > 0) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
     process.exit(1)
   }
