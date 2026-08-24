@@ -142,14 +142,14 @@ As allowed by [VS-CONN-VS], a Validator still accepts a peer that is not a Verif
 
 #### Admin API authentication
 
-The Admin API can run two listeners: an unauthenticated internal one (trusted by network reachability) and an authenticated external one. External callers get a bearer token by signing a challenge with their Verana account key (ADR-036) via `POST /v1/auth/challenge` and `POST /v1/auth/token`.
+The Admin API is served on a single port (`ADMIN_PORT`). Each request is classified on the peer address of its TCP connection: a request from a network in `ADMIN_API_TRUSTED_NETWORKS` is served without authentication, every other request is external. Forwarding headers such as `X-Forwarded-For` are never read for this classification. In `internal` mode every external request is rejected with `403`. In `corporation` mode an external caller gets a bearer token by signing a challenge with its Verana account key (ADR-036) via `POST /v1/auth/challenge` and `POST /v1/auth/token`, and its account must be in `ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS`. The health probes (`GET /v2/agent/health/live` and `/v2/agent/health/ready`) are always served without authentication.
 
 | Variable                                 | Required | Description                                                                                                                                          |
 | ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ADMIN_API_AUTH_MODE`                    | REQUIRED | Comma-separated listeners to activate: `internal` (no auth) and/or `corporation` (external listener with ADR-036 auth).                               |
-| `ADMIN_API_PUBLIC_URL`                   | CONDITIONAL | Public `https://` origin (no trailing path) where the external listener is exposed. Required when `corporation` is in `ADMIN_API_AUTH_MODE`, must not be set otherwise. Published in the agent's DID Document as the `VsAgentAdminAPI` service. |
-| `ADMIN_API_EXTERNAL_PORT`                | OPTIONAL | Port for the external authenticated listener. Default `3010`. Only used when `corporation` is in `ADMIN_API_AUTH_MODE`.                              |
-| `ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS` | OPTIONAL | Comma-separated allowlist of Verana account addresses accepted on the external listener, applied before the per-method authorization check.          |
+| `ADMIN_API_AUTH_MODE`                    | OPTIONAL | Single value: `internal` (default, rejects every external request with `403`) or `corporation` (serves external callers after ADR-036 auth plus allowlist). |
+| `ADMIN_API_TRUSTED_NETWORKS`             | OPTIONAL | Comma-separated CIDR blocks served without authentication, in both modes. Default `127.0.0.0/8,::1/128`. Keep the source address of every public reverse proxy or ingress OUT of these blocks, otherwise internet traffic is served unauthenticated. |
+| `ADMIN_API_PUBLIC_URL`                   | CONDITIONAL | Public `https://` origin (no trailing path) where external callers reach the Admin API. Required when `ADMIN_API_AUTH_MODE` is `corporation`, must not be set otherwise. Published in the agent's DID Document as the `VsAgentAdminAPI` service. |
+| `ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS` | CONDITIONAL | Comma-separated allowlist of Verana account addresses accepted as external callers. Required non-empty when `ADMIN_API_AUTH_MODE` is `corporation`. It is the sole authorization mechanism for external callers. |
 
 > **Note:** This feature is currently under active development. The interface and behavior may change in future releases.
 

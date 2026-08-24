@@ -4,6 +4,7 @@ import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import dotenv from 'dotenv'
 
 import packageJson from '../../package.json'
+import { DEFAULT_ADMIN_API_TRUSTED_NETWORKS } from '../security/trustedNetworks'
 
 dotenv.config()
 
@@ -29,11 +30,12 @@ export const PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL
 export const DEFAULT_PUBLIC_API_BASE_URL = 'http://localhost:3001'
 
 export const ADMIN_API_PUBLIC_URL = process.env.ADMIN_API_PUBLIC_URL
-export const ADMIN_API_EXTERNAL_PORT = Number(process.env.ADMIN_API_EXTERNAL_PORT || 3010)
-export const ADMIN_API_AUTH_MODE = (process.env.ADMIN_API_AUTH_MODE ?? '')
-  .split(',')
-  .map(s => s.trim().toLowerCase())
-  .filter(s => s.length > 0)
+export const ADMIN_API_AUTH_MODE = (process.env.ADMIN_API_AUTH_MODE ?? '').trim().toLowerCase() || 'internal'
+export const ADMIN_API_TRUSTED_NETWORKS = process.env.ADMIN_API_TRUSTED_NETWORKS
+  ? process.env.ADMIN_API_TRUSTED_NETWORKS.split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+  : DEFAULT_ADMIN_API_TRUSTED_NETWORKS
 
 export const EVENTS_BASE_URL = (process.env.EVENTS_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '')
 

@@ -24,7 +24,8 @@ import {
   ServiceEndpointError,
   ServiceEndpointErrorCode,
 } from '../src/controllers/admin/service-endpoints/ServiceEndpointsService'
-import { AccessMode, AdminAuthGuard, AdminAuthService } from '../src/security'
+import { AdminAuthGuard, AdminAuthService } from '../src/security'
+import { parseTrustedNetworks } from '../src/security/trustedNetworks'
 import { VsAgentService } from '../src/services/VsAgentService'
 import { commonAppConfig } from '../src/utils/setupAgent'
 
@@ -36,7 +37,6 @@ class SendMessageDto {
   type!: string
 }
 
-@AccessMode('PUBLIC')
 @Controller({ path: 'didcomm', version: '2' })
 class V2DidcommFixtureController {
   @Get('connections/:connectionId')
@@ -65,14 +65,12 @@ class V2DidcommFixtureController {
     throw new Error('askar storage is corrupted at /var/lib/agent/wallet.db')
   }
 
-  @AccessMode('CORPORATION')
   @Get('presentations')
   listPresentations() {
     return { items: [], nextCursor: null }
   }
 }
 
-@AccessMode('PUBLIC')
 @Controller({ path: 'vt/service-endpoints', version: '2' })
 class V2ServiceEndpointsFixtureController {
   @Post()
@@ -84,7 +82,6 @@ class V2ServiceEndpointsFixtureController {
   }
 }
 
-@AccessMode('PUBLIC')
 @Controller({ path: 'connections', version: '1' })
 class V1ConnectionsFixtureController {
   @Get(':connectionId')
@@ -93,7 +90,6 @@ class V1ConnectionsFixtureController {
   }
 }
 
-@AccessMode('PUBLIC')
 @UseFilters(ServiceEndpointExceptionFilter)
 @Controller({ path: 'vt/service-endpoints', version: '1' })
 class V1ServiceEndpointsFixtureController {
@@ -125,6 +121,8 @@ describe('v2 error envelope', () => {
         AdminAuthService,
         VsAgentService,
         { provide: 'VSAGENT', useValue: { isInitialized: true } },
+        { provide: 'ADMIN_AUTH_MODE', useValue: 'internal' },
+        { provide: 'ADMIN_TRUSTED_NETWORKS', useValue: parseTrustedNetworks(['127.0.0.0/8', '::1/128']) },
         { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: [] },
         { provide: BOOTSTRAP_STATE, useValue: bootstrapState },
         { provide: APP_GUARD, useClass: AdminAuthGuard },
@@ -200,13 +198,34 @@ describe('v2 error envelope', () => {
     expect(response.body.error.code).toBe('UNKNOWN_ID')
   })
 
-  it('envelopes the rejection of the auth guard', async () => {
-    const response = await request(app.getHttpServer()).get('/v2/didcomm/presentations')
+  it('envelopes the rejection of the auth guard for an external peer', async () => {
+    const externalModuleRef = await Test.createTestingModule({
+      controllers: [V2DidcommFixtureController, V2AgentController],
+      providers: [
+        AdminAuthService,
+        { provide: 'ADMIN_AUTH_MODE', useValue: 'corporation' },
+        { provide: 'ADMIN_TRUSTED_NETWORKS', useValue: [] },
+        { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: [] },
+        { provide: BOOTSTRAP_STATE, useValue: new BootstrapState() },
+        { provide: APP_GUARD, useClass: AdminAuthGuard },
+      ],
+    }).compile()
+    const externalApp = externalModuleRef.createNestApplication()
+    commonAppConfig(externalApp, false, true, false)
+    await externalApp.init()
 
-    expect(response.status).toBe(401)
-    expect(response.body).toEqual({
-      error: { code: 'UNAUTHENTICATED', message: 'a valid bearer token is required' },
-    })
+    try {
+      const response = await request(externalApp.getHttpServer()).get('/v2/didcomm/presentations')
+      expect(response.status).toBe(401)
+      expect(response.body).toEqual({
+        error: { code: 'UNAUTHENTICATED', message: 'a valid bearer token is required' },
+      })
+
+      const live = await request(externalApp.getHttpServer()).get('/v2/agent/health/live')
+      expect(live.status).toBe(HttpStatus.OK)
+    } finally {
+      await externalApp.close()
+    }
   })
 
   it('reports an unexpected failure as INTERNAL without leaking its detail', async () => {

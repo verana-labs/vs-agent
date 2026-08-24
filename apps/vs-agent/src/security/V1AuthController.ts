@@ -3,7 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger'
 import { IsNotEmpty, IsString } from 'class-validator'
 
 import { AdminAuthService } from './AdminAuthService'
-import { AccessMode } from './accessMode'
+import { AdminAuthExempt } from './adminAuthExempt'
 
 export class ChallengeRequestDto {
   @IsString()
@@ -35,7 +35,7 @@ export class V1AuthController {
   constructor(@Inject(AdminAuthService) private readonly authService: AdminAuthService) {}
 
   @Post('challenge')
-  @AccessMode('PUBLIC')
+  @AdminAuthExempt('corporation')
   @ApiOperation({ summary: 'Request an ADR-036 signature challenge for a Verana account' })
   challenge(@Body() body: ChallengeRequestDto): { nonce: string; expiresAt: string } {
     if (!body.account.startsWith('verana1')) throw new BadRequestException('account must be a verana address')
@@ -43,7 +43,7 @@ export class V1AuthController {
   }
 
   @Post('token')
-  @AccessMode('PUBLIC')
+  @AdminAuthExempt('corporation')
   @ApiOperation({ summary: 'Exchange a signed challenge for a short-lived bearer token' })
   async token(@Body() body: TokenRequestDto): Promise<{ token: string; expiresAt: string }> {
     const issued = await this.authService.issueToken(body)

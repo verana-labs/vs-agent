@@ -18,12 +18,6 @@ spec:
     port: {{ .Values.adminPort }}
     targetPort: {{ .Values.adminPort }}
     protocol: TCP
-  {{- if contains "corporation" (.Values.adminApiAuthMode | default "internal") }}
-  - name: admin-external
-    port: {{ .Values.adminApiExternalPort | default 3010 }}
-    targetPort: {{ .Values.adminApiExternalPort | default 3010 }}
-    protocol: TCP
-  {{- end }}
   - name: db
     port: 5432
     targetPort: 5432
@@ -199,8 +193,10 @@ spec:
             - name: ADMIN_API_PUBLIC_URL
               value: {{ tpl .Values.adminApiPublicUrl . | quote }}
             {{- end }}
-            - name: ADMIN_API_EXTERNAL_PORT
-              value: {{ .Values.adminApiExternalPort | default 3010 | quote }}
+            {{- if .Values.adminApiTrustedNetworks }}
+            - name: ADMIN_API_TRUSTED_NETWORKS
+              value: {{ .Values.adminApiTrustedNetworks | quote }}
+            {{- end }}
             {{- if .Values.adminApiCorporationAllowedAccounts }}
             - name: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS
               value: {{ .Values.adminApiCorporationAllowedAccounts | quote }}
@@ -211,32 +207,28 @@ spec:
             ports:
             -  containerPort: {{ .Values.adminPort }}
             -  containerPort: {{ .Values.didcommPort }}
-            {{- if contains "corporation" (.Values.adminApiAuthMode | default "internal") }}
-            -  containerPort: {{ .Values.adminApiExternalPort | default 3010 }}
-            {{- end }}
             {{- if .Values.resources }}
             resources:
 {{- toYaml .Values.resources | nindent 14 }}
             {{- end }}
-            {{- $probePort := ternary .Values.adminPort (.Values.adminApiExternalPort | default 3010) (contains "internal" (.Values.adminApiAuthMode | default "internal")) }}
             startupProbe:
               httpGet:
                 path: /v2/agent/health/live
-                port: {{ $probePort }}
+                port: {{ .Values.adminPort }}
               periodSeconds: 10
               timeoutSeconds: 5
               failureThreshold: 60
             livenessProbe:
               httpGet:
                 path: /v2/agent/health/live
-                port: {{ $probePort }}
+                port: {{ .Values.adminPort }}
               periodSeconds: 60
               timeoutSeconds: 5
               failureThreshold: 2
             readinessProbe:
               httpGet:
                 path: /v2/agent/health/ready
-                port: {{ $probePort }}
+                port: {{ .Values.adminPort }}
               periodSeconds: 15
               timeoutSeconds: 5
               failureThreshold: 2

@@ -9,7 +9,6 @@ import {
 } from '@nestjs/swagger'
 
 import { Page } from '../../../../common'
-import { AccessMode } from '../../../../security'
 import { VtFlowsService } from '../../vt-flow/VtFlowsService'
 import {
   EditClaimsDto,
@@ -21,7 +20,6 @@ import { VtFlowRecordDto, VtFlowRecordPageDto } from '../../vt-flow/dto/vt-flow-
 
 @ApiTags('v2/vt')
 @Controller({ path: 'vt/flows', version: '2' })
-@AccessMode('INTERNAL')
 export class V2VtFlowsController {
   public constructor(@Inject(VtFlowsService) private readonly service: VtFlowsService) {}
 

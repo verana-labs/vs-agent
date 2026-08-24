@@ -78,6 +78,7 @@
     "didwebvh-ts": "^2.8.0",
     "dotenv": "^17.2.3",
     "express": "^4.18.1",
+    "ipaddr.js": "^1.9.1",
     "qrcode": "^1.5.3",
     "reflect-metadata": "^0.1.13",
     "tsyringe": "4.8.0",

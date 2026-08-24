@@ -25,7 +25,14 @@ import {
   MESSAGE_HANDLERS,
 } from './controllers'
 import { BOOTSTRAP_STATE, BootstrapState } from './common'
-import { AdminAuthGuard, AdminAuthService, V1AuthController } from './security'
+import {
+  AdminAuthGuard,
+  AdminAuthService,
+  DEFAULT_ADMIN_API_TRUSTED_NETWORKS,
+  parseTrustedNetworks,
+  TrustedNetwork,
+  V1AuthController,
+} from './security'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
 
@@ -35,10 +42,17 @@ export class VsAgentModule {
     agent: VsAgent,
     publicApiBaseUrl: string,
     nestPlugins: VsAgentNestPlugin[] = [],
-    options: { external?: boolean; allowedAccounts?: string[]; bootstrapState?: BootstrapState } = {},
+    options: {
+      authMode?: string
+      allowedAccounts?: string[]
+      trustedNetworks?: TrustedNetwork[]
+      bootstrapState?: BootstrapState
+    } = {},
   ): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
     const bootstrapState = options.bootstrapState ?? new BootstrapState()
+    const trustedNetworks =
+      options.trustedNetworks ?? parseTrustedNetworks(DEFAULT_ADMIN_API_TRUSTED_NETWORKS)
 
     const baseControllers = [
       V1VsAgentController,
@@ -90,14 +104,14 @@ export class VsAgentModule {
       inject: allHandlerClasses,
     }
 
-    const securityControllers = options.external ? [V1AuthController] : []
-    const securityProviders = options.external
-      ? [
-          AdminAuthService,
-          { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: options.allowedAccounts ?? [] },
-          { provide: APP_GUARD, useClass: AdminAuthGuard },
-        ]
-      : []
+    const securityControllers = [V1AuthController]
+    const securityProviders = [
+      AdminAuthService,
+      { provide: 'ADMIN_AUTH_MODE', useValue: options.authMode ?? 'internal' },
+      { provide: 'ADMIN_TRUSTED_NETWORKS', useValue: trustedNetworks },
+      { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: options.allowedAccounts ?? [] },
+      { provide: APP_GUARD, useClass: AdminAuthGuard },
+    ]
 
     return {
       module: VsAgentModule,
