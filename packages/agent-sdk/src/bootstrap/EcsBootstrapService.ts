@@ -35,13 +35,6 @@ const ECS_TITLE_BY_TYPE: Record<string, ECS> = {
   BadgeCredential: ECS.BADGE,
 }
 
-const DELEGATED_OUTCOME_TIMEOUT_MS = 15 * 60_000
-// Thin safety net for any remaining transient failure (e.g. a network blip from
-// the parent's vantage point), on top of the readiness wait in waitUntilOwnDidIsPubliclyResolvable.
-const DELEGATED_REQUEST_MAX_ATTEMPTS = 2
-const DELEGATED_REQUEST_ATTEMPT_TIMEOUT_MS = 60_000
-const DELEGATED_REQUEST_RETRY_DELAY_MS = 5_000
-
 export interface EcsBootstrapOptions {
   mode: 'standalone' | 'delegated'
   trustedEcosystemDids?: string[]
@@ -374,6 +367,8 @@ export class EcsBootstrapService {
     if (!parentDid) throw new Error('AGENT_DELEGATED_PARENT_VS_DID is not set')
     if (!this.agent.did) throw new Error('delegated bootstrap requires a public DID')
     if (!this.indexer) throw new Error('delegated bootstrap requires the Verana indexer')
+    const chain = this.agent.veranaChain
+    if (!chain) throw new Error('delegated bootstrap requires the Verana chain')
     if (!this.options.verifyPeer) {
       throw new Error(
         `cannot verify parent VS ${parentDid}: verifiable public registries are not configured (set VERANA_CHAIN_ID)`,
@@ -387,55 +382,45 @@ export class EcsBootstrapService {
       throw new Error(`parent VS ${parentDid} is not a Verifiable Service`)
     }
 
-    const schemaId = await this.findParentServiceSchemaId(parentDid)
+    const validator = await this.findParentServiceIssuer(parentDid)
 
-    let lastError: Error | undefined
-    for (let attempt = 1; attempt <= DELEGATED_REQUEST_MAX_ATTEMPTS; attempt++) {
-      try {
-        await this.requestDelegatedServiceCredential(parentDid, schemaId, attempt)
-        return
-      } catch (error) {
-        lastError = error as Error
-        this.logger.warn(
-          `[EcsBootstrap] delegated issuance attempt ${attempt}/${DELEGATED_REQUEST_MAX_ATTEMPTS} failed: ${lastError.message}`,
-        )
-        if (attempt < DELEGATED_REQUEST_MAX_ATTEMPTS) {
-          await new Promise(resolve => setTimeout(resolve, DELEGATED_REQUEST_RETRY_DELAY_MS))
-        }
-      }
-    }
-    throw lastError ?? new Error(`parent VS ${parentDid} did not complete the issuance in time`)
-  }
-
-  private async requestDelegatedServiceCredential(
-    parentDid: string,
-    schemaId: number,
-    attempt: number,
-  ): Promise<void> {
-    let connectionId: string
-    try {
-      connectionId = await connectToPublicDid(this.agent, parentDid)
-    } catch (error) {
-      throw new Error(`parent VS ${parentDid} is unreachable: ${(error as Error).message}`)
+    // An existing entry means the process already ran, or the operator provisioned it.
+    const own = await this.indexer.listParticipants({
+      did: this.agent.did,
+      role: ParticipantRole.Holder,
+      schemaId: validator.schema_id,
+    })
+    const existing = own.find(participant => !participant.revoked && !participant.slashed)
+    if (existing) {
+      this.logger.info(
+        `[EcsBootstrap] HOLDER participant ${existing.id} for the ECS Service schema ${validator.schema_id} already exists; the onboarding process continues on its own`,
+      )
+      return
     }
 
-    const api = this.agent.dependencyManager.resolve(VtFlowApi)
-    const record = await api.sendIssuanceRequest({
-      connectionId,
-      schemaId: String(schemaId),
-      agentParticipantId: '0',
-      walletAgentParticipantId: '0',
+    // [VSA-VTI-FLOW-OP-NEW] step 1: the applicant submits StartParticipantOP. The agent then
+    // reacts to its own chain event and sends the onboarding request, so nothing is awaited here.
+    // Direct Issuance does not apply: it needs holder_onboarding_mode = PERMISSIONLESS, and the
+    // ECS Service schema uses ISSUER_ONBOARDING_PROCESS.
+    const operatorAuths = await chain.listOperatorAuthorizations()
+    if (!operatorAuths.some(auth => auth.msgTypes.includes(START_OP_MSG))) {
+      this.logger.info(
+        `[EcsBootstrap] delegated bootstrap skipped: operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP; this agent expects its HOLDER participant to be provisioned out of band, with validator ${validator.id}`,
+      )
+      return
+    }
+
+    const { participantId } = await chain.startParticipantOP({
+      role: HOLDER_PARTICIPANT_TYPE,
+      validatorParticipantId: validator.id,
+      did: this.agent.did,
     })
     this.logger.info(
-      `[EcsBootstrap] requested the Service credential (schema ${schemaId}) from parent VS ${parentDid} (attempt ${attempt}/${DELEGATED_REQUEST_MAX_ATTEMPTS})`,
+      `[EcsBootstrap] started HOLDER onboarding ${participantId} for the ECS Service schema ${validator.schema_id} with parent VS ${parentDid} (validator ${validator.id})`,
     )
-
-    const isLastAttempt = attempt === DELEGATED_REQUEST_MAX_ATTEMPTS
-    const timeoutMs = isLastAttempt ? DELEGATED_OUTCOME_TIMEOUT_MS : DELEGATED_REQUEST_ATTEMPT_TIMEOUT_MS
-    await this.awaitDelegatedOutcome(record.id, parentDid, timeoutMs)
   }
 
-  private async findParentServiceSchemaId(parentDid: string): Promise<number> {
+  private async findParentServiceIssuer(parentDid: string): Promise<ParticipantDto> {
     const participants = await this.indexer!.listParticipants({
       did: parentDid,
       role: ParticipantRole.Issuer,
@@ -444,36 +429,8 @@ export class EcsBootstrapService {
     for (const participant of participants) {
       const schema = await this.indexer!.getCredentialSchema(participant.schema_id).catch(() => undefined)
       if (!schema) continue
-      if ((await this.classifySchema(schema)) === ECS.SERVICE) return schema.id
+      if ((await this.classifySchema(schema)) === ECS.SERVICE) return participant
     }
     throw new Error(`parent VS ${parentDid} holds no active ISSUER participant for an ECS Service schema`)
-  }
-
-  private awaitDelegatedOutcome(recordId: string, parentDid: string, timeoutMs: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const listener = ({ payload }: VtFlowStateChangedEvent) => {
-        if (payload.vtFlowRecordId !== recordId) return
-        if (payload.state === VtFlowState.Completed) {
-          cleanup()
-          resolve()
-        } else if (
-          payload.state === VtFlowState.TerminatedByValidator ||
-          payload.state === VtFlowState.Error
-        ) {
-          cleanup()
-          reject(new Error(`parent VS ${parentDid} rejected the Service credential request`))
-        }
-      }
-      const cleanup = () => {
-        clearTimeout(timer)
-        this.agent.events.off<VtFlowStateChangedEvent>(VtFlowEventTypes.VtFlowStateChanged, listener)
-      }
-      const timer = setTimeout(() => {
-        cleanup()
-        reject(new Error(`parent VS ${parentDid} did not complete the issuance in time`))
-      }, timeoutMs)
-      timer.unref()
-      this.agent.events.on<VtFlowStateChangedEvent>(VtFlowEventTypes.VtFlowStateChanged, listener)
-    })
   }
 }
