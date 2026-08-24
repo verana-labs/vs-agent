@@ -2,17 +2,18 @@ import type { INestApplication } from '@nestjs/common'
 
 import { Secp256k1HdWallet, makeSignDoc } from '@cosmjs/amino'
 import { toBase64, toUtf8 } from '@cosmjs/encoding'
-import { Controller, Get, VersioningType } from '@nestjs/common'
+import { Controller, Get } from '@nestjs/common'
 import { APP_GUARD } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { V2AuthController } from '../../src/controllers/admin/v2/auth/V2AuthController'
 import { AdminAuthGuard } from '../../src/security/AdminAuthGuard'
 import { AdminAuthService, challengePayload } from '../../src/security/AdminAuthService'
-import { V1AuthController } from '../../src/security/V1AuthController'
+import { commonAppConfig } from '../../src/utils/setupAgent'
 
-@Controller({ path: 'vt/flows', version: '1' })
+@Controller({ path: 'vt/flows', version: '2' })
 class TestFlowsController {
   @Get()
   listFlows(): { ok: boolean } {
@@ -22,7 +23,7 @@ class TestFlowsController {
 
 async function makeApp(authMode: string, allowedAccounts: string[]): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
-    controllers: [V1AuthController, TestFlowsController],
+    controllers: [V2AuthController, TestFlowsController],
     providers: [
       AdminAuthService,
       { provide: 'ADMIN_AUTH_MODE', useValue: authMode },
@@ -32,7 +33,7 @@ async function makeApp(authMode: string, allowedAccounts: string[]): Promise<INe
     ],
   }).compile()
   const app = moduleRef.createNestApplication()
-  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' })
+  commonAppConfig(app, false, true, false)
   await app.init()
   return app
 }
@@ -56,11 +57,11 @@ async function signChallenge(wallet: Secp256k1HdWallet, account: string, nonce: 
 }
 
 async function authenticate(app: INestApplication, wallet: Secp256k1HdWallet, account: string) {
-  const challenge = await request(app.getHttpServer()).post('/v1/auth/challenge').send({ account })
+  const challenge = await request(app.getHttpServer()).post('/v2/auth/challenge').send({ account })
   expect(challenge.status).toBe(201)
   const signed = await signChallenge(wallet, account, challenge.body.nonce)
   return request(app.getHttpServer())
-    .post('/v1/auth/token')
+    .post('/v2/auth/token')
     .send({ account, nonce: challenge.body.nonce, ...signed })
 }
 
@@ -81,7 +82,7 @@ describe('admin API auth: ADR-036 challenge to allowlisted call from an external
   })
 
   it('walks challenge, token, and the allowlist check', async () => {
-    const unauthenticated = await request(app.getHttpServer()).get('/v1/vt/flows')
+    const unauthenticated = await request(app.getHttpServer()).get('/v2/vt/flows')
     expect(unauthenticated.status).toBe(401)
 
     const token = await authenticate(app, callerWallet, callerAccount)
@@ -89,7 +90,7 @@ describe('admin API auth: ADR-036 challenge to allowlisted call from an external
     expect(token.body.token).toBeTruthy()
 
     const authorized = await request(app.getHttpServer())
-      .get('/v1/vt/flows')
+      .get('/v2/vt/flows')
       .set('Authorization', `Bearer ${token.body.token}`)
     expect(authorized.status).toBe(200)
     expect(authorized.body).toEqual({ ok: true })
@@ -99,19 +100,42 @@ describe('admin API auth: ADR-036 challenge to allowlisted call from an external
     const strangerToken = await authenticate(app, strangerWallet, strangerAccount)
     expect(strangerToken.status).toBe(201)
     const denied = await request(app.getHttpServer())
-      .get('/v1/vt/flows')
+      .get('/v2/vt/flows')
       .set('Authorization', `Bearer ${strangerToken.body.token}`)
     expect(denied.status).toBe(403)
+  })
+
+  it('envelopes an invalid challenge account as INVALID_INPUT', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/v2/auth/challenge')
+      .send({ account: 'cosmos1notverana' })
+
+    expect(response.status).toBe(400)
+    expect(response.body).toEqual({
+      error: { code: 'INVALID_INPUT', message: 'account must be a verana address' },
+    })
+  })
+
+  it('envelopes a failed token exchange as UNAUTHENTICATED without distinguishing the cause', async () => {
+    const signed = await signChallenge(callerWallet, callerAccount, 'unknown-nonce')
+    const response = await request(app.getHttpServer())
+      .post('/v2/auth/token')
+      .send({ account: callerAccount, nonce: 'unknown-nonce', ...signed })
+
+    expect(response.status).toBe(401)
+    expect(response.body).toEqual({
+      error: { code: 'UNAUTHENTICATED', message: 'challenge verification failed' },
+    })
   })
 
   it('rejects every external request with 403 in internal mode, auth methods included', async () => {
     const internalApp = await makeApp('internal', [])
     try {
-      const flows = await request(internalApp.getHttpServer()).get('/v1/vt/flows')
+      const flows = await request(internalApp.getHttpServer()).get('/v2/vt/flows')
       expect(flows.status).toBe(403)
 
       const challenge = await request(internalApp.getHttpServer())
-        .post('/v1/auth/challenge')
+        .post('/v2/auth/challenge')
         .send({ account: callerAccount })
       expect(challenge.status).toBe(403)
     } finally {

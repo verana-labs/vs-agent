@@ -31,7 +31,6 @@ import {
   DEFAULT_ADMIN_API_TRUSTED_NETWORKS,
   parseTrustedNetworks,
   TrustedNetwork,
-  V1AuthController,
 } from './security'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
@@ -104,7 +103,6 @@ export class VsAgentModule {
       inject: allHandlerClasses,
     }
 
-    const securityControllers = [V1AuthController]
     const securityProviders = [
       AdminAuthService,
       { provide: 'ADMIN_AUTH_MODE', useValue: options.authMode ?? 'internal' },
@@ -116,12 +114,7 @@ export class VsAgentModule {
     return {
       module: VsAgentModule,
       imports: nestPlugins.flatMap(p => p.imports ?? []),
-      controllers: [
-        ...baseControllers,
-        ...v2Controllers,
-        ...securityControllers,
-        ...nestPlugins.flatMap(p => p.controllers ?? []),
-      ],
+      controllers: [...baseControllers, ...v2Controllers, ...nestPlugins.flatMap(p => p.controllers ?? [])],
       providers: [
         ...baseProviders,
         ...securityProviders,
