@@ -186,7 +186,7 @@ describe('vt-flow: two-agent integration', () => {
     await validatingReached
 
     const { VtFlowsService } = await import('../src/controllers/admin/vt-flow/VtFlowsService')
-    const flowsService = new VtFlowsService({ getAgent: async () => validator } as never)
+    const flowsService = new VtFlowsService({ getAgent: async () => validator } as never, undefined as never)
 
     const flows = await flowsService.listFlows({ role: VtFlowRole.Validator })
     expect(flows).toHaveLength(1)

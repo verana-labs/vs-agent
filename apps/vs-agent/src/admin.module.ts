@@ -20,7 +20,7 @@ import {
   V2AuthController,
   V2DidcommController,
   V2Openid4vcController,
-  V2VtController,
+  V2VtServiceEndpointsController,
   V1VsAgentController,
   MESSAGE_HANDLERS,
 } from './controllers'
@@ -57,7 +57,7 @@ export class VsAgentModule {
       V2DidcommController,
       V2Openid4vcController,
       V2AnoncredsController,
-      V2VtController,
+      V2VtServiceEndpointsController,
     ]
 
     const baseProviders = [

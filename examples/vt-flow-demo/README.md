@@ -96,7 +96,23 @@ The applicant's ECS bootstrap self-onboards and sends the onboarding request to 
 
 ### Drive the flow
 
-Use each agent's Swagger (`/api` on the admin port). The flow surface is under `/v1/vt/flows`: list flows, edit claims, send OOB links, validate, and revoke.
+Use each agent's Swagger (`/api` on the admin port). The flow surface is under `/v2/vt/flows`: list flows, edit claims, send OOB links, validate, and revoke.
+
+The ECS Organization schema requires claims the applicant does not send, so set them before validating (`<sid>` is the flow's `participantSessionId`):
+
+```bash
+curl -X PUT http://localhost:4000/v2/vt/flows/<sid>/claims -H 'Content-Type: application/json' \
+  -d '{"claims":{"name":"Applicant Demo Org","logoUri":"https://agent-applicant.demo/vt/default/logo.svg","logoDigestSri":"sha384-AAAA","registryId":"DEMO-1","address":"1 Demo Street","countryCode":"ES"}}'
+curl -X POST http://localhost:4000/v2/vt/flows/<sid>/validate -H 'Content-Type: application/json' -d '{}'
+```
+
+Both sides then reach `COMPLETED` and the applicant's HOLDER participant goes `VALIDATED` / `ACTIVE` on chain.
+
+### Known gaps
+
+- The applicant's second bootstrap leg (an ISSUER participant on the Service schema) stays `PENDING`. Its validator is the ecosystem root participant, which the seed creates with a `did:example:` DID, so there is no DIDComm peer to onboard against.
+- On completion the applicant logs `onCompleted failed: authorization check failed`: the seed grants it no authorization for the post-issuance on-chain call, so it never links the VP or triggers the resolver.
+- Both agents log webhook errors for `http://localhost:5000`; the demo runs no backend.
 
 ### TLS and DIDs
 

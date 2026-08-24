@@ -2,6 +2,8 @@ import { ApiProperty } from '@nestjs/swagger'
 import { VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { IsEnum, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, IsUrl } from 'class-validator'
 
+import { PaginationQueryDto } from '../../../../common'
+
 export class ListFlowsQueryDto {
   @ApiProperty({ required: false, enum: VtFlowRole })
   @IsOptional()
@@ -37,6 +39,43 @@ export class ListFlowsQueryDto {
   @IsOptional()
   @IsString()
   participant_session_id?: string
+}
+
+export class ListFlowsV2QueryDto extends PaginationQueryDto {
+  @ApiProperty({ required: false, enum: VtFlowRole })
+  @IsOptional()
+  @IsEnum(VtFlowRole)
+  role?: VtFlowRole
+
+  @ApiProperty({ required: false, enum: ['NOT_CONNECTED', 'ESTABLISHED', 'TERMINATED'] })
+  @IsOptional()
+  @IsIn(['NOT_CONNECTED', 'ESTABLISHED', 'TERMINATED'])
+  connectionState?: 'NOT_CONNECTED' | 'ESTABLISHED' | 'TERMINATED'
+
+  @ApiProperty({ required: false, enum: VtFlowState })
+  @IsOptional()
+  @IsEnum(VtFlowState)
+  flowState?: VtFlowState
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  peerDid?: string
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  participantId?: string
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  schemaId?: string
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  participantSessionId?: string
 }
 
 export class EditClaimsDto {

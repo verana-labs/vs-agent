@@ -3,6 +3,7 @@ import type { VsAgent, VeranaChainService } from '@verana-labs/vs-agent-sdk'
 import { CredoError } from '@credo-ts/core'
 import {
   BadRequestException,
+  ConflictException,
   HttpException,
   HttpStatus,
   Inject,
@@ -20,18 +21,23 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { VeranaIndexerService, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
+import { AdminApiError, Page, paginate } from '../../../common'
 import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
 import { TsLogger } from '../../../utils'
+import { CredentialTypesService } from '../credentials/CredentialTypeService'
 
-import { ListFlowsQueryDto } from './dto/flow-requests.dto'
+import { ListFlowsQueryDto, ListFlowsV2QueryDto } from './dto/flow-requests.dto'
 import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
 @Injectable()
 export class VtFlowsService {
   private indexerService?: VeranaIndexerService
 
-  public constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
+  public constructor(
+    @Inject(VsAgentService) private readonly agentService: VsAgentService,
+    @Inject(CredentialTypesService) private readonly credentialTypesService: CredentialTypesService,
+  ) {}
 
   public async listFlows(query: ListFlowsQueryDto): Promise<VtFlowRecordDto[]> {
     const agent = await this.agentService.getAgent()
@@ -71,6 +77,35 @@ export class VtFlowsService {
     return flows
   }
 
+  public async listFlowsPage(query: ListFlowsV2QueryDto): Promise<Page<VtFlowRecordDto>> {
+    const flows = await this.listFlows({
+      role: query.role,
+      connectionState: query.connectionState,
+      flowState: query.flowState,
+      peerDID: query.peerDid,
+      participant_id: query.participantId,
+      schema_id: query.schemaId,
+      participant_session_id: query.participantSessionId,
+    })
+    return paginate(
+      flows,
+      query,
+      {
+        method: 'listFlows',
+        filters: {
+          role: query.role,
+          connectionState: query.connectionState,
+          flowState: query.flowState,
+          peerDid: query.peerDid,
+          participantId: query.participantId,
+          schemaId: query.schemaId,
+          participantSessionId: query.participantSessionId,
+        },
+      },
+      flow => `${flow.createdAt.toISOString()}|${flow.id}`,
+    )
+  }
+
   public editCredentialClaims(
     participantSessionId: string,
     claims: Record<string, unknown>,
@@ -96,6 +131,34 @@ export class VtFlowsService {
         reason,
       }),
     )
+  }
+
+  public revokeFlowCredential(participantSessionId: string, reason?: string): Promise<VtFlowRecordDto> {
+    return this.mutateFlow(participantSessionId, async ({ agent, vtFlowApi, record }) => {
+      await this.revokeIssuedCredential(agent, record)
+      return vtFlowApi.notifyCredentialStateChange({
+        vtFlowRecordId: record.id,
+        state: VtCredentialState.Revoked,
+        reason,
+      })
+    })
+  }
+
+  private async revokeIssuedCredential(agent: VsAgent, record: VtFlowRecord): Promise<void> {
+    record.assertState([VtFlowState.Completed, VtFlowState.CredRevoked])
+    if (!record.credentialExchangeRecordId) return
+    const credential = await agent.didcomm.credentials.findById(record.credentialExchangeRecordId)
+    if (!credential) return
+    const registryId = credential.getTag('anonCredsRevocationRegistryId')
+    const revocationId = credential.getTag('anonCredsCredentialRevocationId')
+    if (typeof registryId !== 'string' || !revocationId) {
+      throw new AdminApiError(
+        'UNSUPPORTED_FORMAT',
+        HttpStatus.BAD_REQUEST,
+        'the credential of the flow supports no credential-level revocation',
+      )
+    }
+    await this.credentialTypesService.revokeCredential(agent, registryId, Number(revocationId))
   }
 
   private async filterByValidatorParticipant(
@@ -130,7 +193,7 @@ export class VtFlowsService {
     try {
       return toDto(await action({ agent, vtFlowApi, record }))
     } catch (error) {
-      if (error instanceof CredoError) throw new BadRequestException(error.message)
+      if (error instanceof CredoError) throw new ConflictException(error.message)
       throw error
     }
   }
@@ -138,7 +201,7 @@ export class VtFlowsService {
   private async assertConnectionEstablished(agent: VsAgent, record: VtFlowRecord): Promise<void> {
     const connection = await agent.didcomm.connections.findById(record.connectionId)
     if (!connection?.isReady) {
-      throw new BadRequestException('Flow connection is not in ESTABLISHED state')
+      throw new ConflictException('Flow connection is not in ESTABLISHED state')
     }
   }
 
@@ -149,17 +212,17 @@ export class VtFlowsService {
     const vtFlowApi = this.resolveVtFlowApi(agent)
     const record = await this.findRecordBySession(vtFlowApi, participantSessionId)
     if (record.role !== VtFlowRole.Validator) {
-      throw new BadRequestException('This record is applicant-side; validate is a validator action')
+      throw new ConflictException('This record is applicant-side; validate is a validator action')
     }
     if (record.variant !== VtFlowVariant.OnboardingProcess) {
-      throw new BadRequestException(
+      throw new ConflictException(
         `This record is variant '${record.variant}'; validate only applies to OnboardingProcess`,
       )
     }
     if (record.state !== VtFlowState.AwaitingOr) {
-      throw new BadRequestException(`Record state is '${record.state}', expected '${VtFlowState.AwaitingOr}'`)
+      throw new ConflictException(`Record state is '${record.state}', expected '${VtFlowState.AwaitingOr}'`)
     }
-    if (!record.participantId) throw new BadRequestException('Record has no participantId')
+    if (!record.participantId) throw new ConflictException('Record has no participantId')
 
     const holderParticipant = await this.getIndexer().getParticipant(Number(record.participantId))
     if (!holderParticipant)
@@ -245,5 +308,6 @@ function toDto(record: VtFlowRecord, peerDid?: string): VtFlowRecordDto {
     errorMessage: record.errorMessage,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt ?? record.createdAt,
+    lastEventAt: record.updatedAt ?? record.createdAt,
   }
 }
