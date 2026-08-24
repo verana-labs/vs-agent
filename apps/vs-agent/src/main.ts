@@ -54,7 +54,6 @@ import {
   SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
   SELF_ISSUED_VTC_SERVICE_TYPE,
   UI_WELCOME_MESSAGE,
-  AGENT_DIDCOMM_VERSIONS,
   AGENT_LOG_LEVEL,
   AGENT_NAME,
   AGENT_PORT,
@@ -227,9 +226,6 @@ const run = async () => {
   }
   if (TRUSTED_ECS_ECOSYSTEM_DIDS.some(did => !did.startsWith('did:'))) {
     configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS must be a comma-separated list of DIDs')
-  }
-  if (!AGENT_DIDCOMM_VERSIONS.includes('v2')) {
-    configErrors.push('vt-flow requires DIDComm v2: add v2 to AGENT_DIDCOMM_VERSIONS')
   }
   if (configErrors.length > 0) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
