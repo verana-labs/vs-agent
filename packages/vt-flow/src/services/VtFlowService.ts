@@ -816,12 +816,5 @@ export class VtFlowService {
       )
       return false
     }
-
-    // Tag the record with the public DID of the peer. The agent reads that tag to reuse
-    // this connection, instead of adding a second record for the same pair of DIDs.
-    if (connection.getTag('publicDid') !== peerDid) {
-      connection.setTag('publicDid', peerDid)
-      await agentContext.resolve(DidCommConnectionRepository).update(agentContext, connection)
-    }
   }
 }
