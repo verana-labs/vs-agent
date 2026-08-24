@@ -6,9 +6,9 @@ import { type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt
 import {
   createVsAgent,
   setupBaseDidComm,
+  VeranaIndexerService,
   VsAgent,
   type VeranaChainService,
-  type VeranaIndexerService,
 } from '@verana-labs/vs-agent-sdk'
 
 import { TsLogger } from '../../src/utils'
@@ -56,7 +56,14 @@ export const startAgent = async ({
     publicApiBaseUrl: `https://${domain}`,
     label,
     veranaChain,
-    indexer,
+    // Unroutable on purpose: these agents never reach the VPR, so a test that does hit it fails
+    // loudly instead of silently talking to a real indexer.
+    indexer:
+      indexer ??
+      new VeranaIndexerService({
+        baseUrl: 'http://indexer.invalid',
+        logger: new TsLogger(LogLevel.Off, 'VeranaIndexer'),
+      }),
   })
   return agent as unknown as VsAgent<any>
 }

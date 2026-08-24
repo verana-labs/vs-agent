@@ -351,12 +351,6 @@ describe('VtFlowOrchestrator.allowEcsIssuanceExemption', () => {
     purpose: { participantId: '42' },
   } as never
 
-  it('refuses the exemption when the agent has no indexer', async () => {
-    const orchestrator = new VtFlowOrchestrator({ did: 'did:web:agent' } as never)
-
-    await expect(orchestrator.checkEcsIssuanceExemption(context)).resolves.toBe(false)
-  })
-
   it('resolves the peer participant against the indexer with the agent DID known at call time', async () => {
     const indexer = {
       getParticipant: vi.fn().mockResolvedValue(undefined),

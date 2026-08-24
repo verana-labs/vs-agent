@@ -36,7 +36,7 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
   dependencies: AgentDependencies
   logLevel?: LogLevel
   veranaChain?: VeranaChainService
-  indexer?: VeranaIndexerService
+  indexer: VeranaIndexerService
   trustedEcosystemDids?: string[]
   authorizationService?: AuthorizationService
   discoveryOptions?: DidCommFeatureQueryOptions[]

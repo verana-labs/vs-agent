@@ -165,7 +165,7 @@ export class VtFlowsService {
     }
     if (!record.participantId) throw new BadRequestException('Record has no participantId')
 
-    const applicant = await this.requireIndexer(agent).getParticipant(Number(record.participantId))
+    const applicant = await agent.indexer.getParticipant(Number(record.participantId))
     if (!applicant)
       throw new BadRequestException(`Applicant participant ${record.participantId} not found on indexer`)
     if (applicant.schema_id == null) throw new BadRequestException('Applicant participant has no schema_id')
@@ -223,15 +223,6 @@ export class VtFlowsService {
       )
     }
     return agent.veranaChain
-  }
-
-  private requireIndexer(agent: VsAgent): VeranaIndexerService {
-    if (!agent.indexer) {
-      throw new BadRequestException(
-        'Indexer not configured (set VERANA_INDEXER_BASE_URL); required for vt-flow',
-      )
-    }
-    return agent.indexer
   }
 }
 

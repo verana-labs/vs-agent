@@ -94,7 +94,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public displayPictureUrl?: string
   public label: string
   public veranaChain?: VeranaChainService
-  public indexer?: VeranaIndexerService
+  public indexer: VeranaIndexerService
   public trustedEcosystemDids?: string[]
   public authorizationService?: AuthorizationService
   public discoveryOptions?: DidCommFeatureQueryOptions[]
@@ -108,7 +108,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       displayPictureUrl?: string
       label: string
       veranaChain?: VeranaChainService
-      indexer?: VeranaIndexerService
+      indexer: VeranaIndexerService
       trustedEcosystemDids?: string[]
       authorizationService?: AuthorizationService
       discoveryOptions?: DidCommFeatureQueryOptions[]
