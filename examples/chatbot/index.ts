@@ -37,6 +37,8 @@ import type { Express } from 'express'
 import fetch from 'node-fetch'
 import path from 'path'
 import { Logger } from 'tslog'
+import dotenv from 'dotenv'
+dotenv.config()
 
 import { helpMessage, rockyQuotes, rootContextMenu, rootMenuAsQA, welcomeMessage, worldCupPoll } from './data'
 

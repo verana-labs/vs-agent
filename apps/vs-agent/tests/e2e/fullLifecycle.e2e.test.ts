@@ -9,10 +9,14 @@ import {
   getEcsSchemas,
   ParticipantRole,
   ParticipantState,
+  rebindEcsCredentialSchema,
   reconcileVtFlowRecordsOnCancel,
+  removeSelfIssuedEcsCredentialsIfIssuerRevoked,
+  resolveJsonSchemaCredentialId,
   VeranaChainService,
   VeranaIndexerService,
   VtFlowOrchestrator,
+  type SelfTrDefaults,
 } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -57,6 +61,25 @@ const ecsSchema = (title: string) =>
     required: ['credentialSubject'],
   })
 
+// every digest is supplied, so building the credential never fetches the referenced resources
+const selfTrDefaults: SelfTrDefaults = {
+  agentLabel: 'Applicant',
+  serviceLogoUri: 'https://cdn.example/logo.png',
+  serviceLogoDigestSri: 'sha384-logo',
+  serviceType: 'ECommerce',
+  serviceDescription: 'lifecycle applicant service',
+  serviceMinimumAgeRequired: 18,
+  serviceTermsAndConditions: 'https://cdn.example/terms',
+  serviceTermsAndConditionsDigestSri: 'sha384-terms',
+  servicePrivacyPolicy: 'https://cdn.example/privacy',
+  servicePrivacyPolicyDigestSri: 'sha384-privacy',
+  orgRegistryId: 'REG-1',
+  orgRegistryUri: 'https://registry.example',
+  orgAddress: '1 Demo Street',
+  orgOrganizationKind: 'PUBLIC',
+  orgCountryCode: 'US',
+}
+
 async function until<T>(fn: () => Promise<T | undefined>, timeoutMs = 120_000): Promise<T> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -84,6 +107,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
   let validatorParticipantId: number
   let serviceOpId: number
   let serviceRootId: number
+  let applicantIssuerParticipantId: number
   let corpPolicyAddress: string
   let childMessages: Subject<SubjectMessage>
   let subjectMap: Record<string, Subject<SubjectMessage>>
@@ -383,6 +407,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         vsOperator: opP.address,
         vsOperatorAuthzMsgTypes: [PP_SESSION],
       })
+      applicantIssuerParticipantId = parentServiceOp.participantId
       await seederChain.setParticipantOPToValidated({
         id: parentServiceOp.participantId,
         opSummaryDigest: 'sha384-s',
@@ -456,6 +481,59 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       expect(childCredentials.length).toBeGreaterThan(0)
 
       await child.shutdown().catch(() => undefined)
+    },
+    SETUP_TIMEOUT_MS,
+  )
+
+  it(
+    'withdraws the self-issued ECS credential when its ISSUER participant is revoked on chain',
+    async () => {
+      const baseUrl = applicant.publicApiBaseUrl
+      const vtcEntries = async () =>
+        Object.keys(
+          (await applicant.dids.getCreatedDids({ did: applicant.did }))[0].metadata.get('_vt/vtc') ?? {},
+        )
+      const serviceIds = async () =>
+        (await applicant.dids.getCreatedDids({ did: applicant.did }))[0].didDocument?.service?.map(
+          s => s.id,
+        ) ?? []
+
+      const jscUrl = await resolveJsonSchemaCredentialId(
+        applicant,
+        indexer,
+        serviceSchemaId,
+        seederChain.getChainId,
+      )
+      await rebindEcsCredentialSchema(
+        applicant,
+        baseUrl,
+        String(serviceSchemaId),
+        'ecs-service',
+        selfTrDefaults,
+        jscUrl,
+        applicantIssuerParticipantId,
+      )
+
+      const linkedVpServiceId = `${applicant.did}#vpr-schemas-service-vtc-vp`
+      expect(await vtcEntries()).toContain(jscUrl)
+      expect(await serviceIds()).toContain(linkedVpServiceId)
+
+      await chainA.revokeParticipant(corpPolicyAddress, applicantIssuerParticipantId)
+      await until(async () => {
+        const p = await seederChain.getParticipant(applicantIssuerParticipantId)
+        return p?.revoked ? true : undefined
+      })
+
+      await removeSelfIssuedEcsCredentialsIfIssuerRevoked(
+        applicant,
+        String(applicantIssuerParticipantId),
+        selfTrDefaults,
+      )
+
+      expect(await vtcEntries()).not.toContain(jscUrl)
+      expect(await serviceIds()).not.toContain(linkedVpServiceId)
+      // back in store, detached: this agent already holds the credential a validator issued to it
+      expect(await vtcEntries()).toContain(`${baseUrl}/vt/schemas-example-service-jsc.json`)
     },
     SETUP_TIMEOUT_MS,
   )
