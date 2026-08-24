@@ -98,6 +98,7 @@ import {
   commonAppConfig,
   type ServerConfig,
   setupAgent,
+  runWithRetries,
   toNestLogLevels,
   TsLogger,
   webhookEvent,
@@ -169,6 +170,8 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 }
 
 const AUTHORIZATION_SEED_RETRY_MS = 30_000
+const VTJSC_MIGRATION_RETRY_MS = 30_000
+const VTJSC_MIGRATION_MAX_ATTEMPTS = 5
 
 const run = async () => {
   const serverLogger = new TsLogger(ADMIN_LOG_LEVEL, 'Server')
@@ -351,22 +354,12 @@ const run = async () => {
       logger: serverLogger,
       corporationId: VERANA_CORPORATION_ID ? Number(VERANA_CORPORATION_ID) : undefined,
     })
-    const seedAuthorizationCache = async (): Promise<boolean> =>
-      authorizationService!
-        .refreshForOperator()
-        .then(() => true)
-        .catch(error => {
-          serverLogger.error(
-            `[Authorization] failed to seed the authorization cache: ${(error as Error).message}`,
-          )
-          return false
-        })
-    if (!(await seedAuthorizationCache())) {
-      const retry = setInterval(async () => {
-        if (await seedAuthorizationCache()) clearInterval(retry)
-      }, AUTHORIZATION_SEED_RETRY_MS)
-      retry.unref()
-    }
+    await runWithRetries({
+      run: () => authorizationService!.refreshForOperator(),
+      intervalMs: AUTHORIZATION_SEED_RETRY_MS,
+      onError: error =>
+        serverLogger.error(`[Authorization] failed to seed the authorization cache: ${error.message}`),
+    })
 
     try {
       const balance = await veranaChain.getBalance()
@@ -436,13 +429,17 @@ const run = async () => {
   const { httpServer, webSocketServer } = await startServers(agent, conf)
 
   if (agent.did) {
-    await migrateVtjscServiceIds(agent).then(
-      () => bootstrapState.complete('vtjsc-service-id-migration'),
-      (error: Error) => {
-        bootstrapState.fail('vtjsc-service-id-migration', error.message)
-        serverLogger.error(`[VTJSC] service id migration failed: ${error.message}`)
-      },
-    )
+    await runWithRetries({
+      run: () => migrateVtjscServiceIds(agent),
+      intervalMs: VTJSC_MIGRATION_RETRY_MS,
+      maxAttempts: VTJSC_MIGRATION_MAX_ATTEMPTS,
+      onSuccess: () => bootstrapState.complete('vtjsc-service-id-migration'),
+      onError: (error, attempt) =>
+        serverLogger.error(
+          `[VTJSC] service id migration failed (attempt ${attempt}/${VTJSC_MIGRATION_MAX_ATTEMPTS}): ${error.message}`,
+        ),
+      onExhausted: error => bootstrapState.fail('vtjsc-service-id-migration', error.message),
+    })
   }
 
   // Initialize Self-Trust Registry

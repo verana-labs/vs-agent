@@ -20,7 +20,18 @@ export class V2AgentController {
       'Answers as soon as the HTTP listener accepts a connection. Never fails because an external dependency failed.',
   })
   @ApiOkResponse({ description: 'The agent process is alive', type: LivenessDto })
+  @ApiServiceUnavailableResponse({ description: 'A bootstrap step failed beyond recovery' })
   public getLiveness(): LivenessDto {
+    const { live, message } = this.bootstrapState.liveness
+
+    if (!live) {
+      throw new AdminApiError(
+        AdminApiErrorCode.Internal,
+        HttpStatus.SERVICE_UNAVAILABLE,
+        message ?? 'the agent cannot recover without a restart',
+      )
+    }
+
     return { status: 'live' }
   }
 

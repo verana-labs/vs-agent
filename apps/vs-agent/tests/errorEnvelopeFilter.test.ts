@@ -14,7 +14,7 @@ import { APP_GUARD } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
 import { IsString } from 'class-validator'
 import request from 'supertest'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { AdminApiError, AdminApiErrorCode } from '../src/common/AdminApiError'
 import { BOOTSTRAP_STATE, BootstrapState } from '../src/common/BootstrapState'
@@ -105,6 +105,8 @@ class V1ServiceEndpointsFixtureController {
   }
 }
 
+const BOOTSTRAP_STEPS = ['vtjsc-service-id-migration', 'self-trust-registry', 'indexer-subscription'] as const
+
 describe('v2 error envelope', () => {
   let app: INestApplication
   const bootstrapState = new BootstrapState()
@@ -134,6 +136,11 @@ describe('v2 error envelope', () => {
 
   afterAll(async () => {
     await app?.close()
+  })
+
+  beforeEach(() => {
+    for (const step of BOOTSTRAP_STEPS) bootstrapState.complete(step)
+    bootstrapState.watchIndexer(() => 'synced')
   })
 
   it('derives the code from the status of a nest exception', async () => {
@@ -243,6 +250,32 @@ describe('v2 error envelope', () => {
         message: "bootstrap step 'self-trust-registry' has not completed",
       },
     })
+  })
+
+  it('keeps the liveness probe green while a bootstrap step is only pending', async () => {
+    bootstrapState.require('vtjsc-service-id-migration')
+
+    const response = await request(app.getHttpServer()).get('/v2/agent/health/live')
+
+    expect(response.status).toBe(HttpStatus.OK)
+    expect(response.body).toEqual({ status: 'live' })
+  })
+
+  it('fails the liveness probe once a bootstrap step is beyond recovery, so the pod can restart', async () => {
+    bootstrapState.require('vtjsc-service-id-migration')
+    bootstrapState.fail('vtjsc-service-id-migration', 'askar rejected the write')
+
+    const live = await request(app.getHttpServer()).get('/v2/agent/health/live')
+    const ready = await request(app.getHttpServer()).get('/v2/agent/health/ready')
+
+    expect(live.status).toBe(HttpStatus.SERVICE_UNAVAILABLE)
+    expect(live.body).toEqual({
+      error: {
+        code: AdminApiErrorCode.Internal,
+        message: "bootstrap step 'vtjsc-service-id-migration' failed and could not be recovered",
+      },
+    })
+    expect(ready.status).toBe(HttpStatus.SERVICE_UNAVAILABLE)
   })
 
   it('keeps secrets, tokens, accounts, DIDs and peers out of both probe bodies', async () => {

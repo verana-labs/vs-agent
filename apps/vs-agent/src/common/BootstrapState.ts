@@ -19,6 +19,11 @@ export interface ReadinessResult {
   message?: string
 }
 
+export interface LivenessResult {
+  live: boolean
+  message?: string
+}
+
 export class BootstrapState {
   private readonly steps = new Map<BootstrapStep, BootstrapStepState>()
   private readonly failures = new Map<BootstrapStep, string>()
@@ -58,6 +63,16 @@ export class BootstrapState {
 
   public get ecsBootstrapRecord(): EcsBootstrapRecord | undefined {
     return this.ecsBootstrap
+  }
+
+  public get liveness(): LivenessResult {
+    for (const [step, state] of this.steps) {
+      if (state === 'failed') {
+        return { live: false, message: `bootstrap step '${step}' failed and could not be recovered` }
+      }
+    }
+
+    return { live: true }
   }
 
   public get readiness(): ReadinessResult {
