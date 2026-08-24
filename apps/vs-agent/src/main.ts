@@ -422,7 +422,7 @@ const run = async () => {
     bootstrapState.require('vtjsc-service-id-migration')
     bootstrapState.require('self-trust-registry')
   }
-  if (VERANA_INDEXER_BASE_URL) bootstrapState.require('indexer-subscription')
+  bootstrapState.require('indexer-subscription')
 
   const conf: ServerConfig = {
     port: ADMIN_PORT,
