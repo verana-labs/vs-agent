@@ -96,9 +96,9 @@ import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import {
   commonAppConfig,
+  runWithRetries,
   type ServerConfig,
   setupAgent,
-  runWithRetries,
   toNestLogLevels,
   TsLogger,
   webhookEvent,
