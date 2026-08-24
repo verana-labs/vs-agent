@@ -58,18 +58,16 @@ import {
   AGENT_LOG_LEVEL,
   AGENT_NAME,
   AGENT_PORT,
-  AGENT_PUBLIC_DID,
+  AGENT_PUBLIC_DID_METHOD,
   AGENT_WALLET_ID,
   AGENT_WALLET_KEY,
   AGENT_WALLET_KEY_DERIVATION_METHOD,
   askarPostgresConfig,
   keyDerivationMethodMap,
-  DEFAULT_AGENT_ENDPOINTS,
   ADMIN_API_AUTH_MODE,
   ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
   ADMIN_API_EXTERNAL_PORT,
   ADMIN_API_PUBLIC_URL,
-  DEFAULT_PUBLIC_API_BASE_URL,
   ENABLED_PLUGINS,
   EVENTS_BASE_URL,
   POSTGRES_HOST,
@@ -95,6 +93,8 @@ import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import {
   commonAppConfig,
+  derivePublicDidLocation,
+  type PublicDidLocation,
   runWithRetries,
   type ServerConfig,
   setupAgent,
@@ -188,19 +188,20 @@ const run = async () => {
     )
   }
 
-  const parsedDid = AGENT_PUBLIC_DID ? parseDid(AGENT_PUBLIC_DID) : null
-
-  if (!AGENT_PUBLIC_DID) {
-    serverLogger.warn('AGENT_PUBLIC_DID is not defined. You must set it in production releases')
-  }
-
-  // Check it is a supported DID method
-  if (parsedDid && !['web', 'webvh'].includes(parsedDid.method)) {
-    serverLogger.error('Only did:web or did:webvh method is supported')
-    process.exit(1)
-  }
-
   const configErrors: string[] = []
+  let didLocation: PublicDidLocation | undefined
+  if (!PUBLIC_API_BASE_URL) {
+    configErrors.push('PUBLIC_API_BASE_URL is required')
+  } else {
+    try {
+      didLocation = derivePublicDidLocation(PUBLIC_API_BASE_URL)
+    } catch (error) {
+      configErrors.push((error as Error).message)
+    }
+  }
+  if (!['webvh', 'web'].includes(AGENT_PUBLIC_DID_METHOD)) {
+    configErrors.push(`AGENT_PUBLIC_DID_METHOD must be 'webvh' or 'web' (got '${AGENT_PUBLIC_DID_METHOD}')`)
+  }
   if (!VERANA_CORPORATION_ID) {
     configErrors.push('VERANA_CORPORATION_ID is required')
   } else if (!/^\d+$/.test(VERANA_CORPORATION_ID)) {
@@ -233,18 +234,21 @@ const run = async () => {
   if (TRUSTED_ECS_ECOSYSTEM_DIDS.some(did => !did.startsWith('did:'))) {
     configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS must be a comma-separated list of DIDs')
   }
-  if (configErrors.length > 0) {
+  if (configErrors.length > 0 || !didLocation) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
     process.exit(1)
   }
 
-  let endpoints = AGENT_ENDPOINTS
-  if (!endpoints && parsedDid) endpoints = [`wss://${decodeURIComponent(parsedDid.id)}`]
-  if (!endpoints) endpoints = DEFAULT_AGENT_ENDPOINTS
+  const parsedDid = parseDid(`did:${AGENT_PUBLIC_DID_METHOD}:${didLocation.location}`)
 
-  let publicApiBaseUrl = PUBLIC_API_BASE_URL
-  if (!publicApiBaseUrl && parsedDid) publicApiBaseUrl = `https://${decodeURIComponent(parsedDid.id)}`
-  if (!publicApiBaseUrl) publicApiBaseUrl = DEFAULT_PUBLIC_API_BASE_URL
+  let endpoints = AGENT_ENDPOINTS
+  if (!endpoints) {
+    const port = didLocation.port ? `:${didLocation.port}` : ''
+    const path = didLocation.path ? `/${didLocation.path}` : ''
+    endpoints = [`wss://${didLocation.host}${port}${path}`]
+  }
+
+  const publicApiBaseUrl = didLocation.normalizedBaseUrl
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
@@ -395,7 +399,7 @@ const run = async () => {
     },
     label: AGENT_LABEL || 'Test VS Agent',
     displayPictureUrl: AGENT_INVITATION_IMAGE_URL,
-    parsedDid: parsedDid ?? undefined,
+    parsedDid,
     logLevel: AGENT_LOG_LEVEL,
     publicApiBaseUrl,
     autoDiscloseUserProfile: USER_PROFILE_AUTODISCLOSE,

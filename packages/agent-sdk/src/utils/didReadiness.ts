@@ -20,8 +20,11 @@ export async function waitUntilOwnDidIsPubliclyResolvable(agent: VsAgent, logger
   const did = agent.did
   if (!did || !agent.publicApiBaseUrl) return
 
-  const wellKnownFile = did.startsWith('did:web:') ? 'did.json' : 'did.jsonl'
-  const url = `${agent.publicApiBaseUrl}/.well-known/${wellKnownFile}`
+  const documentFile = did.startsWith('did:web:') ? 'did.json' : 'did.jsonl'
+  const baseUrl = agent.publicApiBaseUrl.replace(/\/+$/, '')
+  // A path-based DID location serves its document at <base>/did.json(l), not under /.well-known
+  const hasPath = new URL(baseUrl).pathname !== '/'
+  const url = hasPath ? `${baseUrl}/${documentFile}` : `${baseUrl}/.well-known/${documentFile}`
 
   const deadline = Date.now() + OWN_DID_READY_TIMEOUT_MS
   let lastStatus: number | string = 'unreachable'

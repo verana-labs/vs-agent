@@ -13,7 +13,7 @@ services:
       - 3000:3000
       - 3001:3001
     environment:
-      - AGENT_PUBLIC_DID=did:webvh:ngrok-free.app
+      - PUBLIC_API_BASE_URL=https://ngrok-free.app
       - AGENT_INVITATION_IMAGE_URL=https://did:webvh:ngrok-free.app/avatar.png
       - AGENT_LABEL=Chatbot Agent
       - USE_CORS=true

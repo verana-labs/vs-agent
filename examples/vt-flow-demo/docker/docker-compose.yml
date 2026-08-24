@@ -111,7 +111,6 @@ services:
       AGENT_LABEL: Validator VS
       AGENT_PORT: '3001'
       ADMIN_PORT: '3000'
-      AGENT_PUBLIC_DID: did:webvh:agent-validator.demo
       AGENT_ENDPOINT: wss://agent-validator.demo
       PUBLIC_API_BASE_URL: https://agent-validator.demo
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
@@ -144,7 +143,6 @@ services:
       AGENT_LABEL: Applicant VS
       AGENT_PORT: '3001'
       ADMIN_PORT: '3000'
-      AGENT_PUBLIC_DID: did:webvh:agent-applicant.demo
       AGENT_ENDPOINT: wss://agent-applicant.demo
       PUBLIC_API_BASE_URL: https://agent-applicant.demo
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
@@ -159,6 +157,43 @@ services:
     ports:
       - '4100:3000'
       - '4101:3001'
+
+  # Operates the Corporation that owns the Ecosystem and its ECS schemas, and publishes a VTJSC
+  # for each of them. Without those credentials the schema references of the other two agents stay
+  # self-issued https URLs, which resolve as NOT_TRUSTED and fail the VS-CONN-VS check.
+  # It signs nothing on chain: it holds no OperatorAuthorization and no balance, so its ECS
+  # bootstrap skips on preflight and it only publishes.
+  agent-ecosystem:
+    build:
+      context: ../../..
+      dockerfile: apps/vs-agent/Dockerfile
+      target: vs-agent
+    depends_on:
+      indexer:
+        condition: service_healthy
+      caddy:
+        condition: service_healthy
+    volumes:
+      - caddy-data:/caddy:ro
+      - agent-ecosystem-data:/root/.afj
+    environment:
+      AGENT_LABEL: Ecosystem VS
+      AGENT_PORT: '3001'
+      ADMIN_PORT: '3000'
+      AGENT_ENDPOINT: wss://agent-ecosystem.demo
+      PUBLIC_API_BASE_URL: https://agent-ecosystem.demo
+      NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
+      ADMIN_API_AUTH_MODE: internal
+      AGENT_MODE: standalone
+      VERANA_RPC_ENDPOINT_URL: http://verana-node:26657
+      VERANA_CHAIN_ID: vna-demo-1
+      VERANA_INDEXER_BASE_URL: http://indexer:3001
+      VERANA_ACCOUNT_MNEMONIC: ${ECOSYSTEM_MNEMONIC:?set ECOSYSTEM_MNEMONIC in .env}
+      VERANA_CORPORATION_ID: ${ECOSYSTEM_CORPORATION_ID:-}
+      TRUSTED_ECS_ECOSYSTEM_DIDS: ${TRUSTED_ECS_ECOSYSTEM_DIDS:-}
+    ports:
+      - '4200:3000'
+      - '4201:3001'
 
 volumes:
   verana-node-data:

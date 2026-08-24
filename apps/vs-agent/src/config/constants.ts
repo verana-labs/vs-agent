@@ -22,11 +22,9 @@ export const AGENT_ENDPOINT = process.env.AGENT_ENDPOINT
 export const AGENT_ENDPOINTS = process.env.AGENT_ENDPOINT
   ? [process.env.AGENT_ENDPOINT]
   : process.env.AGENT_ENDPOINTS?.replace(/\s+/g, '').split(',')
-export const DEFAULT_AGENT_ENDPOINTS = ['ws://localhost:3001']
 
-export const AGENT_PUBLIC_DID = process.env.AGENT_PUBLIC_DID
+export const AGENT_PUBLIC_DID_METHOD = (process.env.AGENT_PUBLIC_DID_METHOD ?? 'webvh').trim().toLowerCase()
 export const PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL
-export const DEFAULT_PUBLIC_API_BASE_URL = 'http://localhost:3001'
 
 export const ADMIN_API_PUBLIC_URL = process.env.ADMIN_API_PUBLIC_URL
 export const ADMIN_API_EXTERNAL_PORT = Number(process.env.ADMIN_API_EXTERNAL_PORT || 3010)

@@ -25,7 +25,9 @@ export class DidWebController {
     @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
   ) {}
 
-  @Get('/.well-known/did.json')
+  // The non-well-known routes serve path-based DID locations, assuming the reverse
+  // proxy strips the base path before forwarding
+  @Get(['/.well-known/did.json', '/did.json'])
   async getDidDocument() {
     const agent = await this.agentService.getAgent()
     agent.config.logger.debug(`Public DID document requested`)
@@ -37,7 +39,7 @@ export class DidWebController {
     throw new HttpException('DID Document not found', HttpStatus.NOT_FOUND)
   }
 
-  @Get('/.well-known/did.jsonl')
+  @Get(['/.well-known/did.jsonl', '/did.jsonl'])
   async getDidLog(@Res() res: Response) {
     const agent = await this.agentService.getAgent()
     agent.config.logger.debug(`Public DID log requested`)

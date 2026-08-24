@@ -13,7 +13,7 @@ services:
       - 2800:3000
       - 2801:3001
     environment:
-      - AGENT_PUBLIC_DID=did:web:p2801.ovpndev.2060.io
+      - AGENT_PUBLIC_DID_METHOD=web
       - AGENT_ENDPOINT=wss://p2801.ovpndev.2060.io
       - PUBLIC_API_BASE_URL=https://p2801.ovpndev.2060.io
       - EVENTS_BASE_URL=https://p2802.ovpndev.2060.io

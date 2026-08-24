@@ -150,7 +150,10 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       // If a public did is specified, check if it's already stored in the wallet. If it's not the case,
       // create a new one and generate keys for DIDComm (if there are endpoints configured)
       // TODO: Make DIDComm version, keys, etc. configurable. Keys can also be imported
-      const domain = parsedDid.id.includes(':') ? parsedDid.id.split(':')[1] : parsedDid.id
+      // The configured DID is always SCID-less: its id is the location (domain[%3Aport][:path...])
+      const location = parsedDid.id
+      const [domain, ...pathSegments] = location.split(':')
+      const path = pathSegments.length ? pathSegments.join('/') : undefined
 
       const existingRecord = await this.findCreatedDid(parsedDid)
 
@@ -170,7 +173,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
           await this.dids.create({
             method: 'web',
-            domain,
+            domain: location,
             didDocument,
             keys: [didCommKey],
           })
@@ -181,7 +184,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           // can use newer keys for DIDComm bootstrapping, but we should at least warn
           // about that
           const didRepository = this.dependencyManager.resolve(DidRepository)
-          const existingDidWebRecord = await didRepository.findCreatedDid(this.context, `did:web:${domain}`)
+          const existingDidWebRecord = await didRepository.findCreatedDid(this.context, `did:web:${location}`)
           if (existingDidWebRecord) {
             this.logger.warn('Existing record for legacy did:web found. Removing it')
             await didRepository.delete(this.context, existingDidWebRecord)
@@ -189,7 +192,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
           const {
             didState: { did: publicDid, didDocument },
-          } = await this.dids.create({ method: 'webvh', domain })
+          } = await this.dids.create({ method: 'webvh', domain, path })
           if (!publicDid || !didDocument) {
             this.logger.error('Failed to create did:webvh record')
             process.exit(1)
@@ -204,7 +207,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           // Add implicit services
           await this.createAndAddWebVhImplicitServices(didDocument)
 
-          didDocument.alsoKnownAs = [`did:web:${domain}`]
+          didDocument.alsoKnownAs = [`did:web:${location}`]
 
           // The webvh registrar doesn't merge new keys into the DidRecord on update,
           // so persist the DIDComm key mapping directly on the existing record.
@@ -248,11 +251,11 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       // implicit invitations
       if (
         parsedDid.method === 'webvh' &&
-        !(existingRecord?.getTag('alternativeDids') as string[])?.includes(`did:web:${domain}`)
+        !(existingRecord?.getTag('alternativeDids') as string[])?.includes(`did:web:${location}`)
       ) {
         this.logger?.debug('Adding did:web form as an alternative DID')
 
-        existingRecord.setTag('alternativeDids', [`did:web:${domain}`])
+        existingRecord.setTag('alternativeDids', [`did:web:${location}`])
         const didRepository = this.dependencyManager.resolve(DidRepository)
         await didRepository.update(this.agentContext, existingRecord)
       }
@@ -329,10 +332,13 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   private async findCreatedDid(parsedDid: ParsedDid) {
     const didRepository = this.dependencyManager.resolve(DidRepository)
 
-    // Particular case of webvh: parsedDid might not include the SCID, so we'll need to find it by domain
+    // Particular case of webvh: parsedDid does not include the SCID, so we'll need to find it by
+    // its location, which the registrar stores as the 'domain' tag (domain[%3Aport][:path...])
     if (parsedDid.method === 'webvh') {
-      const domain = parsedDid.id.includes(':') ? parsedDid.id.split(':')[1] : parsedDid.id
-      return await didRepository.findSingleByQuery(this.context, { method: 'webvh', domain })
+      return await didRepository.findSingleByQuery(this.context, {
+        method: 'webvh',
+        domain: parsedDid.id,
+      })
     }
 
     return await didRepository.findCreatedDid(this.context, parsedDid.did)
