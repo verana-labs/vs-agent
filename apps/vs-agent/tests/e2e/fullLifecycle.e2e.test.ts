@@ -301,14 +301,20 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         indexer,
         publicApiBaseUrl: validator.publicApiBaseUrl,
       })
-      // This applicant is a HOLDER, so the validation is followed by a credential offer.
-      const { record: validatedRecord, participant } = await orchestrator.validateOnboardingProcess({
+      // This applicant is a HOLDER, so the validation builds the credential and the offer sends it.
+      const {
+        record: validatedRecord,
+        participant,
+        credential,
+      } = await orchestrator.validateOnboardingProcess({
         vtFlowRecordId: validatorFlow.id,
+        credentialSchemaId: String(orgSchemaId),
       })
       const validated = await orchestrator.offerOnboardingCredential({
         vtFlowRecordId: validatedRecord.id,
         credentialSchemaId: String(orgSchemaId),
         participant,
+        credential,
       })
       expect(validated.state).toBe(VtFlowState.CredOffered)
       await applicantCompleted

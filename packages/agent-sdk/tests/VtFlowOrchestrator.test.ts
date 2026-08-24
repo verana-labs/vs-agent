@@ -168,14 +168,15 @@ describe('VtFlowOrchestrator onboarding validation', () => {
     claims: {},
   }
 
-  function makeAgent(role: number) {
+  function makeAgent(role: number, recordOverrides: Record<string, unknown> = {}) {
+    const flowRecord = { ...validatorRecord, ...recordOverrides }
     const vtFlowApi = {
-      findById: vi.fn(async () => validatorRecord),
-      acceptOnboardingRequest: vi.fn(async () => validatorRecord),
-      markValidated: vi.fn(async () => ({ ...validatorRecord, state: 'VALIDATED' })),
-      markCompleted: vi.fn(async () => ({ ...validatorRecord, state: 'COMPLETED' })),
+      findById: vi.fn(async () => flowRecord),
+      acceptOnboardingRequest: vi.fn(async () => flowRecord),
+      markValidated: vi.fn(async () => ({ ...flowRecord, state: 'VALIDATED' })),
+      markCompleted: vi.fn(async () => ({ ...flowRecord, state: 'COMPLETED' })),
       offerCredentialForSession: vi.fn(async () => ({
-        record: { ...validatorRecord, state: 'CRED_OFFERED' },
+        record: { ...flowRecord, state: 'CRED_OFFERED' },
       })),
     }
     const agent = {
@@ -186,6 +187,7 @@ describe('VtFlowOrchestrator onboarding validation', () => {
         getParticipant: vi.fn(async () => ({
           id: 94,
           role,
+          schemaId: 22,
           did: 'did:web:applicant',
           corporation: 'verana1corp',
           validatorParticipantId: 93,
@@ -194,6 +196,16 @@ describe('VtFlowOrchestrator onboarding validation', () => {
       },
     }
     return { agent, vtFlowApi }
+  }
+
+  /** buildCredential needs an indexer and a schema; assert the wiring, not the credential body. */
+  function stubBuildCredential(
+    orchestrator: VtFlowOrchestrator,
+    build: () => Promise<unknown> = async () => ({ id: 'urn:cred' }),
+  ) {
+    const spy = vi.fn(build)
+    ;(orchestrator as unknown as { buildCredential: unknown }).buildCredential = spy
+    return spy
   }
 
   it('validateOnboardingProcess records the outcome on-chain and offers no credential', async () => {
@@ -217,21 +229,80 @@ describe('VtFlowOrchestrator onboarding validation', () => {
 
   it('validateOnboardingProcess reports the HOLDER role so the caller can offer a credential', async () => {
     const { agent } = makeAgent(6) // HOLDER
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+    stubBuildCredential(orchestrator)
 
-    const { participant } = await new VtFlowOrchestrator(agent as never).validateOnboardingProcess({
+    const { participant, credential } = await orchestrator.validateOnboardingProcess({
       vtFlowRecordId: 'rec-v',
     })
 
     expect(participant.role).toBe(6)
+    expect(credential).toEqual({ id: 'urn:cred' })
+  })
+
+  it('validateOnboardingProcess builds the HOLDER credential before it writes to the chain', async () => {
+    const { agent } = makeAgent(6) // HOLDER
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+    const order: string[] = []
+    stubBuildCredential(orchestrator, async () => {
+      order.push('build')
+      return { id: 'urn:cred' }
+    })
+    agent.veranaChain.setParticipantOPToValidated = vi.fn(async () => {
+      order.push('chain')
+      return undefined
+    })
+
+    await orchestrator.validateOnboardingProcess({ vtFlowRecordId: 'rec-v' })
+
+    expect(order).toEqual(['build', 'chain'])
+  })
+
+  it('validateOnboardingProcess leaves the flow repeatable when the HOLDER credential fails', async () => {
+    const { agent, vtFlowApi } = makeAgent(6) // HOLDER
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+    stubBuildCredential(orchestrator, async () => {
+      throw new Error('claims do not satisfy the schema')
+    })
+
+    await expect(orchestrator.validateOnboardingProcess({ vtFlowRecordId: 'rec-v' })).rejects.toThrow(
+      /claims do not satisfy the schema/,
+    )
+    expect(agent.veranaChain.setParticipantOPToValidated).not.toHaveBeenCalled()
+    expect(vtFlowApi.acceptOnboardingRequest).not.toHaveBeenCalled()
+    expect(vtFlowApi.markValidated).not.toHaveBeenCalled()
+  })
+
+  it('validateOnboardingProcess re-drives a VALIDATED record that has no credential exchange', async () => {
+    const { agent, vtFlowApi } = makeAgent(6, { state: 'VALIDATED' }) // HOLDER
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+    stubBuildCredential(orchestrator)
+
+    const { record, credential } = await orchestrator.validateOnboardingProcess({
+      vtFlowRecordId: 'rec-v',
+    })
+
+    // The chain already holds the outcome, so only the credential is built again.
+    expect(agent.veranaChain.setParticipantOPToValidated).not.toHaveBeenCalled()
+    expect(vtFlowApi.markValidated).not.toHaveBeenCalled()
+    expect(record.state).toBe('VALIDATED')
+    expect(credential).toEqual({ id: 'urn:cred' })
+  })
+
+  it('validateOnboardingProcess rejects a VALIDATED record that has a credential exchange', async () => {
+    const { agent } = makeAgent(6, { state: 'VALIDATED', credentialExchangeRecordId: 'cx-1' })
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+    stubBuildCredential(orchestrator)
+
+    await expect(orchestrator.validateOnboardingProcess({ vtFlowRecordId: 'rec-v' })).rejects.toThrow(
+      /Record state is 'VALIDATED'/,
+    )
   })
 
   it('offerOnboardingCredential offers against the validator participant', async () => {
     const { agent, vtFlowApi } = makeAgent(6) // HOLDER
     const orchestrator = new VtFlowOrchestrator(agent as never)
-    // buildCredential needs an indexer and a schema; assert the wiring, not the credential body.
-    ;(orchestrator as unknown as { buildCredential: unknown }).buildCredential = vi.fn(async () => ({
-      id: 'urn:cred',
-    }))
+    stubBuildCredential(orchestrator)
 
     const offered = await orchestrator.offerOnboardingCredential({
       vtFlowRecordId: 'rec-v',
@@ -242,6 +313,26 @@ describe('VtFlowOrchestrator onboarding validation', () => {
       expect.objectContaining({ vtFlowRecordId: 'rec-v', issuerParticipantId: 93 }),
     )
     expect(offered.state).toBe('CRED_OFFERED')
+  })
+
+  it('offerOnboardingCredential sends the credential that validateOnboardingProcess built', async () => {
+    const { agent, vtFlowApi } = makeAgent(6) // HOLDER
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+    const build = stubBuildCredential(orchestrator)
+
+    await orchestrator.offerOnboardingCredential({
+      vtFlowRecordId: 'rec-v',
+      credential: { id: 'urn:prebuilt' } as never,
+    })
+
+    expect(build).not.toHaveBeenCalled()
+    expect(vtFlowApi.offerCredentialForSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentialFormats: expect.objectContaining({
+          jsonld: expect.objectContaining({ credential: { id: 'urn:prebuilt' } }),
+        }),
+      }),
+    )
   })
 
   it('completeOnboardingProcess closes a flow that carries no credential', async () => {

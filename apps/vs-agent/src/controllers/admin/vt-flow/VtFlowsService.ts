@@ -156,8 +156,14 @@ export class VtFlowsService {
         `This record is variant '${record.variant}'; validate only applies to OnboardingProcess`,
       )
     }
-    if (record.state !== VtFlowState.AwaitingOr) {
-      throw new BadRequestException(`Record state is '${record.state}', expected '${VtFlowState.AwaitingOr}'`)
+    // A repeat call re-drives the offer of a record that reached VALIDATED and has no credential
+    // exchange. It recovers a credential build or an offer that failed after the chain write.
+    const resumeOffer = record.state === VtFlowState.Validated && !record.credentialExchangeRecordId
+    if (record.state !== VtFlowState.AwaitingOr && !resumeOffer) {
+      throw new BadRequestException(
+        `Record state is '${record.state}'; validate applies to '${VtFlowState.AwaitingOr}', or to ` +
+          `'${VtFlowState.Validated}' with no credential exchange`,
+      )
     }
     if (!record.participantId) throw new BadRequestException('Record has no participantId')
 
@@ -171,8 +177,13 @@ export class VtFlowsService {
       indexer: this.getIndexer(),
     })
     try {
-      const { record: validated, participant } = await orchestrator.validateOnboardingProcess({
+      const {
+        record: validated,
+        participant,
+        credential,
+      } = await orchestrator.validateOnboardingProcess({
         vtFlowRecordId: record.id,
+        credentialSchemaId: String(applicant.schema_id),
       })
 
       // Only a HOLDER receives a credential. For every other role the chain records the outcome
@@ -187,6 +198,7 @@ export class VtFlowsService {
         vtFlowRecordId: validated.id,
         credentialSchemaId: String(applicant.schema_id),
         participant,
+        credential,
       })
       return toDto(offered)
     } catch (error) {
