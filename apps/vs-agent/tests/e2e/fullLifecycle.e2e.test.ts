@@ -1,6 +1,6 @@
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { ConsoleLogger, LogLevel } from '@credo-ts/core'
+import { ConsoleLogger, DidRepository, LogLevel } from '@credo-ts/core'
 import { VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 import {
@@ -10,6 +10,7 @@ import {
   ParticipantRole,
   ParticipantState,
   reconcileVtFlowRecordsOnCancel,
+  reconcileVtjscPublications,
   VeranaChainService,
   VeranaIndexerService,
   VtFlowOrchestrator,
@@ -79,6 +80,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
   let applicantEvents: ReturnType<typeof vi.spyOn>
   let applicantOrchestrator: VtFlowOrchestrator
   let ecosystemDid: string
+  let ecosystemId: number
   let orgSchemaId: number
   let serviceSchemaId: number
   let validatorParticipantId: number
@@ -103,6 +105,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
     await chainA.fundCorporation(corp.policyAddress)
     await chainA.grantOperatorAuthorization(corp.policyAddress)
     const eco = await chainA.createEcosystem(corp.policyAddress, { did: ecosystemDid })
+    ecosystemId = eco.ecosystemId
     const orgSchema = await chainA.createCredentialSchema(corp.policyAddress, {
       ecosystemId: eco.ecosystemId,
       jsonSchema: ecsSchema('OrganizationCredential'),
@@ -456,6 +459,78 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       expect(childCredentials.length).toBeGreaterThan(0)
 
       await child.shutdown().catch(() => undefined)
+    },
+    SETUP_TIMEOUT_MS,
+  )
+
+  it(
+    'withdraws the VTJSCs of an ecosystem it stops controlling, and republishes them on return',
+    async () => {
+      const chainId = validatorChain.getChainId
+      const schemaRef = `vpr:verana:${chainId}:cs:${orgSchemaId}`
+      const serviceId = `${validator.did}#vpr-schemas-${orgSchemaId}-vtjsc-vp`
+
+      const jscKeys = async () => {
+        const [didRecord] = await validator.dids.getCreatedDids({ did: validator.did })
+        return Object.keys(didRecord.metadata.get('_vt/jsc') ?? {})
+      }
+      const serviceIds = async () => {
+        const [didRecord] = await validator.dids.getCreatedDids({ did: validator.did })
+        return (didRecord.didDocument?.service ?? []).map(service => service.id)
+      }
+
+      // beforeAll published this one with createJsc, against the ecosystem of corporation 1.
+      expect(await jscKeys()).toContain(schemaRef)
+      expect(await serviceIds()).toContain(serviceId)
+
+      // startAgent skips setupSelfTr, so seed the entry it would have left: a self-issued schema
+      // credential sharing the `_vt/jsc` bucket under its public URL. No reconciliation may take
+      // it — it says nothing about who governs an ecosystem — and dropping it is exactly what a
+      // delete-by-difference pass would do, since it never appears in the reconciled set.
+      const selfTrKey = `${validator.publicApiBaseUrl}/vt/schemas-example-service-jsc.json`
+      const [seedRecord] = await validator.dids.getCreatedDids({ did: validator.did })
+      seedRecord.metadata.set('_vt/jsc', {
+        ...(seedRecord.metadata.get('_vt/jsc') ?? {}),
+        [selfTrKey]: { credential: {}, verifiablePresentation: {}, didDocumentServiceId: '' },
+      })
+      await validator.context.dependencyManager.resolve(DidRepository).update(validator.context, seedRecord)
+
+      const selfTrKeys = (await jscKeys()).filter(key => !key.startsWith('vpr:verana:'))
+      expect(selfTrKeys).toContain(selfTrKey)
+      const otherServiceIds = (await serviceIds()).filter(id => id !== serviceId)
+
+      const ownCorporationId = Number((await indexer.getEcosystem(ecosystemId)).corporation_id)
+
+      // Rebinding the agent to another Corporation is exactly this: VERANA_CORPORATION_ID changes,
+      // and the ecosystem it published for now answers to somebody else.
+      const otherCorp = await chainA.createCorporation({ did: `did:example:corp2-${RUN_ID}` })
+      await chainA.fundCorporation(otherCorp.policyAddress)
+      await chainA.grantOperatorAuthorization(otherCorp.policyAddress)
+      const otherEco = await chainA.createEcosystem(otherCorp.policyAddress, {
+        did: `did:example:eco2-${RUN_ID}`,
+      })
+      const otherCorporationId = await until(async () => {
+        const id = Number((await indexer.getEcosystem(otherEco.ecosystemId)).corporation_id)
+        return Number.isFinite(id) && id !== ownCorporationId ? id : undefined
+      })
+
+      await reconcileVtjscPublications(validator, indexer, otherCorporationId)
+
+      expect(await jscKeys()).not.toContain(schemaRef)
+      expect(await serviceIds()).not.toContain(serviceId)
+      expect(await jscKeys()).toEqual(expect.arrayContaining(selfTrKeys))
+      expect(await serviceIds()).toEqual(expect.arrayContaining(otherServiceIds))
+
+      // Coming back re-publishes it, which is what proves the two passes agree on who controls
+      // what: a disagreement would show up here as a VTJSC that never returns, or one that the
+      // very next run withdraws again.
+      await reconcileVtjscPublications(validator, indexer, ownCorporationId)
+
+      expect(await jscKeys()).toContain(schemaRef)
+      expect(await serviceIds()).toContain(serviceId)
+
+      await reconcileVtjscPublications(validator, indexer, ownCorporationId)
+      expect(await jscKeys()).toContain(schemaRef)
     },
     SETUP_TIMEOUT_MS,
   )

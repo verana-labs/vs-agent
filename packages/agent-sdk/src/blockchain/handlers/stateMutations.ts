@@ -20,11 +20,13 @@ import {
   findMetadataEntry,
   rebindEcsCredentialSchema,
   removeStoredTrustCredential,
+  withdrawVtjscPublications,
 } from '../../utils/trustCredentialStore'
 import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'
 import {
+  EcosystemDto,
   IndexerActivity,
   ParticipantRole,
   ParticipantState,
@@ -380,11 +382,17 @@ export async function reconcileVtjscPublications(
   }
 
   const ecosystems = await indexer.listEcosystems()
-  for (const ecosystem of ecosystems.filter(entry => Number(entry.corporation_id) === corporationId)) {
+  const controlled = ecosystems.filter(
+    entry => Number(entry.corporation_id) === corporationId && !entry.archived,
+  )
+  const reconciled = new Set<string>()
+
+  for (const ecosystem of controlled) {
     for (const schema of await indexer.listCredentialSchemas(ecosystem.id)) {
       const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
       if (!didRecord) return
       const schemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
+      reconciled.add(schemaRef)
       const expectedDigest = generateDigestSRI(schema.json_schema)
       const existingJsc = findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
       const existingDigest = (
@@ -407,7 +415,75 @@ export async function reconcileVtjscPublications(
     }
   }
 
+  await withdrawUncontrolledVtjscPublications(agent, indexer, corporationId, chainId, reconciled)
+
   if (selfTrDefaults) await reconcileSelfIssuedEcsCredentials(agent, indexer, selfTrDefaults)
+}
+
+/** The `_vt/jsc` key that `createJsc` writes for an on-chain `CredentialSchema`. */
+const onChainSchemaRefPrefix = (chainId: string): string => `vpr:verana:${chainId}:cs:`
+
+/**
+ * VSA-VTI-VTJSC: only the controller of an Ecosystem publishes a VTJSC for its schemas.
+ *
+ * It resolves each stored entry against the VPR one by one instead of deleting by difference
+ * against `listEcosystems`: that endpoint is unpaginated here, and a truncated page reads exactly
+ * like a loss of control. The criteria mirror what the publication pass accepts, so one run never
+ * publishes and withdraws the same entry.
+ */
+async function withdrawUncontrolledVtjscPublications(
+  agent: VsAgent,
+  indexer: VeranaIndexerService,
+  corporationId: number,
+  chainId: string,
+  reconciled: ReadonlySet<string>,
+): Promise<void> {
+  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
+  if (!didRecord) return
+  const metadata = didRecord.metadata.get('_vt/jsc')
+  if (!metadata) return
+
+  const prefix = onChainSchemaRefPrefix(chainId)
+  const ecosystemCache = new Map<string, EcosystemDto | undefined>()
+  const stale: string[] = []
+
+  for (const schemaRef of Object.keys(metadata)) {
+    // setupSelfTr keeps the agent's own schema credentials in this bucket, keyed by public URL.
+    if (!schemaRef.startsWith(prefix)) continue
+    if (reconciled.has(schemaRef)) continue
+
+    const schemaId = schemaRef.slice(prefix.length)
+    try {
+      const schema = await indexer.getCredentialSchema(schemaId)
+      const ecosystemId = String(schema.ecosystem_id)
+      if (!ecosystemCache.has(ecosystemId)) {
+        ecosystemCache.set(ecosystemId, await indexer.getEcosystem(ecosystemId))
+      }
+      const ecosystem = ecosystemCache.get(ecosystemId)
+      if (!ecosystem) continue
+
+      const reason = ecosystem.archived
+        ? `ecosystem ${ecosystemId} is archived`
+        : Number(ecosystem.corporation_id) !== corporationId
+          ? `ecosystem ${ecosystemId} belongs to corporation ${ecosystem.corporation_id}`
+          : undefined
+      if (reason) {
+        agent.config.logger.info(`[VTJSC] Withdrawing the VTJSC of schema ${schemaId}: ${reason}`)
+        stale.push(schemaRef)
+      }
+    } catch (error) {
+      // Withdrawing costs a re-signature to undo, so an unanswered lookup keeps the entry.
+      agent.config.logger.debug(
+        `[VTJSC] Keeping the VTJSC of schema ${schemaId}: ${(error as Error).message}`,
+      )
+    }
+  }
+
+  if (stale.length === 0) return
+  const withdrawn = await withdrawVtjscPublications(agent, stale)
+  if (withdrawn.length > 0) {
+    agent.config.logger.info(`[VTJSC] Withdrew ${withdrawn.length} VTJSC publication(s)`)
+  }
 }
 
 /**

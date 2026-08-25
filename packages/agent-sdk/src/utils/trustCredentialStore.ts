@@ -348,6 +348,43 @@ export async function migrateVtjscServiceIds(agent: VsAgent): Promise<void> {
   agent.config.logger.info('[VTJSC] migrated stored service ids to the -vtjsc-vp naming')
 }
 
+/**
+ * Drops the given `_vt/jsc` entries and their linked VPs, publishing the document once.
+ *
+ * It matches on the exact key, leaving the self-issued schema credentials `setupSelfTr` keeps in
+ * the same bucket. Unlike `deleteMetadataEntry` it never restores `_vt/vtc`: a JSON schema
+ * credential says nothing about this agent's own ECS identity. Returns the refs it withdrew.
+ */
+export async function withdrawVtjscPublications(
+  agent: VsAgent,
+  schemaRefs: readonly string[],
+): Promise<string[]> {
+  if (schemaRefs.length === 0) return []
+
+  const didRecord = await getDidRecord(agent)
+  if (!didRecord) return []
+  const metadata = didRecord.metadata.get('_vt/jsc')
+  if (!metadata) return []
+
+  const withdrawn: string[] = []
+  for (const schemaRef of schemaRefs) {
+    const entry = metadata[schemaRef]
+    if (!entry) continue
+
+    const serviceId = entry.didDocumentServiceId
+    if (serviceId && didRecord.didDocument?.service) {
+      didRecord.didDocument.service = didRecord.didDocument.service.filter(s => s.id !== serviceId)
+    }
+    delete metadata[schemaRef]
+    withdrawn.push(schemaRef)
+  }
+  if (withdrawn.length === 0) return []
+
+  didRecord.metadata.set('_vt/jsc', metadata)
+  await updateDidRecord(agent, didRecord)
+  return withdrawn
+}
+
 export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc', schemaId?: string) {
   return findMetadataEntry(didRecord, key, schemaId)
 }
