@@ -1,6 +1,7 @@
 import '@openwallet-foundation/askar-nodejs'
 
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
+import { ConsoleLogger, LogLevel } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { DIDLog, resolveDIDFromLog, Verifier } from 'didwebvh-ts'
@@ -10,6 +11,7 @@ import * as path from 'path'
 import { afterAll, describe, expect, it } from 'vitest'
 
 import { createVsAgent, VsAgent } from '../src/agent'
+import { VeranaIndexerService } from '../src/blockchain/VeranaIndexerService'
 import { setupBaseDidComm } from '../src/plugins/setupBaseDidComm'
 
 const TEST_TIMEOUT_MS = 60_000
@@ -50,6 +52,10 @@ function makeAgent(did: string, wallet: AskarModuleConfigStoreOptions): VsAgent 
     dependencies: agentDependencies,
     publicApiBaseUrl: `https://${domain}`,
     label: 'Public DID Startup Test',
+    indexer: new VeranaIndexerService({
+      baseUrl: 'https://indexer.invalid',
+      logger: new ConsoleLogger(LogLevel.Off),
+    }),
   }) as unknown as VsAgent
 }
 
