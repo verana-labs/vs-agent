@@ -9,3 +9,7 @@ agent-validator.demo {
 agent-applicant.demo {
 	reverse_proxy agent-applicant:3001
 }
+
+agent-ecosystem.demo {
+	reverse_proxy agent-ecosystem:3001
+}

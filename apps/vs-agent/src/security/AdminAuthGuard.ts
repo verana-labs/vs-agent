@@ -46,6 +46,8 @@ export class AdminAuthGuard implements CanActivate {
     }
 
     const msgTypes = metadata?.msgTypes ?? []
+    if (msgTypes.length === 0) return true
+
     const participantSessionId = request.params?.participantSessionId as string | undefined
 
     let results: (boolean | undefined)[]
