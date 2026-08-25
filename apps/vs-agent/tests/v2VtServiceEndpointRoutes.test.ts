@@ -157,9 +157,9 @@ describe('v2 vt routes', () => {
     expect(conflict.body.error.code).toBe('INVALID_STATE')
   })
 
-  it('removes the v1 vt credential routes entirely', async () => {
-    expect((await request(app.getHttpServer()).get('/v1/vt/linked-credentials')).status).toBe(404)
-    expect((await request(app.getHttpServer()).get('/v1/vt/json-schema-credentials')).status).toBe(404)
+  it('keeps the v1 GET methods and drops the trimmed v1 mutations', async () => {
+    expect((await request(app.getHttpServer()).get('/v1/vt/linked-credentials')).status).toBe(200)
+    expect((await request(app.getHttpServer()).get('/v1/vt/json-schema-credentials')).status).toBe(200)
 
     expect((await request(app.getHttpServer()).post('/v1/vt/linked-credentials').send({})).status).toBe(404)
     expect((await request(app.getHttpServer()).delete('/v1/vt/linked-credentials')).status).toBe(404)
