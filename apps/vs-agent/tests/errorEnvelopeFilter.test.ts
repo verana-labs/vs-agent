@@ -203,6 +203,8 @@ describe('v2 error envelope', () => {
       controllers: [V2DidcommFixtureController, V2AgentController],
       providers: [
         AdminAuthService,
+        VsAgentService,
+        { provide: 'VSAGENT', useValue: { isInitialized: true } },
         { provide: 'ADMIN_AUTH_MODE', useValue: 'corporation' },
         { provide: 'ADMIN_TRUSTED_NETWORKS', useValue: [] },
         { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: [] },

@@ -1,7 +1,6 @@
 import { Controller, Logger, Post, Body, Get, Inject, Query } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery } from '@nestjs/swagger'
 
-
 import { TrustService } from './TrustService'
 import { IssueCredentialRequestDto, RevokeCredentialRequestDto } from './dto'
 
