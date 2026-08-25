@@ -110,7 +110,6 @@ services:
     environment:
       AGENT_LABEL: Validator VS
       AGENT_PORT: '3001'
-      AGENT_DIDCOMM_VERSIONS: v1,v2
       ADMIN_PORT: '3000'
       AGENT_PUBLIC_DID: did:webvh:agent-validator.demo
       AGENT_ENDPOINT: wss://agent-validator.demo
@@ -144,7 +143,6 @@ services:
     environment:
       AGENT_LABEL: Applicant VS
       AGENT_PORT: '3001'
-      AGENT_DIDCOMM_VERSIONS: v1,v2
       ADMIN_PORT: '3000'
       AGENT_PUBLIC_DID: did:webvh:agent-applicant.demo
       AGENT_ENDPOINT: wss://agent-applicant.demo

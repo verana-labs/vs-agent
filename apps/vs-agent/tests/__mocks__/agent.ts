@@ -34,7 +34,7 @@ export const startAgent = async ({
         publicApiBaseUrl: `https://${domain}`,
         endpoints: [`rxjs:${domain}`],
         vtFlow: vtFlowOptions,
-        didcommVersions,
+        didcommVersions: didcommVersions ?? ['v1', 'v2'],
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol()] : []),

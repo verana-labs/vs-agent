@@ -48,13 +48,14 @@ export interface BaseDidCommPlugin {
  * For chat protocols, add setupChatProtocols(). For eMRTD, add setupMrtdProtocol().
  */
 export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidCommPlugin {
+  const didcommVersions = options.didcommVersions ?? ['v1', 'v2']
   return {
     modules: {
       didcomm: new DidCommModule({
         endpoints: options.endpoints,
-        didcommVersions: options.didcommVersions,
+        didcommVersions,
         // BasicMessage protocols must be set separately, otherwise Credo rejects basicmessage/2.0.
-        basicMessages: { protocols: options.didcommVersions ?? ['v1'] },
+        basicMessages: { protocols: didcommVersions },
         transports: {
           outbound: [new DidCommHttpOutboundTransport(), new VsAgentWsOutboundTransport()],
         },
