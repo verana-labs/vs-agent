@@ -94,7 +94,7 @@ import {
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
-import { parseTrustedNetworks } from './security'
+import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
   runWithRetries,
@@ -111,15 +111,17 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   // Nest's global level governs the plain @nestjs/common loggers (the credo agent uses AGENT_LOG_LEVEL).
   const nestLogLevels = toNestLogLevels(ADMIN_LOG_LEVEL)
 
+  const trustedNetworks = parseTrustedNetworks(ADMIN_API_TRUSTED_NETWORKS)
   const adminApp = await NestFactory.create(
     VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins, {
       authMode: ADMIN_API_AUTH_MODE,
       allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
-      trustedNetworks: parseTrustedNetworks(ADMIN_API_TRUSTED_NETWORKS),
+      trustedNetworks,
       bootstrapState,
     }),
     { logger: nestLogLevels },
   )
+  adminApp.use(restrictDocsToTrustedPeers(trustedNetworks))
   commonAppConfig(adminApp, cors)
   await adminApp.listen(port)
 
