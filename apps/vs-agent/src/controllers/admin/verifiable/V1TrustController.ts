@@ -1,17 +1,10 @@
-import { JsonTransformer, W3cJsonLdVerifiableCredential } from '@credo-ts/core'
-import { Controller, Logger, Post, Body, Delete, Get, Query, UseGuards } from '@nestjs/common'
+import { Controller, Logger, Post, Body, Get, Inject, Query } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery } from '@nestjs/swagger'
 
 import { AccessMode } from '../../../security'
 
-import { IndexerDisabledGuard } from './IndexerDisabledGuard'
 import { TrustService } from './TrustService'
-import {
-  JsonSchemaCredentialDto,
-  W3cCredentialDto,
-  IssueCredentialRequestDto,
-  RevokeCredentialRequestDto,
-} from './dto'
+import { IssueCredentialRequestDto, RevokeCredentialRequestDto } from './dto'
 
 @ApiTags('Verifiable Trust')
 @AccessMode('INTERNAL')
@@ -19,7 +12,7 @@ import {
 export class V1TrustController {
   private readonly logger = new Logger(V1TrustController.name)
 
-  constructor(private readonly trustService: TrustService) {}
+  constructor(@Inject(TrustService) private readonly trustService: TrustService) {}
 
   @Post('issue-credential')
   @ApiOperation({
@@ -181,109 +174,6 @@ export class V1TrustController {
     return await this.trustService.getVerifiableTrustCredential(schemaId, page, limit)
   }
 
-  @Delete('linked-credentials')
-  @UseGuards(IndexerDisabledGuard)
-  @ApiOperation({
-    summary: 'Delete a Verifiable Trust Credential (VTC)',
-    description:
-      'Deletes a stored Verifiable Trust Credential (VTC) associated with the specified JSON Schema credential. ' +
-      'This operation removes the credential definition or cached data linked to the provided schema. ' +
-      'The operation aligns with the [Verifiable Trust Specification](https://verana-labs.github.io/verifiable-trust-spec/#vt-linked-vp-verifiable-trust-credential-linked-vp).',
-  })
-  @ApiQuery({
-    name: 'schemaId',
-    required: true,
-    type: String,
-    description:
-      'The URL of the Verifiable Trust Credential (VTC) to be deleted. ' +
-      'This identifier must match an existing stored credential schema.',
-    examples: {
-      verifiableTrustCredential: {
-        summary: 'JSON Schema Credential example',
-        description: 'A full URL identifying the Verifiable Trust Credential to be deleted.',
-        value: 'https://myservice.verana.io/vt/ecs-service-vtc-vp.json',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'The Verifiable Trust Credential (VTC) was successfully deleted for the given schema ID.',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'No Verifiable Trust Credential (VTC) was found for the provided schema ID.',
-  })
-  async removeVerifiableTrustCredential(@Query('schemaId') schemaId: string) {
-    return await this.trustService.removeVerifiableTrustCredential(schemaId)
-  }
-
-  @Post('linked-credentials')
-  @UseGuards(IndexerDisabledGuard)
-  @ApiOperation({
-    summary: 'Create a new Verifiable Trust Credential (VTC)',
-    description:
-      'The `schemaBaseId` defines the base name used to construct the resulting credential schema URL. ' +
-      'This operation supports creating credentials for both organizations and services following the Verifiable Trust model.',
-  })
-  @ApiBody({
-    type: W3cCredentialDto,
-    description:
-      'Defines the Verifiable Credential (VTC) to be created. ' +
-      'The `schemaBaseId` determines the schema URL structure, and the `credential` field contains the W3C Verifiable Credential data.',
-    examples: {
-      organization: {
-        summary: 'Organization Credential Example',
-        description:
-          'Creates a Verifiable Trust Credential (VTC) for an organization. ' +
-          'The `schemaBaseId` is used to generate the schema URL (e.g., `https://myservice.verana.io/vt/schemas-organization-vtc-vp.json`).',
-        value: {
-          schemaBaseId: 'organization',
-          credential: {
-            '@context': ['https://www.w3.org/2018/credentials/v1'],
-            id: 'https://example.org/credentials/123',
-            type: ['VerifiableCredential', 'EcsOrgCredential'],
-            issuer: 'did:example:issuer123',
-            issuanceDate: '2025-10-13T12:00:00Z',
-            credentialSubject: {
-              id: 'did:example:org123',
-              name: 'OpenAI Research',
-              logoUri: 'https://example.org/logo.png',
-              logoDigestSri: 'sha384-...',
-              registryId: 'REG-123',
-              registryUri: 'https://registry.example.org',
-              address: '123 Main St, San Francisco, CA',
-              countryCode: 'US',
-            },
-            proof: {
-              type: 'Ed25519Signature2018',
-              created: '2025-10-13T12:00:00Z',
-              proofPurpose: 'assertionMethod',
-              verificationMethod: 'did:example:issuer123#key-1',
-              jws: 'eyJhbGciOiJFZERTQSJ9...',
-            },
-          },
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 201,
-    description:
-      'The Verifiable Trust Credential (VTC) was successfully created and stored. ' +
-      'The resulting schema URL is derived from the provided `schemaBaseId`.',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Invalid credential format or missing required fields.',
-  })
-  async createVtc(@Body() body: W3cCredentialDto) {
-    const data = await this.trustService.createVtc(
-      body.schemaBaseId.toLocaleLowerCase(),
-      JsonTransformer.fromJSON(body.credential, W3cJsonLdVerifiableCredential),
-    )
-    return { message: 'Credential created successfully', data }
-  }
-
   @Get('json-schema-credentials')
   @ApiOperation({
     summary: 'Retrieve one or multiple Verifiable Trust Json Schema Credential (VTJSC).',
@@ -331,91 +221,5 @@ export class V1TrustController {
     @Query('limit') limit = 10,
   ) {
     return await this.trustService.getJsonSchemaCredential(schemaId, page, limit)
-  }
-
-  @Delete('json-schema-credentials')
-  @ApiOperation({
-    summary: 'Delete a a Verifiable Trust Json Schema Credential (VTJSC)',
-    description:
-      'Deletes a stored Verifiable Trust Json Schema Credential (VTJSC) associated with the specified schema identifier (`schemaId`). ' +
-      'A JSON Schema Credential defines the structure and validation rules for a Verifiable Trust Credential (VTC). ' +
-      'Removing a JSC also invalidates any Verifiable Trust Credentials that rely on it. ' +
-      'This operation follows the [Verifiable Trust Specification](https://verana-labs.github.io/verifiable-trust-spec/#json-schema-credentials).\n\n' +
-      '**Disabled when the lifecycle is managed via Verana VPR events.**',
-  })
-  @ApiQuery({
-    name: 'schemaId',
-    required: true,
-    type: String,
-    description:
-      'The identifier or URL of the Verifiable Trust Json Schema Credential (VTJSC) to delete. ' +
-      'This must correspond to an existing stored schema definition.',
-    examples: {
-      jsonSchemaCredentialId: {
-        summary: 'JSON Schema Credential example',
-        description:
-          'A full URL identifying the Verifiable Trust Json Schema Credential (VTJSC) to be deleted.',
-        value: 'https://ecosystem/shemas-example-jsc.json',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description:
-      'The Verifiable Trust Json Schema Credential (VTJSC) was successfully deleted for the given schema ID.',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'No Verifiable Trust Json Schema Credential (VTJSC) was found for the provided schema ID.',
-  })
-  @UseGuards(IndexerDisabledGuard)
-  async removeJsonSchemaCredential(@Query('schemaId') schemaId: string) {
-    return await this.trustService.removeJsonSchemaCredential(schemaId)
-  }
-
-  @Post('json-schema-credentials')
-  @ApiOperation({
-    summary: 'Create or update a Verifiable Trust Json Schema Credential (VTJSC)',
-    description: `
-  Creates or updates a **Verifiable Trust Json Schema Credential (VTJSC)**, used by **Trust Registries** to cryptographically sign and attest to **Credential Schemas** they have created in the Verana ledger.
-
-  A VTJSC binds a CredentialSchema entry in the VPR to the **Ecosystem DID** that governs the Trust Registry.
-  - schemaBaseId: the name you want to show in the url path of the create vtjsc. Example: organizationtest will create the VTJSC with the id: https:///vt/schemas-organizationtest-jsc.json
-  - jsonSchemaRef: the URI of your schema in the Verana ledger.
-  
-  The **issuer DID** of the VTJSC MUST be the **same DID** as the Ecosystem DID of the Trust Registry that created the referenced CredentialSchema in the ledger.
-
-  VTJSCs issued by any other DID will be be considered invalid by trust resolvers.
-  **Disabled when the lifecycle is managed via Verana VPR events.**
-  `,
-  })
-  @ApiBody({
-    type: JsonSchemaCredentialDto,
-    description:
-      'Defines the base schema identifier and the JSON Schema reference used to create or update the Verifiable Trust Json Schema Credential (VTJSC).',
-    examples: {
-      service: {
-        summary: 'JSON Schema Credential Example',
-        description:
-          'Creates a Verifiable Trust Json Schema Credential (VTJSC) for an organization or service. ' +
-          'The `schemaBaseId` determines the base schema name, and the `jsonSchemaRef` provides the reference to the JSON Schema definition.',
-        value: {
-          schemaBaseId: 'organization',
-          jsonSchemaRef: 'vpr:verana:vna-testnet-1:cs:12345678',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 201,
-    description: 'The Verifiable Trust Json Schema Credential (VTJSC) was successfully created or updated.',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Invalid schema input or missing required parameters.',
-  })
-  @UseGuards(IndexerDisabledGuard)
-  async createJsc(@Body() body: JsonSchemaCredentialDto) {
-    return await this.trustService.createJsc(body.schemaBaseId.toLocaleLowerCase(), body.jsonSchemaRef)
   }
 }
