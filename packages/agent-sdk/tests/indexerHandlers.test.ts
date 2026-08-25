@@ -1,6 +1,15 @@
 import { VtFlowRole, VtFlowService, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { describe, expect, it, vi } from 'vitest'
 
+// the withdrawal republishes the self-issued default, which would otherwise sign and fetch
+const { generateVerifiablePresentation } = vi.hoisted(() => ({
+  generateVerifiablePresentation: vi.fn(),
+}))
+vi.mock('../src/utils/setupSelfTr', async () => {
+  const actual = await vi.importActual<typeof import('../src/utils/setupSelfTr')>('../src/utils/setupSelfTr')
+  return { ...actual, generateVerifiablePresentation }
+})
+
 import {
   IndexerEventHandler,
   IndexerHandlerContext,
@@ -14,6 +23,7 @@ import {
   applyStateMutation,
   reconcileVtFlowRecordsOnCancel,
   removeHolderTrustCredentialIfRevoked,
+  removeSelfIssuedEcsCredentialsIfIssuerRevoked,
 } from '../src/blockchain/handlers/stateMutations'
 import { IndexerActivity, VeranaSyncState } from '../src/blockchain/types'
 
@@ -175,6 +185,58 @@ describe('applyStateMutation', () => {
     findAllByQuery.mockClear()
     await removeHolderTrustCredentialIfRevoked(agent as never, '13')
     expect(findAllByQuery).not.toHaveBeenCalled()
+  })
+
+  it('withdraws the self-issued ECS credential of a revoked ISSUER participant', async () => {
+    const serviceId = 'did:web:agent#vpr-schemas-service-vtc-vp'
+    const vtc: Record<string, unknown> = {
+      'https://ecosystem/vt/schemas-9-jsc.json': {
+        credential: { id: 'did:web:agent' },
+        verifiablePresentation: { id: 'https://agent/vt/ecs-service-vtc-vp.json' },
+        didDocumentServiceId: serviceId,
+        issuerParticipantId: 7,
+        schemaKey: 'ecs-service',
+      },
+      'https://ecosystem/vt/schemas-3-jsc.json': { issuerParticipantId: 42, schemaKey: 'ecs-org' },
+      selfA: { attached: true },
+    }
+    const metadataStore: Record<string, Record<string, unknown>> = { '_vt/vtc': vtc, '_vt/jsc': {} }
+    const didRecord = {
+      did: 'did:web:agent',
+      didDocument: { id: 'did:web:agent', service: [{ id: serviceId }] },
+      metadata: {
+        get: (k: string) => metadataStore[k],
+        set: (k: string, v: Record<string, unknown>) => {
+          metadataStore[k] = v
+        },
+      },
+    }
+    const agent = {
+      did: 'did:web:agent',
+      publicApiBaseUrl: 'https://agent',
+      veranaChain: {
+        getParticipant: vi.fn().mockResolvedValue({ id: 7, role: 1, did: 'did:web:agent', schemaId: 9 }),
+      },
+      context: { dependencyManager: { resolve: () => ({ update: vi.fn() }) } },
+      dids: { getCreatedDids: vi.fn().mockResolvedValue([didRecord]), update: vi.fn() },
+      config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
+    }
+
+    await removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent as never, '7', {} as never)
+
+    expect(metadataStore['_vt/vtc']['https://ecosystem/vt/schemas-9-jsc.json']).toBeUndefined()
+    expect(didRecord.didDocument.service).toEqual([])
+    // the credential of another participant survives, and the default is published again
+    expect(metadataStore['_vt/vtc']['https://ecosystem/vt/schemas-3-jsc.json']).toBeDefined()
+    expect(generateVerifiablePresentation.mock.calls[0][5]).toEqual({
+      id: 'https://agent/vt/schemas-example-service-jsc.json',
+      type: 'JsonSchemaCredential',
+    })
+
+    // A HOLDER participant is not this handler's business.
+    agent.veranaChain.getParticipant.mockResolvedValue({ id: 8, role: 6, did: 'did:web:agent' })
+    await removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent as never, '8', {} as never)
+    expect(metadataStore['_vt/vtc']['https://ecosystem/vt/schemas-3-jsc.json']).toBeDefined()
   })
 
   it('records the participant from SelfCreateParticipant and CreateRootParticipant', () => {

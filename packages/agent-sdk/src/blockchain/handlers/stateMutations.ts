@@ -11,7 +11,7 @@ import {
 import { identifySchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
-import { HOLDER_PARTICIPANT_TYPE } from '../../types'
+import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../../types'
 import { getEcsSchemas } from '../../utils/data'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../../utils/didReadiness'
 import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
@@ -20,6 +20,7 @@ import {
   findMetadataEntry,
   rebindEcsCredentialSchema,
   removeStoredTrustCredential,
+  withdrawSelfIssuedEcsCredentials,
 } from '../../utils/trustCredentialStore'
 import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
 import { VtFlowOrchestrator } from '../../vtFlow'
@@ -31,8 +32,6 @@ import {
   ValidationState,
   VeranaSyncState,
 } from '../types'
-
-const PARTICIPANT_ROLE_HOLDER = 6
 
 export function applyStateMutation(state: VeranaSyncState, activity: IndexerActivity): void {
   switch (activity.msg) {
@@ -298,7 +297,7 @@ export async function removeHolderTrustCredentialIfRevoked(
   participantId: string,
 ): Promise<void> {
   const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
-  if (participant?.role !== PARTICIPANT_ROLE_HOLDER || participant.did !== agent.did) return
+  if (participant?.role !== HOLDER_PARTICIPANT_TYPE || participant.did !== agent.did) return
   if (!agent.publicApiBaseUrl) return
 
   const agentContext = agent.context
@@ -323,6 +322,39 @@ export async function removeHolderTrustCredentialIfRevoked(
         e as Record<string, unknown>,
       )
     }
+  }
+}
+
+/**
+ * VSA-VTI-FLOW-OP-REVOKE: an ECS credential anchored against a revoked ISSUER still verifies, but a
+ * resolver reports the Participant as REVOKED and the whole DID then fails VS-CONN-VS.
+ */
+export async function removeSelfIssuedEcsCredentialsIfIssuerRevoked(
+  agent: VsAgent,
+  participantId: string,
+  selfTrDefaults: SelfTrDefaults,
+): Promise<void> {
+  if (!agent.publicApiBaseUrl) return
+  const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
+  if (participant?.role !== ISSUER_PARTICIPANT_TYPE || participant.did !== agent.did) return
+
+  try {
+    const withdrawn = await withdrawSelfIssuedEcsCredentials(
+      agent,
+      agent.publicApiBaseUrl,
+      participant.id,
+      selfTrDefaults,
+    )
+    for (const jscUrl of withdrawn) {
+      agent.config.logger.info(
+        `[SelfTR] Withdrew the self-issued ECS credential bound to ${jscUrl} (issuer participant ${participantId})`,
+      )
+    }
+  } catch (e) {
+    agent.config.logger.error(
+      `[SelfTR] Failed to withdraw the ECS credentials of the revoked ISSUER participant ${participantId}`,
+      e as Record<string, unknown>,
+    )
   }
 }
 
@@ -427,6 +459,36 @@ async function reconcileSelfIssuedEcsCredentials(
   const chain = agent.veranaChain
   if (!chain || !agent.did || !agent.publicApiBaseUrl) return
   const chainId = chain.getChainId
+
+  // A Participant revoked while the agent was down delivers no event it can still act on. Runs
+  // first, so a schema whose ISSUER entry was replaced ends up bound to the new one.
+  for (const participantState of [ParticipantState.Revoked, ParticipantState.Slashed]) {
+    try {
+      const stale = await indexer.listParticipants({
+        did: agent.did,
+        role: ParticipantRole.Issuer,
+        participantState,
+      })
+      for (const issuer of stale) {
+        const withdrawn = await withdrawSelfIssuedEcsCredentials(
+          agent,
+          agent.publicApiBaseUrl,
+          issuer.id,
+          selfTrDefaults,
+        )
+        for (const jscUrl of withdrawn) {
+          agent.config.logger.info(
+            `[SelfTR] Withdrew the self-issued ECS credential bound to ${jscUrl} (${participantState} issuer participant ${issuer.id})`,
+          )
+        }
+      }
+    } catch (e) {
+      agent.config.logger.error(
+        `[SelfTR] Failed to withdraw the ECS credentials of ${participantState} ISSUER participants`,
+        e as Error,
+      )
+    }
+  }
 
   const issuers = await indexer.listParticipants({
     did: agent.did,
