@@ -101,7 +101,6 @@ These are variables that are updated only on specific use cases.
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
 | PUBLIC_API_BASE_URL                    | Base URL for public API (e.g. invitations, short URLs). Used when no public DID is defined or you want to override it                                                                                                                            | <http://localhost:3001>  |
 | AGENT_ENDPOINTS                        | Comma-separeated list of endpoints where agent DIDComm endpoints will be accessible (including protocol and port). Used when no public DID is defined or you want to override it                                                                 | ws://localhost:3001      |
-| AGENT_DIDCOMM_VERSIONS                 | Comma-separated list of DIDComm envelope versions accepted and sent by the agent. `v2` is mandatory (the agent refuses to start without it); `v1` is optional. Controls which `did-communication` / `DIDCommMessaging` services are published in the agent's DID Document. | `v1,v2`                  |
 | AGENT_WALLET_KEY_DERIVATION_METHOD     | Wallet key derivation method: ARGON2I_INT, ARGON2_MOD or RAW                                                                                                                                                                                     | ARGON2I_MOD              |
 | AGENT_INVITATION_BASE_URL              | Public URL for fallback when no DIDComm agent is found                                                                                                                                                                                           | <https://hologram.zone/> |
 | REDIRECT_DEFAULT_URL_TO_INVITATION_URL | Default redirect to AGENT_INVITATION_BASE_URL                                                                                                                                                                                                    | true                     |
@@ -134,6 +133,12 @@ These variables connect the agent to the Verana network (permission management, 
 | `TRUSTED_ECS_ECOSYSTEM_DIDS`               | CONDITIONAL | Comma-separated DIDs of the ECS ecosystems the agent trusts for essential credential schemas (WL-ECS). Required when `AGENT_MODE` is `standalone`.                                                                                     |
 
 > The agent maintains a persistent WebSocket connection to the indexer to receive updates about permissions, trust registries, and credential schemas. These events are used to keep the agent state in sync with the ledger.
+
+##### VS-CONN-VS trust gate
+
+Every vt-flow session is gated on trust resolution: the peer DID must resolve to a Verifiable Service whose trust chain reaches a production registry. A self-signed ECS credential is not enough.
+
+As allowed by [VS-CONN-VS], a Validator still accepts a peer that is not a Verifiable Service yet when the request is an ECS Organization, Persona or Service issuance — otherwise no agent could ever onboard. The exemption is not granted on the peer's word: for an onboarding request the peer must own a `PENDING` Participant entry naming this agent as its validator, and for a direct issuance request this agent must hold an active ISSUER Participant for the requested schema. In both cases the schema must be an ECS Organization, Persona or Service schema of an ecosystem listed in `TRUSTED_ECS_ECOSYSTEM_DIDS`. An Applicant never exempts its Validator: the peer it contacts must always be a Verifiable Service.
 
 #### Admin API authentication
 

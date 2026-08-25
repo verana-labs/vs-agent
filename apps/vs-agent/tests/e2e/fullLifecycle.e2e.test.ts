@@ -154,6 +154,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       domain: 'validator',
       didcommVersions: ['v1', 'v2'],
       veranaChain: validatorChain,
+      indexer,
       vtFlowOptions: { assertVerifiableService: async () => true, autoIssueCredentialOnRequest: true },
     })
     validator.didcomm.registerInboundTransport(new SubjectInboundTransport(validatorMessages))
@@ -184,6 +185,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       domain: 'applicant',
       didcommVersions: ['v1', 'v2'],
       veranaChain: seederChain,
+      indexer,
       vtFlowOptions: {
         assertVerifiableService: async () => true,
         autoAcceptCredentialOffer: true,
@@ -235,7 +237,6 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
     await resolver.registerAgent(applicant)
     applicantEvents = vi.spyOn(applicant.events, 'emit')
     applicantOrchestrator = new VtFlowOrchestrator(applicant, {
-      indexer,
       publicApiBaseUrl: applicant.publicApiBaseUrl,
     })
 
@@ -298,7 +299,6 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       )
       const validatorFlow = (await flowsService.listFlows({ role: VtFlowRole.Validator }))[0]
       const orchestrator = new VtFlowOrchestrator(validator, {
-        indexer,
         publicApiBaseUrl: validator.publicApiBaseUrl,
       })
       // This applicant is a HOLDER, so the validation builds the credential and the offer sends it.
@@ -415,6 +415,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         label: 'Child',
         domain: 'child',
         didcommVersions: ['v1', 'v2'],
+        indexer,
         vtFlowOptions: {
           assertVerifiableService: async () => true,
           autoAcceptCredentialOffer: true,
@@ -440,7 +441,6 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       await child.initialize()
       await resolver.registerAgent(child)
       childOrchestrator = new VtFlowOrchestrator(child, {
-        indexer,
         publicApiBaseUrl: child.publicApiBaseUrl,
       })
 

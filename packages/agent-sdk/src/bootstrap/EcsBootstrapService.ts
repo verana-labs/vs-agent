@@ -1,12 +1,6 @@
 import { BaseLogger } from '@credo-ts/core'
-import {
-  VtFlowApi,
-  VtFlowEventTypes,
-  VtFlowRole,
-  VtFlowState,
-  type VtFlowStateChangedEvent,
-} from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { ECS, identifySchema } from '@verana-labs/vs-agent-model'
+import { VtFlowApi, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../agent/VsAgent'
 import {
@@ -18,7 +12,6 @@ import {
   VeranaIndexerService,
 } from '../blockchain'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
-import { connectToPublicDid } from '../utils/agent'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../utils/didReadiness'
 
 const START_OP_MSG = '/verana.pp.v1.MsgStartParticipantOP'
@@ -26,14 +19,6 @@ const SELF_CREATE_MSG = '/verana.pp.v1.MsgSelfCreateParticipant'
 
 const ISSUER_ONBOARDING_MODE_OPEN = 1
 const ISSUER_ONBOARDING_MODE_GRANTOR = 3
-
-const ECS_TITLE_BY_TYPE: Record<string, ECS> = {
-  ServiceCredential: ECS.SERVICE,
-  OrganizationCredential: ECS.ORG,
-  PersonaCredential: ECS.PERSONA,
-  UserAgentCredential: ECS.USER_AGENT,
-  BadgeCredential: ECS.BADGE,
-}
 
 export interface EcsBootstrapOptions {
   mode: 'standalone' | 'delegated'
@@ -146,7 +131,7 @@ export class EcsBootstrapService {
     const classified = await Promise.all(
       schemas
         .filter(schema => !schema.archived)
-        .map(async schema => ({ schema, type: await this.classifySchema(schema) })),
+        .map(async schema => ({ schema, type: await classifyEcsSchema(schema.json_schema) })),
     )
     const byType = (type: ECS) => classified.find(c => c.type === type)?.schema
 
@@ -157,18 +142,6 @@ export class EcsBootstrapService {
     const credential = org ?? persona
     if (!credential) throw new Error('no ECS Organization or Persona credential schema')
     return { credential, credentialType: org ? ECS.ORG : ECS.PERSONA, service }
-  }
-
-  private async classifySchema(schema: CredentialSchemaDto): Promise<ECS | null> {
-    try {
-      const parsed = JSON.parse(schema.json_schema) as Record<string, unknown>
-      const byDigest = await identifySchema(parsed)
-      if (byDigest) return byDigest
-      const title = typeof parsed.title === 'string' ? parsed.title : ''
-      return ECS_TITLE_BY_TYPE[title] ?? null
-    } catch {
-      return null
-    }
   }
 
   private async ensureHolderParticipant(
@@ -429,7 +402,7 @@ export class EcsBootstrapService {
     for (const participant of participants) {
       const schema = await this.indexer!.getCredentialSchema(participant.schema_id).catch(() => undefined)
       if (!schema) continue
-      if ((await this.classifySchema(schema)) === ECS.SERVICE) return participant
+      if ((await classifyEcsSchema(schema.json_schema)) === ECS.SERVICE) return participant
     }
     throw new Error(`parent VS ${parentDid} holds no active ISSUER participant for an ECS Service schema`)
   }

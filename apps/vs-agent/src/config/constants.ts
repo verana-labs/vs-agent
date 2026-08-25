@@ -83,11 +83,6 @@ export const ADMIN_LOG_LEVEL = process.env.ADMIN_LOG_LEVEL
 export const USE_CORS = Boolean(process.env.USE_CORS || false)
 export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER === 'false')
 
-export const AGENT_DIDCOMM_VERSIONS = (process.env.AGENT_DIDCOMM_VERSIONS ?? 'v1,v2')
-  .split(',')
-  .map(v => v.trim().toLowerCase())
-  .filter(v => v.length > 0)
-
 // Advanced settings
 export const AGENT_INVITATION_BASE_URL = process.env.AGENT_INVITATION_BASE_URL ?? 'https://hologram.zone/'
 export const REDIRECT_DEFAULT_URL_TO_INVITATION_URL =
@@ -192,7 +187,7 @@ export const AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP =
 export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFORE_STORAGE_UPDATE !== 'false' // removed on credo-ts v0.6.0
 
 // Verana network
-export const VERANA_INDEXER_BASE_URL = process.env.VERANA_INDEXER_BASE_URL
+export const VERANA_INDEXER_BASE_URL = process.env.VERANA_INDEXER_BASE_URL ?? ''
 export const VERANA_ACCOUNT_MNEMONIC = process.env.VERANA_ACCOUNT_MNEMONIC
 export const VERANA_RPC_ENDPOINT_URL = process.env.VERANA_RPC_ENDPOINT_URL
 export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID

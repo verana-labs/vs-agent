@@ -24,6 +24,7 @@ import {
   V1VsAgentController,
   MESSAGE_HANDLERS,
 } from './controllers'
+import { BOOTSTRAP_STATE, BootstrapState } from './common'
 import { AdminAuthGuard, AdminAuthService, V1AuthController } from './security'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
@@ -34,9 +35,10 @@ export class VsAgentModule {
     agent: VsAgent,
     publicApiBaseUrl: string,
     nestPlugins: VsAgentNestPlugin[] = [],
-    options: { external?: boolean; allowedAccounts?: string[] } = {},
+    options: { external?: boolean; allowedAccounts?: string[]; bootstrapState?: BootstrapState } = {},
   ): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
+    const bootstrapState = options.bootstrapState ?? new BootstrapState()
 
     const baseControllers = [
       V1VsAgentController,
@@ -68,6 +70,10 @@ export class VsAgentModule {
       {
         provide: 'PUBLIC_API_BASE_URL',
         useFactory: () => publicApiBaseUrl,
+      },
+      {
+        provide: BOOTSTRAP_STATE,
+        useFactory: () => bootstrapState,
       },
       VsAgentService,
       UrlShorteningService,

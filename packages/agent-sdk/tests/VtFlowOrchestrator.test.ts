@@ -14,19 +14,18 @@ const record = {
 const activeIssuer = { id: 10, role: 'ISSUER', participant_state: 'ACTIVE', schema_id: 5 }
 
 function verify(indexer: Record<string, unknown>) {
-  const agent = {
+  const agent: Record<string, unknown> = {
     dependencyManager: { resolve: () => ({ findById: async () => record }) },
     didcomm: { credentials: { getFormatData: async () => ({ credential: { jsonld: {} } }) } },
-  } as never
+  }
   const defaults = {
     getParticipantSession: async () => ({ session_records: [{ issuer_participant_id: 10 }] }),
     getParticipant: async () => activeIssuer,
     getCredentialSchema: async () => ({ id: 5, digest_algorithm: 'sha384' }),
     getDigest: async () => ({ digest: 'anchored' }),
   }
-  return new VtFlowOrchestrator(agent, {
-    indexer: { ...defaults, ...indexer } as never,
-  }).verifyOfferedCredential('rec-1')
+  agent.indexer = { ...defaults, ...indexer }
+  return new VtFlowOrchestrator(agent as never).verifyOfferedCredential('rec-1')
 }
 
 describe('VtFlowOrchestrator.verifyOfferedCredential', () => {
@@ -342,5 +341,31 @@ describe('VtFlowOrchestrator onboarding validation', () => {
 
     expect(vtFlowApi.markCompleted).toHaveBeenCalledWith('rec-v')
     expect(completed.state).toBe('COMPLETED')
+  })
+})
+
+describe('VtFlowOrchestrator.allowEcsIssuanceExemption', () => {
+  const context = {
+    agentContext: { config: { logger: { warn: vi.fn() } } },
+    peerDid: 'did:web:peer',
+    purpose: { participantId: '42' },
+  } as never
+
+  it('resolves the peer participant against the indexer with the agent DID known at call time', async () => {
+    const indexer = {
+      getParticipant: vi.fn().mockResolvedValue(undefined),
+      getCredentialSchema: vi.fn(),
+      getEcosystem: vi.fn(),
+      listParticipants: vi.fn(),
+    }
+    const agent = { did: undefined as string | undefined, indexer }
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+
+    await expect(orchestrator.checkEcsIssuanceExemption(context)).resolves.toBe(false)
+    expect(indexer.getParticipant).not.toHaveBeenCalled()
+
+    agent.did = 'did:webvh:scid:agent.example'
+    await expect(orchestrator.checkEcsIssuanceExemption(context)).resolves.toBe(false)
+    expect(indexer.getParticipant).toHaveBeenCalledWith(42)
   })
 })

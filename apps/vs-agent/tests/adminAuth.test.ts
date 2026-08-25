@@ -161,6 +161,18 @@ describe('AdminAuthGuard', () => {
     expect(anyGrantCheck).toHaveBeenCalledWith(account, '/verana.pp.v1.MsgSetParticipantOPToValidated')
   })
 
+  it('lets the allowlist alone carry a CORPORATION route that declares no message type', async () => {
+    const authService = new AdminAuthService()
+    const { account, token } = await issueToken(authService)
+    const callerCheck = vi.fn().mockResolvedValue(false)
+    const agent = makeAgent(callerCheck)
+    const { reflector, context } = makeContext({ mode: 'CORPORATION' }, { authorization: `Bearer ${token}` })
+    const guard = new AdminAuthGuard(reflector, authService, agent as never, [account])
+
+    await expect(guard.canActivate(context)).resolves.toBe(true)
+    expect(callerCheck).not.toHaveBeenCalled()
+  })
+
   it('rejects a CORPORATION route when the caller holds no matching grant', async () => {
     const authService = new AdminAuthService()
     const { token } = await issueToken(authService)

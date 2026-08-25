@@ -34,6 +34,9 @@ const REST_PAGE_LIMIT = 500
 const MAX_SYNC_BUFFER = 10_000
 const SUBSCRIBE_TIMEOUT_MS = 5_000
 type SubscribeOutcome = 'acknowledged' | 'timed-out' | 'disconnected'
+type ConnectionPhase = 'connecting' | 'catching-up' | 'synced'
+
+export type IndexerSyncStatus = 'never-synced' | 'catching-up' | 'disconnected' | 'synced'
 const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 // The indexer pings every 30 seconds, so a longer gap means the socket is dead.
 const LIVENESS_TIMEOUT_MS = 90_000
@@ -45,6 +48,8 @@ export class IndexerWebSocketService {
   private watchdog: ReturnType<typeof setTimeout> | null = null
   private stopped = false
   private syncing = false
+  private phase: ConnectionPhase = 'connecting'
+  private everSynced = false
   private generation = 0
   private chain: Promise<void> = Promise.resolve()
   private syncBuffer: IndexerEventRecord[] = []
@@ -63,6 +68,12 @@ export class IndexerWebSocketService {
   async start(): Promise<void> {
     this.stopped = false
     await this.connect()
+  }
+
+  get syncStatus(): IndexerSyncStatus {
+    if (this.phase === 'catching-up') return 'catching-up'
+    if (this.phase === 'synced') return 'synced'
+    return this.everSynced ? 'disconnected' : 'never-synced'
   }
 
   stop(): void {
@@ -84,6 +95,7 @@ export class IndexerWebSocketService {
     if (this.stopped) return
     const generation = ++this.generation
     this.syncing = true
+    this.phase = 'connecting'
     this.syncBuffer = []
 
     const subscribed = new Promise<SubscribeOutcome>(resolve => {
@@ -102,6 +114,8 @@ export class IndexerWebSocketService {
       )
     }
 
+    this.phase = 'catching-up'
+
     try {
       await this.syncRest(generation)
     } catch (error) {
@@ -112,6 +126,8 @@ export class IndexerWebSocketService {
 
     if (this.stopped || generation !== this.generation) return
     this.syncing = false
+    this.phase = 'synced'
+    this.everSynced = true
     this.drainSyncBuffer(generation)
   }
 
@@ -147,6 +163,7 @@ export class IndexerWebSocketService {
     ws.on('close', () => {
       if (ws !== this.ws) return
       this.clearWatchdog()
+      this.phase = 'connecting'
       if (!this.stopped) this.scheduleReconnect()
     })
 
@@ -368,6 +385,7 @@ export class IndexerWebSocketService {
   private forceReconnect(reason: string): void {
     if (this.stopped) return
     this.logger.warn(`[IndexerWS] Forcing reconnect: ${reason}`)
+    this.phase = 'connecting'
     this.generation++ // stops queued work so it cannot move the height past the failed event
     this.clearWatchdog()
     const ws = this.ws
