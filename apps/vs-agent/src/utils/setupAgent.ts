@@ -1,4 +1,4 @@
-import type { DidCommFeatureQueryOptions, DidCommVersion } from '@credo-ts/didcomm'
+import type { DidCommFeatureQueryOptions } from '@credo-ts/didcomm'
 
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { LogLevel, ParsedDid } from '@credo-ts/core'
@@ -24,7 +24,6 @@ import WebSocket from 'ws'
 import { ErrorEnvelopeFilter } from '../common'
 import {
   ADMIN_V2_TAGS,
-  AGENT_DIDCOMM_VERSIONS,
   ENABLE_PUBLIC_API_SWAGGER,
   ENABLED_PLUGINS,
   VERANA_CHAIN_ID,
@@ -74,20 +73,6 @@ export const setupAgent = async ({
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
-  const allowedDidCommVersions: DidCommVersion[] = ['v1', 'v2']
-  const invalidDidCommVersions = AGENT_DIDCOMM_VERSIONS.filter(
-    v => !allowedDidCommVersions.includes(v as DidCommVersion),
-  )
-  if (invalidDidCommVersions.length > 0) {
-    throw new Error(
-      `Invalid AGENT_DIDCOMM_VERSIONS values: ${invalidDidCommVersions.join(', ')}. Allowed: ${allowedDidCommVersions.join(', ')}`,
-    )
-  }
-  if (AGENT_DIDCOMM_VERSIONS.length === 0) {
-    throw new Error('AGENT_DIDCOMM_VERSIONS must contain at least one of: v1, v2')
-  }
-  const didcommVersions = AGENT_DIDCOMM_VERSIONS as DidCommVersion[]
-
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
   const [chatSetup, mrtdSetup] = await Promise.all([
     ENABLED_PLUGINS.includes('chat')
@@ -122,7 +107,7 @@ export const setupAgent = async ({
         walletConfig,
         publicApiBaseUrl,
         endpoints,
-        didcommVersions,
+        didcommVersions: ['v1', 'v2'],
         vtFlow: {
           autoIssueCredentialOnRequest: true,
           autoAcceptIssuanceRequest: true,
