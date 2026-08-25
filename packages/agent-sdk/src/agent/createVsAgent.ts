@@ -5,6 +5,7 @@ import { AgentDependencies, InitConfig, LogLevel } from '@credo-ts/core'
 
 import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
+import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { Plugin } from '../types'
 
 import { BaseAgentModules, VsAgent } from './VsAgent'
@@ -35,6 +36,8 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
   dependencies: AgentDependencies
   logLevel?: LogLevel
   veranaChain?: VeranaChainService
+  indexer: VeranaIndexerService
+  trustedEcosystemDids?: string[]
   authorizationService?: AuthorizationService
   discoveryOptions?: DidCommFeatureQueryOptions[]
 }
@@ -86,6 +89,8 @@ export function createVsAgent<T extends Plugin[]>(
     displayPictureUrl: options.displayPictureUrl,
     label: options.label,
     veranaChain: options.veranaChain,
+    indexer: options.indexer,
+    trustedEcosystemDids: options.trustedEcosystemDids,
     authorizationService: options.authorizationService,
     discoveryOptions: options.discoveryOptions,
   })

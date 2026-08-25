@@ -88,6 +88,7 @@ services:
         aliases:
           - agent-validator.demo
           - agent-applicant.demo
+          - agent-ecosystem.demo
     healthcheck:
       test: ['CMD', 'test', '-f', '/data/caddy/pki/authorities/local/root.crt']
       interval: 3s
@@ -200,3 +201,4 @@ volumes:
   caddy-data:
   agent-validator-data:
   agent-applicant-data:
+  agent-ecosystem-data:

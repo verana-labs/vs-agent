@@ -26,6 +26,7 @@ import {
   ADMIN_V2_TAGS,
   ENABLE_PUBLIC_API_SWAGGER,
   ENABLED_PLUGINS,
+  TRUSTED_ECS_ECOSYSTEM_DIDS,
   VERANA_CHAIN_ID,
   VERANA_INDEXER_BASE_URL,
 } from '../config'
@@ -46,6 +47,7 @@ export const setupAgent = async ({
   masterListCscaLocation,
   autoUpdateStorageOnStartup,
   veranaChain,
+  indexer,
   authorizationService,
   discoveryOptions,
   adminApiServiceEndpoint,
@@ -62,6 +64,7 @@ export const setupAgent = async ({
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
   veranaChain?: VeranaChainService
+  indexer: VeranaIndexerService
   authorizationService?: AuthorizationService
   discoveryOptions?: DidCommFeatureQueryOptions[]
   adminApiServiceEndpoint?: string
@@ -95,9 +98,6 @@ export const setupAgent = async ({
         ]
       : undefined
 
-  const indexer = VERANA_INDEXER_BASE_URL
-    ? new VeranaIndexerService({ baseUrl: VERANA_INDEXER_BASE_URL, logger })
-    : undefined
   // eslint-disable-next-line prefer-const
   let orchestrator: VtFlowOrchestrator | undefined
 
@@ -130,6 +130,8 @@ export const setupAgent = async ({
           assertVerifiableService: verifiablePublicRegistries
             ? assertVerifiableService({ verifiablePublicRegistries })
             : undefined,
+          checkEcsIssuanceExemption: async context =>
+            (await orchestrator?.checkEcsIssuanceExemption(context)) ?? false,
           autoAcceptCredentialOffer: true,
           verifyCredential: async ({ record }) => {
             if (!orchestrator) {
@@ -184,12 +186,14 @@ export const setupAgent = async ({
     displayPictureUrl,
     label,
     veranaChain,
+    indexer,
+    trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS,
     authorizationService,
     discoveryOptions,
     adminApiServiceEndpoint,
   })
 
-  orchestrator = new VtFlowOrchestrator(agent, { indexer, publicApiBaseUrl })
+  orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl })
 
   await agent.initialize()
 
@@ -218,7 +222,7 @@ export const setupAgent = async ({
       }
     : undefined
 
-  return { agent, indexer, verifyPeer }
+  return { agent, verifyPeer }
 }
 
 export function commonAppConfig(

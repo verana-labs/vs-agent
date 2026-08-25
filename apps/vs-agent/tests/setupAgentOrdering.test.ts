@@ -1,5 +1,5 @@
-import { LogLevel, parseDid } from '@credo-ts/core'
-import { VsAgentWsInboundTransport } from '@verana-labs/vs-agent-sdk'
+import { ConsoleLogger, LogLevel, parseDid } from '@credo-ts/core'
+import { VeranaIndexerService, VsAgentWsInboundTransport } from '@verana-labs/vs-agent-sdk'
 import { describe, expect, it, vi } from 'vitest'
 
 import { setupAgent } from '../src/utils'
@@ -16,6 +16,10 @@ describe('setupAgent transport ordering', () => {
       label: 'Ordering Test',
       endpoints: ['wss://ordering.example'],
       publicApiBaseUrl: 'https://ordering.example',
+      indexer: new VeranaIndexerService({
+        baseUrl: 'https://indexer.invalid',
+        logger: new ConsoleLogger(LogLevel.Off),
+      }),
       parsedDid: parseDid('did:webvh:ordering.example'),
       logLevel: LogLevel.Off,
     })
