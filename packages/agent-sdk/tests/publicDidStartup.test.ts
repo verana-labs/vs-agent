@@ -136,6 +136,29 @@ describe('public DID startup lifecycle', () => {
   )
 
   it(
+    'refuses to start when the DID method changes and writes no second DID',
+    async () => {
+      const wallet = walletConfig('method-switch')
+      const first = makeAgent('did:webvh:switch.example', wallet)
+      await first.initialize()
+      const originalDid = first.did
+      expect(originalDid).toMatch(/^did:webvh:/)
+      await first.shutdown()
+
+      const second = makeAgent('did:web:switch.example', wallet)
+      await expect(second.initialize()).rejects.toThrow(/method 'webvh'.*now 'web'/)
+
+      expect(await second.dids.getCreatedDids({ method: 'web' })).toHaveLength(0)
+      const kept = await second.dids.getCreatedDids({ method: 'webvh' })
+      expect(kept).toHaveLength(1)
+      expect(kept[0].did).toBe(originalDid)
+
+      await second.shutdown()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
     'refuses to start on a location mismatch and writes no new DID record',
     async () => {
       const wallet = walletConfig('mismatch')
