@@ -17,6 +17,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 
 import { VsAgentService } from '../../../services'
+import { derivePublicDidLocation } from '../../../utils/didLocation'
 
 @Controller()
 export class DidWebController {
@@ -25,10 +26,40 @@ export class DidWebController {
     @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
   ) {}
 
-  // The non-well-known routes serve path-based DID locations, assuming the reverse
-  // proxy strips the base path before forwarding
-  @Get(['/.well-known/did.json', '/did.json'])
+  // The DID methods place the document under /.well-known only when the location carries no
+  // path, so each deployment answers on exactly one of the two shapes. A path deployment
+  // assumes the reverse proxy strips the base path before forwarding.
+  @Get('/.well-known/did.json')
+  async getWellKnownDidDocument() {
+    this.assertLocationShape(false)
+    return this.serveDidDocument()
+  }
+
+  @Get('/did.json')
   async getDidDocument() {
+    this.assertLocationShape(true)
+    return this.serveDidDocument()
+  }
+
+  @Get('/.well-known/did.jsonl')
+  async getWellKnownDidLog(@Res() res: Response) {
+    this.assertLocationShape(false)
+    return this.serveDidLog(res)
+  }
+
+  @Get('/did.jsonl')
+  async getDidLog(@Res() res: Response) {
+    this.assertLocationShape(true)
+    return this.serveDidLog(res)
+  }
+
+  private assertLocationShape(expectsPath: boolean): void {
+    if (derivePublicDidLocation(this.publicApiBaseUrl).hasPath !== expectsPath) {
+      throw new HttpException('DID Document not found', HttpStatus.NOT_FOUND)
+    }
+  }
+
+  private async serveDidDocument() {
     const agent = await this.agentService.getAgent()
     agent.config.logger.debug(`Public DID document requested`)
     const { didDocument } = await resolveDidDocumentData(agent)
@@ -39,8 +70,7 @@ export class DidWebController {
     throw new HttpException('DID Document not found', HttpStatus.NOT_FOUND)
   }
 
-  @Get(['/.well-known/did.jsonl', '/did.jsonl'])
-  async getDidLog(@Res() res: Response) {
+  private async serveDidLog(res: Response) {
     const agent = await this.agentService.getAgent()
     agent.config.logger.debug(`Public DID log requested`)
     const { didLog } = await resolveDidDocumentData(agent)

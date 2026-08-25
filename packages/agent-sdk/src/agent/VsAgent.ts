@@ -158,6 +158,16 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
       const existingRecord = await this.findCreatedDid(parsedDid)
 
+      if (!existingRecord) {
+        const otherMethod = parsedDid.method === 'webvh' ? 'web' : 'webvh'
+        const foreignRecord = await this.findCreatedDid({ ...parsedDid, method: otherMethod })
+        if (foreignRecord) {
+          throw new CredoError(
+            `Persisted public DID '${foreignRecord.did}' was created with method '${otherMethod}', but AGENT_PUBLIC_DID_METHOD is now '${parsedDid.method}'. Refusing to start: creating a second DID would discard the credentials, Participant entries and permissions bound to the persisted one.`,
+          )
+        }
+      }
+
       if (existingRecord) {
         const persistedLocation =
           parsedDid.method === 'webvh'
