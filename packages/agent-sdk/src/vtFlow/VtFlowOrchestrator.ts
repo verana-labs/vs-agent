@@ -13,10 +13,12 @@ import {
   VtFlowState,
   VtFlowVariant,
   isVtFlowTerminalState,
+  type VtFlowEcsIssuanceExemptionContext,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { BaseAgentModules, VsAgent } from '../agent'
+import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { Participant, ParticipantRole, ParticipantState } from '../blockchain/types'
 import {
@@ -37,7 +39,6 @@ import {
 
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
-  indexer?: VeranaIndexerService
   agentParticipantId?: number
   walletAgentParticipantId?: number
 }
@@ -275,7 +276,7 @@ export class VtFlowOrchestrator {
   } | null> {
     const chain = this.requireChain()
     if (!this.agent.did) throw new Error('Agent has no public DID')
-    const indexer = this.requireIndexer()
+    const indexer = this.agent.indexer
 
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(vtFlowRecordId)
@@ -330,7 +331,7 @@ export class VtFlowOrchestrator {
 
     // A credential whose claims don't satisfy the schema's required fields is not a valid
     // instance of that credential type — reject it here rather than issue an empty shell.
-    const schema = await this.requireIndexer().getCredentialSchema(input.credentialSchemaId)
+    const schema = await this.agent.indexer.getCredentialSchema(input.credentialSchemaId)
     validateSchema(JSON.parse(schema.json_schema), { id: input.subjectDid, ...input.claims })
 
     const unsignedCredential = createCredential({
@@ -351,7 +352,7 @@ export class VtFlowOrchestrator {
   private async resolveJsonSchemaCredentialId(credentialSchemaId: string): Promise<string> {
     return resolveJsonSchemaCredentialId(
       this.agent,
-      this.requireIndexer(),
+      this.agent.indexer,
       credentialSchemaId,
       this.requireChain().getChainId,
     )
@@ -359,7 +360,7 @@ export class VtFlowOrchestrator {
 
   /** Per the spec the algorithm comes from the schema, never from the digest value. */
   private async digestAlgorithmForSchema(schemaId: number): Promise<string> {
-    const schema = await this.requireIndexer().getCredentialSchema(schemaId)
+    const schema = await this.agent.indexer.getCredentialSchema(schemaId)
     if (!schema.digest_algorithm) {
       throw new Error(`Credential schema ${schemaId} has no digest_algorithm`)
     }
@@ -376,7 +377,7 @@ export class VtFlowOrchestrator {
       throw new Error(`vt-flow record ${vtFlowRecordId} has no issuerParticipantId to anchor against`)
     }
 
-    const issuer = await this.requireIndexer().getParticipant(record.issuerParticipantId)
+    const issuer = await this.agent.indexer.getParticipant(record.issuerParticipantId)
     const algorithm = await this.digestAlgorithmForSchema(issuer.schema_id)
     const digest = computeCredentialDigestJCS(
       signedCredential as unknown as W3cVerifiableCredential,
@@ -400,7 +401,7 @@ export class VtFlowOrchestrator {
     if (!record.credentialExchangeRecordId) {
       throw new Error('Record has no credentialExchangeRecordId; nothing to verify')
     }
-    const indexer = this.requireIndexer()
+    const indexer = this.agent.indexer
 
     const session = await indexer.getParticipantSession(record.participantSessionId)
     if (!session) {
@@ -485,11 +486,16 @@ export class VtFlowOrchestrator {
     return credentialJson
   }
 
-  private requireIndexer(): VeranaIndexerService {
-    if (!this.options.indexer) {
-      throw new Error('Agent has no indexer configured (set VERANA_INDEXER_BASE_URL)')
-    }
-    return this.options.indexer
+  // VS-CONN-VS gate: consulted only after trust resolution rejected the peer.
+  async checkEcsIssuanceExemption(context: VtFlowEcsIssuanceExemptionContext): Promise<boolean> {
+    return isEcsIssuanceExempt(
+      {
+        indexer: this.agent.indexer,
+        agent: this.agent,
+        trustedEcosystemDids: this.agent.trustedEcosystemDids,
+      },
+      context,
+    )
   }
 
   async publishCredentialAsLinkedVp(vtFlowRecordId: string): Promise<void> {

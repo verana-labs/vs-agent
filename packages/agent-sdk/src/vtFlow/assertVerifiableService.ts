@@ -2,7 +2,7 @@ import type { BaseLogger } from '@credo-ts/core'
 import type { VtFlowAssertVerifiableServiceHook } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import type { ResolverConfig } from '@verana-labs/verre'
 
-import { resolveDID, InMemoryCache } from '@verana-labs/verre'
+import { resolveDID, InMemoryCache, TrustResolutionOutcome } from '@verana-labs/verre'
 
 export interface AssertVerifiableServiceOptions {
   verifiablePublicRegistries: NonNullable<ResolverConfig['verifiablePublicRegistries']>
@@ -22,10 +22,13 @@ export function assertVerifiableService(
         verifiablePublicRegistries: options.verifiablePublicRegistries,
         cache,
       })
-      if (!verified) {
-        logger.warn(`[vt-flow] VS-CONN-VS rejected '${peerDid}': ${outcome} ${metadata?.errorMessage ?? ''}`)
+      const trusted = verified && outcome === TrustResolutionOutcome.VERIFIED
+      if (!trusted) {
+        logger.warn(
+          `[vt-flow] VS-CONN-VS rejected '${peerDid}': verified=${verified} outcome=${outcome} ${metadata?.errorMessage ?? ''}`,
+        )
       }
-      return verified
+      return trusted
     } catch (error) {
       logger.warn(`[vt-flow] VS-CONN-VS resolution failed for '${peerDid}': ${(error as Error).message}`)
       return false

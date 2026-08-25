@@ -19,7 +19,7 @@ import {
   VtFlowVariant,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { HOLDER_PARTICIPANT_TYPE, VeranaIndexerService, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
+import { HOLDER_PARTICIPANT_TYPE, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../common'
 import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
@@ -32,8 +32,6 @@ import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
 @Injectable()
 export class VtFlowsService {
-  private indexerService?: VeranaIndexerService
-
   public constructor(
     @Inject(VsAgentService) private readonly agentService: VsAgentService,
     @Inject(CredentialTypesService) private readonly credentialTypesService: CredentialTypesService,
@@ -242,15 +240,12 @@ export class VtFlowsService {
     }
     if (!record.participantId) throw new ConflictException('Record has no participantId')
 
-    const applicant = await this.getIndexer().getParticipant(Number(record.participantId))
+    const applicant = await agent.indexer.getParticipant(Number(record.participantId))
     if (!applicant)
       throw new BadRequestException(`Applicant participant ${record.participantId} not found on indexer`)
     if (applicant.schema_id == null) throw new BadRequestException('Applicant participant has no schema_id')
 
-    const orchestrator = new VtFlowOrchestrator(agent, {
-      publicApiBaseUrl: agent.publicApiBaseUrl,
-      indexer: this.getIndexer(),
-    })
+    const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
     try {
       const {
         record: validated,
@@ -303,21 +298,6 @@ export class VtFlowsService {
       )
     }
     return agent.veranaChain
-  }
-
-  private getIndexer(): VeranaIndexerService {
-    if (!this.indexerService) {
-      if (!VERANA_INDEXER_BASE_URL) {
-        throw new BadRequestException(
-          'Indexer not configured (set VERANA_INDEXER_BASE_URL); required for vt-flow',
-        )
-      }
-      this.indexerService = new VeranaIndexerService({
-        baseUrl: VERANA_INDEXER_BASE_URL,
-        logger: new TsLogger(ADMIN_LOG_LEVEL, 'VeranaIndexer'),
-      })
-    }
-    return this.indexerService
   }
 }
 

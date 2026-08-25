@@ -72,6 +72,9 @@ export type {
   VtFlowCredentialOfferPayload,
   VtFlowModuleConfigOptions,
   VtFlowOnCompletedHook,
+  VtFlowRequestPurpose,
+  VtFlowEcsIssuanceExemptionContext,
+  VtFlowEcsIssuanceExemptionHook,
   VtFlowVerifyCredentialHook,
 } from './VtFlowModuleConfig'
 
