@@ -12,7 +12,7 @@ Two ways to exercise the full v4 flow against a real chain and indexer: an autom
 - revocation with holder-side credential cleanup
 - renewal reusing the same session
 - cancel restoring the flow to `COMPLETED`
-- a delegated child receiving its Service credential via Direct Issuance
+- a delegated child onboarding as a HOLDER of the parent's Service credential
 
 Run it:
 

@@ -2,7 +2,7 @@ import type { VsAgent } from '../src/agent/VsAgent'
 import type { VeranaIndexerService } from '../src/blockchain'
 
 import { VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { ParticipantRole, ParticipantState } from '../src/blockchain'
 import { EcsBootstrapService, type EcsBootstrapOptions } from '../src/bootstrap/EcsBootstrapService'
@@ -47,6 +47,7 @@ function makeMocks() {
   }
   const indexer = {
     listEcosystems: vi.fn().mockResolvedValue([{ id: 1, did: 'did:example:eco', archived: null }]),
+    getEcosystem: vi.fn().mockResolvedValue({ id: 1, did: 'did:example:eco', archived: null }),
     getCredentialSchema: vi.fn().mockResolvedValue(serviceSchema),
     listCredentialSchemas: vi.fn().mockResolvedValue([orgSchema, serviceSchema]),
     listParticipants: vi.fn().mockResolvedValue([]),
@@ -267,14 +268,6 @@ describe('EcsBootstrapService delegated', () => {
   // The parent's Service ISSUER entry; the child onboards as a HOLDER against it.
   const parentIssuer = { id: 3, schema_id: 5 }
 
-  beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
-  })
-
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
   function onlyParentIssuer(mocks: ReturnType<typeof makeMocks>) {
     // The parent holds the ISSUER entry; the child holds no HOLDER entry yet.
     mocks.indexer.listParticipants.mockImplementation(async (query: Record<string, unknown>) =>
@@ -282,30 +275,11 @@ describe('EcsBootstrapService delegated', () => {
     )
   }
 
-  it('waits for its own DID document to be resolvable before contacting the parent', async () => {
-    const mocks = makeMocks()
-    onlyParentIssuer(mocks)
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: false, status: 503 })
-      .mockResolvedValueOnce({ ok: true })
-    vi.stubGlobal('fetch', fetchMock)
-    const service = makeService(mocks, { ...delegated, verifyPeer: async () => true })
-
-    await expect(service.run()).resolves.toBeUndefined()
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock).toHaveBeenCalledWith('https://agent/.well-known/did.json')
-  }, 8000)
-
-  it('checks did.jsonl instead of did.json for a did:webvh agent', async () => {
-    const mocks = makeMocks()
-    mocks.agent.did = 'did:webvh:Qm123:agent.example.com'
-    onlyParentIssuer(mocks)
-    const service = makeService(mocks, { ...delegated, verifyPeer: async () => true })
-
-    await expect(service.run()).resolves.toBeUndefined()
-    expect(fetch).toHaveBeenCalledWith('https://agent/.well-known/did.jsonl')
-  })
+  function withOwnHolder(mocks: ReturnType<typeof makeMocks>, holder: Record<string, unknown>) {
+    mocks.indexer.listParticipants.mockImplementation(async (query: Record<string, unknown>) =>
+      query.did === 'did:web:parent' ? [parentIssuer] : [holder],
+    )
+  }
 
   it('fails when peer verification is not configured', async () => {
     const mocks = makeMocks()
@@ -343,24 +317,98 @@ describe('EcsBootstrapService delegated', () => {
     expect(mocks.vtFlowApi.sendIssuanceRequest).not.toHaveBeenCalled()
   })
 
-  it('does not start a second onboarding when a HOLDER participant already exists', async () => {
+  it('skips the parent ISSUER entries that are revoked or slashed', async () => {
     const mocks = makeMocks()
     mocks.indexer.listParticipants.mockImplementation(async (query: Record<string, unknown>) =>
-      query.did === 'did:web:parent' ? [parentIssuer] : [{ id: 42, schema_id: 5 }],
+      query.did === 'did:web:parent' ? [{ ...parentIssuer, revoked: '2026-01-01' }] : [],
     )
+    const service = makeService(mocks, { ...delegated, verifyPeer: async () => true })
+
+    await expect(service.run()).rejects.toThrow('no active ISSUER participant for an ECS Service schema')
+  })
+
+  it('fails when TRUSTED_ECS_ECOSYSTEM_DIDS does not list the ecosystem of the schema', async () => {
+    const mocks = makeMocks()
+    onlyParentIssuer(mocks)
+    const service = makeService(mocks, {
+      ...delegated,
+      trustedEcosystemDids: ['did:example:other'],
+      verifyPeer: async () => true,
+    })
+
+    await expect(service.run()).rejects.toThrow('TRUSTED_ECS_ECOSYSTEM_DIDS does not list')
+    expect(mocks.chain.startParticipantOP).not.toHaveBeenCalled()
+  })
+
+  it('starts the onboarding when no allowlist is configured', async () => {
+    const mocks = makeMocks()
+    onlyParentIssuer(mocks)
+    const service = makeService(mocks, {
+      ...delegated,
+      trustedEcosystemDids: undefined,
+      verifyPeer: async () => true,
+    })
+
+    await expect(service.run()).resolves.toBeUndefined()
+    expect(mocks.indexer.getEcosystem).not.toHaveBeenCalled()
+    expect(mocks.chain.startParticipantOP).toHaveBeenCalled()
+  })
+
+  it('does not start a second onboarding when a HOLDER participant already exists', async () => {
+    const mocks = makeMocks()
+    withOwnHolder(mocks, {
+      id: 42,
+      schema_id: 5,
+      validator_participant_id: 3,
+      participant_state: ParticipantState.Active,
+    })
     const service = makeService(mocks, { ...delegated, verifyPeer: async () => true })
 
     await expect(service.run()).resolves.toBeUndefined()
     expect(mocks.chain.startParticipantOP).not.toHaveBeenCalled()
   })
 
-  it('waits for out-of-band provisioning when the operator cannot start an OP', async () => {
+  it('fails when an existing HOLDER participant names another validator', async () => {
+    const mocks = makeMocks()
+    withOwnHolder(mocks, {
+      id: 42,
+      schema_id: 5,
+      validator_participant_id: 9,
+      participant_state: ParticipantState.Active,
+    })
+    const service = makeService(mocks, { ...delegated, verifyPeer: async () => true })
+
+    await expect(service.run()).rejects.toThrow('not the parent VS did:web:parent')
+    expect(mocks.chain.startParticipantOP).not.toHaveBeenCalled()
+  })
+
+  it('restarts the onboarding when the only HOLDER participant is terminated', async () => {
+    const mocks = makeMocks()
+    withOwnHolder(mocks, { id: 42, schema_id: 5, validator_participant_id: 3, op_state: 'TERMINATED' })
+    const service = makeService(mocks, { ...delegated, verifyPeer: async () => true })
+
+    await expect(service.run()).resolves.toBeUndefined()
+    expect(mocks.chain.startParticipantOP).toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'the operator cannot start an OP',
+      (m: ReturnType<typeof makeMocks>) => m.chain.listOperatorAuthorizations.mockResolvedValue([]),
+    ],
+    [
+      'the operator has no balance',
+      (m: ReturnType<typeof makeMocks>) =>
+        m.chain.getBalance.mockResolvedValue({ denom: 'uvna', amount: '0' }),
+    ],
+  ])('waits for out-of-band provisioning when %s', async (_name, tweak) => {
     const mocks = makeMocks()
     onlyParentIssuer(mocks)
-    mocks.chain.listOperatorAuthorizations.mockResolvedValue([])
+    tweak(mocks)
     const service = makeService(mocks, { ...delegated, verifyPeer: async () => true })
 
     await expect(service.run()).resolves.toBeUndefined()
     expect(mocks.chain.startParticipantOP).not.toHaveBeenCalled()
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('delegated bootstrap skipped'))
   })
 })

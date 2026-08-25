@@ -556,7 +556,6 @@ const run = async () => {
     (error: Error) => {
       bootstrapState.recordEcsBootstrap(AGENT_MODE, 'failed', error.message)
       serverLogger.error(`[EcsBootstrap] ${error.message}`)
-      if (AGENT_MODE === 'delegated') process.exit(1)
     },
   )
 

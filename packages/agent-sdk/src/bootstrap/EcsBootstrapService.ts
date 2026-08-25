@@ -12,7 +12,6 @@ import {
   VeranaIndexerService,
 } from '../blockchain'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
-import { waitUntilOwnDidIsPubliclyResolvable } from '../utils/didReadiness'
 
 const START_OP_MSG = '/verana.pp.v1.MsgStartParticipantOP'
 const SELF_CREATE_MSG = '/verana.pp.v1.MsgSelfCreateParticipant'
@@ -348,14 +347,13 @@ export class EcsBootstrapService {
       )
     }
 
-    await waitUntilOwnDidIsPubliclyResolvable(this.agent, this.logger)
-
     const verified = await this.options.verifyPeer(parentDid).catch(() => false)
     if (!verified) {
       throw new Error(`parent VS ${parentDid} is not a Verifiable Service`)
     }
 
     const validator = await this.findParentServiceIssuer(parentDid)
+    await this.assertTrustedEcosystem(validator.schema_id)
 
     // An existing entry means the process already ran, or the operator provisioned it.
     const own = await this.indexer.listParticipants({
@@ -363,8 +361,15 @@ export class EcsBootstrapService {
       role: ParticipantRole.Holder,
       schemaId: validator.schema_id,
     })
-    const existing = own.find(participant => !participant.revoked && !participant.slashed)
+    const existing = own.find(participant => this.isUsableParticipant(participant))
     if (existing) {
+      // The parent named by AGENT_DELEGATED_PARENT_VS_DID must be the validator of the entry;
+      // any other validator would issue the Service credential of another accountable party.
+      if (Number(existing.validator_participant_id) !== validator.id) {
+        throw new Error(
+          `HOLDER participant ${existing.id} for the ECS Service schema ${validator.schema_id} names validator ${existing.validator_participant_id}, not the parent VS ${parentDid} (validator ${validator.id})`,
+        )
+      }
       this.logger.info(
         `[EcsBootstrap] HOLDER participant ${existing.id} for the ECS Service schema ${validator.schema_id} already exists; the onboarding process continues on its own`,
       )
@@ -375,10 +380,10 @@ export class EcsBootstrapService {
     // reacts to its own chain event and sends the onboarding request, so nothing is awaited here.
     // Direct Issuance does not apply: it needs holder_onboarding_mode = PERMISSIONLESS, and the
     // ECS Service schema uses ISSUER_ONBOARDING_PROCESS.
-    const operatorAuths = await chain.listOperatorAuthorizations()
-    if (!operatorAuths.some(auth => auth.msgTypes.includes(START_OP_MSG))) {
+    const skip = await this.delegatedOperatorSkipReason(chain)
+    if (skip) {
       this.logger.info(
-        `[EcsBootstrap] delegated bootstrap skipped: operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP; this agent expects its HOLDER participant to be provisioned out of band, with validator ${validator.id}`,
+        `[EcsBootstrap] delegated bootstrap skipped: ${skip}; this agent expects its HOLDER participant to be provisioned out of band, with validator ${validator.id}`,
       )
       return
     }
@@ -400,10 +405,41 @@ export class EcsBootstrapService {
       participantState: ParticipantState.Active,
     })
     for (const participant of participants) {
+      if (participant.revoked || participant.slashed) continue
       const schema = await this.indexer!.getCredentialSchema(participant.schema_id).catch(() => undefined)
       if (!schema) continue
       if ((await classifyEcsSchema(schema.json_schema)) === ECS.SERVICE) return participant
     }
     throw new Error(`parent VS ${parentDid} holds no active ISSUER participant for an ECS Service schema`)
+  }
+
+  // WL-ECS: an allowlist is optional in delegated mode, but it binds the flow once the operator sets it.
+  private async assertTrustedEcosystem(schemaId: number): Promise<void> {
+    const trusted = this.options.trustedEcosystemDids
+    if (!trusted?.length) return
+
+    const schema = await this.indexer!.getCredentialSchema(schemaId).catch(() => undefined)
+    const ecosystem = schema
+      ? await this.indexer!.getEcosystem(schema.ecosystem_id).catch(() => undefined)
+      : undefined
+    if (!ecosystem || ecosystem.archived || !trusted.includes(ecosystem.did)) {
+      throw new Error(
+        `the ECS Service schema ${schemaId} belongs to ecosystem ${ecosystem?.did ?? '<unresolvable>'}, which TRUSTED_ECS_ECOSYSTEM_DIDS does not list`,
+      )
+    }
+  }
+
+  // StartParticipantOP costs a trust deposit and a fee, so both the authorization and the funds
+  // must be there. Neither is a misconfiguration: the operator may provision the entry itself.
+  private async delegatedOperatorSkipReason(chain: VeranaChainService): Promise<string | null> {
+    const operatorAuths = await chain.listOperatorAuthorizations()
+    if (!operatorAuths.some(auth => auth.msgTypes.includes(START_OP_MSG))) {
+      return `operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP`
+    }
+    const balance = await chain.getBalance()
+    if (Number(balance.amount) === 0) {
+      return `operator ${chain.address} has no ${balance.denom} balance for fees and trust deposits`
+    }
+    return null
   }
 }

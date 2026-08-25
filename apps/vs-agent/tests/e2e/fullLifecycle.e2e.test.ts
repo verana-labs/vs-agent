@@ -1,7 +1,7 @@
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { ConsoleLogger, LogLevel } from '@credo-ts/core'
-import { VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { VtFlowApi, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 import {
   createJsc,
@@ -44,6 +44,7 @@ import {
 const RUN_ID = String(Date.now())
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
 const PP_SESSION = '/verana.pp.v1.MsgCreateOrUpdateParticipantSession'
+const PP_START_OP = '/verana.pp.v1.MsgStartParticipantOP'
 
 const ecsSchema = (title: string) =>
   JSON.stringify({
@@ -399,16 +400,17 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
   )
 
   it(
-    'issues the Service credential to a delegated child via direct issuance',
+    'onboards a delegated child as a HOLDER of the parent Service credential',
     async () => {
       await seederChain.cancelParticipantOPLastRequest(serviceOpId)
       const opP = await chainA.createFundedOperator()
+      // The parent is the validator of the child's onboarding process, so it also signs the outcome.
       const parentServiceOp = await chainA.startParticipantOp(corpPolicyAddress, {
         role: PARTICIPANT_ROLE_ISSUER,
         validatorParticipantId: serviceRootId,
         did: applicant.did!,
         vsOperator: opP.address,
-        vsOperatorAuthzMsgTypes: [PP_SESSION],
+        vsOperatorAuthzMsgTypes: [PP_VALIDATE, PP_SESSION],
       })
       applicantIssuerParticipantId = parentServiceOp.participantId
       await seederChain.setParticipantOPToValidated({
@@ -438,11 +440,23 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         return issuers.length > 0 ? true : undefined
       })
 
+      // The child pays for its own StartParticipantOP, so its operator needs the authorization.
+      const opC = await chainA.createFundedOperator()
+      await chainA.grantOperatorAuthorization(corpPolicyAddress, opC.address, [PP_START_OP])
+      const childChain = new VeranaChainService({
+        rpcUrl: stack.rpcUrl,
+        mnemonic: opC.mnemonic,
+        corporationAddress: corpPolicyAddress,
+        logger,
+      })
+      await childChain.start()
+
       let childOrchestrator: VtFlowOrchestrator | undefined
       const child = await startAgent({
         label: 'Child',
         domain: 'child',
         didcommVersions: ['v1', 'v2'],
+        veranaChain: childChain,
         indexer,
         vtFlowOptions: {
           assertVerifiableService: async () => true,
@@ -468,10 +482,12 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       child.dids.config.resolvers.unshift(resolver)
       await child.initialize()
       await resolver.registerAgent(child)
+      const childEvents = vi.spyOn(child.events, 'emit')
       childOrchestrator = new VtFlowOrchestrator(child, {
         publicApiBaseUrl: child.publicApiBaseUrl,
       })
 
+      // [VSA-VTI-FLOW-OP-NEW] step 1: delegated bootstrap only submits StartParticipantOP.
       const bootstrap = new EcsBootstrapService(
         child,
         indexer,
@@ -480,6 +496,48 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       )
       await bootstrap.run()
 
+      const childHolder = await until(async () => {
+        const [holder] = await indexer.listParticipants({
+          did: child.did!,
+          role: ParticipantRole.Holder,
+          schemaId: serviceSchemaId,
+        })
+        return holder
+      })
+      expect(Number(childHolder.validator_participant_id)).toBe(applicantIssuerParticipantId)
+
+      const childCompleted = waitForEvent(childEvents, isVtFlowStateChangedEvent(VtFlowState.Completed))
+
+      // Steps 2 and 3. In production the indexer StartParticipantOP handler does this; this stack
+      // wires no indexer WebSocket, so the test stands in for it.
+      await childOrchestrator.startOnboardingProcess({ applicantParticipantId: childHolder.id })
+
+      // The parent operator fills the Service claims while the flow waits, then validates and offers.
+      const parentVtFlowApi = applicant.dependencyManager.resolve(VtFlowApi)
+      const parentFlow = await until(async () => {
+        const [flow] = await parentVtFlowApi.findAllByQuery({
+          role: VtFlowRole.Validator,
+          participantId: String(childHolder.id),
+        })
+        return flow?.state === VtFlowState.AwaitingOr ? flow : undefined
+      })
+      await parentVtFlowApi.updateClaims(parentFlow.id, { name: 'Child Service' })
+
+      const parentOrchestrator = new VtFlowOrchestrator(applicant, {
+        publicApiBaseUrl: applicant.publicApiBaseUrl,
+      })
+      const { record, participant, credential } = await parentOrchestrator.validateOnboardingProcess({
+        vtFlowRecordId: parentFlow.id,
+        credentialSchemaId: String(serviceSchemaId),
+      })
+      await parentOrchestrator.offerOnboardingCredential({
+        vtFlowRecordId: record.id,
+        credentialSchemaId: String(serviceSchemaId),
+        participant,
+        credential,
+      })
+
+      await childCompleted
       const childCredentials = await child.w3cCredentials.getAll()
       expect(childCredentials.length).toBeGreaterThan(0)
 
