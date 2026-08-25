@@ -2,17 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { publishVtjscIfOwner, reconcileVtjscPublications } from '../src/blockchain/handlers/stateMutations'
 import { VeranaSyncState } from '../src/blockchain/types'
+import { generateDigestSRI } from '../src/utils/setupSelfTr'
 
 const CHAIN_ID = 'vna-demo-1'
 const schemaRef = (schemaId: number | string) => `vpr:verana:${CHAIN_ID}:cs:${schemaId}`
 
 const createJsc = vi.fn()
-const withdrawVtjscPublications = vi.fn(async (_agent: unknown, refs: readonly string[]) => [...refs])
+const detachVtjscPublications = vi.fn(async (_agent: unknown, refs: readonly string[]) => [...refs])
+const reattachVtjscPublication = vi.fn(async () => false)
 
 vi.mock('../src/utils/trustCredentialStore', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/utils/trustCredentialStore')>()),
   createJsc: (...args: unknown[]) => createJsc(...args),
-  withdrawVtjscPublications: (...args: unknown[]) => withdrawVtjscPublications(args[0], args[1] as string[]),
+  detachVtjscPublications: (...args: unknown[]) => detachVtjscPublications(args[0], args[1] as string[]),
+  reattachVtjscPublication: (...args: unknown[]) => reattachVtjscPublication(...(args as [])),
 }))
 
 function makeLogger() {
@@ -83,16 +86,23 @@ describe('publishVtjscIfOwner', () => {
   })
 })
 
-/** Holds the given `_vt/jsc` keys, so the reconciliation pass has something to withdraw. */
-function agentPublishing(jscKeys: string[]) {
+/** Holds the given `_vt/jsc` keys. A key listed in `digests` reads as current, not to rebuild. */
+function agentPublishing(jscKeys: string[], digests: Record<string, string> = {}) {
   const metadata = Object.fromEntries(
-    jscKeys.map(key => [key, { credential: { credentialSubject: {} }, didDocumentServiceId: `#${key}` }]),
+    jscKeys.map(key => [
+      key,
+      {
+        credential: { credentialSubject: { digestSRI: digests[key] } },
+        didDocumentServiceId: `#${key}`,
+      },
+    ]),
   )
   return {
     did: 'did:web:agent.example',
     publicApiBaseUrl: 'https://agent.example',
     config: { logger: makeLogger() },
     veranaChain: { getChainId: CHAIN_ID },
+    metadata,
     dids: {
       getCreatedDids: async () => [
         { metadata: { get: () => metadata, set: vi.fn() }, didDocument: { service: [] } },
@@ -101,7 +111,7 @@ function agentPublishing(jscKeys: string[]) {
   }
 }
 
-/** Ecosystem 1 is the agent's, 2 moved to another corporation, 3 is archived. */
+/** Ecosystem 1 is the agent's, 2 moved to another corporation, 3 is the agent's but archived. */
 function makeIndexer(overrides: Record<string, unknown> = {}) {
   const ecosystems: Record<string, unknown> = {
     '1': { id: 1, did: 'did:web:agent.example', corporation_id: 7, archived: null },
@@ -132,25 +142,49 @@ function makeIndexer(overrides: Record<string, unknown> = {}) {
 describe('reconcileVtjscPublications', () => {
   beforeEach(() => {
     createJsc.mockReset()
-    withdrawVtjscPublications.mockClear()
+    detachVtjscPublications.mockClear()
+    reattachVtjscPublication.mockClear()
   })
 
-  it('withdraws the VTJSC of an ecosystem that moved to another corporation, and keeps its own', async () => {
+  it('detaches the VTJSC of an ecosystem that moved to another corporation, and keeps its own', async () => {
     const agent = agentPublishing([schemaRef(5), schemaRef(9)])
     await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
 
-    expect(withdrawVtjscPublications).toHaveBeenCalledWith(expect.anything(), [schemaRef(9)])
+    expect(detachVtjscPublications).toHaveBeenCalledWith(expect.anything(), [schemaRef(9)])
   })
 
-  it('withdraws the VTJSC of an archived ecosystem, and does not republish it', async () => {
+  it('detaches without dropping the entry, so the VTJSC keeps being served', async () => {
+    // Issued credentials name this VTJSC in `credentialSchema.id`; losing the entry would 404 it.
+    const agent = agentPublishing([schemaRef(9)])
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+
+    expect(Object.keys(agent.metadata)).toContain(schemaRef(9))
+  })
+
+  it('leaves an archived ecosystem of its own corporation alone', async () => {
+    // The agent still controls it, and [VSA-VTI-NOTIF-ES] gives ArchiveEcosystem no handler.
     const agent = agentPublishing([schemaRef(5), schemaRef(11)])
     await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
 
-    expect(withdrawVtjscPublications).toHaveBeenCalledWith(expect.anything(), [schemaRef(11)])
-    // Without the archived filter on the publication pass, one run would create the entry and the
-    // withdrawal pass would drop it again, on every reconciliation.
-    const published = createJsc.mock.calls.map(call => (call[3] as { schemaBaseId: string }).schemaBaseId)
-    expect(published).not.toContain('11')
+    expect(detachVtjscPublications).not.toHaveBeenCalled()
+    expect(Object.keys(agent.metadata)).toContain(schemaRef(11))
+  })
+
+  it('re-attaches a detached VTJSC once the ecosystem is under its corporation again', async () => {
+    // The digest still matches, so the publication pass skips createJsc and announces nothing.
+    reattachVtjscPublication.mockResolvedValueOnce(true)
+    const agent = agentPublishing([schemaRef(5)], {
+      [schemaRef(5)]: generateDigestSRI('{"title":"kept"}'),
+    })
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+
+    expect(reattachVtjscPublication).toHaveBeenCalledWith(expect.anything(), schemaRef(5))
+    expect(createJsc).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ schemaBaseId: '5' }),
+    )
   })
 
   it('never touches the self-issued schema credentials stored in the same bucket', async () => {
@@ -158,7 +192,7 @@ describe('reconcileVtjscPublications', () => {
     const agent = agentPublishing([selfTrKey, schemaRef(9)])
     await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
 
-    expect(withdrawVtjscPublications).toHaveBeenCalledWith(expect.anything(), [schemaRef(9)])
+    expect(detachVtjscPublications).toHaveBeenCalledWith(expect.anything(), [schemaRef(9)])
   })
 
   it('keeps an entry the VPR cannot answer for, rather than reading silence as a loss of control', async () => {
@@ -170,15 +204,15 @@ describe('reconcileVtjscPublications', () => {
     })
     await reconcileVtjscPublications(agent as never, indexer as never, 7)
 
-    expect(withdrawVtjscPublications).not.toHaveBeenCalled()
+    expect(detachVtjscPublications).not.toHaveBeenCalled()
   })
 
-  it('keeps every entry when the ecosystem list comes back truncated', async () => {
-    // Nothing is reconciled, so a delete-by-difference pass would withdraw schema 5 here.
+  it('keeps every entry attached when the ecosystem list comes back truncated', async () => {
+    // Nothing is reconciled, so a diff-based pass would detach schema 5 here.
     const agent = agentPublishing([schemaRef(5)])
     const indexer = makeIndexer({ listEcosystems: vi.fn(async () => []) })
     await reconcileVtjscPublications(agent as never, indexer as never, 7)
 
-    expect(withdrawVtjscPublications).not.toHaveBeenCalled()
+    expect(detachVtjscPublications).not.toHaveBeenCalled()
   })
 })

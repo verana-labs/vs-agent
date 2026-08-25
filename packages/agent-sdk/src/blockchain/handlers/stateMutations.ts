@@ -17,10 +17,11 @@ import { waitUntilOwnDidIsPubliclyResolvable } from '../../utils/didReadiness'
 import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
 import {
   createJsc,
+  detachVtjscPublications,
   findMetadataEntry,
+  reattachVtjscPublication,
   rebindEcsCredentialSchema,
   removeStoredTrustCredential,
-  withdrawVtjscPublications,
 } from '../../utils/trustCredentialStore'
 import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
 import { VtFlowOrchestrator } from '../../vtFlow'
@@ -382,9 +383,7 @@ export async function reconcileVtjscPublications(
   }
 
   const ecosystems = await indexer.listEcosystems()
-  const controlled = ecosystems.filter(
-    entry => Number(entry.corporation_id) === corporationId && !entry.archived,
-  )
+  const controlled = ecosystems.filter(entry => Number(entry.corporation_id) === corporationId)
   const reconciled = new Set<string>()
 
   for (const ecosystem of controlled) {
@@ -398,8 +397,8 @@ export async function reconcileVtjscPublications(
       const existingDigest = (
         existingJsc?.credential?.credentialSubject as { digestSRI?: string } | undefined
       )?.digestSRI
-      if (!existingJsc || existingDigest !== expectedDigest) {
-        try {
+      try {
+        if (!existingJsc || existingDigest !== expectedDigest) {
           await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
             schemaBaseId: String(schema.id),
             jsonSchemaRef: schemaRef,
@@ -408,14 +407,18 @@ export async function reconcileVtjscPublications(
           agent.config.logger.info(
             `[VTJSC] Reconciled VTJSC for schema ${schema.id} (ecosystem ${ecosystem.id})`,
           )
-        } catch (e) {
-          agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
+        } else if (await reattachVtjscPublication(agent, schemaRef)) {
+          agent.config.logger.info(
+            `[VTJSC] Re-attached the VTJSC of schema ${schema.id} (ecosystem ${ecosystem.id})`,
+          )
         }
+      } catch (e) {
+        agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
       }
     }
   }
 
-  await withdrawUncontrolledVtjscPublications(agent, indexer, corporationId, chainId, reconciled)
+  await detachUncontrolledVtjscPublications(agent, indexer, corporationId, chainId, reconciled)
 
   if (selfTrDefaults) await reconcileSelfIssuedEcsCredentials(agent, indexer, selfTrDefaults)
 }
@@ -424,14 +427,13 @@ export async function reconcileVtjscPublications(
 const onChainSchemaRefPrefix = (chainId: string): string => `vpr:verana:${chainId}:cs:`
 
 /**
- * VSA-VTI-VTJSC: only the controller of an Ecosystem publishes a VTJSC for its schemas.
+ * VSA-VTI-VTJSC: only the controller of an Ecosystem advertises a VTJSC for its schemas. Archival
+ * is not a loss of control — the agent keeps it, and [VSA-VTI-NOTIF-ES] gives it no handler.
  *
- * It resolves each stored entry against the VPR one by one instead of deleting by difference
- * against `listEcosystems`: that endpoint is unpaginated here, and a truncated page reads exactly
- * like a loss of control. The criteria mirror what the publication pass accepts, so one run never
- * publishes and withdraws the same entry.
+ * Each entry is resolved against the VPR one by one rather than diffed against `listEcosystems`:
+ * that endpoint is unpaginated here, and a truncated page reads like a loss of control.
  */
-async function withdrawUncontrolledVtjscPublications(
+async function detachUncontrolledVtjscPublications(
   agent: VsAgent,
   indexer: VeranaIndexerService,
   corporationId: number,
@@ -461,18 +463,15 @@ async function withdrawUncontrolledVtjscPublications(
       }
       const ecosystem = ecosystemCache.get(ecosystemId)
       if (!ecosystem) continue
+      if (Number(ecosystem.corporation_id) === corporationId) continue
 
-      const reason = ecosystem.archived
-        ? `ecosystem ${ecosystemId} is archived`
-        : Number(ecosystem.corporation_id) !== corporationId
-          ? `ecosystem ${ecosystemId} belongs to corporation ${ecosystem.corporation_id}`
-          : undefined
-      if (reason) {
-        agent.config.logger.info(`[VTJSC] Withdrawing the VTJSC of schema ${schemaId}: ${reason}`)
-        stale.push(schemaRef)
-      }
+      agent.config.logger.info(
+        `[VTJSC] Detaching the VTJSC of schema ${schemaId}: ecosystem ${ecosystemId} belongs to ` +
+          `corporation ${ecosystem.corporation_id}`,
+      )
+      stale.push(schemaRef)
     } catch (error) {
-      // Withdrawing costs a re-signature to undo, so an unanswered lookup keeps the entry.
+      // A lookup the VPR cannot answer is not evidence of anything; leave the entry advertised.
       agent.config.logger.debug(
         `[VTJSC] Keeping the VTJSC of schema ${schemaId}: ${(error as Error).message}`,
       )
@@ -480,9 +479,9 @@ async function withdrawUncontrolledVtjscPublications(
   }
 
   if (stale.length === 0) return
-  const withdrawn = await withdrawVtjscPublications(agent, stale)
-  if (withdrawn.length > 0) {
-    agent.config.logger.info(`[VTJSC] Withdrew ${withdrawn.length} VTJSC publication(s)`)
+  const detached = await detachVtjscPublications(agent, stale)
+  if (detached.length > 0) {
+    agent.config.logger.info(`[VTJSC] Detached ${detached.length} VTJSC publication(s)`)
   }
 }
 

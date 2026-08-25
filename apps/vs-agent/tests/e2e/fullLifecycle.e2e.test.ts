@@ -464,7 +464,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
   )
 
   it(
-    'withdraws the VTJSCs of an ecosystem it stops controlling, and republishes them on return',
+    'detaches the VTJSCs of an ecosystem it stops controlling, keeps serving them, and re-attaches on return',
     async () => {
       const chainId = validatorChain.getChainId
       const schemaRef = `vpr:verana:${chainId}:cs:${orgSchemaId}`
@@ -483,10 +483,8 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       expect(await jscKeys()).toContain(schemaRef)
       expect(await serviceIds()).toContain(serviceId)
 
-      // startAgent skips setupSelfTr, so seed the entry it would have left: a self-issued schema
-      // credential sharing the `_vt/jsc` bucket under its public URL. No reconciliation may take
-      // it — it says nothing about who governs an ecosystem — and dropping it is exactly what a
-      // delete-by-difference pass would do, since it never appears in the reconciled set.
+      // startAgent skips setupSelfTr, so seed the URL-keyed entry it would have left in this same
+      // bucket. No reconciliation may take it: it says nothing about who governs an ecosystem.
       const selfTrKey = `${validator.publicApiBaseUrl}/vt/schemas-example-service-jsc.json`
       const [seedRecord] = await validator.dids.getCreatedDids({ did: validator.did })
       seedRecord.metadata.set('_vt/jsc', {
@@ -501,8 +499,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
 
       const ownCorporationId = Number((await indexer.getEcosystem(ecosystemId)).corporation_id)
 
-      // Rebinding the agent to another Corporation is exactly this: VERANA_CORPORATION_ID changes,
-      // and the ecosystem it published for now answers to somebody else.
+      // Rebinding the agent to another Corporation is exactly this: VERANA_CORPORATION_ID changes.
       const otherCorp = await chainA.createCorporation({ did: `did:example:corp2-${RUN_ID}` })
       await chainA.fundCorporation(otherCorp.policyAddress)
       await chainA.grantOperatorAuthorization(otherCorp.policyAddress)
@@ -516,21 +513,23 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
 
       await reconcileVtjscPublications(validator, indexer, otherCorporationId)
 
-      expect(await jscKeys()).not.toContain(schemaRef)
+      // The DID Document stops advertising it...
       expect(await serviceIds()).not.toContain(serviceId)
-      expect(await jscKeys()).toEqual(expect.arrayContaining(selfTrKeys))
       expect(await serviceIds()).toEqual(expect.arrayContaining(otherServiceIds))
 
-      // Coming back re-publishes it, which is what proves the two passes agree on who controls
-      // what: a disagreement would show up here as a VTJSC that never returns, or one that the
-      // very next run withdraws again.
+      // ...but keeps serving it, so credentials naming that URL stay verifiable.
+      expect(await jscKeys()).toContain(schemaRef)
+      expect(await jscKeys()).toEqual(expect.arrayContaining(selfTrKeys))
+
+      // Coming back re-attaches what it already holds; the digest matches, so nothing is rebuilt.
       await reconcileVtjscPublications(validator, indexer, ownCorporationId)
 
-      expect(await jscKeys()).toContain(schemaRef)
       expect(await serviceIds()).toContain(serviceId)
-
-      await reconcileVtjscPublications(validator, indexer, ownCorporationId)
       expect(await jscKeys()).toContain(schemaRef)
+
+      // A second run must leave it attached, which is what proves the two passes agree.
+      await reconcileVtjscPublications(validator, indexer, ownCorporationId)
+      expect(await serviceIds()).toContain(serviceId)
     },
     SETUP_TIMEOUT_MS,
   )

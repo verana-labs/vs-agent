@@ -349,40 +349,60 @@ export async function migrateVtjscServiceIds(agent: VsAgent): Promise<void> {
 }
 
 /**
- * Drops the given `_vt/jsc` entries and their linked VPs, publishing the document once.
+ * Takes the linked VPs of the given `_vt/jsc` entries out of the DID Document, publishing it once.
  *
- * It matches on the exact key, leaving the self-issued schema credentials `setupSelfTr` keeps in
- * the same bucket. Unlike `deleteMetadataEntry` it never restores `_vt/vtc`: a JSON schema
- * credential says nothing about this agent's own ECS identity. Returns the refs it withdrew.
+ * The entries stay: `SelfTrController` serves them, and issued credentials name that URL in
+ * `credentialSchema.id`. Dropping one would 404 it and leave those credentials unverifiable.
  */
-export async function withdrawVtjscPublications(
+export async function detachVtjscPublications(
   agent: VsAgent,
   schemaRefs: readonly string[],
 ): Promise<string[]> {
   if (schemaRefs.length === 0) return []
 
   const didRecord = await getDidRecord(agent)
-  if (!didRecord) return []
+  if (!didRecord?.didDocument?.service) return []
   const metadata = didRecord.metadata.get('_vt/jsc')
   if (!metadata) return []
 
-  const withdrawn: string[] = []
+  const detached: string[] = []
   for (const schemaRef of schemaRefs) {
-    const entry = metadata[schemaRef]
-    if (!entry) continue
+    const serviceId = metadata[schemaRef]?.didDocumentServiceId
+    if (!serviceId || !didRecord.didDocument.service.some(s => s.id === serviceId)) continue
 
-    const serviceId = entry.didDocumentServiceId
-    if (serviceId && didRecord.didDocument?.service) {
-      didRecord.didDocument.service = didRecord.didDocument.service.filter(s => s.id !== serviceId)
-    }
-    delete metadata[schemaRef]
-    withdrawn.push(schemaRef)
+    didRecord.didDocument.service = didRecord.didDocument.service.filter(s => s.id !== serviceId)
+    detached.push(schemaRef)
   }
-  if (withdrawn.length === 0) return []
+  if (detached.length === 0) return []
 
-  didRecord.metadata.set('_vt/jsc', metadata)
   await updateDidRecord(agent, didRecord)
-  return withdrawn
+  return detached
+}
+
+/**
+ * Puts a detached `_vt/jsc` entry back in the DID Document.
+ *
+ * The publication pass skips an entry whose digest still matches, so without this the agent would
+ * keep serving a VTJSC it never announces again.
+ */
+export async function reattachVtjscPublication(agent: VsAgent, schemaRef: string): Promise<boolean> {
+  const didRecord = await getDidRecord(agent)
+  if (!didRecord?.didDocument) return false
+  const entry = didRecord.metadata.get('_vt/jsc')?.[schemaRef]
+
+  const serviceId = entry?.didDocumentServiceId
+  const serviceEndpoint = entry?.verifiablePresentation?.id
+  if (!serviceId || !serviceEndpoint) return false
+
+  const services = didRecord.didDocument.service ?? []
+  if (services.some(s => s.id === serviceId)) return false
+
+  didRecord.didDocument.service = [
+    ...services,
+    new DidDocumentService({ id: serviceId, serviceEndpoint, type: 'LinkedVerifiablePresentation' }),
+  ]
+  await updateDidRecord(agent, didRecord)
+  return true
 }
 
 export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc', schemaId?: string) {
