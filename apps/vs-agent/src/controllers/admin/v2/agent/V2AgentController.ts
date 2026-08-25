@@ -2,15 +2,33 @@ import { Controller, Get, HttpStatus, Inject } from '@nestjs/common'
 import { ApiOkResponse, ApiOperation, ApiServiceUnavailableResponse, ApiTags } from '@nestjs/swagger'
 
 import { AdminApiError, AdminApiErrorCode, BOOTSTRAP_STATE, BootstrapState } from '../../../../common'
+import { AGENT_VERSION } from '../../../../config'
 import { AccessMode } from '../../../../security'
+import { VsAgentService } from '../../../../services/VsAgentService'
 
-import { LivenessDto, ReadinessDto } from './health.dto'
+import { AgentInfoDto, LivenessDto, ReadinessDto } from './dto'
 
 @ApiTags('v2/agent')
 @AccessMode('INTERNAL')
 @Controller({ path: 'agent', version: '2' })
 export class V2AgentController {
-  public constructor(@Inject(BOOTSTRAP_STATE) private readonly bootstrapState: BootstrapState) {}
+  public constructor(
+    @Inject(BOOTSTRAP_STATE) private readonly bootstrapState: BootstrapState,
+    @Inject(VsAgentService) private readonly vsAgentService: VsAgentService,
+  ) {}
+
+  @Get('info')
+  @AccessMode('CORPORATION')
+  @ApiOperation({
+    summary: 'Get agent information',
+    description: 'Identifies this VS Agent instance by the DID it created on its first startup.',
+  })
+  @ApiOkResponse({ description: 'The agent identified itself', type: AgentInfoDto })
+  public async getAgentInfo(): Promise<AgentInfoDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    return { did: agent.did, version: AGENT_VERSION }
+  }
 
   @Get('health/live')
   @AccessMode('PUBLIC')
