@@ -350,6 +350,63 @@ export async function migrateVtjscServiceIds(agent: VsAgent): Promise<void> {
   agent.config.logger.info('[VTJSC] migrated stored service ids to the -vtjsc-vp naming')
 }
 
+/**
+ * Takes the linked VPs of the given `_vt/jsc` entries out of the DID Document, publishing it once.
+ *
+ * The entries stay: `SelfTrController` serves them, and issued credentials name that URL in
+ * `credentialSchema.id`. Dropping one would 404 it and leave those credentials unverifiable.
+ */
+export async function detachVtjscPublications(
+  agent: VsAgent,
+  schemaRefs: readonly string[],
+): Promise<string[]> {
+  if (schemaRefs.length === 0) return []
+
+  const didRecord = await getDidRecord(agent)
+  if (!didRecord?.didDocument?.service) return []
+  const metadata = didRecord.metadata.get('_vt/jsc')
+  if (!metadata) return []
+
+  const detached: string[] = []
+  for (const schemaRef of schemaRefs) {
+    const serviceId = metadata[schemaRef]?.didDocumentServiceId
+    if (!serviceId || !didRecord.didDocument.service.some(s => s.id === serviceId)) continue
+
+    didRecord.didDocument.service = didRecord.didDocument.service.filter(s => s.id !== serviceId)
+    detached.push(schemaRef)
+  }
+  if (detached.length === 0) return []
+
+  await updateDidRecord(agent, didRecord)
+  return detached
+}
+
+/**
+ * Puts a detached `_vt/jsc` entry back in the DID Document.
+ *
+ * The publication pass skips an entry whose digest still matches, so without this the agent would
+ * keep serving a VTJSC it never announces again.
+ */
+export async function reattachVtjscPublication(agent: VsAgent, schemaRef: string): Promise<boolean> {
+  const didRecord = await getDidRecord(agent)
+  if (!didRecord?.didDocument) return false
+  const entry = didRecord.metadata.get('_vt/jsc')?.[schemaRef]
+
+  const serviceId = entry?.didDocumentServiceId
+  const serviceEndpoint = entry?.verifiablePresentation?.id
+  if (!serviceId || !serviceEndpoint) return false
+
+  const services = didRecord.didDocument.service ?? []
+  if (services.some(s => s.id === serviceId)) return false
+
+  didRecord.didDocument.service = [
+    ...services,
+    new DidDocumentService({ id: serviceId, serviceEndpoint, type: 'LinkedVerifiablePresentation' }),
+  ]
+  await updateDidRecord(agent, didRecord)
+  return true
+}
+
 export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc', schemaId?: string) {
   return findMetadataEntry(didRecord, key, schemaId)
 }

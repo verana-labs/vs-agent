@@ -22,9 +22,7 @@ import {
 import { HOLDER_PARTICIPANT_TYPE, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../common'
-import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
-import { TsLogger } from '../../../utils'
 import { CredentialTypesService } from '../credentials/CredentialTypeService'
 
 import { ListFlowsQueryDto, ListFlowsV2QueryDto } from './dto/flow-requests.dto'
