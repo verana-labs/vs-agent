@@ -28,7 +28,7 @@ import {
   TerminateConnectionMessage,
   VerifiableCredentialRequestedProofItem,
 } from '@verana-labs/vs-agent-model'
-import { validateSchema, VsAgent } from '@verana-labs/vs-agent-sdk'
+import { ParticipantRole, validateSchema, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { CredentialTypesService } from '../../credentials'
 
@@ -225,6 +225,15 @@ export class BaseMessageHandler implements MessageHandler {
             attributes = providedAttributes
           }
         }
+
+        await this.credentialService.assertAccreditedForSchema(
+          msg.jsonSchemaCredentialId
+            ? await this.credentialService.resolveTrustRegistrySchemaId(msg.jsonSchemaCredentialId)
+            : await this.credentialService.resolveTrustRegistrySchemaIdForCredentialDefinition(
+                credentialDefinitionId,
+              ),
+          ParticipantRole.Issuer,
+        )
 
         if (attributes.length) {
           const record = await agent.didcomm.credentials.offerCredential({

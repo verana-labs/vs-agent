@@ -7,9 +7,15 @@ import {
 } from '@credo-ts/anoncreds'
 import { JsonObject, parseDid, Proof, TagsBase, utils, W3cCredential } from '@credo-ts/core'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
-import { Inject, Logger } from '@nestjs/common'
+import { BadRequestException, Inject, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
-import { deleteTailsFile, fetchJson, VsAgent } from '@verana-labs/vs-agent-sdk'
+import {
+  deleteTailsFile,
+  fetchJson,
+  ParticipantRole,
+  parseSchemaRef,
+  VsAgent,
+} from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
 
@@ -22,6 +28,51 @@ export class CredentialTypesService {
   private readonly logger = new Logger(CredentialTypesService.name)
 
   constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
+
+  public async resolveTrustRegistrySchemaId(jsonSchemaCredentialId: string): Promise<number | undefined> {
+    const jsc = await fetchJson<W3cCredential>(jsonSchemaCredentialId)
+    const subject = (
+      Array.isArray(jsc.credentialSubject) ? jsc.credentialSubject[0] : jsc.credentialSubject
+    ) as Record<string, any> | undefined
+    const jsonSchemaRef = subject?.jsonSchema?.$ref
+    return jsonSchemaRef ? parseSchemaRef(jsonSchemaRef) : undefined
+  }
+
+  public async resolveTrustRegistrySchemaIdForCredentialDefinition(
+    credentialDefinitionId: string,
+  ): Promise<number | undefined> {
+    const agent = await this.agentService.getAgent()
+
+    const [credentialDefinition] = await agent.modules.anoncreds.getCreatedCredentialDefinitions({
+      credentialDefinitionId,
+    })
+    if (!credentialDefinition) return undefined
+
+    const [schemaRecord] = await agent.modules.anoncreds.getCreatedSchemas({
+      schemaId: credentialDefinition.credentialDefinition.schemaId,
+    })
+    const jsonSchemaCredentialId = schemaRecord?.getTag('relatedJsonSchemaCredentialId') as string | undefined
+    if (!jsonSchemaCredentialId) return undefined
+
+    return this.resolveTrustRegistrySchemaId(jsonSchemaCredentialId)
+  }
+
+  public async assertAccreditedForSchema(schemaId: number | undefined, role: ParticipantRole): Promise<void> {
+    if (schemaId === undefined) return
+
+    const agent = await this.agentService.getAgent()
+    if (!agent.did) return
+
+    const { unaccredited, unchecked } = await agent.indexer.findUnaccreditedDids([agent.did], role, schemaId)
+    if (unchecked.length) {
+      throw new ServiceUnavailableException(
+        `Cannot verify ${role} accreditation of ${agent.did} for credential schema ${schemaId}: the Verana indexer is unreachable`,
+      )
+    }
+    if (unaccredited.length) {
+      throw new BadRequestException(`${agent.did} is not an active ${role} for credential schema ${schemaId}`)
+    }
+  }
 
   public async deleteRevocationRegistry(
     agent: VsAgent,

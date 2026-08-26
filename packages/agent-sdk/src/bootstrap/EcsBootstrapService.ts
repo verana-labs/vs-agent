@@ -44,7 +44,7 @@ export interface EcsBootstrapOptions {
 export class EcsBootstrapService {
   constructor(
     private readonly agent: VsAgent,
-    private readonly indexer: VeranaIndexerService | undefined,
+    private readonly indexer: VeranaIndexerService,
     private readonly options: EcsBootstrapOptions,
     private readonly logger: BaseLogger,
   ) {}
@@ -65,7 +65,7 @@ export class EcsBootstrapService {
       return
     }
     const chain = this.agent.veranaChain!
-    const indexer = this.indexer!
+    const indexer = this.indexer
 
     const { credential, credentialType, service } = await this.discoverEcsSchemas(indexer)
     await this.ensureHolderParticipant(chain, indexer, credential, credentialType)
@@ -76,7 +76,6 @@ export class EcsBootstrapService {
     if (!this.agent.did) return 'the agent has no public DID'
     const chain = this.agent.veranaChain
     if (!chain) return 'the Verana chain is not configured'
-    if (!this.indexer) return 'the Verana indexer is not configured'
     if (!this.options.trustedEcosystemDids?.length) return 'TRUSTED_ECS_ECOSYSTEM_DIDS is not set'
 
     const operatorAuths = await chain.listOperatorAuthorizations()
@@ -353,7 +352,6 @@ export class EcsBootstrapService {
     const parentDid = this.options.delegatedParentVsDid
     if (!parentDid) throw new Error('AGENT_DELEGATED_PARENT_VS_DID is not set')
     if (!this.agent.did) throw new Error('delegated bootstrap requires a public DID')
-    if (!this.indexer) throw new Error('delegated bootstrap requires the Verana indexer')
     if (!this.options.verifyPeer) {
       throw new Error(
         `cannot verify parent VS ${parentDid}: verifiable public registries are not configured (set VERANA_CHAIN_ID)`,
@@ -416,13 +414,13 @@ export class EcsBootstrapService {
   }
 
   private async findParentServiceSchemaId(parentDid: string): Promise<number> {
-    const participants = await this.indexer!.listParticipants({
+    const participants = await this.indexer.listParticipants({
       did: parentDid,
       role: ParticipantRole.Issuer,
       participantState: ParticipantState.Active,
     })
     for (const participant of participants) {
-      const schema = await this.indexer!.getCredentialSchema(participant.schema_id).catch(() => undefined)
+      const schema = await this.indexer.getCredentialSchema(participant.schema_id).catch(() => undefined)
       if (!schema) continue
       if ((await classifyEcsSchema(schema.json_schema)) === ECS.SERVICE) return schema.id
     }

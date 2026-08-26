@@ -163,3 +163,16 @@ export async function fetchJson<T>(
     if (timer) clearTimeout(timer)
   }
 }
+
+export function buildSchemaRef(chainId: string, schemaId: number | string): string {
+  return `vpr:verana:${chainId}:cs:${schemaId}`
+}
+
+export function buildLegacySchemaRef(chainId: string, schemaId: number | string): string {
+  return `vpr:verana:${chainId}/cs/v1/js/${schemaId}`
+}
+
+export function parseSchemaRef(ref: string): number | undefined {
+  const match = ref.match(/:cs:(\d+)$/) ?? ref.match(/\/cs\/v1\/js\/(\d+)$/)
+  return match ? Number(match[1]) : undefined
+}

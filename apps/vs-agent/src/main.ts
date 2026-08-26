@@ -532,7 +532,7 @@ const run = async () => {
     if (VERANA_CORPORATION_ID) {
       void reconcileVtjscPublications(
         agent,
-        indexerService,
+        agent.indexer,
         Number(VERANA_CORPORATION_ID),
         selfTrDefaults,
       ).catch((error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`))
@@ -541,7 +541,7 @@ const run = async () => {
 
   const ecsBootstrap = new EcsBootstrapService(
     agent,
-    indexerService,
+    agent.indexer,
     {
       mode: AGENT_MODE as 'standalone' | 'delegated',
       trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS.length ? TRUSTED_ECS_ECOSYSTEM_DIDS : undefined,

@@ -29,6 +29,7 @@ export const startAgent = async ({
   indexer?: VeranaIndexerService
 }): Promise<VsAgent<any>> => {
   const walletConfig = getAskarStoreConfig(label, { inMemory: true })
+  const logger = new TsLogger(LogLevel.Off, label)
 
   const [chatSetup, mrtdSetup] = await Promise.all([
     import('@verana-labs/vs-agent-plugin-chat').catch(() => null),
@@ -47,9 +48,7 @@ export const startAgent = async ({
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol()] : []),
     ],
-    config: {
-      logger: new TsLogger(LogLevel.Off, label),
-    },
+    config: { logger },
     walletConfig,
     did: `did:webvh:${domain}`,
     dependencies: agentDependencies,

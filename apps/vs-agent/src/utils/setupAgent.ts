@@ -86,17 +86,16 @@ export const setupAgent = async ({
       : null,
   ])
 
-  const verifiablePublicRegistries =
-    VERANA_INDEXER_BASE_URL && VERANA_CHAIN_ID
-      ? [
-          {
-            id: `vpr:verana:${VERANA_CHAIN_ID}`,
-            scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
-            api: [VERANA_INDEXER_BASE_URL],
-            production: true,
-          },
-        ]
-      : undefined
+  const verifiablePublicRegistries = VERANA_CHAIN_ID
+    ? [
+        {
+          id: `vpr:verana:${VERANA_CHAIN_ID}`,
+          scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
+          api: [VERANA_INDEXER_BASE_URL],
+          production: true,
+        },
+      ]
+    : undefined
 
   // eslint-disable-next-line prefer-const
   let orchestrator: VtFlowOrchestrator | undefined

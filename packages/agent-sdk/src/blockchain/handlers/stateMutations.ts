@@ -22,6 +22,7 @@ import {
   removeStoredTrustCredential,
   withdrawSelfIssuedEcsCredentials,
 } from '../../utils/trustCredentialStore'
+import { buildSchemaRef } from '../../utils/util'
 import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'
@@ -416,7 +417,7 @@ export async function reconcileVtjscPublications(
     for (const schema of await indexer.listCredentialSchemas(ecosystem.id)) {
       const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
       if (!didRecord) return
-      const schemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
+      const schemaRef = buildSchemaRef(chainId, schema.id)
       const expectedDigest = generateDigestSRI(schema.json_schema)
       const existingJsc = findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
       const existingDigest = (
