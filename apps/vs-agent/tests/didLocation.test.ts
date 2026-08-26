@@ -33,6 +33,20 @@ describe('derivePublicDidLocation', () => {
       },
     },
     {
+      name: 'domain with port and no path stays under /.well-known',
+      baseUrl: 'https://agent.example.com:8443',
+      expected: {
+        host: 'agent.example.com',
+        port: '8443',
+        pathSegments: [],
+        domain: 'agent.example.com%3A8443',
+        location: 'agent.example.com%3A8443',
+        path: undefined,
+        hasPath: false,
+        normalizedBaseUrl: 'https://agent.example.com:8443',
+      },
+    },
+    {
       name: 'domain with port and path encodes the port as %3A',
       baseUrl: 'https://example.com:3000/user/alice',
       expected: {

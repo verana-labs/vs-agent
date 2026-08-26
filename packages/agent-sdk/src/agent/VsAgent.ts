@@ -201,12 +201,17 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
           this.applyAdminApiService(didDocument)
 
-          await this.dids.create({
+          const createResult = await this.dids.create({
             method: 'web',
             domain: location,
             didDocument,
             keys: [didCommKey],
           })
+          if (createResult.didState.state !== 'finished') {
+            throw new CredoError(
+              `Failed to create did:web record: ${(createResult.didState as { reason?: string }).reason ?? 'unknown reason'}`,
+            )
+          }
           this.did = parsedDid.did
         } else if (parsedDid.method === 'webvh') {
           // If there is an existing did:web with the same domain, this could be an
