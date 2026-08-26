@@ -197,8 +197,6 @@ export const setupAgent = async ({
 
   await agent.initialize()
 
-  // Registered only after initialize so the public DID is created and persisted before any
-  // inbound DIDComm processing; startServers starts them once the public app is ready.
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
   if (enableHttp) {
     logger.info('Inbound HTTP transport enabled')

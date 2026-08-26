@@ -3,7 +3,7 @@ import {
   AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
-import { Controller, Get, Param, Res, HttpStatus, HttpException, Inject, Query } from '@nestjs/common'
+import { Controller, Get, Param, Res, HttpStatus, HttpException, Inject, NotFoundException, Query } from '@nestjs/common'
 import {
   getLegacyDidDocument,
   getTailsDirectoryPath,
@@ -26,9 +26,7 @@ export class DidWebController {
     @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
   ) {}
 
-  // The DID methods place the document under /.well-known only when the location carries no
-  // path, so each deployment answers on exactly one of the two shapes. A path deployment
-  // assumes the reverse proxy strips the base path before forwarding.
+  // .well-known only when the location carries no path, so a deployment answers on one shape.
   @Get('/.well-known/did.json')
   async getWellKnownDidDocument() {
     this.assertLocationShape(false)
@@ -55,7 +53,7 @@ export class DidWebController {
 
   private assertLocationShape(expectsPath: boolean): void {
     if (derivePublicDidLocation(this.publicApiBaseUrl).hasPath !== expectsPath) {
-      throw new HttpException('DID Document not found', HttpStatus.NOT_FOUND)
+      throw new NotFoundException()
     }
   }
 
