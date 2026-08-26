@@ -8,6 +8,16 @@ import { ParticipantRole, ParticipantState } from '../src/blockchain'
 import { EcsBootstrapService, type EcsBootstrapOptions } from '../src/bootstrap/EcsBootstrapService'
 import { HOLDER_PARTICIPANT_TYPE } from '../src/types'
 
+const startOnboardingProcess = vi.fn().mockResolvedValue({ id: 'flow-1', state: 'OR_SENT' })
+vi.mock('../src/vtFlow/VtFlowOrchestrator', () => ({
+  VtFlowOrchestrator: class {
+    startOnboardingProcess = startOnboardingProcess
+  },
+}))
+vi.mock('../src/utils/didReadiness', () => ({
+  waitUntilOwnDidIsPubliclyResolvable: vi.fn().mockResolvedValue(undefined),
+}))
+
 const START_OP = '/verana.pp.v1.MsgStartParticipantOP'
 const SELF_CREATE = '/verana.pp.v1.MsgSelfCreateParticipant'
 
@@ -44,11 +54,14 @@ function makeMocks() {
     }),
     startParticipantOP: vi.fn().mockResolvedValue({ participantId: 77, txHash: 'AA' }),
     selfCreateParticipant: vi.fn().mockResolvedValue({ participantId: 88, txHash: 'BB' }),
+    setParticipantOPToValidated: vi.fn().mockResolvedValue(undefined),
+    triggerResolver: vi.fn().mockResolvedValue(undefined),
   }
   const indexer = {
     listEcosystems: vi.fn().mockResolvedValue([{ id: 1, did: 'did:example:eco', archived: null }]),
     getEcosystem: vi.fn().mockResolvedValue({ id: 1, did: 'did:example:eco', archived: null }),
     getCredentialSchema: vi.fn().mockResolvedValue(serviceSchema),
+    getParticipant: vi.fn().mockResolvedValue({ id: 3, did: 'did:web:parent' }),
     listCredentialSchemas: vi.fn().mockResolvedValue([orgSchema, serviceSchema]),
     listParticipants: vi.fn().mockResolvedValue([]),
   }
@@ -259,6 +272,88 @@ describe('EcsBootstrapService standalone', () => {
     expect(mocks.agent.didcomm.credentials.acceptOffer).toHaveBeenCalledWith({
       credentialExchangeRecordId: 'cred-ex-1',
     })
+  })
+})
+
+describe('EcsBootstrapService onboarding resume', () => {
+  // The chain event handler swallows its own failure and the indexer never replays that block,
+  // so an entry left at PENDING is the only trace of an onboarding request that never went out.
+  const pendingHolder = {
+    id: 42,
+    schema_id: 5,
+    op_state: 'PENDING',
+    validator_participant_id: 3,
+    revoked: null,
+    slashed: null,
+  }
+
+  function onlyOwnPending(mocks: ReturnType<typeof makeMocks>) {
+    mocks.indexer.listParticipants.mockImplementation(async (query: Record<string, unknown>) => {
+      if (query.did === 'did:web:agent') return [pendingHolder]
+      // The parent Service ISSUER, so that the delegated bootstrap reaches its own reuse branch.
+      return query.did === 'did:web:parent' ? [{ id: 3, schema_id: 5 }] : []
+    })
+  }
+
+  it.each([['standalone'], ['delegated']] as const)('resumes a PENDING onboarding in %s mode', async mode => {
+    const mocks = makeMocks()
+    onlyOwnPending(mocks)
+
+    await makeService(mocks, {
+      mode,
+      delegatedParentVsDid: 'did:web:parent',
+      verifyPeer: async () => true,
+    }).run()
+
+    expect(startOnboardingProcess).toHaveBeenCalledWith({ applicantParticipantId: 42 })
+  })
+
+  it('resumes even when the operator can no longer start an OP', async () => {
+    const mocks = makeMocks()
+    onlyOwnPending(mocks)
+    mocks.chain.listOperatorAuthorizations.mockResolvedValue([])
+
+    await makeService(mocks).run()
+
+    // The request signs nothing on chain, so the gate that stops a new OP must not stop the repair.
+    expect(startOnboardingProcess).toHaveBeenCalledWith({ applicantParticipantId: 42 })
+    expect(mocks.chain.startParticipantOP).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [VtFlowState.Error, true],
+    [VtFlowState.TerminatedByValidator, false],
+  ])('resends after %s: %s', async (state, resends) => {
+    const mocks = makeMocks()
+    onlyOwnPending(mocks)
+    mocks.vtFlowApi.findAllByQuery.mockImplementation(async (query: Record<string, unknown>) =>
+      query.participantId === '42' ? [{ id: 'flow-1', state, createdAt: new Date() }] : [],
+    )
+
+    await makeService(mocks).run()
+
+    expect(startOnboardingProcess).toHaveBeenCalledTimes(resends ? 1 : 0)
+  })
+
+  it('validates a self-issued participant instead of sending a request', async () => {
+    const mocks = makeMocks()
+    onlyOwnPending(mocks)
+    // The validator of the entry is this agent, so no peer can answer an onboarding request.
+    mocks.indexer.getParticipant.mockResolvedValue({ id: 3, did: 'did:web:agent' })
+
+    await makeService(mocks).run()
+
+    expect(startOnboardingProcess).not.toHaveBeenCalled()
+    expect(mocks.chain.setParticipantOPToValidated).toHaveBeenCalledWith(expect.objectContaining({ id: 42 }))
+  })
+
+  it('carries on with the bootstrap when the resume fails', async () => {
+    const mocks = makeMocks()
+    onlyOwnPending(mocks)
+    startOnboardingProcess.mockRejectedValueOnce(new Error('parent unreachable'))
+
+    await expect(makeService(mocks).run()).resolves.toBeUndefined()
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('parent unreachable'))
   })
 })
 

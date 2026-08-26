@@ -1,5 +1,11 @@
 import { BaseLogger } from '@credo-ts/core'
-import { VtFlowApi, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  VtFlowApi,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowVariant,
+  isVtFlowTerminalState,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../agent/VsAgent'
@@ -12,6 +18,8 @@ import {
   VeranaIndexerService,
 } from '../blockchain'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
+import { waitUntilOwnDidIsPubliclyResolvable } from '../utils/didReadiness'
+import { VtFlowOrchestrator } from '../vtFlow/VtFlowOrchestrator'
 
 const START_OP_MSG = '/verana.pp.v1.MsgStartParticipantOP'
 const SELF_CREATE_MSG = '/verana.pp.v1.MsgSelfCreateParticipant'
@@ -35,18 +43,21 @@ export class EcsBootstrapService {
   ) {}
 
   async run(): Promise<void> {
+    // Both repair steps sign nothing on chain, so they run before any gate, in either mode, and
+    // also for a deployment whose participants the Corporation operator provisions out of band.
+    await this.acceptPendingOffers()
+    await this.resumePendingOnboardings()
+
     if (this.options.mode === 'delegated') return this.runDelegated()
     return this.runStandalone()
   }
 
   private async runStandalone(): Promise<void> {
-    // Re-driving an interrupted offer signs nothing on chain, so it also runs for a deployment
-    // whose participants the Corporation operator provisions out of band.
-    await this.acceptPendingOffers()
-
     const skip = await this.preflight()
     if (skip) {
-      this.logger.info(`[EcsBootstrap] standalone bootstrap skipped: ${skip}`)
+      this.logger.info(
+        `[EcsBootstrap] standalone bootstrap skipped: ${skip}; this agent expects its participants to be provisioned out of band`,
+      )
       return
     }
     const chain = this.agent.veranaChain!
@@ -64,15 +75,20 @@ export class EcsBootstrapService {
     if (!this.indexer) return 'the Verana indexer is not configured'
     if (!this.options.trustedEcosystemDids?.length) return 'TRUSTED_ECS_ECOSYSTEM_DIDS is not set'
 
+    return this.operatorSkipReason(chain)
+  }
+
+  // StartParticipantOP costs a trust deposit and a fee, so both the authorization and the funds
+  // must be there. Neither is a misconfiguration: the operator may provision the entry itself.
+  private async operatorSkipReason(chain: VeranaChainService): Promise<string | null> {
     const operatorAuths = await chain.listOperatorAuthorizations()
-    if (!operatorAuths.some(a => a.msgTypes.includes(START_OP_MSG))) {
-      return `operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP; this agent expects its participants to be provisioned out of band`
+    if (!operatorAuths.some(auth => auth.msgTypes.includes(START_OP_MSG))) {
+      return `operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP`
     }
     const balance = await chain.getBalance()
     if (Number(balance.amount) === 0) {
       return `operator ${chain.address} has no ${balance.denom} balance for fees and trust deposits`
     }
-
     return null
   }
 
@@ -97,6 +113,75 @@ export class EcsBootstrapService {
         )
       }
     }
+  }
+
+  /**
+   * StartParticipantOP pays a trust deposit, and it cannot be undone. The onboarding request that
+   * must follow it travels over DIDComm from the chain event handler, which catches its own
+   * failure. The indexer marks that block processed all the same and never replays it, so an
+   * unreachable validator leaves the entry at PENDING for ever. This boot step closes that gap.
+   */
+  private async resumePendingOnboardings(): Promise<void> {
+    if (!this.indexer || !this.agent.did) return
+
+    const own = await this.indexer.listParticipants({ did: this.agent.did }).catch(() => [])
+    for (const participant of own) {
+      if (participant.op_state !== 'PENDING' || participant.revoked || participant.slashed) continue
+      try {
+        await this.resumeOnboarding(participant)
+      } catch (error) {
+        this.logger.warn(
+          `[EcsBootstrap] could not resume the onboarding of participant ${participant.id}: ${(error as Error).message}`,
+        )
+      }
+    }
+  }
+
+  private async resumeOnboarding(participant: ParticipantDto): Promise<void> {
+    // A flow that a peer ended on purpose is not an interruption; only an error deserves a retry.
+    const api = this.agent.dependencyManager.resolve(VtFlowApi)
+    const [latest] = (
+      await api.findAllByQuery({
+        participantId: String(participant.id),
+        role: VtFlowRole.Applicant,
+        flowVariant: VtFlowVariant.OnboardingProcess,
+      })
+    ).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    if (latest && isVtFlowTerminalState(latest.state) && latest.state !== VtFlowState.Error) return
+
+    // The agent validates its own entry when it controls the ECOSYSTEM root of the schema, so
+    // there is no peer to send a request to: the interrupted step is the chain outcome itself.
+    if (await this.isSelfValidated(participant)) {
+      const chain = this.agent.veranaChain
+      if (!chain) return
+      await chain.setParticipantOPToValidated({
+        id: participant.id,
+        validationFees: 0,
+        issuanceFees: 0,
+        verificationFees: 0,
+      })
+      await this.triggerResolverBestEffort(chain, participant.id)
+      this.logger.info(`[EcsBootstrap] validated the interrupted self-issued participant ${participant.id}`)
+      return
+    }
+
+    // startOnboardingProcess writes nothing on chain, and it refuses to resend while a flow is in
+    // progress, so this is safe on every boot.
+    await waitUntilOwnDidIsPubliclyResolvable(this.agent, this.logger)
+    const record = await new VtFlowOrchestrator(this.agent).startOnboardingProcess({
+      applicantParticipantId: participant.id,
+    })
+    this.logger.info(
+      `[EcsBootstrap] resumed the onboarding of participant ${participant.id} (flow ${record.id}, state ${record.state})`,
+    )
+  }
+
+  private async isSelfValidated(participant: ParticipantDto): Promise<boolean> {
+    if (participant.validator_participant_id == null) return false
+    const validator = await this.indexer!.getParticipant(participant.validator_participant_id).catch(
+      () => undefined,
+    )
+    return validator?.did === this.agent.did
   }
 
   // WL-ECS: only ecosystems on the configured allowlist may provide the essential credential schemas.
@@ -380,7 +465,7 @@ export class EcsBootstrapService {
     // reacts to its own chain event and sends the onboarding request, so nothing is awaited here.
     // Direct Issuance does not apply: it needs holder_onboarding_mode = PERMISSIONLESS, and the
     // ECS Service schema uses ISSUER_ONBOARDING_PROCESS.
-    const skip = await this.delegatedOperatorSkipReason(chain)
+    const skip = await this.operatorSkipReason(chain)
     if (skip) {
       this.logger.info(
         `[EcsBootstrap] delegated bootstrap skipped: ${skip}; this agent expects its HOLDER participant to be provisioned out of band, with validator ${validator.id}`,
@@ -427,19 +512,5 @@ export class EcsBootstrapService {
         `the ECS Service schema ${schemaId} belongs to ecosystem ${ecosystem?.did ?? '<unresolvable>'}, which TRUSTED_ECS_ECOSYSTEM_DIDS does not list`,
       )
     }
-  }
-
-  // StartParticipantOP costs a trust deposit and a fee, so both the authorization and the funds
-  // must be there. Neither is a misconfiguration: the operator may provision the entry itself.
-  private async delegatedOperatorSkipReason(chain: VeranaChainService): Promise<string | null> {
-    const operatorAuths = await chain.listOperatorAuthorizations()
-    if (!operatorAuths.some(auth => auth.msgTypes.includes(START_OP_MSG))) {
-      return `operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP`
-    }
-    const balance = await chain.getBalance()
-    if (Number(balance.amount) === 0) {
-      return `operator ${chain.address} has no ${balance.denom} balance for fees and trust deposits`
-    }
-    return null
   }
 }
