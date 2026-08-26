@@ -19,7 +19,6 @@ import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { BaseAgentModules, VsAgent } from '../agent'
 import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
-import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { Participant, ParticipantRole, ParticipantState } from '../blockchain/types'
 import {
   HOLDER_PARTICIPANT_TYPE,
