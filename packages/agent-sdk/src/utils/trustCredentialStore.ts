@@ -50,22 +50,20 @@ export function findMetadataEntry(
   const metadata = didRecord.metadata.get(key)
   if (!metadata) return null
   if (!id && !jsonSchemaRef) return { schemaId: '', data: metadata, didDocumentServiceId: '' }
-  for (const [schemaId, entry] of Object.entries(metadata)) {
-    if (schemaId === jsonSchemaRef) {
+  const match = ([schemaId, entry]: [string, (typeof metadata)[string]]) => {
+    if (schemaId === jsonSchemaRef) return { schemaId, ...entry, data: entry.verifiablePresentation }
+    if (entry.credential?.id === id) return { schemaId, ...entry, data: entry.credential }
+    if (entry.verifiablePresentation?.id === id)
       return { schemaId, ...entry, data: entry.verifiablePresentation }
-    }
-    const credId = entry.credential?.id
-    const presId = entry.verifiablePresentation?.id
-
-    if (credId === id) {
-      return { schemaId, ...entry, data: entry.credential }
-    }
-
-    if (presId === id) {
-      return { schemaId, ...entry, data: entry.verifiablePresentation }
-    }
+    return null
   }
-  return null
+
+  // several entries can carry the same presentation URL while a binding is replaced, so the entry
+  // the DID Document announces wins over a detached leftover
+  const matched = Object.entries(metadata)
+    .map(match)
+    .filter(entry => entry !== null)
+  return matched.find(entry => entry.attached !== false) ?? matched[0] ?? null
 }
 
 export async function saveMetadataEntry(
