@@ -50,8 +50,13 @@ export function findMetadataEntry(
   const metadata = didRecord.metadata.get(key)
   if (!metadata) return null
   if (!id && !jsonSchemaRef) return { schemaId: '', data: metadata, didDocumentServiceId: '' }
+  const entries = Object.entries(metadata)
+
+  // the metadata key identifies one entry, so it answers before any preference between entries
+  const exact = jsonSchemaRef ? entries.find(([schemaId]) => schemaId === jsonSchemaRef) : undefined
+  if (exact) return { schemaId: exact[0], ...exact[1], data: exact[1].verifiablePresentation }
+
   const match = ([schemaId, entry]: [string, (typeof metadata)[string]]) => {
-    if (schemaId === jsonSchemaRef) return { schemaId, ...entry, data: entry.verifiablePresentation }
     if (entry.credential?.id === id) return { schemaId, ...entry, data: entry.credential }
     if (entry.verifiablePresentation?.id === id)
       return { schemaId, ...entry, data: entry.verifiablePresentation }
@@ -60,9 +65,7 @@ export function findMetadataEntry(
 
   // several entries can carry the same presentation URL while a binding is replaced, so the entry
   // the DID Document announces wins over a detached leftover
-  const matched = Object.entries(metadata)
-    .map(match)
-    .filter(entry => entry !== null)
+  const matched = entries.map(match).filter(entry => entry !== null)
   return matched.find(entry => entry.attached !== false) ?? matched[0] ?? null
 }
 
@@ -474,6 +477,17 @@ export async function rebindEcsCredentialSchema(
 
   const didRecord = await getDidRecord(agent)
   const record = didRecord.metadata.get('_vt/vtc') ?? {}
+
+  const stored = record[jscUrl]
+  const storedIssuer =
+    typeof stored?.credential?.issuer === 'string' ? stored.credential.issuer : stored?.credential?.issuer?.id
+  if (stored?.credential && !stored.integrityData && storedIssuer !== agent.did) {
+    agent.config.logger.debug(
+      `[SelfTR] Keeping the ${schemaKey} credential issued by ${storedIssuer} instead of rebinding a self-issued one`,
+    )
+    return
+  }
+
   let removedStale = false
   for (const [key, entry] of Object.entries(record)) {
     // findMetadataEntry serves the first entry matching the VP url, so stale bindings must go
