@@ -404,7 +404,6 @@ const run = async () => {
     masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
     veranaChain,
-    indexerBaseUrl: VERANA_INDEXER_BASE_URL!,
     authorizationService,
     adminApiServiceEndpoint,
   })

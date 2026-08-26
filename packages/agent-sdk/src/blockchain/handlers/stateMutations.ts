@@ -22,6 +22,7 @@ import {
   removeStoredTrustCredential,
   withdrawSelfIssuedEcsCredentials,
 } from '../../utils/trustCredentialStore'
+import { buildSchemaRef } from '../../utils/util'
 import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'

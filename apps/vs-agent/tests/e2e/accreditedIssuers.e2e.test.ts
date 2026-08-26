@@ -160,7 +160,7 @@ describeE2E('issuer-agnostic presentation verification against the Verana trust 
       return { participantId: op.participantId, policyAddress: agentCorp.policyAddress }
     }
 
-    issuerAgent = await startAgent({ label: 'Issuer', domain: ISSUER_DOMAIN, indexerBaseUrl })
+    issuerAgent = await startAgent({ label: 'Issuer', domain: ISSUER_DOMAIN, indexer })
     issuerAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(issuerMessages))
     issuerAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
     issuerAgent.dids.config.resolvers.unshift(sharedResolver)
@@ -168,7 +168,7 @@ describeE2E('issuer-agnostic presentation verification against the Verana trust 
     await sharedResolver.registerAgent(issuerAgent)
     issuerApp = await startServersTesting(issuerAgent)
 
-    holderAgent = await startAgent({ label: 'Holder', domain: HOLDER_DOMAIN, indexerBaseUrl })
+    holderAgent = await startAgent({ label: 'Holder', domain: HOLDER_DOMAIN, indexer })
     holderAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(holderMessages))
     holderAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
     holderAgent.dids.config.resolvers.unshift(sharedResolver)

@@ -28,6 +28,7 @@ import {
   ENABLED_PLUGINS,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
   VERANA_CHAIN_ID,
+  VERANA_INDEXER_BASE_URL,
 } from '../config'
 import { MessageService } from '../controllers/admin/message/MessageService'
 
@@ -90,7 +91,7 @@ export const setupAgent = async ({
         {
           id: `vpr:verana:${VERANA_CHAIN_ID}`,
           scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
-          api: [indexerBaseUrl],
+          api: [VERANA_INDEXER_BASE_URL],
           production: true,
         },
       ]

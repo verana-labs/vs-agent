@@ -18,8 +18,6 @@ import {
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { BaseAgentModules, VsAgent } from '../agent'
-import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
-import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { Participant, ParticipantRole, ParticipantState } from '../blockchain/types'
 import {
   HOLDER_PARTICIPANT_TYPE,
@@ -36,6 +34,7 @@ import {
   resolveJsonSchemaCredentialId,
   validateSchema,
 } from '../utils'
+import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
 
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
@@ -333,17 +332,6 @@ export class VtFlowOrchestrator {
     // instance of that credential type — reject it here rather than issue an empty shell.
     const schema = await this.agent.indexer.getCredentialSchema(input.credentialSchemaId)
     validateSchema(JSON.parse(schema.json_schema), { id: input.subjectDid, ...input.claims })
-    const chain = this.requireChain()
-    const didRecords = await this.agent.dids.getCreatedDids({ did: this.agent.did! })
-    const didRecord = didRecords[0]
-    if (!didRecord) throw new Error('Agent DID record not found')
-    const schemaRef = buildSchemaRef(chain.getChainId, input.credentialSchemaId)
-    const legacyRef = buildLegacySchemaRef(chain.getChainId, input.credentialSchemaId)
-    const entry =
-      (await findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)) ??
-      (await findMetadataEntry(didRecord, '_vt/jsc', '', legacyRef))
-    if (!entry) throw new Error(`No stored VTJSC found for ${schemaRef}`)
-    const { data } = entry
 
     const unsignedCredential = createCredential({
       id: `${this.agent.did}#${utils.uuid()}`,

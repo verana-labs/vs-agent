@@ -6,7 +6,6 @@ import { AgentDependencies, InitConfig, LogLevel } from '@credo-ts/core'
 import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
-import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { Plugin } from '../types'
 
 import { BaseAgentModules, VsAgent } from './VsAgent'
