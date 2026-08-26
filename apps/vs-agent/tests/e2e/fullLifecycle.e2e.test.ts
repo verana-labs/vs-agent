@@ -558,6 +558,11 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       // A second run must leave it attached, which is what proves the two passes agree.
       await reconcileVtjscPublications(validator, indexer, ownCorporationId)
       expect(await serviceIds()).toContain(serviceId)
+    },
+    SETUP_TIMEOUT_MS,
+  )
+
+  it(
     'withdraws the self-issued ECS credential when its ISSUER participant is revoked on chain',
     async () => {
       const baseUrl = applicant.publicApiBaseUrl
