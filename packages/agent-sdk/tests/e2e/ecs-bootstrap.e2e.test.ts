@@ -14,9 +14,6 @@ import { EcsBootstrapService } from '../../src/bootstrap/EcsBootstrapService'
 import { PARTICIPANT_ROLE_ISSUER, VeranaTestChain } from './VeranaTestChain'
 import { COOLUSER_MNEMONIC, SETUP_TIMEOUT_MS, startStack, type StartedStack } from './helpers'
 
-const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
-const describeE2E = E2E_ENABLED ? describe : describe.skip
-
 const RUN_ID = String(Date.now())
 const AGENT_DID = `did:example:agent-${RUN_ID}`
 
@@ -40,7 +37,7 @@ async function until<T>(fn: () => Promise<T | undefined>, timeoutMs = 120_000): 
   throw new Error('condition did not resolve in time')
 }
 
-describeE2E('ECS bootstrap (V4): standalone against a live chain and indexer', () => {
+describe('ECS bootstrap (V4): standalone against a live chain and indexer', () => {
   let stack: StartedStack
   let chainA: VeranaTestChain
   let agentChain: VeranaChainService

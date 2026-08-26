@@ -53,7 +53,7 @@
     "start:prod": "node build/src/main",
     "version": "pnpm version --allow-same-version",
     "test": "vitest",
-    "test:e2e": "RUN_FLOW_E2E=1 vitest run tests/e2e"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "@credo-ts/anoncreds": "0.7.1-pr-2704-20260630143332",
@@ -70,6 +70,7 @@
     "@nestjs/swagger": "^8.0.7",
     "@openwallet-foundation/askar-nodejs": "^0.6.0",
     "@types/qrcode": "^1.5.0",
+    "@verana-labs/verre": "0.4.0-dev.1",
     "@verana-labs/vs-agent-model": "workspace:*",
     "@verana-labs/vs-agent-sdk": "workspace:*",
     "bull": "^4.16.2",

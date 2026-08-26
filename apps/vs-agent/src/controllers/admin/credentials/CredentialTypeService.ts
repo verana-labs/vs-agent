@@ -567,7 +567,12 @@ export class CredentialTypesService {
       if (attrNames.length === 0) {
         throw new Error(`No properties found in credentialSubject of schema from ${jsonSchemaCredentialId}`)
       }
-      return { parsedSchema, attrNames, title: parsedSchema?.title as string | undefined }
+      return {
+        parsedSchema,
+        attrNames,
+        title: parsedSchema?.title as string | undefined,
+        subjectRef: subjectId,
+      }
     } catch (error) {
       throw new Error(`Failed to parse JSON Schema Credential ${jsonSchemaCredentialId}: ${error}`)
     }

@@ -6,7 +6,9 @@ import {
   W3cCredential,
   W3cJsonLdVerifiableCredential,
   W3cJsonLdVerifiablePresentation,
+  utils,
 } from '@credo-ts/core'
+import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { VsAgent } from '../agent/VsAgent'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
@@ -112,8 +114,9 @@ export async function saveMetadataEntry(
   if (service && verifiablePresentation.id?.includes('service'))
     service.serviceEndpoint = verifiablePresentation.id!
 
-  // When a new VTC has been added, remove the self VTCs
-  updateVtcEntries(didRecord, false, publicApiBaseUrl)
+  // A JSON schema credential says nothing about this agent's own ECS identity, so only a real
+  // trust credential replaces the self-issued ones.
+  if (key === '_vt/vtc') updateVtcEntries(didRecord, false, publicApiBaseUrl)
   await updateDidRecord(agent, didRecord)
 }
 
@@ -289,7 +292,9 @@ export async function removeTrustCredential(
   key: '_vt/jsc' | '_vt/vtc',
 ) {
   const didRecord = await getDidRecord(agent)
-  const record = findMetadataEntry(didRecord, key, schemaId)
+  // same lookup deleteMetadataEntry performs: a self-issued entry carries the agent DID as
+  // credential id, so only its metadata key reaches it
+  const record = findMetadataEntry(didRecord, key, schemaId, schemaId)
   // Currently, we only use one serviceEndpoint per ID.
   // In the future, if multiple serviceEndpoints exist for the same ID,
   // we should review the serviceEndpoint content and remove only the specific one.
@@ -349,17 +354,68 @@ export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc
   return findMetadataEntry(didRecord, key, schemaId)
 }
 
+/**
+ * Anchors a self-issued ECS credential, the same way as any other issuance: through
+ * CreateOrUpdateParticipantSession, which stores the digest in the `di` module keeper-to-keeper.
+ *
+ * `issuerParticipantId` must name an active ISSUER participant of this agent for the schema, whose
+ * vs_operator is this agent's account — the chain accepts the session from no other signer. The
+ * caller resolves it, because it already lists the agent's participants to decide what to rebind.
+ */
+async function anchorCredentialDigest(
+  agent: VsAgent,
+  schemaId: number,
+  credential: W3cJsonLdVerifiableCredential | undefined,
+  issuerParticipantId: number,
+): Promise<void> {
+  const chain = agent.veranaChain
+  if (!chain) return
+  if (!credential) throw new Error(`[DigestAnchor] The presentation for schema ${schemaId} has no credential`)
+  if (!agent.did) throw new Error('[DigestAnchor] The agent has no public DID')
+
+  const schema = await chain.getCredentialSchema(schemaId)
+  if (!schema) throw new Error(`[DigestAnchor] Credential schema ${schemaId} is not on chain`)
+
+  const digest = computeCredentialDigestJCS(
+    JsonTransformer.toJSON(credential) as unknown as W3cJsonLdVerifiableCredential,
+    schema.digestAlgorithm,
+  )
+  // the same credential gives the same digest on each run, so an anchored digest needs no second transaction
+  if (await chain.getDigest(digest)) return
+
+  // A self-issued credential has no counterparty, so the session names only the issuer.
+  const { txHash } = await chain.createOrUpdateParticipantSession({
+    id: utils.uuid(),
+    issuerParticipantId,
+    agentParticipantId: 0,
+    walletAgentParticipantId: 0,
+    digest,
+  })
+  agent.config.logger.info(
+    `[DigestAnchor] Anchored digest ${digest} for schema ${schemaId} against issuer participant ${issuerParticipantId} (tx ${txHash})`,
+  )
+}
+
 // replaces the self-TR example JSC binding with the on-chain VTJSC so resolvers can link the credential to the VPR
+/**
+ * @param jsonSchemaCredentialId the VTJSC the Ecosystem published for this schema. Only the
+ * Ecosystem publishes it, so an agent that issues against another Corporation's Ecosystem must
+ * resolve it there — see resolveJsonSchemaCredentialId.
+ * @param issuerParticipantId this agent's ISSUER participant for the schema, which anchors the
+ * credential digest.
+ */
 export async function rebindEcsCredentialSchema(
   agent: VsAgent,
   publicApiBaseUrl: string,
   schemaId: string,
   schemaKey: string,
   defaults: SelfTrDefaults,
+  jsonSchemaCredentialId: string,
+  issuerParticipantId: number,
 ): Promise<void> {
   if (!['ecs-service', 'ecs-org'].includes(schemaKey) || !agent.did) return
   const vpUrl = `${publicApiBaseUrl}/vt/${schemaKey}-vtc-vp.json`
-  const jscUrl = `${publicApiBaseUrl}/vt/schemas-${schemaId}-jsc.json`
+  const jscUrl = jsonSchemaCredentialId
 
   const didRecord = await getDidRecord(agent)
   const record = didRecord.metadata.get('_vt/vtc') ?? {}
@@ -387,9 +443,26 @@ export async function rebindEcsCredentialSchema(
     ['VerifiableCredential', 'VerifiableTrustCredential'],
     { id: jscUrl, type: 'JsonSchemaCredential' },
     defaults,
+    async verifiablePresentation =>
+      await anchorCredentialDigest(
+        agent,
+        Number(schemaId),
+        verifiablePresentation?.verifiableCredential?.[0] as W3cJsonLdVerifiableCredential | undefined,
+        issuerParticipantId,
+      ),
   )
 
   const freshRecord = await getDidRecord(agent)
+  let recordChanged = false
+
+  const vtc = freshRecord.metadata.get('_vt/vtc') ?? {}
+  const entry = vtc[jscUrl]
+  if (entry && (entry.issuerParticipantId !== issuerParticipantId || entry.schemaKey !== schemaKey)) {
+    vtc[jscUrl] = { ...entry, issuerParticipantId, schemaKey }
+    freshRecord.metadata.set('_vt/vtc', vtc)
+    recordChanged = true
+  }
+
   const doc = freshRecord.didDocument
   if (doc) {
     // resolvers match the [VT-CRED-W3C-LINKED-VP] fragment; #whois alone is not enough
@@ -404,8 +477,44 @@ export async function rebindEcsCredentialSchema(
           type: 'LinkedVerifiablePresentation',
         }),
       )
-      await updateDidRecord(agent, freshRecord)
+      recordChanged = true
     }
+    if (recordChanged) await updateDidRecord(agent, freshRecord)
   }
   agent.config.logger.info(`[SelfTR] Rebound ${schemaKey} credential to VTJSC ${jscUrl}`)
+}
+
+/**
+ * Withdraws the ECS credentials anchored against `issuerParticipantId` and republishes the
+ * self-issued default in their place, which is what the next start would publish anyway.
+ */
+export async function withdrawSelfIssuedEcsCredentials(
+  agent: VsAgent,
+  publicApiBaseUrl: string,
+  issuerParticipantId: number,
+  defaults: SelfTrDefaults,
+): Promise<string[]> {
+  const didRecord = await getDidRecord(agent)
+  const withdrawn: string[] = []
+
+  for (const [jscUrl, value] of Object.entries(didRecord.metadata.get('_vt/vtc') ?? {})) {
+    const entry = value as { issuerParticipantId?: number; schemaKey?: string }
+    if (entry.issuerParticipantId !== issuerParticipantId) continue
+    await removeTrustCredential(agent, publicApiBaseUrl, jscUrl, '_vt/vtc')
+    withdrawn.push(jscUrl)
+
+    const defaultSchema = presentations.find(p => p.name === entry.schemaKey)
+    if (!defaultSchema) continue
+    // stays detached when a real trust credential is already stored
+    await generateVerifiablePresentation(
+      agent,
+      `${publicApiBaseUrl}/vt/${defaultSchema.name}-vtc-vp.json`,
+      getEcsSchemas(publicApiBaseUrl),
+      defaultSchema.name,
+      ['VerifiableCredential', 'VerifiableTrustCredential'],
+      { id: mapToSelfTr(defaultSchema.schemaUrl, publicApiBaseUrl), type: 'JsonSchemaCredential' },
+      defaults,
+    )
+  }
+  return withdrawn
 }

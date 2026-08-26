@@ -11,21 +11,27 @@ import {
 import { identifySchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
+import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../../types'
 import { getEcsSchemas } from '../../utils/data'
-import { buildSchemaRef } from '../../utils/util'
+import { waitUntilOwnDidIsPubliclyResolvable } from '../../utils/didReadiness'
 import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
 import {
   createJsc,
   findMetadataEntry,
   rebindEcsCredentialSchema,
   removeStoredTrustCredential,
+  withdrawSelfIssuedEcsCredentials,
 } from '../../utils/trustCredentialStore'
+import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'
-import { IndexerActivity, ValidationState, VeranaSyncState } from '../types'
-
-const DEFAULT_CHAIN_ID = 'vna-testnet-1'
-const PARTICIPANT_ROLE_HOLDER = 6
+import {
+  IndexerActivity,
+  ParticipantRole,
+  ParticipantState,
+  ValidationState,
+  VeranaSyncState,
+} from '../types'
 
 export function applyStateMutation(state: VeranaSyncState, activity: IndexerActivity): void {
   switch (activity.msg) {
@@ -206,6 +212,33 @@ export async function markVtFlowRecordsValidated(agent: VsAgent, participantId: 
   )
 }
 
+/**
+ * Close the onboarding records of a participant that receives no credential.
+ *
+ * Only a HOLDER takes part in a credential exchange, and the exchange is what moves a record to
+ * COMPLETED. An ISSUER, a VERIFIER or a grantor is finished the moment the chain records
+ * SetParticipantOPToValidated, so without this both sides would sit at OR_SENT and VALIDATED for
+ * ever. The applicant reaches its own record here, because it watches the same chain event.
+ */
+export async function completeVtFlowRecordsWithoutCredential(
+  agent: VsAgent,
+  participantId: string,
+): Promise<void> {
+  const participant = await agent.veranaChain?.getParticipant(Number(participantId))
+  if (!participant || participant.role === HOLDER_PARTICIPANT_TYPE) return
+
+  await reconcileVtFlowRecordsForParticipant(
+    agent,
+    participantId,
+    async (record, service, agentContext) => {
+      if (record.state === VtFlowState.Completed || isVtFlowTerminalState(record.state)) return null
+      await service.markCompleted(agentContext, record.id)
+      return 'COMPLETED'
+    },
+    'Failed to mark COMPLETED',
+  )
+}
+
 export async function setVtFlowRecordsParticipantRevoked(
   agent: VsAgent,
   participantId: string,
@@ -264,7 +297,7 @@ export async function removeHolderTrustCredentialIfRevoked(
   participantId: string,
 ): Promise<void> {
   const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
-  if (participant?.role !== PARTICIPANT_ROLE_HOLDER || participant.did !== agent.did) return
+  if (participant?.role !== HOLDER_PARTICIPANT_TYPE || participant.did !== agent.did) return
   if (!agent.publicApiBaseUrl) return
 
   const agentContext = agent.context
@@ -289,6 +322,39 @@ export async function removeHolderTrustCredentialIfRevoked(
         e as Record<string, unknown>,
       )
     }
+  }
+}
+
+/**
+ * VSA-VTI-FLOW-OP-REVOKE: an ECS credential anchored against a revoked ISSUER still verifies, but a
+ * resolver reports the Participant as REVOKED and the whole DID then fails VS-CONN-VS.
+ */
+export async function removeSelfIssuedEcsCredentialsIfIssuerRevoked(
+  agent: VsAgent,
+  participantId: string,
+  selfTrDefaults: SelfTrDefaults,
+): Promise<void> {
+  if (!agent.publicApiBaseUrl) return
+  const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
+  if (participant?.role !== ISSUER_PARTICIPANT_TYPE || participant.did !== agent.did) return
+
+  try {
+    const withdrawn = await withdrawSelfIssuedEcsCredentials(
+      agent,
+      agent.publicApiBaseUrl,
+      participant.id,
+      selfTrDefaults,
+    )
+    for (const jscUrl of withdrawn) {
+      agent.config.logger.info(
+        `[SelfTR] Withdrew the self-issued ECS credential bound to ${jscUrl} (issuer participant ${participantId})`,
+      )
+    }
+  } catch (e) {
+    agent.config.logger.error(
+      `[SelfTR] Failed to withdraw the ECS credentials of the revoked ISSUER participant ${participantId}`,
+      e as Record<string, unknown>,
+    )
   }
 }
 
@@ -321,6 +387,7 @@ export async function startParticipantOPAutoFlow(agent: VsAgent, activity: Index
   const holderParticipant = await chain.getParticipant(applicantParticipantId)
   if (!holderParticipant || holderParticipant.did !== agent.did) return
   try {
+    await waitUntilOwnDidIsPubliclyResolvable(agent, agent.config.logger)
     const orchestrator = new VtFlowOrchestrator(agent)
     await orchestrator.startOnboardingProcess({ applicantParticipantId })
   } catch (err) {
@@ -338,7 +405,11 @@ export async function reconcileVtjscPublications(
 ): Promise<void> {
   if (!agent.did || !agent.publicApiBaseUrl) return
 
-  const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
+  const chainId = agent.veranaChain?.getChainId
+  if (!chainId) {
+    agent.config.logger.warn('[VTJSC] Skipping reconciliation: the agent is not connected to a chain')
+    return
+  }
 
   const ecosystems = await indexer.listEcosystems()
   for (const ecosystem of ecosystems.filter(entry => Number(entry.corporation_id) === corporationId)) {
@@ -363,27 +434,89 @@ export async function reconcileVtjscPublications(
           )
         } catch (e) {
           agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
-          continue
         }
       }
-      if (selfTrDefaults) {
-        try {
-          const ecsKey = await identifySchema(JSON.parse(schema.json_schema))
-          if (!ecsKey) continue
-          await rebindEcsCredentialSchema(
-            agent,
-            agent.publicApiBaseUrl,
-            String(schema.id),
-            ecsKey,
-            selfTrDefaults,
-          )
-        } catch (e) {
-          agent.config.logger.error(
-            `[VTJSC] Failed to rebind ECS credential for schema ${schema.id}`,
-            e as Error,
+    }
+  }
+
+  if (selfTrDefaults) await reconcileSelfIssuedEcsCredentials(agent, indexer, selfTrDefaults)
+}
+
+/**
+ * Rebinds and anchors this agent's own ECS credentials.
+ *
+ * It follows the ISSUER Participant entries the agent holds, not the Ecosystems its Corporation
+ * controls: an agent may issue against an Ecosystem that another Corporation owns, and an
+ * Ecosystem controller may hold no ISSUER entry at all. An entry is usable only when it names
+ * this agent's account as its vs_operator, because the chain accepts the anchoring
+ * CreateOrUpdateParticipantSession from no other signer.
+ */
+async function reconcileSelfIssuedEcsCredentials(
+  agent: VsAgent,
+  indexer: VeranaIndexerService,
+  selfTrDefaults: SelfTrDefaults,
+): Promise<void> {
+  const chain = agent.veranaChain
+  if (!chain || !agent.did || !agent.publicApiBaseUrl) return
+  const chainId = chain.getChainId
+
+  // A Participant revoked while the agent was down delivers no event it can still act on. Runs
+  // first, so a schema whose ISSUER entry was replaced ends up bound to the new one.
+  for (const participantState of [ParticipantState.Revoked, ParticipantState.Slashed]) {
+    try {
+      const stale = await indexer.listParticipants({
+        did: agent.did,
+        role: ParticipantRole.Issuer,
+        participantState,
+      })
+      for (const issuer of stale) {
+        const withdrawn = await withdrawSelfIssuedEcsCredentials(
+          agent,
+          agent.publicApiBaseUrl,
+          issuer.id,
+          selfTrDefaults,
+        )
+        for (const jscUrl of withdrawn) {
+          agent.config.logger.info(
+            `[SelfTR] Withdrew the self-issued ECS credential bound to ${jscUrl} (${participantState} issuer participant ${issuer.id})`,
           )
         }
       }
+    } catch (e) {
+      agent.config.logger.error(
+        `[SelfTR] Failed to withdraw the ECS credentials of ${participantState} ISSUER participants`,
+        e as Error,
+      )
+    }
+  }
+
+  const issuers = await indexer.listParticipants({
+    did: agent.did,
+    role: ParticipantRole.Issuer,
+    participantState: ParticipantState.Active,
+  })
+
+  for (const issuer of issuers) {
+    if (issuer.revoked || issuer.slashed || issuer.vs_operator !== chain.address) continue
+    try {
+      const schema = await indexer.getCredentialSchema(issuer.schema_id)
+      const ecsKey = await identifySchema(JSON.parse(schema.json_schema))
+      if (!ecsKey) continue
+      const jsonSchemaCredentialId = await resolveJsonSchemaCredentialId(agent, indexer, schema.id, chainId)
+      await rebindEcsCredentialSchema(
+        agent,
+        agent.publicApiBaseUrl,
+        String(schema.id),
+        ecsKey,
+        selfTrDefaults,
+        jsonSchemaCredentialId,
+        issuer.id,
+      )
+    } catch (e) {
+      agent.config.logger.error(
+        `[SelfTR] Failed to rebind the ECS credential of schema ${issuer.schema_id}`,
+        e as Error,
+      )
     }
   }
 }
@@ -392,19 +525,33 @@ export async function publishVtjscIfOwner(
   state: VeranaSyncState,
   agent: VsAgent,
   schemaEntityId: string,
+  agentCorporationId?: number,
 ): Promise<void> {
   const schema = state.credentialSchemas[schemaEntityId]
   if (!schema) {
     agent.config.logger.warn(`[VTJSC] Schema ${schemaEntityId} not found in state`)
+    return
   }
 
   const ecosystem = state.ecosystems[String(schema.ecosystemId)]
   if (!ecosystem) {
     agent.config.logger.warn(`[VTJSC] Ecosystem ${schema.ecosystemId} not found in state`)
+    return
   }
 
-  const chainId = agent.veranaChain?.getChainId ?? DEFAULT_CHAIN_ID
-  const jsonSchemaRef = buildSchemaRef(chainId, schema.id)
+  if (ecosystem.corporationId !== agentCorporationId) {
+    agent.config.logger.debug(
+      `[VTJSC] Skipping schema ${schema.id}: ecosystem ${ecosystem.id} belongs to corporation ${ecosystem.corporationId}`,
+    )
+    return
+  }
+
+  const chainId = agent.veranaChain?.getChainId
+  if (!chainId) {
+    agent.config.logger.warn(`[VTJSC] Skipping schema ${schema.id}: the agent is not connected to a chain`)
+    return
+  }
+  const jsonSchemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
 
   const digestSRI = generateDigestSRI(schema.jsonSchema)
 

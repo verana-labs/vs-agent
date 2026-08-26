@@ -2,6 +2,7 @@ import {
   W3cCredential,
   W3cPresentation,
   W3cCredentialSchema,
+  DidDocumentService,
   DidRepository,
   ClaimFormat,
   W3cCredentialSubject,
@@ -34,11 +35,14 @@ const DIGEST_FETCH_TIMEOUT_MS = 5000
 export interface SelfTrDefaults {
   agentLabel: string
   serviceLogoUri: string
+  serviceLogoDigestSri?: string
   serviceType: string
   serviceDescription: string
   serviceMinimumAgeRequired: number
   serviceTermsAndConditions: string
+  serviceTermsAndConditionsDigestSri?: string
   servicePrivacyPolicy: string
+  servicePrivacyPolicyDigestSri?: string
   orgRegistryId: string
   orgRegistryUri: string
   orgAddress: string
@@ -94,8 +98,26 @@ export const linkedVpFragment = (schemaKey: string): string =>
 export const mapToSelfTr = (url: string, publicApiBaseUrl: string): string =>
   url.replace('ecosystem', `${publicApiBaseUrl}/vt`)
 
+// A plain array replacer only allowlists property names, applied at every
+// nesting level — nested objects like `claims` and `credentialSchema` would
+// serialize to `{}` since none of their own keys appear in a top-level
+// key list. Sort keys recursively instead, so the hash actually reflects
+// nested content and changes to claims invalidate the cache correctly.
+export const sortKeysDeep = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(sortKeysDeep)
+  if (value !== null && typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = sortKeysDeep((value as Record<string, unknown>)[key])
+        return acc
+      }, {})
+  }
+  return value
+}
+
 const buildIntegrityData = (data: Record<string, unknown>) => {
-  return generateDigestSRI(JSON.stringify(data, Object.keys(data).sort()))
+  return generateDigestSRI(JSON.stringify(sortKeysDeep(data)))
 }
 
 export const setupSelfTr = async ({
@@ -307,6 +329,7 @@ export async function signerW3c(
  * @param schemaKey - Unique identifier for the presentation type and metadata key.
  * @param type - Array of credential types to include.
  * @param credentialSchema - Schema definition for the credential.
+ * @param beforePublish - Step that must succeed before a linked presentation counts as published.
  * @returns The signed verifiable presentation, with integrity metadata.
  */
 export async function generateVerifiablePresentation(
@@ -317,6 +340,7 @@ export async function generateVerifiablePresentation(
   type: string[],
   credentialSchema: W3cCredentialSchema,
   defaults: SelfTrDefaults,
+  beforePublish?: (verifiablePresentation: any) => Promise<void>,
 ) {
   if (!agent.did) throw Error('The DID must be set up')
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
@@ -328,7 +352,12 @@ export async function generateVerifiablePresentation(
   const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
   const record = didRecord.metadata.get('_vt/vtc') ?? {}
   const metadata = record[credentialSchema.id]
-  if (metadata?.integrityData === integrityData && metadata.attached) return metadata.verifiablePresentation
+  const attached = metadata?.attached ?? true
+  if (metadata?.integrityData === integrityData) {
+    // the presentation is already public, so a failed beforePublish step still needs a retry here
+    if (attached) await beforePublish?.(metadata.verifiablePresentation)
+    return metadata.verifiablePresentation
+  }
 
   const presentation = createPresentation({
     id,
@@ -346,25 +375,46 @@ export async function generateVerifiablePresentation(
     defaults,
     presentation,
   )
+  // nothing is persisted yet, so a failure here leaves no public presentation behind
+  if (attached) await beforePublish?.(verifiablePresentation)
   // Update linked VP when the presentation has changed
-  didDocument.service = didDocument.service?.map(s => {
-    if (typeof s.serviceEndpoint !== 'string') return s
-    if (s.serviceEndpoint.includes(schemaKey) && s.id !== `${agent.did}#whois`) {
-      s.id = didDocumentServiceId
-      s.serviceEndpoint = id
-    }
-    return s
-  })
+  if (attached)
+    didDocument.service = didDocument.service?.map(s => {
+      if (typeof s.serviceEndpoint !== 'string') return s
+      if (s.serviceEndpoint.includes(schemaKey) && s.id !== `${agent.did}#whois`) {
+        s.id = didDocumentServiceId
+        s.serviceEndpoint = id
+      }
+      return s
+    })
+  // Resolvers only discover the credential through the [VT-CRED-W3C-LINKED-VP] fragment, and
+  // #whois does not match it. The rename above only covers documents that already carry the
+  // service, so publish it here when nothing declared it yet.
+  let didDocumentChanged = false
+  if (attached && !didDocument.service?.some(s => s.id === didDocumentServiceId)) {
+    didDocument.service = [
+      ...(didDocument.service ?? []),
+      new DidDocumentService({
+        id: didDocumentServiceId,
+        serviceEndpoint: id,
+        type: 'LinkedVerifiablePresentation',
+      }),
+    ]
+    didDocumentChanged = true
+  }
   const credential = verifiablePresentation.verifiableCredential[0]
   record[credentialSchema.id] = {
     credential,
     verifiablePresentation,
     didDocumentServiceId,
     integrityData,
-    attached: true,
+    attached,
   }
   didRecord.metadata.set('_vt/vtc', record)
   await agent.context.dependencyManager.resolve(DidRepository).update(agent.context, didRecord)
+  if (didDocumentChanged) {
+    await agent.dids.update({ did: didRecord.did, didDocument })
+  }
   return verifiablePresentation
 }
 
@@ -407,19 +457,29 @@ export async function getClaims(
           type: claims?.type ?? defaults.serviceType,
           description: claims?.description ?? defaults.serviceDescription,
           logoUri,
-          logoDigestSri: (claims?.logoDigestSri as string) ?? (await urlDigestSri(logoUri)),
+          logoDigestSri:
+            (claims?.logoDigestSri as string) ??
+            defaults.serviceLogoDigestSri ??
+            (await urlDigestSri(logoUri)),
           minimumAgeRequired: claims?.minimumAgeRequired ?? defaults.serviceMinimumAgeRequired,
           termsAndConditionsUri,
           termsAndConditionsDigestSri:
-            (claims?.termsAndConditionsDigestSri as string) ?? (await urlDigestSri(termsAndConditionsUri)),
+            (claims?.termsAndConditionsDigestSri as string) ??
+            defaults.serviceTermsAndConditionsDigestSri ??
+            (await urlDigestSri(termsAndConditionsUri)),
           privacyPolicyUri,
           privacyPolicyDigestSri:
-            (claims?.privacyPolicyDigestSri as string) ?? (await urlDigestSri(privacyPolicyUri)),
+            (claims?.privacyPolicyDigestSri as string) ??
+            defaults.servicePrivacyPolicyDigestSri ??
+            (await urlDigestSri(privacyPolicyUri)),
         }
       : {
           name: claims?.name ?? defaults.agentLabel,
           logoUri,
-          logoDigestSri: (claims?.logoDigestSri as string) ?? (await urlDigestSri(logoUri)),
+          logoDigestSri:
+            (claims?.logoDigestSri as string) ??
+            defaults.serviceLogoDigestSri ??
+            (await urlDigestSri(logoUri)),
           registryId: claims?.registryId ?? defaults.orgRegistryId,
           registryUri: claims?.registryUri ?? defaults.orgRegistryUri,
           address: claims?.address ?? defaults.orgAddress,
@@ -458,6 +518,16 @@ export function validateSchema(ecsSchema: AnySchemaObject, credentialSubject: Re
   }
 }
 
+async function fetchSchemaContent(id: string): Promise<{ content?: string; error?: string }> {
+  try {
+    const response = await fetch(mapToEcosystem(id))
+    if (!response.ok) return { error: `${response.status} ${response.statusText}` }
+    return { content: await response.text() }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 /**
  * Adds a Subresource Integrity (SRI) digest to the provided data using the schema content
  * fetched from the provided URL or from a local schema map as fallback.
@@ -477,16 +547,14 @@ export async function addDigestSRI<T extends object>(
   if (!id || !data) {
     throw new Error(`id and data has requiered`)
   }
-  const response = await fetch(mapToEcosystem(id))
+  const fetched = await fetchSchemaContent(id)
   const key = id.split('/').pop()
   const fallbackSchema = key && ecsSchemas?.[key]
 
-  const schemaContent = response.ok ? await response.text() : fallbackSchema
+  const schemaContent = fetched.content ?? fallbackSchema
 
   if (!schemaContent) {
-    throw new Error(
-      `Failed to fetch schema from ${id}: ${response.status} ${response.statusText}, and no local fallback found.`,
-    )
+    throw new Error(`Failed to fetch schema from ${id}: ${fetched.error}, and no local fallback found.`)
   }
   assertValidSchema(schemaContent, id)
 

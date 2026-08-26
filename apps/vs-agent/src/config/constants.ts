@@ -83,11 +83,6 @@ export const ADMIN_LOG_LEVEL = process.env.ADMIN_LOG_LEVEL
 export const USE_CORS = Boolean(process.env.USE_CORS || false)
 export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER === 'false')
 
-export const AGENT_DIDCOMM_VERSIONS = (process.env.AGENT_DIDCOMM_VERSIONS ?? 'v1,v2')
-  .split(',')
-  .map(v => v.trim().toLowerCase())
-  .filter(v => v.length > 0)
-
 // Advanced settings
 export const AGENT_INVITATION_BASE_URL = process.env.AGENT_INVITATION_BASE_URL ?? 'https://hologram.zone/'
 export const REDIRECT_DEFAULT_URL_TO_INVITATION_URL =
@@ -125,6 +120,63 @@ export const DEFAULT_SELF_ISSUED_VTC_RESOURCES = {
   privacyPolicyUri: (baseUrl: string) => `${baseUrl}/vt/default/privacy.html`,
 }
 
+// Content served at the DEFAULT_SELF_ISSUED_VTC_RESOURCES URLs above (by
+// DefaultResourcesController) and hashed for the corresponding *DigestSri
+// self-tr claim (see main.ts). Defined here, once, so both sides use the
+// exact same bytes without the agent having to fetch its own public URL over
+// HTTP to hash content it already has in memory — self-fetching that URL at
+// startup raced the ingress and 503'd intermittently right after a restart.
+// kept in sync with apps/vs-agent-ui/src/assets/logo.svg
+export const DEFAULT_LOGO_SVG = `<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Matches Tailwind's bg-gradient-to-br from #763EF0 to #9F7AEA -->
+    <linearGradient id="veranaHeaderGradient" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#763EF0"/>
+      <stop offset="100%" stop-color="#9F7AEA"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Purple gradient capsule -->
+  <rect x="0" y="0" width="64" height="64" rx="12" fill="url(#veranaHeaderGradient)"/>
+
+  <!-- White Verana mark scaled to the header proportion -->
+  <g transform="translate(32 33) scale(0.76923) translate(-27 -27)" fill="white">
+    <path d="M26.9932 51.6972L5.805 11.0977L2.91263 16.2161L0 10.6048L5.98725 0L26.9932 40.2483L47.9993 0L54 10.6217L51.0773 16.2161L48.1849 11.0977L26.9932 51.6972Z"/>
+    <path d="M13.696 0L26.9935 25.4637L39.9367 0H13.696Z"/>
+  </g>
+</svg>
+`
+
+const defaultResourcePage = (title: string, body: string) => `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>${title}</title></head>
+<body><h1>${title}</h1><p>${body}</p></body>
+</html>
+`
+
+export const DEFAULT_TERMS_HTML = defaultResourcePage(
+  'Terms and Conditions',
+  'This Verifiable Service has not published its own terms and conditions yet.',
+)
+
+export const DEFAULT_PRIVACY_HTML = defaultResourcePage(
+  'Privacy Policy',
+  'This Verifiable Service has not published its own privacy policy yet.',
+)
+
+// Swagger tags for the v2 admin scopes.
+const v2ScopeTag = (summary: string) =>
+  `${summary} Reserved for the v2 migration; no methods implemented yet.`
+
+export const ADMIN_V2_TAGS: Record<string, string> = {
+  'v2/auth': v2ScopeTag('Exchanges an account signature for a bearer token.'),
+  'v2/agent': v2ScopeTag('Identifies the agent and reports its state to an orchestrator.'),
+  'v2/didcomm': v2ScopeTag('Operates on the wire-level DIDComm state of the agent.'),
+  'v2/openid4vc': v2ScopeTag('Operates on the OpenID4VC state of the agent.'),
+  'v2/anoncreds': v2ScopeTag('Manages the AnonCreds artifacts of the agent.'),
+  'v2/vt': v2ScopeTag('Manages the Verifiable Trust state of the agent.'),
+}
+
 // Utils params
 export const MASTER_LIST_CSCA_LOCATION = process.env.MASTER_LIST_CSCA_LOCATION
 
@@ -135,7 +187,7 @@ export const AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP =
 export const AGENT_BACKUP_BEFORE_STORAGE_UPDATE = process.env.AGENT_BACKUP_BEFORE_STORAGE_UPDATE !== 'false' // removed on credo-ts v0.6.0
 
 // Verana network
-export const VERANA_INDEXER_BASE_URL = process.env.VERANA_INDEXER_BASE_URL
+export const VERANA_INDEXER_BASE_URL = process.env.VERANA_INDEXER_BASE_URL ?? ''
 export const VERANA_ACCOUNT_MNEMONIC = process.env.VERANA_ACCOUNT_MNEMONIC
 export const VERANA_RPC_ENDPOINT_URL = process.env.VERANA_RPC_ENDPOINT_URL
 export const VERANA_CHAIN_ID = process.env.VERANA_CHAIN_ID
@@ -150,6 +202,9 @@ export const VERANA_INDEXER_SUBSCRIPTION_SCOPE = (process.env.VERANA_INDEXER_SUB
   .trim()
   .toLowerCase()
 export const VERANA_AUTO_TRIGGER_RESOLVER = process.env.VERANA_AUTO_TRIGGER_RESOLVER !== 'false'
+export const VERANA_GAS_ADJUSTMENT = process.env.VERANA_GAS_ADJUSTMENT
+  ? Number(process.env.VERANA_GAS_ADJUSTMENT)
+  : undefined
 
 export const TRUSTED_ECS_ECOSYSTEM_DIDS = (process.env.TRUSTED_ECS_ECOSYSTEM_DIDS ?? '')
   .split(',')
@@ -167,7 +222,7 @@ export const ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS = (
 
 // Active plugins: comma-separated list of plugin names.
 // Available:
-//   'messaging' — base MessageController + credential/proof handlers (always required)
+//   'messaging' — base V1MessageController + credential/proof handlers (always required)
 //   'chat'      — chat Credo modules + chat message handlers
 //   'mrtd'      — eMRTD Credo module + MRTD message handlers
 //

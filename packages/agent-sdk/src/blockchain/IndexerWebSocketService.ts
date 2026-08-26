@@ -16,6 +16,7 @@ import {
   IndexerEventRecord,
   IndexerReadyMessage,
   IndexerSubscribeMessage,
+  IndexerSubscribedMessage,
   VeranaSyncState,
 } from './types'
 
@@ -24,6 +25,7 @@ export interface IndexerWebSocketServiceOptions {
   agent: VsAgent
   handlerRegistry?: IndexerHandlerRegistry
   corporationId?: number
+  agentCorporationId?: number
 }
 
 const MAX_RECONNECT_DELAY_MS = 300_000
@@ -31,6 +33,10 @@ const WS_PATHNAME = 'v4/indexer/subscribe'
 const REST_PAGE_LIMIT = 500
 const MAX_SYNC_BUFFER = 10_000
 const SUBSCRIBE_TIMEOUT_MS = 5_000
+type SubscribeOutcome = 'acknowledged' | 'timed-out' | 'disconnected'
+type ConnectionPhase = 'connecting' | 'catching-up' | 'synced'
+
+export type IndexerSyncStatus = 'never-synced' | 'catching-up' | 'disconnected' | 'synced'
 const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 // The indexer pings every 30 seconds, so a longer gap means the socket is dead.
 const LIVENESS_TIMEOUT_MS = 90_000
@@ -42,10 +48,12 @@ export class IndexerWebSocketService {
   private watchdog: ReturnType<typeof setTimeout> | null = null
   private stopped = false
   private syncing = false
+  private phase: ConnectionPhase = 'connecting'
+  private everSynced = false
   private generation = 0
   private chain: Promise<void> = Promise.resolve()
   private syncBuffer: IndexerEventRecord[] = []
-  private subscribeSent: (() => void) | null = null
+  private settleSubscribed: ((outcome: SubscribeOutcome) => void) | null = null
   private readonly indexer: VeranaIndexerService
   private readonly handlerRegistry: IndexerHandlerRegistry
 
@@ -60,6 +68,12 @@ export class IndexerWebSocketService {
   async start(): Promise<void> {
     this.stopped = false
     await this.connect()
+  }
+
+  get syncStatus(): IndexerSyncStatus {
+    if (this.phase === 'catching-up') return 'catching-up'
+    if (this.phase === 'synced') return 'synced'
+    return this.everSynced ? 'disconnected' : 'never-synced'
   }
 
   stop(): void {
@@ -81,14 +95,26 @@ export class IndexerWebSocketService {
     if (this.stopped) return
     const generation = ++this.generation
     this.syncing = true
+    this.phase = 'connecting'
     this.syncBuffer = []
 
-    const subscribed = new Promise<void>(resolve => {
-      this.subscribeSent = resolve
+    const subscribed = new Promise<SubscribeOutcome>(resolve => {
+      this.settleSubscribed = resolve
     })
     this.openWebSocket()
-    await Promise.race([subscribed, delay(SUBSCRIBE_TIMEOUT_MS)])
+    const outcome = await Promise.race([
+      subscribed,
+      delay(SUBSCRIBE_TIMEOUT_MS).then((): SubscribeOutcome => 'timed-out'),
+    ])
     if (this.stopped || generation !== this.generation) return
+    if (outcome === 'disconnected') return
+    if (outcome === 'timed-out') {
+      this.logger.warn(
+        `[IndexerWS] No 'subscribed' acknowledgement within ${SUBSCRIBE_TIMEOUT_MS}ms; starting the catch-up anyway. Events landing before the subscription becomes active may be missed.`,
+      )
+    }
+
+    this.phase = 'catching-up'
 
     try {
       await this.syncRest(generation)
@@ -100,6 +126,8 @@ export class IndexerWebSocketService {
 
     if (this.stopped || generation !== this.generation) return
     this.syncing = false
+    this.phase = 'synced'
+    this.everSynced = true
     this.drainSyncBuffer(generation)
   }
 
@@ -118,12 +146,9 @@ export class IndexerWebSocketService {
       if (ws === this.ws) this.logger.info(`[IndexerWS] Connected to indexer`)
     })
 
-    const releaseSubscribeWait = (): void => {
-      this.subscribeSent?.()
-      this.subscribeSent = null
-    }
-    ws.on('error', releaseSubscribeWait)
-    ws.on('close', releaseSubscribeWait)
+    const abandonSubscribeWait = (): void => this.resolveSubscribed('disconnected')
+    ws.on('error', abandonSubscribeWait)
+    ws.on('close', abandonSubscribeWait)
 
     ws.on('ping', () => {
       if (ws === this.ws) this.armWatchdog()
@@ -138,6 +163,7 @@ export class IndexerWebSocketService {
     ws.on('close', () => {
       if (ws !== this.ws) return
       this.clearWatchdog()
+      this.phase = 'connecting'
       if (!this.stopped) this.scheduleReconnect()
     })
 
@@ -146,8 +172,13 @@ export class IndexerWebSocketService {
     })
   }
 
+  private resolveSubscribed(outcome: SubscribeOutcome): void {
+    this.settleSubscribed?.(outcome)
+    this.settleSubscribed = null
+  }
+
   private handleMessage(ws: WebSocket, data: WebSocket.RawData): void {
-    let message: IndexerReadyMessage | IndexerBlockMessage
+    let message: IndexerReadyMessage | IndexerSubscribedMessage | IndexerBlockMessage
     try {
       message = JSON.parse(data.toString())
     } catch {
@@ -161,12 +192,16 @@ export class IndexerWebSocketService {
         this.options.corporationId != null
           ? { action: 'subscribe', corporationId: this.options.corporationId }
           : { action: 'subscribe', dids: this.options.agent.did ? [this.options.agent.did] : undefined }
-      ws.send(JSON.stringify(subscribe), () => {
-        this.subscribeSent?.()
-        this.subscribeSent = null
-      })
+      ws.send(JSON.stringify(subscribe))
       return
     }
+
+    if (message.type === 'subscribed') {
+      this.logger.debug(`[IndexerWS] Subscription active, delivery starts at block ${message.block}`)
+      this.resolveSubscribed('acknowledged')
+      return
+    }
+
     if (message.type !== 'block') return
 
     const generation = this.generation
@@ -272,6 +307,7 @@ export class IndexerWebSocketService {
       agent: this.options.agent,
       blockHeight: block,
       operatorAddress: event.payload.sender,
+      agentCorporationId: this.options.agentCorporationId,
       state: syncState,
       txHash: event.tx_hash,
     })
@@ -349,6 +385,7 @@ export class IndexerWebSocketService {
   private forceReconnect(reason: string): void {
     if (this.stopped) return
     this.logger.warn(`[IndexerWS] Forcing reconnect: ${reason}`)
+    this.phase = 'connecting'
     this.generation++ // stops queued work so it cannot move the height past the failed event
     this.clearWatchdog()
     const ws = this.ws

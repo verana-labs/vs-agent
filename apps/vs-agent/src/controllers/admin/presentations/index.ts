@@ -1,2 +1,2 @@
 export * from './dto/presentation-data.dto'
-export * from './PresentationsController'
+export * from './V1PresentationsController'

@@ -3,22 +3,29 @@ import { APP_GUARD } from '@nestjs/core'
 import { VsAgent, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import {
-  ConnectionController,
-  CredentialExchangesController,
-  CredentialTypesController,
+  V1ConnectionController,
+  V1CredentialExchangesController,
+  V1CredentialTypesController,
   CredentialTypesService,
-  HealthController,
-  InvitationController,
-  PresentationsController,
-  QrController,
-  ServiceEndpointsController,
+  V1HealthController,
+  V1InvitationController,
+  V1PresentationsController,
+  V1QrController,
+  V1ServiceEndpointsController,
   ServiceEndpointsService,
-  TrustController,
+  V1TrustController,
   TrustService,
-  VsAgentController,
+  V2AgentController,
+  V2AnoncredsController,
+  V2AuthController,
+  V2DidcommController,
+  V2Openid4vcController,
+  V2VtServiceEndpointsController,
+  V1VsAgentController,
   MESSAGE_HANDLERS,
 } from './controllers'
-import { AdminAuthGuard, AdminAuthService, AuthController } from './security'
+import { BOOTSTRAP_STATE, BootstrapState } from './common'
+import { AdminAuthGuard, AdminAuthService, V1AuthController } from './security'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
 
@@ -28,21 +35,31 @@ export class VsAgentModule {
     agent: VsAgent,
     publicApiBaseUrl: string,
     nestPlugins: VsAgentNestPlugin[] = [],
-    options: { external?: boolean; allowedAccounts?: string[] } = {},
+    options: { external?: boolean; allowedAccounts?: string[]; bootstrapState?: BootstrapState } = {},
   ): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
+    const bootstrapState = options.bootstrapState ?? new BootstrapState()
 
     const baseControllers = [
-      VsAgentController,
-      CredentialTypesController,
-      CredentialExchangesController,
-      HealthController,
-      InvitationController,
-      QrController,
-      TrustController,
-      ConnectionController,
-      PresentationsController,
-      ServiceEndpointsController,
+      V1VsAgentController,
+      V1CredentialTypesController,
+      V1CredentialExchangesController,
+      V1HealthController,
+      V1InvitationController,
+      V1QrController,
+      V1TrustController,
+      V1ConnectionController,
+      V1PresentationsController,
+      V1ServiceEndpointsController,
+    ]
+
+    const v2Controllers = [
+      V2AuthController,
+      V2AgentController,
+      V2DidcommController,
+      V2Openid4vcController,
+      V2AnoncredsController,
+      V2VtServiceEndpointsController,
     ]
 
     const baseProviders = [
@@ -53,6 +70,10 @@ export class VsAgentModule {
       {
         provide: 'PUBLIC_API_BASE_URL',
         useFactory: () => publicApiBaseUrl,
+      },
+      {
+        provide: BOOTSTRAP_STATE,
+        useFactory: () => bootstrapState,
       },
       VsAgentService,
       UrlShorteningService,
@@ -69,7 +90,7 @@ export class VsAgentModule {
       inject: allHandlerClasses,
     }
 
-    const securityControllers = options.external ? [AuthController] : []
+    const securityControllers = options.external ? [V1AuthController] : []
     const securityProviders = options.external
       ? [
           AdminAuthService,
@@ -83,6 +104,7 @@ export class VsAgentModule {
       imports: nestPlugins.flatMap(p => p.imports ?? []),
       controllers: [
         ...baseControllers,
+        ...v2Controllers,
         ...securityControllers,
         ...nestPlugins.flatMap(p => p.controllers ?? []),
       ],

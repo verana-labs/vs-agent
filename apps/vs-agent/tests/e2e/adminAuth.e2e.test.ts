@@ -23,11 +23,8 @@ import {
 } from '../../../../packages/agent-sdk/tests/e2e/helpers'
 import { AdminAuthGuard } from '../../src/security/AdminAuthGuard'
 import { AdminAuthService, challengePayload } from '../../src/security/AdminAuthService'
-import { AuthController } from '../../src/security/AuthController'
+import { V1AuthController } from '../../src/security/V1AuthController'
 import { AccessMode } from '../../src/security/accessMode'
-
-const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
-const describeE2E = E2E_ENABLED ? describe : describe.skip
 
 const RUN_ID = String(Date.now())
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
@@ -78,7 +75,7 @@ async function authenticate(app: INestApplication, wallet: Secp256k1HdWallet, ac
   return token
 }
 
-describeE2E('admin API auth (V4): ADR-036 challenge to authorized call against a live chain', () => {
+describe('admin API auth (V4): ADR-036 challenge to authorized call against a live chain', () => {
   let stack: StartedStack
   let chainA: VeranaTestChain
   let veranaChain: VeranaChainService
@@ -146,7 +143,7 @@ describeE2E('admin API auth (V4): ADR-036 challenge to authorized call against a
     }
 
     const moduleRef = await Test.createTestingModule({
-      controllers: [AuthController, TestFlowsController],
+      controllers: [V1AuthController, TestFlowsController],
       providers: [
         AdminAuthService,
         { provide: 'VSAGENT', useValue: agentStub },

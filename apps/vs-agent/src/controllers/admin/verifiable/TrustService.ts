@@ -7,6 +7,7 @@ import {
   W3cJsonLdVerifiableCredential,
 } from '@credo-ts/core'
 import { Logger, Inject, Injectable, HttpException, HttpStatus } from '@nestjs/common'
+import { computeCredentialDigestJCS } from '@verana-labs/verre'
 import {
   CredentialIssuanceRequest,
   CredentialIssuanceResponse,
@@ -178,17 +179,68 @@ export class TrustService {
     return credential.jsonCredential
   }
 
+  private async anchorDigest(
+    agent: VsAgent,
+    subjectRef: string,
+    credential: Record<string, unknown>,
+    session: { participantSessionId: string; agentParticipantId?: number; walletAgentParticipantId?: number },
+  ): Promise<string> {
+    const chain = agent.veranaChain
+    if (!chain) throw new HttpException('ANCHORING_FAILED: no chain configured', HttpStatus.BAD_GATEWAY)
+
+    const ref = subjectRef.match(new RegExp(`^vpr:verana:${chain.getChainId}:cs:(\\d+)$`))
+    if (!ref)
+      throw new HttpException(
+        `ANCHORING_FAILED: schema reference '${subjectRef}' is not governed by chain '${chain.getChainId}'`,
+        HttpStatus.BAD_GATEWAY,
+      )
+    const schemaId = Number(ref[1])
+
+    if (!agent.did)
+      throw new HttpException('ANCHORING_FAILED: agent has no public DID', HttpStatus.BAD_GATEWAY)
+    const issuerParticipantId = await chain.findActiveIssuerParticipantId(agent.did, schemaId)
+    if (issuerParticipantId === undefined)
+      throw new HttpException(
+        `ANCHORING_FAILED: no active ISSUER participant for schema ${schemaId}`,
+        HttpStatus.BAD_GATEWAY,
+      )
+
+    const schema = await chain.getCredentialSchema(schemaId)
+    if (!schema?.digestAlgorithm)
+      throw new HttpException(
+        `ANCHORING_FAILED: credential schema ${schemaId} has no digest_algorithm`,
+        HttpStatus.BAD_GATEWAY,
+      )
+
+    const digestJCS = computeCredentialDigestJCS(credential as never, schema.digestAlgorithm)
+    try {
+      await chain.createOrUpdateParticipantSession({
+        id: session.participantSessionId,
+        issuerParticipantId,
+        agentParticipantId: session.agentParticipantId ?? 0,
+        walletAgentParticipantId: session.walletAgentParticipantId ?? 0,
+        digest: digestJCS,
+      })
+    } catch (error) {
+      throw new HttpException(`ANCHORING_FAILED: ${(error as Error).message}`, HttpStatus.BAD_GATEWAY)
+    }
+    return digestJCS
+  }
+
   public async issueCredential({
     format,
     jsonSchemaCredentialId,
     claims,
     did,
+    participantSessionId,
+    agentParticipantId,
+    walletAgentParticipantId,
   }: CredentialIssuanceRequest): Promise<CredentialIssuanceResponse> {
     try {
       // Check schema for credential
       const { agent, didRecord } = await this.getDidRecord()
 
-      const { parsedSchema, attrNames } =
+      const { parsedSchema, attrNames, subjectRef } =
         await this.credentialTypesService.parseJsonSchemaCredential(jsonSchemaCredentialId)
       if (attrNames.length === 0) {
         throw new HttpException(
@@ -199,11 +251,22 @@ export class TrustService {
       validateSchema(parsedSchema, claims)
 
       switch (format) {
-        case 'jsonld':
+        case 'jsonld': {
           if (!did)
             throw new HttpException('did must be present for JSON-LD credentials', HttpStatus.BAD_REQUEST)
+          if (!participantSessionId)
+            throw new HttpException(
+              'participantSessionId must be present for JSON-LD credentials',
+              HttpStatus.BAD_REQUEST,
+            )
           const credential = await this.issueW3cJsonLd(agent, didRecord, did, jsonSchemaCredentialId, claims)
-          return { status: 200, didcommInvitationUrl: '', credential }
+          const digestJCS = await this.anchorDigest(agent, subjectRef, credential, {
+            participantSessionId,
+            agentParticipantId,
+            walletAgentParticipantId,
+          })
+          return { status: 200, didcommInvitationUrl: '', credential, digestJCS }
+        }
         case 'anoncreds':
           const { credentialDefinitionId } =
             await this.credentialTypesService.getOrRegisterAnonCredsCredentialDefinition({

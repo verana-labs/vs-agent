@@ -5,6 +5,7 @@ export interface IndexerHandlerContext {
   agent: VsAgent
   blockHeight: number
   operatorAddress: string
+  agentCorporationId?: number
   state: VeranaSyncState
   txHash: string
 }

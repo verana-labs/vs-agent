@@ -39,7 +39,7 @@ export class VeranaIndexerService {
   async getEcosystem(id: string | number): Promise<EcosystemDto> {
     this.config.logger.debug(`[VeranaIndexer] getEcosystem id=${id}`)
     const data = await fetchJson<{ ecosystem: EcosystemDto }>(
-      `${this.baseUrl}/v4/ecosystem/get/${id}`,
+      `${this.baseUrl}/v4/ecosystem/get/${encodeURIComponent(id)}`,
       REQUEST_TIMEOUT_MS,
     )
     return data.ecosystem
@@ -66,7 +66,7 @@ export class VeranaIndexerService {
   async getCredentialSchema(id: string | number): Promise<CredentialSchemaDto> {
     this.config.logger.debug(`[VeranaIndexer] getCredentialSchema id=${id}`)
     const data = await fetchJson<{ schema: CredentialSchemaDto }>(
-      `${this.baseUrl}/v4/credential-schema/get/${id}`,
+      `${this.baseUrl}/v4/credential-schema/get/${encodeURIComponent(id)}`,
       REQUEST_TIMEOUT_MS,
     )
     return data.schema
@@ -75,7 +75,7 @@ export class VeranaIndexerService {
   async getParticipant(id: string | number): Promise<ParticipantDto> {
     this.config.logger.debug(`[VeranaIndexer] getParticipant id=${id}`)
     const data = await fetchJson<{ participant: ParticipantDto }>(
-      `${this.baseUrl}/v4/participant/get/${id}`,
+      `${this.baseUrl}/v4/participant/get/${encodeURIComponent(id)}`,
       REQUEST_TIMEOUT_MS,
     )
     return data.participant
@@ -84,7 +84,7 @@ export class VeranaIndexerService {
   async getCorporation(id: string | number): Promise<CorporationDto | undefined> {
     this.config.logger.debug(`[VeranaIndexer] getCorporation id=${id}`)
     const data = await fetchJson<{ corporation: CorporationDto }>(
-      `${this.baseUrl}/v4/corporation/get/${id}`,
+      `${this.baseUrl}/v4/corporation/get/${encodeURIComponent(id)}`,
       { timeoutMs: REQUEST_TIMEOUT_MS, allowNotFound: true },
     )
     return data?.corporation

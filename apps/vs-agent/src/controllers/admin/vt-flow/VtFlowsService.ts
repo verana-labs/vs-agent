@@ -3,6 +3,7 @@ import type { VsAgent, VeranaChainService } from '@verana-labs/vs-agent-sdk'
 import { CredoError } from '@credo-ts/core'
 import {
   BadRequestException,
+  ConflictException,
   HttpException,
   HttpStatus,
   Inject,
@@ -18,16 +19,23 @@ import {
   VtFlowVariant,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { VeranaIndexerService, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
+import { HOLDER_PARTICIPANT_TYPE, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
+import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../common'
+import { ADMIN_LOG_LEVEL, VERANA_INDEXER_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
+import { TsLogger } from '../../../utils'
+import { CredentialTypesService } from '../credentials/CredentialTypeService'
 
-import { ListFlowsQueryDto } from './dto/flow-requests.dto'
+import { ListFlowsQueryDto, ListFlowsV2QueryDto } from './dto/flow-requests.dto'
 import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
 @Injectable()
 export class VtFlowsService {
-  public constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
+  public constructor(
+    @Inject(VsAgentService) private readonly agentService: VsAgentService,
+    @Inject(CredentialTypesService) private readonly credentialTypesService: CredentialTypesService,
+  ) {}
 
   public async listFlows(query: ListFlowsQueryDto): Promise<VtFlowRecordDto[]> {
     const agent = await this.agentService.getAgent()
@@ -67,6 +75,35 @@ export class VtFlowsService {
     return flows
   }
 
+  public async listFlowsPage(query: ListFlowsV2QueryDto): Promise<Page<VtFlowRecordDto>> {
+    const flows = await this.listFlows({
+      role: query.role,
+      connectionState: query.connectionState,
+      flowState: query.flowState,
+      peerDID: query.peerDid,
+      participant_id: query.participantId,
+      schema_id: query.schemaId,
+      participant_session_id: query.participantSessionId,
+    })
+    return paginate(
+      flows,
+      query,
+      {
+        method: 'listFlows',
+        filters: {
+          role: query.role,
+          connectionState: query.connectionState,
+          flowState: query.flowState,
+          peerDid: query.peerDid,
+          participantId: query.participantId,
+          schemaId: query.schemaId,
+          participantSessionId: query.participantSessionId,
+        },
+      },
+      flow => `${flow.createdAt.toISOString()}|${flow.id}`,
+    )
+  }
+
   public editCredentialClaims(
     participantSessionId: string,
     claims: Record<string, unknown>,
@@ -92,6 +129,46 @@ export class VtFlowsService {
         reason,
       }),
     )
+  }
+
+  public revokeFlowCredential(participantSessionId: string, reason?: string): Promise<VtFlowRecordDto> {
+    return this.mutateFlow(participantSessionId, async ({ agent, vtFlowApi, record }) => {
+      await this.revokeIssuedCredential(agent, record)
+      return vtFlowApi.notifyCredentialStateChange({
+        vtFlowRecordId: record.id,
+        state: VtCredentialState.Revoked,
+        reason,
+      })
+    })
+  }
+
+  private async revokeIssuedCredential(agent: VsAgent, record: VtFlowRecord): Promise<void> {
+    record.assertState([VtFlowState.Completed, VtFlowState.CredRevoked])
+    if (!record.credentialExchangeRecordId) {
+      throw new AdminApiError(
+        AdminApiErrorCode.UnsupportedFormat,
+        HttpStatus.BAD_REQUEST,
+        'the flow holds no credential exchange to revoke',
+      )
+    }
+    const credential = await agent.didcomm.credentials.findById(record.credentialExchangeRecordId)
+    if (!credential) {
+      throw new AdminApiError(
+        AdminApiErrorCode.UnsupportedFormat,
+        HttpStatus.BAD_REQUEST,
+        'the credential exchange of the flow no longer exists',
+      )
+    }
+    const registryId = credential.getTag('anonCredsRevocationRegistryId')
+    const revocationId = credential.getTag('anonCredsCredentialRevocationId')
+    if (typeof registryId !== 'string' || !revocationId) {
+      throw new AdminApiError(
+        AdminApiErrorCode.UnsupportedFormat,
+        HttpStatus.BAD_REQUEST,
+        'the credential of the flow supports no credential-level revocation',
+      )
+    }
+    await this.credentialTypesService.revokeCredential(agent, registryId, Number(revocationId))
   }
 
   private async filterByValidatorParticipant(
@@ -126,7 +203,7 @@ export class VtFlowsService {
     try {
       return toDto(await action({ agent, vtFlowApi, record }))
     } catch (error) {
-      if (error instanceof CredoError) throw new BadRequestException(error.message)
+      if (error instanceof CredoError) throw new ConflictException(error.message)
       throw error
     }
   }
@@ -134,7 +211,7 @@ export class VtFlowsService {
   private async assertConnectionEstablished(agent: VsAgent, record: VtFlowRecord): Promise<void> {
     const connection = await agent.didcomm.connections.findById(record.connectionId)
     if (!connection?.isReady) {
-      throw new BadRequestException('Flow connection is not in ESTABLISHED state')
+      throw new ConflictException('Flow connection is not in ESTABLISHED state')
     }
   }
 
@@ -145,29 +222,53 @@ export class VtFlowsService {
     const vtFlowApi = this.resolveVtFlowApi(agent)
     const record = await this.findRecordBySession(vtFlowApi, participantSessionId)
     if (record.role !== VtFlowRole.Validator) {
-      throw new BadRequestException('This record is applicant-side; validate is a validator action')
+      throw new ConflictException('This record is applicant-side; validate is a validator action')
     }
     if (record.variant !== VtFlowVariant.OnboardingProcess) {
-      throw new BadRequestException(
+      throw new ConflictException(
         `This record is variant '${record.variant}'; validate only applies to OnboardingProcess`,
       )
     }
-    if (record.state !== VtFlowState.AwaitingOr) {
-      throw new BadRequestException(`Record state is '${record.state}', expected '${VtFlowState.AwaitingOr}'`)
+    // A repeat call re-drives the offer of a record that reached VALIDATED and has no credential
+    // exchange. It recovers a credential build or an offer that failed after the chain write.
+    const resumeOffer = record.state === VtFlowState.Validated && !record.credentialExchangeRecordId
+    if (record.state !== VtFlowState.AwaitingOr && !resumeOffer) {
+      throw new ConflictException(
+        `Record state is '${record.state}'; validate applies to '${VtFlowState.AwaitingOr}', or to ` +
+          `'${VtFlowState.Validated}' with no credential exchange`,
+      )
     }
-    if (!record.participantId) throw new BadRequestException('Record has no participantId')
+    if (!record.participantId) throw new ConflictException('Record has no participantId')
 
-    const holderParticipant = await agent.indexer.getParticipant(Number(record.participantId))
-    if (!holderParticipant)
-      throw new BadRequestException(`Holder participant ${record.participantId} not found on indexer`)
-    if (holderParticipant.schema_id == null)
-      throw new BadRequestException('Holder participant has no schema_id')
+    const applicant = await agent.indexer.getParticipant(Number(record.participantId))
+    if (!applicant)
+      throw new BadRequestException(`Applicant participant ${record.participantId} not found on indexer`)
+    if (applicant.schema_id == null) throw new BadRequestException('Applicant participant has no schema_id')
 
     const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
     try {
-      const offered = await orchestrator.validateAndOfferCredential({
+      const {
+        record: validated,
+        participant,
+        credential,
+      } = await orchestrator.validateOnboardingProcess({
         vtFlowRecordId: record.id,
-        credentialSchemaId: String(holderParticipant.schema_id),
+        credentialSchemaId: String(applicant.schema_id),
+      })
+
+      // Only a HOLDER receives a credential. For every other role the chain records the outcome
+      // with SetParticipantOPToValidated, and the process ends there. The schema of an ISSUER
+      // entry describes what that issuer will give to others, so building a credential from it
+      // for the issuer itself fails on the required subject claims.
+      if (participant.role !== HOLDER_PARTICIPANT_TYPE) {
+        return toDto(await orchestrator.completeOnboardingProcess(validated.id))
+      }
+
+      const offered = await orchestrator.offerOnboardingCredential({
+        vtFlowRecordId: validated.id,
+        credentialSchemaId: String(applicant.schema_id),
+        participant,
+        credential,
       })
       return toDto(offered)
     } catch (error) {
@@ -223,5 +324,6 @@ function toDto(record: VtFlowRecord, peerDid?: string): VtFlowRecordDto {
     errorMessage: record.errorMessage,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt ?? record.createdAt,
+    lastEventAt: record.updatedAt ?? record.createdAt,
   }
 }

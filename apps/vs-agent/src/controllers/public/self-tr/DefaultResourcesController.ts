@@ -1,37 +1,13 @@
 import { Controller, Get, Header } from '@nestjs/common'
 import { ApiExcludeController } from '@nestjs/swagger'
 
-// kept in sync with apps/vs-agent-ui/src/assets/logo.svg
-const LOGO_SVG = `<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <!-- Matches Tailwind's bg-gradient-to-br from #763EF0 to #9F7AEA -->
-    <linearGradient id="veranaHeaderGradient" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#763EF0"/>
-      <stop offset="100%" stop-color="#9F7AEA"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Purple gradient capsule -->
-  <rect x="0" y="0" width="64" height="64" rx="12" fill="url(#veranaHeaderGradient)"/>
-
-  <!-- White Verana mark scaled to the header proportion -->
-  <g transform="translate(32 33) scale(0.76923) translate(-27 -27)" fill="white">
-    <path d="M26.9932 51.6972L5.805 11.0977L2.91263 16.2161L0 10.6048L5.98725 0L26.9932 40.2483L47.9993 0L54 10.6217L51.0773 16.2161L48.1849 11.0977L26.9932 51.6972Z"/>
-    <path d="M13.696 0L26.9935 25.4637L39.9367 0H13.696Z"/>
-  </g>
-</svg>
-`
-
-const page = (title: string, body: string) => `<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>${title}</title></head>
-<body><h1>${title}</h1><p>${body}</p></body>
-</html>
-`
+import { DEFAULT_LOGO_SVG, DEFAULT_PRIVACY_HTML, DEFAULT_TERMS_HTML } from '../../../config'
 
 /**
  * Placeholder resources for a Verifiable Service that has not configured its own. The self-issued
  * credentials reference these by URL and hash them, so they must be fetchable for the agent to start.
+ * Content lives in config/constants.ts so it can be hashed locally (see main.ts) without the agent
+ * having to fetch its own public URL over HTTP.
  */
 @ApiExcludeController()
 @Controller('vt/default')
@@ -39,21 +15,18 @@ export class DefaultResourcesController {
   @Get('logo.svg')
   @Header('Content-Type', 'image/svg+xml')
   getLogo(): string {
-    return LOGO_SVG
+    return DEFAULT_LOGO_SVG
   }
 
   @Get('terms.html')
   @Header('Content-Type', 'text/html; charset=utf-8')
   getTermsAndConditions(): string {
-    return page(
-      'Terms and Conditions',
-      'This Verifiable Service has not published its own terms and conditions yet.',
-    )
+    return DEFAULT_TERMS_HTML
   }
 
   @Get('privacy.html')
   @Header('Content-Type', 'text/html; charset=utf-8')
   getPrivacyPolicy(): string {
-    return page('Privacy Policy', 'This Verifiable Service has not published its own privacy policy yet.')
+    return DEFAULT_PRIVACY_HTML
   }
 }

@@ -1,2 +1,2 @@
 export * from './dto/connection.dto'
-export * from './ConnectionController'
+export * from './V1ConnectionController'

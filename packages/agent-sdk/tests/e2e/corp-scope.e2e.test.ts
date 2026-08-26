@@ -12,9 +12,6 @@ import {
   type StartedStack,
 } from './helpers'
 
-const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
-const describeE2E = E2E_ENABLED ? describe : describe.skip
-
 const RUN_ID = String(Date.now())
 
 const MINIMAL_SCHEMA = JSON.stringify({
@@ -33,7 +30,7 @@ const corpIdsOf = (event: {
   ...(event.payload.related_corporation_ids ?? []),
 ]
 
-describeE2E('indexer corp-scope (v4): chain -> indexer -> agent', () => {
+describe('indexer corp-scope (v4): chain -> indexer -> agent', () => {
   let stack: StartedStack
   let chainA: VeranaTestChain
   let subscriber: IndexerSubscriber | undefined

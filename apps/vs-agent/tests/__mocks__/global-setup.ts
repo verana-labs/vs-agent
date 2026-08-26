@@ -1,7 +1,10 @@
 import '@openwallet-foundation/askar-nodejs'
+import { configureChainIndexers } from '@verana-labs/vs-agent-model'
 import { vi } from 'vitest'
 
-import { mockResponses } from './object'
+import { mockResponses, TEST_INDEXER_BASE_URL } from './object'
+
+configureChainIndexers({ 'vna-test-1': TEST_INDEXER_BASE_URL })
 
 const fetchOriginal = global.fetch
 

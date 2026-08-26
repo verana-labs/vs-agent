@@ -23,7 +23,7 @@ permissions:
 jobs:
   resolve-version:
     if: github.event_name == 'push'
-    uses: 2060-io/organization/.github/workflows/resolve-version-call.yml@41008f619521ec154b02a7065ad332fad445a2fd # v0.5.1
+    uses: 2060-io/organization/.github/workflows/resolve-version-call.yml@562f890be78c7fd3f07695446f4506d383c52219 # v0.5.2
     with:
       # Maintenance branches (v1, v1.11, …) anchor their dev prereleases to the branch itself;
       # on main this resolves to 'main', matching the reusable workflow's default.
@@ -114,7 +114,7 @@ jobs:
 
   docker:
     needs: version
-    if: needs.version.outputs.publish == 'true'
+    if: ${{ !cancelled() && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -198,7 +198,7 @@ jobs:
 
   helm:
     needs: [version, docker]
-    if: needs.version.outputs.publish == 'true'
+    if: ${{ !cancelled() && needs.docker.result == 'success' && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     env:
       RELEASE_TYPE: ${{ needs.version.outputs.release-type }}
@@ -254,7 +254,7 @@ jobs:
 
   npm-publish:
     needs: [version]
-    if: needs.version.outputs.publish == 'true'
+    if: ${{ !cancelled() && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     env:
       RELEASE_TYPE: ${{ needs.version.outputs.release-type }}

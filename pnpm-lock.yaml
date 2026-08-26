@@ -97,6 +97,9 @@ importers:
       '@types/qrcode':
         specifier: ^1.5.0
         version: 1.5.5
+      '@verana-labs/verre':
+        specifier: 0.4.0-dev.1
+        version: 0.4.0-dev.1(web-streams-polyfill@3.3.3)
       '@verana-labs/vs-agent-model':
         specifier: workspace:*
         version: link:../../packages/model
@@ -401,6 +404,25 @@ importers:
         specifier: ^5.6.2
         version: 5.8.3
 
+  examples/vt-flow-demo:
+    dependencies:
+      '@credo-ts/core':
+        specifier: 0.7.1-pr-2704-20260630143332
+        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@verana-labs/vs-agent-sdk':
+        specifier: workspace:*
+        version: link:../../packages/agent-sdk
+    devDependencies:
+      '@types/node':
+        specifier: 20.11.19
+        version: 20.11.19
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@20.11.19)(typescript@5.8.3)
+      typescript:
+        specifier: ^5.6.2
+        version: 5.8.3
+
   packages/agent-sdk:
     dependencies:
       '@cosmjs/amino':
@@ -449,8 +471,8 @@ importers:
         specifier: workspace:*
         version: link:../vt-flow
       '@verana-labs/verana-types':
-        specifier: 0.10.1-dev.16
-        version: 0.10.1-dev.16(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)
+        specifier: 0.10.2
+        version: 0.10.2(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)
       '@verana-labs/verre':
         specifier: 0.4.0-dev.1
         version: 0.4.0-dev.1(web-streams-polyfill@3.3.3)
@@ -2252,8 +2274,8 @@ packages:
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
-  '@verana-labs/verana-types@0.10.1-dev.16':
-    resolution: {integrity: sha512-PI1c85W9SKxPHPYZP3RKmVwJQEM6pRSyWJ4JyXA6mPkXTm+QDpjs4FFNem90pCHYT/3G95khZt/aALXGZslXPw==}
+  '@verana-labs/verana-types@0.10.2':
+    resolution: {integrity: sha512-2PGqHFsaUt9vuK32QEIJd8ABlro5JAYF8IvHtFRH5ZpVnZFRX/SS4GUvaUnCDf/OYF7UyGuk6JrrBCLGmj04rA==}
     peerDependencies:
       '@cosmjs/proto-signing': ^0.32.3
       '@cosmjs/stargate': ^0.32.3
@@ -7234,7 +7256,7 @@ snapshots:
     dependencies:
       '@types/node': 20.11.19
 
-  '@verana-labs/verana-types@0.10.1-dev.16(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)':
+  '@verana-labs/verana-types@0.10.2(@cosmjs/proto-signing@0.32.4)(@cosmjs/stargate@0.32.3)':
     dependencies:
       '@cosmjs/proto-signing': 0.32.4
       '@cosmjs/stargate': 0.32.3

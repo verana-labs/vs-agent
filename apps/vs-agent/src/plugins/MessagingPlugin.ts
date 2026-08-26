@@ -2,7 +2,7 @@ import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import {
   CoreMessageService,
-  MessageController,
+  V1MessageController,
   MessageService,
   MessageServiceFactory,
   RedisMessageService,
@@ -12,7 +12,7 @@ import { HandledRedisModule } from '../modules/redis.module'
 
 export const MessagingPlugin: VsAgentNestPlugin = {
   name: 'messaging',
-  controllers: [MessageController],
+  controllers: [V1MessageController],
   providers: [
     MessageService,
     RedisMessageService,
