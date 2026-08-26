@@ -24,4 +24,10 @@ export class VtFlowRecordDto {
   @ApiProperty({ required: false }) errorMessage?: string
   @ApiProperty() createdAt!: Date
   @ApiProperty() updatedAt!: Date
+  @ApiProperty() lastEventAt!: Date
+}
+
+export class VtFlowRecordPageDto {
+  @ApiProperty({ type: [VtFlowRecordDto] }) items!: VtFlowRecordDto[]
+  @ApiProperty({ type: String, nullable: true }) nextCursor!: string | null
 }

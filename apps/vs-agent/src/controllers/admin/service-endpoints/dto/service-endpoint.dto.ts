@@ -56,3 +56,11 @@ export class ServiceEndpointDto {
   @ApiProperty({ example: 'https://mcp.agent.example.com' })
   serviceEndpoint!: ServiceEndpointValue
 }
+
+export class ServiceEndpointPageDto {
+  @ApiProperty({ type: [ServiceEndpointDto] })
+  items!: ServiceEndpointDto[]
+
+  @ApiProperty({ type: String, nullable: true })
+  nextCursor!: string | null
+}

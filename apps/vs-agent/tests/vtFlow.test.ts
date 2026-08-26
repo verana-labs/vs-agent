@@ -186,7 +186,7 @@ describe('vt-flow: two-agent integration', () => {
     await validatingReached
 
     const { VtFlowsService } = await import('../src/controllers/admin/vt-flow/VtFlowsService')
-    const flowsService = new VtFlowsService({ getAgent: async () => validator } as never)
+    const flowsService = new VtFlowsService({ getAgent: async () => validator } as never, undefined as never)
 
     const flows = await flowsService.listFlows({ role: VtFlowRole.Validator })
     expect(flows).toHaveLength(1)
@@ -370,9 +370,11 @@ describe('vt-flow: VS-CONN-VS trust gate', () => {
   const sharedResolver = new FakeDidResolver()
 
   beforeEach(async () => {
-    resolveDID = vi.fn().mockResolvedValue({ verified: true, outcome: 'resolved' })
-    const assertVerifiableService = async ({ peerDid }: { peerDid: string }) =>
-      (await resolveDID(peerDid)).verified
+    resolveDID = vi.fn().mockResolvedValue({ verified: true, outcome: 'verified' })
+    const assertVerifiableService = async ({ peerDid }: { peerDid: string }) => {
+      const { verified, outcome } = await resolveDID(peerDid)
+      return verified && outcome === 'verified'
+    }
 
     const applicantMessages = new Subject<SubjectMessage>()
     const validatorMessages = new Subject<SubjectMessage>()
@@ -476,10 +478,12 @@ describe('vt-flow: VS-CONN-VS trust gate', () => {
     expect(resolveDID).toHaveBeenCalledWith(validator.did)
   })
 
-  it('Validator does not reach VALIDATING on an IR from an unverified peer', async () => {
+  // The self-issued case from the VS-CONN-VS issue: the applicant resolves as structurally
+  // valid but its trust chain reaches no registry, so the Validator must not open a session.
+  it('Validator does not reach VALIDATING on an IR from a verified but not-trusted peer', async () => {
     resolveDID.mockImplementation(async (did: string) => ({
-      verified: did === validator.did,
-      outcome: did === validator.did ? 'resolved' : 'not-trusted',
+      verified: true,
+      outcome: did === validator.did ? 'verified' : 'not-trusted',
     }))
 
     const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({

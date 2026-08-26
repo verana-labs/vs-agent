@@ -3,7 +3,7 @@ import { VeranaIndexerService } from '../VeranaIndexerService'
 import { IndexerActivity, ParticipantRole } from '../types'
 
 import { IndexerHandlerContext, IndexerHandlerRegistry } from './IndexerHandlerRegistry'
-import { reconcileVtjscPublications } from './stateMutations'
+import { reconcileVtjscPublications, removeSelfIssuedEcsCredentialsIfIssuerRevoked } from './stateMutations'
 
 /**
  * Messages that can give this agent the ISSUER participant its own ECS credentials anchor
@@ -12,13 +12,17 @@ import { reconcileVtjscPublications } from './stateMutations'
  */
 const ISSUER_READY_MSGS = ['SetParticipantOPToValidated', 'SelfCreateParticipant']
 
+/** Messages that make an ISSUER participant permanently unusable, per VSA-VTI-FLOW-OP-REVOKE. */
+const ISSUER_REVOKED_MSGS = ['RevokeParticipant', 'SlashParticipantTrustDeposit']
+
 /**
- * Re-runs the ECS credential reconciliation when this agent's own ISSUER participant appears.
+ * Keeps this agent's self-issued ECS credentials in step with its own ISSUER participant.
  *
- * The Corporation operator provisions that participant out of band, which usually happens after
- * the agent starts. Until it exists the agent cannot anchor the digest of its self-issued ECS
- * credentials, because the chain accepts a CreateOrUpdateParticipantSession only against an
- * active ISSUER entry. These handlers close that gap without a restart.
+ * The Corporation operator provisions that participant out of band, and a third party revokes it
+ * just as asynchronously — both usually while the agent is already running. Until it exists the
+ * agent cannot anchor the digest of its ECS credentials, because the chain accepts a
+ * CreateOrUpdateParticipantSession only against an active ISSUER entry; once it is revoked the
+ * credential that anchors against it makes the whole DID fail VS-CONN-VS.
  */
 export function registerSelfIssuanceAnchorHandlers(
   registry: IndexerHandlerRegistry,
@@ -56,6 +60,25 @@ export function registerSelfIssuanceAnchorHandlers(
           .catch((error: Error) =>
             agent.config.logger.error(`[SelfTR] reconciliation failed: ${error.message}`),
           )
+        await queue
+      },
+    })
+  }
+
+  for (const msg of ISSUER_REVOKED_MSGS) {
+    const original = registry.get(msg)
+    registry.register({
+      msg,
+      handle: async (activity: IndexerActivity, ctx: IndexerHandlerContext) => {
+        if (original) await original.handle(activity, ctx)
+
+        const { agent } = ctx
+        if (!agent.did || !agent.veranaChain) return
+        queue = queue
+          .then(() =>
+            removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent, String(activity.entity_id), selfTrDefaults),
+          )
+          .catch((error: Error) => agent.config.logger.error(`[SelfTR] withdrawal failed: ${error.message}`))
         await queue
       },
     })
