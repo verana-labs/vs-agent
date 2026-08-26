@@ -17,7 +17,9 @@ import { waitUntilOwnDidIsPubliclyResolvable } from '../../utils/didReadiness'
 import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
 import {
   createJsc,
+  detachVtjscPublications,
   findMetadataEntry,
+  reattachVtjscPublication,
   rebindEcsCredentialSchema,
   removeStoredTrustCredential,
   withdrawSelfIssuedEcsCredentials,
@@ -26,6 +28,7 @@ import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'
 import {
+  EcosystemDto,
   IndexerActivity,
   ParticipantRole,
   ParticipantState,
@@ -412,18 +415,22 @@ export async function reconcileVtjscPublications(
   }
 
   const ecosystems = await indexer.listEcosystems()
-  for (const ecosystem of ecosystems.filter(entry => Number(entry.corporation_id) === corporationId)) {
+  const controlled = ecosystems.filter(entry => Number(entry.corporation_id) === corporationId)
+  const reconciled = new Set<string>()
+
+  for (const ecosystem of controlled) {
     for (const schema of await indexer.listCredentialSchemas(ecosystem.id)) {
       const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
       if (!didRecord) return
       const schemaRef = `vpr:verana:${chainId}:cs:${schema.id}`
+      reconciled.add(schemaRef)
       const expectedDigest = generateDigestSRI(schema.json_schema)
       const existingJsc = findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)
       const existingDigest = (
         existingJsc?.credential?.credentialSubject as { digestSRI?: string } | undefined
       )?.digestSRI
-      if (!existingJsc || existingDigest !== expectedDigest) {
-        try {
+      try {
+        if (!existingJsc || existingDigest !== expectedDigest) {
           await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
             schemaBaseId: String(schema.id),
             jsonSchemaRef: schemaRef,
@@ -432,14 +439,82 @@ export async function reconcileVtjscPublications(
           agent.config.logger.info(
             `[VTJSC] Reconciled VTJSC for schema ${schema.id} (ecosystem ${ecosystem.id})`,
           )
-        } catch (e) {
-          agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
+        } else if (await reattachVtjscPublication(agent, schemaRef)) {
+          agent.config.logger.info(
+            `[VTJSC] Re-attached the VTJSC of schema ${schema.id} (ecosystem ${ecosystem.id})`,
+          )
         }
+      } catch (e) {
+        agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
       }
     }
   }
 
+  await detachUncontrolledVtjscPublications(agent, indexer, corporationId, chainId, reconciled)
+
   if (selfTrDefaults) await reconcileSelfIssuedEcsCredentials(agent, indexer, selfTrDefaults)
+}
+
+/** The `_vt/jsc` key that `createJsc` writes for an on-chain `CredentialSchema`. */
+const onChainSchemaRefPrefix = (chainId: string): string => `vpr:verana:${chainId}:cs:`
+
+/**
+ * VSA-VTI-VTJSC: only the controller of an Ecosystem advertises a VTJSC for its schemas. Archival
+ * is not a loss of control — the agent keeps it, and [VSA-VTI-NOTIF-ES] gives it no handler.
+ *
+ * Each entry is resolved against the VPR one by one rather than diffed against `listEcosystems`:
+ * that endpoint is unpaginated here, and a truncated page reads like a loss of control.
+ */
+async function detachUncontrolledVtjscPublications(
+  agent: VsAgent,
+  indexer: VeranaIndexerService,
+  corporationId: number,
+  chainId: string,
+  reconciled: ReadonlySet<string>,
+): Promise<void> {
+  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
+  if (!didRecord) return
+  const metadata = didRecord.metadata.get('_vt/jsc')
+  if (!metadata) return
+
+  const prefix = onChainSchemaRefPrefix(chainId)
+  const ecosystemCache = new Map<string, EcosystemDto | undefined>()
+  const stale: string[] = []
+
+  for (const schemaRef of Object.keys(metadata)) {
+    // setupSelfTr keeps the agent's own schema credentials in this bucket, keyed by public URL.
+    if (!schemaRef.startsWith(prefix)) continue
+    if (reconciled.has(schemaRef)) continue
+
+    const schemaId = schemaRef.slice(prefix.length)
+    try {
+      const schema = await indexer.getCredentialSchema(schemaId)
+      const ecosystemId = String(schema.ecosystem_id)
+      if (!ecosystemCache.has(ecosystemId)) {
+        ecosystemCache.set(ecosystemId, await indexer.getEcosystem(ecosystemId))
+      }
+      const ecosystem = ecosystemCache.get(ecosystemId)
+      if (!ecosystem) continue
+      if (Number(ecosystem.corporation_id) === corporationId) continue
+
+      agent.config.logger.info(
+        `[VTJSC] Detaching the VTJSC of schema ${schemaId}: ecosystem ${ecosystemId} belongs to ` +
+          `corporation ${ecosystem.corporation_id}`,
+      )
+      stale.push(schemaRef)
+    } catch (error) {
+      // A lookup the VPR cannot answer is not evidence of anything; leave the entry advertised.
+      agent.config.logger.debug(
+        `[VTJSC] Keeping the VTJSC of schema ${schemaId}: ${(error as Error).message}`,
+      )
+    }
+  }
+
+  if (stale.length === 0) return
+  const detached = await detachVtjscPublications(agent, stale)
+  if (detached.length > 0) {
+    agent.config.logger.info(`[VTJSC] Detached ${detached.length} VTJSC publication(s)`)
+  }
 }
 
 /**
