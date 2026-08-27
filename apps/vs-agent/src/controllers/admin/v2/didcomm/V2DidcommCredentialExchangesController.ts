@@ -1,0 +1,294 @@
+import type { DidCommCredentialExchangeRecord } from '@credo-ts/didcomm'
+import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+
+import {
+  Body,
+  Controller,
+  Get,
+  HttpStatus,
+  Inject,
+  Logger,
+  Param,
+  Post,
+  Query,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common'
+import {
+  ApiBody,
+  ApiCreatedResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger'
+import { Claim } from '@verana-labs/vs-agent-model'
+import { createInvitation } from '@verana-labs/vs-agent-sdk'
+
+import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../../common'
+import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../../config'
+import { AccessMode } from '../../../../security'
+import { UrlShorteningService } from '../../../../services/UrlShorteningService'
+import { VsAgentService } from '../../../../services/VsAgentService'
+
+import {
+  CreateCredentialOfferBodyDto,
+  CreateCredentialOfferResponseDto,
+  CredentialExchangeRecordDto,
+  CredentialExchangeRecordPageDto,
+  ListCredentialExchangesQueryDto,
+} from './dto'
+
+const ANONCREDS_METADATA = '_internal/anonCredsCredentialDefinitionMetadata'
+
+interface AnonCredsCredentialMetadata {
+  credentialDefinitionId?: string
+  schemaId?: string
+}
+
+/**
+ * This controller has the credential exchanges of this agent on DIDComm.
+ * Refer to [VSA-ADM-DC-CE].
+ *
+ * `createCredentialOffer` makes the Out-of-Band invitation. The invitation starts an issuance
+ * flow. The other two methods read the credential exchange record of that flow. The AnonCreds
+ * scope has the credential definition and the revocation registry.
+ */
+@ApiTags('v2/didcomm')
+@AccessMode('INTERNAL')
+@Controller({ path: 'didcomm', version: '2' })
+@UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+export class V2DidcommCredentialExchangesController {
+  private readonly logger = new Logger(V2DidcommCredentialExchangesController.name)
+
+  public constructor(
+    @Inject(VsAgentService) private readonly vsAgentService: VsAgentService,
+    @Inject(UrlShorteningService) private readonly urlShortenerService: UrlShorteningService,
+    @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
+  ) {}
+
+  @Post('credential-offer')
+  @ApiOperation({
+    summary: 'Create a credential offer',
+    description:
+      'Creates an AnonCreds credential offer invitation, with a preview of the offered claims. ' +
+      'A revocable credential definition also needs `revocationRegistryDefinitionId` and ' +
+      '`revocationRegistryIndex`.',
+  })
+  @ApiBody({
+    type: CreateCredentialOfferBodyDto,
+    examples: {
+      phoneNumber: {
+        summary: 'Phone Number VC',
+        value: {
+          credentialDefinitionId:
+            'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
+          claims: [{ name: 'phoneNumber', value: '+57128348520' }],
+        },
+      },
+      revocable: {
+        summary: 'Revocable credential',
+        value: {
+          credentialDefinitionId:
+            'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
+          claims: [{ name: 'phoneNumber', value: '+57128348520' }],
+          revocationRegistryDefinitionId: 'did:web:issuer.example.com/resources/zQmRDLc',
+          revocationRegistryIndex: 1,
+        },
+      },
+    },
+  })
+  @ApiCreatedResponse({
+    description: 'The credential offer invitation',
+    type: CreateCredentialOfferResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'No credential definition with the given id' })
+  public async createCredentialOffer(
+    @Body() body: CreateCredentialOfferBodyDto,
+  ): Promise<CreateCredentialOfferResponseDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const {
+      credentialDefinitionId,
+      claims,
+      revocationRegistryDefinitionId,
+      revocationRegistryIndex,
+      useLegacyDid,
+      didcommVersion,
+    } = body
+
+    const [record] = await agent.modules.anoncreds.getCreatedCredentialDefinitions({
+      credentialDefinitionId,
+    })
+    if (!record) {
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        HttpStatus.NOT_FOUND,
+        `no credential definition with id "${credentialDefinitionId}"`,
+      )
+    }
+
+    const { schema } = await agent.modules.anoncreds.getSchema(record.credentialDefinition.schemaId)
+    if (!schema) {
+      throw new AdminApiError(
+        AdminApiErrorCode.Internal,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        `no schema is known for "${record.credentialDefinition.schemaId}"`,
+      )
+    }
+
+    const unknown = claims.filter(claim => !schema.attrNames.includes(claim.name))
+    if (unknown.length) {
+      throw invalidInput(
+        `claims [${unknown.map(claim => claim.name).join(', ')}] are absent from schema "${schema.name}", which defines [${schema.attrNames.join(', ')}]`,
+      )
+    }
+
+    // The specification says that a revocable credential definition needs the two revocation
+    // fields.
+    const revocable = record.credentialDefinition.value?.revocation !== undefined
+    if (revocable && (!revocationRegistryDefinitionId || revocationRegistryIndex === undefined)) {
+      throw invalidInput(
+        'a revocable credential definition needs `revocationRegistryDefinitionId` and `revocationRegistryIndex`',
+      )
+    }
+
+    const offer = await agent.didcomm.credentials.createOffer({
+      protocolVersion: 'v2',
+      credentialFormats: {
+        anoncreds: {
+          credentialDefinitionId,
+          revocationRegistryDefinitionId,
+          revocationRegistryIndex,
+          attributes: claims.map(claim => ({
+            name: claim.name,
+            value: claim.value,
+            mimeType: claim.mimeType,
+          })),
+        },
+      },
+    })
+
+    const { url } = await createInvitation({
+      agent,
+      messages: [offer.message],
+      useLegacyDid,
+      didCommVersion: didcommVersion,
+      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
+      imageUrl: AGENT_INVITATION_IMAGE_URL,
+    })
+
+    const shortUrlId = await this.urlShortenerService.createShortUrl({
+      longUrl: url,
+      relatedFlowId: offer.credentialExchangeRecord.id,
+    })
+
+    return {
+      credentialExchangeId: offer.credentialExchangeRecord.id,
+      url,
+      shortUrl: `${this.publicApiBaseUrl}/s?id=${shortUrlId}`,
+    }
+  }
+
+  @Get('credential-exchanges')
+  @ApiOperation({
+    summary: 'List credential exchanges',
+    description: 'Returns the credential exchange records that the agent tracks.',
+  })
+  @ApiOkResponse({
+    description: 'A page of credential exchange records',
+    type: CredentialExchangeRecordPageDto,
+  })
+  public async listCredentialExchanges(
+    @Query() query: ListCredentialExchangesQueryDto,
+  ): Promise<Page<CredentialExchangeRecordDto>> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const records = await agent.didcomm.credentials.getAll()
+    const results = await Promise.allSettled(records.map(record => this.toRecordDto(agent, record)))
+
+    // The agent removes a record that it cannot read. The other records stay in the page.
+    const items = results.flatMap((result, index) => {
+      if (result.status === 'fulfilled') return [result.value]
+      this.logger.warn(`The agent skips credential exchange ${records[index].id}: ${result.reason}`)
+      return []
+    })
+
+    return paginate(
+      items,
+      query,
+      { method: 'listCredentialExchanges' },
+      item => `${item.createdAt.toISOString()}|${item.credentialExchangeId}`,
+    )
+  }
+
+  @Get('credential-exchanges/:credentialExchangeId')
+  @ApiOperation({
+    summary: 'Get a credential exchange',
+    description: 'Retrieves one credential exchange record by identifier.',
+  })
+  @ApiParam({
+    name: 'credentialExchangeId',
+    type: String,
+    description: 'Exchange identifier',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  @ApiOkResponse({ description: 'The credential exchange record', type: CredentialExchangeRecordDto })
+  @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
+  public async getCredentialExchange(
+    @Param('credentialExchangeId') credentialExchangeId: string,
+  ): Promise<CredentialExchangeRecordDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const record = await agent.didcomm.credentials.findById(credentialExchangeId)
+    if (!record) {
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        HttpStatus.NOT_FOUND,
+        `no credential exchange with id "${credentialExchangeId}"`,
+      )
+    }
+
+    return this.toRecordDto(agent, record)
+  }
+
+  private async toRecordDto(
+    agent: VsAgent<BaseAgentModules>,
+    record: DidCommCredentialExchangeRecord,
+  ): Promise<CredentialExchangeRecordDto> {
+    const anonCredsMetadata = record.metadata.get(ANONCREDS_METADATA) as
+      | AnonCredsCredentialMetadata
+      | undefined
+
+    let claims: Claim[] = []
+    try {
+      const formatData = await agent.didcomm.credentials.getFormatData(record.id)
+      if (formatData.offerAttributes?.length) {
+        claims = formatData.offerAttributes.map(
+          attribute =>
+            new Claim({ name: attribute.name, value: attribute.value, mimeType: attribute.mimeType }),
+        )
+      }
+    } catch (error) {
+      this.logger.debug(`The agent cannot read the offer of ${record.id}: ${error}`)
+    }
+
+    return {
+      credentialExchangeId: record.id,
+      state: record.state,
+      threadId: record.threadId,
+      connectionId: record.connectionId,
+      credentialDefinitionId: anonCredsMetadata?.credentialDefinitionId,
+      schemaId: anonCredsMetadata?.schemaId,
+      claims,
+      errorMessage: record.errorMessage,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt ?? record.createdAt,
+    }
+  }
+}
+
+function invalidInput(message: string): AdminApiError {
+  return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, message)
+}
