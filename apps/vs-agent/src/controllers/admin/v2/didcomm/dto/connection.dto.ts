@@ -45,9 +45,8 @@ export class ListConnectionsQueryDto extends PaginationQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Filter by negotiated DIDComm version. The record only carries this value for connections ' +
-      'established through the v2 out-of-band flow: `v1` matches no record, and `v2` matches only ' +
-      'that subset.',
+      'Filter by negotiated DIDComm version. `v1` selects the connections established through a ' +
+      'handshake protocol, which the store leaves without an explicit version.',
     enum: ['v1', 'v2'],
   })
   @IsOptional()

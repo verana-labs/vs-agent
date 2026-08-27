@@ -621,6 +621,57 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
   )
 
   it(
+    'rebuilds the self-issued ECS credential when its stored proof leaves the DID Document',
+    async () => {
+      const baseUrl = applicant.publicApiBaseUrl
+      const didRecordOf = async () => (await applicant.dids.getCreatedDids({ did: applicant.did }))[0]
+      const storedEntry = async (key: string) => (await didRecordOf()).metadata.get('_vt/vtc')?.[key]
+
+      const jscUrl = await resolveJsonSchemaCredentialId(
+        applicant,
+        indexer,
+        serviceSchemaId,
+        seederChain.getChainId,
+      )
+      const rebind = async () =>
+        await rebindEcsCredentialSchema(
+          applicant,
+          baseUrl,
+          String(serviceSchemaId),
+          'ecs-service',
+          selfTrDefaults,
+          jscUrl,
+          applicantIssuerParticipantId,
+        )
+
+      await rebind()
+      const stored = await storedEntry(jscUrl)
+      expect(stored?.credential?.proof?.verificationMethod).toBeDefined()
+      const integrityData = stored.integrityData
+
+      const rotated = `${applicant.did}#rotated-key`
+      const didRecord = await didRecordOf()
+      const record = didRecord.metadata.get('_vt/vtc') ?? {}
+      record[jscUrl].credential.proof.verificationMethod = rotated
+      didRecord.metadata.set('_vt/vtc', record)
+      await applicant.context.dependencyManager.resolve(DidRepository).update(applicant.context, didRecord)
+      expect((await storedEntry(jscUrl)).credential.proof.verificationMethod).toBe(rotated)
+
+      await rebind()
+
+      const rebuilt = await storedEntry(jscUrl)
+      const assertionMethods = ((await didRecordOf()).didDocument?.assertionMethod ?? []).map(entry =>
+        typeof entry === 'string' ? entry : entry.id,
+      )
+      expect(rebuilt.integrityData).toBe(integrityData)
+      expect(rebuilt.credential.proof.verificationMethod).not.toBe(rotated)
+      expect(assertionMethods).toContain(rebuilt.credential.proof.verificationMethod)
+      expect(rebuilt.credential.credentialSchema.id).toBe(jscUrl)
+    },
+    SETUP_TIMEOUT_MS,
+  )
+
+  it(
     'withdraws the self-issued ECS credential when its ISSUER participant is revoked on chain',
     async () => {
       const baseUrl = applicant.publicApiBaseUrl
