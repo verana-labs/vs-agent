@@ -14,25 +14,27 @@ In this section we will divide them depending on how likely different users will
 
 These variables are usually important for every deployment, since they define how VS Agent will be accessed from the outside world (User Agents, other Verifiable Services and your controller, who will be managing its Admin API and receiving events from it):
 
-| Variable                   | Description                                         | Default value           |
-| -------------------------- | --------------------------------------------------- | ----------------------- |
-| AGENT_PORT                 | Port where DIDComm agent will be running            | 3001                    |
-| ADMIN_PORT                 | Administration interface port                       | 3000                    |
-| AGENT_PUBLIC_DID           | Agent's public DID (in did:web or did:webvh format) | none                    |
-| AGENT_INVITATION_IMAGE_URL | Public URL for image to be shown in invitations     | none                    |
-| AGENT_LABEL                | Label to show to other DIDComm agents               | Test VS Agent           |
-| EVENTS_BASE_URL            | Base URL for sending events                         | <http://localhost:5000> |
+| Variable                   | Description                                                       | Default value           |
+| -------------------------- | ----------------------------------------------------------------- | ----------------------- |
+| AGENT_PORT                 | Port where DIDComm agent will be running                          | 3001                    |
+| ADMIN_PORT                 | Administration interface port                                     | 3000                    |
+| PUBLIC_API_BASE_URL        | Public base URL where the agent is reachable. **Required**        | none                    |
+| AGENT_PUBLIC_DID_METHOD    | DID method for the agent's public DID: `webvh` or `web`           | webvh                   |
+| AGENT_INVITATION_IMAGE_URL | Public URL for image to be shown in invitations                   | none                    |
+| AGENT_LABEL                | Label to show to other DIDComm agents                             | Test VS Agent           |
+| EVENTS_BASE_URL            | Base URL for sending events                                       | <http://localhost:5000> |
 
 VS Agent includes a public and an administration interface, each running in ports 3001 and 3000 respectively (which could be overriden by setting `AGENT_PORT` and `ADMIN_PORT` in case you are running the application locally and these ports are used by other apps).
 
-In order to make your agent reachable by other VS agents and user agents like Hologram, you need to expose your `AGENT_PORT` to the internet. For `did:web`, you must define an `AGENT_PUBLIC_DID` matching the external hostname (e.g. if your VS-A instance public interface is accessible at `https://myagent.com:3001`, you must set `AGENT_PUBLIC_DID` to `did:web:myagent.com%3A3001`).
-For `did:webvh`, the `SCID` is calculated automatically, and only the domain-based DID (`did:webvh:domain`) should be configured in the `AGENT_PUBLIC_DID` environment variable.
+In order to make your agent reachable by other VS agents and user agents like Hologram, you need to expose your `AGENT_PORT` to the internet and set `PUBLIC_API_BASE_URL` to the URL where it is publicly accessible. The agent derives its public DID location from that URL: the host, the port (`%3A`-encoded) and any path segments (colon-separated). For example, `https://myagent.com:3001` yields `did:web:myagent.com%3A3001`, and `https://example.com/dids/issuer` yields `did:webvh:<SCID>:example.com:dids:issuer`. For `did:webvh` (the default method), the `SCID` is calculated automatically. The URL must not contain userinfo, a query or a fragment.
 
-> **Note**: Although it is possible to run VS Agent without any public DID, it is mandatory to do so in order to make possible for the agent to create its own credential types and therefore issue credentials. Note that you'll need HTTPS in order to fully support did:web specification.
+> **Note**: You'll need HTTPS in order to fully support the did:web and did:webvh specifications.
 >
-> Public DID will be used also for agents to easily connect to it using DIDComm without the need of creating an explicit invitation by doing a GET request to `/invitation` endpoint.
+> The public DID will be used also for agents to easily connect to it using DIDComm without the need of creating an explicit invitation by doing a GET request to `/invitation` endpoint.
 >
-> If you don't specify a public DID, you might set up `PUBLIC_API_BASE_URL` and `AGENT_ENDPOINTS` manually.
+> When `PUBLIC_API_BASE_URL` contains a path, the DID document is served at `<base>/did.json` and `<base>/did.jsonl` instead of under `/.well-known`. This assumes the reverse proxy strips the base path before forwarding requests to the agent.
+>
+> The persisted DID wins across restarts: if `PUBLIC_API_BASE_URL` later derives a different location than the one the DID was created for, the agent refuses to start. Restore the previous URL, or deliberately reset the wallet to mint a new DID.
 
 You'll also need to set up an `AGENT_LABEL` and (optionally) an `AGENT_INVITATION_IMAGE_URL` so when DIDComm agents scan an invitation to your service they can identify it easily.
 
@@ -99,8 +101,7 @@ These are variables that are updated only on specific use cases.
 
 | Variable                               | Description                                                                                                                                                                                                                                      | Default value            |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
-| PUBLIC_API_BASE_URL                    | Base URL for public API (e.g. invitations, short URLs). Used when no public DID is defined or you want to override it                                                                                                                            | <http://localhost:3001>  |
-| AGENT_ENDPOINTS                        | Comma-separeated list of endpoints where agent DIDComm endpoints will be accessible (including protocol and port). Used when no public DID is defined or you want to override it                                                                 | ws://localhost:3001      |
+| AGENT_ENDPOINTS                        | Comma-separeated list of endpoints where agent DIDComm endpoints will be accessible (including protocol and port). By default they are derived from PUBLIC_API_BASE_URL                                                                          | wss://<derived location> |
 | AGENT_WALLET_KEY_DERIVATION_METHOD     | Wallet key derivation method: ARGON2I_INT, ARGON2_MOD or RAW                                                                                                                                                                                     | ARGON2I_MOD              |
 | AGENT_INVITATION_BASE_URL              | Public URL for fallback when no DIDComm agent is found                                                                                                                                                                                           | <https://hologram.zone/> |
 | REDIRECT_DEFAULT_URL_TO_INVITATION_URL | Default redirect to AGENT_INVITATION_BASE_URL                                                                                                                                                                                                    | true                     |
@@ -128,9 +129,9 @@ These variables connect the agent to the Verana network (permission management, 
 | `VERANA_INDEXER_SUBSCRIPTION_SCOPE`        | OPTIONAL    | Scope of the indexer subscription and REST catch-up: `did` (default, only the agent's own DID) or `corporation` (all events for `VERANA_CORPORATION_ID`).                                                                               |
 | `VERANA_CORPORATION_ID`                    | REQUIRED    | The VPR `Corporation.id` the agent belongs to. Also scopes the indexer subscription when `VERANA_INDEXER_SUBSCRIPTION_SCOPE` is `corporation`.                                                                                          |
 | `AGENT_MODE`                               | OPTIONAL    | `standalone` (default) or `delegated`. Selects how the agent obtains its ECS credentials at startup.                                                                                                                                    |
-| `AGENT_DELEGATED_PARENT_VS_DID`            | CONDITIONAL | DID of the parent Verifiable Service that issues the Service credential. Required when `AGENT_MODE` is `delegated`.                                                                                                                     |
+| `AGENT_DELEGATED_PARENT_VS_DID`            | CONDITIONAL | DID of the parent Verifiable Service that issues the Service credential. The agent onboards as a HOLDER against the parent. Required when `AGENT_MODE` is `delegated`.                                                                   |
 | `VERANA_GAS_ADJUSTMENT`                    | OPTIONAL    | Multiplier applied to the simulated gas of each transaction, the same idea as veranad's `--gas-adjustment`. Defaults to `1.5`. Raise it if a transaction reports `out of gas` although its simulation succeeded. |
-| `TRUSTED_ECS_ECOSYSTEM_DIDS`               | CONDITIONAL | Comma-separated DIDs of the ECS ecosystems the agent trusts for essential credential schemas (WL-ECS). Required when `AGENT_MODE` is `standalone`.                                                                                     |
+| `TRUSTED_ECS_ECOSYSTEM_DIDS`               | CONDITIONAL | Comma-separated DIDs of the ECS ecosystems the agent trusts for essential credential schemas (WL-ECS). Required when `AGENT_MODE` is `standalone`. In `delegated` mode it is optional, and it restricts the ecosystem of the parent's Service schema when set. |
 
 > The agent maintains a persistent WebSocket connection to the indexer to receive updates about permissions, trust registries, and credential schemas. These events are used to keep the agent state in sync with the ledger.
 
@@ -310,7 +311,7 @@ docker build --target vs-agent-mrtd -t vs-agent-mrtd -f apps/vs-agent/Dockerfile
 
 ```bash
 docker run \
-  -e AGENT_PUBLIC_DID=did:web:myagent.example.com \
+  -e PUBLIC_API_BASE_URL=https://myagent.example.com \
   -e EVENTS_BASE_URL=http://my-backend:5000 \
   -p 3000:3000 -p 3001:3001 \
   vs-agent
@@ -328,7 +329,7 @@ services:
       dockerfile: ./apps/vs-agent/Dockerfile
       target: vs-agent                        # choose the appropriate target (vs-agent or vs-agent-mrtd)
     environment:
-      - AGENT_PUBLIC_DID=did:web:myagent.example.com
+      - PUBLIC_API_BASE_URL=https://myagent.example.com
       - EVENTS_BASE_URL=http://my-backend:5000
     ports:
       - 3000:3000

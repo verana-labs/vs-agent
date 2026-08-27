@@ -24,7 +24,7 @@ import {
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
-import { IncomingMessage } from 'http'
+import { IncomingMessage, Server } from 'http'
 import { Socket } from 'net'
 import * as path from 'path'
 
@@ -58,19 +58,17 @@ import {
   AGENT_LOG_LEVEL,
   AGENT_NAME,
   AGENT_PORT,
-  AGENT_PUBLIC_DID,
+  AGENT_PUBLIC_DID_METHOD,
   AGENT_WALLET_ID,
   AGENT_WALLET_KEY,
   AGENT_WALLET_KEY_DERIVATION_METHOD,
   askarPostgresConfig,
   keyDerivationMethodMap,
-  DEFAULT_AGENT_ENDPOINTS,
   ADMIN_API_AUTH_MODE,
   ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
   ADMIN_API_PUBLIC_URL,
   ADMIN_API_TRUSTED_NETWORKS,
   validateAdminApiConfig,
-  DEFAULT_PUBLIC_API_BASE_URL,
   ENABLED_PLUGINS,
   EVENTS_BASE_URL,
   POSTGRES_HOST,
@@ -97,6 +95,8 @@ import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
+  derivePublicDidLocation,
+  type PublicDidLocation,
   runWithRetries,
   type ServerConfig,
   setupAgent,
@@ -106,7 +106,7 @@ import {
 } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
-  const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [], bootstrapState } = serverConfig
+  const { port, cors, publicApiBaseUrl, nestPlugins = [], bootstrapState } = serverConfig
 
   // Nest's global level governs the plain @nestjs/common loggers (the credo agent uses AGENT_LOG_LEVEL).
   const nestLogLevels = toNestLogLevels(ADMIN_LOG_LEVEL)
@@ -146,18 +146,26 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   publicApp.use(express.static(publicDir))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
-  const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
-
   const webSocketServer = agent.didcomm.inboundTransports
     .find(x => x instanceof VsAgentWsInboundTransport)
     ?.getServer()
   const httpInboundTransport = agent.didcomm.inboundTransports.find(x => x instanceof HttpInboundTransport)
 
-  if (enableHttp) {
-    httpInboundTransport?.setApp(publicApp.getHttpAdapter().getInstance())
+  // When HTTP inbound DIDComm is enabled, the transport listens with the public app itself,
+  // so the DID document routes are servable before (never after) inbound DIDComm starts
+  let publicAppServer: Server | undefined
+  if (httpInboundTransport) {
+    await publicApp.init()
+    httpInboundTransport.setApp(publicApp.getHttpAdapter().getInstance())
+  } else {
+    publicAppServer = await publicApp.listen(AGENT_PORT)
   }
 
-  const httpServer = httpInboundTransport ? httpInboundTransport.server : await publicApp.listen(AGENT_PORT)
+  for (const transport of agent.didcomm.inboundTransports) {
+    await transport.start(agent.context)
+  }
+
+  const httpServer = httpInboundTransport ? httpInboundTransport.server : publicAppServer
 
   return { httpServer, webSocketServer }
 }
@@ -182,19 +190,20 @@ const run = async () => {
     )
   }
 
-  const parsedDid = AGENT_PUBLIC_DID ? parseDid(AGENT_PUBLIC_DID) : null
-
-  if (!AGENT_PUBLIC_DID) {
-    serverLogger.warn('AGENT_PUBLIC_DID is not defined. You must set it in production releases')
-  }
-
-  // Check it is a supported DID method
-  if (parsedDid && !['web', 'webvh'].includes(parsedDid.method)) {
-    serverLogger.error('Only did:web or did:webvh method is supported')
-    process.exit(1)
-  }
-
   const configErrors: string[] = []
+  let didLocation: PublicDidLocation | undefined
+  if (!PUBLIC_API_BASE_URL) {
+    configErrors.push('PUBLIC_API_BASE_URL is required')
+  } else {
+    try {
+      didLocation = derivePublicDidLocation(PUBLIC_API_BASE_URL)
+    } catch (error) {
+      configErrors.push((error as Error).message)
+    }
+  }
+  if (!['webvh', 'web'].includes(AGENT_PUBLIC_DID_METHOD)) {
+    configErrors.push(`AGENT_PUBLIC_DID_METHOD must be 'webvh' or 'web' (got '${AGENT_PUBLIC_DID_METHOD}')`)
+  }
   if (!VERANA_CORPORATION_ID) {
     configErrors.push('VERANA_CORPORATION_ID is required')
   } else if (!/^\d+$/.test(VERANA_CORPORATION_ID)) {
@@ -227,18 +236,21 @@ const run = async () => {
   if (TRUSTED_ECS_ECOSYSTEM_DIDS.some(did => !did.startsWith('did:'))) {
     configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS must be a comma-separated list of DIDs')
   }
-  if (configErrors.length > 0) {
+  if (configErrors.length > 0 || !didLocation) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
     process.exit(1)
   }
 
-  let endpoints = AGENT_ENDPOINTS
-  if (!endpoints && parsedDid) endpoints = [`wss://${decodeURIComponent(parsedDid.id)}`]
-  if (!endpoints) endpoints = DEFAULT_AGENT_ENDPOINTS
+  const parsedDid = parseDid(`did:${AGENT_PUBLIC_DID_METHOD}:${didLocation.location}`)
 
-  let publicApiBaseUrl = PUBLIC_API_BASE_URL
-  if (!publicApiBaseUrl && parsedDid) publicApiBaseUrl = `https://${decodeURIComponent(parsedDid.id)}`
-  if (!publicApiBaseUrl) publicApiBaseUrl = DEFAULT_PUBLIC_API_BASE_URL
+  let endpoints = AGENT_ENDPOINTS
+  if (!endpoints) {
+    const port = didLocation.port ? `:${didLocation.port}` : ''
+    const path = didLocation.path ? `/${didLocation.path}` : ''
+    endpoints = [`wss://${didLocation.host}${port}${path}`]
+  }
+
+  const publicApiBaseUrl = didLocation.normalizedBaseUrl
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
@@ -362,7 +374,7 @@ const run = async () => {
     },
     label: AGENT_LABEL || 'Test VS Agent',
     displayPictureUrl: AGENT_INVITATION_IMAGE_URL,
-    parsedDid: parsedDid ?? undefined,
+    parsedDid,
     logLevel: AGENT_LOG_LEVEL,
     publicApiBaseUrl,
     autoDiscloseUserProfile: USER_PROFILE_AUTODISCLOSE,
@@ -521,7 +533,6 @@ const run = async () => {
     (error: Error) => {
       bootstrapState.recordEcsBootstrap(AGENT_MODE, 'failed', error.message)
       serverLogger.error(`[EcsBootstrap] ${error.message}`)
-      if (AGENT_MODE === 'delegated') process.exit(1)
     },
   )
 
@@ -545,4 +556,7 @@ const run = async () => {
   )
 }
 
-run()
+run().catch((error: Error) => {
+  new TsLogger(ADMIN_LOG_LEVEL, 'Server').error(`Failed to start VS Agent: ${error.message}`)
+  process.exit(1)
+})

@@ -18,7 +18,8 @@ interface ExtWebSocket extends WebSocket {
 
 export class VsAgentWsInboundTransport implements DidCommInboundTransport {
   private socketServer: Server
-  private logger!: Logger
+  // Assigned in start(); stop() and getServer() can run on a registered-but-never-started transport
+  private logger?: Logger
 
   // We're using a `socketId` just for the prevention of calling the connection handler twice.
   private socketIds: Record<string, unknown> = {}
@@ -34,30 +35,31 @@ export class VsAgentWsInboundTransport implements DidCommInboundTransport {
     const transportService = agentContext.dependencyManager.resolve(DidCommTransportService)
     const didcomm = agentContext.dependencyManager.resolve(DidCommApi)
 
-    this.logger = agentContext.config.logger
-    this.logger.debug('VS Agent Ws Inbound transport start')
+    const logger = agentContext.config.logger
+    this.logger = logger
+    logger.debug('VS Agent Ws Inbound transport start')
 
     const wsEndpoint = didcomm.config.endpoints.find(e => e.startsWith('ws'))
-    this.logger.debug(`Starting WS inbound transport`, {
+    logger.debug(`Starting WS inbound transport`, {
       endpoint: wsEndpoint,
     })
 
     this.socketServer.on('connection', (socket: WebSocket) => {
       const socketId = utils.uuid()
-      this.logger.debug('Socket connected.')
+      logger.debug('Socket connected.')
       ;(socket as ExtWebSocket).isAlive = true
       ;(socket as ExtWebSocket).lastActivity = new Date()
       if (!this.socketIds[socketId]) {
-        this.logger.debug(`Saving new socket with id ${socketId}.`)
+        logger.debug(`Saving new socket with id ${socketId}.`)
         this.socketIds[socketId] = socket
-        const session = new WebSocketTransportSession(socketId, socket, this.logger)
+        const session = new WebSocketTransportSession(socketId, socket, logger)
         this.listenOnWebSocketMessages(agentContext, socket, session)
         socket.on('close', () => {
-          this.logger.debug('Socket closed.')
+          logger.debug('Socket closed.')
           transportService.removeSession(session)
         })
       } else {
-        this.logger.debug(`Socket with id ${socketId} already exists.`)
+        logger.debug(`Socket with id ${socketId} already exists.`)
       }
     })
 
@@ -65,7 +67,7 @@ export class VsAgentWsInboundTransport implements DidCommInboundTransport {
   }
 
   public async stop() {
-    this.logger.debug('Closing WebSocket Server')
+    this.logger?.debug('Closing WebSocket Server')
 
     return new Promise<void>((resolve, reject) => {
       this.socketServer.close(error => {
@@ -79,7 +81,7 @@ export class VsAgentWsInboundTransport implements DidCommInboundTransport {
   }
 
   public getServer() {
-    this.logger.debug('Get WebSocket Server')
+    this.logger?.debug('Get WebSocket Server')
 
     return this.socketServer
   }
@@ -89,7 +91,7 @@ export class VsAgentWsInboundTransport implements DidCommInboundTransport {
       const currentDate = new Date()
       this.socketServer.clients.forEach(item => {
         if (currentDate.valueOf() - (item as ExtWebSocket).lastActivity.valueOf() > interval) {
-          this.logger.debug('Client session closed by inactivity')
+          this.logger?.debug('Client session closed by inactivity')
           item.close()
         }
       })
@@ -102,19 +104,19 @@ export class VsAgentWsInboundTransport implements DidCommInboundTransport {
     session: WebSocketTransportSession,
   ) {
     socket.on('pong', () => {
-      this.logger.debug('Pong received')
+      this.logger?.debug('Pong received')
       ;(socket as ExtWebSocket).isAlive = true
     })
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     socket.addEventListener('message', async (event: any) => {
-      this.logger.debug('WebSocket message event received.', { url: event.target.url, data: event.data })
+      this.logger?.debug('WebSocket message event received.', { url: event.target.url, data: event.data })
       ;(socket as ExtWebSocket).lastActivity = new Date()
       try {
         const messageReceiver = agentContext.dependencyManager.resolve(DidCommMessageReceiver)
         await messageReceiver.receiveMessage(JSON.parse(event.data), { session })
       } catch (error) {
-        this.logger.error(
+        this.logger?.error(
           `Error processing inbound message: ${error instanceof Error ? error.message : String(error)}`,
           { error },
         )

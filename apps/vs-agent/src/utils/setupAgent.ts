@@ -193,6 +193,10 @@ export const setupAgent = async ({
     adminApiServiceEndpoint,
   })
 
+  orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl })
+
+  await agent.initialize()
+
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
   if (enableHttp) {
     logger.info('Inbound HTTP transport enabled')
@@ -206,10 +210,6 @@ export const setupAgent = async ({
       new VsAgentWsInboundTransport({ server: new WebSocket.Server({ noServer: true }) }),
     )
   }
-
-  orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl })
-
-  await agent.initialize()
 
   migrateLegacyTailsFiles(agent.context)
 

@@ -3,7 +3,7 @@ import {
   AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
-import { Controller, Get, Param, Res, HttpStatus, HttpException, Inject, Query } from '@nestjs/common'
+import { Controller, Get, Param, Res, HttpStatus, HttpException, Inject, NotFoundException, Query } from '@nestjs/common'
 import {
   getLegacyDidDocument,
   getTailsDirectoryPath,
@@ -17,6 +17,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 
 import { VsAgentService } from '../../../services'
+import { derivePublicDidLocation } from '../../../utils/didLocation'
 
 @Controller()
 export class DidWebController {
@@ -25,8 +26,38 @@ export class DidWebController {
     @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
   ) {}
 
+  // .well-known only when the location carries no path, so a deployment answers on one shape.
   @Get('/.well-known/did.json')
+  async getWellKnownDidDocument() {
+    this.assertLocationShape(false)
+    return this.serveDidDocument()
+  }
+
+  @Get('/did.json')
   async getDidDocument() {
+    this.assertLocationShape(true)
+    return this.serveDidDocument()
+  }
+
+  @Get('/.well-known/did.jsonl')
+  async getWellKnownDidLog(@Res() res: Response) {
+    this.assertLocationShape(false)
+    return this.serveDidLog(res)
+  }
+
+  @Get('/did.jsonl')
+  async getDidLog(@Res() res: Response) {
+    this.assertLocationShape(true)
+    return this.serveDidLog(res)
+  }
+
+  private assertLocationShape(expectsPath: boolean): void {
+    if (derivePublicDidLocation(this.publicApiBaseUrl).hasPath !== expectsPath) {
+      throw new NotFoundException()
+    }
+  }
+
+  private async serveDidDocument() {
     const agent = await this.agentService.getAgent()
     agent.config.logger.debug(`Public DID document requested`)
     const { didDocument } = await resolveDidDocumentData(agent)
@@ -37,8 +68,7 @@ export class DidWebController {
     throw new HttpException('DID Document not found', HttpStatus.NOT_FOUND)
   }
 
-  @Get('/.well-known/did.jsonl')
-  async getDidLog(@Res() res: Response) {
+  private async serveDidLog(res: Response) {
     const agent = await this.agentService.getAgent()
     agent.config.logger.debug(`Public DID log requested`)
     const { didLog } = await resolveDidDocumentData(agent)

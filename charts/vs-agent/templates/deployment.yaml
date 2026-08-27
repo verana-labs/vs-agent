@@ -185,8 +185,10 @@ spec:
               value: {{ tpl .Values.eventsBaseUrl . | quote }}
             - name: ENABLE_PUBLIC_API_SWAGGER
               value: {{ .Values.enablePublicApiSwagger | quote }}
-            - name: AGENT_PUBLIC_DID
-              value: "did:{{ default "webvh" .Values.publicDidMethod }}:{{ tpl .Values.ingress.host . }}"
+            - name: PUBLIC_API_BASE_URL
+              value: "https://{{ tpl .Values.ingress.host . }}"
+            - name: AGENT_PUBLIC_DID_METHOD
+              value: {{ default "webvh" .Values.publicDidMethod | quote }}
             - name: ADMIN_API_AUTH_MODE
               value: {{ .Values.adminApiAuthMode | default "internal" | quote }}
             {{- if .Values.adminApiPublicUrl }}

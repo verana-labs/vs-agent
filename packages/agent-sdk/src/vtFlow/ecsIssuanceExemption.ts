@@ -63,8 +63,8 @@ async function schemaOfPendingOnboarding(
   return participant.schema_id
 }
 
-// Delegated mode has no Participant entry yet: the only claim to the exemption is that issuing this
-// very schema is what this agent is an ISSUER for.
+// A Direct Issuance request carries no Participant entry: the only claim to the exemption is that
+// issuing this very schema is what this agent is an ISSUER for.
 async function schemaOfDirectIssuance(
   indexer: VeranaIndexerService,
   schemaId: string | undefined,

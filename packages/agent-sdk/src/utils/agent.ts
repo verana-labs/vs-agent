@@ -28,7 +28,7 @@ export async function createInvitation(options: {
   // Use legacy did:web in case agent's did is webvh and using legacy did
   const ourDid =
     agent.did && parseDid(agent.did).method === 'webvh' && useLegacyDid
-      ? `did:web:${parseDid(agent.did).id.split(':')[1]}`
+      ? `did:web:${parseDid(agent.did).id.split(':').slice(1).join(':')}`
       : agent.did
 
   const effectiveVersion: DidCommVersion = didCommVersion ?? 'v2'
@@ -123,6 +123,6 @@ export async function getWebDid(agent: VsAgent) {
     const parsedDid = parseDid(agent.did)
 
     if (parsedDid.method === 'web') return agent.did
-    if (parsedDid.method === 'webvh') return `did:web:${parsedDid.id.split(':')[1]}`
+    if (parsedDid.method === 'webvh') return `did:web:${parsedDid.id.split(':').slice(1).join(':')}`
   }
 }

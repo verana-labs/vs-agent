@@ -1,10 +1,10 @@
 import { BaseLogger } from '@credo-ts/core'
 import {
   VtFlowApi,
-  VtFlowEventTypes,
   VtFlowRole,
   VtFlowState,
-  type VtFlowStateChangedEvent,
+  VtFlowVariant,
+  isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
@@ -18,21 +18,14 @@ import {
   VeranaIndexerService,
 } from '../blockchain'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
-import { connectToPublicDid } from '../utils/agent'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../utils/didReadiness'
+import { VtFlowOrchestrator } from '../vtFlow/VtFlowOrchestrator'
 
 const START_OP_MSG = '/verana.pp.v1.MsgStartParticipantOP'
 const SELF_CREATE_MSG = '/verana.pp.v1.MsgSelfCreateParticipant'
 
 const ISSUER_ONBOARDING_MODE_OPEN = 1
 const ISSUER_ONBOARDING_MODE_GRANTOR = 3
-
-const DELEGATED_OUTCOME_TIMEOUT_MS = 15 * 60_000
-// Thin safety net for any remaining transient failure (e.g. a network blip from
-// the parent's vantage point), on top of the readiness wait in waitUntilOwnDidIsPubliclyResolvable.
-const DELEGATED_REQUEST_MAX_ATTEMPTS = 2
-const DELEGATED_REQUEST_ATTEMPT_TIMEOUT_MS = 60_000
-const DELEGATED_REQUEST_RETRY_DELAY_MS = 5_000
 
 export interface EcsBootstrapOptions {
   mode: 'standalone' | 'delegated'
@@ -50,18 +43,21 @@ export class EcsBootstrapService {
   ) {}
 
   async run(): Promise<void> {
+    // Both repair steps sign nothing on chain, so they run before any gate, in either mode, and
+    // also for a deployment whose participants the Corporation operator provisions out of band.
+    await this.acceptPendingOffers()
+    await this.resumePendingOnboardings()
+
     if (this.options.mode === 'delegated') return this.runDelegated()
     return this.runStandalone()
   }
 
   private async runStandalone(): Promise<void> {
-    // Re-driving an interrupted offer signs nothing on chain, so it also runs for a deployment
-    // whose participants the Corporation operator provisions out of band.
-    await this.acceptPendingOffers()
-
     const skip = await this.preflight()
     if (skip) {
-      this.logger.info(`[EcsBootstrap] standalone bootstrap skipped: ${skip}`)
+      this.logger.info(
+        `[EcsBootstrap] standalone bootstrap skipped: ${skip}; this agent expects its participants to be provisioned out of band`,
+      )
       return
     }
     const chain = this.agent.veranaChain!
@@ -79,15 +75,20 @@ export class EcsBootstrapService {
     if (!this.indexer) return 'the Verana indexer is not configured'
     if (!this.options.trustedEcosystemDids?.length) return 'TRUSTED_ECS_ECOSYSTEM_DIDS is not set'
 
+    return this.operatorSkipReason(chain)
+  }
+
+  // StartParticipantOP costs a trust deposit and a fee, so both the authorization and the funds
+  // must be there. Neither is a misconfiguration: the operator may provision the entry itself.
+  private async operatorSkipReason(chain: VeranaChainService): Promise<string | null> {
     const operatorAuths = await chain.listOperatorAuthorizations()
-    if (!operatorAuths.some(a => a.msgTypes.includes(START_OP_MSG))) {
-      return `operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP; this agent expects its participants to be provisioned out of band`
+    if (!operatorAuths.some(auth => auth.msgTypes.includes(START_OP_MSG))) {
+      return `operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP`
     }
     const balance = await chain.getBalance()
     if (Number(balance.amount) === 0) {
       return `operator ${chain.address} has no ${balance.denom} balance for fees and trust deposits`
     }
-
     return null
   }
 
@@ -112,6 +113,75 @@ export class EcsBootstrapService {
         )
       }
     }
+  }
+
+  /**
+   * StartParticipantOP pays a trust deposit, and it cannot be undone. The onboarding request that
+   * must follow it travels over DIDComm from the chain event handler, which catches its own
+   * failure. The indexer marks that block processed all the same and never replays it, so an
+   * unreachable validator leaves the entry at PENDING for ever. This boot step closes that gap.
+   */
+  private async resumePendingOnboardings(): Promise<void> {
+    if (!this.indexer || !this.agent.did) return
+
+    const own = await this.indexer.listParticipants({ did: this.agent.did }).catch(() => [])
+    for (const participant of own) {
+      if (participant.op_state !== 'PENDING' || participant.revoked || participant.slashed) continue
+      try {
+        await this.resumeOnboarding(participant)
+      } catch (error) {
+        this.logger.warn(
+          `[EcsBootstrap] could not resume the onboarding of participant ${participant.id}: ${(error as Error).message}`,
+        )
+      }
+    }
+  }
+
+  private async resumeOnboarding(participant: ParticipantDto): Promise<void> {
+    // A flow that a peer ended on purpose is not an interruption; only an error deserves a retry.
+    const api = this.agent.dependencyManager.resolve(VtFlowApi)
+    const [latest] = (
+      await api.findAllByQuery({
+        participantId: String(participant.id),
+        role: VtFlowRole.Applicant,
+        flowVariant: VtFlowVariant.OnboardingProcess,
+      })
+    ).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    if (latest && isVtFlowTerminalState(latest.state) && latest.state !== VtFlowState.Error) return
+
+    // The agent validates its own entry when it controls the ECOSYSTEM root of the schema, so
+    // there is no peer to send a request to: the interrupted step is the chain outcome itself.
+    if (await this.isSelfValidated(participant)) {
+      const chain = this.agent.veranaChain
+      if (!chain) return
+      await chain.setParticipantOPToValidated({
+        id: participant.id,
+        validationFees: 0,
+        issuanceFees: 0,
+        verificationFees: 0,
+      })
+      await this.triggerResolverBestEffort(chain, participant.id)
+      this.logger.info(`[EcsBootstrap] validated the interrupted self-issued participant ${participant.id}`)
+      return
+    }
+
+    // startOnboardingProcess writes nothing on chain, and it refuses to resend while a flow is in
+    // progress, so this is safe on every boot.
+    await waitUntilOwnDidIsPubliclyResolvable(this.agent, this.logger)
+    const record = await new VtFlowOrchestrator(this.agent).startOnboardingProcess({
+      applicantParticipantId: participant.id,
+    })
+    this.logger.info(
+      `[EcsBootstrap] resumed the onboarding of participant ${participant.id} (flow ${record.id}, state ${record.state})`,
+    )
+  }
+
+  private async isSelfValidated(participant: ParticipantDto): Promise<boolean> {
+    if (participant.validator_participant_id == null) return false
+    const validator = await this.indexer!.getParticipant(participant.validator_participant_id).catch(
+      () => undefined,
+    )
+    return validator?.did === this.agent.did
   }
 
   // WL-ECS: only ecosystems on the configured allowlist may provide the essential credential schemas.
@@ -354,106 +424,93 @@ export class EcsBootstrapService {
     if (!parentDid) throw new Error('AGENT_DELEGATED_PARENT_VS_DID is not set')
     if (!this.agent.did) throw new Error('delegated bootstrap requires a public DID')
     if (!this.indexer) throw new Error('delegated bootstrap requires the Verana indexer')
+    const chain = this.agent.veranaChain
+    if (!chain) throw new Error('delegated bootstrap requires the Verana chain')
     if (!this.options.verifyPeer) {
       throw new Error(
         `cannot verify parent VS ${parentDid}: verifiable public registries are not configured (set VERANA_CHAIN_ID)`,
       )
     }
 
-    await waitUntilOwnDidIsPubliclyResolvable(this.agent, this.logger)
-
     const verified = await this.options.verifyPeer(parentDid).catch(() => false)
     if (!verified) {
       throw new Error(`parent VS ${parentDid} is not a Verifiable Service`)
     }
 
-    const schemaId = await this.findParentServiceSchemaId(parentDid)
+    const validator = await this.findParentServiceIssuer(parentDid)
+    await this.assertTrustedEcosystem(validator.schema_id)
 
-    let lastError: Error | undefined
-    for (let attempt = 1; attempt <= DELEGATED_REQUEST_MAX_ATTEMPTS; attempt++) {
-      try {
-        await this.requestDelegatedServiceCredential(parentDid, schemaId, attempt)
-        return
-      } catch (error) {
-        lastError = error as Error
-        this.logger.warn(
-          `[EcsBootstrap] delegated issuance attempt ${attempt}/${DELEGATED_REQUEST_MAX_ATTEMPTS} failed: ${lastError.message}`,
+    // An existing entry means the process already ran, or the operator provisioned it.
+    const own = await this.indexer.listParticipants({
+      did: this.agent.did,
+      role: ParticipantRole.Holder,
+      schemaId: validator.schema_id,
+    })
+    const existing = own.find(participant => this.isUsableParticipant(participant))
+    if (existing) {
+      // The parent named by AGENT_DELEGATED_PARENT_VS_DID must be the validator of the entry;
+      // any other validator would issue the Service credential of another accountable party.
+      if (Number(existing.validator_participant_id) !== validator.id) {
+        throw new Error(
+          `HOLDER participant ${existing.id} for the ECS Service schema ${validator.schema_id} names validator ${existing.validator_participant_id}, not the parent VS ${parentDid} (validator ${validator.id})`,
         )
-        if (attempt < DELEGATED_REQUEST_MAX_ATTEMPTS) {
-          await new Promise(resolve => setTimeout(resolve, DELEGATED_REQUEST_RETRY_DELAY_MS))
-        }
       }
-    }
-    throw lastError ?? new Error(`parent VS ${parentDid} did not complete the issuance in time`)
-  }
-
-  private async requestDelegatedServiceCredential(
-    parentDid: string,
-    schemaId: number,
-    attempt: number,
-  ): Promise<void> {
-    let connectionId: string
-    try {
-      connectionId = await connectToPublicDid(this.agent, parentDid)
-    } catch (error) {
-      throw new Error(`parent VS ${parentDid} is unreachable: ${(error as Error).message}`)
+      this.logger.info(
+        `[EcsBootstrap] HOLDER participant ${existing.id} for the ECS Service schema ${validator.schema_id} already exists; the onboarding process continues on its own`,
+      )
+      return
     }
 
-    const api = this.agent.dependencyManager.resolve(VtFlowApi)
-    const record = await api.sendIssuanceRequest({
-      connectionId,
-      schemaId: String(schemaId),
-      agentParticipantId: '0',
-      walletAgentParticipantId: '0',
+    // [VSA-VTI-FLOW-OP-NEW] step 1: the applicant submits StartParticipantOP. The agent then
+    // reacts to its own chain event and sends the onboarding request, so nothing is awaited here.
+    // Direct Issuance does not apply: it needs holder_onboarding_mode = PERMISSIONLESS, and the
+    // ECS Service schema uses ISSUER_ONBOARDING_PROCESS.
+    const skip = await this.operatorSkipReason(chain)
+    if (skip) {
+      this.logger.info(
+        `[EcsBootstrap] delegated bootstrap skipped: ${skip}; this agent expects its HOLDER participant to be provisioned out of band, with validator ${validator.id}`,
+      )
+      return
+    }
+
+    const { participantId } = await chain.startParticipantOP({
+      role: HOLDER_PARTICIPANT_TYPE,
+      validatorParticipantId: validator.id,
+      did: this.agent.did,
     })
     this.logger.info(
-      `[EcsBootstrap] requested the Service credential (schema ${schemaId}) from parent VS ${parentDid} (attempt ${attempt}/${DELEGATED_REQUEST_MAX_ATTEMPTS})`,
+      `[EcsBootstrap] started HOLDER onboarding ${participantId} for the ECS Service schema ${validator.schema_id} with parent VS ${parentDid} (validator ${validator.id})`,
     )
-
-    const isLastAttempt = attempt === DELEGATED_REQUEST_MAX_ATTEMPTS
-    const timeoutMs = isLastAttempt ? DELEGATED_OUTCOME_TIMEOUT_MS : DELEGATED_REQUEST_ATTEMPT_TIMEOUT_MS
-    await this.awaitDelegatedOutcome(record.id, parentDid, timeoutMs)
   }
 
-  private async findParentServiceSchemaId(parentDid: string): Promise<number> {
+  private async findParentServiceIssuer(parentDid: string): Promise<ParticipantDto> {
     const participants = await this.indexer!.listParticipants({
       did: parentDid,
       role: ParticipantRole.Issuer,
       participantState: ParticipantState.Active,
     })
     for (const participant of participants) {
+      if (participant.revoked || participant.slashed) continue
       const schema = await this.indexer!.getCredentialSchema(participant.schema_id).catch(() => undefined)
       if (!schema) continue
-      if ((await classifyEcsSchema(schema.json_schema)) === ECS.SERVICE) return schema.id
+      if ((await classifyEcsSchema(schema.json_schema)) === ECS.SERVICE) return participant
     }
     throw new Error(`parent VS ${parentDid} holds no active ISSUER participant for an ECS Service schema`)
   }
 
-  private awaitDelegatedOutcome(recordId: string, parentDid: string, timeoutMs: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const listener = ({ payload }: VtFlowStateChangedEvent) => {
-        if (payload.vtFlowRecordId !== recordId) return
-        if (payload.state === VtFlowState.Completed) {
-          cleanup()
-          resolve()
-        } else if (
-          payload.state === VtFlowState.TerminatedByValidator ||
-          payload.state === VtFlowState.Error
-        ) {
-          cleanup()
-          reject(new Error(`parent VS ${parentDid} rejected the Service credential request`))
-        }
-      }
-      const cleanup = () => {
-        clearTimeout(timer)
-        this.agent.events.off<VtFlowStateChangedEvent>(VtFlowEventTypes.VtFlowStateChanged, listener)
-      }
-      const timer = setTimeout(() => {
-        cleanup()
-        reject(new Error(`parent VS ${parentDid} did not complete the issuance in time`))
-      }, timeoutMs)
-      timer.unref()
-      this.agent.events.on<VtFlowStateChangedEvent>(VtFlowEventTypes.VtFlowStateChanged, listener)
-    })
+  // WL-ECS: an allowlist is optional in delegated mode, but it binds the flow once the operator sets it.
+  private async assertTrustedEcosystem(schemaId: number): Promise<void> {
+    const trusted = this.options.trustedEcosystemDids
+    if (!trusted?.length) return
+
+    const schema = await this.indexer!.getCredentialSchema(schemaId).catch(() => undefined)
+    const ecosystem = schema
+      ? await this.indexer!.getEcosystem(schema.ecosystem_id).catch(() => undefined)
+      : undefined
+    if (!ecosystem || ecosystem.archived || !trusted.includes(ecosystem.did)) {
+      throw new Error(
+        `the ECS Service schema ${schemaId} belongs to ecosystem ${ecosystem?.did ?? '<unresolvable>'}, which TRUSTED_ECS_ECOSYSTEM_DIDS does not list`,
+      )
+    }
   }
 }

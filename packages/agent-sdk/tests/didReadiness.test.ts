@@ -42,6 +42,21 @@ describe('waitUntilOwnDidIsPubliclyResolvable', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://agent.example/.well-known/did.jsonl')
   })
 
+  it('checks <base>/did.jsonl instead of /.well-known when the base URL has a path', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await waitUntilOwnDidIsPubliclyResolvable(
+      {
+        did: 'did:webvh:Qm123:agent.example:dids:issuer',
+        publicApiBaseUrl: 'https://agent.example/dids/issuer',
+      } as never,
+      makeLogger(),
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith('https://agent.example/dids/issuer/did.jsonl')
+  })
+
   it('retries until the DID document becomes resolvable', async () => {
     const fetchMock = vi
       .fn()

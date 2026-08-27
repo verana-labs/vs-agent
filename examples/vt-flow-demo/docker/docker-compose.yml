@@ -112,7 +112,6 @@ services:
       AGENT_LABEL: Validator VS
       AGENT_PORT: '3001'
       ADMIN_PORT: '3000'
-      AGENT_PUBLIC_DID: did:webvh:agent-validator.demo
       AGENT_ENDPOINT: wss://agent-validator.demo
       PUBLIC_API_BASE_URL: https://agent-validator.demo
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
@@ -145,7 +144,6 @@ services:
       AGENT_LABEL: Applicant VS
       AGENT_PORT: '3001'
       ADMIN_PORT: '3000'
-      AGENT_PUBLIC_DID: did:webvh:agent-applicant.demo
       AGENT_ENDPOINT: wss://agent-applicant.demo
       PUBLIC_API_BASE_URL: https://agent-applicant.demo
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
@@ -182,9 +180,7 @@ services:
     environment:
       AGENT_LABEL: Ecosystem VS
       AGENT_PORT: '3001'
-      AGENT_DIDCOMM_VERSIONS: v1,v2
       ADMIN_PORT: '3000'
-      AGENT_PUBLIC_DID: did:webvh:agent-ecosystem.demo
       AGENT_ENDPOINT: wss://agent-ecosystem.demo
       PUBLIC_API_BASE_URL: https://agent-ecosystem.demo
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt

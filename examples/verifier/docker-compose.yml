@@ -16,6 +16,8 @@ services:
       - AGENT_ENDPOINT=ws://192.168.100.105:3001
       - AGENT_INVITATION_IMAGE_URL=http://192.168.100.105:3001/avatar.png
       - PUBLIC_API_BASE_URL=http://192.168.100.105:3001
+      # did:webvh forbids IP hosts, so this IP-based demo must use did:web
+      - AGENT_PUBLIC_DID_METHOD=web
       - AGENT_LABEL=Verifier Agent
       - USE_CORS=true
       - EVENTS_BASE_URL=http://verifier-backend:5100
