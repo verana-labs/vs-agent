@@ -187,14 +187,12 @@ describe('v2 didcomm presentation routes', () => {
       proofs.createRequest.mockResolvedValue({ proofRecord: proofRecordSpy, message: { id: 'msg-1' } })
 
       const requestedCredentials = [{ credentialDefinitionId: 'cred-def-1', attributes: ['firstName'] }]
-      const response = await request(app.getHttpServer())
-        .post('/v2/didcomm/presentation-request')
-        .send({
-          requestedCredentials,
-          ref: '1234',
-          callbackUrl: 'https://cb.test/done',
-          didcommVersion: 'v1',
-        })
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/presentation-request').send({
+        requestedCredentials,
+        ref: '1234',
+        callbackUrl: 'https://cb.test/done',
+        didcommVersion: 'v1',
+      })
 
       expect(response.body).toEqual({
         proofExchangeId: 'proof-1',
