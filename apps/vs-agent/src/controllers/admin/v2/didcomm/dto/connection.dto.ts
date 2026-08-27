@@ -43,7 +43,13 @@ export class ListConnectionsQueryDto extends PaginationQueryDto {
   @IsString()
   invitationDid?: string
 
-  @ApiPropertyOptional({ description: 'Filter by negotiated DIDComm version', enum: ['v1', 'v2'] })
+  @ApiPropertyOptional({
+    description:
+      'Filter by negotiated DIDComm version. The record only carries this value for connections ' +
+      'established through the v2 out-of-band flow: `v1` matches no record, and `v2` matches only ' +
+      'that subset.',
+    enum: ['v1', 'v2'],
+  })
   @IsOptional()
   @IsIn(['v1', 'v2'])
   didcommVersion?: DidCommVersion
@@ -94,7 +100,12 @@ export class ConnectionRecordDto {
   @ApiPropertyOptional({ description: 'DID of the invitation this connection started from' })
   invitationDid?: string
 
-  @ApiPropertyOptional({ enum: ['v1', 'v2'], description: 'DIDComm version negotiated for this connection' })
+  @ApiPropertyOptional({
+    enum: ['v1', 'v2'],
+    description:
+      'DIDComm version negotiated for this connection. Set only for connections established ' +
+      'through the v2 out-of-band flow; absent otherwise.',
+  })
   didcommVersion?: DidCommVersion
 
   @ApiPropertyOptional({ description: 'Mediator that routes messages for this connection' })
