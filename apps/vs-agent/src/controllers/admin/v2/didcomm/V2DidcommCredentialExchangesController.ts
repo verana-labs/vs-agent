@@ -83,7 +83,7 @@ export class V2DidcommCredentialExchangesController {
         summary: 'Phone Number VC',
         value: {
           credentialDefinitionId:
-            'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
+            'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmevazUUyXBhGoXJwJNNEqXgvPPQ5WrwTE8G5MdhfWsmxM',
           claims: [{ name: 'phoneNumber', value: '+57128348520' }],
         },
       },
@@ -91,9 +91,10 @@ export class V2DidcommCredentialExchangesController {
         summary: 'Revocable credential',
         value: {
           credentialDefinitionId:
-            'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
+            'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmevazUUyXBhGoXJwJNNEqXgvPPQ5WrwTE8G5MdhfWsmxM',
           claims: [{ name: 'phoneNumber', value: '+57128348520' }],
-          revocationRegistryDefinitionId: 'did:web:issuer.example.com/resources/zQmRDLc',
+          revocationRegistryDefinitionId:
+            'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmRDLcQ3jZvK4PfcDcf3sbvPzV4Ww5X7Sn2pzyHqUrZp2Z',
           revocationRegistryIndex: 1,
         },
       },

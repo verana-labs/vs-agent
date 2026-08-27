@@ -45,7 +45,7 @@ export class CreateCredentialOfferBodyDto {
   @ApiProperty({
     description: 'AnonCreds credential definition identifier',
     example:
-      'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
+      'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmevazUUyXBhGoXJwJNNEqXgvPPQ5WrwTE8G5MdhfWsmxM',
   })
   @IsString()
   @IsNotEmpty()
@@ -137,7 +137,8 @@ export class CredentialExchangeRecordDto {
 
   @ApiPropertyOptional({
     description: 'AnonCreds credential definition identifier, if the agent knows it',
-    example: 'did:web:issuer.example.com?service=anoncreds&relativeRef=/credDef/abc',
+    example:
+      'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmevazUUyXBhGoXJwJNNEqXgvPPQ5WrwTE8G5MdhfWsmxM',
   })
   credentialDefinitionId?: string
 
