@@ -5,7 +5,7 @@ import { isTrustedPeer, type TrustedNetwork } from './trustedNetworks'
 // SwaggerModule.setup registers on the express adapter, so the Nest guard never sees these paths
 export function restrictDocsToTrustedPeers(trustedNetworks: TrustedNetwork[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const isDocs = req.path === '/api' || req.path.startsWith('/api/') || req.path.startsWith('/api-json')
+    const isDocs = req.path === '/api' || req.path.startsWith('/api/') || req.path.startsWith('/api-')
     if (!isDocs || isTrustedPeer(req.socket?.remoteAddress, trustedNetworks)) {
       next()
       return

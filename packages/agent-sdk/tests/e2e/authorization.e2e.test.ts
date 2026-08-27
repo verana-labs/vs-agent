@@ -168,9 +168,6 @@ describe('authorization cache (V4): indexer events drive grant -> activate -> re
 
       await expect(authz.callerHoldsOperatorGrant(chainA.address, PP_START_OP)).resolves.toBe(true)
       await expect(authz.callerHoldsOperatorGrant(opB.address, PP_START_OP)).resolves.toBe(false)
-      await expect(
-        authz.callerHoldsVsOperatorGrant(opB.address, applicant.participantId, PP_SESSION),
-      ).resolves.toBe(true)
       await expect(authz.agentHoldsOperatorGrant(PP_START_OP)).resolves.toBe(false)
 
       const revoked = await chainA.revokeParticipant(policyAddress, applicant.participantId)

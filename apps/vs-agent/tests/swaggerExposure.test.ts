@@ -42,6 +42,7 @@ describe('the API documentation follows the trusted network rule', () => {
     await app.init()
 
     expect((await request(app.getHttpServer()).get('/api-json')).status).toBe(403)
+    expect((await request(app.getHttpServer()).get('/api-yaml')).status).toBe(403)
     expect((await request(app.getHttpServer()).get('/api')).status).toBe(403)
   })
 
