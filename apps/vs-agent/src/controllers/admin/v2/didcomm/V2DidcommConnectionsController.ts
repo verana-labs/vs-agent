@@ -47,16 +47,22 @@ export class V2DidcommConnectionsController {
       theirDid: query.theirDid,
       threadId: query.threadId,
       invitationDid: query.invitationDid,
-      didcommVersion: query.didcommVersion,
       mediatorId: query.mediatorId,
     }
 
-    const records = await agent.didcomm.connections.findAllByQuery(filters)
+    // Credo tags only v2 out-of-band connections and reads the absent value as v1, so a `v1`
+    // filter can never match a tag value and has to be the negation of v2 instead.
+    const records = await agent.didcomm.connections.findAllByQuery(
+      query.didcommVersion === 'v1'
+        ? { $and: [filters, { $not: { didcommVersion: 'v2' } }] }
+        : { ...filters, didcommVersion: query.didcommVersion },
+    )
 
     return paginate(
       records.map(toConnectionDto),
       query,
-      { method: 'listConnections', filters },
+      // Scoped on what the caller asked for, not on the translated query, so the cursor is stable.
+      { method: 'listConnections', filters: { ...filters, didcommVersion: query.didcommVersion } },
       connection => `${connection.createdAt.toISOString()}|${connection.id}`,
     )
   }
