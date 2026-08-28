@@ -28,7 +28,7 @@ import {
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
 import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
 
-import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../../common'
+import { AdminApiError, AdminApiErrorCode, Page, mapPageAsync, paginate } from '../../../../common'
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../../config'
 import { AccessMode } from '../../../../security'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
@@ -188,14 +188,15 @@ export class V2DidcommPresentationsController {
     const agent = await this.vsAgentService.getAgent()
 
     const records = await agent.didcomm.proofs.getAll()
-    const items = await Promise.all(records.map(record => this.toPresentationDto(record)))
 
-    return paginate(
-      items,
+    const page = paginate(
+      records,
       query,
       { method: 'listPresentations' },
-      presentation => `${presentation.createdAt.toISOString()}|${presentation.proofExchangeId}`,
+      record => `${record.createdAt.toISOString()}|${record.id}`,
     )
+
+    return mapPageAsync(page, record => this.toPresentationDto(record))
   }
 
   @Get('presentations/:proofExchangeId')

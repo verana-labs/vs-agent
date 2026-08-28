@@ -1,3 +1,7 @@
+import { HttpStatus } from '@nestjs/common'
+
+import { AdminApiError, AdminApiErrorCode } from '../AdminApiError'
+
 import { decodeCursor, encodeCursor, hashScope, PageScope } from './cursor'
 import { PAGE_LIMIT_DEFAULT, PAGE_LIMIT_MAX, PAGE_LIMIT_MIN, PaginationQueryDto } from './PaginationQueryDto'
 
@@ -24,6 +28,8 @@ export function paginate<T>(
   const keyed = items.map(item => ({ key: keyOf(item), item }))
   keyed.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
 
+  assertUniqueKeys(keyed, scope.method)
+
   // Scan for the first key after the anchor, so a deleted anchor still starts the page correctly.
   let start = 0
   if (query.cursor !== undefined) {
@@ -42,10 +48,39 @@ export function paginate<T>(
 }
 
 /**
- * Clamps the limit. The DTO validates an HTTP caller, but an internal caller can pass a raw
- * object.
+ * Maps the records of one page. Paginate the records first, then map, when a record costs a
+ * store read to become a DTO: the method then reads one page instead of the collection.
  */
-function limitOf(limit: number | undefined): number {
+export function mapPage<T, U>(page: Page<T>, map: (item: T) => U): Page<U> {
+  return { items: page.items.map(map), nextCursor: page.nextCursor }
+}
+
+/** `mapPage` for a mapping that reads the store. */
+export async function mapPageAsync<T, U>(page: Page<T>, map: (item: T) => Promise<U>): Promise<Page<U>> {
+  return { items: await Promise.all(page.items.map(map)), nextCursor: page.nextCursor }
+}
+
+/**
+ * Refuses a repeated key. The anchor scan would step over each record after the first one that
+ * holds the key, and the method would drop those records without an error.
+ */
+function assertUniqueKeys(keyed: readonly { key: string }[], method: string): void {
+  for (let index = 1; index < keyed.length; index++) {
+    if (keyed[index].key !== keyed[index - 1].key) continue
+
+    throw new AdminApiError(
+      AdminApiErrorCode.Internal,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      `${method} gave two records the pagination key "${keyed[index].key}"`,
+    )
+  }
+}
+
+/**
+ * Clamps the limit. The value is `unknown` because Nest hands the handler the raw query string,
+ * and because an internal caller can pass a raw object that no DTO validated.
+ */
+function limitOf(limit: unknown): number {
   if (limit === undefined) return PAGE_LIMIT_DEFAULT
 
   const value = Number(limit)
