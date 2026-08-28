@@ -7,10 +7,12 @@ import {
 } from '@credo-ts/anoncreds'
 import { JsonObject, parseDid, Proof, TagsBase, utils, W3cCredential } from '@credo-ts/core'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
-import { Inject, Logger } from '@nestjs/common'
+import { HttpStatus, Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import { deleteTailsFile, fetchJson, VsAgent } from '@verana-labs/vs-agent-sdk'
 
+import { AdminApiError, AdminApiErrorCode } from '../../../common'
+import { REVOCATION_REGISTRY_DEFAULT_CAPACITY } from '../../../config/constants'
 import { VsAgentService } from '../../../services/VsAgentService'
 
 type Tags = TagsBase & {
@@ -22,6 +24,112 @@ export class CredentialTypesService {
   private readonly logger = new Logger(CredentialTypesService.name)
 
   constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
+
+  public async listRevocationRegistries(agent: VsAgent, credentialDefinitionId?: string): Promise<string[]> {
+    const revocationDefinitionRepository = agent.dependencyManager.resolve(
+      AnonCredsRevocationRegistryDefinitionRepository,
+    )
+
+    const revocationRegistries = credentialDefinitionId
+      ? await revocationDefinitionRepository.findAllByCredentialDefinitionId(
+          agent.context,
+          credentialDefinitionId,
+        )
+      : await revocationDefinitionRepository.getAll(agent.context)
+
+    return revocationRegistries.map(record => record.revocationRegistryDefinitionId)
+  }
+
+  public async createRevocationRegistry(
+    agent: VsAgent,
+    options: { credentialDefinitionId: string; maximumCredentialNumber?: number },
+  ): Promise<string> {
+    const { credentialDefinitionId } = options
+    const maximumCredentialNumber = options.maximumCredentialNumber ?? REVOCATION_REGISTRY_DEFAULT_CAPACITY
+
+    const cred = await agent.modules.anoncreds.getCredentialDefinition(credentialDefinitionId)
+
+    if (!cred?.credentialDefinition) {
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        HttpStatus.NOT_FOUND,
+        `no credential definition with id "${credentialDefinitionId}"`,
+      )
+    }
+
+    if (!cred.credentialDefinition.value.revocation) {
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidState,
+        HttpStatus.CONFLICT,
+        `credential definition "${credentialDefinitionId}" does not support revocation`,
+      )
+    }
+
+    const { revocationRegistryDefinitionState, registrationMetadata: revDefMetadata } =
+      await agent.modules.anoncreds.registerRevocationRegistryDefinition({
+        revocationRegistryDefinition: {
+          credentialDefinitionId,
+          tag: 'default',
+          maximumCredentialNumber,
+          issuerId: cred.credentialDefinition.issuerId,
+        },
+        options: {},
+      })
+    const { attestedResource: revocationRegistration } = revDefMetadata as {
+      attestedResource: Record<string, unknown>
+    }
+    const revocationRegistryDefinitionId = revocationRegistryDefinitionState.revocationRegistryDefinitionId
+    if (!revocationRegistryDefinitionId) {
+      throw new Error(`Cannot create credential revocations: ${JSON.stringify(revocationRegistration)}`)
+    }
+    this.logger.debug(
+      `revocationRegistryDefinitionState: ${JSON.stringify(revocationRegistryDefinitionState)}`,
+    )
+
+    await this.saveAttestedResource(agent, revocationRegistration, {
+      resourceType: 'anonCredsRevocRegDef',
+    })
+
+    const { revocationStatusListState, registrationMetadata: revListMetadata } =
+      await agent.modules.anoncreds.registerRevocationStatusList({
+        revocationStatusList: {
+          issuerId: cred.credentialDefinition.issuerId,
+          revocationRegistryDefinitionId,
+        },
+        options: {},
+      })
+    const { attestedResource: statusRegistration } = revListMetadata as {
+      attestedResource: Record<string, unknown>
+    }
+    if (!revocationStatusListState.revocationStatusList) {
+      throw new Error(`Failed to create revocation status list`)
+    }
+
+    const revocationDefinitionRepository = agent.dependencyManager.resolve(
+      AnonCredsRevocationRegistryDefinitionRepository,
+    )
+    const revocationDefinitionRecord =
+      await revocationDefinitionRepository.getByRevocationRegistryDefinitionId(
+        agent.context,
+        revocationRegistryDefinitionId,
+      )
+
+    if (statusRegistration) {
+      await this.appendStatusListToRevocationRegistry(
+        agent,
+        revocationRegistryDefinitionId,
+        statusRegistration,
+        revocationStatusListState.revocationStatusList.timestamp,
+      )
+    }
+
+    revocationDefinitionRecord.metadata.set('revStatusList', revocationStatusListState.revocationStatusList)
+    await revocationDefinitionRepository.update(agent.context, revocationDefinitionRecord)
+
+    this.logger.log(`Revocation Registry Definition Id: ${revocationRegistryDefinitionId}`)
+
+    return revocationRegistryDefinitionId
+  }
 
   public async deleteRevocationRegistry(
     agent: VsAgent,

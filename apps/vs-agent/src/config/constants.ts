@@ -175,6 +175,11 @@ export const ADMIN_V2_TAGS: Record<string, string> = {
   'v2/vt': v2ScopeTag('Manages the Verifiable Trust state of the agent.'),
 }
 
+// AnonCreds params
+
+// Capacity of a revocation registry when the caller does not name one.
+export const REVOCATION_REGISTRY_DEFAULT_CAPACITY = 1000
+
 // Utils params
 export const MASTER_LIST_CSCA_LOCATION = process.env.MASTER_LIST_CSCA_LOCATION
 
