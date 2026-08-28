@@ -11,7 +11,10 @@ import { AdminApiError, AdminApiErrorCode, ErrorEnvelopeFilter } from '../src/co
 import { REVOCATION_REGISTRY_DEFAULT_CAPACITY } from '../src/config/constants'
 import { CredentialTypesService } from '../src/controllers/admin/credentials'
 import { V2AnoncredsRevocationRegistriesController } from '../src/controllers/admin/v2/anoncreds/V2AnoncredsRevocationRegistriesController'
-import { CreateRevocationRegistryBodyDto } from '../src/controllers/admin/v2/anoncreds/dto'
+import {
+  CreateRevocationRegistryBodyDto,
+  ListRevocationRegistriesQueryDto,
+} from '../src/controllers/admin/v2/anoncreds/dto'
 import { VsAgentService } from '../src/services/VsAgentService'
 
 const credentialDefinitionId = 'did:web:agent.test?service=anoncreds&relativeRef=/credDef/cd-1'
@@ -166,6 +169,17 @@ describe('v2 anoncreds revocation registry routes', () => {
     await expect(pipe.transform({ credentialDefinitionId }, metadata)).resolves.toBeDefined()
   })
 
+  it('rejects an empty credential definition filter instead of ignoring it', async () => {
+    const pipe = new ValidationPipe()
+    const metadata = { type: 'query', metatype: ListRevocationRegistriesQueryDto } as const
+
+    await expect(pipe.transform({ credentialDefinitionId: '' }, metadata)).rejects.toMatchObject({
+      status: 400,
+    })
+    await expect(pipe.transform({ credentialDefinitionId }, metadata)).resolves.toBeDefined()
+    await expect(pipe.transform({}, metadata)).resolves.toBeDefined()
+  })
+
   it('deletes a registry and answers 204 with an empty body', async () => {
     credentialTypesService.deleteRevocationRegistry.mockResolvedValue(true)
 
@@ -224,6 +238,7 @@ describe('CredentialTypesService revocation registries', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.spyOn(service, 'appendStatusListToRevocationRegistry').mockResolvedValue(undefined)
+    vi.spyOn(service, 'deleteRevocationRegistry').mockResolvedValue(true)
     revocationDefinitionRepository.getByRevocationRegistryDefinitionId.mockResolvedValue(
       revocationDefinitionRecord,
     )
@@ -292,6 +307,7 @@ describe('CredentialTypesService revocation registries', () => {
       agent.context,
       revocationDefinitionRecord,
     )
+    expect(service.deleteRevocationRegistry).not.toHaveBeenCalled()
   })
 
   it('honours an explicit capacity', async () => {
@@ -333,14 +349,36 @@ describe('CredentialTypesService revocation registries', () => {
     expect(anoncreds.registerRevocationRegistryDefinition).not.toHaveBeenCalled()
   })
 
-  it('fails when the status list cannot be registered', async () => {
-    anoncreds.registerRevocationStatusList.mockResolvedValue({
-      revocationStatusListState: {},
+  it('reports the reason the registry gave when the definition cannot be registered', async () => {
+    anoncreds.registerRevocationRegistryDefinition.mockResolvedValue({
+      revocationRegistryDefinitionState: { state: 'failed', reason: 'no registry found for issuerId' },
       registrationMetadata: {},
     })
 
     await expect(
       service.createRevocationRegistry(agent as never, { credentialDefinitionId }),
-    ).rejects.toThrow('Failed to create revocation status list')
+    ).rejects.toThrow('no registry found for issuerId')
+    expect(service.deleteRevocationRegistry).not.toHaveBeenCalled()
+  })
+
+  it('rolls the definition back, with the reason, when the status list cannot be registered', async () => {
+    anoncreds.registerRevocationStatusList.mockResolvedValue({
+      revocationStatusListState: { state: 'failed', reason: 'no previous status list found' },
+      registrationMetadata: {},
+    })
+
+    await expect(
+      service.createRevocationRegistry(agent as never, { credentialDefinitionId }),
+    ).rejects.toThrow('no previous status list found')
+    expect(service.deleteRevocationRegistry).toHaveBeenCalledWith(agent, revocationRegistryDefinitionId)
+  })
+
+  it('rolls the definition back when the first status list cannot be appended', async () => {
+    vi.spyOn(service, 'appendStatusListToRevocationRegistry').mockRejectedValue(new Error('append failed'))
+
+    await expect(
+      service.createRevocationRegistry(agent as never, { credentialDefinitionId }),
+    ).rejects.toThrow('append failed')
+    expect(service.deleteRevocationRegistry).toHaveBeenCalledWith(agent, revocationRegistryDefinitionId)
   })
 })

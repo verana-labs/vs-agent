@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common'
 import {
   ApiBody,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -109,6 +110,7 @@ export class V2AnoncredsRevocationRegistriesController {
     type: CreateRevocationRegistryResponseDto,
   })
   @ApiNotFoundResponse({ description: 'No credential definition with the given id' })
+  @ApiConflictResponse({ description: 'The credential definition does not support revocation' })
   public async createRevocationRegistry(
     @Body() body: CreateRevocationRegistryBodyDto,
   ): Promise<CreateRevocationRegistryResponseDto> {

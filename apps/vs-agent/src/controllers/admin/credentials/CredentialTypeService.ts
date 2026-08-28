@@ -80,7 +80,9 @@ export class CredentialTypesService {
     }
     const revocationRegistryDefinitionId = revocationRegistryDefinitionState.revocationRegistryDefinitionId
     if (!revocationRegistryDefinitionId) {
-      throw new Error(`Cannot create credential revocations: ${JSON.stringify(revocationRegistration)}`)
+      throw new Error(
+        `Cannot create the revocation registry definition: ${failureReason(revocationRegistryDefinitionState)}`,
+      )
     }
     this.logger.debug(
       `revocationRegistryDefinitionState: ${JSON.stringify(revocationRegistryDefinitionState)}`,
@@ -90,45 +92,64 @@ export class CredentialTypesService {
       resourceType: 'anonCredsRevocRegDef',
     })
 
-    const { revocationStatusListState, registrationMetadata: revListMetadata } =
-      await agent.modules.anoncreds.registerRevocationStatusList({
-        revocationStatusList: {
-          issuerId: cred.credentialDefinition.issuerId,
+    // A registry without its first status list cannot issue, so a failure here undoes the
+    // definition rather than leaving it behind for listRevocationRegistries to report.
+    try {
+      const { revocationStatusListState, registrationMetadata: revListMetadata } =
+        await agent.modules.anoncreds.registerRevocationStatusList({
+          revocationStatusList: {
+            issuerId: cred.credentialDefinition.issuerId,
+            revocationRegistryDefinitionId,
+          },
+          options: {},
+        })
+      const { attestedResource: statusRegistration } = revListMetadata as {
+        attestedResource: Record<string, unknown>
+      }
+      if (!revocationStatusListState.revocationStatusList) {
+        throw new Error(
+          `Cannot create the revocation status list: ${failureReason(revocationStatusListState)}`,
+        )
+      }
+
+      const revocationDefinitionRepository = agent.dependencyManager.resolve(
+        AnonCredsRevocationRegistryDefinitionRepository,
+      )
+      const revocationDefinitionRecord =
+        await revocationDefinitionRepository.getByRevocationRegistryDefinitionId(
+          agent.context,
           revocationRegistryDefinitionId,
-        },
-        options: {},
-      })
-    const { attestedResource: statusRegistration } = revListMetadata as {
-      attestedResource: Record<string, unknown>
-    }
-    if (!revocationStatusListState.revocationStatusList) {
-      throw new Error(`Failed to create revocation status list`)
-    }
+        )
 
-    const revocationDefinitionRepository = agent.dependencyManager.resolve(
-      AnonCredsRevocationRegistryDefinitionRepository,
-    )
-    const revocationDefinitionRecord =
-      await revocationDefinitionRepository.getByRevocationRegistryDefinitionId(
-        agent.context,
-        revocationRegistryDefinitionId,
-      )
+      if (statusRegistration) {
+        await this.appendStatusListToRevocationRegistry(
+          agent,
+          revocationRegistryDefinitionId,
+          statusRegistration,
+          revocationStatusListState.revocationStatusList.timestamp,
+        )
+      }
 
-    if (statusRegistration) {
-      await this.appendStatusListToRevocationRegistry(
-        agent,
-        revocationRegistryDefinitionId,
-        statusRegistration,
-        revocationStatusListState.revocationStatusList.timestamp,
-      )
+      revocationDefinitionRecord.metadata.set('revStatusList', revocationStatusListState.revocationStatusList)
+      await revocationDefinitionRepository.update(agent.context, revocationDefinitionRecord)
+    } catch (error) {
+      await this.rollbackRevocationRegistry(agent, revocationRegistryDefinitionId)
+      throw error
     }
-
-    revocationDefinitionRecord.metadata.set('revStatusList', revocationStatusListState.revocationStatusList)
-    await revocationDefinitionRepository.update(agent.context, revocationDefinitionRecord)
 
     this.logger.log(`Revocation Registry Definition Id: ${revocationRegistryDefinitionId}`)
 
     return revocationRegistryDefinitionId
+  }
+
+  private async rollbackRevocationRegistry(agent: VsAgent, revocationRegistryDefinitionId: string) {
+    try {
+      await this.deleteRevocationRegistry(agent, revocationRegistryDefinitionId)
+    } catch (error) {
+      this.logger.error(
+        `Cannot roll back the revocation registry definition ${revocationRegistryDefinitionId}: ${error}`,
+      )
+    }
   }
 
   public async deleteRevocationRegistry(
@@ -634,4 +655,8 @@ export class CredentialTypesService {
       throw new Error(`Failed to parse JSON Schema Credential ${jsonSchemaCredentialId}: ${error}`)
     }
   }
+}
+
+function failureReason(state: { state: string; reason?: string }): string {
+  return state.state === 'failed' && state.reason ? state.reason : `the registry answered "${state.state}"`
 }

@@ -16,6 +16,7 @@ export class ListRevocationRegistriesQueryDto extends PaginationQueryDto {
   })
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   credentialDefinitionId?: string
 }
 
