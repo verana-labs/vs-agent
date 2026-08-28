@@ -3,6 +3,7 @@ import { validate } from 'class-validator'
 import { describe, expect, it } from 'vitest'
 
 import {
+  AdminApiErrorCode,
   PAGE_LIMIT_DEFAULT,
   PAGE_LIMIT_MAX,
   PAGE_LIMIT_MIN,
@@ -30,6 +31,26 @@ const nextCursor = (page: Page<Row>): string => {
   return page.nextCursor as string
 }
 
+// Returns the error that a call threw, so a test can assert on its code the way the route tests do.
+const thrownBy = (call: () => unknown): { code?: string; status?: number; message: string } => {
+  try {
+    call()
+  } catch (error) {
+    return error as { code?: string; status?: number; message: string }
+  }
+
+  throw new Error('the call returned instead of refusing')
+}
+
+// Asserts the INVALID_CURSOR contract, and the reason that tells the three refusals apart.
+const expectInvalidCursor = (call: () => unknown, reason: RegExp) => {
+  expect(thrownBy(call)).toMatchObject({
+    code: AdminApiErrorCode.InvalidCursor,
+    status: 400,
+    message: expect.stringMatching(reason),
+  })
+}
+
 // The caller must treat a cursor as opaque. A test may read it to confirm what it holds.
 const payloadOf = (cursor: string) => JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
 const cursorOf = (payload: unknown) => Buffer.from(JSON.stringify(payload)).toString('base64url')
@@ -37,7 +58,7 @@ const cursorOf = (payload: unknown) => Buffer.from(JSON.stringify(payload)).toSt
 // A query string reaches the handler unconverted, so validation runs on the string form.
 const validateQuery = (query: Record<string, string>) => validate(plainToInstance(PaginationQueryDto, query))
 
-describe('pagination', () => {
+describe('keyset pagination', () => {
   describe('limit', () => {
     it('delivers 100 records when the caller names no limit', async () => {
       const many = rows(...Array.from({ length: 150 }, (_, i) => `r-${String(i).padStart(3, '0')}`))
@@ -162,36 +183,39 @@ describe('pagination', () => {
 
   describe('INVALID_CURSOR', () => {
     it('refuses a malformed cursor', () => {
-      expect(() => pageOf(rows('a'), { cursor: 'zzz' })).toThrow(/malformed/)
-      expect(() => pageOf(rows('a'), { cursor: cursorOf({ k: 'a' }) })).toThrow(/malformed/)
+      expectInvalidCursor(() => pageOf(rows('a'), { cursor: 'zzz' }), /malformed/)
+      expectInvalidCursor(() => pageOf(rows('a'), { cursor: cursorOf({ k: 'a' }) }), /malformed/)
     })
 
     it('refuses a cursor that an earlier format minted', () => {
       const cursor = nextCursor(pageOf(rows('a', 'b'), { limit: 1 }))
       const stale = cursorOf({ ...payloadOf(cursor), v: payloadOf(cursor).v - 1 })
 
-      expect(() => pageOf(rows('a', 'b'), { limit: 1, cursor: stale })).toThrow(/format/)
+      expectInvalidCursor(() => pageOf(rows('a', 'b'), { limit: 1, cursor: stale }), /format/)
     })
 
     it('refuses a cursor replayed against a different filter set', () => {
       const first = pageOf(rows('a', 'b', 'c'), { limit: 1 }, { state: 'done' })
 
-      expect(() =>
-        pageOf(rows('a', 'b', 'c'), { limit: 1, cursor: nextCursor(first) }, { state: 'open' }),
-      ).toThrow(/another method or filter set/)
+      expectInvalidCursor(
+        () => pageOf(rows('a', 'b', 'c'), { limit: 1, cursor: nextCursor(first) }, { state: 'open' }),
+        /another method or filter set/,
+      )
     })
 
     it('refuses a cursor replayed against a different method', () => {
       const first = pageOf(rows('a', 'b', 'c'), { limit: 1 })
 
-      expect(() =>
-        paginate(
-          rows('a', 'b', 'c'),
-          { limit: 1, cursor: nextCursor(first) },
-          { method: 'listOthers' },
-          idOf,
-        ),
-      ).toThrow(/another method or filter set/)
+      expectInvalidCursor(
+        () =>
+          paginate(
+            rows('a', 'b', 'c'),
+            { limit: 1, cursor: nextCursor(first) },
+            { method: 'listOthers' },
+            idOf,
+          ),
+        /another method or filter set/,
+      )
     })
 
     it('accepts a cursor when an absent filter is spelled out, and when the filters are reordered', () => {
@@ -221,7 +245,11 @@ describe('pagination', () => {
 
   describe('guards', () => {
     it('refuses a repeated key instead of dropping the record it names', () => {
-      expect(() => pageOf(rows('a', 'a', 'b'), {})).toThrow(/two records the pagination key "a"/)
+      expect(thrownBy(() => pageOf(rows('a', 'a', 'b'), {}))).toMatchObject({
+        code: AdminApiErrorCode.Internal,
+        status: 500,
+        message: expect.stringMatching(/two records the pagination key "a"/),
+      })
     })
 
     it('refuses two record types that map to one page model', () => {

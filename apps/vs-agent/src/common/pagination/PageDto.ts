@@ -16,14 +16,14 @@ export function PageDto<T>(ItemDto: Type<T>): Type<Page<T>> {
 
   class GeneratedPageDto {
     @ApiProperty({ type: [ItemDto], description: 'The records of this page.' })
-    public items!: T[]
+    items!: T[]
 
     @ApiProperty({
       type: String,
       nullable: true,
       description: 'Cursor of the next page. The agent sets it to null on the last page.',
     })
-    public nextCursor!: string | null
+    nextCursor!: string | null
   }
 
   // Swagger names each schema after its class, and every generated class shares one source name.
