@@ -337,7 +337,6 @@ export async function removeHolderTrustCredentialIfRevoked(
 export async function removeSelfIssuedEcsCredentialsIfIssuerRevoked(
   agent: VsAgent,
   participantId: string,
-  ecsClaims: EcsClaims,
 ): Promise<void> {
   if (!agent.publicApiBaseUrl) return
   const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)

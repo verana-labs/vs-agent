@@ -362,6 +362,22 @@ export async function generateVerifiablePresentation(
     ]
     didDocumentChanged = true
   }
+  const whoisId = `${agent.did}#whois`
+  if (attached && schemaKey === 'ecs-service') {
+    const whois = didDocument.service?.find(s => s.id === whoisId)
+    if (whois) {
+      if (whois.serviceEndpoint !== id) {
+        whois.serviceEndpoint = id
+        didDocumentChanged = true
+      }
+    } else {
+      didDocument.service = [
+        ...(didDocument.service ?? []),
+        new DidDocumentService({ id: whoisId, serviceEndpoint: id, type: 'LinkedVerifiablePresentation' }),
+      ]
+      didDocumentChanged = true
+    }
+  }
   const credential = verifiablePresentation.verifiableCredential[0]
   record[credentialSchema.id] = {
     credential,

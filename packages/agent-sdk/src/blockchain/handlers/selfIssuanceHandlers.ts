@@ -75,9 +75,7 @@ export function registerSelfIssuanceAnchorHandlers(
         const { agent } = ctx
         if (!agent.did || !agent.veranaChain) return
         queue = queue
-          .then(() =>
-            removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent, String(activity.entity_id), ecsClaims),
-          )
+          .then(() => removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent, String(activity.entity_id)))
           .catch((error: Error) => agent.config.logger.error(`[SelfTR] withdrawal failed: ${error.message}`))
         await queue
       },

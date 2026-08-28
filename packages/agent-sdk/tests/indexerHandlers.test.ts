@@ -222,7 +222,7 @@ describe('applyStateMutation', () => {
       config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
     }
 
-    await removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent as never, '7', {} as never)
+    await removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent as never, '7')
 
     expect(metadataStore['_vt/vtc']['https://ecosystem/vt/schemas-9-jsc.json']).toBeUndefined()
     expect(didRecord.didDocument.service).toEqual([])
@@ -232,7 +232,7 @@ describe('applyStateMutation', () => {
 
     // A HOLDER participant is not this handler's business.
     agent.veranaChain.getParticipant.mockResolvedValue({ id: 8, role: 6, did: 'did:web:agent' })
-    await removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent as never, '8', {} as never)
+    await removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent as never, '8')
     expect(metadataStore['_vt/vtc']['https://ecosystem/vt/schemas-3-jsc.json']).toBeDefined()
   })
 

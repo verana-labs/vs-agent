@@ -718,11 +718,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         return p?.revoked ? true : undefined
       })
 
-      await removeSelfIssuedEcsCredentialsIfIssuerRevoked(
-        applicant,
-        String(applicantIssuerParticipantId),
-        ecsClaims,
-      )
+      await removeSelfIssuedEcsCredentialsIfIssuerRevoked(applicant, String(applicantIssuerParticipantId))
 
       expect(await vtcEntries()).not.toContain(jscUrl)
       expect(await serviceIds()).not.toContain(linkedVpServiceId)

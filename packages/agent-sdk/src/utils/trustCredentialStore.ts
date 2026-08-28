@@ -110,22 +110,6 @@ export async function saveMetadataEntry(
   )
   didRecord.metadata.set(key, record)
 
-  // #whois follows the Service VP, and is added the first time one is published
-  if (verifiablePresentation.id?.includes('service')) {
-    const whoisId = `${agent.did}#whois`
-    const whois = didRecord.didDocument?.service?.find(s => s.id === whoisId)
-    if (whois) whois.serviceEndpoint = verifiablePresentation.id
-    else if (didRecord.didDocument)
-      didRecord.didDocument.service = [
-        ...(didRecord.didDocument.service ?? []),
-        new DidDocumentService({
-          id: whoisId,
-          serviceEndpoint: verifiablePresentation.id,
-          type: 'LinkedVerifiablePresentation',
-        }),
-      ]
-  }
-
   // A JSON schema credential says nothing about this agent's own ECS identity, so only a real
   // trust credential replaces the self-issued ones.
   if (key === '_vt/vtc') updateVtcEntries(didRecord, false, publicApiBaseUrl)
@@ -169,7 +153,7 @@ function updateVtcEntries(didRecord: DidRecord, attach: boolean, publicApiBaseUr
   presentations.forEach(p => {
     const schemaId = mapToSelfTr(p.schemaUrl, publicApiBaseUrl)
     const current = record[schemaId]
-    if (current?.attached === attach) return
+    if (!current || current.attached === attach) return
     record[schemaId] = {
       ...current,
       attached: attach,
