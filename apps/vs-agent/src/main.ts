@@ -8,7 +8,6 @@ import {
   AuthorizationService,
   HttpInboundTransport,
   migrateVtjscServiceIds,
-  setupSelfTr,
   VsAgent,
   VsAgentWsInboundTransport,
   type VsAgentNestPlugin,
@@ -38,22 +37,10 @@ import {
   AGENT_ENDPOINT,
   AGENT_ENDPOINTS,
   AGENT_INVITATION_IMAGE_URL,
-  DEFAULT_SELF_ISSUED_VTC_RESOURCES,
   DEFAULT_LOGO_SVG,
   DEFAULT_TERMS_HTML,
   DEFAULT_PRIVACY_HTML,
-  SELF_ISSUED_VTC_SERVICE_LOGOURI,
   AGENT_LABEL,
-  SELF_ISSUED_VTC_ORG_ADDRESS,
-  SELF_ISSUED_VTC_ORG_COUNTRYCODE,
-  SELF_ISSUED_VTC_ORG_REGISTRYID,
-  SELF_ISSUED_VTC_ORG_REGISTRYURI,
-  SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND,
-  SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
-  SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
-  SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
-  SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
-  SELF_ISSUED_VTC_SERVICE_TYPE,
   UI_WELCOME_MESSAGE,
   AGENT_LOG_LEVEL,
   AGENT_NAME,
@@ -64,6 +51,9 @@ import {
   AGENT_WALLET_KEY_DERIVATION_METHOD,
   askarPostgresConfig,
   keyDerivationMethodMap,
+  ECS_CLAIMS_ORG,
+  ECS_CLAIMS_PERSONA,
+  ECS_CLAIMS_SERVICE,
   ADMIN_API_AUTH_MODE,
   ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
   ADMIN_API_EXTERNAL_PORT,
@@ -423,7 +413,6 @@ const run = async () => {
   const bootstrapState = new BootstrapState()
   if (agent.did) {
     bootstrapState.require('vtjsc-service-id-migration')
-    bootstrapState.require('self-trust-registry')
   }
   bootstrapState.require('indexer-subscription')
 
@@ -452,40 +441,10 @@ const run = async () => {
     })
   }
 
-  // Initialize Self-Trust Registry
-  const selfTrDefaults = {
-    agentLabel: AGENT_LABEL,
-    serviceLogoUri:
-      SELF_ISSUED_VTC_SERVICE_LOGOURI ?? DEFAULT_SELF_ISSUED_VTC_RESOURCES.logoUri(publicApiBaseUrl),
-    serviceLogoDigestSri: SELF_ISSUED_VTC_SERVICE_LOGOURI ? undefined : generateDigestSRI(DEFAULT_LOGO_SVG),
-    serviceType: SELF_ISSUED_VTC_SERVICE_TYPE,
-    serviceDescription: SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
-    serviceMinimumAgeRequired: SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
-    serviceTermsAndConditions:
-      SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS ??
-      DEFAULT_SELF_ISSUED_VTC_RESOURCES.termsAndConditionsUri(publicApiBaseUrl),
-    serviceTermsAndConditionsDigestSri: SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS
-      ? undefined
-      : generateDigestSRI(DEFAULT_TERMS_HTML),
-    servicePrivacyPolicy:
-      SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY ??
-      DEFAULT_SELF_ISSUED_VTC_RESOURCES.privacyPolicyUri(publicApiBaseUrl),
-    servicePrivacyPolicyDigestSri: SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY
-      ? undefined
-      : generateDigestSRI(DEFAULT_PRIVACY_HTML),
-    orgRegistryId: SELF_ISSUED_VTC_ORG_REGISTRYID,
-    orgRegistryUri: SELF_ISSUED_VTC_ORG_REGISTRYURI,
-    orgAddress: SELF_ISSUED_VTC_ORG_ADDRESS,
-    orgOrganizationKind: SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND,
-    orgCountryCode: SELF_ISSUED_VTC_ORG_COUNTRYCODE,
-  }
-  if (agent.did) {
-    await setupSelfTr({
-      agent,
-      publicApiBaseUrl,
-      defaults: selfTrDefaults,
-    })
-    bootstrapState.complete('self-trust-registry')
+  const ecsClaims = {
+    org: ECS_CLAIMS_ORG,
+    persona: ECS_CLAIMS_PERSONA,
+    service: ECS_CLAIMS_SERVICE,
   }
 
   // Deliver domain events emitted on the agent bus to the configured webhook endpoint
@@ -515,7 +474,7 @@ const run = async () => {
         handlerRegistry,
         indexerService,
         Number(VERANA_CORPORATION_ID),
-        selfTrDefaults,
+        ecsClaims,
       )
     }
 
@@ -542,12 +501,9 @@ const run = async () => {
     }
 
     if (VERANA_CORPORATION_ID) {
-      void reconcileVtjscPublications(
-        agent,
-        indexerService,
-        Number(VERANA_CORPORATION_ID),
-        selfTrDefaults,
-      ).catch((error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`))
+      void reconcileVtjscPublications(agent, indexerService, Number(VERANA_CORPORATION_ID), ecsClaims).catch(
+        (error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`),
+      )
     }
   }
 

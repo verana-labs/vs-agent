@@ -87,38 +87,44 @@ export const REDIRECT_DEFAULT_URL_TO_INVITATION_URL =
   process.env.REDIRECT_DEFAULT_URL_TO_INVITATION_URL !== 'false'
 export const USER_PROFILE_AUTODISCLOSE = process.env.USER_PROFILE_AUTODISCLOSE === 'true'
 
-// Values for Organization credential
-export const SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND =
-  process.env.SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND ?? 'PUBLIC'
-export const SELF_ISSUED_VTC_ORG_COUNTRYCODE = process.env.SELF_ISSUED_VTC_ORG_COUNTRYCODE ?? 'EE'
-export const SELF_ISSUED_VTC_ORG_REGISTRYID = process.env.SELF_ISSUED_VTC_ORG_REGISTRYID ?? 'ID-123'
-export const SELF_ISSUED_VTC_ORG_REGISTRYURI =
-  process.env.SELF_ISSUED_VTC_ORG_REGISTRYURI ?? 'https://example.com/registry'
-export const SELF_ISSUED_VTC_ORG_ADDRESS = process.env.SELF_ISSUED_VTC_ORG_ADDRESS ?? 'Some address'
+// [VSA-VTI-CFG-ENV-ECS] claims the agent proposes for its own ECS credentials.
+// Every variable is optional here; the Service group is required in standalone mode and
+// validateEcsClaimsConfig enforces that. id and the *DigestSri claims are derived, never read.
+const env = (name: string): string | undefined => process.env[name]?.trim() || undefined
 
-// Values for Service credential
-export const SELF_ISSUED_VTC_SERVICE_TYPE =
-  process.env.SELF_ISSUED_VTC_SERVICE_TYPE?.replace(' ', '_') ?? 'WEB_PORTAL'
-export const SELF_ISSUED_VTC_SERVICE_DESCRIPTION =
-  process.env.SELF_ISSUED_VTC_SERVICE_DESCRIPTION ?? 'Some description'
-export const SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED = Number(
-  process.env.SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED ?? 18,
-)
-// unset means the agent serves its own placeholder, resolved against publicApiBaseUrl at startup:
-// the self-issued credentials hash these resources, so they must be fetchable
-export const SELF_ISSUED_VTC_SERVICE_LOGOURI =
-  process.env.SELF_ISSUED_VTC_SERVICE_LOGOURI ?? AGENT_INVITATION_IMAGE_URL
-export const SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS =
-  process.env.SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS
-export const SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY = process.env.SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY
-
-export const DEFAULT_SELF_ISSUED_VTC_RESOURCES = {
-  logoUri: (baseUrl: string) => `${baseUrl}/vt/default/logo.svg`,
-  termsAndConditionsUri: (baseUrl: string) => `${baseUrl}/vt/default/terms.html`,
-  privacyPolicyUri: (baseUrl: string) => `${baseUrl}/vt/default/privacy.html`,
+export const ECS_CLAIMS_ORG = {
+  name: env('ECS_CLAIMS_ORG_NAME'),
+  logoUri: env('ECS_CLAIMS_ORG_LOGO_URI'),
+  registryId: env('ECS_CLAIMS_ORG_REGISTRY_ID'),
+  registryUri: env('ECS_CLAIMS_ORG_REGISTRY_URI'),
+  address: env('ECS_CLAIMS_ORG_ADDRESS'),
+  countryCode: env('ECS_CLAIMS_ORG_COUNTRY_CODE'),
+  legalJurisdiction: env('ECS_CLAIMS_ORG_LEGAL_JURISDICTION'),
+  organizationKind: env('ECS_CLAIMS_ORG_ORGANIZATION_KIND'),
+  lei: env('ECS_CLAIMS_ORG_LEI'),
 }
 
-// Content served at the DEFAULT_SELF_ISSUED_VTC_RESOURCES URLs above (by
+export const ECS_CLAIMS_PERSONA = {
+  name: env('ECS_CLAIMS_PERSONA_NAME'),
+  description: env('ECS_CLAIMS_PERSONA_DESCRIPTION'),
+  descriptionFormat: env('ECS_CLAIMS_PERSONA_DESCRIPTION_FORMAT'),
+  avatarUri: env('ECS_CLAIMS_PERSONA_AVATAR_URI'),
+  controllerCountryCode: env('ECS_CLAIMS_PERSONA_CONTROLLER_COUNTRY_CODE'),
+  controllerJurisdiction: env('ECS_CLAIMS_PERSONA_CONTROLLER_JURISDICTION'),
+}
+
+export const ECS_CLAIMS_SERVICE = {
+  name: env('ECS_CLAIMS_SERVICE_NAME'),
+  type: env('ECS_CLAIMS_SERVICE_TYPE'),
+  description: env('ECS_CLAIMS_SERVICE_DESCRIPTION'),
+  descriptionFormat: env('ECS_CLAIMS_SERVICE_DESCRIPTION_FORMAT'),
+  logoUri: env('ECS_CLAIMS_SERVICE_LOGO_URI'),
+  minimumAgeRequired: env('ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED'),
+  termsAndConditionsUri: env('ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI'),
+  privacyPolicyUri: env('ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI'),
+}
+
+// Placeholder resources the agent serves under /vt/default (by
 // DefaultResourcesController) and hashed for the corresponding *DigestSri
 // self-tr claim (see main.ts). Defined here, once, so both sides use the
 // exact same bytes without the agent having to fetch its own public URL over

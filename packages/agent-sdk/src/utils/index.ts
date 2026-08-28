@@ -1,5 +1,6 @@
 export * from './agent'
 export * from './data'
+export * from './ecsClaims'
 export * from './setupSelfTr'
 export * from './trustCredentialStore'
 export * from './util'

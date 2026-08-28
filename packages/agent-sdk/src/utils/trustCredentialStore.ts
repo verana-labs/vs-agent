@@ -14,7 +14,6 @@ import { VsAgent } from '../agent/VsAgent'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
 
 import {
-  SelfTrDefaults,
   addDigestSRI,
   createCredential,
   createJsonSchema,
@@ -27,6 +26,7 @@ import {
   presentations,
   signerW3c,
 } from './setupSelfTr'
+import { EcsClaims } from './ecsClaims'
 import { getEcsSchemas } from './data'
 
 async function getDidRecord(agent: VsAgent) {
@@ -137,7 +137,7 @@ export async function deleteMetadataEntry(
   delete metadata[found.schemaId]
   didRecord.metadata.set(key, metadata)
 
-  // If the last entry is removed, restore defaults
+  // If the last entry is removed, restore ecsClaims
   restoreDefaultVtcEntries(didRecord, publicApiBaseUrl)
   await updateDidRecord(agent, didRecord)
   return { schemaId: found.schemaId }
@@ -467,7 +467,7 @@ export async function rebindEcsCredentialSchema(
   publicApiBaseUrl: string,
   schemaId: string,
   schemaKey: string,
-  defaults: SelfTrDefaults,
+  ecsClaims: EcsClaims,
   jsonSchemaCredentialId: string,
   issuerParticipantId: number,
 ): Promise<void> {
@@ -511,7 +511,7 @@ export async function rebindEcsCredentialSchema(
     schemaKey,
     ['VerifiableCredential', 'VerifiableTrustCredential'],
     { id: jscUrl, type: 'JsonSchemaCredential' },
-    defaults,
+    ecsClaims,
     async verifiablePresentation =>
       await anchorCredentialDigest(
         agent,
@@ -561,7 +561,7 @@ export async function withdrawSelfIssuedEcsCredentials(
   agent: VsAgent,
   publicApiBaseUrl: string,
   issuerParticipantId: number,
-  defaults: SelfTrDefaults,
+  ecsClaims: EcsClaims,
 ): Promise<string[]> {
   const didRecord = await getDidRecord(agent)
   const withdrawn: string[] = []
@@ -582,7 +582,7 @@ export async function withdrawSelfIssuedEcsCredentials(
       defaultSchema.name,
       ['VerifiableCredential', 'VerifiableTrustCredential'],
       { id: mapToSelfTr(defaultSchema.schemaUrl, publicApiBaseUrl), type: 'JsonSchemaCredential' },
-      defaults,
+      ecsClaims,
     )
   }
   return withdrawn

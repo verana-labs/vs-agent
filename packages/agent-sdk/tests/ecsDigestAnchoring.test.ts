@@ -1,7 +1,7 @@
 import { DidDocument, VerificationMethod } from '@credo-ts/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { SelfTrDefaults } from '../src/utils/setupSelfTr'
+import { EcsClaims } from '../src/utils/ecsClaims'
 import { rebindEcsCredentialSchema } from '../src/utils/trustCredentialStore'
 
 const DID = 'did:web:agent.example'
@@ -17,7 +17,7 @@ vi.mock('../src/utils/setupSelfTr', async importOriginal => ({
   generateVerifiablePresentation: (...args: unknown[]) => generateVerifiablePresentation(...args),
 }))
 
-const defaults = {} as SelfTrDefaults
+const ecsClaims = {} as EcsClaims
 
 function makeAgent(chain?: Record<string, unknown>) {
   const metadata = new Map<string, Record<string, unknown>>()
@@ -74,7 +74,7 @@ async function rebind(agent: unknown) {
     'https://agent.example',
     '5',
     'ecs-service',
-    defaults,
+    ecsClaims,
     JSC_ID,
     ISSUER_PARTICIPANT_ID,
   )

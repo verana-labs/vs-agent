@@ -1,4 +1,4 @@
-import { SelfTrDefaults } from '../../utils/setupSelfTr'
+import { EcsClaims } from '../../utils/ecsClaims'
 import { VeranaIndexerService } from '../VeranaIndexerService'
 import { IndexerActivity, ParticipantRole } from '../types'
 
@@ -28,7 +28,7 @@ export function registerSelfIssuanceAnchorHandlers(
   registry: IndexerHandlerRegistry,
   indexer: VeranaIndexerService,
   corporationId: number,
-  selfTrDefaults: SelfTrDefaults,
+  ecsClaims: EcsClaims,
 ): void {
   // Events arrive in bursts, and each reconciliation writes the DID record, so they run in turn.
   let queue: Promise<void> = Promise.resolve()
@@ -56,7 +56,7 @@ export function registerSelfIssuanceAnchorHandlers(
           `[SelfTR] own ISSUER participant ${activity.entity_id} is ready; reconciling the ECS credentials`,
         )
         queue = queue
-          .then(() => reconcileVtjscPublications(agent, indexer, corporationId, selfTrDefaults))
+          .then(() => reconcileVtjscPublications(agent, indexer, corporationId, ecsClaims))
           .catch((error: Error) =>
             agent.config.logger.error(`[SelfTR] reconciliation failed: ${error.message}`),
           )
@@ -76,7 +76,7 @@ export function registerSelfIssuanceAnchorHandlers(
         if (!agent.did || !agent.veranaChain) return
         queue = queue
           .then(() =>
-            removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent, String(activity.entity_id), selfTrDefaults),
+            removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent, String(activity.entity_id), ecsClaims),
           )
           .catch((error: Error) => agent.config.logger.error(`[SelfTR] withdrawal failed: ${error.message}`))
         await queue

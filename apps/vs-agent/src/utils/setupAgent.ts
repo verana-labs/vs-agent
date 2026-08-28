@@ -27,6 +27,9 @@ import {
   ENABLE_PUBLIC_API_SWAGGER,
   ENABLED_PLUGINS,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
+  ECS_CLAIMS_ORG,
+  ECS_CLAIMS_PERSONA,
+  ECS_CLAIMS_SERVICE,
   VERANA_CHAIN_ID,
   VERANA_INDEXER_BASE_URL,
 } from '../config'
@@ -188,6 +191,7 @@ export const setupAgent = async ({
     veranaChain,
     indexer,
     trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS,
+    ecsClaims: { org: ECS_CLAIMS_ORG, persona: ECS_CLAIMS_PERSONA, service: ECS_CLAIMS_SERVICE },
     authorizationService,
     discoveryOptions,
     adminApiServiceEndpoint,

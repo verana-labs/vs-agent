@@ -14,7 +14,9 @@ import { VsAgent } from '../../agent/VsAgent'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../../types'
 import { getEcsSchemas } from '../../utils/data'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../../utils/didReadiness'
-import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
+import { generateDigestSRI } from '../../utils/setupSelfTr'
+import { composeEcsClaims } from '../../utils/ecsClaims'
+import { EcsClaims } from '../../utils/ecsClaims'
 import {
   createJsc,
   detachVtjscPublications,
@@ -335,7 +337,7 @@ export async function removeHolderTrustCredentialIfRevoked(
 export async function removeSelfIssuedEcsCredentialsIfIssuerRevoked(
   agent: VsAgent,
   participantId: string,
-  selfTrDefaults: SelfTrDefaults,
+  ecsClaims: EcsClaims,
 ): Promise<void> {
   if (!agent.publicApiBaseUrl) return
   const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
@@ -346,7 +348,7 @@ export async function removeSelfIssuedEcsCredentialsIfIssuerRevoked(
       agent,
       agent.publicApiBaseUrl,
       participant.id,
-      selfTrDefaults,
+      ecsClaims,
     )
     for (const jscUrl of withdrawn) {
       agent.config.logger.info(
@@ -382,6 +384,26 @@ export async function reconcileVtFlowRecordsOnCancel(agent: VsAgent, participant
   )
 }
 
+// [VSA-VTI-CFG-ENV-ECS]: the applicant proposes its own claims, and the validator may override
+// them. The field is omitted when the operator configured none.
+async function onboardingClaims(
+  agent: VsAgent,
+  schemaId: number,
+): Promise<Record<string, unknown> | undefined> {
+  if (!agent.ecsClaims || !agent.did) return undefined
+  try {
+    const schema = await agent.indexer.getCredentialSchema(schemaId)
+    const ecsKey = schema && (await identifySchema(JSON.parse(schema.json_schema)))
+    if (!ecsKey) return undefined
+    return await composeEcsClaims(agent.ecsClaims, ecsKey, agent.did, agent.config.logger)
+  } catch (error) {
+    agent.config.logger.error(
+      `[ecs-claims] cannot compose the onboarding claims: ${(error as Error).message}`,
+    )
+    throw error
+  }
+}
+
 export async function startParticipantOPAutoFlow(agent: VsAgent, activity: IndexerActivity): Promise<void> {
   const chain = agent.veranaChain
   if (!chain) return
@@ -392,7 +414,8 @@ export async function startParticipantOPAutoFlow(agent: VsAgent, activity: Index
   try {
     await waitUntilOwnDidIsPubliclyResolvable(agent, agent.config.logger)
     const orchestrator = new VtFlowOrchestrator(agent)
-    await orchestrator.startOnboardingProcess({ applicantParticipantId })
+    const claims = await onboardingClaims(agent, holderParticipant.schemaId)
+    await orchestrator.startOnboardingProcess({ applicantParticipantId, ...(claims ? { claims } : {}) })
   } catch (err) {
     agent.config.logger.error(
       `[IndexerWS] StartParticipantOP auto-flow failed: ${(err as Error).message}\n${(err as Error).stack}`,
@@ -404,7 +427,7 @@ export async function reconcileVtjscPublications(
   agent: VsAgent,
   indexer: VeranaIndexerService,
   corporationId: number,
-  selfTrDefaults?: SelfTrDefaults,
+  ecsClaims?: EcsClaims,
 ): Promise<void> {
   if (!agent.did || !agent.publicApiBaseUrl) return
 
@@ -452,7 +475,7 @@ export async function reconcileVtjscPublications(
 
   await detachUncontrolledVtjscPublications(agent, indexer, corporationId, chainId, reconciled)
 
-  if (selfTrDefaults) await reconcileSelfIssuedEcsCredentials(agent, indexer, selfTrDefaults)
+  if (ecsClaims) await reconcileSelfIssuedEcsCredentials(agent, indexer, ecsClaims)
 }
 
 /** The `_vt/jsc` key that `createJsc` writes for an on-chain `CredentialSchema`. */
@@ -529,7 +552,7 @@ async function detachUncontrolledVtjscPublications(
 async function reconcileSelfIssuedEcsCredentials(
   agent: VsAgent,
   indexer: VeranaIndexerService,
-  selfTrDefaults: SelfTrDefaults,
+  ecsClaims: EcsClaims,
 ): Promise<void> {
   const chain = agent.veranaChain
   if (!chain || !agent.did || !agent.publicApiBaseUrl) return
@@ -549,7 +572,7 @@ async function reconcileSelfIssuedEcsCredentials(
           agent,
           agent.publicApiBaseUrl,
           issuer.id,
-          selfTrDefaults,
+          ecsClaims,
         )
         for (const jscUrl of withdrawn) {
           agent.config.logger.info(
@@ -583,7 +606,7 @@ async function reconcileSelfIssuedEcsCredentials(
         agent.publicApiBaseUrl,
         String(schema.id),
         ecsKey,
-        selfTrDefaults,
+        ecsClaims,
         jsonSchemaCredentialId,
         issuer.id,
       )

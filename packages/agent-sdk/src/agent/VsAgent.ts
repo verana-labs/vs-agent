@@ -50,6 +50,7 @@ import { migrateWebVhVersionTimeIfBroken } from '../did/migrateWebVhVersionTime'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { connectionEvents } from '../events/ConnectionEvents'
 import { vtFlowEvents } from '../events/VtFlowEvents'
+import { EcsClaims } from '../utils/ecsClaims'
 
 const MANAGED_DIDCOMM_SERVICE_TYPES: readonly string[] = [DidCommV1Service.type, NewDidCommV2Service.type]
 
@@ -97,6 +98,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public veranaChain?: VeranaChainService
   public indexer: VeranaIndexerService
   public trustedEcosystemDids?: string[]
+  public ecsClaims?: EcsClaims
   public authorizationService?: AuthorizationService
   public discoveryOptions?: DidCommFeatureQueryOptions[]
 
@@ -111,6 +113,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       veranaChain?: VeranaChainService
       indexer: VeranaIndexerService
       trustedEcosystemDids?: string[]
+      ecsClaims?: EcsClaims
       authorizationService?: AuthorizationService
       discoveryOptions?: DidCommFeatureQueryOptions[]
     },
@@ -125,6 +128,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.veranaChain = options.veranaChain
     this.indexer = options.indexer
     this.trustedEcosystemDids = options.trustedEcosystemDids
+    this.ecsClaims = options.ecsClaims
     this.authorizationService = options.authorizationService
     this.discoveryOptions = options.discoveryOptions
   }

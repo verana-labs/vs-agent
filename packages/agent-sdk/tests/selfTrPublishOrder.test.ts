@@ -2,7 +2,8 @@ import { DidDocument, VerificationMethod } from '@credo-ts/core'
 import { describe, expect, it, vi } from 'vitest'
 
 import { getEcsSchemas } from '../src/utils/data'
-import { generateVerifiablePresentation, SelfTrDefaults, sortKeysDeep } from '../src/utils/setupSelfTr'
+import { generateVerifiablePresentation, sortKeysDeep } from '../src/utils/setupSelfTr'
+import { EcsClaims } from '../src/utils/ecsClaims'
 
 const DID = 'did:web:agent.example'
 const VP_URL = 'https://agent.example/vt/ecs-service-vtc-vp.json'
@@ -13,19 +14,25 @@ vi.mock('axios', () => ({
   default: { get: vi.fn(async (url: string) => ({ data: Buffer.from(`bytes of ${url}`) })) },
 }))
 
-const defaults: SelfTrDefaults = {
-  agentLabel: 'Agent',
-  serviceLogoUri: 'https://cdn.example/logo.png',
-  serviceType: 'ECommerce',
-  serviceDescription: 'demo',
-  serviceMinimumAgeRequired: 18,
-  serviceTermsAndConditions: 'https://cdn.example/terms',
-  servicePrivacyPolicy: 'https://cdn.example/privacy',
-  orgRegistryId: 'REG-1',
-  orgRegistryUri: 'https://registry.example',
-  orgAddress: '1 Demo Street',
-  orgOrganizationKind: 'PUBLIC',
-  orgCountryCode: 'US',
+const ecsClaims: EcsClaims = {
+  service: {
+    name: 'Test Service',
+    type: 'WEB_PORTAL',
+    description: 'a test service',
+    logoUri: 'https://example.com/logo.svg',
+    minimumAgeRequired: '18',
+    termsAndConditionsUri: 'https://example.com/terms.html',
+    privacyPolicyUri: 'https://example.com/privacy.html',
+  },
+  org: {
+    name: 'Test Org',
+    logoUri: 'https://example.com/logo.svg',
+    registryId: 'ID-123',
+    registryUri: 'https://example.com/registry',
+    address: 'Some address',
+    countryCode: 'EE',
+    organizationKind: 'PUBLIC',
+  },
 }
 
 function makeAgent() {
@@ -79,7 +86,7 @@ async function publish(
     'ecs-service',
     ['VerifiableCredential', 'VerifiableTrustCredential'],
     { id: credentialSchemaId, type: 'JsonSchemaCredential' },
-    defaults,
+    ecsClaims,
     beforePublish,
   )
 }
@@ -131,7 +138,10 @@ describe('generateVerifiablePresentation beforePublish step', () => {
     expect(repositoryUpdate).toHaveBeenCalledTimes(1)
 
     // A changed claim must invalidate the cache and regenerate.
-    const changed: SelfTrDefaults = { ...defaults, serviceDescription: 'a different description' }
+    const changed: EcsClaims = {
+      ...ecsClaims,
+      service: { ...ecsClaims.service, description: 'a different description' },
+    }
     await generateVerifiablePresentation(
       agent as never,
       VP_URL,
