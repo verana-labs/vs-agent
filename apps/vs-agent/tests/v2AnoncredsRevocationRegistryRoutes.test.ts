@@ -169,6 +169,18 @@ describe('v2 anoncreds revocation registry routes', () => {
     await expect(pipe.transform({ credentialDefinitionId }, metadata)).resolves.toBeDefined()
   })
 
+  it('rejects a capacity that is not a JSON number', async () => {
+    const pipe = new ValidationPipe()
+    const metadata = { type: 'body', metatype: CreateRevocationRegistryBodyDto } as const
+
+    await expect(
+      pipe.transform({ credentialDefinitionId, maximumCredentialNumber: '500' }, metadata),
+    ).rejects.toMatchObject({ status: 400 })
+    await expect(
+      pipe.transform({ credentialDefinitionId, maximumCredentialNumber: 500 }, metadata),
+    ).resolves.toBeDefined()
+  })
+
   it('rejects an empty credential definition filter instead of ignoring it', async () => {
     const pipe = new ValidationPipe()
     const metadata = { type: 'query', metatype: ListRevocationRegistriesQueryDto } as const

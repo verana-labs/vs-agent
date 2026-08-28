@@ -1,5 +1,4 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
 import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
 
 import { PaginationQueryDto } from '../../../../../common'
@@ -40,7 +39,6 @@ export class CreateRevocationRegistryBodyDto {
     minimum: 1,
   })
   @IsOptional()
-  @Type(() => Number)
   @IsInt()
   @Min(1)
   maximumCredentialNumber?: number

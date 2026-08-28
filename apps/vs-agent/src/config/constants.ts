@@ -171,7 +171,7 @@ export const ADMIN_V2_TAGS: Record<string, string> = {
   'v2/agent': v2ScopeTag('Identifies the agent and reports its state to an orchestrator.'),
   'v2/didcomm': v2ScopeTag('Operates on the wire-level DIDComm state of the agent.'),
   'v2/openid4vc': v2ScopeTag('Operates on the OpenID4VC state of the agent.'),
-  'v2/anoncreds': v2ScopeTag('Manages the AnonCreds artifacts of the agent.'),
+  'v2/anoncreds': 'Manages the AnonCreds artifacts of the agent.',
   'v2/vt': v2ScopeTag('Manages the Verifiable Trust state of the agent.'),
 }
 
