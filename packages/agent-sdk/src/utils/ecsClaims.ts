@@ -80,14 +80,13 @@ const groupOf = (claims: EcsClaims, schemaKey: string) => {
 export async function composeEcsClaims(
   claims: EcsClaims,
   schemaKey: string,
-  subjectDid: string,
   logger?: Logger,
 ): Promise<Record<string, unknown> | undefined> {
   const configured = groupOf(claims, schemaKey)
   const set = Object.entries(configured ?? {}).filter(([, v]) => v !== undefined && v !== '')
   if (set.length === 0) return undefined
 
-  const composed: Record<string, unknown> = { id: subjectDid }
+  const composed: Record<string, unknown> = {}
   for (const [claim, value] of set) {
     composed[claim] = claim === 'minimumAgeRequired' ? Number(value) : value
   }

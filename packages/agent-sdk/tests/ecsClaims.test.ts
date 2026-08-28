@@ -33,10 +33,8 @@ describe('composeEcsClaims', () => {
         },
       },
       'ecs-service',
-      DID,
       log,
     )
-    expect(c!.id).toBe(DID)
     expect(c!.minimumAgeRequired).toBe(18)
     expect(c!.logoDigestSri).toBe(sri('https://x/logo.svg'))
     expect(c!.termsAndConditionsDigestSri).toBe(sri('https://x/t.html'))
@@ -47,20 +45,19 @@ describe('composeEcsClaims', () => {
     const c = await composeEcsClaims(
       { persona: { name: 'P', avatarUri: 'https://x/a.png' } },
       'ecs-persona',
-      DID,
       log,
     )
     expect(c!.avatarDigestSri).toBe(sri('https://x/a.png'))
   })
 
   it('returns undefined when nothing is configured, so claims is omitted', async () => {
-    expect(await composeEcsClaims({}, 'ecs-service', DID, log)).toBeUndefined()
-    expect(await composeEcsClaims({ service: {} }, 'ecs-service', DID, log)).toBeUndefined()
+    expect(await composeEcsClaims({}, 'ecs-service', log)).toBeUndefined()
+    expect(await composeEcsClaims({ service: {} }, 'ecs-service', log)).toBeUndefined()
   })
 
   it('names the variable and the uri when it cannot read the resource', async () => {
     await expect(
-      composeEcsClaims({ service: { name: 'S', logoUri: 'https://bad/logo.svg' } }, 'ecs-service', DID, log),
+      composeEcsClaims({ service: { name: 'S', logoUri: 'https://bad/logo.svg' } }, 'ecs-service', log),
     ).rejects.toThrow(/ECS_CLAIMS_SERVICE_LOGO_URI.*https:\/\/bad\/logo\.svg/)
   })
 })

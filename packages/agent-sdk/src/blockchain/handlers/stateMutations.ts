@@ -385,22 +385,14 @@ async function onboardingClaims(
   schemaId: number,
 ): Promise<Record<string, unknown> | undefined> {
   if (!agent.ecsClaims || !agent.did) return undefined
-  let ecsKey: string | null | undefined
-  try {
-    const schema = await agent.indexer.getCredentialSchema(schemaId)
-    ecsKey = schema && (await classifyEcsSchema(schema.json_schema))
-  } catch (error) {
-    agent.config.logger.warn(
-      `[ecs-claims] cannot classify schema ${schemaId}, sending no claims: ${(error as Error).message}`,
-    )
-    return undefined
-  }
+  const schema = await agent.indexer.getCredentialSchema(schemaId)
+  const ecsKey = schema && (await classifyEcsSchema(schema.json_schema))
   if (!ecsKey) {
     agent.config.logger.warn(`[ecs-claims] schema ${schemaId} is not an ECS schema, sending no claims`)
     return undefined
   }
   // a digest the agent cannot compute must stop the flow, per [VSA-VTI-CFG-ENV-ECS]
-  return await composeEcsClaims(agent.ecsClaims, ecsKey, agent.did, agent.config.logger)
+  return await composeEcsClaims(agent.ecsClaims, ecsKey, agent.config.logger)
 }
 
 export async function startParticipantOPAutoFlow(agent: VsAgent, activity: IndexerActivity): Promise<void> {

@@ -421,7 +421,7 @@ export async function getClaims(
   schemaKey: string,
   ecsClaims: EcsClaims,
 ) {
-  const claims = await composeEcsClaims(ecsClaims, schemaKey, id as string, logger)
+  const claims = await composeEcsClaims(ecsClaims, schemaKey, logger)
   if (!claims) throw new Error(`No ECS_CLAIMS_* variable is set for ${schemaKey}`)
 
   const ecsSchema = ecsSchemas[schemaKey]
@@ -429,10 +429,9 @@ export async function getClaims(
     throw new Error(`Schema not defined in data schemas for schemaKey: ${schemaKey}`)
   }
 
-  validateSchema(JSON.parse(ecsSchema), claims)
+  validateSchema(JSON.parse(ecsSchema), { id, ...claims })
 
-  const { id: _subjectId, ...rest } = claims
-  return rest
+  return claims
 }
 
 /**

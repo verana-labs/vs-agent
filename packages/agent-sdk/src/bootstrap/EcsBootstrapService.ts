@@ -525,6 +525,6 @@ export class EcsBootstrapService {
       this.agent.config.logger.warn(`[ecs-claims] schema ${schemaId} is not an ECS schema, sending no claims`)
       return undefined
     }
-    return await composeEcsClaims(this.agent.ecsClaims, ecsKey, this.agent.did, this.agent.config.logger)
+    return await composeEcsClaims(this.agent.ecsClaims, ecsKey, this.agent.config.logger)
   }
 }

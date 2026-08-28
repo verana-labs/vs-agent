@@ -120,7 +120,7 @@ services:
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
       ADMIN_API_AUTH_MODE: internal
       AGENT_MODE: standalone
-      ECS_CLAIMS_SERVICE_NAME: ${AGENT_LABEL:-VS Agent}
+      ECS_CLAIMS_SERVICE_NAME: vt-flow demo agent
       ECS_CLAIMS_SERVICE_TYPE: WEB_PORTAL
       ECS_CLAIMS_SERVICE_DESCRIPTION: vt-flow demo agent
       ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED: "18"
@@ -159,7 +159,7 @@ services:
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
       ADMIN_API_AUTH_MODE: internal
       AGENT_MODE: standalone
-      ECS_CLAIMS_SERVICE_NAME: ${AGENT_LABEL:-VS Agent}
+      ECS_CLAIMS_SERVICE_NAME: vt-flow demo agent
       ECS_CLAIMS_SERVICE_TYPE: WEB_PORTAL
       ECS_CLAIMS_SERVICE_DESCRIPTION: vt-flow demo agent
       ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED: "18"
@@ -203,7 +203,7 @@ services:
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
       ADMIN_API_AUTH_MODE: internal
       AGENT_MODE: standalone
-      ECS_CLAIMS_SERVICE_NAME: ${AGENT_LABEL:-VS Agent}
+      ECS_CLAIMS_SERVICE_NAME: vt-flow demo agent
       ECS_CLAIMS_SERVICE_TYPE: WEB_PORTAL
       ECS_CLAIMS_SERVICE_DESCRIPTION: vt-flow demo agent
       ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED: "18"
