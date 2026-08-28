@@ -110,10 +110,21 @@ export async function saveMetadataEntry(
   )
   didRecord.metadata.set(key, record)
 
-  // Update #whois with new endpoint
-  const service = didRecord.didDocument?.service?.find(s => s.id === `${agent.did}#whois`)
-  if (service && verifiablePresentation.id?.includes('service'))
-    service.serviceEndpoint = verifiablePresentation.id!
+  // #whois follows the Service VP, and is added the first time one is published
+  if (verifiablePresentation.id?.includes('service')) {
+    const whoisId = `${agent.did}#whois`
+    const whois = didRecord.didDocument?.service?.find(s => s.id === whoisId)
+    if (whois) whois.serviceEndpoint = verifiablePresentation.id
+    else if (didRecord.didDocument)
+      didRecord.didDocument.service = [
+        ...(didRecord.didDocument.service ?? []),
+        new DidDocumentService({
+          id: whoisId,
+          serviceEndpoint: verifiablePresentation.id,
+          type: 'LinkedVerifiablePresentation',
+        }),
+      ]
+  }
 
   // A JSON schema credential says nothing about this agent's own ECS identity, so only a real
   // trust credential replaces the self-issued ones.
@@ -470,6 +481,7 @@ export async function rebindEcsCredentialSchema(
   ecsClaims: EcsClaims,
   jsonSchemaCredentialId: string,
   issuerParticipantId: number,
+  onChainJsonSchema?: string,
 ): Promise<void> {
   if (!['ecs-service', 'ecs-org'].includes(schemaKey) || !agent.did) return
   const vpUrl = `${publicApiBaseUrl}/vt/${schemaKey}-vtc-vp.json`
@@ -507,7 +519,7 @@ export async function rebindEcsCredentialSchema(
   await generateVerifiablePresentation(
     agent,
     vpUrl,
-    getEcsSchemas(publicApiBaseUrl),
+    { ...getEcsSchemas(publicApiBaseUrl), ...(onChainJsonSchema ? { [schemaKey]: onChainJsonSchema } : {}) },
     schemaKey,
     ['VerifiableCredential', 'VerifiableTrustCredential'],
     { id: jscUrl, type: 'JsonSchemaCredential' },
@@ -561,7 +573,6 @@ export async function withdrawSelfIssuedEcsCredentials(
   agent: VsAgent,
   publicApiBaseUrl: string,
   issuerParticipantId: number,
-  ecsClaims: EcsClaims,
 ): Promise<string[]> {
   const didRecord = await getDidRecord(agent)
   const withdrawn: string[] = []
@@ -571,19 +582,6 @@ export async function withdrawSelfIssuedEcsCredentials(
     if (entry.issuerParticipantId !== issuerParticipantId) continue
     await removeTrustCredential(agent, publicApiBaseUrl, jscUrl, '_vt/vtc')
     withdrawn.push(jscUrl)
-
-    const defaultSchema = presentations.find(p => p.name === entry.schemaKey)
-    if (!defaultSchema) continue
-    // stays detached when a real trust credential is already stored
-    await generateVerifiablePresentation(
-      agent,
-      `${publicApiBaseUrl}/vt/${defaultSchema.name}-vtc-vp.json`,
-      getEcsSchemas(publicApiBaseUrl),
-      defaultSchema.name,
-      ['VerifiableCredential', 'VerifiableTrustCredential'],
-      { id: mapToSelfTr(defaultSchema.schemaUrl, publicApiBaseUrl), type: 'JsonSchemaCredential' },
-      ecsClaims,
-    )
   }
   return withdrawn
 }

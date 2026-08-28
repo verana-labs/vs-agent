@@ -19,7 +19,6 @@ import {
   registerSelfIssuanceAnchorHandlers,
   EcsBootstrapService,
   reconcileVtjscPublications,
-  generateDigestSRI,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -37,9 +36,6 @@ import {
   AGENT_ENDPOINT,
   AGENT_ENDPOINTS,
   AGENT_INVITATION_IMAGE_URL,
-  DEFAULT_LOGO_SVG,
-  DEFAULT_TERMS_HTML,
-  DEFAULT_PRIVACY_HTML,
   AGENT_LABEL,
   UI_WELCOME_MESSAGE,
   AGENT_LOG_LEVEL,
@@ -231,6 +227,28 @@ const run = async () => {
   }
   if (TRUSTED_ECS_ECOSYSTEM_DIDS.some(did => !did.startsWith('did:'))) {
     configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS must be a comma-separated list of DIDs')
+  }
+  // [VSA-VTI-CFG-ENV-ECS]: the agent issues its own Service credential in standalone mode, so no
+  // validator can supply a claim it is missing
+  if (AGENT_MODE === 'standalone') {
+    const required: [string, string | undefined][] = [
+      ['ECS_CLAIMS_SERVICE_NAME', ECS_CLAIMS_SERVICE.name],
+      ['ECS_CLAIMS_SERVICE_TYPE', ECS_CLAIMS_SERVICE.type],
+      ['ECS_CLAIMS_SERVICE_DESCRIPTION', ECS_CLAIMS_SERVICE.description],
+      ['ECS_CLAIMS_SERVICE_LOGO_URI', ECS_CLAIMS_SERVICE.logoUri],
+      ['ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED', ECS_CLAIMS_SERVICE.minimumAgeRequired],
+      ['ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI', ECS_CLAIMS_SERVICE.termsAndConditionsUri],
+      ['ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI', ECS_CLAIMS_SERVICE.privacyPolicyUri],
+    ]
+    for (const [variable, value] of required) {
+      if (!value) configErrors.push(`${variable} is required when AGENT_MODE=standalone`)
+    }
+  }
+  if (
+    ECS_CLAIMS_SERVICE.minimumAgeRequired &&
+    !Number.isInteger(Number(ECS_CLAIMS_SERVICE.minimumAgeRequired))
+  ) {
+    configErrors.push('ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED must be an integer')
   }
   if (configErrors.length > 0 || !didLocation) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
@@ -441,11 +459,7 @@ const run = async () => {
     })
   }
 
-  const ecsClaims = {
-    org: ECS_CLAIMS_ORG,
-    persona: ECS_CLAIMS_PERSONA,
-    service: ECS_CLAIMS_SERVICE,
-  }
+  const ecsClaims = agent.ecsClaims ?? {}
 
   // Deliver domain events emitted on the agent bus to the configured webhook endpoint
   webhookEvent(agent, EVENTS_BASE_URL, serverLogger)

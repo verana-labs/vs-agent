@@ -167,9 +167,10 @@ The agent composes the claims of its own ECS credentials from these variables, p
 It derives `id` from its own DID, and each `*DigestSri` by fetching the paired URI, so no
 variable carries a digest.
 
-The ORG and PERSONA groups are read in standalone mode only. Every SERVICE variable below is
-required in standalone mode, where the agent issues its own Service credential and no validator
-supplies a missing claim.
+The ORG and PERSONA groups are read in standalone mode only. In standalone mode the agent issues
+its own Service credential and no validator supplies a missing claim, so every SERVICE variable
+except `ECS_CLAIMS_SERVICE_DESCRIPTION_FORMAT` is required and the agent refuses to start without
+it.
 
 | Variable | Claim |
 | --- | --- |
@@ -203,7 +204,6 @@ stops the flow when it cannot read one. The agent still serves placeholder resou
 may point these variables at.
 
 
-For **more examples of how to configure these variables and use the API**, see the additional file [Self-Verifiable Trust Registry routes](../../doc/self-tr-routes.md).
 
 ### eMRTD (ePassport) verification
 

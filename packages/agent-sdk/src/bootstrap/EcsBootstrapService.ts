@@ -20,6 +20,7 @@ import {
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../utils/didReadiness'
 import { VtFlowOrchestrator } from '../vtFlow/VtFlowOrchestrator'
+import { composeEcsClaims } from '../utils/ecsClaims'
 
 const START_OP_MSG = '/verana.pp.v1.MsgStartParticipantOP'
 const SELF_CREATE_MSG = '/verana.pp.v1.MsgSelfCreateParticipant'
@@ -168,8 +169,10 @@ export class EcsBootstrapService {
     // startOnboardingProcess writes nothing on chain, and it refuses to resend while a flow is in
     // progress, so this is safe on every boot.
     await waitUntilOwnDidIsPubliclyResolvable(this.agent, this.logger)
+    const claims = await this.onboardingClaims(participant.schema_id)
     const record = await new VtFlowOrchestrator(this.agent).startOnboardingProcess({
       applicantParticipantId: participant.id,
+      ...(claims ? { claims } : {}),
     })
     this.logger.info(
       `[EcsBootstrap] resumed the onboarding of participant ${participant.id} (flow ${record.id}, state ${record.state})`,
@@ -512,5 +515,16 @@ export class EcsBootstrapService {
         `the ECS Service schema ${schemaId} belongs to ecosystem ${ecosystem?.did ?? '<unresolvable>'}, which TRUSTED_ECS_ECOSYSTEM_DIDS does not list`,
       )
     }
+  }
+
+  private async onboardingClaims(schemaId: number): Promise<Record<string, unknown> | undefined> {
+    if (!this.agent.ecsClaims || !this.agent.did) return undefined
+    const schema = await this.agent.indexer.getCredentialSchema(schemaId)
+    const ecsKey = schema && (await classifyEcsSchema(schema.json_schema))
+    if (!ecsKey) {
+      this.agent.config.logger.warn(`[ecs-claims] schema ${schemaId} is not an ECS schema, sending no claims`)
+      return undefined
+    }
+    return await composeEcsClaims(this.agent.ecsClaims, ecsKey, this.agent.did, this.agent.config.logger)
   }
 }

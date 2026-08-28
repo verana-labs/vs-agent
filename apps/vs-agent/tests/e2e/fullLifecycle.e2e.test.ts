@@ -65,6 +65,10 @@ const ecsSchema = (title: string) =>
   })
 
 // every digest is supplied, so building the credential never fetches the referenced resources
+vi.mock('axios', () => ({
+  default: { get: vi.fn(async (url: string) => ({ data: Buffer.from(`bytes of ${url}`) })) },
+}))
+
 const ecsClaims: EcsClaims = {
   service: {
     name: 'Test Service',

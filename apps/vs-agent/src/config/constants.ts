@@ -88,8 +88,8 @@ export const REDIRECT_DEFAULT_URL_TO_INVITATION_URL =
 export const USER_PROFILE_AUTODISCLOSE = process.env.USER_PROFILE_AUTODISCLOSE === 'true'
 
 // [VSA-VTI-CFG-ENV-ECS] claims the agent proposes for its own ECS credentials.
-// Every variable is optional here; the Service group is required in standalone mode and
-// validateEcsClaimsConfig enforces that. id and the *DigestSri claims are derived, never read.
+// Every variable is optional here. main.ts rejects a standalone agent that leaves a required
+// Service claim unset. id and the *DigestSri claims are derived, never read from the environment.
 const env = (name: string): string | undefined => process.env[name]?.trim() || undefined
 
 export const ECS_CLAIMS_ORG = {
@@ -124,12 +124,8 @@ export const ECS_CLAIMS_SERVICE = {
   privacyPolicyUri: env('ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI'),
 }
 
-// Placeholder resources the agent serves under /vt/default (by
-// DefaultResourcesController) and hashed for the corresponding *DigestSri
-// self-tr claim (see main.ts). Defined here, once, so both sides use the
-// exact same bytes without the agent having to fetch its own public URL over
-// HTTP to hash content it already has in memory — self-fetching that URL at
-// startup raced the ingress and 503'd intermittently right after a restart.
+// Placeholder resources the agent serves under /vt/default, so an operator can point an
+// ECS_CLAIMS_*_URI at the agent itself.
 // kept in sync with apps/vs-agent-ui/src/assets/logo.svg
 export const DEFAULT_LOGO_SVG = `<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
   <defs>

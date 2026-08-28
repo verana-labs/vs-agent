@@ -559,23 +559,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   }
 
   private async createAndAddLinkedVpServices(didDocument: DidDocument) {
-    const publicDid = didDocument.id
-    didDocument.service = [
-      ...(didDocument.service ?? []),
-      ...[
-        new DidDocumentService({
-          id: `${publicDid}#vpr-schemas-service-vtc-vp`,
-          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-service-vtc-vp.json`,
-          type: 'LinkedVerifiablePresentation',
-        }),
-        new DidDocumentService({
-          id: `${publicDid}#vpr-schemas-org-vtc-vp`,
-          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-org-vtc-vp.json`,
-          type: 'LinkedVerifiablePresentation',
-        }),
-      ],
-    ]
-
     didDocument.context = [
       ...(didDocument.context ?? []),
       'https://identity.foundation/linked-vp/contexts/v1',
@@ -591,11 +574,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     didDocument.service = [
       ...(didDocument.service ?? []),
       ...[
-        new DidDocumentService({
-          id: `${publicDid}#whois`,
-          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-service-vtc-vp.json`,
-          type: 'LinkedVerifiablePresentation',
-        }),
         new DidDocumentService({
           id: `${publicDid}#files`,
           serviceEndpoint: `${this.publicApiBaseUrl}`,

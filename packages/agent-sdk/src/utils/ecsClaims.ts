@@ -7,6 +7,8 @@ import axios from 'axios'
 // [VSA-VTI-CFG-ENV-ECS]. Values come from the ECS_CLAIMS_* variables; a claim the operator
 // did not set is absent, never an invented default.
 export interface EcsClaims {
+  // bytes the agent already serves, keyed by URI, so it never fetches its own public URL
+  localResources?: Record<string, string>
   org?: Record<string, string | undefined>
   persona?: Record<string, string | undefined>
   service?: Record<string, string | undefined>
@@ -39,6 +41,10 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 // the spec asks for a retry with an increasing delay, then a descriptive error naming the
 // variable and the URI, and a stop
+export function digestOf(content: string): string {
+  return `sha384-${createHash('sha384').update(content).digest('base64')}`
+}
+
 export async function digestOfUri(uri: string, variable: string, logger?: Logger): Promise<string> {
   let lastError: Error | undefined
   for (let attempt = 1; attempt <= DIGEST_ATTEMPTS; attempt++) {
@@ -55,8 +61,16 @@ export async function digestOfUri(uri: string, variable: string, logger?: Logger
   throw new Error(message)
 }
 
-const groupOf = (claims: EcsClaims, schemaKey: string) =>
-  schemaKey === 'ecs-service' ? claims.service : schemaKey === 'ecs-persona' ? claims.persona : claims.org
+const GROUP_OF: Record<string, keyof EcsClaims> = {
+  'ecs-service': 'service',
+  'ecs-persona': 'persona',
+  'ecs-org': 'org',
+}
+
+const groupOf = (claims: EcsClaims, schemaKey: string) => {
+  const group = GROUP_OF[schemaKey]
+  return group ? claims[group] : undefined
+}
 
 /**
  * Compose the claims of one ECS credential from the configured variables, deriving `id` and
@@ -81,7 +95,8 @@ export async function composeEcsClaims(
     const uri = composed[uriClaim]
     if (typeof uri !== 'string') continue
     const variable = VARIABLE_OF[schemaKey]?.[uriClaim] ?? uriClaim
-    composed[digestClaim] = await digestOfUri(uri, variable, logger)
+    const local = claims.localResources?.[uri]
+    composed[digestClaim] = local ? digestOf(local) : await digestOfUri(uri, variable, logger)
   }
   return composed
 }

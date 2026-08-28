@@ -25,9 +25,7 @@ import { createHash } from 'crypto'
 import { VsAgent } from '../agent/VsAgent'
 import { composeEcsClaims, EcsClaims } from './ecsClaims'
 
-import { getEcsSchemas } from './data'
-
-const ajv = new Ajv({ strict: false })
+const ajv = new Ajv({ strict: false, allErrors: true })
 addFormats(ajv)
 
 // Helpers
@@ -332,7 +330,7 @@ export async function generateVerifiablePresentation(
     ecsSchemas,
     schemaKey,
     type,
-    { id: agent.did },
+    { id: agent.did, claims },
     credentialSchema,
     ecsClaims,
     presentation,

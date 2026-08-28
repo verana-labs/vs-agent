@@ -27,6 +27,10 @@ import {
   ENABLE_PUBLIC_API_SWAGGER,
   ENABLED_PLUGINS,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
+  AGENT_MODE,
+  DEFAULT_LOGO_SVG,
+  DEFAULT_PRIVACY_HTML,
+  DEFAULT_TERMS_HTML,
   ECS_CLAIMS_ORG,
   ECS_CLAIMS_PERSONA,
   ECS_CLAIMS_SERVICE,
@@ -191,7 +195,16 @@ export const setupAgent = async ({
     veranaChain,
     indexer,
     trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS,
-    ecsClaims: { org: ECS_CLAIMS_ORG, persona: ECS_CLAIMS_PERSONA, service: ECS_CLAIMS_SERVICE },
+    ecsClaims: {
+      ...(AGENT_MODE === 'standalone'
+        ? { org: ECS_CLAIMS_ORG, persona: ECS_CLAIMS_PERSONA, service: ECS_CLAIMS_SERVICE }
+        : { service: ECS_CLAIMS_SERVICE }),
+      localResources: {
+        [`${publicApiBaseUrl}/vt/default/logo.svg`]: DEFAULT_LOGO_SVG,
+        [`${publicApiBaseUrl}/vt/default/terms.html`]: DEFAULT_TERMS_HTML,
+        [`${publicApiBaseUrl}/vt/default/privacy.html`]: DEFAULT_PRIVACY_HTML,
+      },
+    },
     authorizationService,
     discoveryOptions,
     adminApiServiceEndpoint,

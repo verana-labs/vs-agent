@@ -226,12 +226,9 @@ describe('applyStateMutation', () => {
 
     expect(metadataStore['_vt/vtc']['https://ecosystem/vt/schemas-9-jsc.json']).toBeUndefined()
     expect(didRecord.didDocument.service).toEqual([])
-    // the credential of another participant survives, and the default is published again
+    // the credential of another participant survives, and nothing is republished
     expect(metadataStore['_vt/vtc']['https://ecosystem/vt/schemas-3-jsc.json']).toBeDefined()
-    expect(generateVerifiablePresentation.mock.calls[0][5]).toEqual({
-      id: 'https://agent/vt/schemas-example-service-jsc.json',
-      type: 'JsonSchemaCredential',
-    })
+    expect(generateVerifiablePresentation).not.toHaveBeenCalled()
 
     // A HOLDER participant is not this handler's business.
     agent.veranaChain.getParticipant.mockResolvedValue({ id: 8, role: 6, did: 'did:web:agent' })
