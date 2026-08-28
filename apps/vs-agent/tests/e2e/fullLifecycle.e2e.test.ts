@@ -722,8 +722,8 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
 
       expect(await vtcEntries()).not.toContain(jscUrl)
       expect(await serviceIds()).not.toContain(linkedVpServiceId)
-      // back in store, detached: this agent already holds the credential a validator issued to it
-      expect(await vtcEntries()).toContain(`${baseUrl}/vt/schemas-example-service-jsc.json`)
+      // nothing is republished: withdrawal withdraws
+      expect(await vtcEntries()).not.toContain(`${baseUrl}/vt/schemas-example-service-jsc.json`)
     },
     SETUP_TIMEOUT_MS,
   )

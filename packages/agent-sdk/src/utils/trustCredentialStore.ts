@@ -550,8 +550,8 @@ export async function rebindEcsCredentialSchema(
 }
 
 /**
- * Withdraws the ECS credentials anchored against `issuerParticipantId` and republishes the
- * self-issued default in their place, which is what the next start would publish anyway.
+ * Withdraws the ECS credentials anchored against `issuerParticipantId`, and the #whois entry
+ * when the Service credential is among them.
  */
 export async function withdrawSelfIssuedEcsCredentials(
   agent: VsAgent,
@@ -560,12 +560,21 @@ export async function withdrawSelfIssuedEcsCredentials(
 ): Promise<string[]> {
   const didRecord = await getDidRecord(agent)
   const withdrawn: string[] = []
+  let whoisWithdrawn = false
 
   for (const [jscUrl, value] of Object.entries(didRecord.metadata.get('_vt/vtc') ?? {})) {
     const entry = value as { issuerParticipantId?: number; schemaKey?: string }
     if (entry.issuerParticipantId !== issuerParticipantId) continue
     await removeTrustCredential(agent, publicApiBaseUrl, jscUrl, '_vt/vtc')
     withdrawn.push(jscUrl)
+    if (entry.schemaKey === 'ecs-service') whoisWithdrawn = true
+  }
+  if (whoisWithdrawn) {
+    const record = await getDidRecord(agent)
+    if (record.didDocument?.service) {
+      record.didDocument.service = record.didDocument.service.filter(s => s.id !== `${agent.did}#whois`)
+      await updateDidRecord(agent, record)
+    }
   }
   return withdrawn
 }
