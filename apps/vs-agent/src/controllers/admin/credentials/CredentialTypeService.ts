@@ -122,7 +122,7 @@ export class CredentialTypesService {
     agent: VsAgent,
     revocationRegistryDefinitionId: string,
     revocationRegistryIndex: number,
-  ): Promise<void> {
+  ): Promise<{ timestamp: number }> {
     const uptStatusListResult = await agent.modules.anoncreds.updateRevocationStatusList({
       revocationStatusList: {
         revocationRegistryDefinitionId,
@@ -131,10 +131,15 @@ export class CredentialTypesService {
       options: {},
     })
 
-    const revocationStatusList = uptStatusListResult.revocationStatusListState.revocationStatusList
-    if (!revocationStatusList) {
-      throw new Error('Failed to update revocation status list')
+    const revocationStatusListState = uptStatusListResult.revocationStatusListState
+    if (revocationStatusListState.state !== 'finished') {
+      const detail =
+        revocationStatusListState.state === 'failed'
+          ? revocationStatusListState.reason
+          : revocationStatusListState.state
+      throw new Error(`Failed to update revocation status list: ${detail}`)
     }
+    const revocationStatusList = revocationStatusListState.revocationStatusList
 
     const statusRegistration = (
       uptStatusListResult.registrationMetadata as { attestedResource?: Record<string, unknown> }
@@ -149,6 +154,8 @@ export class CredentialTypesService {
       statusRegistration,
       revocationStatusList.timestamp,
     )
+
+    return { timestamp: revocationStatusList.timestamp }
   }
 
   public async saveAttestedResource(agent: VsAgent, resource: Record<string, unknown>, tags?: Tags) {
