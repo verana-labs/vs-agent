@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger'
 import { IsString, IsNotEmpty, IsNumber, IsOptional } from 'class-validator'
 
+import { REVOCATION_REGISTRY_DEFAULT_CAPACITY } from '../../../config/constants'
+
 export class CreateRevocationRegistryDto {
   @ApiProperty({
     description: 'credentialDefinitionId',
@@ -13,11 +15,11 @@ export class CreateRevocationRegistryDto {
 
   @ApiProperty({
     description: 'maximumCredentialNumber',
-    default: 1000,
-    example: 1000,
+    default: REVOCATION_REGISTRY_DEFAULT_CAPACITY,
+    example: REVOCATION_REGISTRY_DEFAULT_CAPACITY,
   })
   @IsNumber()
   @IsNotEmpty()
   @IsOptional()
-  maximumCredentialNumber: number = 1000
+  maximumCredentialNumber: number = REVOCATION_REGISTRY_DEFAULT_CAPACITY
 }

@@ -163,17 +163,23 @@ export const DEFAULT_PRIVACY_HTML = defaultResourcePage(
 )
 
 // Swagger tags for the v2 admin scopes.
+// TODO: remove once the methods are implemented
 const v2ScopeTag = (summary: string) =>
   `${summary} Reserved for the v2 migration; no methods implemented yet.`
 
 export const ADMIN_V2_TAGS: Record<string, string> = {
   'v2/auth': v2ScopeTag('Exchanges an account signature for a bearer token.'),
-  'v2/agent': v2ScopeTag('Identifies the agent and reports its state to an orchestrator.'),
-  'v2/didcomm': v2ScopeTag('Operates on the wire-level DIDComm state of the agent.'),
+  'v2/agent': 'Identifies the agent and reports its state to an orchestrator.',
+  'v2/didcomm': 'Operates on the wire-level DIDComm state of the agent.',
   'v2/openid4vc': v2ScopeTag('Operates on the OpenID4VC state of the agent.'),
-  'v2/anoncreds': v2ScopeTag('Manages the AnonCreds artifacts of the agent.'),
-  'v2/vt': v2ScopeTag('Manages the Verifiable Trust state of the agent.'),
+  'v2/anoncreds': 'Manages the AnonCreds artifacts of the agent.',
+  'v2/vt': 'Manages the Verifiable Trust state of the agent.',
 }
+
+// AnonCreds params
+
+// Capacity of a revocation registry when the caller does not name one.
+export const REVOCATION_REGISTRY_DEFAULT_CAPACITY = 1000
 
 // Utils params
 export const MASTER_LIST_CSCA_LOCATION = process.env.MASTER_LIST_CSCA_LOCATION
