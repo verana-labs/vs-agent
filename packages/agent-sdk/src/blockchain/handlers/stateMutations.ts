@@ -311,11 +311,7 @@ export async function removeHolderTrustCredentialIfRevoked(
   for (const record of records) {
     if (record.role !== VtFlowRole.Applicant || !record.credentialExchangeRecordId) continue
     try {
-      const credentialId = await removeStoredTrustCredential(
-        agent,
-        agent.publicApiBaseUrl,
-        record.credentialExchangeRecordId,
-      )
+      const credentialId = await removeStoredTrustCredential(agent, record.credentialExchangeRecordId)
       if (credentialId) {
         agent.config.logger.info(
           `[IndexerWS] Removed linked VP and stored credential ${credentialId} (participant=${participantId})`,
@@ -343,7 +339,7 @@ export async function removeSelfIssuedEcsCredentialsIfIssuerRevoked(
   if (participant?.role !== ISSUER_PARTICIPANT_TYPE || participant.did !== agent.did) return
 
   try {
-    const withdrawn = await withdrawSelfIssuedEcsCredentials(agent, agent.publicApiBaseUrl, participant.id)
+    const withdrawn = await withdrawSelfIssuedEcsCredentials(agent, participant.id)
     for (const jscUrl of withdrawn) {
       agent.config.logger.info(
         `[SelfTR] Withdrew the self-issued ECS credential bound to ${jscUrl} (issuer participant ${participantId})`,
@@ -559,7 +555,7 @@ async function reconcileSelfIssuedEcsCredentials(
         participantState,
       })
       for (const issuer of stale) {
-        const withdrawn = await withdrawSelfIssuedEcsCredentials(agent, agent.publicApiBaseUrl, issuer.id)
+        const withdrawn = await withdrawSelfIssuedEcsCredentials(agent, issuer.id)
         for (const jscUrl of withdrawn) {
           agent.config.logger.info(
             `[SelfTR] Withdrew the self-issued ECS credential bound to ${jscUrl} (${participantState} issuer participant ${issuer.id})`,
@@ -585,7 +581,7 @@ async function reconcileSelfIssuedEcsCredentials(
     try {
       const schema = await indexer.getCredentialSchema(issuer.schema_id)
       const ecsKey = await classifyEcsSchema(schema.json_schema)
-      if (!ecsKey) continue
+      if (ecsKey !== 'ecs-service') continue
       const jsonSchemaCredentialId = await resolveJsonSchemaCredentialId(agent, indexer, schema.id, chainId)
       await rebindEcsCredentialSchema(
         agent,

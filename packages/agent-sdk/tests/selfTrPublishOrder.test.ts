@@ -2,7 +2,8 @@ import { DidDocument, VerificationMethod } from '@credo-ts/core'
 import { describe, expect, it, vi } from 'vitest'
 
 import { getEcsSchemas } from '../src/utils/data'
-import { generateVerifiablePresentation, sortKeysDeep } from '../src/utils/setupSelfTr'
+import { publishSelfIssuedEcsPresentation } from '../src/utils/selfIssuedEcsCredential'
+import { sortKeysDeep } from '../src/utils/setupSelfTr'
 import { EcsClaims } from '../src/utils/ecsClaims'
 
 const DID = 'did:web:agent.example'
@@ -79,7 +80,7 @@ async function publish(
   beforePublish: (vp: unknown) => Promise<void>,
   credentialSchemaId = JSC_URL,
 ) {
-  return await generateVerifiablePresentation(
+  return await publishSelfIssuedEcsPresentation(
     agent as never,
     VP_URL,
     getEcsSchemas('https://agent.example'),
@@ -97,7 +98,7 @@ function storedEntry(metadata: Map<string, any>, schemaId: string) {
   return entry
 }
 
-describe('generateVerifiablePresentation beforePublish step', () => {
+describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
   it('receives the signed presentation and then publishes it', async () => {
     const { agent, metadata, repositoryUpdate } = makeAgent()
     const beforePublish = vi.fn(async (vp: any) => {
@@ -142,7 +143,7 @@ describe('generateVerifiablePresentation beforePublish step', () => {
       ...ecsClaims,
       service: { ...ecsClaims.service, description: 'a different description' },
     }
-    await generateVerifiablePresentation(
+    await publishSelfIssuedEcsPresentation(
       agent as never,
       VP_URL,
       getEcsSchemas('https://agent.example'),

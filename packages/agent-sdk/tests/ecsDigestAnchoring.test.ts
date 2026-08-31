@@ -11,10 +11,9 @@ vi.mock('@verana-labs/verre', () => ({
   computeCredentialDigestJCS: () => DIGEST,
 }))
 
-const generateVerifiablePresentation = vi.fn()
-vi.mock('../src/utils/setupSelfTr', async importOriginal => ({
-  ...(await importOriginal<typeof import('../src/utils/setupSelfTr')>()),
-  generateVerifiablePresentation: (...args: unknown[]) => generateVerifiablePresentation(...args),
+const publishSelfIssuedEcsPresentation = vi.fn()
+vi.mock('../src/utils/selfIssuedEcsCredential', () => ({
+  publishSelfIssuedEcsPresentation: (...args: unknown[]) => publishSelfIssuedEcsPresentation(...args),
 }))
 
 const ecsClaims = {} as EcsClaims
@@ -82,9 +81,9 @@ async function rebind(agent: unknown) {
 
 describe('ECS credential digest anchoring', () => {
   beforeEach(() => {
-    generateVerifiablePresentation.mockReset()
+    publishSelfIssuedEcsPresentation.mockReset()
     // the real function calls the beforePublish step with the signed presentation
-    generateVerifiablePresentation.mockImplementation(async (...args: unknown[]) => {
+    publishSelfIssuedEcsPresentation.mockImplementation(async (...args: unknown[]) => {
       const verifiablePresentation = { id: 'vp', verifiableCredential: [{ id: 'credential' }] }
       const beforePublish = args[7] as (vp: unknown) => Promise<void>
       await beforePublish?.(verifiablePresentation)
@@ -158,7 +157,7 @@ describe('ECS credential digest anchoring', () => {
 
     await rebind(agent)
 
-    expect(generateVerifiablePresentation).not.toHaveBeenCalled()
+    expect(publishSelfIssuedEcsPresentation).not.toHaveBeenCalled()
     expect(chain.createOrUpdateParticipantSession).not.toHaveBeenCalled()
     expect(didsUpdate).not.toHaveBeenCalled()
     expect(metadata.get('_vt/vtc')?.[JSC_ID]).toEqual(received)
@@ -178,7 +177,7 @@ describe('ECS credential digest anchoring', () => {
 
     await rebind(agent)
 
-    expect(generateVerifiablePresentation).toHaveBeenCalledTimes(1)
+    expect(publishSelfIssuedEcsPresentation).toHaveBeenCalledTimes(1)
     expect(chain.createOrUpdateParticipantSession).toHaveBeenCalledTimes(1)
   })
 

@@ -109,7 +109,7 @@ export class TrustService {
   private async removeCredentialByType(schemaId: string, key: '_vt/vtc' | '_vt/jsc') {
     try {
       const { agent } = await this.getDidRecord()
-      await removeTrustCredential(agent, this.publicApiBaseUrl, schemaId, key)
+      await removeTrustCredential(agent, schemaId, key)
 
       this.logger.log(`Metadata ${schemaId} successfully removed`)
       return { success: true, message: `Metadata ${schemaId} removed` }
