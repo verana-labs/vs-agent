@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger'
 import { VtFlowRole, VtFlowVariant, type VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
+import { PageDto } from '../../../../common'
+
 export class VtFlowRecordDto {
   @ApiProperty() id!: string
   @ApiProperty() threadId!: string
@@ -27,7 +29,4 @@ export class VtFlowRecordDto {
   @ApiProperty() lastEventAt!: Date
 }
 
-export class VtFlowRecordPageDto {
-  @ApiProperty({ type: [VtFlowRecordDto] }) items!: VtFlowRecordDto[]
-  @ApiProperty({ type: String, nullable: true }) nextCursor!: string | null
-}
+export const VtFlowRecordPageDto = PageDto(VtFlowRecordDto)

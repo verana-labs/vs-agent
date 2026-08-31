@@ -110,6 +110,45 @@ describe('v2 didcomm connection routes', () => {
     )
   })
 
+  // Credo writes the didcommVersion tag only for v2 out-of-band connections and treats its
+  // absence as v1, so a v1 filter has to be the negation of v2 rather than a tag match.
+  it('translates a v1 version filter into the negation of v2', async () => {
+    const response = await request(app.getHttpServer()).get('/v2/didcomm/connections?didcommVersion=v1')
+
+    expect(response.status).toBe(200)
+    const [query] = connections.findAllByQuery.mock.calls[0]
+    expect(query.$and[1]).toEqual({ $not: { didcommVersion: 'v2' } })
+    // The tag must not also be asserted as a value, or nothing would ever match.
+    expect(query.$and[0]).not.toHaveProperty('didcommVersion')
+  })
+
+  it('keeps the other filters alongside the negated version', async () => {
+    await request(app.getHttpServer()).get(
+      '/v2/didcomm/connections?didcommVersion=v1&state=completed&role=responder',
+    )
+
+    const [query] = connections.findAllByQuery.mock.calls[0]
+    expect(query.$and[0]).toMatchObject({ state: 'completed', role: 'responder' })
+    expect(query.$and[1]).toEqual({ $not: { didcommVersion: 'v2' } })
+  })
+
+  it('leaves a v2 version filter as a plain tag match', async () => {
+    await request(app.getHttpServer()).get('/v2/didcomm/connections?didcommVersion=v2')
+
+    expect(connections.findAllByQuery).toHaveBeenCalledWith(expect.objectContaining({ didcommVersion: 'v2' }))
+    expect(connections.findAllByQuery.mock.calls[0][0].$and).toBeUndefined()
+  })
+
+  it('keys the pagination cursor on the requested version, not on the translated query', async () => {
+    const first = await request(app.getHttpServer()).get('/v2/didcomm/connections?didcommVersion=v1&limit=2')
+
+    const second = await request(app.getHttpServer()).get(
+      `/v2/didcomm/connections?didcommVersion=v1&limit=2&cursor=${encodeURIComponent(first.body.nextCursor)}`,
+    )
+
+    expect(second.status).toBe(200)
+  })
+
   // Driven through the pipe rather than over HTTP: esbuild drops the design:paramtypes
   // metadata that the global pipe infers the DTO from, so the route cannot be made to
   // validate under vitest. `nest build` emits it, so the deployed route does validate.

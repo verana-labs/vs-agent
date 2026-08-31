@@ -11,7 +11,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 
-import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../../common'
+import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
 import { ConnectionRecordDto, ConnectionRecordPageDto, ListConnectionsQueryDto } from './dto'
@@ -45,18 +45,26 @@ export class V2DidcommConnectionsController {
       theirDid: query.theirDid,
       threadId: query.threadId,
       invitationDid: query.invitationDid,
-      didcommVersion: query.didcommVersion,
       mediatorId: query.mediatorId,
     }
 
-    const records = await agent.didcomm.connections.findAllByQuery(filters)
-
-    return paginate(
-      records.map(toConnectionDto),
-      query,
-      { method: 'listConnections', filters },
-      connection => `${connection.createdAt.toISOString()}|${connection.id}`,
+    // Credo tags only v2 out-of-band connections and reads the absent value as v1, so a `v1`
+    // filter can never match a tag value and has to be the negation of v2 instead.
+    const records = await agent.didcomm.connections.findAllByQuery(
+      query.didcommVersion === 'v1'
+        ? { $and: [filters, { $not: { didcommVersion: 'v2' } }] }
+        : { ...filters, didcommVersion: query.didcommVersion },
     )
+
+    const page = paginate(
+      records,
+      query,
+      // Scoped on what the caller asked for, not on the translated query, so the cursor is stable.
+      { method: 'listConnections', filters: { ...filters, didcommVersion: query.didcommVersion } },
+      createdAtKey,
+    )
+
+    return mapPage(page, toConnectionDto)
   }
 
   @Get(':connectionId')

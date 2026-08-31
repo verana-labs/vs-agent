@@ -14,7 +14,7 @@ import {
   presentations,
   SelfTrDefaults,
 } from '../src/utils/setupSelfTr'
-import { saveMetadataEntry } from '../src/utils/trustCredentialStore'
+import { findMetadataEntry, saveMetadataEntry } from '../src/utils/trustCredentialStore'
 
 const PUBLIC_URL = 'https://agent.example'
 const DID = 'did:web:agent.example'
@@ -151,6 +151,39 @@ function agentAfterRealCredential(integrityData: string) {
     didDocument,
   }
 }
+
+describe('findMetadataEntry with several entries for one presentation URL', () => {
+  const vpUrl = `${PUBLIC_URL}/vt/ecs-service-vtc-vp.json`
+  const jscUrl = `${PUBLIC_URL}/vt/schemas-5-jsc.json`
+  const recordWith = (entries: Record<string, unknown>) => ({ metadata: { get: () => entries } }) as never
+
+  it('serves the entry the DID Document announces, whatever the insertion order', () => {
+    const found = findMetadataEntry(
+      recordWith({
+        [selfIds[0]]: { attached: false, verifiablePresentation: { id: vpUrl, holder: 'detached' } },
+        [jscUrl]: { attached: true, verifiablePresentation: { id: vpUrl, holder: 'attached' } },
+      }),
+      '_vt/vtc',
+      vpUrl,
+    )
+
+    expect(found?.schemaId).toBe(jscUrl)
+    expect(found?.data.holder).toBe('attached')
+  })
+
+  it('falls back to a detached entry when no announced one matches', () => {
+    const found = findMetadataEntry(
+      recordWith({
+        [selfIds[0]]: { attached: false, verifiablePresentation: { id: vpUrl, holder: 'detached' } },
+      }),
+      '_vt/vtc',
+      vpUrl,
+    )
+
+    expect(found?.schemaId).toBe(selfIds[0])
+    expect(found?.data.holder).toBe('detached')
+  })
+})
 
 describe('self-issued VTC attach state', () => {
   it('keeps the self-issued entries when a json schema credential is stored', async () => {

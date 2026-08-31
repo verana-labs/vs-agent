@@ -50,7 +50,7 @@ function makeAgent(chain?: Record<string, unknown>) {
     context: { dependencyManager: { resolve: () => ({ update: repositoryUpdate }) } },
     veranaChain: chain,
   }
-  return { agent, didDocument, didsUpdate }
+  return { agent, didDocument, didsUpdate, metadata }
 }
 
 function makeChain(overrides: Record<string, unknown> = {}) {
@@ -144,6 +144,42 @@ describe('ECS credential digest anchoring', () => {
 
     await expect(rebind(agent)).rejects.toThrow('not on chain')
     expect(chain.createOrUpdateParticipantSession).not.toHaveBeenCalled()
+  })
+
+  it('keeps a trust credential a validator issued under the same VTJSC key', async () => {
+    const chain = makeChain()
+    const { agent, metadata, didsUpdate } = makeAgent(chain)
+    const received = {
+      credential: { id: 'did:web:validator.example#1', issuer: 'did:web:validator.example' },
+      verifiablePresentation: { id: 'https://agent.example/vt/schemas-5-vtc-vp.json' },
+      didDocumentServiceId: `${DID}#vpr-schemas-5-vtc-vp`,
+    }
+    metadata.set('_vt/vtc', { [JSC_ID]: received })
+
+    await rebind(agent)
+
+    expect(generateVerifiablePresentation).not.toHaveBeenCalled()
+    expect(chain.createOrUpdateParticipantSession).not.toHaveBeenCalled()
+    expect(didsUpdate).not.toHaveBeenCalled()
+    expect(metadata.get('_vt/vtc')?.[JSC_ID]).toEqual(received)
+  })
+
+  it('rebinds its own stored credential after the agent DID changed', async () => {
+    const chain = makeChain()
+    const { agent, metadata } = makeAgent(chain)
+    // a webvh migration leaves the previous DID as the issuer, but the entry is still this pass's
+    metadata.set('_vt/vtc', {
+      [JSC_ID]: {
+        integrityData: 'sha384-stale',
+        credential: { id: 'did:web:agent.example', issuer: 'did:web:old.example' },
+        verifiablePresentation: { id: 'https://agent.example/vt/ecs-service-vtc-vp.json' },
+      },
+    })
+
+    await rebind(agent)
+
+    expect(generateVerifiablePresentation).toHaveBeenCalledTimes(1)
+    expect(chain.createOrUpdateParticipantSession).toHaveBeenCalledTimes(1)
   })
 
   it('publishes the credential of an agent that has no chain connection', async () => {

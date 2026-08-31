@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsDefined, IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator'
 
+import { PageDto } from '../../../../common'
 import { ServiceEndpointValue } from '../ServiceEndpointsService'
 
 export class AddServiceEndpointDto {
@@ -57,10 +58,4 @@ export class ServiceEndpointDto {
   serviceEndpoint!: ServiceEndpointValue
 }
 
-export class ServiceEndpointPageDto {
-  @ApiProperty({ type: [ServiceEndpointDto] })
-  items!: ServiceEndpointDto[]
-
-  @ApiProperty({ type: String, nullable: true })
-  nextCursor!: string | null
-}
+export const ServiceEndpointPageDto = PageDto(ServiceEndpointDto)

@@ -314,6 +314,43 @@ export async function signerW3c(
   }
 }
 
+interface StoredSelfIssuedCredential {
+  issuer?: string | { id?: string }
+  credentialSchema?: { id?: string } | Array<{ id?: string }>
+  proof?: { verificationMethod?: string } | Array<{ verificationMethod?: string }>
+}
+
+function storedCredentialIsCurrent(
+  credential: StoredSelfIssuedCredential | undefined,
+  credentialSchemaId: string,
+  did: string,
+  didRecord: DidRecord,
+): boolean {
+  if (!credential) return false
+
+  const issuer = typeof credential.issuer === 'string' ? credential.issuer : credential.issuer?.id
+  if (issuer !== did) return false
+
+  const schema = Array.isArray(credential.credentialSchema)
+    ? credential.credentialSchema[0]
+    : credential.credentialSchema
+  if (schema?.id !== credentialSchemaId) return false
+
+  const proofs = !credential.proof
+    ? []
+    : Array.isArray(credential.proof)
+      ? credential.proof
+      : [credential.proof]
+  if (proofs.length === 0) return false
+
+  const assertionMethods = new Set(
+    (didRecord.didDocument?.assertionMethod ?? []).map(entry =>
+      typeof entry === 'string' ? entry : entry.id,
+    ),
+  )
+  return proofs.every(proof => !!proof.verificationMethod && assertionMethods.has(proof.verificationMethod))
+}
+
 /**
  * Generates and signs a verifiable presentation containing a verifiable credential.
  * Stores the signed presentation and its integrity metadata in the DID record.
@@ -352,8 +389,17 @@ export async function generateVerifiablePresentation(
   const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
   const record = didRecord.metadata.get('_vt/vtc') ?? {}
   const metadata = record[credentialSchema.id]
-  const attached = metadata?.attached ?? true
-  if (metadata?.integrityData === integrityData) {
+  const superseded = Object.entries(record).some(
+    ([storedSchemaId, entry]) =>
+      storedSchemaId !== credentialSchema.id &&
+      entry?.verifiablePresentation?.id === id &&
+      entry?.attached !== false,
+  )
+  const attached = (metadata?.attached ?? true) && !superseded
+  if (
+    metadata?.integrityData === integrityData &&
+    storedCredentialIsCurrent(metadata?.credential, credentialSchema.id, agent.did, didRecord)
+  ) {
     // the presentation is already public, so a failed beforePublish step still needs a retry here
     if (attached) await beforePublish?.(metadata.verifiablePresentation)
     return metadata.verifiablePresentation

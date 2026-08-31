@@ -2,7 +2,7 @@ import { DidCommDidExchangeRole, DidCommDidExchangeState, DidCommVersion } from 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsIn, IsOptional, IsString } from 'class-validator'
 
-import { PaginationQueryDto } from '../../../../../common'
+import { PageDto, PaginationQueryDto } from '../../../../../common'
 
 /**
  * Query filters of [VSA-ADM-DC-CN-LIST] listConnections
@@ -45,9 +45,8 @@ export class ListConnectionsQueryDto extends PaginationQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Filter by negotiated DIDComm version. The record only carries this value for connections ' +
-      'established through the v2 out-of-band flow: `v1` matches no record, and `v2` matches only ' +
-      'that subset.',
+      'Filter by negotiated DIDComm version. `v1` selects the connections established through a ' +
+      'handshake protocol, which the store leaves without an explicit version.',
     enum: ['v1', 'v2'],
   })
   @IsOptional()
@@ -76,10 +75,16 @@ export class ConnectionRecordDto {
   @ApiProperty({ enum: DidCommDidExchangeRole, description: 'Role in the DID exchange' })
   role!: DidCommDidExchangeRole
 
-  @ApiPropertyOptional({ description: 'My DID for this connection', example: 'did:web:example.com' })
+  @ApiPropertyOptional({
+    description: 'My DID for this connection',
+    example: 'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:agent.example.com',
+  })
   did?: string
 
-  @ApiPropertyOptional({ description: 'DID of the peer', example: 'did:web:other.com' })
+  @ApiPropertyOptional({
+    description: 'DID of the peer',
+    example: 'did:webvh:QmbfsYcjFS2bnouwXBSoZZ65jREEgZGSPdcatcwY7i1Gq2:peer.example.com',
+  })
   theirDid?: string
 
   @ApiPropertyOptional({ description: 'Human-readable label of the peer', example: 'Alice' })
@@ -124,10 +129,4 @@ export class ConnectionRecordDto {
   updatedAt!: Date
 }
 
-export class ConnectionRecordPageDto {
-  @ApiProperty({ type: [ConnectionRecordDto] })
-  items!: ConnectionRecordDto[]
-
-  @ApiProperty({ type: String, nullable: true })
-  nextCursor!: string | null
-}
+export const ConnectionRecordPageDto = PageDto(ConnectionRecordDto)
