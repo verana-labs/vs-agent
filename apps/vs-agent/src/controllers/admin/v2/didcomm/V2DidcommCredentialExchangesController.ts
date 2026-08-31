@@ -1,3 +1,4 @@
+import type { AnonCredsCredentialMetadata } from '@credo-ts/anoncreds'
 import type { DidCommCredentialExchangeRecord } from '@credo-ts/didcomm'
 import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
@@ -14,6 +15,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common'
+import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import {
   ApiBody,
   ApiCreatedResponse,
@@ -39,13 +41,6 @@ import {
   CredentialExchangeRecordPageDto,
   ListCredentialExchangesQueryDto,
 } from './dto'
-
-const ANONCREDS_METADATA = '_internal/anonCredsCredentialDefinitionMetadata'
-
-interface AnonCredsCredentialMetadata {
-  credentialDefinitionId?: string
-  schemaId?: string
-}
 
 /**
  * This controller has the credential exchanges of this agent on DIDComm.
@@ -258,7 +253,7 @@ export class V2DidcommCredentialExchangesController {
     agent: VsAgent<BaseAgentModules>,
     record: DidCommCredentialExchangeRecord,
   ): Promise<CredentialExchangeRecordDto> {
-    const anonCredsMetadata = record.metadata.get(ANONCREDS_METADATA) as
+    const anonCredsMetadata = record.metadata.get(AnonCredsCredentialMetadataKey) as
       | AnonCredsCredentialMetadata
       | undefined
 

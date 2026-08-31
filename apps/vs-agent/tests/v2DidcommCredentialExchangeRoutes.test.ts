@@ -8,6 +8,7 @@ import { validate } from 'class-validator'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import { createInvitation } from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
@@ -23,7 +24,20 @@ vi.mock('@verana-labs/vs-agent-sdk', async importOriginal => {
 
 const schema = { name: 'phoneNumber', version: '1.0', attrNames: ['phoneNumber', 'issuedAt'] }
 
-function exchangeRecord(options: { id: string; createdAt: string; credentialDefinitionId?: string }) {
+function exchangeRecord(options: {
+  id: string
+  createdAt: string
+  credentialDefinitionId?: string
+  schemaId?: string
+}) {
+  const metadata: Record<string, unknown> = {}
+  if (options.credentialDefinitionId || options.schemaId) {
+    metadata[AnonCredsCredentialMetadataKey] = {
+      credentialDefinitionId: options.credentialDefinitionId,
+      schemaId: options.schemaId,
+    }
+  }
+
   return {
     id: options.id,
     state: 'offer-sent',
@@ -33,14 +47,24 @@ function exchangeRecord(options: { id: string; createdAt: string; credentialDefi
     createdAt: new Date(options.createdAt),
     updatedAt: undefined,
     metadata: {
-      get: () => ({ credentialDefinitionId: options.credentialDefinitionId, schemaId: 'schema:phone' }),
+      get: (key: string) => metadata[key],
     },
   }
 }
 
 const records = [
-  exchangeRecord({ id: 'ce-a', createdAt: '2026-01-01T00:00:00.000Z', credentialDefinitionId: 'credDef:a' }),
-  exchangeRecord({ id: 'ce-b', createdAt: '2026-01-02T00:00:00.000Z', credentialDefinitionId: 'credDef:a' }),
+  exchangeRecord({
+    id: 'ce-a',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    credentialDefinitionId: 'credDef:a',
+    schemaId: 'schema:phone',
+  }),
+  exchangeRecord({
+    id: 'ce-b',
+    createdAt: '2026-01-02T00:00:00.000Z',
+    credentialDefinitionId: 'credDef:a',
+    schemaId: 'schema:phone',
+  }),
   exchangeRecord({ id: 'ce-c', createdAt: '2026-01-03T00:00:00.000Z' }),
 ]
 
@@ -144,6 +168,8 @@ describe('v2 didcomm credential exchange routes', () => {
       ].sort(),
     )
     expect(response.body.items[0].claims).toEqual([{ name: 'phoneNumber', value: '+57128348520' }])
+    expect(response.body.items[0].credentialDefinitionId).toBe('credDef:a')
+    expect(response.body.items[0].schemaId).toBe('schema:phone')
     // This record has no updatedAt value. The agent sends the createdAt value.
     expect(response.body.items[0].updatedAt).toBe('2026-01-01T00:00:00.000Z')
   })
@@ -172,7 +198,19 @@ describe('v2 didcomm credential exchange routes', () => {
 
     expect(response.status).toBe(200)
     expect(response.body.credentialExchangeId).toBe('ce-b')
+    expect(response.body.credentialDefinitionId).toBe('credDef:a')
+    expect(response.body.schemaId).toBe('schema:phone')
     expect(agent.didcomm.credentials.findById).toHaveBeenCalledWith('ce-b')
+  })
+
+  it('leaves out the AnonCreds identifiers of a record without AnonCreds metadata', async () => {
+    agent.didcomm.credentials.findById.mockResolvedValue(records[2])
+
+    const response = await request(app.getHttpServer()).get('/v2/didcomm/credential-exchanges/ce-c')
+
+    expect(response.status).toBe(200)
+    expect(response.body.credentialDefinitionId).toBeUndefined()
+    expect(response.body.schemaId).toBeUndefined()
   })
 
   it('answers UNKNOWN_ID for an unknown credential exchange', async () => {
