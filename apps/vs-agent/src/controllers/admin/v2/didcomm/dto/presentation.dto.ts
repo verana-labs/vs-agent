@@ -13,7 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator'
 
-import { PaginationQueryDto } from '../../../../../common'
+import { PageDto, PaginationQueryDto } from '../../../../../common'
 
 /**
  * One entry of `requestedCredentials`: the credential the holder is asked to present, and the
@@ -164,10 +164,4 @@ export class PresentationRecordDto {
   updatedAt!: Date
 }
 
-export class PresentationRecordPageDto {
-  @ApiProperty({ type: [PresentationRecordDto] })
-  items!: PresentationRecordDto[]
-
-  @ApiProperty({ type: String, nullable: true })
-  nextCursor!: string | null
-}
+export const PresentationRecordPageDto = PageDto(PresentationRecordDto)

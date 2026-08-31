@@ -28,7 +28,7 @@ import {
 import { Claim } from '@verana-labs/vs-agent-model'
 import { createInvitation } from '@verana-labs/vs-agent-sdk'
 
-import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../../common'
+import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../../config'
 import { AccessMode } from '../../../../security'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
@@ -202,21 +202,20 @@ export class V2DidcommCredentialExchangesController {
     const agent = await this.vsAgentService.getAgent()
 
     const records = await agent.didcomm.credentials.getAll()
-    const results = await Promise.allSettled(records.map(record => this.toRecordDto(agent, record)))
 
-    // The agent removes a record that it cannot read. The other records stay in the page.
+    const page = paginate(records, query, { method: 'listCredentialExchanges' }, createdAtKey)
+
+    const results = await Promise.allSettled(page.items.map(record => this.toRecordDto(agent, record)))
+
+    // The agent removes a record that it cannot read, which leaves the page short of the limit.
+    // The cursor still anchors on the last record of the page, so the walk stays correct.
     const items = results.flatMap((result, index) => {
       if (result.status === 'fulfilled') return [result.value]
-      this.logger.warn(`The agent skips credential exchange ${records[index].id}: ${result.reason}`)
+      this.logger.warn(`The agent skips credential exchange ${page.items[index].id}: ${result.reason}`)
       return []
     })
 
-    return paginate(
-      items,
-      query,
-      { method: 'listCredentialExchanges' },
-      item => `${item.createdAt.toISOString()}|${item.credentialExchangeId}`,
-    )
+    return { items, nextCursor: page.nextCursor }
   }
 
   @Get('credential-exchanges/:credentialExchangeId')
