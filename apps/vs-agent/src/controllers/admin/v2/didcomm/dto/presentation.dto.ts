@@ -24,7 +24,7 @@ export class RequestedCredentialDto implements RequestedCredential {
   @ApiPropertyOptional({
     description: 'AnonCreds credential definition the presentation is restricted to',
     example:
-      'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
+      'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmevazUUyXBhGoXJwJNNEqXgvPPQ5WrwTE8G5MdhfWsmxM',
   })
   @IsOptional()
   @IsString()
