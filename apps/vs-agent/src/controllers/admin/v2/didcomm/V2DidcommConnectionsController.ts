@@ -11,7 +11,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 
-import { AdminApiError, AdminApiErrorCode, Page, mapPage, paginate } from '../../../../common'
+import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
 import { AccessMode } from '../../../../security'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
@@ -63,7 +63,7 @@ export class V2DidcommConnectionsController {
       query,
       // Scoped on what the caller asked for, not on the translated query, so the cursor is stable.
       { method: 'listConnections', filters: { ...filters, didcommVersion: query.didcommVersion } },
-      record => `${record.createdAt.toISOString()}|${record.id}`,
+      createdAtKey,
     )
 
     return mapPage(page, toConnectionDto)

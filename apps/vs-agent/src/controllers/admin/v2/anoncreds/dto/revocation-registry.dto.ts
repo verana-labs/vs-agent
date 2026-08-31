@@ -44,16 +44,25 @@ export class CreateRevocationRegistryBodyDto {
   maximumCredentialNumber?: number
 }
 
+/**
+ * `PageDto` builds a page model off a record class, and the records here are plain identifiers,
+ * so this envelope is written out. It must stay identical to the generated one.
+ */
 export class RevocationRegistryDefinitionIdPageDto {
   @ApiProperty({
     type: [String],
+    description: 'The records of this page.',
     example: [
       'did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/revRegDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p',
     ],
   })
   items!: string[]
 
-  @ApiProperty({ type: String, nullable: true })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Cursor of the next page. The agent sets it to null on the last page.',
+  })
   nextCursor!: string | null
 }
 

@@ -13,7 +13,7 @@ export interface Page<T> {
 
 /**
  * Cuts a page out of a collection with a keyset cursor. `keyOf` must give a unique key that
- * does not change, for example `${createdAt.toISOString()}|${id}`.
+ * does not change, for example `createdAtKey`.
  */
 export function paginate<T>(
   items: readonly T[],
@@ -45,6 +45,14 @@ export function paginate<T>(
     items: page.map(entry => entry.item),
     nextCursor: hasMore && page.length > 0 ? encodeCursor(scopeHash, page[page.length - 1].key) : null,
   }
+}
+
+/**
+ * Pagination key of a record that carries a creation timestamp and an id. The timestamp orders
+ * the records, and the id keeps the key unique when two records share a timestamp.
+ */
+export function createdAtKey(record: { createdAt: Date; id: string }): string {
+  return `${record.createdAt.toISOString()}|${record.id}`
 }
 
 /**

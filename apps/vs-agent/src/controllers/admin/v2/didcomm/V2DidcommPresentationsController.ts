@@ -28,7 +28,14 @@ import {
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
 import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
 
-import { AdminApiError, AdminApiErrorCode, Page, mapPageAsync, paginate } from '../../../../common'
+import {
+  AdminApiError,
+  AdminApiErrorCode,
+  createdAtKey,
+  mapPageAsync,
+  Page,
+  paginate,
+} from '../../../../common'
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../../config'
 import { AccessMode } from '../../../../security'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
@@ -189,12 +196,7 @@ export class V2DidcommPresentationsController {
 
     const records = await agent.didcomm.proofs.getAll()
 
-    const page = paginate(
-      records,
-      query,
-      { method: 'listPresentations' },
-      record => `${record.createdAt.toISOString()}|${record.id}`,
-    )
+    const page = paginate(records, query, { method: 'listPresentations' }, createdAtKey)
 
     return mapPageAsync(page, record => this.toPresentationDto(record))
   }

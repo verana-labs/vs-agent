@@ -14,7 +14,7 @@ import {
   ValidateNested,
 } from 'class-validator'
 
-import { PaginationQueryDto } from '../../../../../common'
+import { PageDto, PaginationQueryDto } from '../../../../../common'
 
 /**
  * This class holds one attribute of the credential preview.
@@ -164,10 +164,4 @@ export class CredentialExchangeRecordDto {
   updatedAt!: Date
 }
 
-export class CredentialExchangeRecordPageDto {
-  @ApiProperty({ type: [CredentialExchangeRecordDto] })
-  items!: CredentialExchangeRecordDto[]
-
-  @ApiProperty({ type: String, nullable: true })
-  nextCursor!: string | null
-}
+export const CredentialExchangeRecordPageDto = PageDto(CredentialExchangeRecordDto)
