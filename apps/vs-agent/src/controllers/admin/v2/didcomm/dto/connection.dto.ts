@@ -75,10 +75,16 @@ export class ConnectionRecordDto {
   @ApiProperty({ enum: DidCommDidExchangeRole, description: 'Role in the DID exchange' })
   role!: DidCommDidExchangeRole
 
-  @ApiPropertyOptional({ description: 'My DID for this connection', example: 'did:web:example.com' })
+  @ApiPropertyOptional({
+    description: 'My DID for this connection',
+    example: 'did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:agent.example.com',
+  })
   did?: string
 
-  @ApiPropertyOptional({ description: 'DID of the peer', example: 'did:web:other.com' })
+  @ApiPropertyOptional({
+    description: 'DID of the peer',
+    example: 'did:webvh:QmbfsYcjFS2bnouwXBSoZZ65jREEgZGSPdcatcwY7i1Gq2:peer.example.com',
+  })
   theirDid?: string
 
   @ApiPropertyOptional({ description: 'Human-readable label of the peer', example: 'Alice' })
