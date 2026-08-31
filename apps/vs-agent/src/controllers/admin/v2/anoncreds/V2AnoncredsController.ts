@@ -56,7 +56,7 @@ export class V2AnoncredsController {
     }
 
     const { maxCredNum } = record.revocationRegistryDefinition.value
-    if (revocationRegistryIndex > maxCredNum) {
+    if (revocationRegistryIndex >= maxCredNum) {
       throw new AdminApiError(
         AdminApiErrorCode.InvalidInput,
         HttpStatus.BAD_REQUEST,

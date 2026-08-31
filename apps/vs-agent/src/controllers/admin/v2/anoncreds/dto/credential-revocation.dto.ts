@@ -15,12 +15,14 @@ export class RevokeCredentialBodyDto {
   revocationRegistryDefinitionId!: string
 
   @ApiProperty({
-    description: 'Index of the credential in the revocation registry',
-    example: 1,
-    minimum: 1,
+    description:
+      'Index of the credential in the revocation registry. The first credential of a registry lives at index 0, ' +
+      'and the last one at `maxCredNum - 1`.',
+    example: 0,
+    minimum: 0,
   })
   @IsInt()
-  @Min(1)
+  @Min(0)
   revocationRegistryIndex!: number
 }
 
