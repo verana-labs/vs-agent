@@ -18,6 +18,7 @@ import {
   V2AgentController,
   V2AnoncredsController,
   V2AnoncredsCredentialDefinitionsController,
+  V2AnoncredsRevocationRegistriesController,
   V2AuthController,
   V2DidcommConnectionsController,
   V2DidcommController,
@@ -65,6 +66,7 @@ export class VsAgentModule {
       V2Openid4vcController,
       V2AnoncredsController,
       V2AnoncredsCredentialDefinitionsController,
+      V2AnoncredsRevocationRegistriesController,
       V2VtServiceEndpointsController,
     ]
 
