@@ -28,6 +28,7 @@ import {
   VsAgent,
 } from '@verana-labs/vs-agent-sdk'
 
+import { AdminApiError, paginate, PaginationQueryDto } from '../../../common'
 import { AGENT_INVITATION_BASE_URL } from '../../../config'
 import { UrlShorteningService } from '../../../services'
 import { VsAgentService } from '../../../services/VsAgentService'
@@ -60,19 +61,22 @@ export class TrustService {
     }
   }
 
-  public async getVerifiableTrustCredential(schemaId?: string, page = 1, limit = 10) {
-    return await this.getTrustCredentialPaginated('_vt/vtc', schemaId, page, limit)
+  public async getVerifiableTrustCredential(schemaId?: string, query: PaginationQueryDto = {}) {
+    return await this.getTrustCredentialPage('_vt/vtc', schemaId, query)
   }
 
-  public async getJsonSchemaCredential(schemaId?: string, page = 1, limit = 10) {
-    return await this.getTrustCredentialPaginated('_vt/jsc', schemaId, page, limit)
+  public async getJsonSchemaCredential(schemaId?: string, query: PaginationQueryDto = {}) {
+    return await this.getTrustCredentialPage('_vt/jsc', schemaId, query)
   }
 
-  private async getTrustCredentialPaginated(
+  /**
+   * A `schemaId` names one credential, and the method answers with that credential alone. The
+   * caller gets a page of every credential of the kind when it names no schema.
+   */
+  private async getTrustCredentialPage(
     key: '_vt/vtc' | '_vt/jsc',
-    schemaId?: string,
-    page = 1,
-    limit = 10,
+    schemaId: string | undefined,
+    query: PaginationQueryDto,
   ) {
     const allMetadata = await this.getTrustCredential(key, schemaId)
     if (schemaId) return allMetadata
@@ -84,25 +88,19 @@ export class TrustService {
       schemaId,
       ...(entry as Record<string, any>),
     }))
-    return this.paginate(items, page, limit)
-  }
 
-  private paginate<T>(items: T[], page = 1, limit = 10) {
-    const totalItems = items.length
-    const totalPages = Math.ceil(totalItems / limit)
-    const start = (page - 1) * limit
-    const end = start + limit
-
-    return {
-      meta: {
-        page,
-        limit,
-        totalItems,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-      },
-      data: items.slice(start, end),
+    try {
+      // The kind of credential belongs to the scope: a cursor of one kind must not walk the other.
+      return paginate(
+        items,
+        query,
+        { method: 'getTrustCredentials', filters: { key } },
+        item => item.schemaId,
+      )
+    } catch (error) {
+      // The v2 error envelope does not serve v1 paths, so a cursor error takes the v1 error shape.
+      if (error instanceof AdminApiError) throw new HttpException(error.message, error.status)
+      throw error
     }
   }
 
@@ -266,7 +264,7 @@ export class TrustService {
           })
           return { status: 200, didcommInvitationUrl: '', credential, digestJCS }
         }
-        case 'anoncreds':
+        case 'anoncreds': {
           const { credentialDefinitionId } =
             await this.credentialTypesService.getOrRegisterAnonCredsCredentialDefinition({
               relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
@@ -314,6 +312,7 @@ export class TrustService {
             didcommInvitationUrl,
             jsonSchemaCredentialId,
           }
+        }
         default:
           throw new HttpException(`Invalid credential type: ${format}`, HttpStatus.BAD_REQUEST)
       }

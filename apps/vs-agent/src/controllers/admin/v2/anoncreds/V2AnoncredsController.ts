@@ -9,7 +9,6 @@ import {
 } from '@nestjs/swagger'
 
 import { AdminApiError, AdminApiErrorCode } from '../../../../common'
-import { AccessMode } from '../../../../security'
 import { VsAgentService } from '../../../../services/VsAgentService'
 import { CredentialTypesService } from '../../credentials'
 

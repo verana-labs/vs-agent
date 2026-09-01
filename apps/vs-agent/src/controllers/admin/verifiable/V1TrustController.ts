@@ -1,6 +1,8 @@
 import { Controller, Logger, Post, Body, Get, Inject, Query } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery } from '@nestjs/swagger'
 
+import { PaginationQueryDto } from '../../../common'
+
 import { TrustService } from './TrustService'
 import { IssueCredentialRequestDto, RevokeCredentialRequestDto } from './dto'
 
@@ -145,30 +147,16 @@ export class V1TrustController {
       },
     },
   })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    example: 1,
-    description: 'Page number (default: 1)',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    example: 10,
-    description: 'Number of items per page (default: 10)',
-  })
   @ApiResponse({
     status: 200,
-    description: 'Returns one or all Verifiable Trust Credentials with pagination if applicable.',
+    description:
+      'Returns the named credential, or a page of every credential when the caller names no schema.',
   })
   async getVerifiableTrustCredential(
+    @Query() query: PaginationQueryDto,
     @Query('schemaId') schemaId?: string,
-    @Query('page') page = 1,
-    @Query('limit') limit = 10,
   ) {
-    return await this.trustService.getVerifiableTrustCredential(schemaId, page, limit)
+    return await this.trustService.getVerifiableTrustCredential(schemaId, query)
   }
 
   @Get('json-schema-credentials')
@@ -194,29 +182,12 @@ export class V1TrustController {
       },
     },
   })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    example: 1,
-    description: 'Page number (default: 1)',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    example: 10,
-    description: 'Number of items per page (default: 10)',
-  })
   @ApiResponse({
     status: 200,
-    description: 'Returns one or all Verifiable Trust Credentials with pagination if applicable.',
+    description:
+      'Returns the named credential, or a page of every credential when the caller names no schema.',
   })
-  async getJsonSchemaCredential(
-    @Query('schemaId') schemaId: string,
-    @Query('page') page = 1,
-    @Query('limit') limit = 10,
-  ) {
-    return await this.trustService.getJsonSchemaCredential(schemaId, page, limit)
+  async getJsonSchemaCredential(@Query() query: PaginationQueryDto, @Query('schemaId') schemaId?: string) {
+    return await this.trustService.getJsonSchemaCredential(schemaId, query)
   }
 }
