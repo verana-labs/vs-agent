@@ -39,8 +39,7 @@ const DIGEST_BASE_DELAY_MS = 500
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-// the spec asks for a retry with an increasing delay, then a descriptive error naming the
-// variable and the URI, and a stop
+// Generate a SHA-384 digest for the given content
 export function digestOf(content: string): string {
   return `sha384-${createHash('sha384').update(content).digest('base64')}`
 }
