@@ -15,6 +15,7 @@ import {
   AuthorizationService,
   VeranaChainService,
   VeranaIndexerService,
+  readEcsClaimsFromEnv,
   VsAgentWsInboundTransport,
   VtFlowOrchestrator,
 } from '@verana-labs/vs-agent-sdk'
@@ -31,9 +32,6 @@ import {
   DEFAULT_LOGO_SVG,
   DEFAULT_PRIVACY_HTML,
   DEFAULT_TERMS_HTML,
-  ECS_CLAIMS_ORG,
-  ECS_CLAIMS_PERSONA,
-  ECS_CLAIMS_SERVICE,
   VERANA_CHAIN_ID,
   VERANA_INDEXER_BASE_URL,
 } from '../config'
@@ -108,6 +106,7 @@ export const setupAgent = async ({
   // eslint-disable-next-line prefer-const
   let orchestrator: VtFlowOrchestrator | undefined
 
+  const envEcsClaims = readEcsClaimsFromEnv()
   const agent = createVsAgent({
     plugins: [
       setupBaseDidComm({
@@ -196,9 +195,7 @@ export const setupAgent = async ({
     indexer,
     trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS,
     ecsClaims: {
-      ...(AGENT_MODE === 'standalone'
-        ? { org: ECS_CLAIMS_ORG, persona: ECS_CLAIMS_PERSONA, service: ECS_CLAIMS_SERVICE }
-        : { service: ECS_CLAIMS_SERVICE }),
+      ...(AGENT_MODE === 'standalone' ? envEcsClaims : { service: envEcsClaims.service }),
       localResources: {
         [`${publicApiBaseUrl}/vt/default/logo.svg`]: DEFAULT_LOGO_SVG,
         [`${publicApiBaseUrl}/vt/default/terms.html`]: DEFAULT_TERMS_HTML,

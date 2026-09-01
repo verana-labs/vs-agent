@@ -162,15 +162,8 @@ VS-A fetches capabilities from the `discovery.json` file (which is located at at
 
 ### ECS credential claims
 
-The agent composes the claims of its own ECS credentials from these variables, per
-[[VSA-VTI-CFG-ENV-ECS]](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-vti-cfg-env-ecs-ecs-credential-claims).
-It derives `id` from its own DID, and each `*DigestSri` by fetching the paired URI, so no
-variable carries a digest.
-
-The ORG and PERSONA groups are read in standalone mode only. In standalone mode the agent issues
-its own Service credential and no validator supplies a missing claim, so every SERVICE variable
-except `ECS_CLAIMS_SERVICE_DESCRIPTION_FORMAT` is required and the agent refuses to start without
-it.
+The agent composes the claims of its own ECS credentials from the variables below. Behaviour is
+defined in [[VSA-VTI-CFG-ENV-ECS]](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-vti-cfg-env-ecs-ecs-credential-claims).
 
 | Variable | Claim |
 | --- | --- |
@@ -198,10 +191,8 @@ it.
 | `ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI` | `termsAndConditionsUri` |
 | `ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI` | `privacyPolicyUri` |
 
-Each URI must be fetchable: the agent hashes the response into the paired `*DigestSri` claim, and
-stops the flow when it cannot read one. The agent still serves placeholder resources at
-`/vt/default/logo.svg`, `/vt/default/terms.html` and `/vt/default/privacy.html`, which an operator
-may point these variables at.
+The agent serves placeholder resources at `/vt/default/logo.svg`, `/vt/default/terms.html` and
+`/vt/default/privacy.html`, which an operator may point the `*_URI` variables at.
 
 
 

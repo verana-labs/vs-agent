@@ -89,43 +89,6 @@ export const REDIRECT_DEFAULT_URL_TO_INVITATION_URL =
   process.env.REDIRECT_DEFAULT_URL_TO_INVITATION_URL !== 'false'
 export const USER_PROFILE_AUTODISCLOSE = process.env.USER_PROFILE_AUTODISCLOSE === 'true'
 
-// [VSA-VTI-CFG-ENV-ECS] claims the agent proposes for its own ECS credentials.
-// Every variable is optional here. main.ts rejects a standalone agent that leaves a required
-// Service claim unset. id and the *DigestSri claims are derived, never read from the environment.
-const env = (name: string): string | undefined => process.env[name]?.trim() || undefined
-
-export const ECS_CLAIMS_ORG = {
-  name: env('ECS_CLAIMS_ORG_NAME'),
-  logoUri: env('ECS_CLAIMS_ORG_LOGO_URI'),
-  registryId: env('ECS_CLAIMS_ORG_REGISTRY_ID'),
-  registryUri: env('ECS_CLAIMS_ORG_REGISTRY_URI'),
-  address: env('ECS_CLAIMS_ORG_ADDRESS'),
-  countryCode: env('ECS_CLAIMS_ORG_COUNTRY_CODE'),
-  legalJurisdiction: env('ECS_CLAIMS_ORG_LEGAL_JURISDICTION'),
-  organizationKind: env('ECS_CLAIMS_ORG_ORGANIZATION_KIND'),
-  lei: env('ECS_CLAIMS_ORG_LEI'),
-}
-
-export const ECS_CLAIMS_PERSONA = {
-  name: env('ECS_CLAIMS_PERSONA_NAME'),
-  description: env('ECS_CLAIMS_PERSONA_DESCRIPTION'),
-  descriptionFormat: env('ECS_CLAIMS_PERSONA_DESCRIPTION_FORMAT'),
-  avatarUri: env('ECS_CLAIMS_PERSONA_AVATAR_URI'),
-  controllerCountryCode: env('ECS_CLAIMS_PERSONA_CONTROLLER_COUNTRY_CODE'),
-  controllerJurisdiction: env('ECS_CLAIMS_PERSONA_CONTROLLER_JURISDICTION'),
-}
-
-export const ECS_CLAIMS_SERVICE = {
-  name: env('ECS_CLAIMS_SERVICE_NAME'),
-  type: env('ECS_CLAIMS_SERVICE_TYPE'),
-  description: env('ECS_CLAIMS_SERVICE_DESCRIPTION'),
-  descriptionFormat: env('ECS_CLAIMS_SERVICE_DESCRIPTION_FORMAT'),
-  logoUri: env('ECS_CLAIMS_SERVICE_LOGO_URI'),
-  minimumAgeRequired: env('ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED'),
-  termsAndConditionsUri: env('ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI'),
-  privacyPolicyUri: env('ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI'),
-}
-
 // Placeholder resources the agent serves under /vt/default, so an operator can point an
 // ECS_CLAIMS_*_URI at the agent itself.
 // kept in sync with apps/vs-agent-ui/src/assets/logo.svg

@@ -18,6 +18,8 @@ import {
   registerAuthorizationHandlers,
   registerSelfIssuanceAnchorHandlers,
   EcsBootstrapService,
+  ECS_CLAIMS_VARIABLES,
+  readEcsClaimsFromEnv,
   reconcileVtjscPublications,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
@@ -47,7 +49,6 @@ import {
   AGENT_WALLET_KEY_DERIVATION_METHOD,
   askarPostgresConfig,
   keyDerivationMethodMap,
-  ECS_CLAIMS_SERVICE,
   ADMIN_API_AUTH_MODE,
   ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
   ADMIN_API_PUBLIC_URL,
@@ -222,25 +223,25 @@ const run = async () => {
   }
   // [VSA-VTI-CFG-ENV-ECS]: the agent issues its own Service credential in standalone mode, so no
   // validator can supply a claim it is missing
+  const serviceClaims = readEcsClaimsFromEnv().service
   if (AGENT_MODE === 'standalone') {
-    const required: [string, string | undefined][] = [
-      ['ECS_CLAIMS_SERVICE_NAME', ECS_CLAIMS_SERVICE.name],
-      ['ECS_CLAIMS_SERVICE_TYPE', ECS_CLAIMS_SERVICE.type],
-      ['ECS_CLAIMS_SERVICE_DESCRIPTION', ECS_CLAIMS_SERVICE.description],
-      ['ECS_CLAIMS_SERVICE_LOGO_URI', ECS_CLAIMS_SERVICE.logoUri],
-      ['ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED', ECS_CLAIMS_SERVICE.minimumAgeRequired],
-      ['ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI', ECS_CLAIMS_SERVICE.termsAndConditionsUri],
-      ['ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI', ECS_CLAIMS_SERVICE.privacyPolicyUri],
-    ]
-    for (const [variable, value] of required) {
-      if (!value) configErrors.push(`${variable} is required when AGENT_MODE=standalone`)
+    const requiredServiceClaims = [
+      'name',
+      'type',
+      'description',
+      'logoUri',
+      'minimumAgeRequired',
+      'termsAndConditionsUri',
+      'privacyPolicyUri',
+    ] as const
+    for (const claim of requiredServiceClaims) {
+      if (!serviceClaims[claim]) {
+        configErrors.push(`${ECS_CLAIMS_VARIABLES.service[claim]} is required when AGENT_MODE=standalone`)
+      }
     }
   }
-  if (
-    ECS_CLAIMS_SERVICE.minimumAgeRequired &&
-    !Number.isInteger(Number(ECS_CLAIMS_SERVICE.minimumAgeRequired))
-  ) {
-    configErrors.push('ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED must be an integer')
+  if (serviceClaims.minimumAgeRequired && !Number.isInteger(Number(serviceClaims.minimumAgeRequired))) {
+    configErrors.push(`${ECS_CLAIMS_VARIABLES.service.minimumAgeRequired} must be an integer`)
   }
   if (configErrors.length > 0 || !didLocation) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
