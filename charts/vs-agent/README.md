@@ -26,7 +26,6 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 | Parameter                      | Description                                 | Default       |
 | ------------------------------ | ------------------------------------------- | ------------- |
 | `name`                         | Application name                            | `vs-agent`    |
-| `namespace`                    | Kubernetes namespace                        | `default`     |
 | `replicas`                     | Number of agent pods                        | `1`           |
 | `domain`                       | Domain for ingress hosts                    | `example.com` |
 
@@ -108,8 +107,6 @@ extraEnv:
 | Parameter                  | Description                                      | Default                          |
 | -------------------------- | ------------------------------------------------ | -------------------------------- |
 | `redis.enabled`            | Enable Redis                                     | `false`                         |
-| `redis.host`               | Redis host                                       | `your-redis-host`               |
-| `redis.password`           | Redis password                                   | `myRedisPass123`                |
 | `redis.image`              | Redis container image (pin a tag for reproducible deploys) | `redis:alpine`       |
 | `redis.maxmemory`          | Redis `maxmemory`; set `""` for unlimited        | `80mb`                          |
 | `redis.maxmemoryPolicy`    | Redis `maxmemory-policy` (applied only when `maxmemory` is set) | `noeviction`     |

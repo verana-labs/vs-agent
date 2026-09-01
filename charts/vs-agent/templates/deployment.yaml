@@ -183,8 +183,10 @@ spec:
               value: {{ tpl .Values.didcommInvitationImageUrl . | quote }}
             - name: EVENTS_BASE_URL
               value: {{ tpl .Values.eventsBaseUrl . | quote }}
+            {{- if hasKey .Values "enablePublicApiSwagger" }}
             - name: ENABLE_PUBLIC_API_SWAGGER
               value: {{ .Values.enablePublicApiSwagger | quote }}
+            {{- end }}
             - name: PUBLIC_API_BASE_URL
               value: "https://{{ tpl .Values.ingress.host . }}"
             - name: AGENT_PUBLIC_DID_METHOD

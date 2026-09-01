@@ -81,6 +81,10 @@ ingress:
   tlsSecret: public.{{ .Values.name }}.{{ .Values.global.domain }}-cert
   public:
     enableCors: true
+  # The agent reads the address of each TCP connection. The ingress controller has an
+  # external address. Therefore, the agent rejects these requests with the HTTP status
+  # 403 if adminApiAuthMode is "internal".
+  # Set adminApiAuthMode to "corporation" before you set a host here.
   private:
     enableCors: true
     whitelistSourceRange: "" # e.g. "xxx.xx.xxx.xxx/32"
