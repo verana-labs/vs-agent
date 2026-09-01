@@ -13,7 +13,7 @@
     "typescript": "^5.6.2"
   },
   "dependencies": {
-    "@credo-ts/core": "0.7.1-pr-2704-20260901064803",
+    "@credo-ts/core": "catalog:",
     "@verana-labs/vs-agent-sdk": "workspace:*"
   },
   "packageManager": "pnpm@9.15.3"
