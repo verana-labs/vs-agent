@@ -11,10 +11,10 @@ adminPort: 3000 # adminPort is the port for the Agent Admin API
 didcommPort: 3001 # Port for DIDComm
 
 # Admin API authentication
-adminApiAuthMode: "internal" # Comma-separated Admin API listeners: internal (no auth) and/or corporation (external listener with ADR-036 auth)
-adminApiPublicUrl: "" # Public https origin of the external listener, required when corporation mode is enabled (e.g. "https://admin.{{ .Values.global.domain }}")
-adminApiExternalPort: 3010 # Port for the external authenticated Admin API listener (used when corporation mode is enabled)
-adminApiCorporationAllowedAccounts: "" # Optional comma-separated allowlist of Verana account addresses for the external listener
+adminApiAuthMode: "internal" # Single value: internal (403 for every external request) or corporation (external callers with ADR-036 auth + allowlist)
+adminApiPublicUrl: "" # Public https origin where external callers reach the Admin API, required when adminApiAuthMode is corporation (e.g. "https://admin.{{ .Values.global.domain }}")
+adminApiTrustedNetworks: "" # Comma-separated CIDR blocks served without authentication (default 127.0.0.0/8,::1/128). Keep public proxy/ingress source addresses OUT of these blocks
+adminApiCorporationAllowedAccounts: "" # Comma-separated allowlist of Verana account addresses, required non-empty when adminApiAuthMode is corporation
 
 # Agent configuration
 didcommLabel: "VS Agent"

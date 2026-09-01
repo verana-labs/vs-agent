@@ -121,6 +121,9 @@ importers:
       express:
         specifier: ^4.18.1
         version: 4.21.2
+      ipaddr.js:
+        specifier: ^1.9.1
+        version: 1.9.1
       qrcode:
         specifier: ^1.5.3
         version: 1.5.4

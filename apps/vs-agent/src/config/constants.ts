@@ -4,6 +4,7 @@ import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import dotenv from 'dotenv'
 
 import packageJson from '../../package.json'
+import { DEFAULT_ADMIN_API_TRUSTED_NETWORKS } from '../security/trustedNetworks'
 
 dotenv.config()
 
@@ -27,11 +28,12 @@ export const AGENT_PUBLIC_DID_METHOD = (process.env.AGENT_PUBLIC_DID_METHOD ?? '
 export const PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL
 
 export const ADMIN_API_PUBLIC_URL = process.env.ADMIN_API_PUBLIC_URL
-export const ADMIN_API_EXTERNAL_PORT = Number(process.env.ADMIN_API_EXTERNAL_PORT || 3010)
-export const ADMIN_API_AUTH_MODE = (process.env.ADMIN_API_AUTH_MODE ?? '')
-  .split(',')
-  .map(s => s.trim().toLowerCase())
-  .filter(s => s.length > 0)
+export const ADMIN_API_AUTH_MODE = (process.env.ADMIN_API_AUTH_MODE ?? '').trim().toLowerCase() || 'internal'
+export const ADMIN_API_TRUSTED_NETWORKS = process.env.ADMIN_API_TRUSTED_NETWORKS
+  ? process.env.ADMIN_API_TRUSTED_NETWORKS.split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+  : DEFAULT_ADMIN_API_TRUSTED_NETWORKS
 
 export const EVENTS_BASE_URL = (process.env.EVENTS_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '')
 
@@ -163,17 +165,23 @@ export const DEFAULT_PRIVACY_HTML = defaultResourcePage(
 )
 
 // Swagger tags for the v2 admin scopes.
+// TODO: remove once the methods are implemented
 const v2ScopeTag = (summary: string) =>
   `${summary} Reserved for the v2 migration; no methods implemented yet.`
 
 export const ADMIN_V2_TAGS: Record<string, string> = {
   'v2/auth': v2ScopeTag('Exchanges an account signature for a bearer token.'),
-  'v2/agent': v2ScopeTag('Identifies the agent and reports its state to an orchestrator.'),
-  'v2/didcomm': v2ScopeTag('Operates on the wire-level DIDComm state of the agent.'),
+  'v2/agent': 'Identifies the agent and reports its state to an orchestrator.',
+  'v2/didcomm': 'Operates on the wire-level DIDComm state of the agent.',
   'v2/openid4vc': v2ScopeTag('Operates on the OpenID4VC state of the agent.'),
-  'v2/anoncreds': v2ScopeTag('Manages the AnonCreds artifacts of the agent.'),
-  'v2/vt': v2ScopeTag('Manages the Verifiable Trust state of the agent.'),
+  'v2/anoncreds': 'Manages the AnonCreds artifacts of the agent.',
+  'v2/vt': 'Manages the Verifiable Trust state of the agent.',
 }
+
+// AnonCreds params
+
+// Capacity of a revocation registry when the caller does not name one.
+export const REVOCATION_REGISTRY_DEFAULT_CAPACITY = 1000
 
 // Utils params
 export const MASTER_LIST_CSCA_LOCATION = process.env.MASTER_LIST_CSCA_LOCATION
