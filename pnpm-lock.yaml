@@ -9,14 +9,15 @@ overrides:
   tsyringe: 4.8.0
   '@hyperledger/anoncreds-nodejs': 0.4.0
   '@hyperledger/anoncreds-shared': 0.4.0
-  '@credo-ts/action-menu': 0.7.1-pr-2704-20260630143332
-  '@credo-ts/core': 0.7.1-pr-2704-20260630143332
-  '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332
-  '@credo-ts/question-answer': 0.7.1-pr-2704-20260630143332
-  '@credo-ts/node': 0.7.1-pr-2704-20260630143332
-  '@credo-ts/askar': 0.7.1-pr-2704-20260630143332
-  '@credo-ts/anoncreds': 0.7.1-pr-2704-20260630143332
   libphonenumber-js: ^1.12.33
+  '@credo-ts/action-menu': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/anoncreds': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/askar': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/core': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/node': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/question-answer': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/webvh': 0.7.1-pr-2704-20260901064803
 
 importers:
 
@@ -56,23 +57,23 @@ importers:
   apps/vs-agent:
     dependencies:
       '@credo-ts/anoncreds':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
       '@credo-ts/askar':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.7.2)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.7.2)
       '@credo-ts/core':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       '@credo-ts/didcomm':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       '@credo-ts/node':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       '@credo-ts/webvh':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
       '@hyperledger/anoncreds-nodejs':
         specifier: 0.4.0
         version: 0.4.0
@@ -111,7 +112,7 @@ importers:
         version: 4.16.5
       credo-ts-didweb-anoncreds:
         specifier: 0.0.2-alpha.5
-        version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.7.2))
+        version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.7.2))
       didwebvh-ts:
         specifier: ^2.8.0
         version: 2.8.0
@@ -261,8 +262,8 @@ importers:
   examples/nestjs-vs:
     dependencies:
       '@credo-ts/core':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@nestjs/axios':
         specifier: ^3.1.1
         version: 3.1.3(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(axios@1.9.0)(rxjs@7.8.2)
@@ -410,8 +411,8 @@ importers:
   examples/vt-flow-demo:
     dependencies:
       '@credo-ts/core':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@verana-labs/vs-agent-sdk':
         specifier: workspace:*
         version: link:../../packages/agent-sdk
@@ -447,23 +448,23 @@ importers:
         specifier: ^0.32.4
         version: 0.32.4
       '@credo-ts/anoncreds':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
       '@credo-ts/askar':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.8.3)
       '@credo-ts/core':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@credo-ts/didcomm':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@credo-ts/node':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@credo-ts/webvh':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
       '@hyperledger/anoncreds-nodejs':
         specifier: 0.4.0
         version: 0.4.0
@@ -493,7 +494,7 @@ importers:
         version: 1.9.0
       credo-ts-didweb-anoncreds:
         specifier: 0.0.2-alpha.5
-        version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))
+        version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       didwebvh-ts:
         specifier: ^2.8.0
         version: 2.8.0
@@ -514,8 +515,8 @@ importers:
   packages/client:
     dependencies:
       '@credo-ts/core':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@verana-labs/vs-agent-model':
         specifier: workspace:*
         version: link:../model
@@ -546,16 +547,16 @@ importers:
     dependencies:
       '@2060.io/credo-ts-didcomm-reactions':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-receipts':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       '@credo-ts/core':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@credo-ts/didcomm':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       class-transformer:
         specifier: 0.5.1
         version: 0.5.1
@@ -571,13 +572,13 @@ importers:
     dependencies:
       '@2060.io/credo-ts-didcomm-mrtd':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(typescript@5.8.3)
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(typescript@5.8.3)
       '@credo-ts/core':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@credo-ts/didcomm':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@nestjs/common':
         specifier: ^10.0.0
         version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -611,7 +612,7 @@ importers:
     devDependencies:
       '@2060.io/credo-ts-didcomm-receipts':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       '@nestjs/cli':
         specifier: ^10.0.0
         version: 10.4.9
@@ -638,31 +639,31 @@ importers:
     dependencies:
       '@2060.io/credo-ts-didcomm-calls':
         specifier: 0.1.0
-        version: 0.1.0(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))
+        version: 0.1.0(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-media-sharing':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-reactions':
         specifier: ^0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-receipts':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-user-profile':
         specifier: 0.1.0
-        version: 0.1.0(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))
+        version: 0.1.0(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       '@credo-ts/action-menu':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@credo-ts/core':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@credo-ts/didcomm':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@credo-ts/question-answer':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@nestjs/common':
         specifier: ^10.0.0
         version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -677,13 +678,13 @@ importers:
     dependencies:
       '@2060.io/credo-ts-didcomm-mrtd':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(typescript@5.8.3)
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(typescript@5.8.3)
       '@credo-ts/core':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@credo-ts/didcomm':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@nestjs/common':
         specifier: ^10.0.0
         version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -703,11 +704,11 @@ importers:
   packages/vt-flow:
     dependencies:
       '@credo-ts/core':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@credo-ts/didcomm':
-        specifier: 0.7.1-pr-2704-20260630143332
-        version: 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+        specifier: 0.7.1-pr-2704-20260901064803
+        version: 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       class-transformer:
         specifier: 0.5.1
         version: 0.5.1
@@ -720,38 +721,38 @@ packages:
   '@2060.io/credo-ts-didcomm-calls@0.1.0':
     resolution: {integrity: sha512-lwU3yh25m4PV6xi8j/6AIVvHaAfZ0lu8OIBCJxA9VURap/NohcFPxZgENTz3s2ry1m3qtaDTGgJbLEulX+dlDA==}
     peerDependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803
 
   '@2060.io/credo-ts-didcomm-media-sharing@0.1.1':
     resolution: {integrity: sha512-BLaK8FkBPObVm9vfmofJWaSzwWPbPUs5Si9ELtFUbgcei6UxGLHCbSVZcvelimosyFPmCtKPukZ4yO7zkVnDxQ==}
     peerDependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803
 
   '@2060.io/credo-ts-didcomm-mrtd@0.1.1':
     resolution: {integrity: sha512-5/Ts9iyGQpzCFSl9XsLwDVftpXwSw6tCcglIr9L0WRR3bPvs2Bim/xZVirjsq3EHbZ7C4gaw0oZx2N6Fd+LrJw==}
     peerDependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803
 
   '@2060.io/credo-ts-didcomm-reactions@0.1.1':
     resolution: {integrity: sha512-E8BtqfOBiXDQcW26JDmm4YB7cf/RwJJSjnZ88bDeTJ9dhYqrGk74iuls+p7ujO8FPkOImmYgUp4E49J0sqi1ew==}
     peerDependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803
 
   '@2060.io/credo-ts-didcomm-receipts@0.1.1':
     resolution: {integrity: sha512-91oSmGpY9F1YWwAnNBLT4aCLN4Phbt6PavjNy82gXBMCfC1HodQraAdiUjG6MeCPmacQjihv8rPNVWNFENtXIw==}
     peerDependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803
 
   '@2060.io/credo-ts-didcomm-user-profile@0.1.0':
     resolution: {integrity: sha512-jrg6zepDBceFp/BYZTNg+k5NSDfuhpcv4MGd1KU9T9N5Oxdo+Hh4TDpZ0iISZ88l25EW/SSUM8YYwiYNYl2Cjw==}
     peerDependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803
 
   '@angular-devkit/core@17.3.11':
     resolution: {integrity: sha512-vTNDYNsLIWpYk2I969LMQFH29GTsLzxNk/0cLw5q56ARF0v5sIWfHYwGTS88jdDqIpuuettcSczbxeA7EuAmqQ==}
@@ -1013,34 +1014,34 @@ packages:
   '@cosmjs/utils@0.32.4':
     resolution: {integrity: sha512-D1Yc+Zy8oL/hkUkFUL/bwxvuDBzRGpc4cF7/SkdhxX4iHpSLgdOuTt1mhCh9+kl6NQREy9t7SYZ6xeW5gFe60w==}
 
-  '@credo-ts/action-menu@0.7.1-pr-2704-20260630143332':
-    resolution: {integrity: sha512-283xdugzstDk3Qmm3HoSagYwbc6MB8XvTHg/ziKNaq0AIvAx+PyMD8PXdbAcsOA+jnWcjuq+9EUzjzGjLsHRWQ==}
+  '@credo-ts/action-menu@0.7.1-pr-2704-20260901064803':
+    resolution: {integrity: sha512-g5AVdXjc7l2ZmcXwqcmgWD74AQx3fF84BHmS9YgkVXQRpkvo6621HaeqOM87HK6AeKXOSeMVc18lUTb1Bt/7vg==}
 
-  '@credo-ts/anoncreds@0.7.1-pr-2704-20260630143332':
-    resolution: {integrity: sha512-BaS5nWb7S00A3WgJrqp67ECfc6oDpnKRwSZ2odyCc4IuuhW0+y8skZ1GR26Rq1q7GkVYqjTgjIADmDmtp8QEjw==}
+  '@credo-ts/anoncreds@0.7.1-pr-2704-20260901064803':
+    resolution: {integrity: sha512-rljBCDMyzFCBTdvmk49VmkvtWAhl6yNpyiL82g/l/5AKY642x1bbO7+VwgQfZNl+jNpxRC9OwpUAY0y5fJJPQA==}
     peerDependencies:
       '@hyperledger/anoncreds-shared': 0.4.0
 
-  '@credo-ts/askar@0.7.1-pr-2704-20260630143332':
-    resolution: {integrity: sha512-jwCDyax8pJ/8zzxXzu+LLYJdFN+XphVQmX7SndSt92xKIymc8rNJm3D1T3AZzQcpEX4p3V3yJi73IhUDnFkFww==}
+  '@credo-ts/askar@0.7.1-pr-2704-20260901064803':
+    resolution: {integrity: sha512-kpUhf8d5uYIN8GB7mczplMukA/s1zSahaZddOOGC2fTf2i0oXAFQBAKK6SGk1VhzFIQBBirqBLJea87tN8Pg4w==}
     peerDependencies:
       '@openwallet-foundation/askar-shared': ^0.4.3 || ^0.5.0 || ^0.6.0
 
-  '@credo-ts/core@0.7.1-pr-2704-20260630143332':
-    resolution: {integrity: sha512-YnAETlQaHHYVA5PL2c0BXgSPVDIRR3vX3OCMWk6LGw9inX/IMAUyv3AcN+oQbzEE6AcA2kkDLJv24bB48UlPwg==}
+  '@credo-ts/core@0.7.1-pr-2704-20260901064803':
+    resolution: {integrity: sha512-G1TU0bmmYi4Sqspuzzoc1z9Kkvnp8IbUi1P4ton+vRoJ6vWReHI67obJ4rty8Am6RsrxJkXKHNtINnJiFp+ujQ==}
 
-  '@credo-ts/didcomm@0.7.1-pr-2704-20260630143332':
-    resolution: {integrity: sha512-mm8fuVqJjP3urmtcyrVBXqMKNiGd20c1G45ujjSjVYpYZsgjZFfgFrGLRd4hAH0OyxjYBaWw9Jjgkzy1MC1GXQ==}
+  '@credo-ts/didcomm@0.7.1-pr-2704-20260901064803':
+    resolution: {integrity: sha512-6H4amBbdQeO9QvxC63mFCi+cfXX88QkRPF3IiMOq3taAmncXN/f92Qb+41y7eSdv3fnGYyQ2qCOTExStUblT4g==}
 
-  '@credo-ts/node@0.7.1-pr-2704-20260630143332':
-    resolution: {integrity: sha512-U050hUuvEdLLr591FFBCFb8QEhV7RQe0inBQ61fltd3Wph/LfSako0IdWRy0VfILYkVnQ+GKASoyW4HWAjZB/g==}
+  '@credo-ts/node@0.7.1-pr-2704-20260901064803':
+    resolution: {integrity: sha512-QqThcrA+bckHbtPc2y/qtg64cXm79ttM6MqD+mzIXVKA3xPqgRBESJ0Cjtn1ka878eBYdKgryhS7DX+vTEyHIg==}
     engines: {node: '>=20.19'}
 
-  '@credo-ts/question-answer@0.7.1-pr-2704-20260630143332':
-    resolution: {integrity: sha512-xnpgjzWt+5e4cljrkFkr4sFb2LMaja0C+YrzU3ezY2CYBExCmXw5MsZAh1h0e5/11T40UdeYNtN4Neh3Kg4iqQ==}
+  '@credo-ts/question-answer@0.7.1-pr-2704-20260901064803':
+    resolution: {integrity: sha512-vD6WzsAjwwIdskRx6o3GeLlC9bV7r43gw0yIrBK6S9EZ4SsU6jlDClWa+TOPxN/jv1+ai1CLWKJOe6lNtvN8Xg==}
 
-  '@credo-ts/webvh@0.7.1-pr-2704-20260630143332':
-    resolution: {integrity: sha512-2/ufNUkHhnxxWTUVfQWtvxHNcA2OYdkfTMYvZjFaKJ5hJlCI6hRvpYDIw0f9iyV6X4B2zQhnGilpVBvvr8eTPg==}
+  '@credo-ts/webvh@0.7.1-pr-2704-20260901064803':
+    resolution: {integrity: sha512-wigueftmcw2p2zRYhwdFjnKaLSqgnQFBEZoqO/F+TUo3KAvWfl8o32MFWtzofMr1E//7uNepGxzfVTxwsVoCNg==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -2919,8 +2920,8 @@ packages:
   credo-ts-didweb-anoncreds@0.0.2-alpha.5:
     resolution: {integrity: sha512-D+WpN6Tp4CHe81OyxJsnake0e42xUDDTaqFiCsN9Ppav7oLYs8RuToeh4uwzwa2LnThbdd7XGRjLRA9sv8YB3g==}
     peerDependencies:
-      '@credo-ts/anoncreds': 0.7.1-pr-2704-20260630143332
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332
+      '@credo-ts/anoncreds': 0.7.1-pr-2704-20260901064803
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803
 
   cron-parser@4.9.0:
     resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
@@ -3083,8 +3084,8 @@ packages:
   eastasianwidth@0.2.0:
     resolution: {integrity: sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==}
 
-  ec-compression@0.0.1-alpha.12:
-    resolution: {integrity: sha512-rfsgHPnS/q8SiiJyaJ5w+qpkLtvtvEFOXoh40VmjH+Xs1pjzCCKwhd9Un3BQV+1+Qg0es5VQnzwZVJ7fjzfN+A==}
+  ec-compression@2.0.0:
+    resolution: {integrity: sha512-FxmFasfn5+aTZxwsODAYcuFQalrRkpphWSm56UW3XuT9wyo6z2mW8fjajHortO8xYxYzzoUHqfEf3JJb32zMgw==}
 
   ed25519-signature-2018-context@1.1.0:
     resolution: {integrity: sha512-ppDWYMNwwp9bploq0fS4l048vHIq41nWsAbPq6H4mNVx9G/GxW3fwg4Ln0mqctP13MoEpREK7Biz8TbVVdYXqA==}
@@ -5299,18 +5300,18 @@ packages:
 
 snapshots:
 
-  '@2060.io/credo-ts-didcomm-calls@0.1.0(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))':
+  '@2060.io/credo-ts-didcomm-calls@0.1.0(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.1
       tsyringe: 4.8.0
 
-  '@2060.io/credo-ts-didcomm-media-sharing@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))':
+  '@2060.io/credo-ts-didcomm-media-sharing@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
@@ -5318,10 +5319,10 @@ snapshots:
       tsyringe: 4.8.0
       uuid: 9.0.1
 
-  '@2060.io/credo-ts-didcomm-mrtd@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(typescript@5.8.3)':
+  '@2060.io/credo-ts-didcomm-mrtd@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(typescript@5.8.3)':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@li0ard/tsemrtd': 0.3.4(typescript@5.8.3)
       '@peculiar/asn1-x509': 2.6.1
       '@peculiar/x509': 1.14.3
@@ -5338,20 +5339,20 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@2060.io/credo-ts-didcomm-reactions@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))':
+  '@2060.io/credo-ts-didcomm-reactions@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
       rxjs: 7.8.2
       uuid: 9.0.1
 
-  '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))':
+  '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
@@ -5359,10 +5360,10 @@ snapshots:
       tsyringe: 4.8.0
       uuid: 9.0.1
 
-  '@2060.io/credo-ts-didcomm-user-profile@0.1.0(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3))':
+  '@2060.io/credo-ts-didcomm-user-profile@0.1.0(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
@@ -5711,10 +5712,10 @@ snapshots:
 
   '@cosmjs/utils@0.32.4': {}
 
-  '@credo-ts/action-menu@0.7.1-pr-2704-20260630143332(typescript@5.8.3)':
+  '@credo-ts/action-menu@0.7.1-pr-2704-20260901064803(typescript@5.8.3)':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.3
       rxjs: 7.8.2
@@ -5723,11 +5724,11 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/anoncreds@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)':
+  '@credo-ts/anoncreds@0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)':
     dependencies:
       '@astronautlabs/jsonpath': 1.1.2
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       '@hyperledger/anoncreds-shared': 0.4.0
       '@sphereon/pex-models': 2.3.2
       class-transformer: 0.5.1
@@ -5738,11 +5739,11 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/anoncreds@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)':
+  '@credo-ts/anoncreds@0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)':
     dependencies:
       '@astronautlabs/jsonpath': 1.1.2
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@hyperledger/anoncreds-shared': 0.4.0
       '@sphereon/pex-models': 2.3.2
       class-transformer: 0.5.1
@@ -5753,9 +5754,9 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/askar@0.7.1-pr-2704-20260630143332(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.7.2)':
+  '@credo-ts/askar@0.7.1-pr-2704-20260901064803(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.7.2)':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       '@openwallet-foundation/askar-shared': 0.6.0
       class-transformer: 0.5.1
       class-validator: 0.14.3
@@ -5766,9 +5767,9 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/askar@0.7.1-pr-2704-20260630143332(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.8.3)':
+  '@credo-ts/askar@0.7.1-pr-2704-20260901064803(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.8.3)':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@openwallet-foundation/askar-shared': 0.6.0
       class-transformer: 0.5.1
       class-validator: 0.14.3
@@ -5779,7 +5780,7 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.7.2)':
+  '@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.7.2)':
     dependencies:
       '@animo-id/pex': 6.1.1
       '@astronautlabs/jsonpath': 1.1.2
@@ -5788,7 +5789,7 @@ snapshots:
       '@digitalcredentials/vc': 10.0.2
       '@multiformats/base-x': 4.0.1
       '@noble/curves': 2.0.1
-      '@noble/hashes': 2.0.1
+      '@noble/hashes': 2.2.0
       '@owf/cose': 0.3.1
       '@owf/mdoc': 0.7.0
       '@owf/token-status-list': 0.3.1
@@ -5809,7 +5810,8 @@ snapshots:
       class-validator: 0.14.3
       dcql: 3.0.0(typescript@5.7.2)
       did-resolver: 4.1.0
-      ec-compression: 0.0.1-alpha.12
+      ec-compression: 2.0.0
+      json-canonicalize: 2.0.0
       lru_map: 0.4.1
       make-error: 1.3.6
       object-inspect: 1.13.4
@@ -5826,7 +5828,7 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3)':
+  '@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3)':
     dependencies:
       '@animo-id/pex': 6.1.1
       '@astronautlabs/jsonpath': 1.1.2
@@ -5835,7 +5837,7 @@ snapshots:
       '@digitalcredentials/vc': 10.0.2
       '@multiformats/base-x': 4.0.1
       '@noble/curves': 2.0.1
-      '@noble/hashes': 2.0.1
+      '@noble/hashes': 2.2.0
       '@owf/cose': 0.3.1
       '@owf/mdoc': 0.7.0
       '@owf/token-status-list': 0.3.1
@@ -5856,7 +5858,8 @@ snapshots:
       class-validator: 0.14.3
       dcql: 3.0.0(typescript@5.8.3)
       did-resolver: 4.1.0
-      ec-compression: 0.0.1-alpha.12
+      ec-compression: 2.0.0
+      json-canonicalize: 2.0.0
       lru_map: 0.4.1
       make-error: 1.3.6
       object-inspect: 1.13.4
@@ -5873,9 +5876,9 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.7.2)':
+  '@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.7.2)':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       '@stablelib/ed25519': 2.0.2
       class-transformer: 0.5.1
       class-validator: 0.14.3
@@ -5887,9 +5890,9 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/didcomm@0.7.1-pr-2704-20260630143332(typescript@5.8.3)':
+  '@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3)':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@stablelib/ed25519': 2.0.2
       class-transformer: 0.5.1
       class-validator: 0.14.3
@@ -5901,10 +5904,10 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/node@0.7.1-pr-2704-20260630143332(typescript@5.7.2)':
+  '@credo-ts/node@0.7.1-pr-2704-20260901064803(typescript@5.7.2)':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       '@types/express': 5.0.6
       express: 5.2.1
       rxjs: 7.8.2
@@ -5916,10 +5919,10 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@credo-ts/node@0.7.1-pr-2704-20260630143332(typescript@5.8.3)':
+  '@credo-ts/node@0.7.1-pr-2704-20260901064803(typescript@5.8.3)':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@types/express': 5.0.6
       express: 5.2.1
       rxjs: 7.8.2
@@ -5931,10 +5934,10 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@credo-ts/question-answer@0.7.1-pr-2704-20260630143332(typescript@5.8.3)':
+  '@credo-ts/question-answer@0.7.1-pr-2704-20260901064803(typescript@5.8.3)':
     dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.3
       rxjs: 7.8.2
@@ -5943,10 +5946,10 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/webvh@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)':
+  '@credo-ts/webvh@0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)':
     dependencies:
-      '@credo-ts/anoncreds': 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
+      '@credo-ts/anoncreds': 0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       class-transformer: 0.5.1
       class-validator: 0.14.3
       didwebvh-ts: 2.8.0
@@ -5958,10 +5961,10 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/webvh@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)':
+  '@credo-ts/webvh@0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)':
     dependencies:
-      '@credo-ts/anoncreds': 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/anoncreds': 0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.3
       didwebvh-ts: 2.8.0
@@ -7975,17 +7978,17 @@ snapshots:
 
   credentials-context@2.0.0: {}
 
-  credo-ts-didweb-anoncreds@0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.7.2)):
+  credo-ts-didweb-anoncreds@0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2))(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.7.2)):
     dependencies:
-      '@credo-ts/anoncreds': 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.7.2)
+      '@credo-ts/anoncreds': 0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       canonicalize: 2.1.0
       query-string: 9.3.1
 
-  credo-ts-didweb-anoncreds@0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.1-pr-2704-20260630143332(typescript@5.8.3)):
+  credo-ts-didweb-anoncreds@0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3)):
     dependencies:
-      '@credo-ts/anoncreds': 0.7.1-pr-2704-20260630143332(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
-      '@credo-ts/core': 0.7.1-pr-2704-20260630143332(typescript@5.8.3)
+      '@credo-ts/anoncreds': 0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3)
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       canonicalize: 2.1.0
       query-string: 9.3.1
 
@@ -8136,7 +8139,7 @@ snapshots:
 
   eastasianwidth@0.2.0: {}
 
-  ec-compression@0.0.1-alpha.12: {}
+  ec-compression@2.0.0: {}
 
   ed25519-signature-2018-context@1.1.0: {}
 
