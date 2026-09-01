@@ -2,7 +2,7 @@ import { DidCommDidExchangeRole, DidCommDidExchangeState, DidCommVersion } from 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsIn, IsOptional, IsString } from 'class-validator'
 
-import { PaginationQueryDto } from '../../../../../common'
+import { PageDto, PaginationQueryDto } from '../../../../../common'
 
 /**
  * Query filters of [VSA-ADM-DC-CN-LIST] listConnections
@@ -129,10 +129,4 @@ export class ConnectionRecordDto {
   updatedAt!: Date
 }
 
-export class ConnectionRecordPageDto {
-  @ApiProperty({ type: [ConnectionRecordDto] })
-  items!: ConnectionRecordDto[]
-
-  @ApiProperty({ type: String, nullable: true })
-  nextCursor!: string | null
-}
+export const ConnectionRecordPageDto = PageDto(ConnectionRecordDto)

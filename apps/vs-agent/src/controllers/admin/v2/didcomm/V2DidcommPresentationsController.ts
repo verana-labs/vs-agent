@@ -28,9 +28,15 @@ import {
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
 import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
 
-import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../../common'
+import {
+  AdminApiError,
+  AdminApiErrorCode,
+  createdAtKey,
+  mapPageAsync,
+  Page,
+  paginate,
+} from '../../../../common'
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../../config'
-import { AccessMode } from '../../../../security'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 import { CredentialTypesService } from '../../credentials'
@@ -54,7 +60,6 @@ const CALLBACK_METADATA = '_2060/callbackParameters'
  * methods read and delete the proof exchange record that the flow leaves behind.
  */
 @ApiTags('v2/didcomm')
-@AccessMode('INTERNAL')
 @Controller({ path: 'didcomm', version: '2' })
 export class V2DidcommPresentationsController {
   public constructor(
@@ -188,14 +193,10 @@ export class V2DidcommPresentationsController {
     const agent = await this.vsAgentService.getAgent()
 
     const records = await agent.didcomm.proofs.getAll()
-    const items = await Promise.all(records.map(record => this.toPresentationDto(record)))
 
-    return paginate(
-      items,
-      query,
-      { method: 'listPresentations' },
-      presentation => `${presentation.createdAt.toISOString()}|${presentation.proofExchangeId}`,
-    )
+    const page = paginate(records, query, { method: 'listPresentations' }, createdAtKey)
+
+    return mapPageAsync(page, record => this.toPresentationDto(record))
   }
 
   @Get('presentations/:proofExchangeId')

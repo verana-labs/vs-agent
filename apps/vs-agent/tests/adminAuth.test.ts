@@ -9,7 +9,12 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { AdminAuthGuard } from '../src/security/AdminAuthGuard'
 import { AdminAuthService, challengePayload } from '../src/security/AdminAuthService'
-import { ACCESS_MODE_KEY, type AccessModeMetadata } from '../src/security/accessMode'
+import { ADMIN_AUTH_EXEMPT_KEY, type AdminAuthExemption } from '../src/security/adminAuthExempt'
+import {
+  DEFAULT_ADMIN_API_TRUSTED_NETWORKS,
+  isTrustedPeer,
+  parseTrustedNetworks,
+} from '../src/security/trustedNetworks'
 
 async function makeSigner() {
   const keypair = await Secp256k1.makeKeypair(sha256(toUtf8('admin-auth-test-seed')))
@@ -39,36 +44,40 @@ async function issueToken(authService: AdminAuthService) {
 }
 
 function makeContext(
-  metadata: AccessModeMetadata | undefined,
-  headers: Record<string, string> = {},
-  params: Record<string, string> = { participantSessionId: 'sess-1' },
+  exemption: AdminAuthExemption | undefined,
+  options: { headers?: Record<string, string>; remoteAddress?: string | undefined } = {},
 ) {
+  const headers = options.headers ?? {}
+  const remoteAddress = 'remoteAddress' in options ? options.remoteAddress : '203.0.113.5'
   const reflector = {
-    getAllAndOverride: vi.fn((key: string) => (key === ACCESS_MODE_KEY ? metadata : undefined)),
+    getAllAndOverride: vi.fn((key: string) => (key === ADMIN_AUTH_EXEMPT_KEY ? exemption : undefined)),
   } as unknown as Reflector
   const context = {
     getHandler: () => ({}),
     getClass: () => ({}),
     switchToHttp: () => ({
-      getRequest: () => ({ headers, params }),
+      getRequest: () => ({ headers, socket: { remoteAddress } }),
     }),
   } as unknown as ExecutionContext
   return { reflector, context }
 }
 
-function makeAgent(callerHoldsVsOperatorGrant = vi.fn().mockResolvedValue(true)) {
-  return {
-    authorizationService: { callerHoldsVsOperatorGrant },
-    veranaChain: { getParticipant: vi.fn().mockResolvedValue({ id: 42, validatorParticipantId: 9 }) },
-    dependencyManager: {
-      resolve: () => ({ findAllByQuery: vi.fn().mockResolvedValue([{ participantId: '42' }]) }),
-    },
-  }
-}
-
-const CORPORATION_META: AccessModeMetadata = {
-  mode: 'CORPORATION',
-  msgTypes: ['/verana.pp.v1.MsgSetParticipantOPToValidated'],
+function makeGuard(
+  reflector: Reflector,
+  options: {
+    authService?: AdminAuthService
+    authMode?: 'internal' | 'corporation'
+    trustedNetworks?: string[]
+    allowedAccounts?: string[]
+  } = {},
+): AdminAuthGuard {
+  return new AdminAuthGuard(
+    reflector,
+    options.authService ?? new AdminAuthService(),
+    options.authMode ?? 'internal',
+    parseTrustedNetworks(options.trustedNetworks ?? DEFAULT_ADMIN_API_TRUSTED_NETWORKS),
+    options.allowedAccounts ?? [],
+  )
 }
 
 describe('AdminAuthService', () => {
@@ -98,90 +107,134 @@ describe('AdminAuthService', () => {
   })
 })
 
+describe('trusted network parsing and classification', () => {
+  it('parses the default blocks', () => {
+    expect(parseTrustedNetworks(DEFAULT_ADMIN_API_TRUSTED_NETWORKS)).toHaveLength(2)
+  })
+
+  it('throws on a malformed CIDR block', () => {
+    expect(() => parseTrustedNetworks(['not-a-cidr'])).toThrow()
+    expect(() => parseTrustedNetworks(['10.0.0.0/33'])).toThrow()
+    expect(() => parseTrustedNetworks(['127.0.0.1'])).toThrow()
+  })
+
+  it('matches an IPv4-mapped IPv6 peer against an IPv4 block', () => {
+    const networks = parseTrustedNetworks(DEFAULT_ADMIN_API_TRUSTED_NETWORKS)
+    expect(isTrustedPeer('::ffff:127.0.0.1', networks)).toBe(true)
+  })
+
+  it('fails closed on missing or unparseable peer addresses', () => {
+    const networks = parseTrustedNetworks(DEFAULT_ADMIN_API_TRUSTED_NETWORKS)
+    expect(isTrustedPeer(undefined, networks)).toBe(false)
+    expect(isTrustedPeer('fe80::1%eth0', networks)).toBe(false)
+  })
+})
+
 describe('AdminAuthGuard', () => {
-  it('allows PUBLIC routes without a token', async () => {
-    const authService = new AdminAuthService()
-    const { reflector, context } = makeContext({ mode: 'PUBLIC' })
-    const guard = new AdminAuthGuard(reflector, authService, makeAgent() as never, [])
+  it('classifies on the socket peer address and never on X-Forwarded-For', async () => {
+    const spoofed = {
+      remoteAddress: '203.0.113.5',
+      headers: { 'x-forwarded-for': '127.0.0.1' },
+    }
+    const internal = makeContext(undefined, spoofed)
+    expect(() => makeGuard(internal.reflector).canActivate(internal.context)).toThrow(ForbiddenException)
 
-    await expect(guard.canActivate(context)).resolves.toBe(true)
+    const corporation = makeContext(undefined, spoofed)
+    expect(() =>
+      makeGuard(corporation.reflector, { authMode: 'corporation' }).canActivate(corporation.context),
+    ).toThrow(UnauthorizedException)
   })
 
-  it('rejects requests without a valid bearer token', async () => {
-    const authService = new AdminAuthService()
-    const { reflector, context } = makeContext(CORPORATION_META)
-    const guard = new AdminAuthGuard(reflector, authService, makeAgent() as never, [])
-
-    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException)
+  it.each([
+    '127.0.0.1',
+    '::1',
+    '::ffff:127.0.0.1',
+  ])('serves trusted peer %s without a token in both modes', remoteAddress => {
+    for (const authMode of ['internal', 'corporation'] as const) {
+      const { reflector, context } = makeContext(undefined, { remoteAddress })
+      expect(makeGuard(reflector, { authMode }).canActivate(context)).toBe(true)
+    }
   })
 
-  it('rejects INTERNAL routes on the external listener even when authenticated', async () => {
+  it('classifies peers against the configured blocks', () => {
+    const trusted = makeContext(undefined, { remoteAddress: '10.1.2.3' })
+    expect(
+      makeGuard(trusted.reflector, { trustedNetworks: ['10.0.0.0/8'] }).canActivate(trusted.context),
+    ).toBe(true)
+
+    const external = makeContext(undefined, { remoteAddress: '192.168.1.1' })
+    expect(() =>
+      makeGuard(external.reflector, { trustedNetworks: ['10.0.0.0/8'] }).canActivate(external.context),
+    ).toThrow(ForbiddenException)
+  })
+
+  it('classifies missing and unparseable peer addresses as external', () => {
+    for (const remoteAddress of [undefined, 'fe80::1%eth0']) {
+      const { reflector, context } = makeContext(undefined, { remoteAddress })
+      expect(() => makeGuard(reflector).canActivate(context)).toThrow(ForbiddenException)
+    }
+  })
+
+  it('rejects an external request with 403 in internal mode even when authenticated', async () => {
     const authService = new AdminAuthService()
     const { token } = await issueToken(authService)
-    const { reflector, context } = makeContext(undefined, { authorization: `Bearer ${token}` })
-    const guard = new AdminAuthGuard(reflector, authService, makeAgent() as never, [])
+    const { reflector, context } = makeContext(undefined, { headers: { authorization: `Bearer ${token}` } })
+    expect(() => makeGuard(reflector, { authService }).canActivate(context)).toThrow(ForbiddenException)
+  })
 
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      new ForbiddenException('this method is only available on the internal listener'),
+  it('rejects an external request without a valid bearer token in corporation mode', () => {
+    const { reflector, context } = makeContext(undefined)
+    expect(() => makeGuard(reflector, { authMode: 'corporation' }).canActivate(context)).toThrow(
+      UnauthorizedException,
     )
   })
 
-  it('rejects accounts outside the allowed accounts list', async () => {
+  it('denies an authenticated account when the allowlist is empty', async () => {
     const authService = new AdminAuthService()
     const { token } = await issueToken(authService)
-    const { reflector, context } = makeContext(CORPORATION_META, { authorization: `Bearer ${token}` })
-    const guard = new AdminAuthGuard(reflector, authService, makeAgent() as never, ['verana1someoneelse'])
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      new ForbiddenException('account is not in the allowed accounts list'),
-    )
+    const { reflector, context } = makeContext(undefined, { headers: { authorization: `Bearer ${token}` } })
+    expect(() =>
+      makeGuard(reflector, { authService, authMode: 'corporation', allowedAccounts: [] }).canActivate(
+        context,
+      ),
+    ).toThrow(new ForbiddenException('account is not in the allowed accounts list'))
   })
 
-  it('allows a CORPORATION route when the caller holds the required grant for the flow validator', async () => {
+  it('denies an authenticated account outside the allowlist and serves one inside it', async () => {
     const authService = new AdminAuthService()
     const { account, token } = await issueToken(authService)
-    const callerCheck = vi.fn().mockResolvedValue(true)
-    const agent = makeAgent(callerCheck)
-    const { reflector, context } = makeContext(CORPORATION_META, { authorization: `Bearer ${token}` })
-    const guard = new AdminAuthGuard(reflector, authService, agent as never, [])
 
-    await expect(guard.canActivate(context)).resolves.toBe(true)
-    expect(callerCheck).toHaveBeenCalledWith(account, 9, '/verana.pp.v1.MsgSetParticipantOPToValidated')
+    const denied = makeContext(undefined, { headers: { authorization: `Bearer ${token}` } })
+    expect(() =>
+      makeGuard(denied.reflector, {
+        authService,
+        authMode: 'corporation',
+        allowedAccounts: ['verana1someoneelse'],
+      }).canActivate(denied.context),
+    ).toThrow(ForbiddenException)
+
+    const served = makeContext(undefined, { headers: { authorization: `Bearer ${token}` } })
+    expect(
+      makeGuard(served.reflector, {
+        authService,
+        authMode: 'corporation',
+        allowedAccounts: [account],
+      }).canActivate(served.context),
+    ).toBe(true)
   })
 
-  it('allows a CORPORATION route without a flow scope when the caller holds any matching grant', async () => {
-    const authService = new AdminAuthService()
-    const { account, token } = await issueToken(authService)
-    const anyGrantCheck = vi.fn().mockResolvedValue(true)
-    const agent = { authorizationService: { callerHoldsAnyVsOperatorGrant: anyGrantCheck } }
-    const { reflector, context } = makeContext(CORPORATION_META, { authorization: `Bearer ${token}` }, {})
-    const guard = new AdminAuthGuard(reflector, authService, agent as never, [])
+  it('serves a corporation-exempt method to an external caller in corporation mode only', () => {
+    const served = makeContext('corporation')
+    expect(makeGuard(served.reflector, { authMode: 'corporation' }).canActivate(served.context)).toBe(true)
 
-    await expect(guard.canActivate(context)).resolves.toBe(true)
-    expect(anyGrantCheck).toHaveBeenCalledWith(account, '/verana.pp.v1.MsgSetParticipantOPToValidated')
+    const rejected = makeContext('corporation')
+    expect(() => makeGuard(rejected.reflector).canActivate(rejected.context)).toThrow(ForbiddenException)
   })
 
-  it('lets the allowlist alone carry a CORPORATION route that declares no message type', async () => {
-    const authService = new AdminAuthService()
-    const { account, token } = await issueToken(authService)
-    const callerCheck = vi.fn().mockResolvedValue(false)
-    const agent = makeAgent(callerCheck)
-    const { reflector, context } = makeContext({ mode: 'CORPORATION' }, { authorization: `Bearer ${token}` })
-    const guard = new AdminAuthGuard(reflector, authService, agent as never, [account])
-
-    await expect(guard.canActivate(context)).resolves.toBe(true)
-    expect(callerCheck).not.toHaveBeenCalled()
-  })
-
-  it('rejects a CORPORATION route when the caller holds no matching grant', async () => {
-    const authService = new AdminAuthService()
-    const { token } = await issueToken(authService)
-    const agent = makeAgent(vi.fn().mockResolvedValue(false))
-    const { reflector, context } = makeContext(CORPORATION_META, { authorization: `Bearer ${token}` })
-    const guard = new AdminAuthGuard(reflector, authService, agent as never, [])
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      new ForbiddenException('account holds no authorization covering this method'),
-    )
+  it('serves an always-exempt method to an external caller in both modes', () => {
+    for (const authMode of ['internal', 'corporation'] as const) {
+      const { reflector, context } = makeContext('always')
+      expect(makeGuard(reflector, { authMode }).canActivate(context)).toBe(true)
+    }
   })
 })

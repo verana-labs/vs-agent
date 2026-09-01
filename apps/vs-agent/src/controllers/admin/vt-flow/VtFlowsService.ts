@@ -21,7 +21,7 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { HOLDER_PARTICIPANT_TYPE, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
-import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../common'
+import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../common'
 import { VsAgentService } from '../../../services/VsAgentService'
 import { CredentialTypesService } from '../credentials/CredentialTypeService'
 
@@ -98,7 +98,7 @@ export class VtFlowsService {
           participantSessionId: query.participantSessionId,
         },
       },
-      flow => `${flow.createdAt.toISOString()}|${flow.id}`,
+      createdAtKey,
     )
   }
 

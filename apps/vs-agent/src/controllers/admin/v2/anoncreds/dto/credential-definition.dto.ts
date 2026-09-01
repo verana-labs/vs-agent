@@ -2,6 +2,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Transform } from 'class-transformer'
 import { IsBoolean, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator'
 
+import { PageDto } from '../../../../../common'
+
 /**
  * The request body of [VSA-ADM-AC-CD-CREATE].
  *
@@ -61,13 +63,7 @@ export class CredentialDefinitionDto {
   relatedJsonSchemaCredentialId!: string
 }
 
-export class CredentialDefinitionPageDto {
-  @ApiProperty({ type: [CredentialDefinitionDto] })
-  items!: CredentialDefinitionDto[]
-
-  @ApiProperty({ type: String, nullable: true })
-  nextCursor!: string | null
-}
+export const CredentialDefinitionPageDto = PageDto(CredentialDefinitionDto)
 
 /**
  * The package that [VSA-ADM-AC-CD-EXPORT] sends. It is also the request body of

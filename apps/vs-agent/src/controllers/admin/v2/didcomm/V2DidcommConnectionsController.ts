@@ -11,8 +11,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 
-import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../../common'
-import { AccessMode } from '../../../../security'
+import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
 import { ConnectionRecordDto, ConnectionRecordPageDto, ListConnectionsQueryDto } from './dto'
@@ -25,7 +24,6 @@ import { ConnectionRecordDto, ConnectionRecordPageDto, ListConnectionsQueryDto }
  * peer that connects to the agent.
  */
 @ApiTags('v2/didcomm')
-@AccessMode('INTERNAL')
 @Controller({ path: 'didcomm/connections', version: '2' })
 export class V2DidcommConnectionsController {
   public constructor(@Inject(VsAgentService) private readonly vsAgentService: VsAgentService) {}
@@ -58,13 +56,15 @@ export class V2DidcommConnectionsController {
         : { ...filters, didcommVersion: query.didcommVersion },
     )
 
-    return paginate(
-      records.map(toConnectionDto),
+    const page = paginate(
+      records,
       query,
       // Scoped on what the caller asked for, not on the translated query, so the cursor is stable.
       { method: 'listConnections', filters: { ...filters, didcommVersion: query.didcommVersion } },
-      connection => `${connection.createdAt.toISOString()}|${connection.id}`,
+      createdAtKey,
     )
+
+    return mapPage(page, toConnectionDto)
   }
 
   @Get(':connectionId')

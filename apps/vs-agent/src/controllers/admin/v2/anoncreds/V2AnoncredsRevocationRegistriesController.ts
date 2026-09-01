@@ -23,7 +23,6 @@ import {
 } from '@nestjs/swagger'
 
 import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../../common'
-import { AccessMode } from '../../../../security'
 import { VsAgentService } from '../../../../services/VsAgentService'
 import { CredentialTypesService } from '../../credentials/CredentialTypeService'
 
@@ -38,7 +37,6 @@ import {
  * AnonCreds revocation registry definitions held by this agent.
  */
 @ApiTags('v2/anoncreds')
-@AccessMode('INTERNAL')
 @Controller({ path: 'anoncreds/revocation-registries', version: '2' })
 export class V2AnoncredsRevocationRegistriesController {
   public constructor(

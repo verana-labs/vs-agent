@@ -50,8 +50,9 @@ import {
   ECS_CLAIMS_SERVICE,
   ADMIN_API_AUTH_MODE,
   ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
-  ADMIN_API_EXTERNAL_PORT,
   ADMIN_API_PUBLIC_URL,
+  ADMIN_API_TRUSTED_NETWORKS,
+  validateAdminApiConfig,
   ENABLED_PLUGINS,
   EVENTS_BASE_URL,
   POSTGRES_HOST,
@@ -75,6 +76,7 @@ import {
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
+import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
   derivePublicDidLocation,
@@ -93,27 +95,19 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   // Nest's global level governs the plain @nestjs/common loggers (the credo agent uses AGENT_LOG_LEVEL).
   const nestLogLevels = toNestLogLevels(ADMIN_LOG_LEVEL)
 
-  if (ADMIN_API_AUTH_MODE.includes('internal')) {
-    const adminApp = await NestFactory.create(
-      VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins, { bootstrapState }),
-      { logger: nestLogLevels },
-    )
-    commonAppConfig(adminApp, cors)
-    await adminApp.listen(port)
-  }
-
-  if (ADMIN_API_AUTH_MODE.includes('corporation')) {
-    const externalApp = await NestFactory.create(
-      VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins, {
-        external: true,
-        allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
-        bootstrapState,
-      }),
-      { logger: nestLogLevels },
-    )
-    commonAppConfig(externalApp, cors, false, false)
-    await externalApp.listen(ADMIN_API_EXTERNAL_PORT)
-  }
+  const trustedNetworks = parseTrustedNetworks(ADMIN_API_TRUSTED_NETWORKS)
+  const adminApp = await NestFactory.create(
+    VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins, {
+      authMode: ADMIN_API_AUTH_MODE,
+      allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
+      trustedNetworks,
+      bootstrapState,
+    }),
+    { logger: nestLogLevels },
+  )
+  adminApp.use(restrictDocsToTrustedPeers(trustedNetworks))
+  commonAppConfig(adminApp, cors)
+  await adminApp.listen(port)
 
   // PublicModule-specific config
   const publicApp = await NestFactory.create(PublicModule.register(agent, publicApiBaseUrl), {
@@ -266,46 +260,17 @@ const run = async () => {
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
-  if (ADMIN_API_AUTH_MODE.length === 0) {
-    serverLogger.error('ADMIN_API_AUTH_MODE is required (comma-separated list of: internal, corporation)')
+  const adminApiConfigErrors = validateAdminApiConfig({
+    authMode: ADMIN_API_AUTH_MODE,
+    publicUrl: ADMIN_API_PUBLIC_URL,
+    allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
+    trustedNetworks: ADMIN_API_TRUSTED_NETWORKS,
+  })
+  if (adminApiConfigErrors.length > 0) {
+    serverLogger.error(`Invalid configuration:\n- ${adminApiConfigErrors.join('\n- ')}`)
     process.exit(1)
   }
-  const unknownAuthModes = ADMIN_API_AUTH_MODE.filter(mode => !['internal', 'corporation'].includes(mode))
-  if (unknownAuthModes.length > 0) {
-    serverLogger.error(
-      `ADMIN_API_AUTH_MODE has unsupported value(s): ${unknownAuthModes.join(', ')}. Allowed: internal, corporation`,
-    )
-    process.exit(1)
-  }
-  if (ADMIN_API_PUBLIC_URL) {
-    let isBareHttpsOrigin = false
-    try {
-      const url = new URL(ADMIN_API_PUBLIC_URL)
-      isBareHttpsOrigin = url.protocol === 'https:' && url.origin === ADMIN_API_PUBLIC_URL
-    } catch {
-      isBareHttpsOrigin = false
-    }
-    if (!isBareHttpsOrigin) {
-      serverLogger.error(
-        'ADMIN_API_PUBLIC_URL must be a single https:// origin (scheme + host + optional port, no trailing path)',
-      )
-      process.exit(1)
-    }
-  }
-
-  if (ADMIN_API_PUBLIC_URL && !ADMIN_API_AUTH_MODE.includes('corporation')) {
-    serverLogger.error(
-      'ADMIN_API_PUBLIC_URL must not be set unless ADMIN_API_AUTH_MODE includes "corporation"',
-    )
-    process.exit(1)
-  }
-  if (ADMIN_API_AUTH_MODE.includes('corporation') && !ADMIN_API_PUBLIC_URL) {
-    serverLogger.error('ADMIN_API_PUBLIC_URL is required when ADMIN_API_AUTH_MODE includes "corporation"')
-    process.exit(1)
-  }
-  const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE.includes('corporation')
-    ? ADMIN_API_PUBLIC_URL
-    : undefined
+  const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE === 'corporation' ? ADMIN_API_PUBLIC_URL : undefined
 
   // Dynamically load optional plugin packages.
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)

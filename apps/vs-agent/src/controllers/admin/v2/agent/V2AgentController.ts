@@ -3,13 +3,12 @@ import { ApiOkResponse, ApiOperation, ApiServiceUnavailableResponse, ApiTags } f
 
 import { AdminApiError, AdminApiErrorCode, BOOTSTRAP_STATE, BootstrapState } from '../../../../common'
 import { AGENT_VERSION } from '../../../../config'
-import { AccessMode } from '../../../../security'
+import { AdminAuthExempt } from '../../../../security'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
 import { AgentInfoDto, LivenessDto, ReadinessDto } from './dto'
 
 @ApiTags('v2/agent')
-@AccessMode('INTERNAL')
 @Controller({ path: 'agent', version: '2' })
 export class V2AgentController {
   public constructor(
@@ -18,7 +17,6 @@ export class V2AgentController {
   ) {}
 
   @Get('info')
-  @AccessMode('CORPORATION')
   @ApiOperation({
     summary: 'Get agent information',
     description: 'Identifies this VS Agent instance by the DID it created on its first startup.',
@@ -31,7 +29,7 @@ export class V2AgentController {
   }
 
   @Get('health/live')
-  @AccessMode('PUBLIC')
+  @AdminAuthExempt()
   @ApiOperation({
     summary: 'Liveness probe',
     description:
@@ -54,7 +52,7 @@ export class V2AgentController {
   }
 
   @Get('health/ready')
-  @AccessMode('PUBLIC')
+  @AdminAuthExempt()
   @ApiOperation({
     summary: 'Readiness probe',
     description:

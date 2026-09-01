@@ -2,14 +2,12 @@ import { Controller, Get } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiOkResponse, getSchemaPath, ApiExtraModels } from '@nestjs/swagger'
 
 import { AGENT_LABEL, AGENT_VERSION } from '../../../../src/config'
-import { AccessMode } from '../../../security'
 import { VsAgentService } from '../../../services/VsAgentService'
 
 import { VsAgentInfoDto } from './dto'
 
 @ApiTags('agent')
 @ApiExtraModels(VsAgentInfoDto)
-@AccessMode('INTERNAL')
 @Controller({ path: 'agent', version: '1' })
 export class V1VsAgentController {
   constructor(private readonly vsAgentService: VsAgentService) {}

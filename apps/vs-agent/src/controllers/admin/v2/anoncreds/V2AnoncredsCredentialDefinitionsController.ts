@@ -39,8 +39,14 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 
-import { AdminApiError, AdminApiErrorCode, Page, PaginationQueryDto, paginate } from '../../../../common'
-import { AccessMode } from '../../../../security'
+import {
+  AdminApiError,
+  AdminApiErrorCode,
+  mapPageAsync,
+  Page,
+  paginate,
+  PaginationQueryDto,
+} from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
 import { CredentialTypesService } from '../../credentials'
 
@@ -61,7 +67,6 @@ import {
  * or a version.
  */
 @ApiTags('v2/anoncreds')
-@AccessMode('INTERNAL')
 @Controller({ path: 'anoncreds/credential-definitions', version: '2' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class V2AnoncredsCredentialDefinitionsController {
@@ -85,9 +90,15 @@ export class V2AnoncredsCredentialDefinitionsController {
     const agent = await this.agentService.getAgent()
 
     const records = await agent.modules.anoncreds.getCreatedCredentialDefinitions({})
-    const items = await Promise.all(records.map(record => this.toRecordDto(agent, record)))
 
-    return paginate(items, query, { method: 'listCredentialDefinitions' }, item => item.id)
+    const page = paginate(
+      records,
+      query,
+      { method: 'listCredentialDefinitions' },
+      record => record.credentialDefinitionId,
+    )
+
+    return mapPageAsync(page, record => this.toRecordDto(agent, record))
   }
 
   @Post()
