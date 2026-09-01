@@ -7,10 +7,12 @@ import {
 } from '@credo-ts/anoncreds'
 import { JsonObject, parseDid, Proof, TagsBase, utils, W3cCredential } from '@credo-ts/core'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
-import { Inject, Logger } from '@nestjs/common'
+import { HttpStatus, Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import { deleteTailsFile, fetchJson, VsAgent } from '@verana-labs/vs-agent-sdk'
 
+import { AdminApiError, AdminApiErrorCode } from '../../../common'
+import { REVOCATION_REGISTRY_DEFAULT_CAPACITY } from '../../../config/constants'
 import { VsAgentService } from '../../../services/VsAgentService'
 
 type Tags = TagsBase & {
@@ -22,6 +24,133 @@ export class CredentialTypesService {
   private readonly logger = new Logger(CredentialTypesService.name)
 
   constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
+
+  public async listRevocationRegistries(agent: VsAgent, credentialDefinitionId?: string): Promise<string[]> {
+    const revocationDefinitionRepository = agent.dependencyManager.resolve(
+      AnonCredsRevocationRegistryDefinitionRepository,
+    )
+
+    const revocationRegistries = credentialDefinitionId
+      ? await revocationDefinitionRepository.findAllByCredentialDefinitionId(
+          agent.context,
+          credentialDefinitionId,
+        )
+      : await revocationDefinitionRepository.getAll(agent.context)
+
+    return revocationRegistries.map(record => record.revocationRegistryDefinitionId)
+  }
+
+  public async createRevocationRegistry(
+    agent: VsAgent,
+    options: { credentialDefinitionId: string; maximumCredentialNumber?: number },
+  ): Promise<string> {
+    const { credentialDefinitionId } = options
+    const maximumCredentialNumber = options.maximumCredentialNumber ?? REVOCATION_REGISTRY_DEFAULT_CAPACITY
+
+    const cred = await agent.modules.anoncreds.getCredentialDefinition(credentialDefinitionId)
+
+    if (!cred?.credentialDefinition) {
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        HttpStatus.NOT_FOUND,
+        `no credential definition with id "${credentialDefinitionId}"`,
+      )
+    }
+
+    if (!cred.credentialDefinition.value.revocation) {
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidState,
+        HttpStatus.CONFLICT,
+        `credential definition "${credentialDefinitionId}" does not support revocation`,
+      )
+    }
+
+    const { revocationRegistryDefinitionState, registrationMetadata: revDefMetadata } =
+      await agent.modules.anoncreds.registerRevocationRegistryDefinition({
+        revocationRegistryDefinition: {
+          credentialDefinitionId,
+          tag: 'default',
+          maximumCredentialNumber,
+          issuerId: cred.credentialDefinition.issuerId,
+        },
+        options: {},
+      })
+    const { attestedResource: revocationRegistration } = revDefMetadata as {
+      attestedResource: Record<string, unknown>
+    }
+    const revocationRegistryDefinitionId = revocationRegistryDefinitionState.revocationRegistryDefinitionId
+    if (!revocationRegistryDefinitionId) {
+      throw new Error(
+        `Cannot create the revocation registry definition: ${failureReason(revocationRegistryDefinitionState)}`,
+      )
+    }
+    this.logger.debug(
+      `revocationRegistryDefinitionState: ${JSON.stringify(revocationRegistryDefinitionState)}`,
+    )
+
+    await this.saveAttestedResource(agent, revocationRegistration, {
+      resourceType: 'anonCredsRevocRegDef',
+    })
+
+    // A registry without its first status list cannot issue, so a failure here undoes the
+    // definition rather than leaving it behind for listRevocationRegistries to report.
+    try {
+      const { revocationStatusListState, registrationMetadata: revListMetadata } =
+        await agent.modules.anoncreds.registerRevocationStatusList({
+          revocationStatusList: {
+            issuerId: cred.credentialDefinition.issuerId,
+            revocationRegistryDefinitionId,
+          },
+          options: {},
+        })
+      const { attestedResource: statusRegistration } = revListMetadata as {
+        attestedResource: Record<string, unknown>
+      }
+      if (!revocationStatusListState.revocationStatusList) {
+        throw new Error(
+          `Cannot create the revocation status list: ${failureReason(revocationStatusListState)}`,
+        )
+      }
+
+      const revocationDefinitionRepository = agent.dependencyManager.resolve(
+        AnonCredsRevocationRegistryDefinitionRepository,
+      )
+      const revocationDefinitionRecord =
+        await revocationDefinitionRepository.getByRevocationRegistryDefinitionId(
+          agent.context,
+          revocationRegistryDefinitionId,
+        )
+
+      if (statusRegistration) {
+        await this.appendStatusListToRevocationRegistry(
+          agent,
+          revocationRegistryDefinitionId,
+          statusRegistration,
+          revocationStatusListState.revocationStatusList.timestamp,
+        )
+      }
+
+      revocationDefinitionRecord.metadata.set('revStatusList', revocationStatusListState.revocationStatusList)
+      await revocationDefinitionRepository.update(agent.context, revocationDefinitionRecord)
+    } catch (error) {
+      await this.rollbackRevocationRegistry(agent, revocationRegistryDefinitionId)
+      throw error
+    }
+
+    this.logger.log(`Revocation Registry Definition Id: ${revocationRegistryDefinitionId}`)
+
+    return revocationRegistryDefinitionId
+  }
+
+  private async rollbackRevocationRegistry(agent: VsAgent, revocationRegistryDefinitionId: string) {
+    try {
+      await this.deleteRevocationRegistry(agent, revocationRegistryDefinitionId)
+    } catch (error) {
+      this.logger.error(
+        `Cannot roll back the revocation registry definition ${revocationRegistryDefinitionId}: ${error}`,
+      )
+    }
+  }
 
   public async deleteRevocationRegistry(
     agent: VsAgent,
@@ -526,4 +655,8 @@ export class CredentialTypesService {
       throw new Error(`Failed to parse JSON Schema Credential ${jsonSchemaCredentialId}: ${error}`)
     }
   }
+}
+
+function failureReason(state: { state: string; reason?: string }): string {
+  return state.state === 'failed' && state.reason ? state.reason : `the registry answered "${state.state}"`
 }
