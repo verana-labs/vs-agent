@@ -37,7 +37,6 @@ import {
   paginate,
 } from '../../../../common'
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../../config'
-import { AccessMode } from '../../../../security'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 import { CredentialTypesService } from '../../credentials'
@@ -61,7 +60,6 @@ const CALLBACK_METADATA = '_2060/callbackParameters'
  * methods read and delete the proof exchange record that the flow leaves behind.
  */
 @ApiTags('v2/didcomm')
-@AccessMode('INTERNAL')
 @Controller({ path: 'didcomm', version: '2' })
 export class V2DidcommPresentationsController {
   public constructor(

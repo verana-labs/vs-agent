@@ -30,7 +30,6 @@ import { createInvitation } from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../../config'
-import { AccessMode } from '../../../../security'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
@@ -51,7 +50,6 @@ import {
  * scope has the credential definition and the revocation registry.
  */
 @ApiTags('v2/didcomm')
-@AccessMode('INTERNAL')
 @Controller({ path: 'didcomm', version: '2' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class V2DidcommCredentialExchangesController {

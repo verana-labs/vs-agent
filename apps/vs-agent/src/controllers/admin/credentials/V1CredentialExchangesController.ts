@@ -17,7 +17,6 @@ import {
 import { Claim } from '@verana-labs/vs-agent-model'
 import { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { AccessMode } from '../../../security'
 import { VsAgentService } from '../../../services/VsAgentService'
 
 import { CredentialExchangeDataDto } from './dto/credential-exchange-data.dto'
@@ -28,7 +27,6 @@ interface AnonCredsCredentialMetadata {
 }
 
 @ApiTags('credential-exchanges')
-@AccessMode('INTERNAL')
 @Controller({
   path: 'credential-exchanges',
   version: '1',

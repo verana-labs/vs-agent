@@ -13,7 +13,6 @@ import {
 import { ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 
 import { Page, PaginationQueryDto, paginate } from '../../../../common'
-import { AccessMode } from '../../../../security'
 import { ServiceEndpoint, ServiceEndpointsService } from '../../service-endpoints/ServiceEndpointsService'
 import {
   AddServiceEndpointDto,
@@ -23,7 +22,6 @@ import {
 } from '../../service-endpoints/dto/service-endpoint.dto'
 
 @ApiTags('v2/vt')
-@AccessMode('INTERNAL')
 @Controller({ path: 'vt/service-endpoints', version: '2' })
 export class V2VtServiceEndpointsController {
   public constructor(@Inject(ServiceEndpointsService) private readonly service: ServiceEndpointsService) {}

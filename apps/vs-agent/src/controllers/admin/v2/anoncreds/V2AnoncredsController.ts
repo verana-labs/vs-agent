@@ -16,7 +16,6 @@ import { CredentialTypesService } from '../../credentials'
 import { RevokeCredentialBodyDto, RevokeCredentialResponseDto } from './dto'
 
 @ApiTags('v2/anoncreds')
-@AccessMode('INTERNAL')
 @Controller({ path: 'anoncreds', version: '2' })
 export class V2AnoncredsController {
   public constructor(

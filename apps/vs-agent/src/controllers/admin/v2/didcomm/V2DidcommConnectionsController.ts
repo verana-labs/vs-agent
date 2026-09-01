@@ -12,7 +12,6 @@ import {
 } from '@nestjs/swagger'
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
-import { AccessMode } from '../../../../security'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
 import { ConnectionRecordDto, ConnectionRecordPageDto, ListConnectionsQueryDto } from './dto'
@@ -25,7 +24,6 @@ import { ConnectionRecordDto, ConnectionRecordPageDto, ListConnectionsQueryDto }
  * peer that connects to the agent.
  */
 @ApiTags('v2/didcomm')
-@AccessMode('INTERNAL')
 @Controller({ path: 'didcomm/connections', version: '2' })
 export class V2DidcommConnectionsController {
   public constructor(@Inject(VsAgentService) private readonly vsAgentService: VsAgentService) {}

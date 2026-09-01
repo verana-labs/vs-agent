@@ -1,13 +1,10 @@
 import { Controller, Logger, Post, Body, Get, Inject, Query } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery } from '@nestjs/swagger'
 
-import { AccessMode } from '../../../security'
-
 import { TrustService } from './TrustService'
 import { IssueCredentialRequestDto, RevokeCredentialRequestDto } from './dto'
 
 @ApiTags('Verifiable Trust')
-@AccessMode('INTERNAL')
 @Controller({ path: 'vt', version: '1' })
 export class V1TrustController {
   private readonly logger = new Logger(V1TrustController.name)

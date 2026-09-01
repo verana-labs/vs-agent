@@ -47,7 +47,6 @@ import {
   paginate,
   PaginationQueryDto,
 } from '../../../../common'
-import { AccessMode } from '../../../../security'
 import { VsAgentService } from '../../../../services/VsAgentService'
 import { CredentialTypesService } from '../../credentials'
 
@@ -68,7 +67,6 @@ import {
  * or a version.
  */
 @ApiTags('v2/anoncreds')
-@AccessMode('INTERNAL')
 @Controller({ path: 'anoncreds/credential-definitions', version: '2' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class V2AnoncredsCredentialDefinitionsController {
