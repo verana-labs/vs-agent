@@ -189,6 +189,32 @@ spec:
               value: "https://{{ tpl .Values.ingress.host . }}"
             - name: AGENT_PUBLIC_DID_METHOD
               value: {{ default "webvh" .Values.publicDidMethod | quote }}
+            {{- if .Values.veranaCorporationId }}
+            - name: VERANA_CORPORATION_ID
+              value: {{ .Values.veranaCorporationId | quote }}
+            {{- end }}
+            {{- if .Values.veranaRpcEndpointUrl }}
+            - name: VERANA_RPC_ENDPOINT_URL
+              value: {{ tpl .Values.veranaRpcEndpointUrl . | quote }}
+            {{- end }}
+            {{- if .Values.veranaIndexerBaseUrl }}
+            - name: VERANA_INDEXER_BASE_URL
+              value: {{ tpl .Values.veranaIndexerBaseUrl . | quote }}
+            {{- end }}
+            {{- if .Values.veranaChainId }}
+            - name: VERANA_CHAIN_ID
+              value: {{ .Values.veranaChainId | quote }}
+            {{- end }}
+            - name: AGENT_MODE
+              value: {{ .Values.agentMode | default "standalone" | quote }}
+            {{- if .Values.trustedEcsEcosystemDids }}
+            - name: TRUSTED_ECS_ECOSYSTEM_DIDS
+              value: {{ .Values.trustedEcsEcosystemDids | quote }}
+            {{- end }}
+            {{- if .Values.delegatedParentVsDid }}
+            - name: AGENT_DELEGATED_PARENT_VS_DID
+              value: {{ .Values.delegatedParentVsDid | quote }}
+            {{- end }}
             - name: ADMIN_API_AUTH_MODE
               value: {{ .Values.adminApiAuthMode | default "internal" | quote }}
             {{- if .Values.adminApiPublicUrl }}

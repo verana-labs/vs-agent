@@ -45,6 +45,13 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 | `eventsBaseUrl`            | Base URL for events                              | `https://events.example.com`    |
 | `didcommInvitationImageUrl`  | URL for the agent invitation image               | `https://example.com/invitation.png` |
 | `publicDidMethod`          | DID method to use for public DID: 'web' or 'webvh' | `webvh` |
+| `veranaCorporationId`      | VPR `Corporation.id` the agent belongs to. **Required** | `""` |
+| `veranaRpcEndpointUrl`     | Verana blockchain RPC endpoint URL. **Required** | `""` |
+| `veranaIndexerBaseUrl`     | Verana indexer API URL. **Required**             | `""` |
+| `veranaChainId`            | Chain ID. Required for the VS-CONN-VS trust gate | `""` |
+| `agentMode`                | How the agent obtains its ECS credentials: `standalone` or `delegated` | `standalone` |
+| `trustedEcsEcosystemDids`  | Comma-separated ECS ecosystem DIDs. Required when `agentMode` is `standalone` | `""` |
+| `delegatedParentVsDid`     | DID of the parent Verifiable Service. Required when `agentMode` is `delegated` | `""` |
 | `extraEnv`                 | Additional environment variables for the agent   | `[]`                            |
 
 ### Secrets Management
@@ -58,6 +65,18 @@ extraEnv:
       secretKeyRef:
         name: my-existing-secret
         key: AGENT_WALLET_KEY
+```
+
+`VERANA_ACCOUNT_MNEMONIC`, the BIP-39 mnemonic of the agent's `vs_operator` account, is
+**required** and must be supplied the same way:
+
+```yaml
+extraEnv:
+  - name: VERANA_ACCOUNT_MNEMONIC
+    valueFrom:
+      secretKeyRef:
+        name: my-existing-secret
+        key: VERANA_ACCOUNT_MNEMONIC
 ```
 
 Both direct values and secret references can be mixed in `extraEnv`:
