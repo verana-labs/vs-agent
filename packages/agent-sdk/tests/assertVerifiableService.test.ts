@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { assertVerifiableService } from '../src/vtFlow/assertVerifiableService'
 
@@ -70,5 +70,85 @@ describe('assertVerifiableService: VS-CONN-VS trust resolution', () => {
 
     await expect(check()).resolves.toBe(false)
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('registry unreachable'))
+  })
+})
+
+describe('assertVerifiableService: verdict caching', () => {
+  const fresh = vi.fn()
+
+  function makeHook(ttl?: { positiveTtlMs?: number }) {
+    return assertVerifiableService({ verifiablePublicRegistries, logger: logger as never, ...ttl })
+  }
+
+  function call(hook: ReturnType<typeof makeHook>) {
+    return hook({ agentContext: {} as never, peerDid: PEER_DID, connectionId: 'conn-1' })
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    // replicates verre's cache protocol (didValidator._resolve): serve only verified===true, set after fresh
+    resolveDID.mockImplementation(async (...args: unknown[]) => {
+      const did = args[0] as string
+      const { cache } = args[1] as {
+        cache?: { get(k: string): Promise<unknown> | undefined; set(k: string, v: Promise<unknown>): void }
+      }
+      const cached = cache?.get(did)
+      const cachedValue = (cached ? await cached : undefined) as { verified?: boolean } | undefined
+      if (cachedValue?.verified === true) return cachedValue
+      const result = await fresh()
+      cache?.set(did, Promise.resolve(result))
+      return result
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('serves a repeat positive verdict from cache within the TTL and logs the source', async () => {
+    fresh.mockResolvedValue({ verified: true, outcome: 'verified' })
+    const hook = makeHook({ positiveTtlMs: 60_000 })
+
+    await expect(call(hook)).resolves.toBe(true)
+    expect(fresh).toHaveBeenCalledTimes(1)
+    expect(logger.debug).toHaveBeenLastCalledWith(expect.stringContaining('source=fresh'))
+
+    await expect(call(hook)).resolves.toBe(true)
+    expect(fresh).toHaveBeenCalledTimes(1)
+    expect(logger.debug).toHaveBeenLastCalledWith(expect.stringContaining('source=cache'))
+  })
+
+  it('re-resolves a positive verdict after the TTL expires', async () => {
+    fresh.mockResolvedValue({ verified: true, outcome: 'verified' })
+    const hook = makeHook({ positiveTtlMs: 60_000 })
+
+    await expect(call(hook)).resolves.toBe(true)
+    vi.advanceTimersByTime(60_001)
+
+    await expect(call(hook)).resolves.toBe(true)
+    expect(fresh).toHaveBeenCalledTimes(2)
+    expect(logger.debug).toHaveBeenLastCalledWith(expect.stringContaining('source=fresh'))
+  })
+
+  it('re-resolves a negative verdict on every attempt', async () => {
+    fresh.mockResolvedValue({ verified: false, outcome: 'invalid' })
+    const hook = makeHook()
+
+    await expect(call(hook)).resolves.toBe(false)
+    await expect(call(hook)).resolves.toBe(false)
+    expect(fresh).toHaveBeenCalledTimes(2)
+    expect(logger.warn).toHaveBeenCalledTimes(2)
+    expect(logger.warn).toHaveBeenLastCalledWith(expect.stringContaining('source=fresh'))
+  })
+
+  it('recovers immediately when a verified-but-untrusted peer becomes trusted', async () => {
+    fresh.mockResolvedValueOnce({ verified: true, outcome: 'verified-test' })
+    fresh.mockResolvedValueOnce({ verified: true, outcome: 'verified' })
+    const hook = makeHook()
+
+    await expect(call(hook)).resolves.toBe(false)
+    await expect(call(hook)).resolves.toBe(true)
+    expect(fresh).toHaveBeenCalledTimes(2)
   })
 })
