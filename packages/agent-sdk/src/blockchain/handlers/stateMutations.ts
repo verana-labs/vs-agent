@@ -15,8 +15,7 @@ import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../../types'
 import { getEcsSchemas } from '../../utils/data'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../../utils/didReadiness'
 import { generateDigestSRI } from '../../utils/setupSelfTr'
-import { composeEcsClaims } from '../../utils/ecsClaims'
-import { EcsClaims } from '../../utils/ecsClaims'
+import { composeEcsClaims, EcsClaims } from '../../utils/ecsClaims'
 import {
   createJsc,
   detachVtjscPublications,
