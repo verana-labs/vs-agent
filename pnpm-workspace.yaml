@@ -2,3 +2,13 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'examples/*'
+
+catalog:
+  '@credo-ts/action-menu': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/anoncreds': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/askar': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/core': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/node': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/question-answer': 0.7.1-pr-2704-20260901064803
+  '@credo-ts/webvh': 0.7.1-pr-2704-20260901064803
