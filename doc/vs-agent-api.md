@@ -9,7 +9,7 @@ VS Agent API consists on a REST-like interface that exposes endpoints to:
 - Query connections, credentials and messages emitted or received
 - Configure agent
 
-In addition, it supports a notification mechanism to subscribe to any event the consumer is interested in, through either HTTP Webhooks (POST endpoints exposed by the consumer) or a long-lived WebSocket connection.
+In addition, it notifies the consumer of every event through HTTP webhooks, one POST per event to the configured `EVENTS_WEBHOOK_URL` (see [Events](#events)).
 
 - [VS Agent API](#vs-agent-api)
   - [Messaging](#messaging)
@@ -86,9 +86,7 @@ Response from VS-A will generally result in a 200 HTTP response code and include
 }
 ```
 
-Using the message `id`, the agent controller can subscribe and verify the message sending status.
-
-To receive messages from other agents, the controller receives the `didcomm.basic-messages.message-received` event.
+Basic messages from other agents arrive as `didcomm.basic-messages.message-received` events, messages of an extension protocol module as `didcomm.{module}.message-received`, and credential and presentation flows as the corresponding `state-updated` events.
 
 ### Message types
 
@@ -486,7 +484,7 @@ If no `did` specified, a new pairwise connection will be created. The newly crea
 
 `label` and `imageUrl` are optional but recommended. URL is given as a Data URL (it can be either a link or base64-encoded).
 
-The generated message Id will be used as invitationId un subsequent Connection State Update events. This can be used to correlate connections.
+The generated message id appears as `outOfBandId` in the `data` of subsequent `didcomm.connections.state-updated` events. This can be used to correlate connections.
 
 ```json
 {

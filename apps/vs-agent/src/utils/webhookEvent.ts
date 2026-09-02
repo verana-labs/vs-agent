@@ -5,7 +5,6 @@ import type {
   DidCommBasicMessageV2StateChangedEvent,
   DidCommConnectionStateChangedEvent,
   DidCommCredentialStateChangedEvent,
-  DidCommMessageProcessedEvent,
   DidCommProofStateChangedEvent,
 } from '@credo-ts/didcomm'
 import type { Event } from '@verana-labs/vs-agent-model'
@@ -16,7 +15,6 @@ import {
   DidCommBasicMessageRole,
   DidCommConnectionEventTypes,
   DidCommCredentialEventTypes,
-  DidCommEventTypes,
   DidCommProofEventTypes,
 } from '@credo-ts/didcomm'
 import { EventType } from '@verana-labs/vs-agent-model'
@@ -39,7 +37,6 @@ export interface WebhookOptions {
   apiKey?: string
 }
 
-// [VSA-ADM-DC-EXT-4] module path segment of each extension protocol the agent serves
 const EXTENSION_MODULES: Record<string, string> = {
   'https://didcomm.org/reactions/1.0': 'reactions',
   'https://didcomm.org/user-profile/1.0': 'user-profile',
@@ -133,8 +130,10 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
     basicMessageReceived,
   )
 
-  agent.events.on<DidCommMessageProcessedEvent>(DidCommEventTypes.DidCommMessageProcessed, ({ payload }) => {
-    const { message, connection } = payload
+  // after the handler, before any reply is sent
+  agent.didcomm.registerMessageHandlerMiddleware(async (context, next) => {
+    await next()
+    const { message, connection } = context
     if (!connection) return
 
     if (message.type === RECEIPTS_MESSAGE_TYPE) {

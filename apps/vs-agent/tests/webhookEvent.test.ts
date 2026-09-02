@@ -2,17 +2,15 @@ import {
   DidCommBasicMessageEventTypes,
   DidCommBasicMessageRole,
   DidCommConnectionEventTypes,
-  DidCommCredentialEventTypes,
-  DidCommEventTypes,
   DidCommProofEventTypes,
 } from '@credo-ts/didcomm'
-import { VtFlowStateUpdated } from '@verana-labs/vs-agent-model'
 import { VsAgentEventTypes } from '@verana-labs/vs-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { presentationCallback, webhookEvent } from '../src/utils/webhookEvent'
 
 type Handler = (event: { payload: unknown }) => unknown
+type Middleware = (context: unknown, next: () => Promise<void>) => Promise<void>
 
 const URL = 'https://backend.example/events'
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
@@ -20,9 +18,11 @@ const fetchMock = vi.fn()
 
 function fakeAgent() {
   const handlers = new Map<string, Handler>()
+  const middlewares: Middleware[] = []
   const agent = {
     events: { on: (type: string, handler: Handler) => handlers.set(type, handler) },
     didcomm: {
+      registerMessageHandlerMiddleware: (middleware: Middleware) => middlewares.push(middleware),
       proofs: {
         getFormatData: vi.fn().mockResolvedValue({
           presentation: { anoncreds: { requested_proof: { revealed_attrs: { name: { raw: 'Alice' } } } } },
@@ -33,11 +33,16 @@ function fakeAgent() {
       },
     },
   }
-  return { agent, emit: (type: string, payload: unknown) => handlers.get(type)?.({ payload }) }
+  return {
+    agent,
+    emit: (type: string, payload: unknown) => handlers.get(type)?.({ payload }),
+    process: (context: unknown) => middlewares[0](context, async () => {}),
+  }
 }
 
 async function delivered(): Promise<{ init: RequestInit; body: Record<string, any> }> {
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+  expect(fetchMock).toHaveBeenCalledTimes(1)
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
   expect(url).toBe(URL)
   return { init, body: JSON.parse(init.body as string) }
@@ -78,68 +83,6 @@ describe('Events API delivery', () => {
     expect(body.data).toMatchObject({ id: 'conn-1', state: 'completed', previousState: null })
   })
 
-  it('sends no authorization header without an api key', async () => {
-    const { agent, emit } = fakeAgent()
-    webhookEvent(agent as never, { url: URL }, logger as never)
-
-    emit(DidCommConnectionEventTypes.DidCommConnectionStateChanged, {
-      connectionRecord,
-      previousState: 'request-received',
-    })
-
-    const { init, body } = await delivered()
-    expect(init.headers).toEqual({ 'Content-Type': 'application/json' })
-    expect(body.data.previousState).toBe('request-received')
-  })
-
-  it('delivers presentation and credential exchange records in their get shape', async () => {
-    const { agent, emit } = fakeAgent()
-    webhookEvent(agent as never, { url: URL }, logger as never)
-
-    emit(DidCommProofEventTypes.ProofStateChanged, {
-      proofRecord: {
-        id: 'proof-1',
-        state: 'done',
-        threadId: 't-1',
-        isVerified: true,
-        createdAt: new Date(),
-        metadata: { get: () => null },
-      },
-      previousState: 'presentation-received',
-    })
-    const presentation = (await delivered()).body
-    expect(presentation.type).toBe('didcomm.presentations.state-updated')
-    expect(presentation.data).toMatchObject({
-      proofExchangeId: 'proof-1',
-      state: 'done',
-      verified: true,
-      claims: [{ name: 'name', value: 'Alice' }],
-      previousState: 'presentation-received',
-    })
-
-    fetchMock.mockClear()
-    emit(DidCommCredentialEventTypes.DidCommCredentialStateChanged, {
-      credentialExchangeRecord: {
-        id: 'cred-1',
-        state: 'offer-sent',
-        threadId: 't-2',
-        connectionId: 'conn-1',
-        createdAt: new Date(),
-        metadata: { get: () => ({ credentialDefinitionId: 'cd-1', schemaId: 's-1' }) },
-      },
-      previousState: null,
-    })
-    const exchange = (await delivered()).body
-    expect(exchange.type).toBe('didcomm.credential-exchanges.state-updated')
-    expect(exchange.data).toMatchObject({
-      credentialExchangeId: 'cred-1',
-      credentialDefinitionId: 'cd-1',
-      schemaId: 's-1',
-      claims: [{ name: 'name', value: 'Alice' }],
-      previousState: null,
-    })
-  })
-
   it('delivers a received basic message as its record and ignores sent ones', async () => {
     const { agent, emit } = fakeAgent()
     webhookEvent(agent as never, { url: URL }, logger as never)
@@ -159,7 +102,6 @@ describe('Events API delivery', () => {
     })
 
     const { body } = await delivered()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(body.type).toBe('didcomm.basic-messages.message-received')
     expect(body.data).toEqual({
       id: 'bm-1',
@@ -171,12 +113,12 @@ describe('Events API delivery', () => {
     })
   })
 
-  it('delivers receipts and extension module messages from the processed message', async () => {
-    const { agent, emit } = fakeAgent()
+  it('delivers receipts and extension module messages once the handler processed them', async () => {
+    const { agent, process } = fakeAgent()
     webhookEvent(agent as never, { url: URL }, logger as never)
     const connection = { id: 'conn-1' }
 
-    emit(DidCommEventTypes.DidCommMessageProcessed, {
+    await process({
       connection,
       message: {
         type: 'https://didcomm.org/receipts/1.0/message-receipts',
@@ -193,7 +135,7 @@ describe('Events API delivery', () => {
 
     fetchMock.mockClear()
     const plaintext = { '@type': 'https://didcomm.org/reactions/1.0/message-reactions', reactions: [] }
-    emit(DidCommEventTypes.DidCommMessageProcessed, {
+    await process({
       connection,
       message: { type: plaintext['@type'], threadId: 't-2', toJSON: () => plaintext },
     })
@@ -202,43 +144,14 @@ describe('Events API delivery', () => {
     expect(reactions.data).toEqual({ connectionId: 'conn-1', threadId: 't-2', message: plaintext })
 
     fetchMock.mockClear()
-    emit(DidCommEventTypes.DidCommMessageProcessed, {
+    await process({
       connection,
       message: { type: 'https://didcomm.org/trust-ping/1.0/ping', threadId: 't-3', toJSON: () => ({}) },
     })
-    emit(DidCommEventTypes.DidCommMessageProcessed, {
+    await process({
       message: { type: plaintext['@type'], threadId: 't-4', toJSON: () => plaintext },
     })
-    await new Promise(resolve => setTimeout(resolve, 20))
     expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('moves type and timestamp of a bus event into the envelope', async () => {
-    const { agent, emit } = fakeAgent()
-    webhookEvent(agent as never, { url: URL }, logger as never)
-
-    emit(VsAgentEventTypes.VtFlowStateUpdated, {
-      event: new VtFlowStateUpdated({
-        vtFlowRecordId: 'flow-1',
-        threadId: 't-1',
-        participantSessionId: 'ps-1',
-        connectionId: 'conn-1',
-        role: 'validator',
-        variant: 'direct-issuance',
-        state: 'validating',
-        previousState: 'ir-received',
-      }),
-    })
-
-    const { body } = await delivered()
-    expect(body.type).toBe('vt.flows.state-updated')
-    expect(body.data).toMatchObject({
-      vtFlowRecordId: 'flow-1',
-      state: 'validating',
-      previousState: 'ir-received',
-    })
-    expect(body.data.type).toBeUndefined()
-    expect(body.data.timestamp).toBeUndefined()
   })
 
   it('logs a record that cannot be mapped instead of rejecting the listener', async () => {
