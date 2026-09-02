@@ -36,15 +36,6 @@ vi.stubGlobal('fetch', async (input: any | URL, options?: RequestInit) => {
 vi.mock('node-fetch', async () => {
   return {
     default: vi.fn(async (url: string) => {
-      if (url === 'http://localhost:5000/didcomm.basic-messages.message-received') {
-        return {
-          ok: true,
-          json: async () => 'ok',
-          text: async () => 'ok',
-          headers: new Map([['content-type', 'application/json']]),
-        }
-      }
-
       throw new Error(`Unhandled fetch to ${url}`)
     }),
   }

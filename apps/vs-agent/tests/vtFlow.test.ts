@@ -247,7 +247,7 @@ describe('vt-flow: two-agent integration', () => {
     vi.stubGlobal('fetch', fetchSpy)
 
     try {
-      webhookEvent(validator, webhookUrl, new TsLogger(LogLevel.Off, validator.label))
+      webhookEvent(validator, { url: webhookUrl }, new TsLogger(LogLevel.Off, validator.label))
 
       await applicant.modules.vtFlow.sendIssuanceRequest({
         connectionId: applicantConnection.id,
@@ -278,7 +278,7 @@ describe('vt-flow: two-agent integration', () => {
       )
 
       const [url, init] = validatingCall
-      expect(url).toBe(`${webhookUrl}/vt.flows.state-updated`)
+      expect(url).toBe(webhookUrl)
       expect((init as RequestInit).method).toBe('POST')
 
       const body = JSON.parse((init as RequestInit).body as string)

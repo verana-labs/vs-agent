@@ -11,19 +11,23 @@ import {
   VsAgentVtFlowStateUpdatedEvent,
 } from '@verana-labs/vs-agent-sdk'
 
-export const webhookEvent = (agent: VsAgent, webhookUrl: string, logger: BaseLogger) => {
+export interface WebhookOptions {
+  url: string
+  apiKey?: string
+}
+
+export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: BaseLogger) => {
+  const { url, apiKey } = options
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+  }
   const sendWebhookEvent = async (body: Event) => {
     try {
-      logger.debug(`sending webhook event to ${webhookUrl}: ${JSON.stringify(body)}`)
-      await fetch(`${webhookUrl}/${body.type}`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-        headers: { 'Content-Type': 'application/json' },
-      })
+      logger.debug(`sending webhook event to ${url}: ${JSON.stringify(body)}`)
+      await fetch(url, { method: 'POST', body: JSON.stringify(body), headers })
     } catch (error) {
-      logger.error(`Error sending ${body.type} webhook event to ${webhookUrl}`, {
-        cause: error,
-      })
+      logger.error(`Error sending ${body.type} webhook event to ${url}`, { cause: error })
     }
   }
 
