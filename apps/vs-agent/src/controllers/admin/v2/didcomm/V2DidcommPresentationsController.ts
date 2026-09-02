@@ -1,8 +1,9 @@
 import type { AnonCredsProofRequestRestriction, AnonCredsRequestedAttribute } from '@credo-ts/anoncreds'
-import type { DidCommProofExchangeRecord } from '@credo-ts/didcomm'
+import type { DidCommProofExchangeRecord, DidCommProofStateChangedEvent } from '@credo-ts/didcomm'
 
 import { AnonCredsNonRevokedInterval, AnonCredsSchema, dateToTimestamp } from '@credo-ts/anoncreds'
 import { RecordNotFoundError, W3cCredential } from '@credo-ts/core'
+import { DidCommProofEventTypes, DidCommProofState } from '@credo-ts/didcomm'
 import {
   Body,
   Controller,
@@ -11,12 +12,14 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Logger,
   Param,
   Post,
   Query,
 } from '@nestjs/common'
 import {
   ApiBody,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -44,6 +47,7 @@ import { CredentialTypesService } from '../../credentials'
 import {
   CreatePresentationRequestBodyDto,
   CreatePresentationRequestResponseDto,
+  DeclineExchangeBodyDto,
   ListPresentationsQueryDto,
   PresentationRecordDto,
   PresentationRecordPageDto,
@@ -52,6 +56,9 @@ import {
 
 const REQUESTED_CREDENTIALS_METADATA = '_2060/requestedCredentials'
 const CALLBACK_METADATA = '_2060/callbackParameters'
+
+/** These states are final. [VSA-ADM-DC-PR-DECLINE] refuses a decline on a final state. */
+const TERMINAL_STATES = [DidCommProofState.Done, DidCommProofState.Declined, DidCommProofState.Abandoned]
 
 /**
  * Presentation flows this agent requested over DIDComm.
@@ -62,6 +69,8 @@ const CALLBACK_METADATA = '_2060/callbackParameters'
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm', version: '2' })
 export class V2DidcommPresentationsController {
+  private readonly logger = new Logger(V2DidcommPresentationsController.name)
+
   public constructor(
     @Inject(VsAgentService) private readonly vsAgentService: VsAgentService,
     @Inject(UrlShorteningService) private readonly urlShortenerService: UrlShorteningService,
@@ -223,6 +232,83 @@ export class V2DidcommPresentationsController {
     return this.toPresentationDto(record)
   }
 
+  @Post('presentations/:proofExchangeId/decline')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Decline a presentation exchange',
+    description:
+      'Refuses the pending step of a presentation exchange, in either role. The agent sends a ' +
+      'problem report to the peer and ends the exchange in state `declined`.',
+  })
+  @ApiParam({
+    name: 'proofExchangeId',
+    type: String,
+    description: 'Presentation flow identifier',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  @ApiBody({ type: DeclineExchangeBodyDto, required: false })
+  @ApiOkResponse({
+    description: 'The updated presentation record, in state `declined`',
+    type: PresentationRecordDto,
+  })
+  @ApiNotFoundResponse({ description: 'No presentation with the given id' })
+  @ApiConflictResponse({ description: 'The exchange is in a terminal state' })
+  public async declinePresentationExchange(
+    @Param('proofExchangeId') proofExchangeId: string,
+    @Body() body: DeclineExchangeBodyDto,
+  ): Promise<PresentationRecordDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const record = await agent.didcomm.proofs.findById(proofExchangeId)
+    if (!record) throw unknownPresentation(proofExchangeId)
+
+    if (TERMINAL_STATES.includes(record.state)) {
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidState,
+        HttpStatus.CONFLICT,
+        `presentation "${proofExchangeId}" is in the terminal state "${record.state}"`,
+      )
+    }
+
+    const description = body.reason ?? 'Request declined'
+
+    // Credo declines a request that the agent receives. It sends the problem report and it sets
+    // the state. Credo has no equivalent method for the step of the verifier.
+    if (record.state === DidCommProofState.RequestReceived) {
+      const declined = await agent.didcomm.proofs.declineRequest({
+        proofExchangeRecordId: proofExchangeId,
+        sendProblemReport: true,
+        problemReportDescription: description,
+      })
+      return this.toPresentationDto(declined)
+    }
+
+    // Credo sends no problem report when the exchange has no connection. An invitation makes
+    // such an exchange. The exchange ends in `declined`, because the caller refuses it, and the
+    // record keeps the reason when the peer gets no report.
+    let undelivered: string | undefined
+    try {
+      await agent.didcomm.proofs.sendProblemReport({ proofExchangeRecordId: proofExchangeId, description })
+    } catch (error) {
+      undelivered = `the agent declined the exchange but could not notify the peer: ${error}`
+      this.logger.warn(`Presentation ${proofExchangeId}: ${undelivered}`)
+    }
+
+    // `update` writes the record but it sends no event. The agent emits the state change for
+    // the Events API.
+    const previousState = record.state
+    record.state = DidCommProofState.Declined
+    if (undelivered) record.errorMessage = undelivered
+    await agent.didcomm.proofs.update(record)
+
+    agent.events.emit<DidCommProofStateChangedEvent>(agent.context, {
+      type: DidCommProofEventTypes.ProofStateChanged,
+      payload: { proofRecord: record.clone(), previousState },
+    })
+
+    return this.toPresentationDto(record)
+  }
+
   @Delete('presentations/:proofExchangeId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
@@ -318,6 +404,7 @@ export class V2DidcommPresentationsController {
     return {
       proofExchangeId: record.id,
       state: record.state,
+      errorMessage: record.errorMessage,
       requestedCredentials:
         (record.metadata.get(REQUESTED_CREDENTIALS_METADATA) as RequestedCredential[] | null) ?? [],
       claims,

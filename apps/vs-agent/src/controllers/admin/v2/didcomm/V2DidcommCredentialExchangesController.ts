@@ -1,11 +1,12 @@
 import type { AnonCredsCredentialMetadata } from '@credo-ts/anoncreds'
-import type { DidCommCredentialExchangeRecord } from '@credo-ts/didcomm'
+import type { DidCommCredentialExchangeRecord, DidCommCredentialStateChangedEvent } from '@credo-ts/didcomm'
 import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
   Body,
   Controller,
   Get,
+  HttpCode,
   HttpStatus,
   Inject,
   Logger,
@@ -16,8 +17,10 @@ import {
   ValidationPipe,
 } from '@nestjs/common'
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
+import { DidCommCredentialEventTypes, DidCommCredentialState } from '@credo-ts/didcomm'
 import {
   ApiBody,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -38,8 +41,16 @@ import {
   CreateCredentialOfferResponseDto,
   CredentialExchangeRecordDto,
   CredentialExchangeRecordPageDto,
+  DeclineExchangeBodyDto,
   ListCredentialExchangesQueryDto,
 } from './dto'
+
+/** These states are final. [VSA-ADM-DC-CE-DECLINE] refuses a decline on a final state. */
+const TERMINAL_STATES = [
+  DidCommCredentialState.Done,
+  DidCommCredentialState.Declined,
+  DidCommCredentialState.Abandoned,
+]
 
 /**
  * This controller has the credential exchanges of this agent on DIDComm.
@@ -185,6 +196,86 @@ export class V2DidcommCredentialExchangesController {
     }
   }
 
+  @Post('credential-exchanges/:credentialExchangeId/decline')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Decline a credential exchange',
+    description:
+      'Refuses the pending step of a credential exchange, in either role. The agent sends a ' +
+      'problem report to the peer and ends the exchange in state `declined`.',
+  })
+  @ApiParam({
+    name: 'credentialExchangeId',
+    type: String,
+    description: 'Exchange identifier',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  @ApiBody({ type: DeclineExchangeBodyDto, required: false })
+  @ApiOkResponse({
+    description: 'The updated credential exchange record, in state `declined`',
+    type: CredentialExchangeRecordDto,
+  })
+  @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
+  @ApiConflictResponse({ description: 'The exchange is in a terminal state' })
+  public async declineCredentialExchange(
+    @Param('credentialExchangeId') credentialExchangeId: string,
+    @Body() body: DeclineExchangeBodyDto,
+  ): Promise<CredentialExchangeRecordDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const record = await agent.didcomm.credentials.findById(credentialExchangeId)
+    if (!record) throw unknownCredentialExchange(credentialExchangeId)
+
+    if (TERMINAL_STATES.includes(record.state)) {
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidState,
+        HttpStatus.CONFLICT,
+        `credential exchange "${credentialExchangeId}" is in the terminal state "${record.state}"`,
+      )
+    }
+
+    const description = body.reason ?? 'Offer declined'
+
+    // Credo declines an offer that the agent receives. It sends the problem report and it sets
+    // the state. Credo has no equivalent method for the step of the issuer.
+    if (record.state === DidCommCredentialState.OfferReceived) {
+      const declined = await agent.didcomm.credentials.declineOffer({
+        credentialExchangeRecordId: credentialExchangeId,
+        sendProblemReport: true,
+        problemReportDescription: description,
+      })
+      return this.toRecordDto(agent, declined)
+    }
+
+    // Credo sends no problem report when the exchange has no connection. An invitation makes
+    // such an exchange. The exchange ends in `declined`, because the caller refuses it, and the
+    // record keeps the reason when the peer gets no report.
+    let undelivered: string | undefined
+    try {
+      await agent.didcomm.credentials.sendProblemReport({
+        credentialExchangeRecordId: credentialExchangeId,
+        description,
+      })
+    } catch (error) {
+      undelivered = `the agent declined the exchange but could not notify the peer: ${error}`
+      this.logger.warn(`Credential exchange ${credentialExchangeId}: ${undelivered}`)
+    }
+
+    // `update` writes the record but it sends no event. The agent emits the state change for
+    // the Events API.
+    const previousState = record.state
+    record.state = DidCommCredentialState.Declined
+    if (undelivered) record.errorMessage = undelivered
+    await agent.didcomm.credentials.update(record)
+
+    agent.events.emit<DidCommCredentialStateChangedEvent>(agent.context, {
+      type: DidCommCredentialEventTypes.DidCommCredentialStateChanged,
+      payload: { credentialExchangeRecord: record.clone(), previousState },
+    })
+
+    return this.toRecordDto(agent, record)
+  }
+
   @Get('credential-exchanges')
   @ApiOperation({
     summary: 'List credential exchanges',
@@ -235,13 +326,7 @@ export class V2DidcommCredentialExchangesController {
     const agent = await this.vsAgentService.getAgent()
 
     const record = await agent.didcomm.credentials.findById(credentialExchangeId)
-    if (!record) {
-      throw new AdminApiError(
-        AdminApiErrorCode.UnknownId,
-        HttpStatus.NOT_FOUND,
-        `no credential exchange with id "${credentialExchangeId}"`,
-      )
-    }
+    if (!record) throw unknownCredentialExchange(credentialExchangeId)
 
     return this.toRecordDto(agent, record)
   }
@@ -284,4 +369,12 @@ export class V2DidcommCredentialExchangesController {
 
 function invalidInput(message: string): AdminApiError {
   return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, message)
+}
+
+function unknownCredentialExchange(credentialExchangeId: string): AdminApiError {
+  return new AdminApiError(
+    AdminApiErrorCode.UnknownId,
+    HttpStatus.NOT_FOUND,
+    `no credential exchange with id "${credentialExchangeId}"`,
+  )
 }

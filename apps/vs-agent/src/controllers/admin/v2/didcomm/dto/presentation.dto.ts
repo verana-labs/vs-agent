@@ -157,6 +157,13 @@ export class PresentationRecordDto {
   @ApiPropertyOptional({ description: 'DIDComm thread identifier', example: 'thread-8765-4321' })
   threadId?: string
 
+  @ApiPropertyOptional({
+    description:
+      'Error message on the exchange. The agent sets it when the exchange stops. The agent also ' +
+      'sets it when it declines an exchange and the peer gets no problem report.',
+  })
+  errorMessage?: string
+
   @ApiProperty({ type: String, format: 'date-time', description: 'When the flow was created' })
   createdAt!: Date
 
