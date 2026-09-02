@@ -88,6 +88,7 @@ import {
   setupAgent,
   toNestLogLevels,
   TsLogger,
+  presentationCallback,
   webhookEvent,
 } from './utils'
 
@@ -426,6 +427,7 @@ const run = async () => {
 
   const ecsClaims = agent.ecsClaims ?? {}
 
+  presentationCallback(agent, serverLogger)
   if (EVENTS_WEBHOOK_URL) {
     webhookEvent(agent, { url: EVENTS_WEBHOOK_URL, apiKey: EVENTS_WEBHOOK_API_KEY }, serverLogger)
   }

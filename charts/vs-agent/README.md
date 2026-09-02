@@ -78,6 +78,9 @@ extraEnv:
         key: VERANA_ACCOUNT_MNEMONIC
 ```
 
+`EVENTS_WEBHOOK_API_KEY`, the bearer secret the agent sends with every event delivery, is optional and
+must be supplied the same way when `eventsWebhookUrl` is set.
+
 Both direct values and secret references can be mixed in `extraEnv`:
 
 ```yaml

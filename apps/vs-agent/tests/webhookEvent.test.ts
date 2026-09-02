@@ -10,7 +10,7 @@ import { VtFlowStateUpdated } from '@verana-labs/vs-agent-model'
 import { VsAgentEventTypes } from '@verana-labs/vs-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { webhookEvent } from '../src/utils/webhookEvent'
+import { presentationCallback, webhookEvent } from '../src/utils/webhookEvent'
 
 type Handler = (event: { payload: unknown }) => unknown
 
@@ -239,6 +239,40 @@ describe('Events API delivery', () => {
     })
     expect(body.data.type).toBeUndefined()
     expect(body.data.timestamp).toBeUndefined()
+  })
+
+  it('logs a record that cannot be mapped instead of rejecting the listener', async () => {
+    const { agent, emit } = fakeAgent()
+    agent.didcomm.proofs.getFormatData.mockRejectedValueOnce(new Error('record deleted'))
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    await emit(DidCommProofEventTypes.ProofStateChanged, {
+      proofRecord: { id: 'proof-1', state: 'done', createdAt: new Date(), metadata: { get: () => null } },
+      previousState: null,
+    })
+
+    expect(logger.error).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('posts the presentation callback independently of the webhook', async () => {
+    const { agent, emit } = fakeAgent()
+    presentationCallback(agent as never, logger as never)
+
+    await emit(VsAgentEventTypes.PresentationStateUpdated, {
+      event: {
+        callbackUrl: 'https://caller.example/cb',
+        ref: 'r-1',
+        state: 'ok',
+        verified: true,
+        proofExchangeId: 'p-1',
+      },
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://caller.example/cb',
+      expect.objectContaining({ method: 'POST' }),
+    )
   })
 
   it('logs a failed delivery and never throws', async () => {

@@ -74,8 +74,18 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
       .catch(error => logger.error(`event ${type} ${envelope.id} delivery failed`, { cause: error }))
   }
 
-  const stateUpdated = (type: EventType, record: object, previousState: string | null): void =>
-    deliver(type, { ...record, previousState })
+  // a listener is never awaited, so a rejection here would take the process down
+  const stateUpdated = async (
+    type: EventType,
+    record: object | Promise<object>,
+    previousState: string | null,
+  ): Promise<void> => {
+    try {
+      deliver(type, { ...(await record), previousState })
+    } catch (error) {
+      logger.error(`event ${type} delivery failed`, { cause: error })
+    }
+  }
 
   agent.events.on<DidCommConnectionStateChangedEvent>(
     DidCommConnectionEventTypes.DidCommConnectionStateChanged,
@@ -87,22 +97,20 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
       ),
   )
 
-  agent.events.on<DidCommProofStateChangedEvent>(
-    DidCommProofEventTypes.ProofStateChanged,
-    async ({ payload }) =>
-      stateUpdated(
-        EventType.PresentationStateUpdated,
-        await toPresentationDto(agent, payload.proofRecord),
-        payload.previousState,
-      ),
+  agent.events.on<DidCommProofStateChangedEvent>(DidCommProofEventTypes.ProofStateChanged, ({ payload }) =>
+    stateUpdated(
+      EventType.PresentationStateUpdated,
+      toPresentationDto(agent, payload.proofRecord),
+      payload.previousState,
+    ),
   )
 
   agent.events.on<DidCommCredentialStateChangedEvent>(
     DidCommCredentialEventTypes.DidCommCredentialStateChanged,
-    async ({ payload }) =>
+    ({ payload }) =>
       stateUpdated(
         EventType.CredentialExchangeStateUpdated,
-        await toCredentialExchangeDto(agent, payload.credentialExchangeRecord, logger),
+        toCredentialExchangeDto(agent, payload.credentialExchangeRecord, logger),
         payload.previousState,
       ),
   )
@@ -156,7 +164,9 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
   agent.events.on<VsAgentIndexerNotificationEvent>(VsAgentEventTypes.IndexerNotification, ({ payload }) =>
     deliver(EventType.IndexerNotification, dataOf(payload.event)),
   )
+}
 
+export const presentationCallback = (agent: VsAgent, logger: BaseLogger) => {
   agent.events.on<VsAgentPresentationStateUpdatedEvent>(
     VsAgentEventTypes.PresentationStateUpdated,
     async ({ payload }) => {
