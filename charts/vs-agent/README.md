@@ -135,6 +135,52 @@ extraEnv:
     value: custom-value
 ```
 
+#### ECS Credential Claims (Optional)
+
+The agent gets the claims of its own ECS credentials from the `ECS_CLAIMS_*` variables. The
+chart has no value for them. Set them with `extraEnv`.
+
+In the `standalone` agent mode, the agent needs these seven variables. The agent stops at
+startup if one of them is absent:
+
+| Variable | Claim |
+| --- | --- |
+| `ECS_CLAIMS_SERVICE_NAME` | `name` |
+| `ECS_CLAIMS_SERVICE_TYPE` | `type` |
+| `ECS_CLAIMS_SERVICE_DESCRIPTION` | `description` |
+| `ECS_CLAIMS_SERVICE_LOGO_URI` | `logoUri` |
+| `ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED` | `minimumAgeRequired` |
+| `ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI` | `termsAndConditionsUri` |
+| `ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI` | `privacyPolicyUri` |
+
+`ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED` must be an integer.
+
+The agent reads each `*_URI` variable and calculates the digest of the response. Therefore,
+each URI must be available. The agent serves three placeholder resources at
+`/vt/default/logo.svg`, `/vt/default/terms.html` and `/vt/default/privacy.html`. A URI can
+point to one of them.
+
+`extraEnv` does not accept Helm templates. Write the full host in each URI.
+
+```yaml
+extraEnv:
+  - name: ECS_CLAIMS_SERVICE_NAME
+    value: My Service
+  - name: ECS_CLAIMS_SERVICE_TYPE
+    value: WEB_PORTAL
+  - name: ECS_CLAIMS_SERVICE_DESCRIPTION
+    value: A verifiable service
+  - name: ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED
+    value: "18"
+  - name: ECS_CLAIMS_SERVICE_LOGO_URI
+    value: https://vs-agent.example.io/vt/default/logo.svg
+  - name: ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI
+    value: https://vs-agent.example.io/vt/default/terms.html
+  - name: ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI
+    value: https://vs-agent.example.io/vt/default/privacy.html
+```
+
+
 ---
 
 ### Resources (New)
