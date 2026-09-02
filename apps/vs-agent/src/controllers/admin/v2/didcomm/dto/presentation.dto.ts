@@ -88,6 +88,16 @@ export class CreatePresentationRequestBodyDto {
   requireNonRevocation?: boolean
 
   @ApiPropertyOptional({
+    description:
+      'Complete the verifier steps without a call: the agent acknowledges a presentation after it ' +
+      'verifies it, with no `acceptPresentation` call.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  autoAccept?: boolean
+
+  @ApiPropertyOptional({
     description: 'Advertise the legacy did:web form when the DID of the agent is did:webvh',
   })
   @IsOptional()

@@ -6,6 +6,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   HttpStatus,
   Inject,
   Logger,
@@ -16,8 +17,10 @@ import {
   ValidationPipe,
 } from '@nestjs/common'
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
+import { DidCommAutoAcceptCredential, DidCommCredentialState } from '@credo-ts/didcomm'
 import {
   ApiBody,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -46,8 +49,9 @@ import {
  * Refer to [VSA-ADM-DC-CE].
  *
  * `createCredentialOffer` makes the Out-of-Band invitation. The invitation starts an issuance
- * flow. The other two methods read the credential exchange record of that flow. The AnonCreds
- * scope has the credential definition and the revocation registry.
+ * flow. The accept methods run the protocol steps of that flow, as issuer or as holder, and the
+ * read methods show the credential exchange record. The AnonCreds scope has the credential
+ * definition and the revocation registry.
  */
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm', version: '2' })
@@ -111,6 +115,7 @@ export class V2DidcommCredentialExchangesController {
       useLegacyDid,
       didcommVersion,
     } = body
+    const autoAccept = body.autoAccept ?? false
 
     const [record] = await agent.modules.anoncreds.getCreatedCredentialDefinitions({
       credentialDefinitionId,
@@ -148,8 +153,13 @@ export class V2DidcommCredentialExchangesController {
       )
     }
 
+    // The specification makes the caller run the issuer steps, unless the caller sets
+    // `autoAccept`. The exchange carries the policy, which the module default does not override.
     const offer = await agent.didcomm.credentials.createOffer({
       protocolVersion: 'v2',
+      autoAcceptCredential: autoAccept
+        ? DidCommAutoAcceptCredential.ContentApproved
+        : DidCommAutoAcceptCredential.Never,
       credentialFormats: {
         anoncreds: {
           credentialDefinitionId,
@@ -183,6 +193,113 @@ export class V2DidcommCredentialExchangesController {
       url,
       shortUrl: `${this.publicApiBaseUrl}/s?id=${shortUrlId}`,
     }
+  }
+
+  @Post('credential-exchanges/:credentialExchangeId/accept-offer')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Accept a credential offer',
+    description: 'Accepts a credential offer that a peer sent to this agent, and requests the credential.',
+  })
+  @ApiParam({
+    name: 'credentialExchangeId',
+    type: String,
+    description: 'Exchange identifier',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  @ApiOkResponse({ description: 'The updated credential exchange record', type: CredentialExchangeRecordDto })
+  @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
+  @ApiConflictResponse({ description: 'The exchange is not in state `offer-received`' })
+  public async acceptCredentialOffer(
+    @Param('credentialExchangeId') credentialExchangeId: string,
+  ): Promise<CredentialExchangeRecordDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const record = await agent.didcomm.credentials.findById(credentialExchangeId)
+    if (!record) throw unknownCredentialExchange(credentialExchangeId)
+
+    requireCredentialState(record, DidCommCredentialState.OfferReceived)
+
+    // The specification makes the caller store the credential with `acceptCredential`, so the
+    // exchange stops here until that call arrives.
+    const updated = await agent.didcomm.credentials.acceptOffer({
+      credentialExchangeRecordId: credentialExchangeId,
+      autoAcceptCredential: DidCommAutoAcceptCredential.Never,
+    })
+
+    return this.toRecordDto(agent, updated)
+  }
+
+  @Post('credential-exchanges/:credentialExchangeId/accept-request')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Accept a credential request',
+    description:
+      'Accepts a credential request as issuer, and issues the credential. The agent issues the ' +
+      'claims that the offer previewed. A caller that wants other claims declines this exchange ' +
+      'and starts a new offer.',
+  })
+  @ApiParam({
+    name: 'credentialExchangeId',
+    type: String,
+    description: 'Exchange identifier',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  @ApiOkResponse({ description: 'The updated credential exchange record', type: CredentialExchangeRecordDto })
+  @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
+  @ApiConflictResponse({ description: 'The exchange is not in state `request-received`' })
+  public async acceptCredentialRequest(
+    @Param('credentialExchangeId') credentialExchangeId: string,
+  ): Promise<CredentialExchangeRecordDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const record = await agent.didcomm.credentials.findById(credentialExchangeId)
+    if (!record) throw unknownCredentialExchange(credentialExchangeId)
+
+    requireCredentialState(record, DidCommCredentialState.RequestReceived)
+
+    const updated = await agent.didcomm.credentials.acceptRequest({
+      credentialExchangeRecordId: credentialExchangeId,
+    })
+
+    return this.toRecordDto(agent, updated)
+  }
+
+  @Post('credential-exchanges/:credentialExchangeId/accept-credential')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Accept a credential',
+    description:
+      'Accepts a received credential as holder: the agent stores the credential in its credential ' +
+      'store and acknowledges it to the issuer.',
+  })
+  @ApiParam({
+    name: 'credentialExchangeId',
+    type: String,
+    description: 'Exchange identifier',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  @ApiOkResponse({
+    description: 'The updated credential exchange record, in state `done`',
+    type: CredentialExchangeRecordDto,
+  })
+  @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
+  @ApiConflictResponse({ description: 'The exchange is not in state `credential-received`' })
+  public async acceptCredential(
+    @Param('credentialExchangeId') credentialExchangeId: string,
+  ): Promise<CredentialExchangeRecordDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const record = await agent.didcomm.credentials.findById(credentialExchangeId)
+    if (!record) throw unknownCredentialExchange(credentialExchangeId)
+
+    requireCredentialState(record, DidCommCredentialState.CredentialReceived)
+
+    const updated = await agent.didcomm.credentials.acceptCredential({
+      credentialExchangeRecordId: credentialExchangeId,
+    })
+
+    return this.toRecordDto(agent, updated)
   }
 
   @Get('credential-exchanges')
@@ -235,13 +352,7 @@ export class V2DidcommCredentialExchangesController {
     const agent = await this.vsAgentService.getAgent()
 
     const record = await agent.didcomm.credentials.findById(credentialExchangeId)
-    if (!record) {
-      throw new AdminApiError(
-        AdminApiErrorCode.UnknownId,
-        HttpStatus.NOT_FOUND,
-        `no credential exchange with id "${credentialExchangeId}"`,
-      )
-    }
+    if (!record) throw unknownCredentialExchange(credentialExchangeId)
 
     return this.toRecordDto(agent, record)
   }
@@ -284,4 +395,29 @@ export class V2DidcommCredentialExchangesController {
 
 function invalidInput(message: string): AdminApiError {
   return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, message)
+}
+
+function unknownCredentialExchange(credentialExchangeId: string): AdminApiError {
+  return new AdminApiError(
+    AdminApiErrorCode.UnknownId,
+    HttpStatus.NOT_FOUND,
+    `no credential exchange with id "${credentialExchangeId}"`,
+  )
+}
+
+/**
+ * This function checks the state of an exchange before the agent runs a protocol step. Each
+ * method of the specification names one state that it accepts.
+ */
+function requireCredentialState(
+  record: DidCommCredentialExchangeRecord,
+  expected: DidCommCredentialState,
+): void {
+  if (record.state === expected) return
+
+  throw new AdminApiError(
+    AdminApiErrorCode.InvalidState,
+    HttpStatus.CONFLICT,
+    `credential exchange "${record.id}" is in state "${record.state}", not "${expected}"`,
+  )
 }

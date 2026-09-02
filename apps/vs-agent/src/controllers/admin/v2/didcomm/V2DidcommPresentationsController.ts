@@ -2,6 +2,7 @@ import type { AnonCredsProofRequestRestriction, AnonCredsRequestedAttribute } fr
 import type { DidCommProofExchangeRecord } from '@credo-ts/didcomm'
 
 import { AnonCredsNonRevokedInterval, AnonCredsSchema, dateToTimestamp } from '@credo-ts/anoncreds'
+import { DidCommAutoAcceptProof, DidCommProofState } from '@credo-ts/didcomm'
 import { RecordNotFoundError, W3cCredential } from '@credo-ts/core'
 import {
   Body,
@@ -17,6 +18,7 @@ import {
 } from '@nestjs/common'
 import {
   ApiBody,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -56,7 +58,8 @@ const CALLBACK_METADATA = '_2060/callbackParameters'
 /**
  * Presentation flows this agent requested over DIDComm.
  *
- * `createPresentationRequest` mints the Out-of-Band invitation that starts a flow; the remaining
+ * `createPresentationRequest` mints the Out-of-Band invitation that starts a flow; the accept
+ * methods run the protocol steps of that flow, as verifier or as prover, and the remaining
  * methods read and delete the proof exchange record that the flow leaves behind.
  */
 @ApiTags('v2/didcomm')
@@ -116,6 +119,7 @@ export class V2DidcommPresentationsController {
 
     const { requestedCredentials, ref, callbackUrl, useLegacyDid, didcommVersion } = body
     const requireNonRevocation = body.requireNonRevocation ?? false
+    const autoAccept = body.autoAccept ?? false
 
     if (!requestedCredentials?.length) {
       throw invalidInput('`requestedCredentials` must name at least one credential')
@@ -144,8 +148,11 @@ export class V2DidcommPresentationsController {
       nonRevoked = { from: now, to: now }
     }
 
+    // The specification makes the caller run the verifier steps, unless the caller sets
+    // `autoAccept`. The exchange carries the policy, which the module default does not override.
     const request = await agent.didcomm.proofs.createRequest({
       protocolVersion: 'v2',
+      autoAcceptProof: autoAccept ? DidCommAutoAcceptProof.ContentApproved : DidCommAutoAcceptProof.Never,
       proofFormats: {
         anoncreds: {
           name: 'proof-request',
@@ -179,6 +186,104 @@ export class V2DidcommPresentationsController {
       url,
       shortUrl: `${this.publicApiBaseUrl}/s?id=${shortUrlId}`,
     }
+  }
+
+  @Post('presentations/:proofExchangeId/accept-request')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Accept a presentation request',
+    description:
+      'Accepts a presentation request that a peer sent to this agent, and presents the matching ' +
+      'credentials from the credential store of the agent. The agent selects the credentials.',
+  })
+  @ApiParam({
+    name: 'proofExchangeId',
+    type: String,
+    description: 'Presentation flow identifier',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  @ApiOkResponse({ description: 'The updated presentation record', type: PresentationRecordDto })
+  @ApiNotFoundResponse({ description: 'No presentation with the given id' })
+  @ApiConflictResponse({
+    description:
+      'The exchange is not in state `request-received`, or no credential set satisfies the request',
+  })
+  public async acceptPresentationRequest(
+    @Param('proofExchangeId') proofExchangeId: string,
+  ): Promise<PresentationRecordDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const record = await agent.didcomm.proofs.findById(proofExchangeId)
+    if (!record) throw unknownPresentation(proofExchangeId)
+
+    requireProofState(record, DidCommProofState.RequestReceived)
+
+    // `getCredentialsForRequest` returns the matches of each group of the request, and an empty
+    // group shows that the credential store cannot answer that group. The agent asks first
+    // because `acceptRequest`, which makes the selection itself, throws on an empty group.
+    const { proofFormats } = await agent.didcomm.proofs.getCredentialsForRequest({
+      proofExchangeRecordId: proofExchangeId,
+    })
+    const candidates = proofFormats.anoncreds ?? proofFormats.indy
+
+    if (!candidates) {
+      throw noCompatibleCredentials('the request asks for a format that this agent cannot present')
+    }
+
+    const missing = [...Object.entries(candidates.attributes), ...Object.entries(candidates.predicates)]
+      .filter(([, matches]) => !matches.length)
+      .map(([name]) => name)
+
+    if (missing.length) {
+      throw noCompatibleCredentials(
+        `the credential store holds no credential that satisfies [${missing.join(', ')}]`,
+      )
+    }
+
+    // The agent selects the credentials itself, so `acceptRequest` gets no `proofFormats`.
+    const updated = await agent.didcomm.proofs.acceptRequest({
+      proofExchangeRecordId: proofExchangeId,
+    })
+
+    return this.toPresentationDto(updated)
+  }
+
+  @Post('presentations/:proofExchangeId/accept-presentation')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Accept a presentation',
+    description:
+      'Acknowledges a received presentation as verifier, and completes the exchange. This method ' +
+      'does not change the verification result: the agent verified the presentation when it ' +
+      'received it, and stored the result in `verified`.',
+  })
+  @ApiParam({
+    name: 'proofExchangeId',
+    type: String,
+    description: 'Presentation flow identifier',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  @ApiOkResponse({
+    description: 'The updated presentation record, in state `done`',
+    type: PresentationRecordDto,
+  })
+  @ApiNotFoundResponse({ description: 'No presentation with the given id' })
+  @ApiConflictResponse({ description: 'The exchange is not in state `presentation-received`' })
+  public async acceptPresentation(
+    @Param('proofExchangeId') proofExchangeId: string,
+  ): Promise<PresentationRecordDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const record = await agent.didcomm.proofs.findById(proofExchangeId)
+    if (!record) throw unknownPresentation(proofExchangeId)
+
+    requireProofState(record, DidCommProofState.PresentationReceived)
+
+    const updated = await agent.didcomm.proofs.acceptPresentation({
+      proofExchangeRecordId: proofExchangeId,
+    })
+
+    return this.toPresentationDto(updated)
   }
 
   @Get('presentations')
@@ -339,6 +444,24 @@ function uniqueKey(taken: Record<string, unknown>, name: string): string {
 
 function invalidInput(message: string): AdminApiError {
   return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, message)
+}
+
+/**
+ * This function checks the state of an exchange before the agent runs a protocol step. Each
+ * method of the specification names one state that it accepts.
+ */
+function requireProofState(record: DidCommProofExchangeRecord, expected: DidCommProofState): void {
+  if (record.state === expected) return
+
+  throw new AdminApiError(
+    AdminApiErrorCode.InvalidState,
+    HttpStatus.CONFLICT,
+    `presentation "${record.id}" is in state "${record.state}", not "${expected}"`,
+  )
+}
+
+function noCompatibleCredentials(message: string): AdminApiError {
+  return new AdminApiError(AdminApiErrorCode.NoCompatibleCredentials, HttpStatus.CONFLICT, message)
 }
 
 function unknownPresentation(proofExchangeId: string): AdminApiError {
