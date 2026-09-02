@@ -8,13 +8,14 @@ import {
   VtFlowState,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { identifySchema } from '@verana-labs/vs-agent-model'
+import { classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../../types'
 import { getEcsSchemas } from '../../utils/data'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../../utils/didReadiness'
-import { SelfTrDefaults, generateDigestSRI } from '../../utils/setupSelfTr'
+import { generateDigestSRI } from '../../utils/setupSelfTr'
+import { composeEcsClaims, EcsClaims } from '../../utils/ecsClaims'
 import {
   createJsc,
   detachVtjscPublications,
@@ -309,11 +310,7 @@ export async function removeHolderTrustCredentialIfRevoked(
   for (const record of records) {
     if (record.role !== VtFlowRole.Applicant || !record.credentialExchangeRecordId) continue
     try {
-      const credentialId = await removeStoredTrustCredential(
-        agent,
-        agent.publicApiBaseUrl,
-        record.credentialExchangeRecordId,
-      )
+      const credentialId = await removeStoredTrustCredential(agent, record.credentialExchangeRecordId)
       if (credentialId) {
         agent.config.logger.info(
           `[IndexerWS] Removed linked VP and stored credential ${credentialId} (participant=${participantId})`,
@@ -335,19 +332,13 @@ export async function removeHolderTrustCredentialIfRevoked(
 export async function removeSelfIssuedEcsCredentialsIfIssuerRevoked(
   agent: VsAgent,
   participantId: string,
-  selfTrDefaults: SelfTrDefaults,
 ): Promise<void> {
   if (!agent.publicApiBaseUrl) return
   const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
   if (participant?.role !== ISSUER_PARTICIPANT_TYPE || participant.did !== agent.did) return
 
   try {
-    const withdrawn = await withdrawSelfIssuedEcsCredentials(
-      agent,
-      agent.publicApiBaseUrl,
-      participant.id,
-      selfTrDefaults,
-    )
+    const withdrawn = await withdrawSelfIssuedEcsCredentials(agent, participant.id)
     for (const jscUrl of withdrawn) {
       agent.config.logger.info(
         `[SelfTR] Withdrew the self-issued ECS credential bound to ${jscUrl} (issuer participant ${participantId})`,
@@ -382,6 +373,23 @@ export async function reconcileVtFlowRecordsOnCancel(agent: VsAgent, participant
   )
 }
 
+// [VSA-VTI-CFG-ENV-ECS]: the applicant proposes its own claims, and the validator may override
+// them. The field is omitted when the operator configured none.
+async function onboardingClaims(
+  agent: VsAgent,
+  schemaId: number,
+): Promise<Record<string, unknown> | undefined> {
+  if (!agent.ecsClaims || !agent.did) return undefined
+  const schema = await agent.indexer.getCredentialSchema(schemaId)
+  const ecsKey = schema && (await classifyEcsSchema(schema.json_schema))
+  if (!ecsKey) {
+    agent.config.logger.warn(`[ecs-claims] schema ${schemaId} is not an ECS schema, sending no claims`)
+    return undefined
+  }
+  // a digest the agent cannot compute must stop the flow, per [VSA-VTI-CFG-ENV-ECS]
+  return await composeEcsClaims(agent.ecsClaims, ecsKey, agent.config.logger)
+}
+
 export async function startParticipantOPAutoFlow(agent: VsAgent, activity: IndexerActivity): Promise<void> {
   const chain = agent.veranaChain
   if (!chain) return
@@ -392,7 +400,8 @@ export async function startParticipantOPAutoFlow(agent: VsAgent, activity: Index
   try {
     await waitUntilOwnDidIsPubliclyResolvable(agent, agent.config.logger)
     const orchestrator = new VtFlowOrchestrator(agent)
-    await orchestrator.startOnboardingProcess({ applicantParticipantId })
+    const claims = await onboardingClaims(agent, holderParticipant.schemaId)
+    await orchestrator.startOnboardingProcess({ applicantParticipantId, ...(claims ? { claims } : {}) })
   } catch (err) {
     agent.config.logger.error(
       `[IndexerWS] StartParticipantOP auto-flow failed: ${(err as Error).message}\n${(err as Error).stack}`,
@@ -404,7 +413,7 @@ export async function reconcileVtjscPublications(
   agent: VsAgent,
   indexer: VeranaIndexerService,
   corporationId: number,
-  selfTrDefaults?: SelfTrDefaults,
+  ecsClaims?: EcsClaims,
 ): Promise<void> {
   if (!agent.did || !agent.publicApiBaseUrl) return
 
@@ -452,7 +461,7 @@ export async function reconcileVtjscPublications(
 
   await detachUncontrolledVtjscPublications(agent, indexer, corporationId, chainId, reconciled)
 
-  if (selfTrDefaults) await reconcileSelfIssuedEcsCredentials(agent, indexer, selfTrDefaults)
+  if (ecsClaims) await reconcileSelfIssuedEcsCredentials(agent, indexer, ecsClaims)
 }
 
 /** The `_vt/jsc` key that `createJsc` writes for an on-chain `CredentialSchema`. */
@@ -482,7 +491,7 @@ async function detachUncontrolledVtjscPublications(
   const stale: string[] = []
 
   for (const schemaRef of Object.keys(metadata)) {
-    // setupSelfTr keeps the agent's own schema credentials in this bucket, keyed by public URL.
+    // the agent's own schema credentials live in this bucket, keyed by public URL.
     if (!schemaRef.startsWith(prefix)) continue
     if (reconciled.has(schemaRef)) continue
 
@@ -529,7 +538,7 @@ async function detachUncontrolledVtjscPublications(
 async function reconcileSelfIssuedEcsCredentials(
   agent: VsAgent,
   indexer: VeranaIndexerService,
-  selfTrDefaults: SelfTrDefaults,
+  ecsClaims: EcsClaims,
 ): Promise<void> {
   const chain = agent.veranaChain
   if (!chain || !agent.did || !agent.publicApiBaseUrl) return
@@ -545,12 +554,7 @@ async function reconcileSelfIssuedEcsCredentials(
         participantState,
       })
       for (const issuer of stale) {
-        const withdrawn = await withdrawSelfIssuedEcsCredentials(
-          agent,
-          agent.publicApiBaseUrl,
-          issuer.id,
-          selfTrDefaults,
-        )
+        const withdrawn = await withdrawSelfIssuedEcsCredentials(agent, issuer.id)
         for (const jscUrl of withdrawn) {
           agent.config.logger.info(
             `[SelfTR] Withdrew the self-issued ECS credential bound to ${jscUrl} (${participantState} issuer participant ${issuer.id})`,
@@ -575,17 +579,18 @@ async function reconcileSelfIssuedEcsCredentials(
     if (issuer.revoked || issuer.slashed || issuer.vs_operator !== chain.address) continue
     try {
       const schema = await indexer.getCredentialSchema(issuer.schema_id)
-      const ecsKey = await identifySchema(JSON.parse(schema.json_schema))
-      if (!ecsKey) continue
+      const ecsKey = await classifyEcsSchema(schema.json_schema)
+      if (ecsKey !== 'ecs-service') continue
       const jsonSchemaCredentialId = await resolveJsonSchemaCredentialId(agent, indexer, schema.id, chainId)
       await rebindEcsCredentialSchema(
         agent,
         agent.publicApiBaseUrl,
         String(schema.id),
         ecsKey,
-        selfTrDefaults,
+        ecsClaims,
         jsonSchemaCredentialId,
         issuer.id,
+        schema.json_schema,
       )
     } catch (e) {
       agent.config.logger.error(

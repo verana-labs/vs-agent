@@ -2,13 +2,10 @@ import { VtFlowRole, VtFlowService, VtFlowState } from '@verana-labs/credo-ts-di
 import { describe, expect, it, vi } from 'vitest'
 
 // the withdrawal republishes the self-issued default, which would otherwise sign and fetch
-const { generateVerifiablePresentation } = vi.hoisted(() => ({
-  generateVerifiablePresentation: vi.fn(),
+const { publishSelfIssuedEcsPresentation } = vi.hoisted(() => ({
+  publishSelfIssuedEcsPresentation: vi.fn(),
 }))
-vi.mock('../src/utils/setupSelfTr', async () => {
-  const actual = await vi.importActual<typeof import('../src/utils/setupSelfTr')>('../src/utils/setupSelfTr')
-  return { ...actual, generateVerifiablePresentation }
-})
+vi.mock('../src/utils/selfIssuedEcsCredential', () => ({ publishSelfIssuedEcsPresentation }))
 
 import {
   IndexerEventHandler,
@@ -222,20 +219,17 @@ describe('applyStateMutation', () => {
       config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
     }
 
-    await removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent as never, '7', {} as never)
+    await removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent as never, '7')
 
     expect(metadataStore['_vt/vtc']['https://ecosystem/vt/schemas-9-jsc.json']).toBeUndefined()
     expect(didRecord.didDocument.service).toEqual([])
-    // the credential of another participant survives, and the default is published again
+    // the credential of another participant survives, and nothing is republished
     expect(metadataStore['_vt/vtc']['https://ecosystem/vt/schemas-3-jsc.json']).toBeDefined()
-    expect(generateVerifiablePresentation.mock.calls[0][5]).toEqual({
-      id: 'https://agent/vt/schemas-example-service-jsc.json',
-      type: 'JsonSchemaCredential',
-    })
+    expect(publishSelfIssuedEcsPresentation).not.toHaveBeenCalled()
 
     // A HOLDER participant is not this handler's business.
     agent.veranaChain.getParticipant.mockResolvedValue({ id: 8, role: 6, did: 'did:web:agent' })
-    await removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent as never, '8', {} as never)
+    await removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent as never, '8')
     expect(metadataStore['_vt/vtc']['https://ecosystem/vt/schemas-3-jsc.json']).toBeDefined()
   })
 

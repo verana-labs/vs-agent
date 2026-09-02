@@ -1,7 +1,10 @@
+import { createHash } from 'crypto'
+
 import { describe, expect, it, vi } from 'vitest'
 
 import { getEcsSchemas } from '../src/utils/data'
-import { getClaims, SelfTrDefaults } from '../src/utils/setupSelfTr'
+import { getClaims } from '../src/utils/setupSelfTr'
+import { EcsClaims } from '../src/utils/ecsClaims'
 
 vi.mock('axios', () => ({
   default: {
@@ -14,42 +17,51 @@ vi.mock('axios', () => ({
 
 const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() } as never
 
-const defaults: SelfTrDefaults = {
-  agentLabel: 'Agent',
-  serviceLogoUri: 'https://cdn.example/logo.png',
-  serviceType: 'ECommerce',
-  serviceDescription: 'demo',
-  serviceMinimumAgeRequired: 18,
-  serviceTermsAndConditions: 'https://cdn.example/terms',
-  servicePrivacyPolicy: 'https://cdn.example/privacy',
-  orgRegistryId: 'REG-1',
-  orgRegistryUri: 'https://registry.example',
-  orgAddress: '1 Demo Street',
-  orgOrganizationKind: 'PUBLIC',
-  orgCountryCode: 'US',
+const ecsClaims: EcsClaims = {
+  service: {
+    name: 'Test Service',
+    type: 'WEB_PORTAL',
+    description: 'a test service',
+    logoUri: 'https://example.com/logo.svg',
+    minimumAgeRequired: '18',
+    termsAndConditionsUri: 'https://example.com/terms.html',
+    privacyPolicyUri: 'https://example.com/privacy.html',
+  },
+  org: {
+    name: 'Test Org',
+    logoUri: 'https://example.com/logo.svg',
+    registryId: 'ID-123',
+    registryUri: 'https://example.com/registry',
+    address: 'Some address',
+    countryCode: 'EE',
+    organizationKind: 'PUBLIC',
+  },
 }
 
 const schemas = getEcsSchemas('https://agent.example')
 const subject = { id: 'did:web:agent.example' }
 
-describe('self-TR default claims', () => {
+describe('ECS claim composition', () => {
   it.each(['ecs-service', 'ecs-org'])('validates against the v4 %s schema', async key => {
-    const claims = await getClaims(logger, schemas, subject, key, defaults)
+    const claims = await getClaims(logger, schemas, subject, key, ecsClaims)
     expect(claims.logoDigestSri).toBe(
       'sha384-' +
-        require('crypto')
-          .createHash('sha384')
-          .update(Buffer.from('bytes of https://cdn.example/logo.png'))
-          .digest('base64'),
+        createHash('sha384').update(Buffer.from('bytes of https://example.com/logo.svg')).digest('base64'),
     )
   })
 
   it('refuses to attest a resource it cannot read', async () => {
     await expect(
       getClaims(logger, schemas, subject, 'ecs-service', {
-        ...defaults,
-        serviceLogoUri: 'https://unreachable/logo.png',
+        ...ecsClaims,
+        service: { ...ecsClaims.service, logoUri: 'https://unreachable/logo.png' },
       }),
     ).rejects.toThrow()
+  })
+
+  it('omits the claims of a schema the operator configured nothing for', async () => {
+    await expect(getClaims(logger, schemas, subject, 'ecs-persona', ecsClaims)).rejects.toThrow(
+      /No ECS_CLAIMS_\* variable is set/,
+    )
   })
 })

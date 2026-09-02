@@ -114,9 +114,16 @@ services:
       ADMIN_PORT: '3000'
       AGENT_ENDPOINT: wss://agent-validator.demo
       PUBLIC_API_BASE_URL: https://agent-validator.demo
+      ECS_CLAIMS_SERVICE_LOGO_URI: https://agent-validator.demo/vt/default/logo.svg
+      ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI: https://agent-validator.demo/vt/default/terms.html
+      ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI: https://agent-validator.demo/vt/default/privacy.html
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
       ADMIN_API_AUTH_MODE: internal
       AGENT_MODE: standalone
+      ECS_CLAIMS_SERVICE_NAME: vt-flow demo agent
+      ECS_CLAIMS_SERVICE_TYPE: WEB_PORTAL
+      ECS_CLAIMS_SERVICE_DESCRIPTION: vt-flow demo agent
+      ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED: "18"
       VERANA_RPC_ENDPOINT_URL: http://verana-node:26657
       VERANA_CHAIN_ID: vna-demo-1
       VERANA_INDEXER_BASE_URL: http://indexer:3001
@@ -146,9 +153,16 @@ services:
       ADMIN_PORT: '3000'
       AGENT_ENDPOINT: wss://agent-applicant.demo
       PUBLIC_API_BASE_URL: https://agent-applicant.demo
+      ECS_CLAIMS_SERVICE_LOGO_URI: https://agent-applicant.demo/vt/default/logo.svg
+      ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI: https://agent-applicant.demo/vt/default/terms.html
+      ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI: https://agent-applicant.demo/vt/default/privacy.html
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
       ADMIN_API_AUTH_MODE: internal
       AGENT_MODE: standalone
+      ECS_CLAIMS_SERVICE_NAME: vt-flow demo agent
+      ECS_CLAIMS_SERVICE_TYPE: WEB_PORTAL
+      ECS_CLAIMS_SERVICE_DESCRIPTION: vt-flow demo agent
+      ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED: "18"
       VERANA_RPC_ENDPOINT_URL: http://verana-node:26657
       VERANA_CHAIN_ID: vna-demo-1
       VERANA_INDEXER_BASE_URL: http://indexer:3001
@@ -183,9 +197,16 @@ services:
       ADMIN_PORT: '3000'
       AGENT_ENDPOINT: wss://agent-ecosystem.demo
       PUBLIC_API_BASE_URL: https://agent-ecosystem.demo
+      ECS_CLAIMS_SERVICE_LOGO_URI: https://agent-ecosystem.demo/vt/default/logo.svg
+      ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI: https://agent-ecosystem.demo/vt/default/terms.html
+      ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI: https://agent-ecosystem.demo/vt/default/privacy.html
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
       ADMIN_API_AUTH_MODE: internal
       AGENT_MODE: standalone
+      ECS_CLAIMS_SERVICE_NAME: vt-flow demo agent
+      ECS_CLAIMS_SERVICE_TYPE: WEB_PORTAL
+      ECS_CLAIMS_SERVICE_DESCRIPTION: vt-flow demo agent
+      ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED: "18"
       VERANA_RPC_ENDPOINT_URL: http://verana-node:26657
       VERANA_CHAIN_ID: vna-demo-1
       VERANA_INDEXER_BASE_URL: http://indexer:3001

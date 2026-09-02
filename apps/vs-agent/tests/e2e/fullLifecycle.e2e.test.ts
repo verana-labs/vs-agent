@@ -3,6 +3,8 @@ import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 import { ConsoleLogger, DidRepository, LogLevel } from '@credo-ts/core'
 import { VtFlowApi, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
+import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
+
 import {
   createJsc,
   EcsBootstrapService,
@@ -17,7 +19,6 @@ import {
   VeranaChainService,
   VeranaIndexerService,
   VtFlowOrchestrator,
-  type SelfTrDefaults,
 } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -64,22 +65,29 @@ const ecsSchema = (title: string) =>
   })
 
 // every digest is supplied, so building the credential never fetches the referenced resources
-const selfTrDefaults: SelfTrDefaults = {
-  agentLabel: 'Applicant',
-  serviceLogoUri: 'https://cdn.example/logo.png',
-  serviceLogoDigestSri: 'sha384-logo',
-  serviceType: 'ECommerce',
-  serviceDescription: 'lifecycle applicant service',
-  serviceMinimumAgeRequired: 18,
-  serviceTermsAndConditions: 'https://cdn.example/terms',
-  serviceTermsAndConditionsDigestSri: 'sha384-terms',
-  servicePrivacyPolicy: 'https://cdn.example/privacy',
-  servicePrivacyPolicyDigestSri: 'sha384-privacy',
-  orgRegistryId: 'REG-1',
-  orgRegistryUri: 'https://registry.example',
-  orgAddress: '1 Demo Street',
-  orgOrganizationKind: 'PUBLIC',
-  orgCountryCode: 'US',
+vi.mock('axios', () => ({
+  default: { get: vi.fn(async (url: string) => ({ data: Buffer.from(`bytes of ${url}`) })) },
+}))
+
+const ecsClaims: EcsClaims = {
+  service: {
+    name: 'Test Service',
+    type: 'WEB_PORTAL',
+    description: 'a test service',
+    logoUri: 'https://example.com/logo.svg',
+    minimumAgeRequired: '18',
+    termsAndConditionsUri: 'https://example.com/terms.html',
+    privacyPolicyUri: 'https://example.com/privacy.html',
+  },
+  org: {
+    name: 'Test Org',
+    logoUri: 'https://example.com/logo.svg',
+    registryId: 'ID-123',
+    registryUri: 'https://example.com/registry',
+    address: 'Some address',
+    countryCode: 'EE',
+    organizationKind: 'PUBLIC',
+  },
 }
 
 async function until<T>(fn: () => Promise<T | undefined>, timeoutMs = 120_000): Promise<T> {
@@ -639,7 +647,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
           baseUrl,
           String(serviceSchemaId),
           'ecs-service',
-          selfTrDefaults,
+          ecsClaims,
           jscUrl,
           applicantIssuerParticipantId,
         )
@@ -695,7 +703,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         baseUrl,
         String(serviceSchemaId),
         'ecs-service',
-        selfTrDefaults,
+        ecsClaims,
         jscUrl,
         applicantIssuerParticipantId,
       )
@@ -710,16 +718,12 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         return p?.revoked ? true : undefined
       })
 
-      await removeSelfIssuedEcsCredentialsIfIssuerRevoked(
-        applicant,
-        String(applicantIssuerParticipantId),
-        selfTrDefaults,
-      )
+      await removeSelfIssuedEcsCredentialsIfIssuerRevoked(applicant, String(applicantIssuerParticipantId))
 
       expect(await vtcEntries()).not.toContain(jscUrl)
       expect(await serviceIds()).not.toContain(linkedVpServiceId)
-      // back in store, detached: this agent already holds the credential a validator issued to it
-      expect(await vtcEntries()).toContain(`${baseUrl}/vt/schemas-example-service-jsc.json`)
+      // nothing is republished: withdrawal withdraws
+      expect(await vtcEntries()).not.toContain(`${baseUrl}/vt/schemas-example-service-jsc.json`)
     },
     SETUP_TIMEOUT_MS,
   )

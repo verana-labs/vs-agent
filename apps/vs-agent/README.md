@@ -160,30 +160,41 @@ When connecting to other agents, VS-A tries to get information from them in orde
 
 VS-A fetches capabilities from the `discovery.json` file (which is located at at `/www/apps/vs-agent/discovery.json` in the deployed container) to determine available features. If you want to customize the capabilities to look for, replace the volume at this path with your own `discovery.json` file.
 
-### Self VR
+### ECS credential claims
 
-To enable the Self-Verifiable Trust Registry API endpoints, you must set the following environment variables in your `.env` file or system environment. These variables control the agent's identity, endpoints, and the data used for example credentials:
+The agent composes the claims of its own ECS credentials from the variables below. Behaviour is
+defined in [[VSA-VTI-CFG-ENV-ECS]](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-vti-cfg-env-ecs-ecs-credential-claims).
 
-| Variable                                     | Description                              | Example Value                            |
-| -------------------------------------------- | ---------------------------------------- | ---------------------------------------- |
-| `SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND`       | Organization kind for example credential | `PRIVATE`                                |
-| `SELF_ISSUED_VTC_ORG_COUNTRYCODE`            | Organization country code                | `EE`                                     |
-| `SELF_ISSUED_VTC_ORG_REGISTRYID`             | Organization registry ID                 | `1234567890`                             |
-| `SELF_ISSUED_VTC_ORG_REGISTRYURI`            | Organization registry URI                | `https://registry.example.com`           |
-| `SELF_ISSUED_VTC_ORG_ADDRESS`                | Organization address                     | `Ahtri tn 12 10151 Tallinn, Estonia`     |
-| `SELF_ISSUED_VTC_SERVICE_TYPE`               | Service type for example credential      | `HealthCheckService`                     |
-| `SELF_ISSUED_VTC_SERVICE_DESCRIPTION`        | Service description                      | `Health Verification Service`            |
-| `SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED` | Minimum age required for service         | `18`                                     |
-| `SELF_ISSUED_VTC_SERVICE_LOGOURI`            | Service logo URL. Must be fetchable, its digest goes in the credential. Falls back to `AGENT_INVITATION_IMAGE_URL`, then to a placeholder the agent serves at `/vt/default/logo.svg` | none |
-| `SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS` | Terms and conditions URL. Must be fetchable. Defaults to a placeholder the agent serves at `/vt/default/terms.html` | none |
-| `SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY`      | Privacy policy URL. Must be fetchable. Defaults to a placeholder the agent serves at `/vt/default/privacy.html` | none |
+| Variable | Claim |
+| --- | --- |
+| `ECS_CLAIMS_ORG_NAME` | `name` |
+| `ECS_CLAIMS_ORG_LOGO_URI` | `logoUri` |
+| `ECS_CLAIMS_ORG_REGISTRY_ID` | `registryId` |
+| `ECS_CLAIMS_ORG_REGISTRY_URI` | `registryUri` |
+| `ECS_CLAIMS_ORG_ADDRESS` | `address` |
+| `ECS_CLAIMS_ORG_COUNTRY_CODE` | `countryCode` |
+| `ECS_CLAIMS_ORG_LEGAL_JURISDICTION` | `legalJurisdiction` |
+| `ECS_CLAIMS_ORG_ORGANIZATION_KIND` | `organizationKind` |
+| `ECS_CLAIMS_ORG_LEI` | `lei` |
+| `ECS_CLAIMS_PERSONA_NAME` | `name` |
+| `ECS_CLAIMS_PERSONA_DESCRIPTION` | `description` |
+| `ECS_CLAIMS_PERSONA_DESCRIPTION_FORMAT` | `descriptionFormat` |
+| `ECS_CLAIMS_PERSONA_AVATAR_URI` | `avatarUri` |
+| `ECS_CLAIMS_PERSONA_CONTROLLER_COUNTRY_CODE` | `controllerCountryCode` |
+| `ECS_CLAIMS_PERSONA_CONTROLLER_JURISDICTION` | `controllerJurisdiction` |
+| `ECS_CLAIMS_SERVICE_NAME` | `name` |
+| `ECS_CLAIMS_SERVICE_TYPE` | `type` |
+| `ECS_CLAIMS_SERVICE_DESCRIPTION` | `description` |
+| `ECS_CLAIMS_SERVICE_DESCRIPTION_FORMAT` | `descriptionFormat` |
+| `ECS_CLAIMS_SERVICE_LOGO_URI` | `logoUri` |
+| `ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED` | `minimumAgeRequired` |
+| `ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI` | `termsAndConditionsUri` |
+| `ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI` | `privacyPolicyUri` |
 
-> **Note:**  
-> This Self-Verifiable Trust Registry API and its configuration are **unstable** and intended for testing and development only. These endpoints and related environment variables may be removed or changed in future releases **without prior notice**.
->
-> The variables `AGENT_LABEL` and `AGENT_INVITATION_IMAGE_URL` will be used as the name and logo for services and credentials issued by the Self-Verifiable Trust Registry.
+The agent serves placeholder resources at `/vt/default/logo.svg`, `/vt/default/terms.html` and
+`/vt/default/privacy.html`, which an operator may point the `*_URI` variables at.
 
-For **more examples of how to configure these variables and use the API**, see the additional file [Self-Verifiable Trust Registry routes](../../doc/self-tr-routes.md).
+
 
 ### eMRTD (ePassport) verification
 

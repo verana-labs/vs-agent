@@ -89,43 +89,8 @@ export const REDIRECT_DEFAULT_URL_TO_INVITATION_URL =
   process.env.REDIRECT_DEFAULT_URL_TO_INVITATION_URL !== 'false'
 export const USER_PROFILE_AUTODISCLOSE = process.env.USER_PROFILE_AUTODISCLOSE === 'true'
 
-// Values for Organization credential
-export const SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND =
-  process.env.SELF_ISSUED_VTC_ORG_ORGANIZATIONKIND ?? 'PUBLIC'
-export const SELF_ISSUED_VTC_ORG_COUNTRYCODE = process.env.SELF_ISSUED_VTC_ORG_COUNTRYCODE ?? 'EE'
-export const SELF_ISSUED_VTC_ORG_REGISTRYID = process.env.SELF_ISSUED_VTC_ORG_REGISTRYID ?? 'ID-123'
-export const SELF_ISSUED_VTC_ORG_REGISTRYURI =
-  process.env.SELF_ISSUED_VTC_ORG_REGISTRYURI ?? 'https://example.com/registry'
-export const SELF_ISSUED_VTC_ORG_ADDRESS = process.env.SELF_ISSUED_VTC_ORG_ADDRESS ?? 'Some address'
-
-// Values for Service credential
-export const SELF_ISSUED_VTC_SERVICE_TYPE =
-  process.env.SELF_ISSUED_VTC_SERVICE_TYPE?.replace(' ', '_') ?? 'WEB_PORTAL'
-export const SELF_ISSUED_VTC_SERVICE_DESCRIPTION =
-  process.env.SELF_ISSUED_VTC_SERVICE_DESCRIPTION ?? 'Some description'
-export const SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED = Number(
-  process.env.SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED ?? 18,
-)
-// unset means the agent serves its own placeholder, resolved against publicApiBaseUrl at startup:
-// the self-issued credentials hash these resources, so they must be fetchable
-export const SELF_ISSUED_VTC_SERVICE_LOGOURI =
-  process.env.SELF_ISSUED_VTC_SERVICE_LOGOURI ?? AGENT_INVITATION_IMAGE_URL
-export const SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS =
-  process.env.SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS
-export const SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY = process.env.SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY
-
-export const DEFAULT_SELF_ISSUED_VTC_RESOURCES = {
-  logoUri: (baseUrl: string) => `${baseUrl}/vt/default/logo.svg`,
-  termsAndConditionsUri: (baseUrl: string) => `${baseUrl}/vt/default/terms.html`,
-  privacyPolicyUri: (baseUrl: string) => `${baseUrl}/vt/default/privacy.html`,
-}
-
-// Content served at the DEFAULT_SELF_ISSUED_VTC_RESOURCES URLs above (by
-// DefaultResourcesController) and hashed for the corresponding *DigestSri
-// self-tr claim (see main.ts). Defined here, once, so both sides use the
-// exact same bytes without the agent having to fetch its own public URL over
-// HTTP to hash content it already has in memory — self-fetching that URL at
-// startup raced the ingress and 503'd intermittently right after a restart.
+// Placeholder resources the agent serves under /vt/default, so an operator can point an
+// ECS_CLAIMS_*_URI at the agent itself.
 // kept in sync with apps/vs-agent-ui/src/assets/logo.svg
 export const DEFAULT_LOGO_SVG = `<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
   <defs>

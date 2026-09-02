@@ -444,11 +444,7 @@ export class VtFlowOrchestrator {
     if (!record || record.role !== VtFlowRole.Applicant) return
     if (!this.options.publicApiBaseUrl || !record.credentialExchangeRecordId) return
 
-    const credentialId = await removeStoredTrustCredential(
-      this.agent,
-      this.options.publicApiBaseUrl,
-      record.credentialExchangeRecordId,
-    )
+    const credentialId = await removeStoredTrustCredential(this.agent, record.credentialExchangeRecordId)
     if (credentialId) {
       this.agent.config.logger.info(
         `[vt-flow] removed revoked credential and its linked VP (${credentialId})`,

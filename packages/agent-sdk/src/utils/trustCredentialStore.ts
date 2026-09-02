@@ -14,19 +14,17 @@ import { VsAgent } from '../agent/VsAgent'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
 
 import {
-  SelfTrDefaults,
   addDigestSRI,
   createCredential,
   createJsonSchema,
   createJsonSubjectRef,
   createPresentation,
-  generateVerifiablePresentation,
   getVerificationMethodId,
   linkedVpFragment,
-  mapToSelfTr,
-  presentations,
   signerW3c,
 } from './setupSelfTr'
+import { publishSelfIssuedEcsPresentation } from './selfIssuedEcsCredential'
+import { EcsClaims } from './ecsClaims'
 import { getEcsSchemas } from './data'
 
 async function getDidRecord(agent: VsAgent) {
@@ -76,7 +74,6 @@ export async function saveMetadataEntry(
   verifiablePresentation: W3cJsonLdVerifiablePresentation,
   didDocumentServiceId: string,
   key: '_vt/vtc' | '_vt/jsc',
-  publicApiBaseUrl: string,
 ) {
   const schema = key === '_vt/vtc' ? credential.credentialSchema : credential.credentialSubject
   const ref = Array.isArray(schema) ? schema[0]?.id : schema?.id
@@ -109,15 +106,6 @@ export async function saveMetadataEntry(
     }),
   )
   didRecord.metadata.set(key, record)
-
-  // Update #whois with new endpoint
-  const service = didRecord.didDocument?.service?.find(s => s.id === `${agent.did}#whois`)
-  if (service && verifiablePresentation.id?.includes('service'))
-    service.serviceEndpoint = verifiablePresentation.id!
-
-  // A JSON schema credential says nothing about this agent's own ECS identity, so only a real
-  // trust credential replaces the self-issued ones.
-  if (key === '_vt/vtc') updateVtcEntries(didRecord, false, publicApiBaseUrl)
   await updateDidRecord(agent, didRecord)
 }
 
@@ -126,7 +114,6 @@ export async function deleteMetadataEntry(
   id: string,
   didRecord: DidRecord,
   key: '_vt/vtc' | '_vt/jsc',
-  publicApiBaseUrl: string,
 ) {
   const found = findMetadataEntry(didRecord, key, id, id)
   if (!found) return null
@@ -136,57 +123,8 @@ export async function deleteMetadataEntry(
 
   delete metadata[found.schemaId]
   didRecord.metadata.set(key, metadata)
-
-  // If the last entry is removed, restore defaults
-  restoreDefaultVtcEntries(didRecord, publicApiBaseUrl)
   await updateDidRecord(agent, didRecord)
   return { schemaId: found.schemaId }
-}
-
-function restoreDefaultVtcEntries(didRecord: DidRecord, publicApiBaseUrl: string) {
-  const vtc = didRecord.metadata.get('_vt/vtc') ?? {}
-  const jsc = didRecord.metadata.get('_vt/jsc') ?? {}
-  // By default we have 2 Self-trusted VTCs
-  if (Object.keys(vtc).length < 3 && Object.keys(jsc).length < 3) {
-    updateVtcEntries(didRecord, true, publicApiBaseUrl)
-  }
-}
-
-function updateVtcEntries(didRecord: DidRecord, attach: boolean, publicApiBaseUrl: string) {
-  const record = didRecord.metadata.get('_vt/vtc') ?? {}
-
-  presentations.forEach(p => {
-    const schemaId = mapToSelfTr(p.schemaUrl, publicApiBaseUrl)
-    const current = record[schemaId]
-    if (current?.attached === attach) return
-    record[schemaId] = {
-      ...current,
-      attached: attach,
-    }
-
-    const serviceId = current?.didDocumentServiceId
-    const serviceEndpoint = current?.verifiablePresentation?.id
-    if (!didRecord.didDocument?.service) return
-    if (attach) {
-      const alreadyExists = didRecord.didDocument.service.some(s => s.id === serviceId)
-      if (!alreadyExists && serviceId && serviceEndpoint) {
-        didRecord.didDocument.service.push(
-          new DidDocumentService({
-            id: serviceId,
-            serviceEndpoint,
-            type: 'LinkedVerifiablePresentation',
-          }),
-        )
-      }
-
-      // Return to self-trusted VTC in #whois endpoint
-      const service = didRecord.didDocument?.service?.find(s => s.id === `${didRecord.did}#whois`)
-      if (service && serviceEndpoint?.includes('service')) service.serviceEndpoint = serviceEndpoint
-    } else {
-      didRecord.didDocument.service = didRecord.didDocument.service.filter(s => s.id !== serviceId)
-    }
-  })
-  didRecord.metadata.set('_vt/vtc', record)
 }
 
 export async function createVtc(
@@ -218,7 +156,6 @@ export async function createVtc(
     verifiablePresentation,
     didDocumentServiceId,
     '_vt/vtc',
-    publicApiBaseUrl,
   )
   return verifiablePresentation
 }
@@ -281,17 +218,11 @@ export async function createJsc(
     verifiablePresentation,
     didDocumentServiceId,
     '_vt/jsc',
-    publicApiBaseUrl,
   )
   return credential.jsonCredential
 }
 
-export async function removeTrustCredential(
-  agent: VsAgent,
-  publicApiBaseUrl: string,
-  schemaId: string,
-  key: '_vt/jsc' | '_vt/vtc',
-) {
+export async function removeTrustCredential(agent: VsAgent, schemaId: string, key: '_vt/jsc' | '_vt/vtc') {
   const didRecord = await getDidRecord(agent)
   // same lookup deleteMetadataEntry performs: a self-issued entry carries the agent DID as
   // credential id, so only its metadata key reaches it
@@ -304,19 +235,18 @@ export async function removeTrustCredential(
       s => s.id !== record.didDocumentServiceId,
     )
   }
-  return await deleteMetadataEntry(agent, schemaId, didRecord, key, publicApiBaseUrl)
+  return await deleteMetadataEntry(agent, schemaId, didRecord, key)
 }
 
 export async function removeStoredTrustCredential(
   agent: VsAgent,
-  publicApiBaseUrl: string,
   credentialExchangeRecordId: string,
 ): Promise<string | undefined> {
   const formatData = await agent.didcomm.credentials.getFormatData(credentialExchangeRecordId)
   const credentialId = (formatData.credential as { jsonld?: { id?: string } } | undefined)?.jsonld?.id
   if (!credentialId) return undefined
 
-  await removeTrustCredential(agent, publicApiBaseUrl, credentialId, '_vt/vtc')
+  await removeTrustCredential(agent, credentialId, '_vt/vtc')
 
   const stored = await agent.w3cCredentials.getAll()
   for (const storedRecord of stored) {
@@ -467,11 +397,12 @@ export async function rebindEcsCredentialSchema(
   publicApiBaseUrl: string,
   schemaId: string,
   schemaKey: string,
-  defaults: SelfTrDefaults,
+  ecsClaims: EcsClaims,
   jsonSchemaCredentialId: string,
   issuerParticipantId: number,
+  onChainJsonSchema?: string,
 ): Promise<void> {
-  if (!['ecs-service', 'ecs-org'].includes(schemaKey) || !agent.did) return
+  if (schemaKey !== 'ecs-service' || !agent.did) return
   const vpUrl = `${publicApiBaseUrl}/vt/${schemaKey}-vtc-vp.json`
   const jscUrl = jsonSchemaCredentialId
 
@@ -504,14 +435,14 @@ export async function rebindEcsCredentialSchema(
     await updateDidRecord(agent, didRecord)
   }
 
-  await generateVerifiablePresentation(
+  await publishSelfIssuedEcsPresentation(
     agent,
     vpUrl,
-    getEcsSchemas(publicApiBaseUrl),
+    { ...getEcsSchemas(publicApiBaseUrl), ...(onChainJsonSchema ? { [schemaKey]: onChainJsonSchema } : {}) },
     schemaKey,
     ['VerifiableCredential', 'VerifiableTrustCredential'],
     { id: jscUrl, type: 'JsonSchemaCredential' },
-    defaults,
+    ecsClaims,
     async verifiablePresentation =>
       await anchorCredentialDigest(
         agent,
@@ -554,36 +485,30 @@ export async function rebindEcsCredentialSchema(
 }
 
 /**
- * Withdraws the ECS credentials anchored against `issuerParticipantId` and republishes the
- * self-issued default in their place, which is what the next start would publish anyway.
+ * Withdraws the ECS credentials anchored against `issuerParticipantId`, and the #whois entry
+ * when the Service credential is among them.
  */
 export async function withdrawSelfIssuedEcsCredentials(
   agent: VsAgent,
-  publicApiBaseUrl: string,
   issuerParticipantId: number,
-  defaults: SelfTrDefaults,
 ): Promise<string[]> {
   const didRecord = await getDidRecord(agent)
   const withdrawn: string[] = []
+  let whoisWithdrawn = false
 
   for (const [jscUrl, value] of Object.entries(didRecord.metadata.get('_vt/vtc') ?? {})) {
     const entry = value as { issuerParticipantId?: number; schemaKey?: string }
     if (entry.issuerParticipantId !== issuerParticipantId) continue
-    await removeTrustCredential(agent, publicApiBaseUrl, jscUrl, '_vt/vtc')
+    await removeTrustCredential(agent, jscUrl, '_vt/vtc')
     withdrawn.push(jscUrl)
-
-    const defaultSchema = presentations.find(p => p.name === entry.schemaKey)
-    if (!defaultSchema) continue
-    // stays detached when a real trust credential is already stored
-    await generateVerifiablePresentation(
-      agent,
-      `${publicApiBaseUrl}/vt/${defaultSchema.name}-vtc-vp.json`,
-      getEcsSchemas(publicApiBaseUrl),
-      defaultSchema.name,
-      ['VerifiableCredential', 'VerifiableTrustCredential'],
-      { id: mapToSelfTr(defaultSchema.schemaUrl, publicApiBaseUrl), type: 'JsonSchemaCredential' },
-      defaults,
-    )
+    if (entry.schemaKey === 'ecs-service') whoisWithdrawn = true
+  }
+  if (whoisWithdrawn) {
+    const record = await getDidRecord(agent)
+    if (record.didDocument?.service) {
+      record.didDocument.service = record.didDocument.service.filter(s => s.id !== `${agent.did}#whois`)
+      await updateDidRecord(agent, record)
+    }
   }
   return withdrawn
 }

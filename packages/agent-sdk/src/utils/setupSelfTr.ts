@@ -2,8 +2,6 @@ import {
   W3cCredential,
   W3cPresentation,
   W3cCredentialSchema,
-  DidDocumentService,
-  DidRepository,
   ClaimFormat,
   W3cCredentialSubject,
   W3cJsonLdVerifiableCredential,
@@ -20,62 +18,14 @@ import { purposes } from '@digitalcredentials/jsonld-signatures'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
-import axios from 'axios'
 import { createHash } from 'crypto'
 
 import { VsAgent } from '../agent/VsAgent'
+import { composeEcsClaims, EcsClaims } from './ecsClaims'
 
-import { getEcsSchemas } from './data'
-
-const ajv = new Ajv({ strict: false })
+const ajv = new Ajv({ strict: false, allErrors: true })
 addFormats(ajv)
 
-const DIGEST_FETCH_TIMEOUT_MS = 5000
-
-export interface SelfTrDefaults {
-  agentLabel: string
-  serviceLogoUri: string
-  serviceLogoDigestSri?: string
-  serviceType: string
-  serviceDescription: string
-  serviceMinimumAgeRequired: number
-  serviceTermsAndConditions: string
-  serviceTermsAndConditionsDigestSri?: string
-  servicePrivacyPolicy: string
-  servicePrivacyPolicyDigestSri?: string
-  orgRegistryId: string
-  orgRegistryUri: string
-  orgAddress: string
-  orgOrganizationKind: string
-  orgCountryCode: string
-}
-
-// Helpers
-export const presentations = [
-  {
-    name: 'ecs-service',
-    schemaUrl: `ecosystem/schemas-example-service-jsc.json`,
-  },
-  {
-    name: 'ecs-org',
-    schemaUrl: `ecosystem/schemas-example-org-jsc.json`,
-  },
-]
-
-export const credentials = [
-  {
-    name: 'example-service',
-    credUrl: `ecosystem/cs/v1/js/ecs-service`,
-    schemaUrl: `ecosystem/schemas-example-service-jsc.json`,
-  },
-  {
-    name: 'example-org',
-    credUrl: `ecosystem/cs/v1/js/ecs-org`,
-    schemaUrl: `ecosystem/schemas-example-org-jsc.json`,
-  },
-]
-
-// Default JSON Schema objects
 export const createJsonSchema: W3cCredentialSchema = {
   id: 'https://www.w3.org/ns/credentials/json-schema/v2.json',
   type: 'JsonSchema',
@@ -95,9 +45,6 @@ export const createJsonSubjectRef = (id: string): W3cCredentialSubject => ({
 export const linkedVpFragment = (schemaKey: string): string =>
   `vpr-schemas-${schemaKey.replace(/^ecs-/, '')}-vtc-vp`
 
-export const mapToSelfTr = (url: string, publicApiBaseUrl: string): string =>
-  url.replace('ecosystem', `${publicApiBaseUrl}/vt`)
-
 // A plain array replacer only allowlists property names, applied at every
 // nesting level — nested objects like `claims` and `credentialSchema` would
 // serialize to `{}` since none of their own keys appear in a top-level
@@ -115,142 +62,6 @@ export const sortKeysDeep = (value: unknown): unknown => {
   }
   return value
 }
-
-const buildIntegrityData = (data: Record<string, unknown>) => {
-  return generateDigestSRI(JSON.stringify(sortKeysDeep(data)))
-}
-
-export const setupSelfTr = async ({
-  agent,
-  publicApiBaseUrl,
-  defaults,
-}: {
-  agent: VsAgent
-  publicApiBaseUrl: string
-  defaults: SelfTrDefaults
-}) => {
-  const ecsSchemas = getEcsSchemas(publicApiBaseUrl)
-  const logger = agent.config.logger
-
-  for (const { name, schemaUrl } of presentations) {
-    try {
-      await generateVerifiablePresentation(
-        agent,
-        `${publicApiBaseUrl}/vt/${name}-vtc-vp.json`,
-        ecsSchemas,
-        name,
-        ['VerifiableCredential', 'VerifiableTrustCredential'],
-        {
-          id: mapToSelfTr(schemaUrl, publicApiBaseUrl),
-          type: 'JsonSchemaCredential',
-        },
-        defaults,
-      )
-    } catch (error) {
-      logger.warn(`Skipping self-issued ${name}: ${error instanceof Error ? error.message : error}`)
-    }
-  }
-
-  for (const { name, credUrl, schemaUrl } of credentials) {
-    const id = mapToSelfTr(schemaUrl, publicApiBaseUrl)
-    const ref = mapToSelfTr(credUrl, publicApiBaseUrl)
-    try {
-      await generateVerifiableCredential(
-        agent,
-        id,
-        ecsSchemas,
-        name,
-        ['VerifiableCredential', 'JsonSchemaCredential'],
-        createJsonSubjectRef(ref),
-        createJsonSchema,
-        defaults,
-      )
-    } catch (error) {
-      logger.warn(`Skipping self-issued ${name}: ${error instanceof Error ? error.message : error}`)
-    }
-  }
-}
-
-/**
- * Generates and signs a verifiable credential using the agent's DID.
- * Stores the signed credential and its integrity metadata in the DID record.
- *
- * - If the claims for the subject are not provided, they are retrieved (default claims) and validated against the schema.
- * - The integrity of the claims is tracked using a Subresource Integrity (SRI) digest.
- * - If a credential with the same integrity already exists in the DID metadata, it is returned directly.
- * - Otherwise, a new credential is created, signed, and stored in the DID metadata.
- * - If a presentation is provided, the signed credential is embedded and a signed presentation is returned.
- *
- * @param agent - The VsAgent instance used for signing and DID management.
- * @param logger - Logger instance for logging operations.
- * @param ecsSchemas - Map of ECS schemas for validation.
- * @param schemaKey - Unique identifier for the credential type and metadata key.
- * @param type - Array of credential types (e.g., ['VerifiableCredential']).
- * @param subject - Subject information, including ID and optional claims.
- * @param credentialSchema - Schema definition for the credential.
- * @param presentation - Optional presentation to include the credential.
- * @returns The signed verifiable credential or presentation, with integrity metadata.
- */
-async function generateVerifiableCredential(
-  agent: VsAgent,
-  id: string,
-  ecsSchemas: Record<string, string>,
-  schemaKey: string,
-  type: string[],
-  subject: W3cCredentialSubject,
-  credentialSchema: W3cCredentialSchema,
-  defaults: SelfTrDefaults,
-  presentation?: W3cPresentation,
-): Promise<any> {
-  const logger = agent.config.logger
-  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
-
-  const { id: subjectId } = subject
-  let claims = subject.claims
-
-  if (!claims) {
-    claims = await getClaims(logger, ecsSchemas, { id: subjectId }, schemaKey, defaults)
-  }
-  const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
-  const record = didRecord.metadata.get('_vt/jsc') ?? {}
-  const metadata = record[subjectId!]
-  if (metadata?.integrityData === integrityData) return metadata.credential
-
-  const unsignedCredential = createCredential({
-    id,
-    type,
-    issuer: agent.did,
-    credentialSubject: {
-      id: subjectId,
-      claims: presentation ? claims : await addDigestSRI(subjectId, claims, ecsSchemas),
-    },
-  })
-
-  unsignedCredential.credentialSchema = presentation
-    ? credentialSchema
-    : await addDigestSRI(credentialSchema.id, credentialSchema, ecsSchemas)
-
-  // Note: this is dependant on DIDComm invitation keys. Not sure if it is fine or we should use a dedicated
-  // key for this feature
-  const verificationMethodId = getVerificationMethodId(logger, didRecord)
-
-  const signedCredential = await signerW3c(agent, unsignedCredential, verificationMethodId)
-  if (presentation) {
-    presentation.verifiableCredential = [signedCredential]
-    return await signerW3c(agent, presentation, verificationMethodId)
-  } else {
-    record[subjectId!] = {
-      credential: signedCredential.jsonCredential,
-      verifiablePresentation: {},
-      didDocumentServiceId: '',
-      integrityData,
-    }
-    didRecord.metadata.set('_vt/jsc', record)
-    await agent.context.dependencyManager.resolve(DidRepository).update(agent.context, didRecord)
-    return signedCredential.jsonCredential
-  }
-}
-
 export function createCredential(options: Partial<W3cCredentialOptions>) {
   options.context ??= [
     'https://www.w3.org/2018/credentials/v1',
@@ -313,157 +124,6 @@ export async function signerW3c(
     })
   }
 }
-
-interface StoredSelfIssuedCredential {
-  issuer?: string | { id?: string }
-  credentialSchema?: { id?: string } | Array<{ id?: string }>
-  proof?: { verificationMethod?: string } | Array<{ verificationMethod?: string }>
-}
-
-function storedCredentialIsCurrent(
-  credential: StoredSelfIssuedCredential | undefined,
-  credentialSchemaId: string,
-  did: string,
-  didRecord: DidRecord,
-): boolean {
-  if (!credential) return false
-
-  const issuer = typeof credential.issuer === 'string' ? credential.issuer : credential.issuer?.id
-  if (issuer !== did) return false
-
-  const schema = Array.isArray(credential.credentialSchema)
-    ? credential.credentialSchema[0]
-    : credential.credentialSchema
-  if (schema?.id !== credentialSchemaId) return false
-
-  const proofs = !credential.proof
-    ? []
-    : Array.isArray(credential.proof)
-      ? credential.proof
-      : [credential.proof]
-  if (proofs.length === 0) return false
-
-  const assertionMethods = new Set(
-    (didRecord.didDocument?.assertionMethod ?? []).map(entry =>
-      typeof entry === 'string' ? entry : entry.id,
-    ),
-  )
-  return proofs.every(proof => !!proof.verificationMethod && assertionMethods.has(proof.verificationMethod))
-}
-
-/**
- * Generates and signs a verifiable presentation containing a verifiable credential.
- * Stores the signed presentation and its integrity metadata in the DID record.
- *
- * - Retrieves and validates claims for the agent's DID.
- * - Computes an integrity digest for the claims.
- * - If a presentation with the same integrity already exists in the DID metadata, it is returned.
- * - Otherwise, a new presentation is created, signed, and stored in the DID metadata.
- *
- * @param agent - The VsAgent instance used for signing and DID management.
- * @param logger - Logger instance for logging operations.
- * @param ecsSchemas - Map of ECS schemas for validation.
- * @param schemaKey - Unique identifier for the presentation type and metadata key.
- * @param type - Array of credential types to include.
- * @param credentialSchema - Schema definition for the credential.
- * @param beforePublish - Step that must succeed before a linked presentation counts as published.
- * @returns The signed verifiable presentation, with integrity metadata.
- */
-export async function generateVerifiablePresentation(
-  agent: VsAgent,
-  id: string,
-  ecsSchemas: Record<string, string>,
-  schemaKey: string,
-  type: string[],
-  credentialSchema: W3cCredentialSchema,
-  defaults: SelfTrDefaults,
-  beforePublish?: (verifiablePresentation: any) => Promise<void>,
-) {
-  if (!agent.did) throw Error('The DID must be set up')
-  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
-  const didDocument = didRecord.didDocument
-  if (!didDocument) throw Error('The DID Document be set up')
-  const claims = await getClaims(agent.config.logger, ecsSchemas, { id: agent.did }, schemaKey, defaults)
-  // Use full input for integrityData to ensure update detection
-  const didDocumentServiceId = `${agent.did}#${linkedVpFragment(schemaKey)}`
-  const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
-  const record = didRecord.metadata.get('_vt/vtc') ?? {}
-  const metadata = record[credentialSchema.id]
-  const superseded = Object.entries(record).some(
-    ([storedSchemaId, entry]) =>
-      storedSchemaId !== credentialSchema.id &&
-      entry?.verifiablePresentation?.id === id &&
-      entry?.attached !== false,
-  )
-  const attached = (metadata?.attached ?? true) && !superseded
-  if (
-    metadata?.integrityData === integrityData &&
-    storedCredentialIsCurrent(metadata?.credential, credentialSchema.id, agent.did, didRecord)
-  ) {
-    // the presentation is already public, so a failed beforePublish step still needs a retry here
-    if (attached) await beforePublish?.(metadata.verifiablePresentation)
-    return metadata.verifiablePresentation
-  }
-
-  const presentation = createPresentation({
-    id,
-    holder: agent.did,
-    verifiableCredential: [],
-  })
-  const verifiablePresentation = await generateVerifiableCredential(
-    agent,
-    agent.did,
-    ecsSchemas,
-    schemaKey,
-    type,
-    { id: agent.did },
-    credentialSchema,
-    defaults,
-    presentation,
-  )
-  // nothing is persisted yet, so a failure here leaves no public presentation behind
-  if (attached) await beforePublish?.(verifiablePresentation)
-  // Update linked VP when the presentation has changed
-  if (attached)
-    didDocument.service = didDocument.service?.map(s => {
-      if (typeof s.serviceEndpoint !== 'string') return s
-      if (s.serviceEndpoint.includes(schemaKey) && s.id !== `${agent.did}#whois`) {
-        s.id = didDocumentServiceId
-        s.serviceEndpoint = id
-      }
-      return s
-    })
-  // Resolvers only discover the credential through the [VT-CRED-W3C-LINKED-VP] fragment, and
-  // #whois does not match it. The rename above only covers documents that already carry the
-  // service, so publish it here when nothing declared it yet.
-  let didDocumentChanged = false
-  if (attached && !didDocument.service?.some(s => s.id === didDocumentServiceId)) {
-    didDocument.service = [
-      ...(didDocument.service ?? []),
-      new DidDocumentService({
-        id: didDocumentServiceId,
-        serviceEndpoint: id,
-        type: 'LinkedVerifiablePresentation',
-      }),
-    ]
-    didDocumentChanged = true
-  }
-  const credential = verifiablePresentation.verifiableCredential[0]
-  record[credentialSchema.id] = {
-    credential,
-    verifiablePresentation,
-    didDocumentServiceId,
-    integrityData,
-    attached,
-  }
-  didRecord.metadata.set('_vt/vtc', record)
-  await agent.context.dependencyManager.resolve(DidRepository).update(agent.context, didRecord)
-  if (didDocumentChanged) {
-    await agent.dids.update({ did: didRecord.did, didDocument })
-  }
-  return verifiablePresentation
-}
-
 export function createPresentation(options: Partial<W3cPresentationOptions>) {
   options.context ??= [
     'https://www.w3.org/2018/credentials/v1',
@@ -487,59 +147,19 @@ export function createPresentation(options: Partial<W3cPresentationOptions>) {
 export async function getClaims(
   logger: Logger,
   ecsSchemas: Record<string, string>,
-  { id, claims }: W3cCredentialSubject,
+  { id }: W3cCredentialSubject,
   schemaKey: string,
-  defaults: SelfTrDefaults,
+  ecsClaims: EcsClaims,
 ) {
-  // Default claims fallback
-  const logoUri = (claims?.logoUri as string) ?? defaults.serviceLogoUri
-  const termsAndConditionsUri =
-    (claims?.termsAndConditionsUri as string) ?? defaults.serviceTermsAndConditions
-  const privacyPolicyUri = (claims?.privacyPolicyUri as string) ?? defaults.servicePrivacyPolicy
-  claims =
-    schemaKey === 'ecs-service'
-      ? {
-          name: claims?.name ?? defaults.agentLabel,
-          type: claims?.type ?? defaults.serviceType,
-          description: claims?.description ?? defaults.serviceDescription,
-          logoUri,
-          logoDigestSri:
-            (claims?.logoDigestSri as string) ??
-            defaults.serviceLogoDigestSri ??
-            (await urlDigestSri(logoUri)),
-          minimumAgeRequired: claims?.minimumAgeRequired ?? defaults.serviceMinimumAgeRequired,
-          termsAndConditionsUri,
-          termsAndConditionsDigestSri:
-            (claims?.termsAndConditionsDigestSri as string) ??
-            defaults.serviceTermsAndConditionsDigestSri ??
-            (await urlDigestSri(termsAndConditionsUri)),
-          privacyPolicyUri,
-          privacyPolicyDigestSri:
-            (claims?.privacyPolicyDigestSri as string) ??
-            defaults.servicePrivacyPolicyDigestSri ??
-            (await urlDigestSri(privacyPolicyUri)),
-        }
-      : {
-          name: claims?.name ?? defaults.agentLabel,
-          logoUri,
-          logoDigestSri:
-            (claims?.logoDigestSri as string) ??
-            defaults.serviceLogoDigestSri ??
-            (await urlDigestSri(logoUri)),
-          registryId: claims?.registryId ?? defaults.orgRegistryId,
-          registryUri: claims?.registryUri ?? defaults.orgRegistryUri,
-          address: claims?.address ?? defaults.orgAddress,
-          organizationKind: claims?.organizationKind ?? defaults.orgOrganizationKind,
-          countryCode: claims?.countryCode ?? defaults.orgCountryCode,
-        }
+  const claims = await composeEcsClaims(ecsClaims, schemaKey, logger)
+  if (!claims) throw new Error(`No ECS_CLAIMS_* variable is set for ${schemaKey}`)
 
   const ecsSchema = ecsSchemas[schemaKey]
   if (!ecsSchema) {
     throw new Error(`Schema not defined in data schemas for schemaKey: ${schemaKey}`)
   }
 
-  const credentialSubject = { id, ...claims }
-  validateSchema(JSON.parse(ecsSchema), credentialSubject)
+  validateSchema(JSON.parse(ecsSchema), { id, ...claims })
 
   return claims
 }
@@ -638,15 +258,6 @@ function assertValidSchema(schemaContent: string, id: string): void {
 export function generateDigestSRI(content: string, algorithm: string = 'sha384'): string {
   const hash = createHash(algorithm).update(content).digest('base64')
   return `${algorithm}-${hash}`
-}
-
-/**
- * Digest of the resource a credential references. Throws rather than attest content it could
- * not read: a wrong digestSRI is a false integrity claim in a signed credential.
- */
-export async function urlDigestSri(url: string): Promise<string> {
-  const response = await axios.get(url, { responseType: 'arraybuffer', timeout: DIGEST_FETCH_TIMEOUT_MS })
-  return `sha384-${createHash('sha384').update(Buffer.from(response.data)).digest('base64')}`
 }
 
 export function getVerificationMethodId(logger: Logger, didRecord: DidRecord): string {

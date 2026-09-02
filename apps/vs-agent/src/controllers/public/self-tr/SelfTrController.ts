@@ -35,6 +35,7 @@ export class SelfTrController {
           HttpStatus.BAD_REQUEST,
         )
     } catch (error) {
+      if (error instanceof HttpException) throw error
       this.logger.error(`Error loading schema file: ${error.message}`)
       throw new HttpException('Failed to load schema', HttpStatus.INTERNAL_SERVER_ERROR)
     }

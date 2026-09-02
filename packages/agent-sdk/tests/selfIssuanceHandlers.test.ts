@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { IndexerHandlerRegistry } from '../src/blockchain/handlers/IndexerHandlerRegistry'
 import { registerSelfIssuanceAnchorHandlers } from '../src/blockchain/handlers/selfIssuanceHandlers'
-import { SelfTrDefaults } from '../src/utils/setupSelfTr'
+import { EcsClaims } from '../src/utils/ecsClaims'
 
 const DID = 'did:web:agent.example'
 
@@ -12,7 +12,7 @@ vi.mock('../src/blockchain/handlers/stateMutations', async importOriginal => ({
   reconcileVtjscPublications: (...args: unknown[]) => reconcileVtjscPublications(...args),
 }))
 
-const defaults = {} as SelfTrDefaults
+const ecsClaims = {} as EcsClaims
 
 function makeContext() {
   return {
@@ -37,7 +37,7 @@ async function dispatch(msg: string, participant: unknown) {
   const original = vi.fn()
   registry.register({ msg, handle: original })
   const indexer = makeIndexer(participant)
-  registerSelfIssuanceAnchorHandlers(registry, indexer, 7, defaults)
+  registerSelfIssuanceAnchorHandlers(registry, indexer, 7, ecsClaims)
   await registry.dispatch({ msg, entity_id: 42 } as never, makeContext())
   return { original, indexer }
 }
@@ -60,7 +60,7 @@ describe('self-issuance anchor handlers', () => {
       expect.objectContaining({ did: DID }),
       expect.anything(),
       7,
-      defaults,
+      ecsClaims,
     )
   })
 

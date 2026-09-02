@@ -1,7 +1,7 @@
 import { DidDocument, VerificationMethod } from '@credo-ts/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { SelfTrDefaults } from '../src/utils/setupSelfTr'
+import { EcsClaims } from '../src/utils/ecsClaims'
 import { rebindEcsCredentialSchema } from '../src/utils/trustCredentialStore'
 
 const DID = 'did:web:agent.example'
@@ -11,13 +11,12 @@ vi.mock('@verana-labs/verre', () => ({
   computeCredentialDigestJCS: () => DIGEST,
 }))
 
-const generateVerifiablePresentation = vi.fn()
-vi.mock('../src/utils/setupSelfTr', async importOriginal => ({
-  ...(await importOriginal<typeof import('../src/utils/setupSelfTr')>()),
-  generateVerifiablePresentation: (...args: unknown[]) => generateVerifiablePresentation(...args),
+const publishSelfIssuedEcsPresentation = vi.fn()
+vi.mock('../src/utils/selfIssuedEcsCredential', () => ({
+  publishSelfIssuedEcsPresentation: (...args: unknown[]) => publishSelfIssuedEcsPresentation(...args),
 }))
 
-const defaults = {} as SelfTrDefaults
+const ecsClaims = {} as EcsClaims
 
 function makeAgent(chain?: Record<string, unknown>) {
   const metadata = new Map<string, Record<string, unknown>>()
@@ -74,7 +73,7 @@ async function rebind(agent: unknown) {
     'https://agent.example',
     '5',
     'ecs-service',
-    defaults,
+    ecsClaims,
     JSC_ID,
     ISSUER_PARTICIPANT_ID,
   )
@@ -82,9 +81,9 @@ async function rebind(agent: unknown) {
 
 describe('ECS credential digest anchoring', () => {
   beforeEach(() => {
-    generateVerifiablePresentation.mockReset()
+    publishSelfIssuedEcsPresentation.mockReset()
     // the real function calls the beforePublish step with the signed presentation
-    generateVerifiablePresentation.mockImplementation(async (...args: unknown[]) => {
+    publishSelfIssuedEcsPresentation.mockImplementation(async (...args: unknown[]) => {
       const verifiablePresentation = { id: 'vp', verifiableCredential: [{ id: 'credential' }] }
       const beforePublish = args[7] as (vp: unknown) => Promise<void>
       await beforePublish?.(verifiablePresentation)
@@ -158,7 +157,7 @@ describe('ECS credential digest anchoring', () => {
 
     await rebind(agent)
 
-    expect(generateVerifiablePresentation).not.toHaveBeenCalled()
+    expect(publishSelfIssuedEcsPresentation).not.toHaveBeenCalled()
     expect(chain.createOrUpdateParticipantSession).not.toHaveBeenCalled()
     expect(didsUpdate).not.toHaveBeenCalled()
     expect(metadata.get('_vt/vtc')?.[JSC_ID]).toEqual(received)
@@ -178,7 +177,7 @@ describe('ECS credential digest anchoring', () => {
 
     await rebind(agent)
 
-    expect(generateVerifiablePresentation).toHaveBeenCalledTimes(1)
+    expect(publishSelfIssuedEcsPresentation).toHaveBeenCalledTimes(1)
     expect(chain.createOrUpdateParticipantSession).toHaveBeenCalledTimes(1)
   })
 
