@@ -1,7 +1,3 @@
-import type { AnonCredsCredentialMetadata } from '@credo-ts/anoncreds'
-import type { DidCommCredentialExchangeRecord } from '@credo-ts/didcomm'
-import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
-
 import {
   Body,
   Controller,
@@ -15,7 +11,6 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common'
-import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import {
   ApiBody,
   ApiCreatedResponse,
@@ -25,7 +20,6 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { Claim } from '@verana-labs/vs-agent-model'
 import { createInvitation } from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
@@ -40,6 +34,7 @@ import {
   CredentialExchangeRecordPageDto,
   ListCredentialExchangesQueryDto,
 } from './dto'
+import { toCredentialExchangeDto } from './mappers'
 
 /**
  * This controller has the credential exchanges of this agent on DIDComm.
@@ -203,7 +198,9 @@ export class V2DidcommCredentialExchangesController {
 
     const page = paginate(records, query, { method: 'listCredentialExchanges' }, createdAtKey)
 
-    const results = await Promise.allSettled(page.items.map(record => this.toRecordDto(agent, record)))
+    const results = await Promise.allSettled(
+      page.items.map(record => toCredentialExchangeDto(agent, record, this.logger)),
+    )
 
     // The agent removes a record that it cannot read, which leaves the page short of the limit.
     // The cursor still anchors on the last record of the page, so the walk stays correct.
@@ -243,42 +240,7 @@ export class V2DidcommCredentialExchangesController {
       )
     }
 
-    return this.toRecordDto(agent, record)
-  }
-
-  private async toRecordDto(
-    agent: VsAgent<BaseAgentModules>,
-    record: DidCommCredentialExchangeRecord,
-  ): Promise<CredentialExchangeRecordDto> {
-    const anonCredsMetadata = record.metadata.get(AnonCredsCredentialMetadataKey) as
-      | AnonCredsCredentialMetadata
-      | undefined
-
-    let claims: Claim[] = []
-    try {
-      const formatData = await agent.didcomm.credentials.getFormatData(record.id)
-      if (formatData.offerAttributes?.length) {
-        claims = formatData.offerAttributes.map(
-          attribute =>
-            new Claim({ name: attribute.name, value: attribute.value, mimeType: attribute.mimeType }),
-        )
-      }
-    } catch (error) {
-      this.logger.debug(`The agent cannot read the offer of ${record.id}: ${error}`)
-    }
-
-    return {
-      credentialExchangeId: record.id,
-      state: record.state,
-      threadId: record.threadId,
-      connectionId: record.connectionId,
-      credentialDefinitionId: anonCredsMetadata?.credentialDefinitionId,
-      schemaId: anonCredsMetadata?.schemaId,
-      claims,
-      errorMessage: record.errorMessage,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt ?? record.createdAt,
-    }
+    return toCredentialExchangeDto(agent, record, this.logger)
   }
 }
 

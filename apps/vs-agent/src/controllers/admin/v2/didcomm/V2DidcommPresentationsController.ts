@@ -1,5 +1,4 @@
 import type { AnonCredsProofRequestRestriction, AnonCredsRequestedAttribute } from '@credo-ts/anoncreds'
-import type { DidCommProofExchangeRecord } from '@credo-ts/didcomm'
 
 import { AnonCredsNonRevokedInterval, AnonCredsSchema, dateToTimestamp } from '@credo-ts/anoncreds'
 import { RecordNotFoundError, W3cCredential } from '@credo-ts/core'
@@ -25,7 +24,6 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
 import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
 
 import {
@@ -49,8 +47,8 @@ import {
   PresentationRecordPageDto,
   RequestedCredentialDto,
 } from './dto'
+import { REQUESTED_CREDENTIALS_METADATA, toPresentationDto } from './mappers'
 
-const REQUESTED_CREDENTIALS_METADATA = '_2060/requestedCredentials'
 const CALLBACK_METADATA = '_2060/callbackParameters'
 
 /**
@@ -196,7 +194,7 @@ export class V2DidcommPresentationsController {
 
     const page = paginate(records, query, { method: 'listPresentations' }, createdAtKey)
 
-    return mapPageAsync(page, record => this.toPresentationDto(record))
+    return mapPageAsync(page, record => toPresentationDto(agent, record))
   }
 
   @Get('presentations/:proofExchangeId')
@@ -220,7 +218,7 @@ export class V2DidcommPresentationsController {
     const record = await agent.didcomm.proofs.findById(proofExchangeId)
     if (!record) throw unknownPresentation(proofExchangeId)
 
-    return this.toPresentationDto(record)
+    return toPresentationDto(agent, record)
   }
 
   @Delete('presentations/:proofExchangeId')
@@ -296,36 +294,6 @@ export class V2DidcommPresentationsController {
     }
 
     return { schema, restrictions: [{ cred_def_id: credentialDefinitionId }] }
-  }
-
-  private async toPresentationDto(record: DidCommProofExchangeRecord): Promise<PresentationRecordDto> {
-    const agent = await this.vsAgentService.getAgent()
-    const formatData = await agent.didcomm.proofs.getFormatData(record.id)
-
-    const proof = formatData.presentation?.anoncreds ?? formatData.presentation?.indy
-    const claims: Claim[] = []
-
-    for (const [name, value] of Object.entries(proof?.requested_proof.revealed_attrs ?? {})) {
-      claims.push(new Claim({ name, value: value.raw }))
-    }
-
-    for (const group of Object.values(proof?.requested_proof.revealed_attr_groups ?? {})) {
-      for (const [name, value] of Object.entries(group?.values ?? {})) {
-        claims.push(new Claim({ name, value: value.raw }))
-      }
-    }
-
-    return {
-      proofExchangeId: record.id,
-      state: record.state,
-      requestedCredentials:
-        (record.metadata.get(REQUESTED_CREDENTIALS_METADATA) as RequestedCredential[] | null) ?? [],
-      claims,
-      verified: record.isVerified ?? false,
-      threadId: record.threadId,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt ?? record.createdAt,
-    }
   }
 }
 

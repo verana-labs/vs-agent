@@ -1,19 +1,59 @@
 import type { BaseLogger } from '@credo-ts/core'
+import type {
+  DidCommBasicMessageRecord,
+  DidCommBasicMessageStateChangedEvent,
+  DidCommBasicMessageV2StateChangedEvent,
+  DidCommConnectionStateChangedEvent,
+  DidCommCredentialStateChangedEvent,
+  DidCommMessageProcessedEvent,
+  DidCommProofStateChangedEvent,
+} from '@credo-ts/didcomm'
 import type { Event } from '@verana-labs/vs-agent-model'
 
+import { utils } from '@credo-ts/core'
+import {
+  DidCommBasicMessageEventTypes,
+  DidCommBasicMessageRole,
+  DidCommConnectionEventTypes,
+  DidCommCredentialEventTypes,
+  DidCommEventTypes,
+  DidCommProofEventTypes,
+} from '@credo-ts/didcomm'
+import { EventType } from '@verana-labs/vs-agent-model'
 import {
   VsAgent,
-  VsAgentConnectionStateEvent,
   VsAgentEventTypes,
   VsAgentIndexerNotificationEvent,
-  VsAgentMessageReceivedEvent,
   VsAgentPresentationStateUpdatedEvent,
   VsAgentVtFlowStateUpdatedEvent,
 } from '@verana-labs/vs-agent-sdk'
 
+import {
+  toConnectionDto,
+  toCredentialExchangeDto,
+  toPresentationDto,
+} from '../controllers/admin/v2/didcomm/mappers'
+
 export interface WebhookOptions {
   url: string
   apiKey?: string
+}
+
+// [VSA-ADM-DC-EXT-4] module path segment of each extension protocol the agent serves
+const EXTENSION_MODULES: Record<string, string> = {
+  'https://didcomm.org/reactions/1.0': 'reactions',
+  'https://didcomm.org/user-profile/1.0': 'user-profile',
+  'https://didcomm.org/media-sharing/1.0': 'media-sharing',
+  'https://didcomm.org/calls/1.0': 'calls',
+  'https://didcomm.org/action-menu/1.0': 'action-menu',
+  'https://didcomm.org/questionanswer/1.0': 'question-answer',
+  'https://didcomm.org/mrtd/1.0': 'mrtd',
+}
+
+const RECEIPTS_MESSAGE_TYPE = 'https://didcomm.org/receipts/1.0/message-receipts'
+
+interface ReceiptsMessage {
+  receipts: { messageId: string; state: string; timestamp?: Date }[]
 }
 
 export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: BaseLogger) => {
@@ -22,27 +62,101 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
     'Content-Type': 'application/json',
     ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
   }
-  const sendWebhookEvent = async (body: Event) => {
-    try {
-      logger.debug(`sending webhook event to ${url}: ${JSON.stringify(body)}`)
-      await fetch(url, { method: 'POST', body: JSON.stringify(body), headers })
-    } catch (error) {
-      logger.error(`Error sending ${body.type} webhook event to ${url}`, { cause: error })
-    }
+
+  const deliver = (type: string, data: unknown): void => {
+    const envelope = { id: utils.uuid(), type, timestamp: new Date().toISOString(), data }
+    logger.debug(`delivering event ${type} ${envelope.id} to ${url}`)
+    fetch(url, { method: 'POST', headers, body: JSON.stringify(envelope) })
+      .then(response => {
+        if (!response.ok)
+          logger.error(`event ${type} ${envelope.id} delivery failed: HTTP ${response.status}`)
+      })
+      .catch(error => logger.error(`event ${type} ${envelope.id} delivery failed`, { cause: error }))
   }
 
-  agent.events.on<VsAgentConnectionStateEvent>(VsAgentEventTypes.ConnectionStateUpdated, ({ payload }) =>
-    sendWebhookEvent(payload.event),
+  const stateUpdated = (type: EventType, record: object, previousState: string | null): void =>
+    deliver(type, { ...record, previousState })
+
+  agent.events.on<DidCommConnectionStateChangedEvent>(
+    DidCommConnectionEventTypes.DidCommConnectionStateChanged,
+    ({ payload }) =>
+      stateUpdated(
+        EventType.ConnectionStateUpdated,
+        toConnectionDto(payload.connectionRecord),
+        payload.previousState,
+      ),
   )
-  agent.events.on<VsAgentMessageReceivedEvent>(VsAgentEventTypes.MessageReceived, ({ payload }) =>
-    sendWebhookEvent(payload.event),
+
+  agent.events.on<DidCommProofStateChangedEvent>(
+    DidCommProofEventTypes.ProofStateChanged,
+    async ({ payload }) =>
+      stateUpdated(
+        EventType.PresentationStateUpdated,
+        await toPresentationDto(agent, payload.proofRecord),
+        payload.previousState,
+      ),
   )
+
+  agent.events.on<DidCommCredentialStateChangedEvent>(
+    DidCommCredentialEventTypes.DidCommCredentialStateChanged,
+    async ({ payload }) =>
+      stateUpdated(
+        EventType.CredentialExchangeStateUpdated,
+        await toCredentialExchangeDto(agent, payload.credentialExchangeRecord, logger),
+        payload.previousState,
+      ),
+  )
+
+  const basicMessageReceived = ({
+    payload,
+  }: {
+    payload: { basicMessageRecord: DidCommBasicMessageRecord }
+  }): void => {
+    const record = payload.basicMessageRecord
+    if (record.role !== DidCommBasicMessageRole.Receiver) return
+    deliver(EventType.MessageReceived, toBasicMessageRecord(record))
+  }
+  agent.events.on<DidCommBasicMessageStateChangedEvent>(
+    DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged,
+    basicMessageReceived,
+  )
+  agent.events.on<DidCommBasicMessageV2StateChangedEvent>(
+    DidCommBasicMessageEventTypes.DidCommBasicMessageV2StateChanged,
+    basicMessageReceived,
+  )
+
+  agent.events.on<DidCommMessageProcessedEvent>(DidCommEventTypes.DidCommMessageProcessed, ({ payload }) => {
+    const { message, connection } = payload
+    if (!connection) return
+
+    if (message.type === RECEIPTS_MESSAGE_TYPE) {
+      const receipts = (message as unknown as ReceiptsMessage).receipts.map(
+        ({ messageId, state, timestamp }) => ({
+          messageId,
+          state,
+          timestamp,
+        }),
+      )
+      deliver(EventType.ReceiptsMessageReceived, { connectionId: connection.id, receipts })
+      return
+    }
+
+    const module = EXTENSION_MODULES[protocolOf(message.type)]
+    if (!module) return
+    deliver(`didcomm.${module}.message-received`, {
+      connectionId: connection.id,
+      threadId: message.threadId,
+      message: message.toJSON(),
+    })
+  })
+
   agent.events.on<VsAgentVtFlowStateUpdatedEvent>(VsAgentEventTypes.VtFlowStateUpdated, ({ payload }) =>
-    sendWebhookEvent(payload.event),
+    deliver(EventType.VtFlowStateUpdated, dataOf(payload.event)),
   )
   agent.events.on<VsAgentIndexerNotificationEvent>(VsAgentEventTypes.IndexerNotification, ({ payload }) =>
-    sendWebhookEvent(payload.event),
+    deliver(EventType.IndexerNotification, dataOf(payload.event)),
   )
+
   agent.events.on<VsAgentPresentationStateUpdatedEvent>(
     VsAgentEventTypes.PresentationStateUpdated,
     async ({ payload }) => {
@@ -63,3 +177,16 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
     },
   )
 }
+
+const dataOf = ({ type: _type, timestamp: _timestamp, ...data }: Event): Record<string, unknown> => data
+
+const protocolOf = (messageType: string): string => messageType.slice(0, messageType.lastIndexOf('/'))
+
+const toBasicMessageRecord = (record: DidCommBasicMessageRecord) => ({
+  id: record.id,
+  connectionId: record.connectionId,
+  role: record.role,
+  content: record.content,
+  sentTime: record.sentTime,
+  createdAt: record.createdAt,
+})
