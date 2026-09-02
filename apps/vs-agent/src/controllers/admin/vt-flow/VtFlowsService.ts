@@ -1,6 +1,7 @@
 import type { VsAgent, VeranaChainService } from '@verana-labs/vs-agent-sdk'
 
 import { CredoError } from '@credo-ts/core'
+import type { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import {
   BadRequestException,
   ConflictException,
@@ -37,17 +38,22 @@ export class VtFlowsService {
   ) {}
 
   public async listFlows(query: ListFlowsQueryDto): Promise<VtFlowRecordDto[]> {
-    const flows = await this.collectFlows(query)
-    return flows.map(({ record, peerDid, connectionState }) => ({
-      ...toDto(record, peerDid),
-      connectionState,
-    }))
+    const flows = await this.collectFlows({
+      role: query.role,
+      connectionState: query.connectionState,
+      flowState: query.flowState,
+      peerDid: query.peerDID,
+      participantId: query.participant_id,
+      schemaId: query.schema_id,
+      participantSessionId: query.participant_session_id,
+    })
+    return flows.map(toDto)
   }
 
   public async listFlowsPage(query: ListFlowsV2QueryDto): Promise<Page<V2VtFlowRecordDto>> {
-    const flows = await this.collectFlows(toV1Query(query))
+    const flows = await this.collectFlows(query)
     return paginate(
-      flows.map(toV2Dto),
+      flows.map(flow => toV2Dto(toDto(flow))),
       query,
       {
         method: 'listFlows',
@@ -66,9 +72,7 @@ export class VtFlowsService {
   }
 
   public async getFlow(participantSessionId: string): Promise<V2VtFlowRecordDto> {
-    const [flow] = await this.collectFlows({
-      participant_session_id: participantSessionId,
-    })
+    const [flow] = await this.collectFlows({ participantSessionId })
     if (!flow) {
       throw new AdminApiError(
         AdminApiErrorCode.UnknownId,
@@ -76,7 +80,7 @@ export class VtFlowsService {
         `no vt-flow with participantSessionId "${participantSessionId}"`,
       )
     }
-    return toV2Dto(flow)
+    return toV2Dto(toDto(flow))
   }
 
   /**
@@ -84,21 +88,19 @@ export class VtFlowsService {
    * each one. The connection filters apply here, because the flow record does not hold the
    * connection data.
    */
-  private async collectFlows(query: ListFlowsQueryDto): Promise<ResolvedFlow[]> {
+  private async collectFlows(query: FlowFilters): Promise<ResolvedFlow[]> {
     const agent = await this.agentService.getAgent()
     const vtFlowApi = this.resolveVtFlowApi(agent)
-    const validatorScope = query.role === VtFlowRole.Applicant && query.participant_id
+    const validatorScope = query.role === VtFlowRole.Applicant && query.participantId
     let records = await vtFlowApi.findAllByQuery({
       ...(query.role && { role: query.role }),
       ...(query.flowState && { flowState: query.flowState }),
-      ...(query.participant_id && !validatorScope && { participantId: query.participant_id }),
-      ...(query.schema_id && { schemaId: query.schema_id }),
-      ...(query.participant_session_id && {
-        participantSessionId: query.participant_session_id,
-      }),
+      ...(query.participantId && !validatorScope && { participantId: query.participantId }),
+      ...(query.schemaId && { schemaId: query.schemaId }),
+      ...(query.participantSessionId && { participantSessionId: query.participantSessionId }),
     })
     if (validatorScope) {
-      records = await this.filterByValidatorParticipant(agent, records, query.participant_id!)
+      records = await this.filterByValidatorParticipant(agent, records, query.participantId!)
     }
 
     const connectionIds = [...new Set(records.map(record => record.connectionId))]
@@ -111,17 +113,25 @@ export class VtFlowsService {
     const flows: ResolvedFlow[] = []
     for (const record of records) {
       const connection = connections.get(record.connectionId)
-      const connectionState: VtConnectionState =
-        isVtFlowTerminalState(record.state) || !connection
-          ? 'TERMINATED'
-          : connection.isReady
-            ? 'ESTABLISHED'
-            : 'NOT_CONNECTED'
-      if (query.peerDID && connection?.theirDid !== query.peerDID) continue
+      const connectionState = connectionStateOf(record, connection)
+      if (query.peerDid && connection?.theirDid !== query.peerDid) continue
       if (query.connectionState && connectionState !== query.connectionState) continue
       flows.push({ record, peerDid: connection?.theirDid, connectionState })
     }
     return flows
+  }
+
+  /**
+   * Resolves the connection data of one flow. A mutation returns the record of the flow, and the
+   * record must carry the Connection State that [VSA-ADM-VT-FL-LIST] listFlows defines.
+   */
+  private async resolveFlow(agent: VsAgent, record: VtFlowRecord): Promise<ResolvedFlow> {
+    const connection = await agent.didcomm.connections.findById(record.connectionId)
+    return {
+      record,
+      peerDid: connection?.theirDid,
+      connectionState: connectionStateOf(record, connection),
+    }
   }
 
   public editCredentialClaims(
@@ -225,7 +235,7 @@ export class VtFlowsService {
     const vtFlowApi = this.resolveVtFlowApi(agent)
     const record = await this.findRecordBySession(vtFlowApi, participantSessionId)
     try {
-      return toDto(await action({ agent, vtFlowApi, record }))
+      return toDto(await this.resolveFlow(agent, await action({ agent, vtFlowApi, record })))
     } catch (error) {
       if (error instanceof CredoError) throw new ConflictException(error.message)
       throw error
@@ -287,7 +297,8 @@ export class VtFlowsService {
       // entry describes what that issuer will give to others, so building a credential from it
       // for the issuer itself fails on the required subject claims.
       if (participant.role !== HOLDER_PARTICIPANT_TYPE) {
-        return toDto(await orchestrator.completeOnboardingProcess(validated.id))
+        const completed = await orchestrator.completeOnboardingProcess(validated.id)
+        return toDto(await this.resolveFlow(agent, completed))
       }
 
       const offered = await orchestrator.offerOnboardingCredential({
@@ -296,7 +307,7 @@ export class VtFlowsService {
         participant,
         credential,
       })
-      return toDto(offered)
+      return toDto(await this.resolveFlow(agent, offered))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       throw new HttpException(`validate failed: ${message}`, HttpStatus.INTERNAL_SERVER_ERROR)
@@ -337,55 +348,43 @@ interface ResolvedFlow {
 }
 
 /**
- * Maps the camelCase v2 filters onto the snake_case names that the v1 query uses.
+ * Filters that select the flows. The names follow [VSA-ADM-VT-FL-LIST] listFlows. The v1 query
+ * maps its snake_case names onto these.
  */
-function toV1Query(query: ListFlowsV2QueryDto): ListFlowsQueryDto {
-  return {
-    role: query.role,
-    connectionState: query.connectionState,
-    flowState: query.flowState,
-    peerDID: query.peerDid,
-    participant_id: query.participantId,
-    schema_id: query.schemaId,
-    participant_session_id: query.participantSessionId,
-  }
+interface FlowFilters {
+  role?: VtFlowRole
+  connectionState?: VtConnectionState
+  flowState?: VtFlowState
+  peerDid?: string
+  participantId?: string
+  schemaId?: string
+  participantSessionId?: string
 }
 
 /**
- * Makes the flow record of [VSA-ADM-VT-FL-LIST] listFlows, which [VSA-ADM-VT-FL-GET] getFlow
- * returns too.
+ * Gives the Connection State of one flow, per [VSA-VTI-FLOW-STATE] Flow State. A flow in a
+ * terminal state is TERMINATED, and so is a flow whose connection no longer exists.
  */
-function toV2Dto({ record, peerDid, connectionState }: ResolvedFlow): V2VtFlowRecordDto {
-  return {
-    id: record.id,
-    participantSessionId: record.participantSessionId,
-    flowState: record.state,
-    connectionState,
-    role: record.role,
-    variant: record.variant,
-    threadId: record.threadId,
-    connectionId: record.connectionId,
-    agentParticipantId: record.agentParticipantId,
-    walletAgentParticipantId: record.walletAgentParticipantId,
-    peerDid,
-    participantId: record.participantId,
-    schemaId: record.schemaId,
-    claims: record.claims,
-    proofs: record.proofsAttach,
-    oobLinkUrl: record.oobLinkUrl,
-    credentialExchangeRecordId: record.credentialExchangeRecordId,
-    credentialDigest: record.credentialDigest,
-    subprotocolThid: record.subprotocolThid,
-    errorMessage: record.errorMessage,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt ?? record.createdAt,
-    lastEventAt: record.updatedAt ?? record.createdAt,
-  }
+function connectionStateOf(
+  record: VtFlowRecord,
+  connection: DidCommConnectionRecord | null | undefined,
+): VtConnectionState {
+  if (isVtFlowTerminalState(record.state) || !connection) return 'TERMINATED'
+  return connection.isReady ? 'ESTABLISHED' : 'NOT_CONNECTED'
 }
 
-function toDto(record: VtFlowRecord, peerDid?: string): VtFlowRecordDto {
+/**
+ * Makes the v2 flow record of [VSA-ADM-VT-FL-LIST] listFlows. v2 renames `state` to `flowState`
+ * and keeps every other field. The v1 record goes away with the v1 API, and this mapper with it.
+ */
+export function toV2Dto({ state, ...rest }: VtFlowRecordDto): V2VtFlowRecordDto {
+  return { ...rest, flowState: state }
+}
+
+function toDto({ record, peerDid, connectionState }: ResolvedFlow): VtFlowRecordDto {
   return {
     peerDid,
+    connectionState,
     oobLinkUrl: record.oobLinkUrl,
     proofs: record.proofsAttach,
     credentialDigest: record.credentialDigest,

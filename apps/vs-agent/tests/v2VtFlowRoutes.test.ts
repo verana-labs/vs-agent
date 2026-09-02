@@ -24,12 +24,18 @@ function flowRecord(id: string, createdAtMs: number, state: VtFlowState = VtFlow
 
 function makeService(
   vtFlowApi: Record<string, unknown>,
-  options: { credential?: unknown; credentialTypesService?: Record<string, unknown> } = {},
+  options: {
+    credential?: unknown
+    credentialTypesService?: Record<string, unknown>
+    connection?: { isReady: boolean; theirDid?: string } | null
+  } = {},
 ) {
+  const connection =
+    options.connection === undefined ? { isReady: true, theirDid: 'did:web:peer' } : options.connection
   const agent = {
     dependencyManager: { resolve: () => vtFlowApi },
     didcomm: {
-      connections: { findById: vi.fn().mockResolvedValue({ isReady: true, theirDid: 'did:web:peer' }) },
+      connections: { findById: vi.fn().mockResolvedValue(connection) },
       credentials: { findById: vi.fn().mockResolvedValue(options.credential ?? null) },
     },
   }
@@ -112,6 +118,34 @@ describe('VtFlowsService v2 routes', () => {
     expect(page.items[0]).toMatchObject({
       flowState: VtFlowState.Validating,
       connectionState: 'ESTABLISHED',
+    })
+  })
+
+  it('reports NOT_CONNECTED while the connection of a live flow is not ready', async () => {
+    const service = makeService(
+      { findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) },
+      { connection: { isReady: false, theirDid: 'did:web:peer' } },
+    )
+
+    await expect(service.getFlow('sess-a')).resolves.toMatchObject({
+      connectionState: 'NOT_CONNECTED',
+      flowState: VtFlowState.Validating,
+    })
+  })
+
+  it('reports TERMINATED for a flow in a terminal state, and for a lost connection', async () => {
+    const terminal = makeService({
+      findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000, VtFlowState.TerminatedByValidator)]),
+    })
+    await expect(terminal.getFlow('sess-a')).resolves.toMatchObject({ connectionState: 'TERMINATED' })
+
+    const lost = makeService(
+      { findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) },
+      { connection: null },
+    )
+    await expect(lost.getFlow('sess-a')).resolves.toMatchObject({
+      connectionState: 'TERMINATED',
+      peerDid: undefined,
     })
   })
 

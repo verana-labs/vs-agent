@@ -34,6 +34,7 @@ const serviceEndpointsService = {
 const vtFlowsService = {
   listFlowsPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
   getFlow: vi.fn(),
+  validateAndOfferCredential: vi.fn(),
   editCredentialClaims: vi.fn(),
   sendOobLink: vi.fn(),
   revokeFlowCredential: vi.fn(),
@@ -176,6 +177,26 @@ describe('v2 vt routes', () => {
     const missing = await request(app.getHttpServer()).get('/v2/vt/flows/nope')
     expect(missing.status).toBe(404)
     expect(missing.body.error.code).toBe('UNKNOWN_ID')
+  })
+
+  it('returns the v2 flow record on validate, per [VSA-ADM-VT-FL-VALIDATE]', async () => {
+    vtFlowsService.validateAndOfferCredential.mockResolvedValue({
+      id: 'a',
+      participantSessionId: 'sess-a',
+      state: 'CRED_OFFERED',
+      connectionState: 'ESTABLISHED',
+      peerDid: 'did:web:peer',
+    })
+
+    const response = await request(app.getHttpServer()).post('/v2/vt/flows/sess-a/validate')
+
+    expect(response.status).toBe(200)
+    expect(response.body).toMatchObject({
+      flowState: 'CRED_OFFERED',
+      connectionState: 'ESTABLISHED',
+      peerDid: 'did:web:peer',
+    })
+    expect(response.body.state).toBeUndefined()
   })
 
   it('keeps the v1 GET methods and drops the trimmed v1 mutations', async () => {
