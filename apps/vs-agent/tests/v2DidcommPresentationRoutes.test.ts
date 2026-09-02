@@ -63,9 +63,7 @@ const anoncreds = { getCredentialDefinition: vi.fn(), getSchema: vi.fn() }
 const events = { emit: vi.fn() }
 
 const vsAgentService = {
-  getAgent: vi
-    .fn()
-    .mockResolvedValue({ didcomm: { proofs }, modules: { anoncreds }, events, context: {} }),
+  getAgent: vi.fn().mockResolvedValue({ didcomm: { proofs }, modules: { anoncreds }, events, context: {} }),
 }
 const urlShortenerService = { createShortUrl: vi.fn() }
 const credentialTypesService = { findAnonCredsSchema: vi.fn() }
