@@ -90,6 +90,39 @@ describe('VtFlowsService v2 routes', () => {
     })
   })
 
+  it('returns the flow of a session with its flow state and connection state', async () => {
+    const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) })
+
+    const flow = await service.getFlow('sess-a')
+
+    expect(flow).toMatchObject({
+      id: 'a',
+      participantSessionId: 'sess-a',
+      flowState: VtFlowState.Validating,
+      connectionState: 'ESTABLISHED',
+      peerDid: 'did:web:peer',
+    })
+  })
+
+  it('reports the flow state and the connection state on every listed flow', async () => {
+    const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) })
+
+    const page = await service.listFlowsPage({})
+
+    expect(page.items[0]).toMatchObject({
+      flowState: VtFlowState.Validating,
+      connectionState: 'ESTABLISHED',
+    })
+  })
+
+  it('rejects an unknown participant session with UNKNOWN_ID and status 404', async () => {
+    const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([]) })
+
+    const rejection = expect(service.getFlow('sess-missing')).rejects
+    await rejection.toBeInstanceOf(AdminApiError)
+    await rejection.toMatchObject({ code: AdminApiErrorCode.UnknownId, status: 404 })
+  })
+
   it('revokes an AnonCreds credential through its registry before notifying the applicant', async () => {
     const completed = flowRecord('a', 1000, VtFlowState.Completed)
     ;(completed as Record<string, unknown>).credentialExchangeRecordId = 'cred-ex-1'

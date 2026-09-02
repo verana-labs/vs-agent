@@ -6,7 +6,7 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import { ErrorEnvelopeFilter } from '../src/common'
+import { AdminApiError, AdminApiErrorCode, ErrorEnvelopeFilter } from '../src/common'
 import {
   ServiceEndpointError,
   ServiceEndpointErrorCode,
@@ -33,6 +33,7 @@ const serviceEndpointsService = {
 
 const vtFlowsService = {
   listFlowsPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+  getFlow: vi.fn(),
   editCredentialClaims: vi.fn(),
   sendOobLink: vi.fn(),
   revokeFlowCredential: vi.fn(),
@@ -155,6 +156,26 @@ describe('v2 vt routes', () => {
       .send({ url: 'https://x' })
     expect(conflict.status).toBe(409)
     expect(conflict.body.error.code).toBe('INVALID_STATE')
+  })
+
+  it('serves one flow on the get-by-id route and envelopes an unknown session as UNKNOWN_ID', async () => {
+    vtFlowsService.getFlow.mockResolvedValue({
+      id: 'a',
+      participantSessionId: 'sess-a',
+      flowState: 'VALIDATING',
+      connectionState: 'ESTABLISHED',
+    })
+    const found = await request(app.getHttpServer()).get('/v2/vt/flows/sess-a')
+    expect(found.status).toBe(200)
+    expect(vtFlowsService.getFlow).toHaveBeenCalledWith('sess-a')
+    expect(found.body).toMatchObject({ flowState: 'VALIDATING', connectionState: 'ESTABLISHED' })
+
+    vtFlowsService.getFlow.mockRejectedValue(
+      new AdminApiError(AdminApiErrorCode.UnknownId, 404, 'no vt-flow with participantSessionId "nope"'),
+    )
+    const missing = await request(app.getHttpServer()).get('/v2/vt/flows/nope')
+    expect(missing.status).toBe(404)
+    expect(missing.body.error.code).toBe('UNKNOWN_ID')
   })
 
   it('keeps the v1 GET methods and drops the trimmed v1 mutations', async () => {

@@ -23,6 +23,7 @@ import { HOLDER_PARTICIPANT_TYPE, VtFlowOrchestrator } from '@verana-labs/vs-age
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../common'
 import { VsAgentService } from '../../../services/VsAgentService'
+import { V2VtFlowRecordDto, VtConnectionState } from '../v2/vt/dto'
 import { CredentialTypesService } from '../credentials/CredentialTypeService'
 
 import { ListFlowsQueryDto, ListFlowsV2QueryDto } from './dto/flow-requests.dto'
@@ -36,55 +37,17 @@ export class VtFlowsService {
   ) {}
 
   public async listFlows(query: ListFlowsQueryDto): Promise<VtFlowRecordDto[]> {
-    const agent = await this.agentService.getAgent()
-    const vtFlowApi = this.resolveVtFlowApi(agent)
-    const validatorScope = query.role === VtFlowRole.Applicant && query.participant_id
-    let records = await vtFlowApi.findAllByQuery({
-      ...(query.role && { role: query.role }),
-      ...(query.flowState && { flowState: query.flowState }),
-      ...(query.participant_id && !validatorScope && { participantId: query.participant_id }),
-      ...(query.schema_id && { schemaId: query.schema_id }),
-      ...(query.participant_session_id && { participantSessionId: query.participant_session_id }),
-    })
-    if (validatorScope) {
-      records = await this.filterByValidatorParticipant(agent, records, query.participant_id!)
-    }
-
-    const connectionIds = [...new Set(records.map(record => record.connectionId))]
-    const connections = new Map(
-      await Promise.all(
-        connectionIds.map(async id => [id, await agent.didcomm.connections.findById(id)] as const),
-      ),
-    )
-
-    const flows: VtFlowRecordDto[] = []
-    for (const record of records) {
-      const connection = connections.get(record.connectionId)
-      const connectionState =
-        isVtFlowTerminalState(record.state) || !connection
-          ? 'TERMINATED'
-          : connection.isReady
-            ? 'ESTABLISHED'
-            : 'NOT_CONNECTED'
-      if (query.peerDID && connection?.theirDid !== query.peerDID) continue
-      if (query.connectionState && connectionState !== query.connectionState) continue
-      flows.push({ ...toDto(record, connection?.theirDid), connectionState })
-    }
-    return flows
+    const flows = await this.collectFlows(query)
+    return flows.map(({ record, peerDid, connectionState }) => ({
+      ...toDto(record, peerDid),
+      connectionState,
+    }))
   }
 
-  public async listFlowsPage(query: ListFlowsV2QueryDto): Promise<Page<VtFlowRecordDto>> {
-    const flows = await this.listFlows({
-      role: query.role,
-      connectionState: query.connectionState,
-      flowState: query.flowState,
-      peerDID: query.peerDid,
-      participant_id: query.participantId,
-      schema_id: query.schemaId,
-      participant_session_id: query.participantSessionId,
-    })
+  public async listFlowsPage(query: ListFlowsV2QueryDto): Promise<Page<V2VtFlowRecordDto>> {
+    const flows = await this.collectFlows(toV1Query(query))
     return paginate(
-      flows,
+      flows.map(toV2Dto),
       query,
       {
         method: 'listFlows',
@@ -102,6 +65,65 @@ export class VtFlowsService {
     )
   }
 
+  public async getFlow(participantSessionId: string): Promise<V2VtFlowRecordDto> {
+    const [flow] = await this.collectFlows({
+      participant_session_id: participantSessionId,
+    })
+    if (!flow) {
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        HttpStatus.NOT_FOUND,
+        `no vt-flow with participantSessionId "${participantSessionId}"`,
+      )
+    }
+    return toV2Dto(flow)
+  }
+
+  /**
+   * Finds the flows that match the query and resolves the Connection State and the peer DID of
+   * each one. The connection filters apply here, because the flow record does not hold the
+   * connection data.
+   */
+  private async collectFlows(query: ListFlowsQueryDto): Promise<ResolvedFlow[]> {
+    const agent = await this.agentService.getAgent()
+    const vtFlowApi = this.resolveVtFlowApi(agent)
+    const validatorScope = query.role === VtFlowRole.Applicant && query.participant_id
+    let records = await vtFlowApi.findAllByQuery({
+      ...(query.role && { role: query.role }),
+      ...(query.flowState && { flowState: query.flowState }),
+      ...(query.participant_id && !validatorScope && { participantId: query.participant_id }),
+      ...(query.schema_id && { schemaId: query.schema_id }),
+      ...(query.participant_session_id && {
+        participantSessionId: query.participant_session_id,
+      }),
+    })
+    if (validatorScope) {
+      records = await this.filterByValidatorParticipant(agent, records, query.participant_id!)
+    }
+
+    const connectionIds = [...new Set(records.map(record => record.connectionId))]
+    const connections = new Map(
+      await Promise.all(
+        connectionIds.map(async id => [id, await agent.didcomm.connections.findById(id)] as const),
+      ),
+    )
+
+    const flows: ResolvedFlow[] = []
+    for (const record of records) {
+      const connection = connections.get(record.connectionId)
+      const connectionState: VtConnectionState =
+        isVtFlowTerminalState(record.state) || !connection
+          ? 'TERMINATED'
+          : connection.isReady
+            ? 'ESTABLISHED'
+            : 'NOT_CONNECTED'
+      if (query.peerDID && connection?.theirDid !== query.peerDID) continue
+      if (query.connectionState && connectionState !== query.connectionState) continue
+      flows.push({ record, peerDid: connection?.theirDid, connectionState })
+    }
+    return flows
+  }
+
   public editCredentialClaims(
     participantSessionId: string,
     claims: Record<string, unknown>,
@@ -115,7 +137,11 @@ export class VtFlowsService {
   public sendOobLink(participantSessionId: string, url: string, message?: string): Promise<VtFlowRecordDto> {
     return this.mutateFlow(participantSessionId, async ({ agent, vtFlowApi, record }) => {
       await this.assertConnectionEstablished(agent, record)
-      return vtFlowApi.sendOobLink({ vtFlowRecordId: record.id, url, description: message ?? '' })
+      return vtFlowApi.sendOobLink({
+        vtFlowRecordId: record.id,
+        url,
+        description: message ?? '',
+      })
     })
   }
 
@@ -243,7 +269,9 @@ export class VtFlowsService {
       throw new BadRequestException(`Applicant participant ${record.participantId} not found on indexer`)
     if (applicant.schema_id == null) throw new BadRequestException('Applicant participant has no schema_id')
 
-    const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
+    const orchestrator = new VtFlowOrchestrator(agent, {
+      publicApiBaseUrl: agent.publicApiBaseUrl,
+    })
     try {
       const {
         record: validated,
@@ -296,6 +324,62 @@ export class VtFlowsService {
       )
     }
     return agent.veranaChain
+  }
+}
+
+/**
+ * One flow record with the connection data that the flow record does not hold.
+ */
+interface ResolvedFlow {
+  record: VtFlowRecord
+  peerDid?: string
+  connectionState: VtConnectionState
+}
+
+/**
+ * Maps the camelCase v2 filters onto the snake_case names that the v1 query uses.
+ */
+function toV1Query(query: ListFlowsV2QueryDto): ListFlowsQueryDto {
+  return {
+    role: query.role,
+    connectionState: query.connectionState,
+    flowState: query.flowState,
+    peerDID: query.peerDid,
+    participant_id: query.participantId,
+    schema_id: query.schemaId,
+    participant_session_id: query.participantSessionId,
+  }
+}
+
+/**
+ * Makes the flow record of [VSA-ADM-VT-FL-LIST] listFlows, which [VSA-ADM-VT-FL-GET] getFlow
+ * returns too.
+ */
+function toV2Dto({ record, peerDid, connectionState }: ResolvedFlow): V2VtFlowRecordDto {
+  return {
+    id: record.id,
+    participantSessionId: record.participantSessionId,
+    flowState: record.state,
+    connectionState,
+    role: record.role,
+    variant: record.variant,
+    threadId: record.threadId,
+    connectionId: record.connectionId,
+    agentParticipantId: record.agentParticipantId,
+    walletAgentParticipantId: record.walletAgentParticipantId,
+    peerDid,
+    participantId: record.participantId,
+    schemaId: record.schemaId,
+    claims: record.claims,
+    proofs: record.proofsAttach,
+    oobLinkUrl: record.oobLinkUrl,
+    credentialExchangeRecordId: record.credentialExchangeRecordId,
+    credentialDigest: record.credentialDigest,
+    subprotocolThid: record.subprotocolThid,
+    errorMessage: record.errorMessage,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt ?? record.createdAt,
+    lastEventAt: record.updatedAt ?? record.createdAt,
   }
 }
 
