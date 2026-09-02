@@ -49,6 +49,15 @@ const proofs = {
   findById: vi.fn(),
   deleteById: vi.fn(),
   getFormatData: vi.fn(),
+  getCredentialsForRequest: vi.fn(),
+  acceptRequest: vi.fn(),
+  acceptPresentation: vi.fn(),
+}
+
+// The matches that `getCredentialsForRequest` returns for a request of one attribute group.
+const matchingCredentials = {
+  attributes: { 'gov-id': [{ credentialId: 'cred-1' }] },
+  predicates: {},
 }
 const anoncreds = { getCredentialDefinition: vi.fn(), getSchema: vi.fn() }
 
@@ -328,6 +337,147 @@ describe('v2 didcomm presentation routes', () => {
 
       expect(response.status).toBe(500)
       expect(response.body.error.code).toBe('INTERNAL')
+    })
+  })
+
+  describe('autoAccept', () => {
+    it('stops the agent from acknowledging a presentation on its own by default', async () => {
+      await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({ requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }] })
+
+      expect(proofs.createRequest.mock.calls[0][0].autoAcceptProof).toBe('never')
+    })
+
+    it('lets the agent complete its verifier steps when the caller asks for it', async () => {
+      await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({ requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }], autoAccept: true })
+
+      expect(proofs.createRequest.mock.calls[0][0].autoAcceptProof).toBe('contentApproved')
+    })
+  })
+
+  describe('acceptPresentationRequest', () => {
+    beforeEach(() => {
+      proofs.findById.mockResolvedValue(
+        proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'request-received' }),
+      )
+      proofs.getCredentialsForRequest.mockResolvedValue({
+        proofFormats: { anoncreds: matchingCredentials },
+      })
+      proofs.acceptRequest.mockResolvedValue(
+        proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'presentation-sent' }),
+      )
+      proofs.getFormatData.mockResolvedValue({})
+    })
+
+    it('lets the agent select the credentials and answers with the updated record', async () => {
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/presentations/p-1/accept-request')
+
+      expect(response.status).toBe(200)
+      expect(response.body).toMatchObject({ proofExchangeId: 'p-1', state: 'presentation-sent' })
+      expect(proofs.acceptRequest).toHaveBeenCalledWith({ proofExchangeRecordId: 'p-1' })
+    })
+
+    it('rejects a state other than request-received with INVALID_STATE', async () => {
+      proofs.findById.mockResolvedValue(proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'done' }))
+
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/presentations/p-1/accept-request')
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('INVALID_STATE')
+      expect(proofs.acceptRequest).not.toHaveBeenCalled()
+    })
+
+    it('rejects a group that no credential matches with NO_COMPATIBLE_CREDENTIALS', async () => {
+      proofs.getCredentialsForRequest.mockResolvedValue({
+        proofFormats: { anoncreds: { attributes: { 'gov-id': [] }, predicates: {} } },
+      })
+
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/presentations/p-1/accept-request')
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('NO_COMPATIBLE_CREDENTIALS')
+      expect(response.body.error.message).toContain('gov-id')
+      expect(proofs.acceptRequest).not.toHaveBeenCalled()
+    })
+
+    it('rejects a request of a format the agent cannot present with NO_COMPATIBLE_CREDENTIALS', async () => {
+      proofs.getCredentialsForRequest.mockResolvedValue({ proofFormats: {} })
+
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/presentations/p-1/accept-request')
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('NO_COMPATIBLE_CREDENTIALS')
+      expect(proofs.acceptRequest).not.toHaveBeenCalled()
+    })
+
+    it('answers a legacy indy request from the indy matches', async () => {
+      proofs.getCredentialsForRequest.mockResolvedValue({ proofFormats: { indy: matchingCredentials } })
+
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/presentations/p-1/accept-request')
+
+      expect(response.status).toBe(200)
+      expect(proofs.acceptRequest).toHaveBeenCalledWith({ proofExchangeRecordId: 'p-1' })
+    })
+
+    it('reports an unknown presentation as UNKNOWN_ID', async () => {
+      proofs.findById.mockResolvedValue(null)
+
+      const response = await request(app.getHttpServer()).post(
+        '/v2/didcomm/presentations/nope/accept-request',
+      )
+
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
+    })
+  })
+
+  describe('acceptPresentation', () => {
+    beforeEach(() => {
+      proofs.findById.mockResolvedValue(
+        proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'presentation-received' }),
+      )
+      proofs.acceptPresentation.mockResolvedValue(
+        proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'done', isVerified: true }),
+      )
+      proofs.getFormatData.mockResolvedValue({})
+    })
+
+    it('acknowledges the presentation and answers with the record in state done', async () => {
+      const response = await request(app.getHttpServer()).post(
+        '/v2/didcomm/presentations/p-1/accept-presentation',
+      )
+
+      expect(response.status).toBe(200)
+      expect(response.body).toMatchObject({ proofExchangeId: 'p-1', state: 'done', verified: true })
+      expect(proofs.acceptPresentation).toHaveBeenCalledWith({ proofExchangeRecordId: 'p-1' })
+    })
+
+    it('rejects a state other than presentation-received with INVALID_STATE', async () => {
+      proofs.findById.mockResolvedValue(
+        proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'request-sent' }),
+      )
+
+      const response = await request(app.getHttpServer()).post(
+        '/v2/didcomm/presentations/p-1/accept-presentation',
+      )
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('INVALID_STATE')
+      expect(proofs.acceptPresentation).not.toHaveBeenCalled()
+    })
+
+    it('reports an unknown presentation as UNKNOWN_ID', async () => {
+      proofs.findById.mockResolvedValue(null)
+
+      const response = await request(app.getHttpServer()).post(
+        '/v2/didcomm/presentations/nope/accept-presentation',
+      )
+
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
     })
   })
 })

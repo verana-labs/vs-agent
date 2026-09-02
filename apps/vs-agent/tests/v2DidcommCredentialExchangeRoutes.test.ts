@@ -29,6 +29,7 @@ function exchangeRecord(options: {
   createdAt: string
   credentialDefinitionId?: string
   schemaId?: string
+  state?: string
 }) {
   const metadata: Record<string, unknown> = {}
   if (options.credentialDefinitionId || options.schemaId) {
@@ -40,7 +41,7 @@ function exchangeRecord(options: {
 
   return {
     id: options.id,
-    state: 'offer-sent',
+    state: options.state ?? 'offer-sent',
     threadId: `thread-${options.id}`,
     connectionId: `conn-${options.id}`,
     errorMessage: undefined,
@@ -81,6 +82,9 @@ const agent = {
       getAll: vi.fn().mockResolvedValue(records),
       findById: vi.fn(),
       getFormatData: vi.fn(),
+      acceptOffer: vi.fn(),
+      acceptRequest: vi.fn(),
+      acceptCredential: vi.fn(),
     },
   },
 }
@@ -384,5 +388,124 @@ describe('v2 didcomm credential exchange routes', () => {
     )
 
     expect(errors).toEqual([])
+  })
+
+  describe('autoAccept', () => {
+    beforeEach(() => {
+      agent.didcomm.credentials.createOffer.mockResolvedValue({
+        message: { id: 'msg-1' },
+        credentialExchangeRecord: { id: 'ce-a' },
+      })
+    })
+
+    it('stops the agent from issuing on its own by default', async () => {
+      await request(app.getHttpServer())
+        .post('/v2/didcomm/credential-offer')
+        .send({ credentialDefinitionId: 'credDef:a', claims: [{ name: 'phoneNumber', value: '+1' }] })
+
+      expect(agent.didcomm.credentials.createOffer.mock.calls[0][0].autoAcceptCredential).toBe('never')
+    })
+
+    it('lets the agent complete its issuer steps when the caller asks for it', async () => {
+      await request(app.getHttpServer())
+        .post('/v2/didcomm/credential-offer')
+        .send({
+          credentialDefinitionId: 'credDef:a',
+          claims: [{ name: 'phoneNumber', value: '+1' }],
+          autoAccept: true,
+        })
+
+      expect(agent.didcomm.credentials.createOffer.mock.calls[0][0].autoAcceptCredential).toBe(
+        'contentApproved',
+      )
+    })
+
+    it('leaves the last holder step to acceptCredential when it accepts an offer', async () => {
+      agent.didcomm.credentials.findById.mockResolvedValue(
+        exchangeRecord({ id: 'ce-a', createdAt: '2026-01-01T00:00:00.000Z', state: 'offer-received' }),
+      )
+      agent.didcomm.credentials.acceptOffer.mockResolvedValue(
+        exchangeRecord({ id: 'ce-a', createdAt: '2026-01-01T00:00:00.000Z', state: 'request-sent' }),
+      )
+
+      await request(app.getHttpServer()).post('/v2/didcomm/credential-exchanges/ce-a/accept-offer')
+
+      expect(agent.didcomm.credentials.acceptOffer).toHaveBeenCalledWith({
+        credentialExchangeRecordId: 'ce-a',
+        autoAcceptCredential: 'never',
+      })
+    })
+  })
+
+  describe.each([
+    {
+      route: 'accept-offer',
+      method: 'acceptOffer' as const,
+      accepted: 'offer-received',
+      next: 'request-sent',
+      // The holder stores the credential with acceptCredential, so the exchange stops after this.
+      options: { autoAcceptCredential: 'never' },
+    },
+    {
+      route: 'accept-request',
+      method: 'acceptRequest' as const,
+      accepted: 'request-received',
+      next: 'credential-issued',
+      options: {},
+    },
+    {
+      route: 'accept-credential',
+      method: 'acceptCredential' as const,
+      accepted: 'credential-received',
+      next: 'done',
+      options: {},
+    },
+  ])('$route', ({ route, method, accepted, next, options }) => {
+    beforeEach(() => {
+      agent.didcomm.credentials.findById.mockResolvedValue(
+        exchangeRecord({ id: 'ce-a', createdAt: '2026-01-01T00:00:00.000Z', state: accepted }),
+      )
+      agent.didcomm.credentials[method].mockResolvedValue(
+        exchangeRecord({ id: 'ce-a', createdAt: '2026-01-01T00:00:00.000Z', state: next }),
+      )
+    })
+
+    it('runs the protocol step and answers with the updated record', async () => {
+      const response = await request(app.getHttpServer()).post(
+        `/v2/didcomm/credential-exchanges/ce-a/${route}`,
+      )
+
+      expect(response.status).toBe(200)
+      expect(response.body).toMatchObject({ credentialExchangeId: 'ce-a', state: next })
+      expect(agent.didcomm.credentials[method]).toHaveBeenCalledWith({
+        credentialExchangeRecordId: 'ce-a',
+        ...options,
+      })
+    })
+
+    it(`rejects a state other than ${accepted} with INVALID_STATE`, async () => {
+      agent.didcomm.credentials.findById.mockResolvedValue(
+        exchangeRecord({ id: 'ce-a', createdAt: '2026-01-01T00:00:00.000Z', state: 'abandoned' }),
+      )
+
+      const response = await request(app.getHttpServer()).post(
+        `/v2/didcomm/credential-exchanges/ce-a/${route}`,
+      )
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('INVALID_STATE')
+      expect(agent.didcomm.credentials[method]).not.toHaveBeenCalled()
+    })
+
+    it('reports an unknown credential exchange as UNKNOWN_ID', async () => {
+      agent.didcomm.credentials.findById.mockResolvedValue(null)
+
+      const response = await request(app.getHttpServer()).post(
+        `/v2/didcomm/credential-exchanges/nope/${route}`,
+      )
+
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
+    })
   })
 })
