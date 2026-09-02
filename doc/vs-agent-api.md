@@ -48,12 +48,8 @@ In addition, it supports a notification mechanism to subscribe to any event the 
         - [Submit value](#submit-value)
         - [Result value](#result-value)
   - [Events](#events)
-    - [Event topics](#event-topics)
-      - [Connection State Updated](#connection-state-updated)
-      - [Message State Updated](#message-state-updated)
-      - [Message Received](#message-received)
-      - [Indexer Notification](#indexer-notification)
-    - [Subscribing to events](#subscribing-to-events)
+    - [Envelope](#envelope)
+    - [Event types](#event-types)
   - [Invitations](#invitations)
     - [Connection Invitation](#connection-invitation)
     - [Presentation Request](#presentation-request)
@@ -92,7 +88,7 @@ Response from VS-A will generally result in a 200 HTTP response code and include
 
 Using the message `id`, the agent controller can subscribe and verify the message sending status.
 
-To receive messages from other agents, the controller can subscribe to `message-received` topic.
+To receive messages from other agents, the controller receives the `didcomm.basic-messages.message-received` event.
 
 ### Message types
 
@@ -719,101 +715,59 @@ When a Verifiable Credential is processed, a result message may be generated. It
 
 ## Events
 
-VS Agent Notification interface supports the following event topics:
+VS Agent notifies a backend of state changes through webhook events, per the
+[Events API](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#events-api) of the
+VS Agent specification. The operator configures one consumer endpoint:
 
-- Connection State Updated (`connection-state-updated`): usually for new connections
-- Message State Updated (`message-state-updated`): used to keep track of sent messages
-- Message Received (`message-received`): for reception of any message
-- Indexer Notification (`indexer-notification`): on-chain ledger notifications relayed from the Verana indexer
+| Variable | Description |
+| --- | --- |
+| `EVENTS_WEBHOOK_URL` | URL to which the agent delivers every event with one HTTP `POST`. When it is unset, the agent delivers no event. |
+| `EVENTS_WEBHOOK_API_KEY` | Static secret. When it is set, the agent sends it in the `Authorization: Bearer` header of every delivery. |
 
-Events are JSON-encoded and include their underlying data in their payload field:
+An event is a notification, not a state transfer. The records of the Administration API are the source of
+truth: an event tells the consumer that a record changed, and the consumer reads the record when it needs a
+guaranteed view. Delivery is best-effort. The agent logs a failed delivery (a non `2xx` response or a network
+error) and does not block DIDComm processing, flow processing, or an Administration API request on it.
 
-```json
-{
-  "timestamp": "NumericDate",
-  "type": "EventType",
-  "event-specific-field": "EventSpecificFieldType"
-}
-```
+### Envelope
 
-`EventType` is a string, while `EventSpecificFieldType` is a free structure dependant on the event type (there might be multiple fields for a given event)
-
-### Event topics
-
-#### Connection State Updated
-
-Sent whenever a connection has been created or updated. Event format is as follows:
+Every event is one JSON object:
 
 ```json
 {
-  "type": "connection-state-updated",
-  "connectionId": "UUID",
-  "invitationId": "UUID",
-  "state": "ConnectionState"
+  "id": "0b9df6f4-3f0e-4b3a-9c26-6a5f8e2d1c47",
+  "type": "didcomm.connections.state-updated",
+  "timestamp": "2026-08-28T12:00:00.000Z",
+  "data": { "id": "…", "state": "completed", "previousState": "response-sent" }
 }
 ```
 
-ConnectionState corresponds to the different states in [DID Exchange protocol](https://github.com/hyperledger/aries-rfcs/blob/main/features/0023-did-exchange/README.md).
+- `id`: UUID of the event. A consumer uses it to discard a duplicate.
+- `type`: one of the event types below.
+- `timestamp`: ISO 8601 UTC datetime of the emission.
+- `data`: object whose shape the event type defines.
 
-#### Message State Updated
+A `state-updated` event carries the record in the same shape as the `get` method of that record returns it,
+plus `previousState`: the state before the change, or `null` when the event reports the creation of the
+record. A `message-received` event carries the inbound message.
 
-Sent when a message delivery status has been changed. Event format is as follows:
+### Event types
 
-```json
-{
-  "type": "message-state-updated",
-  "messageId": "UUID",
-  "timestamp": "NumericDate",
-  "connectionId": "UUID",
-  "state": "MessageState"
-}
-```
+| `type` | Trigger | `data` |
+| --- | --- | --- |
+| `didcomm.connections.state-updated` | A connection record is created or changes state | the connection record as `GET /v2/didcomm/connections/{connectionId}` returns it, plus `previousState` |
+| `didcomm.basic-messages.message-received` | The agent receives a basic message | the message record: `id`, `connectionId`, `role`, `content`, `sentTime`, `createdAt` |
+| `didcomm.receipts.message-received` | The agent receives a `message-receipts` message | `connectionId` and `receipts`, each with `messageId`, `state` and `timestamp` |
+| `didcomm.presentations.state-updated` | A presentation record is created or changes state | the presentation record as `GET /v2/didcomm/presentations/{proofExchangeId}` returns it, plus `previousState` |
+| `didcomm.credential-exchanges.state-updated` | A credential exchange record is created or changes state | the credential exchange record as `GET /v2/didcomm/credential-exchanges/{credentialExchangeId}` returns it, plus `previousState` |
+| `didcomm.{module}.message-received` | The agent receives a message of an extension protocol module: `reactions`, `user-profile`, `media-sharing`, `calls`, `action-menu`, `question-answer` or `mrtd` | `connectionId`, `threadId` and `message`, the plaintext DIDComm message |
+| `vt.flows.state-updated` | The Flow State of a credential acquisition flow changes | the flow fields (`vtFlowRecordId`, `participantSessionId`, `connectionId`, `role`, `variant`, `state`, `claims`, …) plus `previousState` |
+| `indexer-notification` | The agent processes an indexer event | `msg`, `entityType`, `entityId`, `changes`, `blockHeight`, `txHash` and `operatorAddress` |
 
-MessageState corresponds to the different states specified in [Messaging](<[https://gitlab/messaging.md](https://gitlab.mobiera.com/2060/2060-spec/-/blob/master/messaging.md)>).
-
-#### Message Received
-
-Sent when a message is received. Event format is as follows:
-
-```json
-{
-  "type": "message-received",
-  "message": "Message"
-}
-```
-
-Payload contains the message itself, as specified in the previous section.
-
-#### Indexer Notification
-
-Sent whenever an on-chain activity related to the agent DID is received from the Verana indexer. Event format is as follows:
-
-```json
-{
-  "type": "indexer-notification",
-  "timestamp": "NumericDate",
-  "msg": "string",
-  "entityType": "string",
-  "entityId": "string",
-  "changes": {},
-  "blockHeight": 0,
-  "txHash": "string",
-  "operatorAddress": "string"
-}
-```
-
-It is emitted for **every** indexer activity, regardless of which default handlers are active. This lets a backend behind the container react to `msg` types not covered by the default implementation, or override the ones that are (together with the `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` environment variable). The state-sync bookkeeping the agent needs internally always runs and is never affected by overriding handlers.
-
-### Subscribing to events
-
-> **NOTE**: Not yet supported by VS Agent implementation
-> Subscription to events is maanaged in a REST route (`/event-subscriptions`) that allows to list, create and remove Webhooks for different topics.
-
-Subscriptions are composed by:
-
-- (optional) type: EventType (or array of Event Types). If not specified, send all events to the endpoint
-- (optional) filter: send only events that match specific fields. This only works when a particular EventType is defined in type
-- endpoint: URL where VS Agent will connect to send the notifications (it could be HTTP or WS)
+The `indexer-notification` event is emitted for every indexer activity, regardless of which default handlers
+are active, so a backend can react to `msg` types the default implementation does not cover, or override the
+ones that it does (together with the `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` environment variable). The
+state-sync bookkeeping the agent needs internally always runs and is never affected by overriding handlers.
 
 ## Invitations
 

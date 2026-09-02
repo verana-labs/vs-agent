@@ -22,7 +22,8 @@ These variables are usually important for every deployment, since they define ho
 | AGENT_PUBLIC_DID_METHOD    | DID method for the agent's public DID: `webvh` or `web`           | webvh                   |
 | AGENT_INVITATION_IMAGE_URL | Public URL for image to be shown in invitations                   | none                    |
 | AGENT_LABEL                | Label to show to other DIDComm agents                             | Test VS Agent           |
-| EVENTS_BASE_URL            | Base URL for sending events                                       | <http://localhost:5000> |
+| EVENTS_WEBHOOK_URL         | URL the agent posts every event to. No event is delivered when unset | (none)               |
+| EVENTS_WEBHOOK_API_KEY     | Secret sent as `Authorization: Bearer` with every event delivery  | (none)                  |
 
 VS Agent includes a public and an administration interface, each running in ports 3001 and 3000 respectively (which could be overriden by setting `AGENT_PORT` and `ADMIN_PORT` in case you are running the application locally and these ports are used by other apps).
 
@@ -38,7 +39,7 @@ In order to make your agent reachable by other VS agents and user agents like Ho
 
 You'll also need to set up an `AGENT_LABEL` and (optionally) an `AGENT_INVITATION_IMAGE_URL` so when DIDComm agents scan an invitation to your service they can identify it easily.
 
-Besides these parameters, you are likely to use your VS Agent alongside a **controller** app that will be sending messages and also receiving events from it (such as new messages arrived, new connections, etc.). For that purpose, you'll need to set up an `EVENTS_BASE_URL` for your VS Agent to be able to send WebHooks to it. See the [VS Agent API document](../../doc//vs-agent-api.md#events) for more information about the API your backend needs to implement (if you are not using the handy [JS](../../packages/client) or [NestJS](../../packages/nestjs-client) client packages).
+Besides these parameters, you are likely to use your VS Agent alongside a **controller** app that will be sending messages and also receiving events from it (such as new messages arrived, new connections, etc.). For that purpose, you'll need to set up an `EVENTS_WEBHOOK_URL` for your VS Agent to be able to send WebHooks to it. See the [VS Agent API document](../../doc//vs-agent-api.md#events) for more information about the API your backend needs to implement (if you are not using the handy [JS](../../packages/client) or [NestJS](../../packages/nestjs-client) client packages).
 
 #### Database access settings
 
@@ -323,7 +324,7 @@ docker build --target vs-agent-mrtd -t vs-agent-mrtd -f apps/vs-agent/Dockerfile
 ```bash
 docker run \
   -e PUBLIC_API_BASE_URL=https://myagent.example.com \
-  -e EVENTS_BASE_URL=http://my-backend:5000 \
+  -e EVENTS_WEBHOOK_URL=http://my-backend:5000/events \
   -p 3000:3000 -p 3001:3001 \
   vs-agent
 ```
@@ -341,7 +342,7 @@ services:
       target: vs-agent                        # choose the appropriate target (vs-agent or vs-agent-mrtd)
     environment:
       - PUBLIC_API_BASE_URL=https://myagent.example.com
-      - EVENTS_BASE_URL=http://my-backend:5000
+      - EVENTS_WEBHOOK_URL=http://my-backend:5000/events
     ports:
       - 3000:3000
       - 3001:3001

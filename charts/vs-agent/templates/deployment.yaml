@@ -181,8 +181,10 @@ spec:
               value: {{ .Values.didcommLabel | quote }}
             - name: AGENT_INVITATION_IMAGE_URL
               value: {{ tpl .Values.didcommInvitationImageUrl . | quote }}
-            - name: EVENTS_BASE_URL
-              value: {{ tpl .Values.eventsBaseUrl . | quote }}
+            {{- if .Values.eventsWebhookUrl }}
+            - name: EVENTS_WEBHOOK_URL
+              value: {{ tpl .Values.eventsWebhookUrl . | quote }}
+            {{- end }}
             {{- if hasKey .Values "enablePublicApiSwagger" }}
             - name: ENABLE_PUBLIC_API_SWAGGER
               value: {{ .Values.enablePublicApiSwagger | quote }}

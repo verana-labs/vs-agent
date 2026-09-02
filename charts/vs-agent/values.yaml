@@ -18,7 +18,7 @@ adminApiCorporationAllowedAccounts: "" # Comma-separated allowlist of Verana acc
 
 # Agent configuration
 didcommLabel: "VS Agent"
-eventsBaseUrl: "https://events.{{ .Values.global.domain }}"
+eventsWebhookUrl: "" # URL the agent posts every event to. Leave empty to deliver no event. Pass EVENTS_WEBHOOK_API_KEY through extraEnv as a secret.
 didcommInvitationImageUrl: "https://image.{{ .Values.global.domain }}/invitation.png"
 # enablePublicApiSwagger: true # Enable Swagger documentation for the VS Agent service (its recommended only for development environments)
 publicDidMethod: "webvh"
