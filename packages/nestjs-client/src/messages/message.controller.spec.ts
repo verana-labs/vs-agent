@@ -1,8 +1,7 @@
-import { MessageState } from '@2060.io/credo-ts-didcomm-receipts'
 import { Logger } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { HttpUtils } from '@verana-labs/vs-agent-client'
-import { MessageReceived, MessageStateUpdated, TextMessage } from '@verana-labs/vs-agent-model'
+import { MessageReceived, TextMessage } from '@verana-labs/vs-agent-model'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 import { MessageEventController } from './message.controller'
@@ -61,40 +60,6 @@ describe('MessageEventController', () => {
         expect.any(Logger),
         error,
         'Failed to received message state',
-      )
-    })
-  })
-
-  describe('updated', () => {
-    it('should successfully process updated message state', async () => {
-      const mockBody = new MessageStateUpdated({
-        connectionId: 'conn-1',
-        messageId: 'msg-1',
-        state: MessageState.Submitted,
-      })
-
-      const result = await controller.updated(mockBody)
-
-      expect(messageService.updated).toHaveBeenCalled()
-      expect(result).toEqual({ message: 'Message state updated successfully' })
-    })
-
-    it('should handle error in message state update', async () => {
-      const error = new Error('Test error')
-      vi.spyOn(messageService, 'updated').mockRejectedValue(error)
-      vi.spyOn(HttpUtils, 'handleException')
-
-      const mockBody = new MessageStateUpdated({
-        connectionId: 'conn-1',
-        messageId: 'msg-1',
-        state: MessageState.Submitted,
-      })
-      await controller.updated(mockBody)
-
-      expect(HttpUtils.handleException).toHaveBeenCalledWith(
-        expect.any(Logger),
-        error,
-        'Failed to update message state',
       )
     })
   })

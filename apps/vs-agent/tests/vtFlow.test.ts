@@ -232,7 +232,7 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.id).not.toBe(applicantRecord.id)
   })
 
-  it('vtFlowEvents POSTs vt-flow-state-updated as the Validator transitions to VALIDATING', async () => {
+  it('vtFlowEvents POSTs vt.flows.state-updated as the Validator transitions to VALIDATING', async () => {
     const webhookUrl = 'http://localhost:5005'
     const { webhookEvent } = await import('../src/utils')
     const { TsLogger } = await import('../src/utils/logger')
@@ -278,11 +278,11 @@ describe('vt-flow: two-agent integration', () => {
       )
 
       const [url, init] = validatingCall
-      expect(url).toBe(`${webhookUrl}/vt-flow-state-updated`)
+      expect(url).toBe(`${webhookUrl}/vt.flows.state-updated`)
       expect((init as RequestInit).method).toBe('POST')
 
       const body = JSON.parse((init as RequestInit).body as string)
-      expect(body.type).toBe('vt-flow-state-updated')
+      expect(body.type).toBe('vt.flows.state-updated')
       expect(body.state).toBe(VtFlowState.Validating)
       expect(body.role).toBe(VtFlowRole.Validator)
       expect(body.variant).toBe(VtFlowVariant.DirectIssuance)
