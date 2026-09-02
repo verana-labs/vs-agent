@@ -32,7 +32,7 @@ import { Claim } from '@verana-labs/vs-agent-model'
 import { createInvitation } from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
-import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../../config'
+import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
@@ -44,13 +44,6 @@ import {
   DeclineExchangeBodyDto,
   ListCredentialExchangesQueryDto,
 } from './dto'
-
-/** These states are final. [VSA-ADM-DC-CE-DECLINE] refuses a decline on a final state. */
-const TERMINAL_STATES = [
-  DidCommCredentialState.Done,
-  DidCommCredentialState.Declined,
-  DidCommCredentialState.Abandoned,
-]
 
 /**
  * This controller has the credential exchanges of this agent on DIDComm.

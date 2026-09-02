@@ -39,7 +39,7 @@ import {
   Page,
   paginate,
 } from '../../../../common'
-import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../../config'
+import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 import { CredentialTypesService } from '../../credentials'
@@ -56,9 +56,6 @@ import {
 
 const REQUESTED_CREDENTIALS_METADATA = '_2060/requestedCredentials'
 const CALLBACK_METADATA = '_2060/callbackParameters'
-
-/** These states are final. [VSA-ADM-DC-PR-DECLINE] refuses a decline on a final state. */
-const TERMINAL_STATES = [DidCommProofState.Done, DidCommProofState.Declined, DidCommProofState.Abandoned]
 
 /**
  * Presentation flows this agent requested over DIDComm.
