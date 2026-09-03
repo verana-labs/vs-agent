@@ -148,7 +148,8 @@ export class PresentationRecordDto {
   claims!: Claim[]
 
   @ApiProperty({
-    description: 'Whether the presentation verified. Only meaningful once `state` is `done`.',
+    description:
+      'Whether the presentation verified. Set when the presentation is received, false with an `errorMessage` when the flow is `abandoned`.',
     example: true,
   })
   verified!: boolean

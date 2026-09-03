@@ -3,6 +3,8 @@ import type { INestApplication } from '@nestjs/common'
 import { RecordNotFoundError } from '@credo-ts/core'
 import { ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
+import { plainToInstance } from 'class-transformer'
+import { validate } from 'class-validator'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,6 +15,7 @@ import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
 import { ErrorEnvelopeFilter } from '../src/common'
 import { CredentialTypesService } from '../src/controllers/admin/credentials'
 import { V2DidcommPresentationsController } from '../src/controllers/admin/v2/didcomm/V2DidcommPresentationsController'
+import { CreatePresentationRequestBodyDto } from '../src/controllers/admin/v2/didcomm/dto'
 import { UrlShorteningService } from '../src/services/UrlShorteningService'
 import { VsAgentService } from '../src/services/VsAgentService'
 
@@ -35,6 +38,7 @@ const proofRecord = (id: string, createdAt: string, extra: Record<string, unknow
   const record = {
     id,
     state: 'request-sent',
+    role: 'verifier',
     connectionId: `conn-${id}`,
     errorMessage: undefined,
     threadId: `thread-${id}`,
@@ -201,6 +205,19 @@ describe('v2 didcomm presentation routes', () => {
       expect(response.body.error.code).toBe('INVALID_INPUT')
     })
 
+    it('refuses the removed callbackUrl and ref fields', async () => {
+      const errors = await validate(
+        plainToInstance(CreatePresentationRequestBodyDto, {
+          requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }],
+          callbackUrl: 'https://cb.test/done',
+          ref: '1234',
+        }),
+        { whitelist: true, forbidNonWhitelisted: true },
+      )
+
+      expect(errors.map(error => error.property).sort()).toEqual(['callbackUrl', 'ref'])
+    })
+
     it('carries the requested credentials onto the record and the envelope choice onto the invitation', async () => {
       const proofRecordSpy = { id: 'proof-1', metadata: metadata() }
       proofs.createRequest.mockResolvedValue({ proofRecord: proofRecordSpy, message: { id: 'msg-1' } })
@@ -296,6 +313,8 @@ describe('v2 didcomm presentation routes', () => {
       expect(response.body).toMatchObject({
         proofExchangeId: 'p-1',
         state: 'done',
+        role: 'verifier',
+        connectionId: 'conn-p-1',
         verified: true,
         threadId: 'thread-p-1',
         requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }],

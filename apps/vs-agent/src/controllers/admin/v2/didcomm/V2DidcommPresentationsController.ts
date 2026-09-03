@@ -16,6 +16,8 @@ import {
   Param,
   Post,
   Query,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common'
 import {
   ApiBody,
@@ -74,6 +76,7 @@ export class V2DidcommPresentationsController {
   ) {}
 
   @Post('presentation-request')
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   @ApiOperation({
     summary: 'Create a presentation request',
     description:

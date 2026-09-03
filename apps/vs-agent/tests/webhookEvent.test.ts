@@ -153,6 +153,36 @@ describe('Events API delivery', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('delivers an abandoned presentation with its reason in the record', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit(DidCommProofEventTypes.ProofStateChanged, {
+      proofRecord: {
+        id: 'proof-1',
+        state: 'abandoned',
+        role: 'verifier',
+        connectionId: 'conn-1',
+        errorMessage: 'e.req.no-compatible-credentials: no matching credentials',
+        createdAt: new Date(),
+        metadata: { get: () => null },
+      },
+      previousState: 'request-sent',
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.presentations.state-updated')
+    expect(body.data).toMatchObject({
+      proofExchangeId: 'proof-1',
+      state: 'abandoned',
+      role: 'verifier',
+      connectionId: 'conn-1',
+      verified: false,
+      errorMessage: 'e.req.no-compatible-credentials: no matching credentials',
+      previousState: 'request-sent',
+    })
+  })
+
   it('logs a record that cannot be mapped instead of rejecting the listener', async () => {
     const { agent, emit } = fakeAgent()
     agent.didcomm.proofs.getFormatData.mockRejectedValueOnce(new Error('record deleted'))
