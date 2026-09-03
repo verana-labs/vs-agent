@@ -57,11 +57,14 @@ export async function toPresentationDto(
   return {
     proofExchangeId: record.id,
     state: record.state,
+    role: record.role,
+    connectionId: record.connectionId,
     requestedCredentials:
       (record.metadata.get(REQUESTED_CREDENTIALS_METADATA) as RequestedCredential[] | null) ?? [],
     claims,
     verified: record.isVerified ?? false,
     threadId: record.threadId,
+    errorMessage: record.errorMessage,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt ?? record.createdAt,
   }

@@ -80,6 +80,16 @@ export class CreateCredentialOfferBodyDto {
   revocationRegistryIndex?: number
 
   @ApiPropertyOptional({
+    description:
+      'Complete the issuer steps without a call: the agent issues the credential on ' +
+      '`request-received`, with no `acceptCredentialRequest` call.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  autoAccept?: boolean
+
+  @ApiPropertyOptional({
     description: 'Advertise the legacy did:web form when the DID of the agent is did:webvh',
   })
   @IsOptional()

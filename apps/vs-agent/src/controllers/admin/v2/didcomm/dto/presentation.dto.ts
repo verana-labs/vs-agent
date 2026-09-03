@@ -1,4 +1,4 @@
-import { DidCommProofState } from '@credo-ts/didcomm'
+import { DidCommProofRole, DidCommProofState } from '@credo-ts/didcomm'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
 import { Type } from 'class-transformer'
@@ -88,6 +88,16 @@ export class CreatePresentationRequestBodyDto {
   requireNonRevocation?: boolean
 
   @ApiPropertyOptional({
+    description:
+      'Complete the verifier steps without a call: the agent acknowledges a presentation after it ' +
+      'verifies it, with no `acceptPresentation` call.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  autoAccept?: boolean
+
+  @ApiPropertyOptional({
     description: 'Advertise the legacy did:web form when the DID of the agent is did:webvh',
   })
   @IsOptional()
@@ -135,6 +145,12 @@ export class PresentationRecordDto {
   @ApiProperty({ enum: DidCommProofState, description: 'Current state of the presentation flow' })
   state!: DidCommProofState
 
+  @ApiProperty({ enum: DidCommProofRole, description: 'Role of this agent in the flow' })
+  role!: DidCommProofRole
+
+  @ApiPropertyOptional({ description: 'Connection the flow runs on', example: 'conn-1234-5678' })
+  connectionId?: string
+
   @ApiProperty({
     type: [RequestedCredentialDto],
     description: 'The credentials, and attributes of them, that this flow asked for',
@@ -156,6 +172,13 @@ export class PresentationRecordDto {
 
   @ApiPropertyOptional({ description: 'DIDComm thread identifier', example: 'thread-8765-4321' })
   threadId?: string
+
+  @ApiPropertyOptional({
+    description:
+      'Error message on the exchange. The agent sets it when the exchange stops. The agent also ' +
+      'sets it when it declines an exchange and the peer gets no problem report.',
+  })
+  errorMessage?: string
 
   @ApiProperty({ type: String, format: 'date-time', description: 'When the flow was created' })
   createdAt!: Date

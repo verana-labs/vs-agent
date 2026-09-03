@@ -1,5 +1,6 @@
 import { AskarPostgresStorageConfig } from '@credo-ts/askar'
 import { LogLevel } from '@credo-ts/core'
+import { DidCommProofState } from '@credo-ts/didcomm'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import dotenv from 'dotenv'
 
@@ -143,6 +144,16 @@ export const ADMIN_V2_TAGS: Record<string, string> = {
   'v2/anoncreds': 'Manages the AnonCreds artifacts of the agent.',
   'v2/vt': 'Manages the Verifiable Trust state of the agent.',
 }
+
+// DIDComm params
+
+// The final states of an exchange. Present Proof 2.0 and Issue Credential 2.0 give them the same
+// names. [VSA-ADM-DC-PR-DECLINE] and [VSA-ADM-DC-CE-DECLINE] refuse a decline on a final state.
+export const TERMINAL_STATES: string[] = [
+  DidCommProofState.Done,
+  DidCommProofState.Declined,
+  DidCommProofState.Abandoned,
+]
 
 // AnonCreds params
 
