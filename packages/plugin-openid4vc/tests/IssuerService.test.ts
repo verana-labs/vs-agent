@@ -449,8 +449,26 @@ describe('IssuerService', () => {
     })
   })
 
+  it('omits an absent optional claim from the offer metadata', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    api.createCredentialOffer.mockResolvedValue({
+      credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
+      issuanceSession: { id: 'session-id' },
+    })
+    const service = new IssuerService(agent(api) as never, options())
+    await service.ensureInitialized()
+
+    await service.createOffer('employee', { name: 'Ada' })
+
+    expect(api.createCredentialOffer).toHaveBeenCalledWith(
+      expect.objectContaining({ issuanceMetadata: { name: 'Ada' } }),
+    )
+  })
+
   it.each([
-    [{ name: 'Ada' }, "claim 'role'"],
+    [{}, 'at least one'],
+    [{ name: '', role: 'engineer' }, "claim 'name'"],
     [{ name: 'Ada', role: 'engineer', admin: true }, "unknown claim 'admin'"],
     [null, 'claims must be an object'],
   ])('rejects invalid offer claims %#', async (claims, message) => {
@@ -560,7 +578,7 @@ describe('IssuerService', () => {
   })
 
   it.each([
-    [{ name: 'Ada' }, "claim 'role'"],
+    [{}, 'at least one'],
     [{ name: 'Ada', role: 'engineer', admin: true }, "unknown claim 'admin'"],
   ])('rejects invalid issuance metadata %#', async (issuanceMetadata, message) => {
     const api = issuerApi()

@@ -308,10 +308,15 @@ describe('parseOfferClaims', () => {
     })
   })
 
-  it('rejects missing and unknown claims', () => {
+  it('omits absent optional claims instead of rejecting them', () => {
     const config = validOptions().credentialConfigurations[0]
 
-    expect(() => parseOfferClaims(config, { name: 'Ada' })).toThrow("claim 'role'")
+    expect(parseOfferClaims(config, { name: 'Ada' })).toEqual({ name: 'Ada' })
+  })
+
+  it('rejects unknown claims', () => {
+    const config = validOptions().credentialConfigurations[0]
+
     expect(() => parseOfferClaims(config, { name: 'Ada', role: 'engineer', admin: true })).toThrow(
       "unknown claim 'admin'",
     )
@@ -321,5 +326,12 @@ describe('parseOfferClaims', () => {
     const config = validOptions().credentialConfigurations[0]
 
     expect(() => parseOfferClaims(config, { name: '', role: 'engineer' })).toThrow("claim 'name'")
+    expect(() => parseOfferClaims(config, { name: 'Ada', role: null })).toThrow("claim 'role'")
+  })
+
+  it('rejects an offer with no configured claims at all', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferClaims(config, {})).toThrow('at least one')
   })
 })
