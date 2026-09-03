@@ -80,13 +80,23 @@ export function parseOfferClaims(
     }
   }
 
+  // The configured claim list is the ALLOWED set, not a required set: the
+  // credential's schema may mark claims optional (an employment with no end
+  // date, a right to work that never expires), and an SD-JWT credential need
+  // not carry every attribute. Absent claims are omitted from the credential;
+  // a claim that IS offered must still be non-empty.
   const claims: Record<string, unknown> = {}
   for (const name of configuration.claims) {
+    if (!(name in input)) continue
     const value = input[name]
     if (isEmptyClaim(value)) {
       throw new Error(`claim '${name}' must be non-empty`)
     }
     claims[name] = value
+  }
+
+  if (Object.keys(claims).length === 0) {
+    throw new Error('claims must include at least one configured claim')
   }
 
   return claims
