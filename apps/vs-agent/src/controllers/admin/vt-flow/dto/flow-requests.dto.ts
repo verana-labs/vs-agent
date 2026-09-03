@@ -3,6 +3,7 @@ import { VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { IsEnum, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, IsUrl } from 'class-validator'
 
 import { PaginationQueryDto } from '../../../../common'
+import { VT_CONNECTION_STATES, type VtConnectionState } from '../../v2/vt/dto'
 
 export class ListFlowsQueryDto {
   @ApiProperty({ required: false, enum: VtFlowRole })
@@ -10,10 +11,10 @@ export class ListFlowsQueryDto {
   @IsEnum(VtFlowRole)
   role?: VtFlowRole
 
-  @ApiProperty({ required: false, enum: ['NOT_CONNECTED', 'ESTABLISHED', 'TERMINATED'] })
+  @ApiProperty({ required: false, enum: VT_CONNECTION_STATES })
   @IsOptional()
-  @IsIn(['NOT_CONNECTED', 'ESTABLISHED', 'TERMINATED'])
-  connectionState?: 'NOT_CONNECTED' | 'ESTABLISHED' | 'TERMINATED'
+  @IsIn([...VT_CONNECTION_STATES])
+  connectionState?: VtConnectionState
 
   @ApiProperty({ required: false, enum: VtFlowState })
   @IsOptional()
@@ -47,10 +48,10 @@ export class ListFlowsV2QueryDto extends PaginationQueryDto {
   @IsEnum(VtFlowRole)
   role?: VtFlowRole
 
-  @ApiProperty({ required: false, enum: ['NOT_CONNECTED', 'ESTABLISHED', 'TERMINATED'] })
+  @ApiProperty({ required: false, enum: VT_CONNECTION_STATES })
   @IsOptional()
-  @IsIn(['NOT_CONNECTED', 'ESTABLISHED', 'TERMINATED'])
-  connectionState?: 'NOT_CONNECTED' | 'ESTABLISHED' | 'TERMINATED'
+  @IsIn([...VT_CONNECTION_STATES])
+  connectionState?: VtConnectionState
 
   @ApiProperty({ required: false, enum: VtFlowState })
   @IsOptional()

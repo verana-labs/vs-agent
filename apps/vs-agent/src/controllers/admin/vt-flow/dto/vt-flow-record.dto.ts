@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger'
 import { VtFlowRole, VtFlowVariant, type VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
-import { PageDto } from '../../../../common'
+import { VT_CONNECTION_STATES, type VtConnectionState } from '../../v2/vt/dto'
 
 export class VtFlowRecordDto {
   @ApiProperty() id!: string
@@ -22,11 +22,9 @@ export class VtFlowRecordDto {
   @ApiProperty({ required: false, type: [Object] }) proofs?: unknown[]
   @ApiProperty({ required: false }) credentialDigest?: string
   @ApiProperty({ required: false }) peerDid?: string
-  @ApiProperty({ required: false }) connectionState?: string
+  @ApiProperty({ enum: VT_CONNECTION_STATES }) connectionState!: VtConnectionState
   @ApiProperty({ required: false }) errorMessage?: string
   @ApiProperty() createdAt!: Date
   @ApiProperty() updatedAt!: Date
   @ApiProperty() lastEventAt!: Date
 }
-
-export const VtFlowRecordPageDto = PageDto(VtFlowRecordDto)
