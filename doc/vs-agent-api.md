@@ -53,7 +53,6 @@ In addition, it notifies the consumer of every event through HTTP webhooks, one 
   - [Invitations](#invitations)
     - [Connection Invitation](#connection-invitation)
     - [Presentation Request](#presentation-request)
-      - [Presentation Callback API](#presentation-callback-api)
     - [Credential Offer](#credential-offer)
   - [Presentations](#presentations)
   - [Verifiable Data Registry Operations](#verifiable-data-registry-operations)
@@ -805,8 +804,6 @@ It's a POST to `/invitation/presentation-request` which receives a JSON object i
 
 ```json
 {
-  "callbackUrl": "https://myhost.com/presentation_callback ",
-  "ref": "1234-5678",
   "requestedCredentials": [
     {
       "credentialDefinitionId": "full credential definition identifier",
@@ -815,10 +812,6 @@ It's a POST to `/invitation/presentation-request` which receives a JSON object i
   ]
 }
 ```
-
-`callbackUrl` is an URL that will be called by VS Agent when the flow completes. The request follows the [Presentation Callback API](#presentation-callback-api).
-
-`ref` is an optional, arbitrary string that will be included in the body of the request to the callback URL.
 
 Response will include the invitation code in both short and long form URL format.
 
@@ -836,31 +829,6 @@ Note that the following VS Agent configuration environment variables are used wh
 - AGENT_INVITATION_IMAGE_URL: An optional image URL to display along the connection invitation
 - AGENT_LABEL: An optional label to show along the connection invitation
 - PUBLIC_API_BASE_URL: Base URL for short URL creation (resulting something like `https://myHost.com/s?id=<uuid>`)
-
-#### Presentation Callback API
-
-When the presentation flow is completed (either successfully or not), VS Agent calls its `callbackUrl` as an HTTP POST with the following body:
-
-```json
-{
-  "ref": "1234-5678",
-  "presentationRequestId": "unique identifier for the flow",
-  "state": "PresentationState",
-  "claims": [
-    { "name": "attribute-1", "value": "value-1" },
-    { "name": "attribute-2", "value": "value-2" }
-  ]
-}
-```
-
-Possible values for PresentationState are:
-
-- 'ok'
-- 'connected'
-- 'refused'
-- 'no-compatible-credentials'
-- 'verification-error'
-- 'unspecified-error'
 
 ### Credential Offer
 

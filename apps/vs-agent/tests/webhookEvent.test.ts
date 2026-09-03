@@ -4,10 +4,9 @@ import {
   DidCommConnectionEventTypes,
   DidCommProofEventTypes,
 } from '@credo-ts/didcomm'
-import { VsAgentEventTypes } from '@verana-labs/vs-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { presentationCallback, webhookEvent } from '../src/utils/webhookEvent'
+import { webhookEvent } from '../src/utils/webhookEvent'
 
 type Handler = (event: { payload: unknown }) => unknown
 type Middleware = (context: unknown, next: () => Promise<void>) => Promise<void>
@@ -166,26 +165,6 @@ describe('Events API delivery', () => {
 
     expect(logger.error).toHaveBeenCalledTimes(1)
     expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('posts the presentation callback independently of the webhook', async () => {
-    const { agent, emit } = fakeAgent()
-    presentationCallback(agent as never, logger as never)
-
-    await emit(VsAgentEventTypes.PresentationStateUpdated, {
-      event: {
-        callbackUrl: 'https://caller.example/cb',
-        ref: 'r-1',
-        state: 'ok',
-        verified: true,
-        proofExchangeId: 'p-1',
-      },
-    })
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://caller.example/cb',
-      expect.objectContaining({ method: 'POST' }),
-    )
   })
 
   it('logs a failed delivery and never throws', async () => {

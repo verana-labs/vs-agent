@@ -54,8 +54,6 @@ import {
 } from './dto'
 import { REQUESTED_CREDENTIALS_METADATA, toPresentationDto } from './mappers'
 
-const CALLBACK_METADATA = '_2060/callbackParameters'
-
 /**
  * Presentation flows this agent requested over DIDComm.
  *
@@ -89,8 +87,6 @@ export class V2DidcommPresentationsController {
       byCredentialDefinition: {
         summary: 'By credentialDefinitionId',
         value: {
-          ref: '1234-5678',
-          callbackUrl: 'https://myhost.com/presentation_callback',
           requestedCredentials: [
             {
               credentialDefinitionId:
@@ -120,7 +116,7 @@ export class V2DidcommPresentationsController {
   ): Promise<CreatePresentationRequestResponseDto> {
     const agent = await this.vsAgentService.getAgent()
 
-    const { requestedCredentials, ref, callbackUrl, useLegacyDid, didcommVersion } = body
+    const { requestedCredentials, useLegacyDid, didcommVersion } = body
     const requireNonRevocation = body.requireNonRevocation ?? false
     const autoAccept = body.autoAccept ?? false
 
@@ -167,7 +163,6 @@ export class V2DidcommPresentationsController {
     })
 
     request.proofRecord.metadata.set(REQUESTED_CREDENTIALS_METADATA, requestedCredentials)
-    request.proofRecord.metadata.set(CALLBACK_METADATA, { ref, callbackUrl })
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { url } = await createInvitation({

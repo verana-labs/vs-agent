@@ -201,15 +201,13 @@ describe('v2 didcomm presentation routes', () => {
       expect(response.body.error.code).toBe('INVALID_INPUT')
     })
 
-    it('carries the callback parameters onto the record and the envelope choice onto the invitation', async () => {
+    it('carries the requested credentials onto the record and the envelope choice onto the invitation', async () => {
       const proofRecordSpy = { id: 'proof-1', metadata: metadata() }
       proofs.createRequest.mockResolvedValue({ proofRecord: proofRecordSpy, message: { id: 'msg-1' } })
 
       const requestedCredentials = [{ credentialDefinitionId: 'cred-def-1', attributes: ['firstName'] }]
       const response = await request(app.getHttpServer()).post('/v2/didcomm/presentation-request').send({
         requestedCredentials,
-        ref: '1234',
-        callbackUrl: 'https://cb.test/done',
         didcommVersion: 'v1',
       })
 
@@ -219,10 +217,6 @@ describe('v2 didcomm presentation routes', () => {
         shortUrl: 'https://agent.test/s?id=abcd',
       })
       expect(proofRecordSpy.metadata.get('_2060/requestedCredentials')).toEqual(requestedCredentials)
-      expect(proofRecordSpy.metadata.get('_2060/callbackParameters')).toEqual({
-        ref: '1234',
-        callbackUrl: 'https://cb.test/done',
-      })
       expect(proofs.update).toHaveBeenCalledWith(proofRecordSpy)
       // The spec spells the field `didcommVersion`; the SDK takes `didCommVersion`.
       expect(vi.mocked(createInvitation).mock.calls[0][0]).toMatchObject({ didCommVersion: 'v1' })
