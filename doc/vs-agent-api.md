@@ -755,14 +755,14 @@ record. A `message-received` event carries the inbound message.
 | --- | --- | --- |
 | `didcomm.connections.state-updated` | A connection record is created or changes state | the connection record as `GET /v2/didcomm/connections/{connectionId}` returns it, plus `previousState` |
 | `didcomm.basic-messages.message-received` | The agent receives a basic message | the message record: `id`, `connectionId`, `role`, `content`, `sentTime`, `createdAt` |
-| `didcomm.receipts.message-received` | The agent receives a `message-receipts` message | `connectionId` and `receipts`, each with `messageId`, `state` and `timestamp` |
+| `didcomm.receipts.message-receipts-received` | The agent receives a `message-receipts` message | `connectionId` and `receipts`, each with `messageId`, `state` and `timestamp` |
 | `didcomm.presentations.state-updated` | A presentation record is created or changes state | the presentation record as `GET /v2/didcomm/presentations/{proofExchangeId}` returns it, plus `previousState` |
 | `didcomm.credential-exchanges.state-updated` | A credential exchange record is created or changes state | the credential exchange record as `GET /v2/didcomm/credential-exchanges/{credentialExchangeId}` returns it, plus `previousState` |
 | `didcomm.{module}.message-received` | The agent receives a message of an extension protocol module: `reactions`, `user-profile`, `media-sharing`, `calls`, `action-menu`, `question-answer` or `mrtd` | `connectionId`, `threadId` and `message`, the plaintext DIDComm message |
 | `vt.flows.state-updated` | The Flow State of a credential acquisition flow changes | the flow fields (`vtFlowRecordId`, `participantSessionId`, `connectionId`, `role`, `variant`, `state`, `claims`, …) plus `previousState` |
-| `indexer-notification` | The agent processes an indexer event | `msg`, `entityType`, `entityId`, `changes`, `blockHeight`, `txHash` and `operatorAddress` |
+| `vpr.notification` | The agent processes an indexer event | `msg`, `entityType`, `entityId`, `changes`, `blockHeight`, `txHash` and `operatorAddress` |
 
-The `indexer-notification` event is emitted for every indexer activity, regardless of which default handlers
+The `vpr.notification` event is emitted for every indexer activity, regardless of which default handlers
 are active, so a backend can react to `msg` types the default implementation does not cover, or override the
 ones that it does (together with the `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` environment variable). The
 state-sync bookkeeping the agent needs internally always runs and is never affected by overriding handlers.

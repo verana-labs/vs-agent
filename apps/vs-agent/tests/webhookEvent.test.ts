@@ -127,7 +127,7 @@ describe('Events API delivery', () => {
       },
     })
     const receipts = (await delivered()).body
-    expect(receipts.type).toBe('didcomm.receipts.message-received')
+    expect(receipts.type).toBe('didcomm.receipts.message-receipts-received')
     expect(receipts.data).toEqual({
       connectionId: 'conn-1',
       receipts: [{ messageId: 'm-1', state: 'viewed', timestamp: '2026-09-01T00:00:00.000Z' }],

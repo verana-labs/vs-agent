@@ -1,4 +1,4 @@
-import { DidCommCredentialState } from '@credo-ts/didcomm'
+import { DidCommCredentialRole, DidCommCredentialState } from '@credo-ts/didcomm'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Claim } from '@verana-labs/vs-agent-model'
 import { Type } from 'class-transformer'
@@ -128,6 +128,9 @@ export class CredentialExchangeRecordDto {
 
   @ApiProperty({ enum: DidCommCredentialState, description: 'Current state of the issuance flow' })
   state!: DidCommCredentialState
+
+  @ApiProperty({ enum: DidCommCredentialRole, description: 'Role of this agent in the exchange' })
+  role!: DidCommCredentialRole
 
   @ApiProperty({ description: 'DIDComm thread identifier', example: 'thread-8765-4321' })
   threadId!: string

@@ -92,6 +92,7 @@ export async function toCredentialExchangeDto(
   return {
     credentialExchangeId: record.id,
     state: record.state,
+    role: record.role,
     threadId: record.threadId,
     connectionId: record.connectionId,
     credentialDefinitionId: anonCredsMetadata?.credentialDefinitionId,
