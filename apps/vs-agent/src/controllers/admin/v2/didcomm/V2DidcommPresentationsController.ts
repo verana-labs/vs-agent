@@ -2,9 +2,8 @@ import type { AnonCredsProofRequestRestriction, AnonCredsRequestedAttribute } fr
 import type { DidCommProofExchangeRecord, DidCommProofStateChangedEvent } from '@credo-ts/didcomm'
 
 import { AnonCredsNonRevokedInterval, AnonCredsSchema, dateToTimestamp } from '@credo-ts/anoncreds'
-import { DidCommAutoAcceptProof, DidCommProofState } from '@credo-ts/didcomm'
+import { DidCommAutoAcceptProof, DidCommProofEventTypes, DidCommProofState } from '@credo-ts/didcomm'
 import { RecordNotFoundError, W3cCredential } from '@credo-ts/core'
-import { DidCommProofEventTypes, DidCommProofState } from '@credo-ts/didcomm'
 import {
   Body,
   Controller,

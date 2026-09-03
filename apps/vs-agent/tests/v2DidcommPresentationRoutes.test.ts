@@ -429,6 +429,11 @@ describe('v2 didcomm presentation routes', () => {
 
       const response = await request(app.getHttpServer()).post('/v2/didcomm/presentations/nope/decline')
 
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
+    })
+  })
+
   describe('autoAccept', () => {
     it('stops the agent from acknowledging a presentation on its own by default', async () => {
       await request(app.getHttpServer())

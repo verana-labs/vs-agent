@@ -472,6 +472,24 @@ describe('v2 didcomm credential exchange routes', () => {
 
       const response = await request(app.getHttpServer()).post(
         '/v2/didcomm/credential-exchanges/ce-a/decline',
+      )
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('INVALID_STATE')
+      expect(agent.didcomm.credentials.update).not.toHaveBeenCalled()
+    })
+
+    it('reports a decline of an unknown credential exchange as UNKNOWN_ID', async () => {
+      agent.didcomm.credentials.findById.mockResolvedValue(null)
+
+      const response = await request(app.getHttpServer()).post(
+        '/v2/didcomm/credential-exchanges/nope/decline',
+      )
+
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
+    })
+  })
 
   describe('autoAccept', () => {
     beforeEach(() => {
@@ -577,14 +595,6 @@ describe('v2 didcomm credential exchange routes', () => {
 
       expect(response.status).toBe(409)
       expect(response.body.error.code).toBe('INVALID_STATE')
-      expect(agent.didcomm.credentials.update).not.toHaveBeenCalled()
-    })
-
-    it('reports a decline of an unknown credential exchange as UNKNOWN_ID', async () => {
-      agent.didcomm.credentials.findById.mockResolvedValue(null)
-
-      const response = await request(app.getHttpServer()).post(
-        '/v2/didcomm/credential-exchanges/nope/decline',
       expect(agent.didcomm.credentials[method]).not.toHaveBeenCalled()
     })
 
