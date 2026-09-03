@@ -758,7 +758,7 @@ record. A `message-received` event carries the inbound message.
 | `didcomm.presentations.state-updated` | A presentation record is created or changes state | the presentation record as `GET /v2/didcomm/presentations/{proofExchangeId}` returns it, plus `previousState` |
 | `didcomm.credential-exchanges.state-updated` | A credential exchange record is created or changes state | the credential exchange record as `GET /v2/didcomm/credential-exchanges/{credentialExchangeId}` returns it, plus `previousState` |
 | `didcomm.{module}.{message-type}-received` | The agent receives a message of an extension protocol module: `reactions`, `user-profile`, `media-sharing`, `calls`, `action-menu`, `question-answer` or `mrtd` | `connectionId`, `threadId` and `message`, the plaintext DIDComm message |
-| `vt.flows.state-updated` | The Flow State of a credential acquisition flow changes | the flow fields (`vtFlowRecordId`, `participantSessionId`, `connectionId`, `role`, `variant`, `state`, `claims`, …) plus `previousState` |
+| `vt.flows.state-updated` | The Flow State of a credential acquisition flow changes | the flow record as `GET /v2/vt/flows/{participantSessionId}` returns it, plus `previousState` |
 | `vpr.notification` | The agent processes an indexer event | `msg`, `entityType`, `entityId`, `changes`, `blockHeight`, `txHash` and `operatorAddress` |
 
 The `vpr.notification` event is emitted for every indexer activity, regardless of which default handlers
