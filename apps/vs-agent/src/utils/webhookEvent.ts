@@ -150,7 +150,8 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
 
     const module = EXTENSION_MODULES[protocolOf(message.type)]
     if (!module) return
-    deliver(`didcomm.${module}.message-received`, {
+    // [VSA-ADM-DC-EXT-4]: one event type per message kind
+    deliver(`didcomm.${module}.${messageNameOf(message.type)}-received`, {
       connectionId: connection.id,
       threadId: message.threadId,
       message: message.toJSON(),
@@ -190,6 +191,8 @@ export const presentationCallback = (agent: VsAgent, logger: BaseLogger) => {
 const dataOf = ({ type: _type, timestamp: _timestamp, ...data }: Event): Record<string, unknown> => data
 
 const protocolOf = (messageType: string): string => messageType.slice(0, messageType.lastIndexOf('/'))
+
+const messageNameOf = (messageType: string): string => messageType.slice(messageType.lastIndexOf('/') + 1)
 
 const toBasicMessageRecord = (record: DidCommBasicMessageRecord) => ({
   id: record.id,

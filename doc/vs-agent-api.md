@@ -86,7 +86,7 @@ Response from VS-A will generally result in a 200 HTTP response code and include
 }
 ```
 
-Basic messages from other agents arrive as `didcomm.basic-messages.message-received` events, messages of an extension protocol module as `didcomm.{module}.message-received`, and credential and presentation flows as the corresponding `state-updated` events.
+Basic messages from other agents arrive as `didcomm.basic-messages.message-received` events, messages of an extension protocol module as `didcomm.{module}.{message-type}-received`, and credential and presentation flows as the corresponding `state-updated` events.
 
 ### Message types
 
@@ -758,7 +758,7 @@ record. A `message-received` event carries the inbound message.
 | `didcomm.receipts.message-receipts-received` | The agent receives a `message-receipts` message | `connectionId` and `receipts`, each with `messageId`, `state` and `timestamp` |
 | `didcomm.presentations.state-updated` | A presentation record is created or changes state | the presentation record as `GET /v2/didcomm/presentations/{proofExchangeId}` returns it, plus `previousState` |
 | `didcomm.credential-exchanges.state-updated` | A credential exchange record is created or changes state | the credential exchange record as `GET /v2/didcomm/credential-exchanges/{credentialExchangeId}` returns it, plus `previousState` |
-| `didcomm.{module}.message-received` | The agent receives a message of an extension protocol module: `reactions`, `user-profile`, `media-sharing`, `calls`, `action-menu`, `question-answer` or `mrtd` | `connectionId`, `threadId` and `message`, the plaintext DIDComm message |
+| `didcomm.{module}.{message-type}-received` | The agent receives a message of an extension protocol module: `reactions`, `user-profile`, `media-sharing`, `calls`, `action-menu`, `question-answer` or `mrtd` | `connectionId`, `threadId` and `message`, the plaintext DIDComm message |
 | `vt.flows.state-updated` | The Flow State of a credential acquisition flow changes | the flow fields (`vtFlowRecordId`, `participantSessionId`, `connectionId`, `role`, `variant`, `state`, `claims`, …) plus `previousState` |
 | `vpr.notification` | The agent processes an indexer event | `msg`, `entityType`, `entityId`, `changes`, `blockHeight`, `txHash` and `operatorAddress` |
 

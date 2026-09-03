@@ -140,7 +140,7 @@ describe('Events API delivery', () => {
       message: { type: plaintext['@type'], threadId: 't-2', toJSON: () => plaintext },
     })
     const reactions = (await delivered()).body
-    expect(reactions.type).toBe('didcomm.reactions.message-received')
+    expect(reactions.type).toBe('didcomm.reactions.message-reactions-received')
     expect(reactions.data).toEqual({ connectionId: 'conn-1', threadId: 't-2', message: plaintext })
 
     fetchMock.mockClear()
