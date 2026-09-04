@@ -251,6 +251,11 @@ export class DidWebController {
       attestedResourceId: resourcePath,
       type: 'AttestedResource',
     })
+
+    if (!record) {
+      throw new HttpException('Resource not found', HttpStatus.NOT_FOUND)
+    }
+
     res.send(record.content)
   }
 }
