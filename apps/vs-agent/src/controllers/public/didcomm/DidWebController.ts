@@ -4,7 +4,16 @@ import {
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
 import { parseDid } from '@credo-ts/core'
-import { Controller, Get, Param, Res, HttpStatus, HttpException, Inject, NotFoundException, Query } from '@nestjs/common'
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Inject,
+  NotFoundException,
+  Param,
+  Query,
+  Res,
+} from '@nestjs/common'
 import {
   getLegacyDidDocument,
   getTailsDirectoryPath,
@@ -72,7 +81,7 @@ export class DidWebController {
     if (didDocument) return getLegacyDidDocument(didDocument)
 
     // Neither did:web nor did:webvh
-    throw new HttpException('DID Document not found', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('DID Document not found')
   }
 
   private async serveDidLog(res: Response) {
@@ -85,7 +94,7 @@ export class DidWebController {
       res.setHeader('Cache-Control', 'no-cache')
       res.send(didLog)
     } else {
-      throw new HttpException('DID Log not found', HttpStatus.NOT_FOUND)
+      throw new NotFoundException('DID Log not found')
     }
   }
 
@@ -105,11 +114,11 @@ export class DidWebController {
 
     if (schemaRecord) {
       agent.config.logger.debug(`schema found: ${schemaId}`)
-      res.send({ resource: schemaRecord.schema, resourceMetadata: {} })
+      return res.send({ resource: schemaRecord.schema, resourceMetadata: {} })
     }
 
     agent.config.logger.debug(`schema not found: ${schemaId}`)
-    throw new HttpException('', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('Schema not found')
   }
 
   // Credential Definitions
@@ -129,10 +138,13 @@ export class DidWebController {
     )
 
     if (credentialDefinitionRecord) {
-      res.send({ resource: credentialDefinitionRecord.credentialDefinition, resourceMetadata: {} })
+      return res.send({
+        resource: credentialDefinitionRecord.credentialDefinition,
+        resourceMetadata: {},
+      })
     }
 
-    throw new HttpException('Credential Definition not found', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('Credential Definition not found')
   }
 
   // Endpoint to retrieve a revocation registry definition by its ID
@@ -153,7 +165,7 @@ export class DidWebController {
       )
 
     if (revocationDefinitionRecord) {
-      res.send({
+      return res.send({
         resource: revocationDefinitionRecord.revocationRegistryDefinition,
         resourceMetadata: {
           statusListEndpoint: `${this.publicApiBaseUrl}/anoncreds/v1/revStatus/${revocationDefinitionId}`,
@@ -161,7 +173,7 @@ export class DidWebController {
       })
     }
 
-    throw new HttpException('Revocation Definition not found', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('Revocation Definition not found')
   }
 
   // Endpoint to retrieve the revocation status list for a specific revocation definition ID
@@ -184,7 +196,7 @@ export class DidWebController {
 
     if (revocationDefinitionRecord) {
       const revStatusList = revocationDefinitionRecord.metadata.get('revStatusList')
-      res.send({
+      return res.send({
         resource: revStatusList,
         resourceMetadata: {
           previousVersionId: '',
@@ -193,7 +205,7 @@ export class DidWebController {
       })
     }
 
-    throw new HttpException('Revocation Status not found', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('Revocation Status not found')
   }
 
   @Get('/anoncreds/v1/tails/:tailsFileId')
@@ -201,12 +213,12 @@ export class DidWebController {
     const agent = await this.agentService.getAgent()
 
     if (!isValidTailsFileName(tailsFileId)) {
-      throw new HttpException('tailsFileId not found', HttpStatus.NOT_FOUND)
+      throw new NotFoundException('tailsFileId not found')
     }
 
     const filePath = path.join(getTailsDirectoryPath(agent.context), tailsFileId)
     if (!fs.existsSync(filePath)) {
-      throw new HttpException('tailsFileId not found', HttpStatus.NOT_FOUND)
+      throw new NotFoundException('tailsFileId not found')
     }
 
     res.setHeader('Content-Disposition', `attachment; filename="${tailsFileId}"`)
@@ -222,7 +234,7 @@ export class DidWebController {
     @Query('relatedJsonSchemaCredentialId') relatedJsonSchemaCredentialId?: string,
   ) {
     if (!resourceType) {
-      throw new HttpException('resourceType query param is required', HttpStatus.BAD_REQUEST)
+      throw new BadRequestException('resourceType query param is required')
     }
     const agent = await this.agentService.getAgent()
     this.assertDidMethod(agent, 'webvh')
@@ -233,7 +245,7 @@ export class DidWebController {
     })
 
     if (!records || records.length === 0) {
-      throw new HttpException('No entries found for resourceType', HttpStatus.NOT_FOUND)
+      throw new NotFoundException('No entries found for resourceType')
     }
 
     return res.send(records.map(r => r.content))
@@ -253,7 +265,7 @@ export class DidWebController {
     })
 
     if (!record) {
-      throw new HttpException('Resource not found', HttpStatus.NOT_FOUND)
+      throw new NotFoundException('Resource not found')
     }
 
     res.send(record.content)
@@ -266,7 +278,7 @@ async function resolveDidDocumentData(agent: VsAgent) {
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
 
   if (!didRecord) {
-    throw new HttpException('DID Document not found', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('DID Document not found')
   }
 
   const didDocument = didRecord.didDocument
