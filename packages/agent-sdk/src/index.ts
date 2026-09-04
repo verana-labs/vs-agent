@@ -15,6 +15,12 @@ export type { BaseDidCommPlugin, BaseDidCommPluginOptions } from './plugins/setu
 export { CachedWebDidResolver } from './did/CachedWebDidResolver'
 export { WebDidRegistrar } from './did/WebDidRegistrar'
 export { getLegacyDidDocument } from './did/legacyDidWeb'
+export {
+  applyArtifactServices,
+  artifactServicesMatch,
+  removeArtifactServices,
+} from './did/artifactServices'
+export type { ArtifactServiceMethod, ArtifactServiceOptions } from './did/artifactServices'
 export { applyAdminApiServiceEntry } from './did/adminApiService'
 
 // Transports

@@ -16,7 +16,6 @@ import {
   DidDocument,
   DidDocumentKey,
   DidDocumentRole,
-  DidDocumentService,
   DidRecord,
   DidRepository,
   DidsModule,
@@ -45,6 +44,7 @@ import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
+import { applyArtifactServices, artifactServicesMatch } from '../did/artifactServices'
 import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
 import { migrateWebVhVersionTimeIfBroken } from '../did/migrateWebVhVersionTime'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
@@ -200,8 +200,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           // Add Self TR
           await this.createAndAddLinkedVpServices(didDocument)
 
-          // Add AnonCreds Services
-          await this.createAndAddAnonCredsServices(didDocument)
+          applyArtifactServices(didDocument, { method: 'web', publicApiBaseUrl: this.publicApiBaseUrl })
 
           this.applyAdminApiService(didDocument)
 
@@ -243,8 +242,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           // Add Linked VP services
           await this.createAndAddLinkedVpServices(didDocument)
 
-          // Add implicit services
-          await this.createAndAddWebVhImplicitServices(didDocument)
+          applyArtifactServices(didDocument, { method: 'webvh', publicApiBaseUrl: this.publicApiBaseUrl })
 
           didDocument.alsoKnownAs = [`did:web:${location}`]
 
@@ -324,7 +322,19 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         })
       const currentAdminEntry = (didDocument.service ?? []).find(s => s.type === 'VsAgentAdminAPI')
       const adminEntryChanged = currentAdminEntry?.serviceEndpoint !== this.adminApiServiceEndpoint
-      if (hasLegacyMethods || servicesChanged || authHasUpdateKey || adminEntryChanged) {
+      // A record from an earlier version may still carry the service of the other method.
+      const artifactMethod = parsedDid.method === 'webvh' ? 'webvh' : 'web'
+      const artifactServicesChanged = !artifactServicesMatch(didDocument, {
+        method: artifactMethod,
+        publicApiBaseUrl: this.publicApiBaseUrl,
+      })
+      if (
+        hasLegacyMethods ||
+        servicesChanged ||
+        authHasUpdateKey ||
+        adminEntryChanged ||
+        artifactServicesChanged
+      ) {
         if (servicesChanged && ed25519VerificationMethodId) {
           didDocument.service = [
             ...(didDocument.service
@@ -333,6 +343,10 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             ...this.getDidCommServices(didDocument.id, ed25519VerificationMethodId),
           ]
         }
+        applyArtifactServices(didDocument, {
+          method: artifactMethod,
+          publicApiBaseUrl: this.publicApiBaseUrl,
+        })
         this.applyAdminApiService(didDocument)
         const newKeys: DidDocumentKey[] = []
         if (hasLegacyMethods) {
@@ -562,36 +576,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     didDocument.context = [
       ...(didDocument.context ?? []),
       'https://identity.foundation/linked-vp/contexts/v1',
-    ]
-  }
-
-  /**
-   * Basic implicit webvh services, for the moment pointing to the service VP
-   * and public base URL
-   */
-  private async createAndAddWebVhImplicitServices(didDocument: DidDocument) {
-    const publicDid = didDocument.id
-    didDocument.service = [
-      ...(didDocument.service ?? []),
-      ...[
-        new DidDocumentService({
-          id: `${publicDid}#files`,
-          serviceEndpoint: `${this.publicApiBaseUrl}`,
-          type: 'relativeRef',
-        }),
-      ],
-    ]
-  }
-
-  private async createAndAddAnonCredsServices(didDocument: DidDocument) {
-    const publicDid = didDocument.id
-    didDocument.service = [
-      ...(didDocument.service ?? []),
-      new DidDocumentService({
-        id: `${publicDid}#anoncreds`,
-        serviceEndpoint: `${this.publicApiBaseUrl}/anoncreds/v1`,
-        type: 'AnonCredsRegistry',
-      }),
     ]
   }
 

@@ -104,10 +104,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
         ],
       }),
       dids: new DidsModule({
-        resolvers: [
-          new CachedWebDidResolver({ publicApiBaseUrl: options.publicApiBaseUrl }),
-          new WebVhDidResolver(),
-        ],
+        resolvers: [new CachedWebDidResolver(), new WebVhDidResolver()],
         registrars: [new WebDidRegistrar(), new WebVhDidRegistrar()],
       }),
       w3cCredentials: new W3cCredentialsModule({

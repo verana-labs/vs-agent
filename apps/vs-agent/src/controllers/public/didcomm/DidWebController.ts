@@ -3,11 +3,11 @@ import {
   AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
+import { parseDid } from '@credo-ts/core'
 import { Controller, Get, Param, Res, HttpStatus, HttpException, Inject, NotFoundException, Query } from '@nestjs/common'
 import {
   getLegacyDidDocument,
   getTailsDirectoryPath,
-  getWebDid,
   isValidTailsFileName,
   VsAgent,
 } from '@verana-labs/vs-agent-sdk'
@@ -57,12 +57,21 @@ export class DidWebController {
     }
   }
 
+  // Artifacts follow the method of the agent DID: the routes of the other method must not answer.
+  private async getAgentWithDidMethod(method: 'web' | 'webvh'): Promise<{ agent: VsAgent; did: string }> {
+    const agent = await this.agentService.getAgent()
+
+    if (!agent.did || parseDid(agent.did).method !== method) throw new NotFoundException()
+
+    return { agent, did: agent.did }
+  }
+
   private async serveDidDocument() {
     const agent = await this.agentService.getAgent()
     agent.config.logger.debug(`Public DID document requested`)
     const { didDocument } = await resolveDidDocumentData(agent)
 
-    if (didDocument) return getLegacyDidDocument(didDocument, this.publicApiBaseUrl)
+    if (didDocument) return getLegacyDidDocument(didDocument)
 
     // Neither did:web nor did:webvh
     throw new HttpException('DID Document not found', HttpStatus.NOT_FOUND)
@@ -86,13 +95,8 @@ export class DidWebController {
   // Schemas
   @Get('/anoncreds/v1/schema/:schemaId')
   async getSchema(@Param('schemaId') schemaId: string, @Res() res: Response) {
-    const agent = await this.agentService.getAgent()
+    const { agent, did: issuerId } = await this.getAgentWithDidMethod('web')
     agent.config.logger.debug(`Schema requested: ${schemaId}`)
-
-    const issuerId = await getWebDid(agent)
-    if (!issuerId) {
-      throw new HttpException('Agent does not have any defined public DID', HttpStatus.NOT_FOUND)
-    }
 
     const schemaRepository = agent.dependencyManager.resolve(AnonCredsSchemaRepository)
     const schemaRecord = await schemaRepository.findBySchemaId(
@@ -112,13 +116,8 @@ export class DidWebController {
   // Credential Definitions
   @Get('/anoncreds/v1/credDef/:credentialDefinitionId')
   async getCredDef(@Param('credentialDefinitionId') credentialDefinitionId: string, @Res() res: Response) {
-    const agent = await this.agentService.getAgent()
+    const { agent, did: issuerId } = await this.getAgentWithDidMethod('web')
     agent.config.logger.debug(`credential definition requested: ${credentialDefinitionId}`)
-
-    const issuerId = await getWebDid(agent)
-    if (!issuerId) {
-      throw new HttpException('Agent does not have any defined public DID', HttpStatus.NOT_FOUND)
-    }
 
     const credentialDefinitionRepository = agent.dependencyManager.resolve(
       AnonCredsCredentialDefinitionRepository,
@@ -139,12 +138,8 @@ export class DidWebController {
   // Endpoint to retrieve a revocation registry definition by its ID
   @Get('/anoncreds/v1/revRegDef/:revocationDefinitionId')
   async getRevRegDef(@Param('revocationDefinitionId') revocationDefinitionId: string, @Res() res: Response) {
-    const agent = await this.agentService.getAgent()
+    const { agent, did: issuerId } = await this.getAgentWithDidMethod('web')
     agent.config.logger.debug(`revocate definition requested: ${revocationDefinitionId}`)
-    const issuerId = await getWebDid(agent)
-    if (!issuerId) {
-      throw new HttpException('Agent does not have any defined public DID', HttpStatus.NOT_FOUND)
-    }
 
     const revocationDefinitionRepository = agent.dependencyManager.resolve(
       AnonCredsRevocationRegistryDefinitionRepository,
@@ -172,13 +167,8 @@ export class DidWebController {
   // Optional: Accepts a timestamp parameter (not currently used in the logic)
   @Get('/anoncreds/v1/revStatus/:revocationDefinitionId/:timestamp?')
   async getRevStatus(@Param('revocationDefinitionId') revocationDefinitionId: string, @Res() res: Response) {
-    const agent = await this.agentService.getAgent()
+    const { agent, did: issuerId } = await this.getAgentWithDidMethod('web')
     agent.config.logger.debug(`revocate definition requested: ${revocationDefinitionId}`)
-
-    const issuerId = await getWebDid(agent)
-    if (!issuerId) {
-      throw new HttpException('Agent does not have any defined public DID', HttpStatus.NOT_FOUND)
-    }
 
     const revocationDefinitionRepository = agent.dependencyManager.resolve(
       AnonCredsRevocationRegistryDefinitionRepository,
@@ -232,7 +222,7 @@ export class DidWebController {
     if (!resourceType) {
       throw new HttpException('resourceType query param is required', HttpStatus.BAD_REQUEST)
     }
-    const agent = await this.agentService.getAgent()
+    const { agent } = await this.getAgentWithDidMethod('webvh')
     const records = await agent.genericRecords.findAllByQuery({
       type: 'AttestedResource',
       resourceType,
@@ -248,16 +238,13 @@ export class DidWebController {
 
   @Get('/resources/:resourceId')
   async getWebVhResources(@Param('resourceId') resourceId: string, @Res() res: Response) {
-    const agent = await this.agentService.getAgent()
-    const resourcePath = `${agent.did}/resources/${resourceId}`
+    const { agent, did } = await this.getAgentWithDidMethod('webvh')
+    const resourcePath = `${did}/resources/${resourceId}`
 
     agent.config.logger.debug(`requested resource ${resourceId}`)
 
     if (!resourceId) {
       throw new HttpException('resourceId not found', HttpStatus.CONFLICT)
-    }
-    if (!agent.did) {
-      throw new HttpException('Agent does not have any defined public DID', HttpStatus.NOT_FOUND)
     }
 
     const [record] = await agent.genericRecords.findAllByQuery({

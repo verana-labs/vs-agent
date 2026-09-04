@@ -117,12 +117,3 @@ export async function getRecordId(agent: VsAgent, id: string): Promise<string> {
   const record = await agent.genericRecords.findById(id)
   return (record?.getTag('messageId') as string) ?? id
 }
-
-export async function getWebDid(agent: VsAgent) {
-  if (agent.did) {
-    const parsedDid = parseDid(agent.did)
-
-    if (parsedDid.method === 'web') return agent.did
-    if (parsedDid.method === 'webvh') return `did:web:${parsedDid.id.split(':').slice(1).join(':')}`
-  }
-}
