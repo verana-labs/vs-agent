@@ -44,6 +44,7 @@ import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
 import { applyArtifactServices, artifactServicesMatch } from '../did/artifactServices'
+import { getLegacyDidWeb } from '../did/legacyDidWeb'
 import {
   authenticationHasUpdateKey,
   hasLegacyVerificationMethods,
@@ -199,7 +200,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           const didDocument = new DidDocument({ id: parsedDid.did })
           const didCommKey = await this.createAndAddDidCommKeysAndServices(didDocument)
 
-          await this.createAndAddLinkedVpServices(didDocument)
+          this.addLinkedVpContext(didDocument)
 
           applyArtifactServices(didDocument, { method: 'web', publicApiBaseUrl: this.publicApiBaseUrl })
 
@@ -218,17 +219,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           }
           this.did = parsedDid.did
         } else if (parsedDid.method === 'webvh') {
-          // If there is an existing did:web with the same domain, this could be an
-          // upgrade. There should be no problem on removing did:web record since we
-          // can use newer keys for DIDComm bootstrapping, but we should at least warn
-          // about that
-          const didRepository = this.dependencyManager.resolve(DidRepository)
-          const existingDidWebRecord = await didRepository.findCreatedDid(this.context, `did:web:${location}`)
-          if (existingDidWebRecord) {
-            this.logger.warn('Existing record for legacy did:web found. Removing it')
-            await didRepository.delete(this.context, existingDidWebRecord)
-          }
-
           const createResult = await this.dids.create({ method: 'webvh', domain, path })
           const { did: publicDid, didDocument } = createResult.didState
           if (!publicDid || !didDocument) {
@@ -240,12 +230,12 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           // Add DIDComm services and keys
           const didCommKey = await this.createAndAddDidCommKeysAndServices(didDocument)
 
-          // Add Linked VP services
-          await this.createAndAddLinkedVpServices(didDocument)
+          this.addLinkedVpContext(didDocument)
 
           applyArtifactServices(didDocument, { method: 'webvh', publicApiBaseUrl: this.publicApiBaseUrl })
 
-          didDocument.alsoKnownAs = [`did:web:${location}`]
+          const legacyDidWeb = getLegacyDidWeb(publicDid)
+          if (legacyDidWeb) didDocument.alsoKnownAs = [legacyDidWeb]
 
           // The webvh registrar doesn't merge new keys into the DidRecord on update,
           // so persist the DIDComm key mapping directly on the existing record.
@@ -270,7 +260,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
       await migrateLegacyDidRecord(this.agentContext, existingRecord, {
         method: parsedDid.method,
-        location,
         logger: this.logger,
       })
 
@@ -506,7 +495,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     return didDocumentKey
   }
 
-  private async createAndAddLinkedVpServices(didDocument: DidDocument) {
+  private addLinkedVpContext(didDocument: DidDocument) {
     didDocument.context = [
       ...(didDocument.context ?? []),
       'https://identity.foundation/linked-vp/contexts/v1',

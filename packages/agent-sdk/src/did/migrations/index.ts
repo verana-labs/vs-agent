@@ -1,5 +1,7 @@
 import { AgentContext, DidDocument, DidRecord, DidRepository, Logger } from '@credo-ts/core'
 
+import { getLegacyDidWeb } from '../legacyDidWeb'
+
 import { migrateWebVhLogIfBroken } from './migrateWebVhLog'
 import { migrateWebVhVersionTimeIfBroken } from './migrateWebVhVersionTime'
 
@@ -10,21 +12,22 @@ const LEGACY_VERIFICATION_METHOD_TYPES = ['Ed25519VerificationKey2018', 'X25519K
 
 export interface LegacyDidRecordMigrationOptions {
   method: string
-  location: string
   logger: Logger
 }
 
 /**
  * Brings a persisted public DID record created by an earlier VS Agent version up to date.
  * The agent supports no DID change during its lifecycle, so every step here runs only after
- * an upgrade and the whole module can be dropped once those versions are out of support.
+ * an upgrade.
+ * TODO (last legacy version: v1.11): remove this module once upgrading from v1.11 or earlier
+ * is out of support.
  */
 export async function migrateLegacyDidRecord(
   agentContext: AgentContext,
   record: DidRecord,
   options: LegacyDidRecordMigrationOptions,
 ): Promise<void> {
-  const { method, location, logger } = options
+  const { method, logger } = options
 
   if (method !== 'webvh') return
 
@@ -43,11 +46,14 @@ export async function migrateLegacyDidRecord(
     throw error
   }
 
-  await addLegacyDidWebAlternative(agentContext, record, location, logger)
+  await addLegacyDidWebAlternative(agentContext, record, logger)
   await repairWebvhUpdateKeyMapping(agentContext, record, logger)
 }
 
-/** Records published before the update was folded into the reconciliation still carry 2018/2019 key types. */
+/**
+ * Records published before the update was folded into the reconciliation still carry 2018/2019 key types.
+ * TODO (last legacy version: v1.5): remove once upgrading from v1.5 or earlier is out of support.
+ */
 export function hasLegacyVerificationMethods(didDocument: DidDocument): boolean {
   return (didDocument.verificationMethod ?? []).some(vm => LEGACY_VERIFICATION_METHOD_TYPES.includes(vm.type))
 }
@@ -70,12 +76,12 @@ export function authenticationHasUpdateKey(
 async function addLegacyDidWebAlternative(
   agentContext: AgentContext,
   record: DidRecord,
-  location: string,
   logger: Logger,
 ): Promise<void> {
-  const legacyDid = `did:web:${location}`
-  const alternativeDids = record.getTag('alternativeDids') as string[] | undefined
+  const legacyDid = getLegacyDidWeb(record.did)
+  if (!legacyDid) return
 
+  const alternativeDids = record.getTag('alternativeDids') as string[] | undefined
   if (alternativeDids?.includes(legacyDid)) return
 
   logger.debug('Adding did:web form as an alternative DID')

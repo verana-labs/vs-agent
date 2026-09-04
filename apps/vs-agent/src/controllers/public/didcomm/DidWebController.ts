@@ -200,7 +200,7 @@ export class DidWebController {
   async getTailsFile(@Param('tailsFileId') tailsFileId: string, @Res() res: Response) {
     const agent = await this.agentService.getAgent()
 
-    if (!tailsFileId || !isValidTailsFileName(tailsFileId)) {
+    if (!isValidTailsFileName(tailsFileId)) {
       throw new HttpException('tailsFileId not found', HttpStatus.NOT_FOUND)
     }
 
@@ -246,10 +246,6 @@ export class DidWebController {
     const resourcePath = `${agent.did}/resources/${resourceId}`
 
     agent.config.logger.debug(`requested resource ${resourceId}`)
-
-    if (!resourceId) {
-      throw new HttpException('resourceId not found', HttpStatus.CONFLICT)
-    }
 
     const [record] = await agent.genericRecords.findAllByQuery({
       attestedResourceId: resourcePath,

@@ -3,6 +3,19 @@ import { DidDocument, parseDid, JsonTransformer } from '@credo-ts/core'
 import { removeArtifactServices } from './artifactServices'
 
 /**
+ * Returns the legacy did:web form of a DID: the DID itself when it is already a did:web, and the
+ * SCID-less did:web of a did:webvh. Returns undefined for any other method.
+ */
+export function getLegacyDidWeb(did: string): string | undefined {
+  const parsedDid = parseDid(did)
+
+  if (parsedDid.method === 'web') return did
+  if (parsedDid.method === 'webvh' && parsedDid.id.includes(':')) {
+    return `did:web:${parsedDid.id.split(':').slice(1).join(':')}`
+  }
+}
+
+/**
  * Returns a Legacy did:web document, based on an input document. If it is already a did:web,
  * it returns the same document.
  * If it isn't supported (i.e. it is not a did:webvh DID Document), it returns undefined
