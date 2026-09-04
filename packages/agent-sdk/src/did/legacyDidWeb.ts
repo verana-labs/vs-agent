@@ -19,8 +19,6 @@ export function getLegacyDidWeb(did: string): string | undefined {
  * Returns a Legacy did:web document, based on an input document. If it is already a did:web,
  * it returns the same document.
  * If it isn't supported (i.e. it is not a did:webvh DID Document), it returns undefined
- * @param didDocument
- * @returns
  */
 export function getLegacyDidDocument(didDocument: DidDocument) {
   const parsedDid = parseDid(didDocument.id)

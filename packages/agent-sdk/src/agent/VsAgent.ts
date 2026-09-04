@@ -162,10 +162,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
     const parsedDid = this.did ? parseDid(this.did) : null
     if (parsedDid) {
-      // If a public did is specified, check if it's already stored in the wallet. If it's not the case,
-      // create a new one and generate keys for DIDComm (if there are endpoints configured)
+      // The DID is derived from the public API base URL and is always SCID-less: its id is the
+      // location (domain[%3Aport][:path...]). Create it if the wallet holds no record yet.
       // TODO: Make DIDComm version, keys, etc. configurable. Keys can also be imported
-      // The configured DID is always SCID-less: its id is the location (domain[%3Aport][:path...])
       const location = parsedDid.id
       const [domain, ...pathSegments] = location.split(':')
       const path = pathSegments.length ? pathSegments.join('/') : undefined
@@ -263,8 +262,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         logger: this.logger,
       })
 
-      // DID Already exists: update it in case that agent parameters have been changed. At the moment, we can only update
-      //  DIDComm endpoints, so we'll only replace the service (if different from previous)
+      // DID already exists: reconcile the stored document with the current agent parameters,
+      // updating it only if one of the checks below finds a difference
       const didDocument = existingRecord.didDocument!
       const hasLegacyMethods = hasLegacyVerificationMethods(didDocument)
       const ed25519VerificationMethodId = this.findEd25519VerificationMethodId(didDocument)

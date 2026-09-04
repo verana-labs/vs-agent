@@ -98,7 +98,6 @@ export class DidWebController {
     }
   }
 
-  // AnonCreds routes only make sense if we have a public DID (otherwise, we cannot be issuers)
   // Schemas
   @Get('/anoncreds/v1/schema/:schemaId')
   async getSchema(@Param('schemaId') schemaId: string, @Res() res: Response) {

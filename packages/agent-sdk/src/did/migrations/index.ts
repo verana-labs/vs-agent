@@ -51,7 +51,7 @@ export async function migrateLegacyDidRecord(
 }
 
 /**
- * Records published before the update was folded into the reconciliation still carry 2018/2019 key types.
+ * Records published before the 2020 key types landed still carry 2018/2019 verification methods.
  * TODO (last legacy version: v1.5): remove once upgrading from v1.5 or earlier is out of support.
  */
 export function hasLegacyVerificationMethods(didDocument: DidDocument): boolean {
