@@ -19,6 +19,8 @@ import * as path from 'path'
 import { VsAgentService } from '../../../services'
 import { derivePublicDidLocation } from '../../../utils/didLocation'
 
+type PublicDidAgent = VsAgent & { did: string }
+
 @Controller()
 export class DidWebController {
   constructor(
@@ -58,12 +60,8 @@ export class DidWebController {
   }
 
   // Artifacts follow the method of the agent DID: the routes of the other method must not answer.
-  private async getAgentWithDidMethod(method: 'web' | 'webvh'): Promise<{ agent: VsAgent; did: string }> {
-    const agent = await this.agentService.getAgent()
-
+  private assertDidMethod(agent: VsAgent, method: 'web' | 'webvh'): asserts agent is PublicDidAgent {
     if (!agent.did || parseDid(agent.did).method !== method) throw new NotFoundException()
-
-    return { agent, did: agent.did }
   }
 
   private async serveDidDocument() {
@@ -95,13 +93,14 @@ export class DidWebController {
   // Schemas
   @Get('/anoncreds/v1/schema/:schemaId')
   async getSchema(@Param('schemaId') schemaId: string, @Res() res: Response) {
-    const { agent, did: issuerId } = await this.getAgentWithDidMethod('web')
+    const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'web')
     agent.config.logger.debug(`Schema requested: ${schemaId}`)
 
     const schemaRepository = agent.dependencyManager.resolve(AnonCredsSchemaRepository)
     const schemaRecord = await schemaRepository.findBySchemaId(
       agent.context,
-      `${issuerId}?service=anoncreds&relativeRef=/schema/${schemaId}`,
+      `${agent.did}?service=anoncreds&relativeRef=/schema/${schemaId}`,
     )
 
     if (schemaRecord) {
@@ -116,7 +115,8 @@ export class DidWebController {
   // Credential Definitions
   @Get('/anoncreds/v1/credDef/:credentialDefinitionId')
   async getCredDef(@Param('credentialDefinitionId') credentialDefinitionId: string, @Res() res: Response) {
-    const { agent, did: issuerId } = await this.getAgentWithDidMethod('web')
+    const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'web')
     agent.config.logger.debug(`credential definition requested: ${credentialDefinitionId}`)
 
     const credentialDefinitionRepository = agent.dependencyManager.resolve(
@@ -125,7 +125,7 @@ export class DidWebController {
 
     const credentialDefinitionRecord = await credentialDefinitionRepository.findByCredentialDefinitionId(
       agent.context,
-      `${issuerId}?service=anoncreds&relativeRef=/credDef/${credentialDefinitionId}`,
+      `${agent.did}?service=anoncreds&relativeRef=/credDef/${credentialDefinitionId}`,
     )
 
     if (credentialDefinitionRecord) {
@@ -138,7 +138,8 @@ export class DidWebController {
   // Endpoint to retrieve a revocation registry definition by its ID
   @Get('/anoncreds/v1/revRegDef/:revocationDefinitionId')
   async getRevRegDef(@Param('revocationDefinitionId') revocationDefinitionId: string, @Res() res: Response) {
-    const { agent, did: issuerId } = await this.getAgentWithDidMethod('web')
+    const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'web')
     agent.config.logger.debug(`revocate definition requested: ${revocationDefinitionId}`)
 
     const revocationDefinitionRepository = agent.dependencyManager.resolve(
@@ -148,7 +149,7 @@ export class DidWebController {
     const revocationDefinitionRecord =
       await revocationDefinitionRepository.findByRevocationRegistryDefinitionId(
         agent.context,
-        `${issuerId}?service=anoncreds&relativeRef=/revRegDef/${revocationDefinitionId}`,
+        `${agent.did}?service=anoncreds&relativeRef=/revRegDef/${revocationDefinitionId}`,
       )
 
     if (revocationDefinitionRecord) {
@@ -167,7 +168,8 @@ export class DidWebController {
   // Optional: Accepts a timestamp parameter (not currently used in the logic)
   @Get('/anoncreds/v1/revStatus/:revocationDefinitionId/:timestamp?')
   async getRevStatus(@Param('revocationDefinitionId') revocationDefinitionId: string, @Res() res: Response) {
-    const { agent, did: issuerId } = await this.getAgentWithDidMethod('web')
+    const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'web')
     agent.config.logger.debug(`revocate definition requested: ${revocationDefinitionId}`)
 
     const revocationDefinitionRepository = agent.dependencyManager.resolve(
@@ -177,7 +179,7 @@ export class DidWebController {
     const revocationDefinitionRecord =
       await revocationDefinitionRepository.findByRevocationRegistryDefinitionId(
         agent.context,
-        `${issuerId}?service=anoncreds&relativeRef=/revRegDef/${revocationDefinitionId}`,
+        `${agent.did}?service=anoncreds&relativeRef=/revRegDef/${revocationDefinitionId}`,
       )
 
     if (revocationDefinitionRecord) {
@@ -222,7 +224,8 @@ export class DidWebController {
     if (!resourceType) {
       throw new HttpException('resourceType query param is required', HttpStatus.BAD_REQUEST)
     }
-    const { agent } = await this.getAgentWithDidMethod('webvh')
+    const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'webvh')
     const records = await agent.genericRecords.findAllByQuery({
       type: 'AttestedResource',
       resourceType,
@@ -238,8 +241,9 @@ export class DidWebController {
 
   @Get('/resources/:resourceId')
   async getWebVhResources(@Param('resourceId') resourceId: string, @Res() res: Response) {
-    const { agent, did } = await this.getAgentWithDidMethod('webvh')
-    const resourcePath = `${did}/resources/${resourceId}`
+    const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'webvh')
+    const resourcePath = `${agent.did}/resources/${resourceId}`
 
     agent.config.logger.debug(`requested resource ${resourceId}`)
 
