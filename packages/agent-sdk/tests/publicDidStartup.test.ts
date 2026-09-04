@@ -1,7 +1,7 @@
 import '@openwallet-foundation/askar-nodejs'
 
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
-import { ConsoleLogger, LogLevel } from '@credo-ts/core'
+import { ConsoleLogger, DidDocumentService, DidRepository, LogLevel } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { DIDLog, resolveDIDFromLog, Verifier } from 'didwebvh-ts'
@@ -179,6 +179,61 @@ describe('public DID startup lifecycle', () => {
       const records = await second.dids.getCreatedDids({ method: 'webvh' })
       expect(records).toHaveLength(1)
       expect(records[0].did).toBe(originalDid)
+
+      await second.shutdown()
+    },
+    TEST_TIMEOUT_MS,
+  )
+  it(
+    'startup drops a legacy AnonCreds registry from the persisted webvh document',
+    async () => {
+      const wallet = walletConfig('artifact-legacy')
+      const first = makeAgent('did:webvh:artifact-legacy.example', wallet)
+      await first.initialize()
+
+      const didRepository = first.dependencyManager.resolve(DidRepository)
+      const [record] = await first.dids.getCreatedDids({ method: 'webvh' })
+      record.didDocument!.service = [
+        ...(record.didDocument!.service ?? []),
+        new DidDocumentService({
+          id: `${first.did}#anoncreds`,
+          type: 'AnonCredsRegistry',
+          serviceEndpoint: 'https://artifact-legacy.example/anoncreds/v1',
+        }),
+      ]
+      await didRepository.update(first.context, record)
+      const entriesBefore = (record.metadata.get('log') as DIDLog).length
+      await first.shutdown()
+
+      const second = makeAgent('did:webvh:artifact-legacy.example', wallet)
+      await second.initialize()
+
+      const [reconciled] = await second.dids.getCreatedDids({ method: 'webvh' })
+      const services = reconciled.didDocument?.service ?? []
+      expect(services.some(service => service.type === 'AnonCredsRegistry')).toBe(false)
+      expect(services.some(service => service.type === 'relativeRef')).toBe(true)
+      expect((reconciled.metadata.get('log') as DIDLog).length).toBe(entriesBefore + 1)
+
+      await second.shutdown()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'startup publishes no new log entry when the artifact services already match',
+    async () => {
+      const wallet = walletConfig('artifact-stable')
+      const first = makeAgent('did:webvh:artifact-stable.example', wallet)
+      await first.initialize()
+      const [created] = await first.dids.getCreatedDids({ method: 'webvh' })
+      const entriesBefore = (created.metadata.get('log') as DIDLog).length
+      await first.shutdown()
+
+      const second = makeAgent('did:webvh:artifact-stable.example', wallet)
+      await second.initialize()
+
+      const [reloaded] = await second.dids.getCreatedDids({ method: 'webvh' })
+      expect((reloaded.metadata.get('log') as DIDLog).length).toBe(entriesBefore)
 
       await second.shutdown()
     },
