@@ -199,7 +199,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           const didDocument = new DidDocument({ id: parsedDid.did })
           const didCommKey = await this.createAndAddDidCommKeysAndServices(didDocument)
 
-          // Add Self TR
           await this.createAndAddLinkedVpServices(didDocument)
 
           applyArtifactServices(didDocument, { method: 'web', publicApiBaseUrl: this.publicApiBaseUrl })
