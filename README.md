@@ -77,7 +77,7 @@ Once your VS Agent is up and running, you can manage it from your backend basica
 
 ### Using VS Agent REST API
 
-This can be used regardless the software stack you use in your backend. See [VS Agent API reference](./doc/vs-agent-api.md) for a detailed guide about all endpoints.
+This can be used regardless the software stack you use in your backend. The Administration API and the Events API are specified in the [VS Agent Specification, Verana v4](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#administration-api), which this implementation targets.
 
 
 ---
