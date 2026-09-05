@@ -9,7 +9,6 @@ import {
   IsIn,
   IsOptional,
   IsString,
-  IsUrl,
   ValidateNested,
 } from 'class-validator'
 
@@ -62,22 +61,6 @@ export class CreatePresentationRequestBodyDto {
   @ValidateNested({ each: true })
   @Type(() => RequestedCredentialDto)
   requestedCredentials!: RequestedCredentialDto[]
-
-  @ApiPropertyOptional({
-    description: 'URL the agent POSTs to when the presentation flow completes',
-    example: 'https://myhost.com/presentation_callback',
-  })
-  @IsOptional()
-  @IsUrl({ require_tld: false })
-  callbackUrl?: string
-
-  @ApiPropertyOptional({
-    description: 'Correlation identifier of the caller, echoed back in the callback',
-    example: '1234-5678',
-  })
-  @IsOptional()
-  @IsString()
-  ref?: string
 
   @ApiPropertyOptional({
     description: 'Ask the holder for a non-revocation proof at verification time',
@@ -165,7 +148,8 @@ export class PresentationRecordDto {
   claims!: Claim[]
 
   @ApiProperty({
-    description: 'Whether the presentation verified. Only meaningful once `state` is `done`.',
+    description:
+      'Whether the presentation verified. Set when the presentation is received, false with an `errorMessage` when the flow is `abandoned`.',
     example: true,
   })
   verified!: boolean

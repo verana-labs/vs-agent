@@ -53,7 +53,6 @@ In addition, it notifies the consumer of every event through HTTP webhooks, one 
   - [Invitations](#invitations)
     - [Connection Invitation](#connection-invitation)
     - [Presentation Request](#presentation-request)
-      - [Presentation Callback API](#presentation-callback-api)
     - [Credential Offer](#credential-offer)
   - [Presentations](#presentations)
   - [Verifiable Data Registry Operations](#verifiable-data-registry-operations)
@@ -798,15 +797,13 @@ Note that the following VS Agent configuration environment variables are used wh
 Presentation Request invitation codes are created by specifying details of the credentials required.
 
 This means that a single presentation request can ask for a number of attributes present in a credential a holder might possess.
-At the moment, credential requirements are only filtered by their `credentialDefinitionId`. If no `attributes` are specified,
+A requested credential is identified by its `credentialDefinitionId` or its `jsonSchemaCredentialId`. If no `attributes` are specified,
 then VS Agent will ask for all attributes in the credential.
 
-It's a POST to `/invitation/presentation-request` which receives a JSON object in the body
+It's a POST to `/v2/didcomm/presentation-request` which receives a JSON object in the body
 
 ```json
 {
-  "callbackUrl": "https://myhost.com/presentation_callback ",
-  "ref": "1234-5678",
   "requestedCredentials": [
     {
       "credentialDefinitionId": "full credential definition identifier",
@@ -815,10 +812,6 @@ It's a POST to `/invitation/presentation-request` which receives a JSON object i
   ]
 }
 ```
-
-`callbackUrl` is an URL that will be called by VS Agent when the flow completes. The request follows the [Presentation Callback API](#presentation-callback-api).
-
-`ref` is an optional, arbitrary string that will be included in the body of the request to the callback URL.
 
 Response will include the invitation code in both short and long form URL format.
 
@@ -836,31 +829,6 @@ Note that the following VS Agent configuration environment variables are used wh
 - AGENT_INVITATION_IMAGE_URL: An optional image URL to display along the connection invitation
 - AGENT_LABEL: An optional label to show along the connection invitation
 - PUBLIC_API_BASE_URL: Base URL for short URL creation (resulting something like `https://myHost.com/s?id=<uuid>`)
-
-#### Presentation Callback API
-
-When the presentation flow is completed (either successfully or not), VS Agent calls its `callbackUrl` as an HTTP POST with the following body:
-
-```json
-{
-  "ref": "1234-5678",
-  "presentationRequestId": "unique identifier for the flow",
-  "state": "PresentationState",
-  "claims": [
-    { "name": "attribute-1", "value": "value-1" },
-    { "name": "attribute-2", "value": "value-2" }
-  ]
-}
-```
-
-Possible values for PresentationState are:
-
-- 'ok'
-- 'connected'
-- 'refused'
-- 'no-compatible-credentials'
-- 'verification-error'
-- 'unspecified-error'
 
 ### Credential Offer
 
@@ -897,16 +865,20 @@ Note that the following VS Agent configuration environment variables are used wh
 
 ## Presentations
 
-It is possible to query all presentation flows created by VS Agent through the endpoint `/presentations`, which will respond with records using the following format:
+It is possible to query all presentation flows created by VS Agent through the endpoint `/v2/didcomm/presentations`, which will respond with a page of records using the following format:
 
 - proofExchangeId: flow identifier (the same as the one used in events and other responses)
-- state: current state of the presentation flow (e.g. `request-sent` when it was just started, `done` when finished)
-- claims: array containing the claims received within the presentation
-- verified: boolean stating if the presentation is valid (only meaningful when state is `done`)
+- state: current state of the presentation flow (e.g. `request-sent` when it was just started, `done` when finished, `abandoned` when it failed)
+- role: role of the agent in the flow (`verifier` or `prover`)
+- connectionId: connection the flow runs on
 - threadId: DIDComm thread id (shared with the other party)
-- updatedAt: last time activity was recorded for this flow
+- requestedCredentials: the credentials and attributes the flow asked for
+- claims: array containing the claims received within the presentation
+- verified: whether the presentation verified, set when it is received
+- errorMessage: why the flow ended in `abandoned`, when it did
+- createdAt and updatedAt: creation time and last activity of the flow
 
-It is possible to query for a single presentation by executing a GET to `/presentations/<proofExchangeId>`.
+It is possible to query for a single presentation by executing a GET to `/v2/didcomm/presentations/<proofExchangeId>`.
 
 ## Verifiable Data Registry Operations
 

@@ -4,10 +4,9 @@ import {
   DidCommConnectionEventTypes,
   DidCommProofEventTypes,
 } from '@credo-ts/didcomm'
-import { VsAgentEventTypes } from '@verana-labs/vs-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { presentationCallback, webhookEvent } from '../src/utils/webhookEvent'
+import { webhookEvent } from '../src/utils/webhookEvent'
 
 type Handler = (event: { payload: unknown }) => unknown
 type Middleware = (context: unknown, next: () => Promise<void>) => Promise<void>
@@ -154,6 +153,36 @@ describe('Events API delivery', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('delivers an abandoned presentation with its reason in the record', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit(DidCommProofEventTypes.ProofStateChanged, {
+      proofRecord: {
+        id: 'proof-1',
+        state: 'abandoned',
+        role: 'verifier',
+        connectionId: 'conn-1',
+        errorMessage: 'e.req.no-compatible-credentials: no matching credentials',
+        createdAt: new Date(),
+        metadata: { get: () => null },
+      },
+      previousState: 'request-sent',
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.presentations.state-updated')
+    expect(body.data).toMatchObject({
+      proofExchangeId: 'proof-1',
+      state: 'abandoned',
+      role: 'verifier',
+      connectionId: 'conn-1',
+      verified: false,
+      errorMessage: 'e.req.no-compatible-credentials: no matching credentials',
+      previousState: 'request-sent',
+    })
+  })
+
   it('logs a record that cannot be mapped instead of rejecting the listener', async () => {
     const { agent, emit } = fakeAgent()
     agent.didcomm.proofs.getFormatData.mockRejectedValueOnce(new Error('record deleted'))
@@ -166,26 +195,6 @@ describe('Events API delivery', () => {
 
     expect(logger.error).toHaveBeenCalledTimes(1)
     expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('posts the presentation callback independently of the webhook', async () => {
-    const { agent, emit } = fakeAgent()
-    presentationCallback(agent as never, logger as never)
-
-    await emit(VsAgentEventTypes.PresentationStateUpdated, {
-      event: {
-        callbackUrl: 'https://caller.example/cb',
-        ref: 'r-1',
-        state: 'ok',
-        verified: true,
-        proofExchangeId: 'p-1',
-      },
-    })
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://caller.example/cb',
-      expect.objectContaining({ method: 'POST' }),
-    )
   })
 
   it('logs a failed delivery and never throws', async () => {
