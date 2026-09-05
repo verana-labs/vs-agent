@@ -10,13 +10,6 @@ import { ParsedDID } from 'did-resolver'
 import { getLegacyDidDocument } from './legacyDidWeb'
 
 export class CachedWebDidResolver extends WebDidResolver {
-  private publicApiBaseUrl: string
-
-  public constructor(options: { publicApiBaseUrl: string }) {
-    super()
-    this.publicApiBaseUrl = options.publicApiBaseUrl
-  }
-
   public async resolve(
     agentContext: AgentContext,
     did: string,
@@ -45,7 +38,7 @@ export class CachedWebDidResolver extends WebDidResolver {
     })
 
     if (webVhdDidRecord?.didDocument) {
-      const legacyDidDocument = getLegacyDidDocument(webVhdDidRecord.didDocument, this.publicApiBaseUrl)
+      const legacyDidDocument = getLegacyDidDocument(webVhdDidRecord.didDocument)
       if (legacyDidDocument) {
         return {
           didDocument: legacyDidDocument,

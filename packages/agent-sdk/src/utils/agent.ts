@@ -1,12 +1,13 @@
 import type { VsAgent } from '../agent/VsAgent'
 
-import { parseDid } from '@credo-ts/core'
 import {
   DidCommConnectionRepository,
   DidCommHandshakeProtocol,
   DidCommMessage,
   type DidCommVersion,
 } from '@credo-ts/didcomm'
+
+import { getLegacyDidWeb } from '../did/legacyDidWeb'
 
 /**
  * Creates an out of band invitation that will equal to the public DID in case the agent has one defined,
@@ -25,11 +26,7 @@ export async function createInvitation(options: {
 }) {
   const { agent, messages, useLegacyDid, invitationBaseUrl, imageUrl, didCommVersion } = options
 
-  // Use legacy did:web in case agent's did is webvh and using legacy did
-  const ourDid =
-    agent.did && parseDid(agent.did).method === 'webvh' && useLegacyDid
-      ? `did:web:${parseDid(agent.did).id.split(':').slice(1).join(':')}`
-      : agent.did
+  const ourDid = (useLegacyDid && agent.did ? getLegacyDidWeb(agent.did) : undefined) ?? agent.did
 
   const effectiveVersion: DidCommVersion = didCommVersion ?? 'v2'
   const isV2 = effectiveVersion === 'v2'
@@ -116,13 +113,4 @@ export async function connectToPublicDid(agent: VsAgent, peerPublicDid: string):
 export async function getRecordId(agent: VsAgent, id: string): Promise<string> {
   const record = await agent.genericRecords.findById(id)
   return (record?.getTag('messageId') as string) ?? id
-}
-
-export async function getWebDid(agent: VsAgent) {
-  if (agent.did) {
-    const parsedDid = parseDid(agent.did)
-
-    if (parsedDid.method === 'web') return agent.did
-    if (parsedDid.method === 'webvh') return `did:web:${parsedDid.id.split(':').slice(1).join(':')}`
-  }
 }

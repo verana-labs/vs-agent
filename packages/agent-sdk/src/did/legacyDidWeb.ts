@@ -1,14 +1,26 @@
-import { DidDocument, parseDid, DidDocumentService, JsonTransformer } from '@credo-ts/core'
+import { DidDocument, parseDid, JsonTransformer } from '@credo-ts/core'
+
+import { removeArtifactServices } from './artifactServices'
+
+/**
+ * Returns the legacy did:web form of a DID: the DID itself when it is already a did:web, and the
+ * SCID-less did:web of a did:webvh. Returns undefined for any other method.
+ */
+export function getLegacyDidWeb(did: string): string | undefined {
+  const parsedDid = parseDid(did)
+
+  if (parsedDid.method === 'web') return did
+  if (parsedDid.method === 'webvh' && parsedDid.id.includes(':')) {
+    return `did:web:${parsedDid.id.split(':').slice(1).join(':')}`
+  }
+}
 
 /**
  * Returns a Legacy did:web document, based on an input document. If it is already a did:web,
  * it returns the same document.
  * If it isn't supported (i.e. it is not a did:webvh DID Document), it returns undefined
- * @param didDocument
- * @param publicApiBaseUrl
- * @returns
  */
-export function getLegacyDidDocument(didDocument: DidDocument, publicApiBaseUrl: string) {
+export function getLegacyDidDocument(didDocument: DidDocument) {
   const parsedDid = parseDid(didDocument.id)
 
   if (parsedDid.method === 'web') return didDocument
@@ -21,15 +33,8 @@ export function getLegacyDidDocument(didDocument: DidDocument, publicApiBaseUrl:
     // Start with resolved version of the DIDDoc from did:webvh
     const legacyDidDocument = new DidDocument(didDocument)
 
-    // We add the legacy did:web AnonCreds service (important in case the agent had previously did:web objects)
-    legacyDidDocument.service = [
-      ...(legacyDidDocument.service ?? []),
-      new DidDocumentService({
-        id: `${didDocument.id}#anoncreds`,
-        serviceEndpoint: `${publicApiBaseUrl}/anoncreds/v1`,
-        type: 'AnonCredsRegistry',
-      }),
-    ]
+    // The parallel document is for DIDComm only: it advertises no artifact service
+    removeArtifactServices(legacyDidDocument)
 
     // Execute text replacement: did:webvh:<scid> by did:web
     const stringified = JSON.stringify(legacyDidDocument.toJSON())

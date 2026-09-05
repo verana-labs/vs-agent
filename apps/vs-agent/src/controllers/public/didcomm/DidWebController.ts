@@ -3,11 +3,20 @@ import {
   AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
-import { Controller, Get, Param, Res, HttpStatus, HttpException, Inject, NotFoundException, Query } from '@nestjs/common'
+import { parseDid } from '@credo-ts/core'
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Inject,
+  NotFoundException,
+  Param,
+  Query,
+  Res,
+} from '@nestjs/common'
 import {
   getLegacyDidDocument,
   getTailsDirectoryPath,
-  getWebDid,
   isValidTailsFileName,
   VsAgent,
 } from '@verana-labs/vs-agent-sdk'
@@ -18,6 +27,8 @@ import * as path from 'path'
 
 import { VsAgentService } from '../../../services'
 import { derivePublicDidLocation } from '../../../utils/didLocation'
+
+type PublicDidAgent = VsAgent & { did: string }
 
 @Controller()
 export class DidWebController {
@@ -57,15 +68,20 @@ export class DidWebController {
     }
   }
 
+  // Artifacts follow the method of the agent DID: the routes of the other method must not answer.
+  private assertDidMethod(agent: VsAgent, method: 'web' | 'webvh'): asserts agent is PublicDidAgent {
+    if (!agent.did || parseDid(agent.did).method !== method) throw new NotFoundException()
+  }
+
   private async serveDidDocument() {
     const agent = await this.agentService.getAgent()
     agent.config.logger.debug(`Public DID document requested`)
     const { didDocument } = await resolveDidDocumentData(agent)
 
-    if (didDocument) return getLegacyDidDocument(didDocument, this.publicApiBaseUrl)
+    if (didDocument) return getLegacyDidDocument(didDocument)
 
     // Neither did:web nor did:webvh
-    throw new HttpException('DID Document not found', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('DID Document not found')
   }
 
   private async serveDidLog(res: Response) {
@@ -78,47 +94,38 @@ export class DidWebController {
       res.setHeader('Cache-Control', 'no-cache')
       res.send(didLog)
     } else {
-      throw new HttpException('DID Log not found', HttpStatus.NOT_FOUND)
+      throw new NotFoundException('DID Log not found')
     }
   }
 
-  // AnonCreds routes only make sense if we have a public DID (otherwise, we cannot be issuers)
   // Schemas
   @Get('/anoncreds/v1/schema/:schemaId')
   async getSchema(@Param('schemaId') schemaId: string, @Res() res: Response) {
     const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'web')
     agent.config.logger.debug(`Schema requested: ${schemaId}`)
-
-    const issuerId = await getWebDid(agent)
-    if (!issuerId) {
-      throw new HttpException('Agent does not have any defined public DID', HttpStatus.NOT_FOUND)
-    }
 
     const schemaRepository = agent.dependencyManager.resolve(AnonCredsSchemaRepository)
     const schemaRecord = await schemaRepository.findBySchemaId(
       agent.context,
-      `${issuerId}?service=anoncreds&relativeRef=/schema/${schemaId}`,
+      `${agent.did}?service=anoncreds&relativeRef=/schema/${schemaId}`,
     )
 
     if (schemaRecord) {
       agent.config.logger.debug(`schema found: ${schemaId}`)
-      res.send({ resource: schemaRecord.schema, resourceMetadata: {} })
+      return res.send({ resource: schemaRecord.schema, resourceMetadata: {} })
     }
 
     agent.config.logger.debug(`schema not found: ${schemaId}`)
-    throw new HttpException('', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('Schema not found')
   }
 
   // Credential Definitions
   @Get('/anoncreds/v1/credDef/:credentialDefinitionId')
   async getCredDef(@Param('credentialDefinitionId') credentialDefinitionId: string, @Res() res: Response) {
     const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'web')
     agent.config.logger.debug(`credential definition requested: ${credentialDefinitionId}`)
-
-    const issuerId = await getWebDid(agent)
-    if (!issuerId) {
-      throw new HttpException('Agent does not have any defined public DID', HttpStatus.NOT_FOUND)
-    }
 
     const credentialDefinitionRepository = agent.dependencyManager.resolve(
       AnonCredsCredentialDefinitionRepository,
@@ -126,25 +133,25 @@ export class DidWebController {
 
     const credentialDefinitionRecord = await credentialDefinitionRepository.findByCredentialDefinitionId(
       agent.context,
-      `${issuerId}?service=anoncreds&relativeRef=/credDef/${credentialDefinitionId}`,
+      `${agent.did}?service=anoncreds&relativeRef=/credDef/${credentialDefinitionId}`,
     )
 
     if (credentialDefinitionRecord) {
-      res.send({ resource: credentialDefinitionRecord.credentialDefinition, resourceMetadata: {} })
+      return res.send({
+        resource: credentialDefinitionRecord.credentialDefinition,
+        resourceMetadata: {},
+      })
     }
 
-    throw new HttpException('Credential Definition not found', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('Credential Definition not found')
   }
 
   // Endpoint to retrieve a revocation registry definition by its ID
   @Get('/anoncreds/v1/revRegDef/:revocationDefinitionId')
   async getRevRegDef(@Param('revocationDefinitionId') revocationDefinitionId: string, @Res() res: Response) {
     const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'web')
     agent.config.logger.debug(`revocate definition requested: ${revocationDefinitionId}`)
-    const issuerId = await getWebDid(agent)
-    if (!issuerId) {
-      throw new HttpException('Agent does not have any defined public DID', HttpStatus.NOT_FOUND)
-    }
 
     const revocationDefinitionRepository = agent.dependencyManager.resolve(
       AnonCredsRevocationRegistryDefinitionRepository,
@@ -153,11 +160,11 @@ export class DidWebController {
     const revocationDefinitionRecord =
       await revocationDefinitionRepository.findByRevocationRegistryDefinitionId(
         agent.context,
-        `${issuerId}?service=anoncreds&relativeRef=/revRegDef/${revocationDefinitionId}`,
+        `${agent.did}?service=anoncreds&relativeRef=/revRegDef/${revocationDefinitionId}`,
       )
 
     if (revocationDefinitionRecord) {
-      res.send({
+      return res.send({
         resource: revocationDefinitionRecord.revocationRegistryDefinition,
         resourceMetadata: {
           statusListEndpoint: `${this.publicApiBaseUrl}/anoncreds/v1/revStatus/${revocationDefinitionId}`,
@@ -165,7 +172,7 @@ export class DidWebController {
       })
     }
 
-    throw new HttpException('Revocation Definition not found', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('Revocation Definition not found')
   }
 
   // Endpoint to retrieve the revocation status list for a specific revocation definition ID
@@ -173,12 +180,8 @@ export class DidWebController {
   @Get('/anoncreds/v1/revStatus/:revocationDefinitionId/:timestamp?')
   async getRevStatus(@Param('revocationDefinitionId') revocationDefinitionId: string, @Res() res: Response) {
     const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'web')
     agent.config.logger.debug(`revocate definition requested: ${revocationDefinitionId}`)
-
-    const issuerId = await getWebDid(agent)
-    if (!issuerId) {
-      throw new HttpException('Agent does not have any defined public DID', HttpStatus.NOT_FOUND)
-    }
 
     const revocationDefinitionRepository = agent.dependencyManager.resolve(
       AnonCredsRevocationRegistryDefinitionRepository,
@@ -187,12 +190,12 @@ export class DidWebController {
     const revocationDefinitionRecord =
       await revocationDefinitionRepository.findByRevocationRegistryDefinitionId(
         agent.context,
-        `${issuerId}?service=anoncreds&relativeRef=/revRegDef/${revocationDefinitionId}`,
+        `${agent.did}?service=anoncreds&relativeRef=/revRegDef/${revocationDefinitionId}`,
       )
 
     if (revocationDefinitionRecord) {
       const revStatusList = revocationDefinitionRecord.metadata.get('revStatusList')
-      res.send({
+      return res.send({
         resource: revStatusList,
         resourceMetadata: {
           previousVersionId: '',
@@ -201,20 +204,20 @@ export class DidWebController {
       })
     }
 
-    throw new HttpException('Revocation Status not found', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('Revocation Status not found')
   }
 
   @Get('/anoncreds/v1/tails/:tailsFileId')
   async getTailsFile(@Param('tailsFileId') tailsFileId: string, @Res() res: Response) {
     const agent = await this.agentService.getAgent()
 
-    if (!tailsFileId || !isValidTailsFileName(tailsFileId)) {
-      throw new HttpException('tailsFileId not found', HttpStatus.NOT_FOUND)
+    if (!isValidTailsFileName(tailsFileId)) {
+      throw new NotFoundException('tailsFileId not found')
     }
 
     const filePath = path.join(getTailsDirectoryPath(agent.context), tailsFileId)
     if (!fs.existsSync(filePath)) {
-      throw new HttpException('tailsFileId not found', HttpStatus.NOT_FOUND)
+      throw new NotFoundException('tailsFileId not found')
     }
 
     res.setHeader('Content-Disposition', `attachment; filename="${tailsFileId}"`)
@@ -230,9 +233,10 @@ export class DidWebController {
     @Query('relatedJsonSchemaCredentialId') relatedJsonSchemaCredentialId?: string,
   ) {
     if (!resourceType) {
-      throw new HttpException('resourceType query param is required', HttpStatus.BAD_REQUEST)
+      throw new BadRequestException('resourceType query param is required')
     }
     const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'webvh')
     const records = await agent.genericRecords.findAllByQuery({
       type: 'AttestedResource',
       resourceType,
@@ -240,7 +244,7 @@ export class DidWebController {
     })
 
     if (!records || records.length === 0) {
-      throw new HttpException('No entries found for resourceType', HttpStatus.NOT_FOUND)
+      throw new NotFoundException('No entries found for resourceType')
     }
 
     return res.send(records.map(r => r.content))
@@ -249,21 +253,20 @@ export class DidWebController {
   @Get('/resources/:resourceId')
   async getWebVhResources(@Param('resourceId') resourceId: string, @Res() res: Response) {
     const agent = await this.agentService.getAgent()
+    this.assertDidMethod(agent, 'webvh')
     const resourcePath = `${agent.did}/resources/${resourceId}`
 
     agent.config.logger.debug(`requested resource ${resourceId}`)
-
-    if (!resourceId) {
-      throw new HttpException('resourceId not found', HttpStatus.CONFLICT)
-    }
-    if (!agent.did) {
-      throw new HttpException('Agent does not have any defined public DID', HttpStatus.NOT_FOUND)
-    }
 
     const [record] = await agent.genericRecords.findAllByQuery({
       attestedResourceId: resourcePath,
       type: 'AttestedResource',
     })
+
+    if (!record) {
+      throw new NotFoundException('Resource not found')
+    }
+
     res.send(record.content)
   }
 }
@@ -274,7 +277,7 @@ async function resolveDidDocumentData(agent: VsAgent) {
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
 
   if (!didRecord) {
-    throw new HttpException('DID Document not found', HttpStatus.NOT_FOUND)
+    throw new NotFoundException('DID Document not found')
   }
 
   const didDocument = didRecord.didDocument
