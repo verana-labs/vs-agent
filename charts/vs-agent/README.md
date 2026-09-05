@@ -41,7 +41,7 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 | Parameter                  | Description                                      | Default                          |
 | -------------------------- | ------------------------------------------------ | -------------------------------- |
 | `didcommLabel`                | Label for the agent                              | `VS Agent`                      |
-| `eventsBaseUrl`            | Base URL for events                              | `https://events.example.com`    |
+| `eventsWebhookUrl`         | URL the agent posts every event to. Empty delivers no event | `""`                |
 | `didcommInvitationImageUrl`  | URL for the agent invitation image               | `https://example.com/invitation.png` |
 | `publicDidMethod`          | DID method to use for public DID: 'web' or 'webvh' | `webvh` |
 | `veranaCorporationId`      | VPR `Corporation.id` the agent belongs to. **Required** | `""` |
@@ -77,6 +77,9 @@ extraEnv:
         name: my-existing-secret
         key: VERANA_ACCOUNT_MNEMONIC
 ```
+
+`EVENTS_WEBHOOK_API_KEY`, the bearer secret the agent sends with every event delivery, is optional and
+must be supplied the same way when `eventsWebhookUrl` is set.
 
 Both direct values and secret references can be mixed in `extraEnv`:
 

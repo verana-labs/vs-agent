@@ -1,6 +1,4 @@
-import type { AnonCredsCredentialMetadata } from '@credo-ts/anoncreds'
 import type { DidCommCredentialExchangeRecord, DidCommCredentialStateChangedEvent } from '@credo-ts/didcomm'
-import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
   Body,
@@ -16,7 +14,6 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common'
-import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import {
   DidCommAutoAcceptCredential,
   DidCommCredentialEventTypes,
@@ -32,7 +29,6 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { Claim } from '@verana-labs/vs-agent-model'
 import { createInvitation } from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
@@ -48,6 +44,7 @@ import {
   DeclineExchangeBodyDto,
   ListCredentialExchangesQueryDto,
 } from './dto'
+import { toCredentialExchangeDto } from './mappers'
 
 /**
  * This controller has the credential exchanges of this agent on DIDComm.
@@ -248,7 +245,7 @@ export class V2DidcommCredentialExchangesController {
         sendProblemReport: true,
         problemReportDescription: description,
       })
-      return this.toRecordDto(agent, declined)
+      return toCredentialExchangeDto(agent, declined, this.logger)
     }
 
     // Credo sends no problem report when the exchange has no connection. An invitation makes
@@ -277,7 +274,7 @@ export class V2DidcommCredentialExchangesController {
       payload: { credentialExchangeRecord: record.clone(), previousState },
     })
 
-    return this.toRecordDto(agent, record)
+    return toCredentialExchangeDto(agent, record, this.logger)
   }
 
   @Post('credential-exchanges/:credentialExchangeId/accept-offer')
@@ -312,7 +309,7 @@ export class V2DidcommCredentialExchangesController {
       autoAcceptCredential: DidCommAutoAcceptCredential.Never,
     })
 
-    return this.toRecordDto(agent, updated)
+    return toCredentialExchangeDto(agent, updated, this.logger)
   }
 
   @Post('credential-exchanges/:credentialExchangeId/accept-request')
@@ -347,7 +344,7 @@ export class V2DidcommCredentialExchangesController {
       credentialExchangeRecordId: credentialExchangeId,
     })
 
-    return this.toRecordDto(agent, updated)
+    return toCredentialExchangeDto(agent, updated, this.logger)
   }
 
   @Post('credential-exchanges/:credentialExchangeId/accept-credential')
@@ -384,7 +381,7 @@ export class V2DidcommCredentialExchangesController {
       credentialExchangeRecordId: credentialExchangeId,
     })
 
-    return this.toRecordDto(agent, updated)
+    return toCredentialExchangeDto(agent, updated, this.logger)
   }
 
   @Get('credential-exchanges')
@@ -405,7 +402,9 @@ export class V2DidcommCredentialExchangesController {
 
     const page = paginate(records, query, { method: 'listCredentialExchanges' }, createdAtKey)
 
-    const results = await Promise.allSettled(page.items.map(record => this.toRecordDto(agent, record)))
+    const results = await Promise.allSettled(
+      page.items.map(record => toCredentialExchangeDto(agent, record, this.logger)),
+    )
 
     // The agent removes a record that it cannot read, which leaves the page short of the limit.
     // The cursor still anchors on the last record of the page, so the walk stays correct.
@@ -439,42 +438,7 @@ export class V2DidcommCredentialExchangesController {
     const record = await agent.didcomm.credentials.findById(credentialExchangeId)
     if (!record) throw unknownCredentialExchange(credentialExchangeId)
 
-    return this.toRecordDto(agent, record)
-  }
-
-  private async toRecordDto(
-    agent: VsAgent<BaseAgentModules>,
-    record: DidCommCredentialExchangeRecord,
-  ): Promise<CredentialExchangeRecordDto> {
-    const anonCredsMetadata = record.metadata.get(AnonCredsCredentialMetadataKey) as
-      | AnonCredsCredentialMetadata
-      | undefined
-
-    let claims: Claim[] = []
-    try {
-      const formatData = await agent.didcomm.credentials.getFormatData(record.id)
-      if (formatData.offerAttributes?.length) {
-        claims = formatData.offerAttributes.map(
-          attribute =>
-            new Claim({ name: attribute.name, value: attribute.value, mimeType: attribute.mimeType }),
-        )
-      }
-    } catch (error) {
-      this.logger.debug(`The agent cannot read the offer of ${record.id}: ${error}`)
-    }
-
-    return {
-      credentialExchangeId: record.id,
-      state: record.state,
-      threadId: record.threadId,
-      connectionId: record.connectionId,
-      credentialDefinitionId: anonCredsMetadata?.credentialDefinitionId,
-      schemaId: anonCredsMetadata?.schemaId,
-      claims,
-      errorMessage: record.errorMessage,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt ?? record.createdAt,
-    }
+    return toCredentialExchangeDto(agent, record, this.logger)
   }
 }
 

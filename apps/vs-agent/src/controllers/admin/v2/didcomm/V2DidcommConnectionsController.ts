@@ -1,5 +1,3 @@
-import type { DidCommConnectionRecord } from '@credo-ts/didcomm'
-
 import { RecordNotFoundError } from '@credo-ts/core'
 import { Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Query } from '@nestjs/common'
 import {
@@ -15,6 +13,7 @@ import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate
 import { VsAgentService } from '../../../../services/VsAgentService'
 
 import { ConnectionRecordDto, ConnectionRecordPageDto, ListConnectionsQueryDto } from './dto'
+import { toConnectionDto } from './mappers'
 
 /**
  * DIDComm connection records held by this agent.
@@ -113,28 +112,6 @@ export class V2DidcommConnectionsController {
       if (error instanceof RecordNotFoundError) throw unknownConnection(connectionId)
       throw error
     }
-  }
-}
-
-function toConnectionDto(record: DidCommConnectionRecord): ConnectionRecordDto {
-  return {
-    id: record.id,
-    state: record.state,
-    role: record.role,
-    did: record.did,
-    theirDid: record.theirDid,
-    theirLabel: record.theirLabel,
-    alias: record.alias,
-    threadId: record.threadId,
-    imageUrl: record.imageUrl,
-    outOfBandId: record.outOfBandId,
-    invitationDid: record.invitationDid,
-    didcommVersion: record.didcommVersion,
-    mediatorId: record.mediatorId,
-    previousDids: record.previousDids,
-    previousTheirDids: record.previousTheirDids,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt ?? record.createdAt,
   }
 }
 

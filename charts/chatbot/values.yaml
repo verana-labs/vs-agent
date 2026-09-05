@@ -34,7 +34,7 @@ vs-agent-chart:
     repository: veranalabs/vs-agent-mrtd
   name: chatbot # Name of the VS Agent chart
   didcommLabel: Chatbot Agent # Chatbot name to display on the invitation QR code
-  eventsBaseUrl: http://chatbot-backend:5000 # Base URL for the chatbot backend service
+  eventsWebhookUrl: http://chatbot-backend:5000/events # Events endpoint of the chatbot backend service
   didcommInvitationImageUrl: https://image.{{ .Values.global.domain }}/avatar.png # Image for the chatbot invitation QR code
   ingress:
     host: '{{ .Values.name }}.{{ .Values.global.domain }}' # Host for the vs agent service

@@ -232,7 +232,7 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.id).not.toBe(applicantRecord.id)
   })
 
-  it('vtFlowEvents POSTs vt-flow-state-updated as the Validator transitions to VALIDATING', async () => {
+  it('vtFlowEvents POSTs vt.flows.state-updated as the Validator transitions to VALIDATING', async () => {
     const webhookUrl = 'http://localhost:5005'
     const { webhookEvent } = await import('../src/utils')
     const { TsLogger } = await import('../src/utils/logger')
@@ -247,7 +247,7 @@ describe('vt-flow: two-agent integration', () => {
     vi.stubGlobal('fetch', fetchSpy)
 
     try {
-      webhookEvent(validator, webhookUrl, new TsLogger(LogLevel.Off, validator.label))
+      webhookEvent(validator, { url: webhookUrl }, new TsLogger(LogLevel.Off, validator.label))
 
       await applicant.modules.vtFlow.sendIssuanceRequest({
         connectionId: applicantConnection.id,
@@ -266,7 +266,7 @@ describe('vt-flow: two-agent integration', () => {
             const rawBody = (init as RequestInit | undefined)?.body
             if (typeof rawBody !== 'string') return false
             try {
-              return JSON.parse(rawBody).state === VtFlowState.Validating
+              return JSON.parse(rawBody).data?.state === VtFlowState.Validating
             } catch {
               return false
             }
@@ -278,20 +278,23 @@ describe('vt-flow: two-agent integration', () => {
       )
 
       const [url, init] = validatingCall
-      expect(url).toBe(`${webhookUrl}/vt-flow-state-updated`)
+      expect(url).toBe(webhookUrl)
       expect((init as RequestInit).method).toBe('POST')
 
       const body = JSON.parse((init as RequestInit).body as string)
-      expect(body.type).toBe('vt-flow-state-updated')
-      expect(body.state).toBe(VtFlowState.Validating)
-      expect(body.role).toBe(VtFlowRole.Validator)
-      expect(body.variant).toBe(VtFlowVariant.DirectIssuance)
-      expect(body.connectionId).toBeDefined()
-      expect(body.threadId).toBeDefined()
-      expect(body.participantSessionId).toBeDefined()
-      expect(body.vtFlowRecordId).toBeDefined()
-      expect(body.schemaId).toBe('https://example.test/schemas/organization.json')
-      expect(body.claims).toEqual({ name: 'Acme', country: 'CH' })
+      expect(body.type).toBe('vt.flows.state-updated')
+      expect(body.id).toBeDefined()
+      expect(body.timestamp).toBeDefined()
+      const data = body.data
+      expect(data.state).toBe(VtFlowState.Validating)
+      expect(data.role).toBe(VtFlowRole.Validator)
+      expect(data.variant).toBe(VtFlowVariant.DirectIssuance)
+      expect(data.connectionId).toBeDefined()
+      expect(data.threadId).toBeDefined()
+      expect(data.participantSessionId).toBeDefined()
+      expect(data.vtFlowRecordId).toBeDefined()
+      expect(data.schemaId).toBe('https://example.test/schemas/organization.json')
+      expect(data.claims).toEqual({ name: 'Acme', country: 'CH' })
     } finally {
       vi.stubGlobal('fetch', baseFetch)
     }

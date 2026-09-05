@@ -20,7 +20,7 @@ services:
       - AGENT_PUBLIC_DID_METHOD=web
       - AGENT_LABEL=Verifier Agent
       - USE_CORS=true
-      - EVENTS_BASE_URL=http://verifier-backend:5100
+      - EVENTS_WEBHOOK_URL=http://verifier-backend:5100/events
     volumes:
       - ./afj:/root/.afj
 

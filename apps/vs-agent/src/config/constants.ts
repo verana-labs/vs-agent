@@ -36,7 +36,8 @@ export const ADMIN_API_TRUSTED_NETWORKS = process.env.ADMIN_API_TRUSTED_NETWORKS
       .filter(s => s.length > 0)
   : DEFAULT_ADMIN_API_TRUSTED_NETWORKS
 
-export const EVENTS_BASE_URL = (process.env.EVENTS_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '')
+export const EVENTS_WEBHOOK_URL = process.env.EVENTS_WEBHOOK_URL?.trim() || undefined
+export const EVENTS_WEBHOOK_API_KEY = process.env.EVENTS_WEBHOOK_API_KEY?.trim() || undefined
 
 // Wallet and Database
 export const AGENT_WALLET_ID = process.env.AGENT_WALLET_ID

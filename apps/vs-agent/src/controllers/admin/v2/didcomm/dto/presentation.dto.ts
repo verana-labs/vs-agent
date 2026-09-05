@@ -1,4 +1,4 @@
-import { DidCommProofState } from '@credo-ts/didcomm'
+import { DidCommProofRole, DidCommProofState } from '@credo-ts/didcomm'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
 import { Type } from 'class-transformer'
@@ -144,6 +144,12 @@ export class PresentationRecordDto {
 
   @ApiProperty({ enum: DidCommProofState, description: 'Current state of the presentation flow' })
   state!: DidCommProofState
+
+  @ApiProperty({ enum: DidCommProofRole, description: 'Role of this agent in the flow' })
+  role!: DidCommProofRole
+
+  @ApiPropertyOptional({ description: 'Connection the flow runs on', example: 'conn-1234-5678' })
+  connectionId?: string
 
   @ApiProperty({
     type: [RequestedCredentialDto],
