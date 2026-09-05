@@ -266,7 +266,7 @@ describe('vt-flow: two-agent integration', () => {
             const rawBody = (init as RequestInit | undefined)?.body
             if (typeof rawBody !== 'string') return false
             try {
-              return JSON.parse(rawBody).data?.state === VtFlowState.Validating
+              return JSON.parse(rawBody).data?.flowState === VtFlowState.Validating
             } catch {
               return false
             }
@@ -286,13 +286,15 @@ describe('vt-flow: two-agent integration', () => {
       expect(body.id).toBeDefined()
       expect(body.timestamp).toBeDefined()
       const data = body.data
-      expect(data.state).toBe(VtFlowState.Validating)
+      expect(data.flowState).toBe(VtFlowState.Validating)
+      expect(data.connectionState).toBeDefined()
+      expect(data.previousState).toBeDefined()
       expect(data.role).toBe(VtFlowRole.Validator)
       expect(data.variant).toBe(VtFlowVariant.DirectIssuance)
       expect(data.connectionId).toBeDefined()
       expect(data.threadId).toBeDefined()
       expect(data.participantSessionId).toBeDefined()
-      expect(data.vtFlowRecordId).toBeDefined()
+      expect(data.id).toBeDefined()
       expect(data.schemaId).toBe('https://example.test/schemas/organization.json')
       expect(data.claims).toEqual({ name: 'Acme', country: 'CH' })
     } finally {

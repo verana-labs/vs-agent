@@ -25,6 +25,8 @@ import {
   VsAgentVtFlowStateUpdatedEvent,
 } from '@verana-labs/vs-agent-sdk'
 
+import { resolveV2FlowRecord } from '../controllers/admin/vt-flow/VtFlowsService'
+
 import {
   toConnectionDto,
   toCredentialExchangeDto,
@@ -157,8 +159,25 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
     })
   })
 
-  agent.events.on<VsAgentVtFlowStateUpdatedEvent>(VsAgentEventTypes.VtFlowStateUpdated, ({ payload }) =>
-    deliver(EventType.VtFlowStateUpdated, dataOf(payload.event)),
+  agent.events.on<VsAgentVtFlowStateUpdatedEvent>(
+    VsAgentEventTypes.VtFlowStateUpdated,
+    async ({ payload }) => {
+      const { vtFlowRecordId, state, previousState } = payload.event
+      try {
+        const record = await agent.modules.vtFlow.findById(vtFlowRecordId)
+        if (!record) {
+          logger.warn(`event ${EventType.VtFlowStateUpdated} skipped: no flow ${vtFlowRecordId}`)
+          return
+        }
+        deliver(EventType.VtFlowStateUpdated, {
+          ...(await resolveV2FlowRecord(agent, record)),
+          flowState: state,
+          previousState,
+        })
+      } catch (error) {
+        logger.error(`event ${EventType.VtFlowStateUpdated} delivery failed`, { cause: error })
+      }
+    },
   )
   agent.events.on<VsAgentIndexerNotificationEvent>(VsAgentEventTypes.IndexerNotification, ({ payload }) =>
     deliver(EventType.IndexerNotification, dataOf(payload.event)),
