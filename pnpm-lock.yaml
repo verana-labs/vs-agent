@@ -56,6 +56,9 @@ importers:
 
   apps/vs-agent:
     dependencies:
+      '@2060.io/credo-ts-didcomm-receipts':
+        specifier: 0.1.1
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.7.2))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.7.2))
       '@credo-ts/anoncreds':
         specifier: 0.7.1-pr-2704-20260901064803
         version: 0.7.1-pr-2704-20260901064803(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.7.2)
@@ -5347,6 +5350,17 @@ snapshots:
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
       rxjs: 7.8.2
+      uuid: 9.0.1
+
+  '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.7.2))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.7.2))':
+    dependencies:
+      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
+      class-transformer: 0.5.1
+      class-validator: 0.14.1
+      reflect-metadata: 0.1.14
+      rxjs: 7.8.2
+      tsyringe: 4.8.0
       uuid: 9.0.1
 
   '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))':

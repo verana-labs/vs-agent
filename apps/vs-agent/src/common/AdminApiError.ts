@@ -1,3 +1,5 @@
+import { HttpStatus } from '@nestjs/common'
+
 export enum AdminApiErrorCode {
   InvalidInput = 'INVALID_INPUT',
   InvalidCursor = 'INVALID_CURSOR',
@@ -22,4 +24,12 @@ export class AdminApiError extends Error {
     super(message)
     this.name = 'AdminApiError'
   }
+}
+
+export function unknownConnection(connectionId: string): AdminApiError {
+  return new AdminApiError(
+    AdminApiErrorCode.UnknownId,
+    HttpStatus.NOT_FOUND,
+    `no connection with id "${connectionId}"`,
+  )
 }
