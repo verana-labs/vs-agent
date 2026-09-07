@@ -9,6 +9,7 @@ export enum AdminApiErrorCode {
   InvalidPackage = 'INVALID_PACKAGE',
   UnsupportedFormat = 'UNSUPPORTED_FORMAT',
   NotReady = 'NOT_READY',
+  ResolverUnavailable = 'RESOLVER_UNAVAILABLE',
   Internal = 'INTERNAL',
 }
 

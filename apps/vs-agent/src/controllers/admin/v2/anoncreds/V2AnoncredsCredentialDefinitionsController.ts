@@ -1,5 +1,7 @@
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
+import { findAttestedResource } from '@verana-labs/vs-agent-sdk'
+
 import {
   AnonCredsCredentialDefinition,
   AnonCredsCredentialDefinitionPrivateRecord,
@@ -36,6 +38,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiQuery,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
 
@@ -109,7 +112,13 @@ export class V2AnoncredsCredentialDefinitionsController {
   })
   @ApiOkResponse({ description: 'The created credential definition record', type: CredentialDefinitionDto })
   @ApiNotFoundResponse({ description: 'The agent cannot resolve relatedJsonSchemaCredentialId' })
-  @ApiConflictResponse({ description: 'A credential definition already governs that JSON Schema Credential' })
+  @ApiConflictResponse({
+    description:
+      'A credential definition already governs that JSON Schema Credential, or the registry of its issuer lists no AnonCreds schema for it yet',
+  })
+  @ApiServiceUnavailableResponse({
+    description: 'The JSON Schema Credential, or the registry of its issuer, cannot be reached',
+  })
   public async createCredentialDefinition(
     @Body() dto: CreateCredentialDefinitionDto,
   ): Promise<CredentialDefinitionDto> {
@@ -133,6 +142,8 @@ export class V2AnoncredsCredentialDefinitionsController {
       throw unresolvableJsonSchemaCredential(relatedJsonSchemaCredentialId)
     }
 
+    // the schema of the VTJSC issuer: the local one when this agent issued the VTJSC, the one
+    // its registry lists otherwise, per [VSA-ADM-AC-CD-CREATE]
     const { schema, schemaId } = await this.service.getOrRegisterAnonCredsSchema({
       relatedJsonSchemaCredentialId,
     })
@@ -402,8 +413,7 @@ export class V2AnoncredsCredentialDefinitionsController {
       await keyCorrectnessProofRepository.delete(agent.context, keyCorrectnessProof)
     }
 
-    const [attestedResource] = await agent.genericRecords.findAllByQuery({
-      type: 'AttestedResource',
+    const attestedResource = await findAttestedResource(agent, {
       attestedResourceId: credentialDefinitionId,
     })
     if (attestedResource) await agent.genericRecords.delete(attestedResource)
