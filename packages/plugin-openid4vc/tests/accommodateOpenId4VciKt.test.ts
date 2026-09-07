@@ -81,11 +81,21 @@ describe('accommodateOpenId4VciKt', () => {
     expect(Object.keys(proofTypesOf(absent.sent))).toEqual(['jwt'])
   })
 
-  it('serves plain metadata on a correctly spelled multi-range accept, without the payload change', () => {
+  it('serves plain metadata to a client that asks for JSON first, without the payload change', () => {
     const swiyu = run('application/json, application/jwt', metadata(jwtOnly))
 
     expect(swiyu.accept).toBe('application/json')
     expect(Object.keys(proofTypesOf(swiyu.sent))).toEqual(['jwt'])
+  })
+
+  // eudi-lib-android-wallet-core 0.29 corrected the malformed accept header, so matching the typo
+  // alone stopped recognising the EUDI wallet and its offers died on the missing member.
+  it('still recognises openid4vci-kt once it spells the accept header correctly', () => {
+    const { sent, accept } = run('application/jwt, application/json', metadata(jwtOnly))
+
+    const expected = { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} }
+    expect(accept).toBe('application/json')
+    expect(proofTypesOf(sent)).toEqual({ jwt: expected, attestation: expected })
   })
 
   it('leaves a jwt-only accept alone', () => {

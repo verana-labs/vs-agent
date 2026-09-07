@@ -171,14 +171,15 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
 export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
   return (request: Request, response: Response, next: NextFunction): void => {
     const accept = request.headers.accept
-    const ranges = typeof accept === 'string' ? accept.split(',') : []
-    const isOpenId4VciKt = ranges.some(
-      range => range.includes('application/jwt') && range.includes('application/json'),
-    )
+    const ranges = typeof accept === 'string' ? accept.split(',').map(range => range.trim()) : []
+    const offersJson = ranges.some(range => range.includes('application/json'))
+    // openid4vci-kt puts the signed metadata first and JSON after it: as one malformed range up to
+    // eudi-lib-android-wallet-core 0.28, as two correct ranges from 0.29, which is why matching the
+    // malformed spelling alone stopped recognising the EUDI wallet. swiyu asks JSON first, so the
+    // order is what separates the two clients.
+    const isOpenId4VciKt = (ranges[0]?.includes('application/jwt') ?? false) && offersJson
     const prefersPlainMetadata =
-      isOpenId4VciKt ||
-      (ranges.some(range => range.includes('application/jwt')) &&
-        ranges.some(range => range.includes('application/json')))
+      isOpenId4VciKt || (ranges.some(range => range.includes('application/jwt')) && offersJson)
 
     if (
       request.method !== 'GET' ||
