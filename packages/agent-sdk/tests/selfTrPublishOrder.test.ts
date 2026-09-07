@@ -1,4 +1,11 @@
-import { DidDocument, VerificationMethod } from '@credo-ts/core'
+import {
+  DidDocument,
+  JsonTransformer,
+  VerificationMethod,
+  W3cV2Credential,
+  W3cV2DataIntegrityVerifiableCredential,
+  W3cV2Presentation,
+} from '@credo-ts/core'
 import { describe, expect, it, vi } from 'vitest'
 
 import { getEcsSchemas } from '../src/utils/data'
@@ -36,6 +43,14 @@ const ecsClaims: EcsClaims = {
   },
 }
 
+const dataIntegrityProof = {
+  type: 'DataIntegrityProof',
+  cryptosuite: 'eddsa-jcs-2022',
+  proofPurpose: 'assertionMethod',
+  verificationMethod: `${DID}#key-1`,
+  proofValue: 'z-stub',
+}
+
 function makeAgent() {
   const metadata = new Map<string, Record<string, unknown>>()
   const didRecord = {
@@ -64,12 +79,14 @@ function makeAgent() {
     config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
     dids: { getCreatedDids: async () => [didRecord], update: didsUpdate },
     context: { dependencyManager: { resolve: () => ({ update: repositoryUpdate }) } },
-    w3cCredentials: {
-      signCredential: async ({ credential }: { credential: object }) => ({
-        ...credential,
-        proof: { type: 'Ed25519Signature2020', verificationMethod: `${DID}#key-1` },
+    w3cV2Credentials: {
+      signCredential: async ({ credential }: { credential: W3cV2Credential }) =>
+        new W3cV2DataIntegrityVerifiableCredential({
+          securedCredential: { ...JsonTransformer.toJSON(credential), proof: dataIntegrityProof },
+        }),
+      signPresentation: async ({ presentation }: { presentation: W3cV2Presentation }) => ({
+        securedPresentation: { ...presentation.toJSON(), proof: dataIntegrityProof },
       }),
-      signPresentation: async ({ presentation }: { presentation: unknown }) => presentation,
     },
   }
   return { agent, metadata, repositoryUpdate, didsUpdate }

@@ -1,12 +1,4 @@
-import {
-  DidDocumentService,
-  DidRecord,
-  DidRepository,
-  W3cCredentialSchema,
-  W3cCredentialSubject,
-  W3cJsonLdVerifiablePresentation,
-  W3cPresentation,
-} from '@credo-ts/core'
+import { DidDocumentService, DidRecord, DidRepository, W3cCredentialSchema } from '@credo-ts/core'
 
 import { VsAgent } from '../agent/VsAgent'
 import { EcsClaims } from './ecsClaims'
@@ -62,25 +54,39 @@ function storedCredentialIsCurrent(
   return proofs.every(proof => !!proof.verificationMethod && assertionMethods.has(proof.verificationMethod))
 }
 
+/** The linked presentation as published: VC Data Model 2.0 JSON secured with Data Integrity proofs */
+export type SelfIssuedEcsPresentation = Record<string, unknown> & {
+  verifiableCredential: Record<string, unknown>[]
+}
+
+/**
+ * Issues the ECS credential to the agent itself and wraps it in the linked presentation, both
+ * secured with a DataIntegrityProof by the DID Document assertion key.
+ */
 async function signSelfIssuedEcsCredential(
   agent: VsAgent,
   didRecord: DidRecord,
+  presentationId: string,
   type: string[],
-  claims: W3cCredentialSubject['claims'],
+  claims: Record<string, unknown>,
   credentialSchema: W3cCredentialSchema,
-  presentation: W3cPresentation,
-): Promise<W3cJsonLdVerifiablePresentation> {
+): Promise<SelfIssuedEcsPresentation> {
   const unsignedCredential = createCredential({
     id: agent.did,
     type,
     issuer: agent.did,
-    credentialSubject: { id: agent.did, claims },
+    credentialSubject: { id: agent.did, ...claims },
+    credentialSchema: { id: credentialSchema.id, type: credentialSchema.type },
   })
-  unsignedCredential.credentialSchema = credentialSchema
   const verificationMethodId = getVerificationMethodId(agent.config.logger, didRecord)
   const signedCredential = await signerW3c(agent, unsignedCredential, verificationMethodId)
-  presentation.verifiableCredential = [signedCredential]
-  return await signerW3c(agent, presentation, verificationMethodId)
+  const presentation = createPresentation({
+    id: presentationId,
+    holder: agent.did,
+    verifiableCredential: [signedCredential],
+  })
+  const signedPresentation = await signerW3c(agent, presentation, verificationMethodId)
+  return signedPresentation.securedPresentation as unknown as SelfIssuedEcsPresentation
 }
 
 export async function publishSelfIssuedEcsPresentation(
@@ -91,8 +97,8 @@ export async function publishSelfIssuedEcsPresentation(
   type: string[],
   credentialSchema: W3cCredentialSchema,
   ecsClaims: EcsClaims,
-  beforePublish?: (verifiablePresentation: any) => Promise<void>,
-) {
+  beforePublish?: (verifiablePresentation: SelfIssuedEcsPresentation) => Promise<void>,
+): Promise<SelfIssuedEcsPresentation> {
   if (!agent.did) throw Error('The DID must be set up')
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
   const didDocument = didRecord.didDocument
@@ -118,18 +124,13 @@ export async function publishSelfIssuedEcsPresentation(
     return metadata.verifiablePresentation
   }
 
-  const presentation = createPresentation({
-    id,
-    holder: agent.did,
-    verifiableCredential: [],
-  })
   const verifiablePresentation = await signSelfIssuedEcsCredential(
     agent,
     didRecord,
+    id,
     type,
-    claims,
+    claims as Record<string, unknown>,
     credentialSchema,
-    presentation,
   )
   // nothing is persisted yet, so a failure here leaves no public presentation behind
   if (attached) await beforePublish?.(verifiablePresentation)
@@ -174,9 +175,7 @@ export async function publishSelfIssuedEcsPresentation(
       didDocumentChanged = true
     }
   }
-  const credential = Array.isArray(verifiablePresentation.verifiableCredential)
-    ? verifiablePresentation.verifiableCredential[0]
-    : verifiablePresentation.verifiableCredential
+  const [credential] = verifiablePresentation.verifiableCredential
   record[credentialSchema.id] = {
     credential,
     verifiablePresentation,
