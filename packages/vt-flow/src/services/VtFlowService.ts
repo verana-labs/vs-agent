@@ -8,7 +8,7 @@ import type {
 import { CredoError, EventEmitter, InjectionSymbols, inject, injectable } from '@credo-ts/core'
 import { DidCommConnectionRepository, DidCommCredentialState } from '@credo-ts/didcomm'
 
-import { VtFlowModuleConfig } from '../VtFlowModuleConfig'
+import { VtFlowModuleConfig, type VtFlowRequestPurpose } from '../VtFlowModuleConfig'
 import { type BuildVtFlowProblemReportOptions, VtFlowErrorCode, buildVtFlowProblemReport } from '../errors'
 import {
   CredentialStateChangeMessage,
@@ -170,7 +170,7 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    await this.checkIsVerifiableService(agentContext, connection)
+    await this.checkIsVerifiableService(agentContext, connection, { participantId: message.participantId })
 
     const existing = await this.repository.findByParticipantSessionId(
       agentContext,
@@ -223,7 +223,7 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    await this.checkIsVerifiableService(agentContext, connection)
+    await this.checkIsVerifiableService(agentContext, connection, { schemaId: message.schemaId })
 
     const existing = await this.repository.findByParticipantSessionId(
       agentContext,
@@ -346,7 +346,10 @@ export class VtFlowService {
     agentContext: AgentContext,
     recordId: string,
     params: RejectRequestParams,
-  ): Promise<{ record: VtFlowRecord; problemReport: ReturnType<typeof buildVtFlowProblemReport> }> {
+  ): Promise<{
+    record: VtFlowRecord
+    problemReport: ReturnType<typeof buildVtFlowProblemReport>
+  }> {
     const record = await this.repository.getById(agentContext, recordId)
 
     const problemReport = buildVtFlowProblemReport({
@@ -373,7 +376,10 @@ export class VtFlowService {
     agentContext: AgentContext,
     recordId: string,
     params: Partial<RejectRequestParams> = {},
-  ): Promise<{ record: VtFlowRecord; problemReport: ReturnType<typeof buildVtFlowProblemReport> }> {
+  ): Promise<{
+    record: VtFlowRecord
+    problemReport: ReturnType<typeof buildVtFlowProblemReport>
+  }> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Applicant)
 
@@ -392,6 +398,33 @@ export class VtFlowService {
     return { record, problemReport }
   }
 
+  /** Validator-side termination producing a problem-report lands in `TERMINATED_BY_VALIDATOR`. */
+  public async terminateByValidator(
+    agentContext: AgentContext,
+    recordId: string,
+    params: Partial<RejectRequestParams> = {},
+  ): Promise<{
+    record: VtFlowRecord
+    problemReport: ReturnType<typeof buildVtFlowProblemReport>
+  }> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+
+    const code = params.code ?? VtFlowErrorCode.SessionTerminated
+    const problemReport = buildVtFlowProblemReport({
+      code,
+      threadId: record.threadId,
+      enDescription: params.enDescription,
+      fixHintEn: params.fixHintEn,
+    })
+
+    record.errorMessage = params.enDescription ?? code
+
+    await this.updateState(agentContext, record, VtFlowState.TerminatedByValidator)
+
+    return { record, problemReport }
+  }
+
   /** On-chain revoke/slash termination producing a problem-report; lands in `PARTICIPANT_REVOKED` or `PARTICIPANT_SLASHED`. */
   public async terminateByChainEvent(
     agentContext: AgentContext,
@@ -401,7 +434,10 @@ export class VtFlowService {
       state: VtFlowState.ParticipantRevoked | VtFlowState.ParticipantSlashed
       enDescription?: string
     },
-  ): Promise<{ record: VtFlowRecord; problemReport: ReturnType<typeof buildVtFlowProblemReport> }> {
+  ): Promise<{
+    record: VtFlowRecord
+    problemReport: ReturnType<typeof buildVtFlowProblemReport>
+  }> {
     const record = await this.repository.getById(agentContext, recordId)
 
     const problemReport = buildVtFlowProblemReport({
@@ -478,12 +514,32 @@ export class VtFlowService {
     return record
   }
 
+  /**
+   * Close an onboarding process that carries no credential exchange. Only a HOLDER receives a
+   * credential; for every other role the chain records the outcome with
+   * SetParticipantOPToValidated, and nothing else follows. Both sides use this, so it asserts no
+   * role: the validator calls it after it validates, and the applicant reaches it from the chain
+   * event.
+   */
+  public async markCompleted(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertVariant(VtFlowVariant.OnboardingProcess)
+    if (record.state === VtFlowState.Completed) return record
+    if (isVtFlowTerminalState(record.state)) {
+      throw new CredoError(`VtFlow record is in terminal state '${record.state}'; cannot complete it.`)
+    }
+
+    await this.updateState(agentContext, record, VtFlowState.Completed)
+    return record
+  }
+
   /** Link a Credo exchange record to the session and transition to `CRED_OFFERED`. */
   public async attachCredentialExchangeRecord(
     agentContext: AgentContext,
     recordId: string,
     credentialExchangeRecord: DidCommCredentialExchangeRecord,
     credentialDigest?: string,
+    issuerParticipantId?: number,
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
@@ -496,9 +552,22 @@ export class VtFlowService {
 
     record.credentialExchangeRecordId = credentialExchangeRecord.id
     if (credentialDigest) record.credentialDigest = credentialDigest
+    if (issuerParticipantId !== undefined) record.issuerParticipantId = issuerParticipantId
     record.subprotocolThid = credentialExchangeRecord.threadId
 
     await this.updateState(agentContext, record, VtFlowState.CredOffered)
+    return record
+  }
+
+  public async setCredentialDigest(
+    agentContext: AgentContext,
+    recordId: string,
+    credentialDigest: string,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.credentialDigest = credentialDigest
+    await this.repository.update(agentContext, record)
     return record
   }
 
@@ -537,7 +606,7 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    record.assertState([VtFlowState.Validating, VtFlowState.CredRevoked])
+    record.assertState([VtFlowState.AwaitingOr, VtFlowState.Validating, VtFlowState.CredRevoked])
     record.claims = claims
     await this.updateRecord(agentContext, record)
     return record
@@ -690,10 +759,11 @@ export class VtFlowService {
     return buildVtFlowProblemReport(options)
   }
 
-  /** Spec Verifiable Service Identity Check: invokes the caller-provided VS-CONN-VS hook. Throws `vt-flow.not-a-verifiable-service` when the peer fails the check. When no hook is configured, logs a warning and permits. */
+  /** Spec Verifiable Service Identity Check: invokes the caller-provided VS-CONN-VS hook. Throws `vt-flow.not-a-verifiable-service` when the peer fails the check. When no hook is configured, logs a warning and permits. A `purpose` is passed on the Validator side only, and lets a rejected peer through the ECS issuance exemption. */
   public async checkIsVerifiableService(
     agentContext: AgentContext,
     connection: DidCommConnectionRecord,
+    purpose?: VtFlowRequestPurpose,
   ): Promise<void> {
     const peerDid = connection.theirDid
     if (!peerDid) throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
@@ -706,15 +776,45 @@ export class VtFlowService {
       return
     }
     let permitted = false
+    let failure: string | undefined
     try {
-      permitted = await hook({ agentContext, peerDid, connectionId: connection.id })
+      permitted = await hook({
+        agentContext,
+        peerDid,
+        connectionId: connection.id,
+      })
     } catch (error) {
-      throw new CredoError(
-        `vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check (${(error as Error).message})`,
-      )
+      failure = (error as Error).message
     }
-    if (!permitted) {
-      throw new CredoError(`vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check`)
+    if (permitted) return
+
+    if (purpose && (await this.isExemptFromVsConnVs(agentContext, connection, peerDid, purpose))) {
+      this.logger.info(
+        `[vt-flow] peer '${peerDid}' is not (yet) a Verifiable Service, but the request qualifies for the VS-CONN-VS ECS issuance exemption`,
+      )
+      return
+    }
+
+    throw new CredoError(
+      `vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check${failure ? ` (${failure})` : ''}`,
+    )
+  }
+
+  private async isExemptFromVsConnVs(
+    agentContext: AgentContext,
+    connection: DidCommConnectionRecord,
+    peerDid: string,
+    purpose: VtFlowRequestPurpose,
+  ): Promise<boolean> {
+    const exemption = this.config.checkEcsIssuanceExemption
+    if (!exemption) return false
+    try {
+      return await exemption({ agentContext, peerDid, connectionId: connection.id, purpose })
+    } catch (error) {
+      this.logger.warn(
+        `[vt-flow] VS-CONN-VS exemption check failed for peer '${peerDid}': ${(error as Error).message}`,
+      )
+      return false
     }
   }
 }

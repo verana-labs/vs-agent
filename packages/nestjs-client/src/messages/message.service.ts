@@ -85,6 +85,4 @@ export class MessageEventService {
       await this.eventHandler.inputMessage(message)
     }
   }
-
-  async updated(): Promise<void> {}
 }

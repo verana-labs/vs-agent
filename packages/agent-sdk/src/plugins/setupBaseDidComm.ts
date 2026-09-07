@@ -13,8 +13,8 @@ import {
   DidCommAutoAcceptCredential,
   DidCommAutoAcceptProof,
   DidCommCredentialV2Protocol,
+  DidCommDataIntegrityCredentialFormatService,
   DidCommHttpOutboundTransport,
-  DidCommJsonLdCredentialFormatService,
   DidCommModule,
   DidCommProofV2Protocol,
 } from '@credo-ts/didcomm'
@@ -48,13 +48,14 @@ export interface BaseDidCommPlugin {
  * For chat protocols, add setupChatProtocols(). For eMRTD, add setupMrtdProtocol().
  */
 export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidCommPlugin {
+  const didcommVersions = options.didcommVersions ?? ['v1', 'v2']
   return {
     modules: {
       didcomm: new DidCommModule({
         endpoints: options.endpoints,
-        didcommVersions: options.didcommVersions,
+        didcommVersions,
         // BasicMessage protocols must be set separately, otherwise Credo rejects basicmessage/2.0.
-        basicMessages: { protocols: options.didcommVersions ?? ['v1'] },
+        basicMessages: { protocols: didcommVersions },
         transports: {
           outbound: [new DidCommHttpOutboundTransport(), new VsAgentWsOutboundTransport()],
         },
@@ -69,7 +70,9 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
               credentialFormats: [
                 new LegacyIndyDidCommCredentialFormatService(),
                 new AnonCredsDidCommCredentialFormatService(),
-                new DidCommJsonLdCredentialFormatService(),
+                // W3C Data Integrity attachment format (Aries RFC 0809): carries the VC Data Model 2.0
+                // credentials that vt-flow issues, secured with a DataIntegrityProof
+                new DidCommDataIntegrityCredentialFormatService(),
               ],
             }),
           ],
@@ -103,10 +106,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
         ],
       }),
       dids: new DidsModule({
-        resolvers: [
-          new CachedWebDidResolver({ publicApiBaseUrl: options.publicApiBaseUrl }),
-          new WebVhDidResolver(),
-        ],
+        resolvers: [new CachedWebDidResolver(), new WebVhDidResolver()],
         registrars: [new WebDidRegistrar(), new WebVhDidRegistrar()],
       }),
       w3cCredentials: new W3cCredentialsModule({

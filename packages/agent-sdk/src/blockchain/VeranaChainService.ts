@@ -17,6 +17,7 @@ import {
   CredentialSchema,
   CredentialSchemaQueryClient,
   DelegationQueryClient,
+  DigestQueryClient,
   Ecosystem,
   EcosystemQueryClient,
   OperatorAuthorization,
@@ -26,6 +27,7 @@ import {
   SelfCreateParticipantParams,
   SetParticipantOPToValidatedParams,
   StartParticipantOPParams,
+  StoredDigest,
   VERANA_BECH32_PREFIX,
   VeranaChainConfig,
   VsOperatorAuthorization,
@@ -33,13 +35,14 @@ import {
 
 const { QueryClientImpl: CsQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/cs/v1/query')
 const { QueryClientImpl: DeQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/de/v1/query')
+const { QueryClientImpl: DiQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/di/v1/query')
 const {
   QueryClientImpl: EcQueryClientImpl,
   QueryGetEcosystemRequest,
 } = require('@verana-labs/verana-types/codec/verana/ec/v1/query')
 const {
   QueryClientImpl: PpQueryClientImpl,
-  QueryFindParticipantsWithDIDRequest,
+  QueryListParticipantsRequest,
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/query')
 const {
   MsgSetParticipantOPToValidated,
@@ -55,6 +58,21 @@ const {
 
 // ParticipantRole.HOLDER (x/pp/types); the only role whose vs_operator may send TriggerResolver (chain Path 1).
 const PARTICIPANT_ROLE_HOLDER = 6
+const PARTICIPANT_ROLE_ISSUER = 1
+
+// QueryListParticipantsRequest.response_max_size caps at 1024 and defaults to 64. The node applies
+// the other filters loosely, so ask for the largest page and match the fields again here.
+const PARTICIPANT_QUERY_MAX_SIZE = 1024
+
+// A simulation signs with an empty signature and runs against the state of the moment, so it
+// reports less gas than the delivery consumes. Cosmos SDK 0.47 made the difference larger (see
+// cosmos-sdk#16020), and cosmjs answers it with a default multiplier of 1.4. Not always enough.
+const DEFAULT_GAS_ADJUSTMENT = 1.5
+
+// the chain answers a query for an unknown record with a NotFound error, not with an empty result
+function isNotFoundError(error: unknown): boolean {
+  return /not found|NotFound|key not found/i.test((error as Error)?.message ?? '')
+}
 
 function mapParticipant(p: RawParticipant): Participant {
   return {
@@ -76,11 +94,13 @@ export class VeranaChainService {
   private operatorAddress!: string
   private chainId!: string
   private corporationAddress!: string
+  private gasAdjustment!: number
 
   private ppQuery!: ParticipantQueryClient
   private deQuery!: DelegationQueryClient
   private ecQuery!: EcosystemQueryClient
   private csQuery!: CredentialSchemaQueryClient
+  private diQuery!: DigestQueryClient
 
   constructor(private readonly config: VeranaChainConfig) {}
 
@@ -113,6 +133,7 @@ export class VeranaChainService {
       `[VeranaChain] vs_operator address: ${this.operatorAddress} (fund this address with VNA to enable on-chain operations)`,
     )
 
+    this.gasAdjustment = this.config.gasAdjustment ?? DEFAULT_GAS_ADJUSTMENT
     const cometClient = await connectComet(rpcUrl)
     this.signingClient = await SigningStargateClient.createWithSigner(cometClient, wallet, {
       registry: createVeranaRegistry(),
@@ -132,6 +153,7 @@ export class VeranaChainService {
     this.deQuery = new DeQueryClientImpl(rpc) as DelegationQueryClient
     this.ecQuery = new EcQueryClientImpl(rpc) as EcosystemQueryClient
     this.csQuery = new CsQueryClientImpl(rpc) as CredentialSchemaQueryClient
+    this.diQuery = new DiQueryClientImpl(rpc) as DigestQueryClient
   }
 
   // Query API (unsigned)
@@ -200,10 +222,21 @@ export class VeranaChainService {
       id: s.id,
       ecosystemId: s.ecosystemId,
       jsonSchema: s.jsonSchema,
+      digestAlgorithm: s.digestAlgorithm,
       issuerOnboardingMode: s.issuerOnboardingMode,
       verifierOnboardingMode: s.verifierOnboardingMode,
       holderOnboardingMode: s.holderOnboardingMode,
       archived: s.archived,
+    }
+  }
+
+  async getDigest(digest: string): Promise<StoredDigest | undefined> {
+    try {
+      const result = await this.diQuery.GetDigest({ digest })
+      return result.digest
+    } catch (error) {
+      if (isNotFoundError(error)) return undefined
+      throw error
     }
   }
 
@@ -317,10 +350,34 @@ export class VeranaChainService {
 
   async findActiveHolderParticipantIdByDid(did: string): Promise<number | undefined> {
     // fromPartial fills the unused fields with defaults so the request encodes correctly.
-    const request = QueryFindParticipantsWithDIDRequest.fromPartial({ did })
-    const { participants } = await this.ppQuery.FindParticipantsWithDID(request)
+    const request = QueryListParticipantsRequest.fromPartial({
+      did,
+      role: PARTICIPANT_ROLE_HOLDER,
+      responseMaxSize: PARTICIPANT_QUERY_MAX_SIZE,
+    })
+    const { participants } = await this.ppQuery.ListParticipants(request)
     return participants.find(
       p => p.did === did && p.role === PARTICIPANT_ROLE_HOLDER && !p.revoked && !p.slashed,
+    )?.id
+  }
+
+  async findActiveIssuerParticipantId(did: string, schemaId: number): Promise<number | undefined> {
+    const request = QueryListParticipantsRequest.fromPartial({
+      did,
+      schemaId,
+      role: PARTICIPANT_ROLE_ISSUER,
+      grantee: this.operatorAddress,
+      responseMaxSize: PARTICIPANT_QUERY_MAX_SIZE,
+    })
+    const { participants } = await this.ppQuery.ListParticipants(request)
+    return participants.find(
+      p =>
+        p.did === did &&
+        p.role === PARTICIPANT_ROLE_ISSUER &&
+        p.schemaId === schemaId &&
+        p.vsOperator === this.operatorAddress &&
+        !p.revoked &&
+        !p.slashed,
     )?.id
   }
 
@@ -338,7 +395,7 @@ export class VeranaChainService {
     const { typeUrl, value } = options
     const msg = { typeUrl, value }
     this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl} as ${this.operatorAddress}`)
-    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], 'auto')
+    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], this.gasAdjustment)
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result

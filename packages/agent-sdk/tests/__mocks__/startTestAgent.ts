@@ -1,10 +1,10 @@
 import { AskarModuleConfigStoreOptions, AskarSqliteStorageConfig } from '@credo-ts/askar'
-import { BaseLogger, DidResolver, utils } from '@credo-ts/core'
+import { BaseLogger, ConsoleLogger, DidResolver, LogLevel, utils } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { createVsAgent, VsAgent } from '../../src/agent'
-import { VeranaChainService } from '../../src/blockchain'
+import { VeranaChainService, VeranaIndexerService } from '../../src/blockchain'
 import { setupBaseDidComm } from '../../src/plugins/setupBaseDidComm'
 import { VsAgentNestPlugin } from '../../src/types'
 
@@ -13,6 +13,7 @@ type StartTestAgentParams = {
   domain: string
   vtFlowOptions?: VtFlowModuleConfigOptions
   veranaChain?: VeranaChainService
+  indexer?: VeranaIndexerService
   extraResolvers?: DidResolver[]
 
   inMemory?: boolean
@@ -26,6 +27,7 @@ export const startAgent = async ({
   domain,
   vtFlowOptions,
   veranaChain,
+  indexer,
   inMemory = true,
   maxConnections,
   logger,
@@ -51,6 +53,14 @@ export const startAgent = async ({
     publicApiBaseUrl: `https://${domain}`,
     label,
     veranaChain,
+    // These agents never reach the VPR: the URL is unroutable on purpose, so a test that does
+    // hit it fails loudly instead of silently talking to a real indexer.
+    indexer:
+      indexer ??
+      new VeranaIndexerService({
+        baseUrl: 'http://indexer.invalid',
+        logger: logger ?? new ConsoleLogger(LogLevel.Off),
+      }),
   }) as unknown as VsAgent<any>
 
   return agent

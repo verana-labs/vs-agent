@@ -110,38 +110,4 @@ export class AuthorizationService {
         isOperatorAuthorizationActive(a.expiration, a.period),
     )
   }
-
-  async callerHoldsAnyVsOperatorGrant(account: string, msgType: string): Promise<boolean> {
-    if (!account.trim()) return false
-    const vsoas = await this.chain.listVsOperatorAuthorizations(account)
-    return vsoas.some(
-      vsoa =>
-        this.inScope(vsoa.corporationId) &&
-        vsoa.records.some(
-          r =>
-            this.vsoaByParticipant.has(r.participantId) &&
-            r.msgTypes.includes(msgType) &&
-            isVsoaRecordActive(r.expiration, r.period),
-        ),
-    )
-  }
-
-  async callerHoldsVsOperatorGrant(
-    account: string,
-    participantId: number,
-    msgType: string,
-  ): Promise<boolean> {
-    if (!account.trim()) return false
-    const vsoas = await this.chain.listVsOperatorAuthorizations(account)
-    return vsoas.some(
-      vsoa =>
-        this.inScope(vsoa.corporationId) &&
-        vsoa.records.some(
-          r =>
-            r.participantId === participantId &&
-            r.msgTypes.includes(msgType) &&
-            isVsoaRecordActive(r.expiration, r.period),
-        ),
-    )
-  }
 }

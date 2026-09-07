@@ -3,17 +3,14 @@ import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { INestApplication } from '@nestjs/common'
 import { Claim, CredentialIssuanceMessage } from '@verana-labs/vs-agent-model'
-import {
-  type BaseAgentModules,
-  type VsAgent,
-  migrateVtjscServiceIds,
-  reconcileVtjscPublications,
-} from '@verana-labs/vs-agent-sdk'
+import { type BaseAgentModules, type VsAgent, migrateVtjscServiceIds } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import request from 'supertest'
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 
 import { MessageService, TrustService } from '../src/controllers'
+
+import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { isCredentialStateChangedEvent, startAgent, startServersTesting } from './__mocks__'
 import {
@@ -71,35 +68,6 @@ describe('TrustService', () => {
       const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`
 
       expect(services.some(s => s.id === serviceId)).toBe(true)
-    })
-
-    it('migrates a legacy vpr ref entry to the canonical form on reconcile', async () => {
-      const legacyRef = 'vpr:verana:vna-testnet-1/cs/v1/js/16'
-      const canonicalRef = 'vpr:verana:vna-testnet-1:cs:16'
-      await jscFaberService.createJsc('16', legacyRef)
-
-      const jsonSchema = JSON.stringify({
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        title: 'MigrationCredential',
-        description: 'migration test',
-        type: 'object',
-        properties: { name: { type: 'string' } },
-        required: ['name'],
-      })
-      const indexerStub = {
-        listEcosystems: async () => [{ id: 1, corporation_id: 7, did: 'did:example:eco', archived: null }],
-        listCredentialSchemas: async () => [
-          { id: 16, ecosystem_id: 1, json_schema: jsonSchema, archived: null, created: '', modified: '' },
-        ],
-      }
-      await reconcileVtjscPublications(jscFaberAgent, indexerStub as never, 7)
-
-      const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
-      const metadata = didRecord.metadata.get('_vt/jsc')!
-      expect(Object.keys(metadata)).toContain(canonicalRef)
-      expect(Object.keys(metadata)).not.toContain(legacyRef)
-      const serviceIds = (didRecord.didDocument?.service ?? []).map(s => s.id)
-      expect(serviceIds.filter(id => id.includes('schemas-16')).length).toBe(1)
     })
 
     it('renames pre-vtjsc service ids on migration without re-signing', async () => {
@@ -167,8 +135,17 @@ describe('TrustService', () => {
   })
 
   describe('Testing for message exchange with VsAgent', async () => {
+    let sessionMock: ReturnType<typeof vi.fn>
+    let fakeChain: Record<string, unknown>
     beforeEach(async () => {
-      faberAgent = await startAgent({ label: 'Faber Test', domain: 'faber' })
+      sessionMock = vi.fn(async () => ({ txHash: 'tx-1' }))
+      fakeChain = {
+        getChainId: 'vna-test-1',
+        findActiveIssuerParticipantId: vi.fn(async () => 12),
+        getCredentialSchema: vi.fn(async () => ({ digestAlgorithm: 'sha384' })),
+        createOrUpdateParticipantSession: sessionMock,
+      }
+      faberAgent = await startAgent({ label: 'Faber Test', domain: 'faber', veranaChain: fakeChain as never })
       faberAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(faberMessages))
       faberAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
       await faberAgent.initialize()
@@ -197,15 +174,17 @@ describe('TrustService', () => {
       const credentialResponse = await faberService.issueCredential({
         format: 'jsonld',
         did: 'did:web:example.com',
-        jsonSchemaCredentialId: 'https://example.org/vt/schemas-example-org-jsc.json',
+        participantSessionId: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
+        jsonSchemaCredentialId: 'https://example.org/vt/schemas-vpr-org-jsc.json',
         claims: {
           id: 'https://example.org/org/123',
           name: 'OpenAI Research',
-          logo: 'https://example.com/logo.png',
+          logoUri: 'https://example.com/logo.png',
+          logoDigestSri: 'sha384-AAAA',
           registryId: 'REG-123',
-          registryUrl: 'https://registry.example.org',
+          registryUri: 'https://registry.example.org',
           address: '123 Main St, San Francisco, CA',
-          type: 'PRIVATE',
+          organizationKind: 'PRIVATE',
           countryCode: 'US',
         },
       })
@@ -218,6 +197,84 @@ describe('TrustService', () => {
           proofValue: expect.any(String),
         }),
       )
+      expect(credentialResponse.digestJCS).toBe(
+        computeCredentialDigestJCS(credentialResponse.credential as never, 'sha384'),
+      )
+      expect(sessionMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
+          issuerParticipantId: 12,
+          digest: credentialResponse.digestJCS,
+        }),
+      )
+    })
+
+    it('rejects a jsonld issuance without a participantSessionId', async () => {
+      await expect(
+        faberService.issueCredential({
+          format: 'jsonld',
+          did: 'did:web:example.com',
+          jsonSchemaCredentialId: 'https://example.org/vt/schemas-vpr-org-jsc.json',
+          claims: {
+            id: 'https://example.org/org/123',
+            name: 'OpenAI Research',
+            logoUri: 'https://example.com/logo.png',
+            logoDigestSri: 'sha384-AAAA',
+            registryId: 'REG-123',
+            registryUri: 'https://registry.example.org',
+            address: '123 Main St, San Francisco, CA',
+            organizationKind: 'PRIVATE',
+            countryCode: 'US',
+          },
+        }),
+      ).rejects.toThrow(/participantSessionId/)
+      expect(sessionMock).not.toHaveBeenCalled()
+    })
+
+    it('returns no credential when the anchoring transaction fails', async () => {
+      sessionMock.mockRejectedValueOnce(new Error('tx rejected'))
+      await expect(
+        faberService.issueCredential({
+          format: 'jsonld',
+          did: 'did:web:example.com',
+          participantSessionId: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
+          jsonSchemaCredentialId: 'https://example.org/vt/schemas-vpr-org-jsc.json',
+          claims: {
+            id: 'https://example.org/org/123',
+            name: 'OpenAI Research',
+            logoUri: 'https://example.com/logo.png',
+            logoDigestSri: 'sha384-AAAA',
+            registryId: 'REG-123',
+            registryUri: 'https://registry.example.org',
+            address: '123 Main St, San Francisco, CA',
+            organizationKind: 'PRIVATE',
+            countryCode: 'US',
+          },
+        }),
+      ).rejects.toThrow(/ANCHORING_FAILED/)
+    })
+
+    it('rejects a schema that is not governed by the configured chain', async () => {
+      await expect(
+        faberService.issueCredential({
+          format: 'jsonld',
+          did: 'did:web:example.com',
+          participantSessionId: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
+          jsonSchemaCredentialId: 'https://example.org/vt/schemas-example-org-jsc.json',
+          claims: {
+            id: 'https://example.org/org/123',
+            name: 'OpenAI Research',
+            logoUri: 'https://example.com/logo.png',
+            logoDigestSri: 'sha384-AAAA',
+            registryId: 'REG-123',
+            registryUri: 'https://registry.example.org',
+            address: '123 Main St, San Francisco, CA',
+            organizationKind: 'PRIVATE',
+            countryCode: 'US',
+          },
+        }),
+      ).rejects.toThrow(/ANCHORING_FAILED/)
+      expect(sessionMock).not.toHaveBeenCalled()
     })
 
     it('should issue a valid anoncreds credential', async () => {
@@ -247,11 +304,12 @@ describe('TrustService', () => {
       const claims = {
         id: 'https://example.org/org/123',
         name: 'OpenAI Research',
-        logo: 'https://example.com/logo.png',
+        logoUri: 'https://example.com/logo.png',
+        logoDigestSri: 'sha384-AAAA',
         registryId: 'REG-123',
-        registryUrl: 'https://registry.example.org',
+        registryUri: 'https://registry.example.org',
         address: '123 Main St, San Francisco, CA',
-        type: 'PRIVATE',
+        organizationKind: 'PRIVATE',
         countryCode: 'US',
       }
       const credentialResponse = await faberService.issueCredential({

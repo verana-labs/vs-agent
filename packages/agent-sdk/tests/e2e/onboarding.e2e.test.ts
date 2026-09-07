@@ -18,9 +18,6 @@ import {
 } from './VeranaTestChain'
 import { COOLUSER_MNEMONIC, SETUP_TIMEOUT_MS, startStack, type StartedStack } from './helpers'
 
-const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
-const describeE2E = E2E_ENABLED ? describe : describe.skip
-
 const RUN_ID = String(Date.now())
 
 const MINIMAL_SCHEMA = JSON.stringify({
@@ -35,7 +32,7 @@ const MINIMAL_SCHEMA = JSON.stringify({
 // Split-account deployment: validation signed by an OA account and the session by a separate VSOA
 // account, each through its own VeranaChainService. The single-account path (one vs_operator whose
 // VSOA covers both msgs) is covered by applicant-ops.e2e.test.ts.
-describeE2E('vt-flow onboarding chain integration (V4)', () => {
+describe('vt-flow onboarding chain integration (V4)', () => {
   let stack: StartedStack
   let chainA: VeranaTestChain
   let veranaChain: VeranaChainService

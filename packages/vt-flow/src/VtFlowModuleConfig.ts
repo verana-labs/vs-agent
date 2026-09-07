@@ -1,12 +1,23 @@
 import type { VtFlowRecord } from './repository/VtFlowRecord'
 import type { AgentContext } from '@credo-ts/core'
-import type { DidCommCredentialExchangeRecord, DidCommJsonLdCredentialDetailFormat } from '@credo-ts/didcomm'
+import type {
+  DidCommCredentialExchangeRecord,
+  DidCommDataIntegrityOfferCredentialFormat,
+} from '@credo-ts/didcomm'
 
 export interface VtFlowCredentialLifecycleContext {
   agentContext: AgentContext
   record: VtFlowRecord
   credentialExchangeRecord: DidCommCredentialExchangeRecord
 }
+
+export interface VtFlowBeforeCredentialIssuedContext extends VtFlowCredentialLifecycleContext {
+  credential: Record<string, unknown>
+}
+
+export type VtFlowBeforeCredentialIssuedHook = (
+  ctx: VtFlowBeforeCredentialIssuedContext,
+) => Promise<{ credentialDigest?: string } | void>
 
 /** Applicant hook fired on `credential-received`; return `true` to auto-Ack, `false`/omit to leave the Ack to the caller. */
 export type VtFlowVerifyCredentialHook = (ctx: VtFlowCredentialLifecycleContext) => Promise<boolean>
@@ -25,8 +36,9 @@ export interface VtFlowBuildCredentialOfferContext {
 }
 
 export interface VtFlowCredentialOfferPayload {
-  credentialFormats: { jsonld: DidCommJsonLdCredentialDetailFormat }
+  credentialFormats: { dataIntegrity: DidCommDataIntegrityOfferCredentialFormat }
   credentialDigest?: string
+  issuerParticipantId?: number
   comment?: string
   goal?: string
   goalCode?: string
@@ -48,10 +60,32 @@ export type VtFlowAssertVerifiableServiceHook = (
   ctx: VtFlowAssertVerifiableServiceContext,
 ) => Promise<boolean>
 
-/** Options accepted by VtFlowModule; all flags default to false, `oobExpirationDays` defaults to 7, `terminalRetentionDays` to 90. */
+/** What the peer is asking this agent for: the on-chain `participantId` of an onboarding-request, or the `schemaId` of a direct issuance-request. */
+export interface VtFlowRequestPurpose {
+  participantId?: string
+  schemaId?: string
+}
+
+export interface VtFlowEcsIssuanceExemptionContext extends VtFlowAssertVerifiableServiceContext {
+  purpose: VtFlowRequestPurpose
+}
+
+/** VS-CONN-VS exemption: a Validator MAY accept a peer that is not yet a Verifiable Service when the purpose of the request is the issuance of an ECS Organization, Persona or Service credential. Consulted only on the Validator side, only after `assertVerifiableService` rejected the peer; return `true` to let the flow proceed. */
+export type VtFlowEcsIssuanceExemptionHook = (ctx: VtFlowEcsIssuanceExemptionContext) => Promise<boolean>
+
+/** Cryptosuite securing the VC Data Model 2.0 credentials this agent issues over RFC 0809. */
+export const DEFAULT_DATA_INTEGRITY_CRYPTOSUITE = 'eddsa-jcs-2022'
+
+/** Options accepted by VtFlowModule; all flags default to false, `oobExpirationDays` defaults to 7, `terminalRetentionDays` to 90, `dataIntegrityCryptosuite` to `eddsa-jcs-2022`. */
 export interface VtFlowModuleConfigOptions {
   oobExpirationDays?: number
   terminalRetentionDays?: number
+  /**
+   * Data Integrity cryptosuite used when issuing a VC Data Model 2.0 credential. RFC 0809 leaves
+   * this choice to the issuer, so it is never negotiated with the applicant. Ignored for data
+   * model 1.1 credentials, which are secured with a linked data signature suite instead.
+   */
+  dataIntegrityCryptosuite?: string
   autoAcceptOnboardingRequest?: boolean
   autoAcceptIssuanceRequest?: boolean
   verifyCredential?: VtFlowVerifyCredentialHook
@@ -62,7 +96,9 @@ export interface VtFlowModuleConfigOptions {
   buildCredentialOffer?: VtFlowBuildCredentialOfferHook
   autoAcceptCredentialOffer?: boolean
   autoIssueCredentialOnRequest?: boolean
+  onBeforeCredentialIssued?: VtFlowBeforeCredentialIssuedHook
   assertVerifiableService?: VtFlowAssertVerifiableServiceHook
+  checkEcsIssuanceExemption?: VtFlowEcsIssuanceExemptionHook
 }
 
 /** Read-only view over VtFlowModuleConfigOptions with defaults applied. */
@@ -79,6 +115,10 @@ export class VtFlowModuleConfig {
 
   public get terminalRetentionDays(): number {
     return this.options.terminalRetentionDays ?? 90
+  }
+
+  public get dataIntegrityCryptosuite(): string {
+    return this.options.dataIntegrityCryptosuite ?? DEFAULT_DATA_INTEGRITY_CRYPTOSUITE
   }
 
   public get autoAcceptOnboardingRequest(): boolean {
@@ -117,11 +157,19 @@ export class VtFlowModuleConfig {
     return this.options.autoAcceptCredentialOffer ?? false
   }
 
+  public get onBeforeCredentialIssued(): VtFlowBeforeCredentialIssuedHook | undefined {
+    return this.options.onBeforeCredentialIssued
+  }
+
   public get autoIssueCredentialOnRequest(): boolean {
     return this.options.autoIssueCredentialOnRequest ?? false
   }
 
   public get assertVerifiableService(): VtFlowAssertVerifiableServiceHook | undefined {
     return this.options.assertVerifiableService
+  }
+
+  public get checkEcsIssuanceExemption(): VtFlowEcsIssuanceExemptionHook | undefined {
+    return this.options.checkEcsIssuanceExemption
   }
 }

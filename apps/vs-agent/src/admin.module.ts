@@ -3,22 +3,40 @@ import { APP_GUARD } from '@nestjs/core'
 import { VsAgent, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import {
-  ConnectionController,
-  CredentialExchangesController,
-  CredentialTypesController,
+  V1ConnectionController,
+  V1CredentialExchangesController,
+  V1CredentialTypesController,
   CredentialTypesService,
-  HealthController,
-  InvitationController,
-  PresentationsController,
-  QrController,
-  ServiceEndpointsController,
+  V1HealthController,
+  V1InvitationController,
+  V1PresentationsController,
+  V1QrController,
+  V1ServiceEndpointsController,
   ServiceEndpointsService,
-  TrustController,
+  V1TrustController,
   TrustService,
-  VsAgentController,
+  V2AgentController,
+  V2AnoncredsController,
+  V2AnoncredsCredentialDefinitionsController,
+  V2AnoncredsRevocationRegistriesController,
+  V2AuthController,
+  V2DidcommConnectionsController,
+  V2DidcommController,
+  V2DidcommCredentialExchangesController,
+  V2DidcommPresentationsController,
+  V2Openid4vcController,
+  V2VtServiceEndpointsController,
+  V1VsAgentController,
   MESSAGE_HANDLERS,
 } from './controllers'
-import { AdminAuthGuard, AdminAuthService, AuthController } from './security'
+import { BOOTSTRAP_STATE, BootstrapState } from './common'
+import {
+  AdminAuthGuard,
+  AdminAuthService,
+  DEFAULT_ADMIN_API_TRUSTED_NETWORKS,
+  parseTrustedNetworks,
+  TrustedNetwork,
+} from './security'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
 
@@ -28,21 +46,43 @@ export class VsAgentModule {
     agent: VsAgent,
     publicApiBaseUrl: string,
     nestPlugins: VsAgentNestPlugin[] = [],
-    options: { external?: boolean; allowedAccounts?: string[] } = {},
+    options: {
+      authMode?: string
+      allowedAccounts?: string[]
+      trustedNetworks?: TrustedNetwork[]
+      bootstrapState?: BootstrapState
+    } = {},
   ): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
+    const bootstrapState = options.bootstrapState ?? new BootstrapState()
+    const trustedNetworks =
+      options.trustedNetworks ?? parseTrustedNetworks(DEFAULT_ADMIN_API_TRUSTED_NETWORKS)
 
     const baseControllers = [
-      VsAgentController,
-      CredentialTypesController,
-      CredentialExchangesController,
-      HealthController,
-      InvitationController,
-      QrController,
-      TrustController,
-      ConnectionController,
-      PresentationsController,
-      ServiceEndpointsController,
+      V1VsAgentController,
+      V1CredentialTypesController,
+      V1CredentialExchangesController,
+      V1HealthController,
+      V1InvitationController,
+      V1QrController,
+      V1TrustController,
+      V1ConnectionController,
+      V1PresentationsController,
+      V1ServiceEndpointsController,
+    ]
+
+    const v2Controllers = [
+      V2AuthController,
+      V2AgentController,
+      V2DidcommController,
+      V2DidcommPresentationsController,
+      V2DidcommConnectionsController,
+      V2DidcommCredentialExchangesController,
+      V2Openid4vcController,
+      V2AnoncredsController,
+      V2AnoncredsCredentialDefinitionsController,
+      V2AnoncredsRevocationRegistriesController,
+      V2VtServiceEndpointsController,
     ]
 
     const baseProviders = [
@@ -53,6 +93,10 @@ export class VsAgentModule {
       {
         provide: 'PUBLIC_API_BASE_URL',
         useFactory: () => publicApiBaseUrl,
+      },
+      {
+        provide: BOOTSTRAP_STATE,
+        useFactory: () => bootstrapState,
       },
       VsAgentService,
       UrlShorteningService,
@@ -69,23 +113,18 @@ export class VsAgentModule {
       inject: allHandlerClasses,
     }
 
-    const securityControllers = options.external ? [AuthController] : []
-    const securityProviders = options.external
-      ? [
-          AdminAuthService,
-          { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: options.allowedAccounts ?? [] },
-          { provide: APP_GUARD, useClass: AdminAuthGuard },
-        ]
-      : []
+    const securityProviders = [
+      AdminAuthService,
+      { provide: 'ADMIN_AUTH_MODE', useValue: options.authMode ?? 'internal' },
+      { provide: 'ADMIN_TRUSTED_NETWORKS', useValue: trustedNetworks },
+      { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: options.allowedAccounts ?? [] },
+      { provide: APP_GUARD, useClass: AdminAuthGuard },
+    ]
 
     return {
       module: VsAgentModule,
       imports: nestPlugins.flatMap(p => p.imports ?? []),
-      controllers: [
-        ...baseControllers,
-        ...securityControllers,
-        ...nestPlugins.flatMap(p => p.controllers ?? []),
-      ],
+      controllers: [...baseControllers, ...v2Controllers, ...nestPlugins.flatMap(p => p.controllers ?? [])],
       providers: [
         ...baseProviders,
         ...securityProviders,

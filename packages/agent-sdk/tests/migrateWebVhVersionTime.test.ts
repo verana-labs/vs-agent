@@ -14,7 +14,7 @@ import {
 } from 'didwebvh-ts'
 import { describe, expect, it } from 'vitest'
 
-import { rebuildWebVhVersionTimes } from '../src/did/migrateWebVhVersionTime'
+import { rebuildWebVhVersionTimes } from '../src/did/migrations/migrateWebVhVersionTime'
 
 import sameSecondLegacyLog from './fixtures/webvh-same-second-2.7.4.json'
 

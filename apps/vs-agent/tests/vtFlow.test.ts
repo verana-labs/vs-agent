@@ -186,7 +186,7 @@ describe('vt-flow: two-agent integration', () => {
     await validatingReached
 
     const { VtFlowsService } = await import('../src/controllers/admin/vt-flow/VtFlowsService')
-    const flowsService = new VtFlowsService({ getAgent: async () => validator } as never)
+    const flowsService = new VtFlowsService({ getAgent: async () => validator } as never, undefined as never)
 
     const flows = await flowsService.listFlows({ role: VtFlowRole.Validator })
     expect(flows).toHaveLength(1)
@@ -232,7 +232,7 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.id).not.toBe(applicantRecord.id)
   })
 
-  it('vtFlowEvents POSTs vt-flow-state-updated as the Validator transitions to VALIDATING', async () => {
+  it('vtFlowEvents POSTs vt.flows.state-updated as the Validator transitions to VALIDATING', async () => {
     const webhookUrl = 'http://localhost:5005'
     const { webhookEvent } = await import('../src/utils')
     const { TsLogger } = await import('../src/utils/logger')
@@ -247,7 +247,7 @@ describe('vt-flow: two-agent integration', () => {
     vi.stubGlobal('fetch', fetchSpy)
 
     try {
-      webhookEvent(validator, webhookUrl, new TsLogger(LogLevel.Off, validator.label))
+      webhookEvent(validator, { url: webhookUrl }, new TsLogger(LogLevel.Off, validator.label))
 
       await applicant.modules.vtFlow.sendIssuanceRequest({
         connectionId: applicantConnection.id,
@@ -266,7 +266,7 @@ describe('vt-flow: two-agent integration', () => {
             const rawBody = (init as RequestInit | undefined)?.body
             if (typeof rawBody !== 'string') return false
             try {
-              return JSON.parse(rawBody).state === VtFlowState.Validating
+              return JSON.parse(rawBody).data?.flowState === VtFlowState.Validating
             } catch {
               return false
             }
@@ -278,20 +278,25 @@ describe('vt-flow: two-agent integration', () => {
       )
 
       const [url, init] = validatingCall
-      expect(url).toBe(`${webhookUrl}/vt-flow-state-updated`)
+      expect(url).toBe(webhookUrl)
       expect((init as RequestInit).method).toBe('POST')
 
       const body = JSON.parse((init as RequestInit).body as string)
-      expect(body.type).toBe('vt-flow-state-updated')
-      expect(body.state).toBe(VtFlowState.Validating)
-      expect(body.role).toBe(VtFlowRole.Validator)
-      expect(body.variant).toBe(VtFlowVariant.DirectIssuance)
-      expect(body.connectionId).toBeDefined()
-      expect(body.threadId).toBeDefined()
-      expect(body.participantSessionId).toBeDefined()
-      expect(body.vtFlowRecordId).toBeDefined()
-      expect(body.schemaId).toBe('https://example.test/schemas/organization.json')
-      expect(body.claims).toEqual({ name: 'Acme', country: 'CH' })
+      expect(body.type).toBe('vt.flows.state-updated')
+      expect(body.id).toBeDefined()
+      expect(body.timestamp).toBeDefined()
+      const data = body.data
+      expect(data.flowState).toBe(VtFlowState.Validating)
+      expect(data.connectionState).toBeDefined()
+      expect(data.previousState).toBeDefined()
+      expect(data.role).toBe(VtFlowRole.Validator)
+      expect(data.variant).toBe(VtFlowVariant.DirectIssuance)
+      expect(data.connectionId).toBeDefined()
+      expect(data.threadId).toBeDefined()
+      expect(data.participantSessionId).toBeDefined()
+      expect(data.id).toBeDefined()
+      expect(data.schemaId).toBe('https://example.test/schemas/organization.json')
+      expect(data.claims).toEqual({ name: 'Acme', country: 'CH' })
     } finally {
       vi.stubGlobal('fetch', baseFetch)
     }
@@ -370,9 +375,11 @@ describe('vt-flow: VS-CONN-VS trust gate', () => {
   const sharedResolver = new FakeDidResolver()
 
   beforeEach(async () => {
-    resolveDID = vi.fn().mockResolvedValue({ verified: true, outcome: 'resolved' })
-    const assertVerifiableService = async ({ peerDid }: { peerDid: string }) =>
-      (await resolveDID(peerDid)).verified
+    resolveDID = vi.fn().mockResolvedValue({ verified: true, outcome: 'verified' })
+    const assertVerifiableService = async ({ peerDid }: { peerDid: string }) => {
+      const { verified, outcome } = await resolveDID(peerDid)
+      return verified && outcome === 'verified'
+    }
 
     const applicantMessages = new Subject<SubjectMessage>()
     const validatorMessages = new Subject<SubjectMessage>()
@@ -476,10 +483,12 @@ describe('vt-flow: VS-CONN-VS trust gate', () => {
     expect(resolveDID).toHaveBeenCalledWith(validator.did)
   })
 
-  it('Validator does not reach VALIDATING on an IR from an unverified peer', async () => {
+  // The self-issued case from the VS-CONN-VS issue: the applicant resolves as structurally
+  // valid but its trust chain reaches no registry, so the Validator must not open a session.
+  it('Validator does not reach VALIDATING on an IR from a verified but not-trusted peer', async () => {
     resolveDID.mockImplementation(async (did: string) => ({
-      verified: did === validator.did,
-      outcome: did === validator.did ? 'resolved' : 'not-trusted',
+      verified: true,
+      outcome: did === validator.did ? 'verified' : 'not-trusted',
     }))
 
     const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({

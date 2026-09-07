@@ -9,7 +9,7 @@ VS Agent API consists on a REST-like interface that exposes endpoints to:
 - Query connections, credentials and messages emitted or received
 - Configure agent
 
-In addition, it supports a notification mechanism to subscribe to any event the consumer is interested in, through either HTTP Webhooks (POST endpoints exposed by the consumer) or a long-lived WebSocket connection.
+In addition, it notifies the consumer of every event through HTTP webhooks, one POST per event to the configured `EVENTS_WEBHOOK_URL` (see [Events](#events)).
 
 - [VS Agent API](#vs-agent-api)
   - [Messaging](#messaging)
@@ -48,16 +48,11 @@ In addition, it supports a notification mechanism to subscribe to any event the 
         - [Submit value](#submit-value)
         - [Result value](#result-value)
   - [Events](#events)
-    - [Event topics](#event-topics)
-      - [Connection State Updated](#connection-state-updated)
-      - [Message State Updated](#message-state-updated)
-      - [Message Received](#message-received)
-      - [Indexer Notification](#indexer-notification)
-    - [Subscribing to events](#subscribing-to-events)
+    - [Envelope](#envelope)
+    - [Event types](#event-types)
   - [Invitations](#invitations)
     - [Connection Invitation](#connection-invitation)
     - [Presentation Request](#presentation-request)
-      - [Presentation Callback API](#presentation-callback-api)
     - [Credential Offer](#credential-offer)
   - [Presentations](#presentations)
   - [Verifiable Data Registry Operations](#verifiable-data-registry-operations)
@@ -90,9 +85,7 @@ Response from VS-A will generally result in a 200 HTTP response code and include
 }
 ```
 
-Using the message `id`, the agent controller can subscribe and verify the message sending status.
-
-To receive messages from other agents, the controller can subscribe to `message-received` topic.
+Basic messages from other agents arrive as `didcomm.basic-messages.message-received` events, messages of an extension protocol module as `didcomm.{module}.{message-type}-received`, and credential and presentation flows as the corresponding `state-updated` events.
 
 ### Message types
 
@@ -490,7 +483,7 @@ If no `did` specified, a new pairwise connection will be created. The newly crea
 
 `label` and `imageUrl` are optional but recommended. URL is given as a Data URL (it can be either a link or base64-encoded).
 
-The generated message Id will be used as invitationId un subsequent Connection State Update events. This can be used to correlate connections.
+The generated message id appears as `outOfBandId` in the `data` of subsequent `didcomm.connections.state-updated` events. This can be used to correlate connections.
 
 ```json
 {
@@ -719,101 +712,59 @@ When a Verifiable Credential is processed, a result message may be generated. It
 
 ## Events
 
-VS Agent Notification interface supports the following event topics:
+VS Agent notifies a backend of state changes through webhook events, per the
+[Events API](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#events-api) of the
+VS Agent specification. The operator configures one consumer endpoint:
 
-- Connection State Updated (`connection-state-updated`): usually for new connections
-- Message State Updated (`message-state-updated`): used to keep track of sent messages
-- Message Received (`message-received`): for reception of any message
-- Indexer Notification (`indexer-notification`): on-chain ledger notifications relayed from the Verana indexer
+| Variable | Description |
+| --- | --- |
+| `EVENTS_WEBHOOK_URL` | URL to which the agent delivers every event with one HTTP `POST`. When it is unset, the agent delivers no event. |
+| `EVENTS_WEBHOOK_API_KEY` | Static secret. When it is set, the agent sends it in the `Authorization: Bearer` header of every delivery. |
 
-Events are JSON-encoded and include their underlying data in their payload field:
+An event is a notification, not a state transfer. The records of the Administration API are the source of
+truth: an event tells the consumer that a record changed, and the consumer reads the record when it needs a
+guaranteed view. Delivery is best-effort. The agent logs a failed delivery (a non `2xx` response or a network
+error) and does not block DIDComm processing, flow processing, or an Administration API request on it.
 
-```json
-{
-  "timestamp": "NumericDate",
-  "type": "EventType",
-  "event-specific-field": "EventSpecificFieldType"
-}
-```
+### Envelope
 
-`EventType` is a string, while `EventSpecificFieldType` is a free structure dependant on the event type (there might be multiple fields for a given event)
-
-### Event topics
-
-#### Connection State Updated
-
-Sent whenever a connection has been created or updated. Event format is as follows:
+Every event is one JSON object:
 
 ```json
 {
-  "type": "connection-state-updated",
-  "connectionId": "UUID",
-  "invitationId": "UUID",
-  "state": "ConnectionState"
+  "id": "0b9df6f4-3f0e-4b3a-9c26-6a5f8e2d1c47",
+  "type": "didcomm.connections.state-updated",
+  "timestamp": "2026-08-28T12:00:00.000Z",
+  "data": { "id": "…", "state": "completed", "previousState": "response-sent" }
 }
 ```
 
-ConnectionState corresponds to the different states in [DID Exchange protocol](https://github.com/hyperledger/aries-rfcs/blob/main/features/0023-did-exchange/README.md).
+- `id`: UUID of the event. A consumer uses it to discard a duplicate.
+- `type`: one of the event types below.
+- `timestamp`: ISO 8601 UTC datetime of the emission.
+- `data`: object whose shape the event type defines.
 
-#### Message State Updated
+A `state-updated` event carries the record in the same shape as the `get` method of that record returns it,
+plus `previousState`: the state before the change, or `null` when the event reports the creation of the
+record. A `message-received` event carries the inbound message.
 
-Sent when a message delivery status has been changed. Event format is as follows:
+### Event types
 
-```json
-{
-  "type": "message-state-updated",
-  "messageId": "UUID",
-  "timestamp": "NumericDate",
-  "connectionId": "UUID",
-  "state": "MessageState"
-}
-```
+| `type` | Trigger | `data` |
+| --- | --- | --- |
+| `didcomm.connections.state-updated` | A connection record is created or changes state | the connection record as `GET /v2/didcomm/connections/{connectionId}` returns it, plus `previousState` |
+| `didcomm.basic-messages.message-received` | The agent receives a basic message | the message record: `id`, `connectionId`, `role`, `content`, `sentTime`, `createdAt` |
+| `didcomm.receipts.message-receipts-received` | The agent receives a `message-receipts` message | `connectionId` and `receipts`, each with `messageId`, `state` and `timestamp` |
+| `didcomm.presentations.state-updated` | A presentation record is created or changes state | the presentation record as `GET /v2/didcomm/presentations/{proofExchangeId}` returns it, plus `previousState` |
+| `didcomm.credential-exchanges.state-updated` | A credential exchange record is created or changes state | the credential exchange record as `GET /v2/didcomm/credential-exchanges/{credentialExchangeId}` returns it, plus `previousState` |
+| `didcomm.{module}.{message-type}-received` | The agent receives a message of an extension protocol module: `reactions`, `user-profile`, `media-sharing`, `calls`, `action-menu`, `question-answer` or `mrtd` | `connectionId`, `threadId` and `message`, the plaintext DIDComm message |
+| `vt.flows.state-updated` | The Flow State of a credential acquisition flow changes | the flow record as `GET /v2/vt/flows/{participantSessionId}` returns it, plus `previousState` |
+| `vpr.notification` | The agent processes an indexer event | `msg`, `entityType`, `entityId`, `changes`, `blockHeight`, `txHash` and `operatorAddress` |
 
-MessageState corresponds to the different states specified in [Messaging](<[https://gitlab/messaging.md](https://gitlab.mobiera.com/2060/2060-spec/-/blob/master/messaging.md)>).
-
-#### Message Received
-
-Sent when a message is received. Event format is as follows:
-
-```json
-{
-  "type": "message-received",
-  "message": "Message"
-}
-```
-
-Payload contains the message itself, as specified in the previous section.
-
-#### Indexer Notification
-
-Sent whenever an on-chain activity related to the agent DID is received from the Verana indexer. Event format is as follows:
-
-```json
-{
-  "type": "indexer-notification",
-  "timestamp": "NumericDate",
-  "msg": "string",
-  "entityType": "string",
-  "entityId": "string",
-  "changes": {},
-  "blockHeight": 0,
-  "txHash": "string",
-  "operatorAddress": "string"
-}
-```
-
-It is emitted for **every** indexer activity, regardless of which default handlers are active. This lets a backend behind the container react to `msg` types not covered by the default implementation, or override the ones that are (together with the `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` environment variable). The state-sync bookkeeping the agent needs internally always runs and is never affected by overriding handlers.
-
-### Subscribing to events
-
-> **NOTE**: Not yet supported by VS Agent implementation
-> Subscription to events is maanaged in a REST route (`/event-subscriptions`) that allows to list, create and remove Webhooks for different topics.
-
-Subscriptions are composed by:
-
-- (optional) type: EventType (or array of Event Types). If not specified, send all events to the endpoint
-- (optional) filter: send only events that match specific fields. This only works when a particular EventType is defined in type
-- endpoint: URL where VS Agent will connect to send the notifications (it could be HTTP or WS)
+The `vpr.notification` event is emitted for every indexer activity, regardless of which default handlers
+are active, so a backend can react to `msg` types the default implementation does not cover, or override the
+ones that it does (together with the `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` environment variable). The
+state-sync bookkeeping the agent needs internally always runs and is never affected by overriding handlers.
 
 ## Invitations
 
@@ -846,15 +797,13 @@ Note that the following VS Agent configuration environment variables are used wh
 Presentation Request invitation codes are created by specifying details of the credentials required.
 
 This means that a single presentation request can ask for a number of attributes present in a credential a holder might possess.
-At the moment, credential requirements are only filtered by their `credentialDefinitionId`. If no `attributes` are specified,
+A requested credential is identified by its `credentialDefinitionId` or its `jsonSchemaCredentialId`. If no `attributes` are specified,
 then VS Agent will ask for all attributes in the credential.
 
-It's a POST to `/invitation/presentation-request` which receives a JSON object in the body
+It's a POST to `/v2/didcomm/presentation-request` which receives a JSON object in the body
 
 ```json
 {
-  "callbackUrl": "https://myhost.com/presentation_callback ",
-  "ref": "1234-5678",
   "requestedCredentials": [
     {
       "credentialDefinitionId": "full credential definition identifier",
@@ -863,10 +812,6 @@ It's a POST to `/invitation/presentation-request` which receives a JSON object i
   ]
 }
 ```
-
-`callbackUrl` is an URL that will be called by VS Agent when the flow completes. The request follows the [Presentation Callback API](#presentation-callback-api).
-
-`ref` is an optional, arbitrary string that will be included in the body of the request to the callback URL.
 
 Response will include the invitation code in both short and long form URL format.
 
@@ -884,31 +829,6 @@ Note that the following VS Agent configuration environment variables are used wh
 - AGENT_INVITATION_IMAGE_URL: An optional image URL to display along the connection invitation
 - AGENT_LABEL: An optional label to show along the connection invitation
 - PUBLIC_API_BASE_URL: Base URL for short URL creation (resulting something like `https://myHost.com/s?id=<uuid>`)
-
-#### Presentation Callback API
-
-When the presentation flow is completed (either successfully or not), VS Agent calls its `callbackUrl` as an HTTP POST with the following body:
-
-```json
-{
-  "ref": "1234-5678",
-  "presentationRequestId": "unique identifier for the flow",
-  "state": "PresentationState",
-  "claims": [
-    { "name": "attribute-1", "value": "value-1" },
-    { "name": "attribute-2", "value": "value-2" }
-  ]
-}
-```
-
-Possible values for PresentationState are:
-
-- 'ok'
-- 'connected'
-- 'refused'
-- 'no-compatible-credentials'
-- 'verification-error'
-- 'unspecified-error'
 
 ### Credential Offer
 
@@ -945,16 +865,20 @@ Note that the following VS Agent configuration environment variables are used wh
 
 ## Presentations
 
-It is possible to query all presentation flows created by VS Agent through the endpoint `/presentations`, which will respond with records using the following format:
+It is possible to query all presentation flows created by VS Agent through the endpoint `/v2/didcomm/presentations`, which will respond with a page of records using the following format:
 
 - proofExchangeId: flow identifier (the same as the one used in events and other responses)
-- state: current state of the presentation flow (e.g. `request-sent` when it was just started, `done` when finished)
-- claims: array containing the claims received within the presentation
-- verified: boolean stating if the presentation is valid (only meaningful when state is `done`)
+- state: current state of the presentation flow (e.g. `request-sent` when it was just started, `done` when finished, `abandoned` when it failed)
+- role: role of the agent in the flow (`verifier` or `prover`)
+- connectionId: connection the flow runs on
 - threadId: DIDComm thread id (shared with the other party)
-- updatedAt: last time activity was recorded for this flow
+- requestedCredentials: the credentials and attributes the flow asked for
+- claims: array containing the claims received within the presentation
+- verified: whether the presentation verified, set when it is received
+- errorMessage: why the flow ended in `abandoned`, when it did
+- createdAt and updatedAt: creation time and last activity of the flow
 
-It is possible to query for a single presentation by executing a GET to `/presentations/<proofExchangeId>`.
+It is possible to query for a single presentation by executing a GET to `/v2/didcomm/presentations/<proofExchangeId>`.
 
 ## Verifiable Data Registry Operations
 

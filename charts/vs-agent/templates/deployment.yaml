@@ -18,12 +18,6 @@ spec:
     port: {{ .Values.adminPort }}
     targetPort: {{ .Values.adminPort }}
     protocol: TCP
-  {{- if contains "corporation" (.Values.adminApiAuthMode | default "internal") }}
-  - name: admin-external
-    port: {{ .Values.adminApiExternalPort | default 3010 }}
-    targetPort: {{ .Values.adminApiExternalPort | default 3010 }}
-    protocol: TCP
-  {{- end }}
   - name: db
     port: 5432
     targetPort: 5432
@@ -187,20 +181,54 @@ spec:
               value: {{ .Values.didcommLabel | quote }}
             - name: AGENT_INVITATION_IMAGE_URL
               value: {{ tpl .Values.didcommInvitationImageUrl . | quote }}
-            - name: EVENTS_BASE_URL
-              value: {{ tpl .Values.eventsBaseUrl . | quote }}
+            {{- if .Values.eventsWebhookUrl }}
+            - name: EVENTS_WEBHOOK_URL
+              value: {{ tpl .Values.eventsWebhookUrl . | quote }}
+            {{- end }}
+            {{- if hasKey .Values "enablePublicApiSwagger" }}
             - name: ENABLE_PUBLIC_API_SWAGGER
               value: {{ .Values.enablePublicApiSwagger | quote }}
-            - name: AGENT_PUBLIC_DID
-              value: "did:{{ default "webvh" .Values.publicDidMethod }}:{{ tpl .Values.ingress.host . }}"
+            {{- end }}
+            - name: PUBLIC_API_BASE_URL
+              value: "https://{{ tpl .Values.ingress.host . }}"
+            - name: AGENT_PUBLIC_DID_METHOD
+              value: {{ default "webvh" .Values.publicDidMethod | quote }}
+            {{- if .Values.veranaCorporationId }}
+            - name: VERANA_CORPORATION_ID
+              value: {{ .Values.veranaCorporationId | quote }}
+            {{- end }}
+            {{- if .Values.veranaRpcEndpointUrl }}
+            - name: VERANA_RPC_ENDPOINT_URL
+              value: {{ tpl .Values.veranaRpcEndpointUrl . | quote }}
+            {{- end }}
+            {{- if .Values.veranaIndexerBaseUrl }}
+            - name: VERANA_INDEXER_BASE_URL
+              value: {{ tpl .Values.veranaIndexerBaseUrl . | quote }}
+            {{- end }}
+            {{- if .Values.veranaChainId }}
+            - name: VERANA_CHAIN_ID
+              value: {{ .Values.veranaChainId | quote }}
+            {{- end }}
+            - name: AGENT_MODE
+              value: {{ .Values.agentMode | default "standalone" | quote }}
+            {{- if .Values.trustedEcsEcosystemDids }}
+            - name: TRUSTED_ECS_ECOSYSTEM_DIDS
+              value: {{ .Values.trustedEcsEcosystemDids | quote }}
+            {{- end }}
+            {{- if .Values.delegatedParentVsDid }}
+            - name: AGENT_DELEGATED_PARENT_VS_DID
+              value: {{ .Values.delegatedParentVsDid | quote }}
+            {{- end }}
             - name: ADMIN_API_AUTH_MODE
               value: {{ .Values.adminApiAuthMode | default "internal" | quote }}
             {{- if .Values.adminApiPublicUrl }}
             - name: ADMIN_API_PUBLIC_URL
               value: {{ tpl .Values.adminApiPublicUrl . | quote }}
             {{- end }}
-            - name: ADMIN_API_EXTERNAL_PORT
-              value: {{ .Values.adminApiExternalPort | default 3010 | quote }}
+            {{- if .Values.adminApiTrustedNetworks }}
+            - name: ADMIN_API_TRUSTED_NETWORKS
+              value: {{ .Values.adminApiTrustedNetworks | quote }}
+            {{- end }}
             {{- if .Values.adminApiCorporationAllowedAccounts }}
             - name: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS
               value: {{ .Values.adminApiCorporationAllowedAccounts | quote }}
@@ -211,46 +239,31 @@ spec:
             ports:
             -  containerPort: {{ .Values.adminPort }}
             -  containerPort: {{ .Values.didcommPort }}
-            {{- if contains "corporation" (.Values.adminApiAuthMode | default "internal") }}
-            -  containerPort: {{ .Values.adminApiExternalPort | default 3010 }}
-            {{- end }}
             {{- if .Values.resources }}
             resources:
 {{- toYaml .Values.resources | nindent 14 }}
             {{- end }}
-            {{- if contains "internal" (.Values.adminApiAuthMode | default "internal") }}
+            startupProbe:
+              httpGet:
+                path: /v2/agent/health/live
+                port: {{ .Values.adminPort }}
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 60
             livenessProbe:
               httpGet:
-                path: /v1/health
+                path: /v2/agent/health/live
                 port: {{ .Values.adminPort }}
-              initialDelaySeconds: 30
               periodSeconds: 60
               timeoutSeconds: 5
               failureThreshold: 2
             readinessProbe:
               httpGet:
-                path: /v1/health
+                path: /v2/agent/health/ready
                 port: {{ .Values.adminPort }}
-              initialDelaySeconds: 15
-              periodSeconds: 60
+              periodSeconds: 15
               timeoutSeconds: 5
               failureThreshold: 2
-            {{- else }}
-            livenessProbe:
-              tcpSocket:
-                port: {{ .Values.adminApiExternalPort | default 3010 }}
-              initialDelaySeconds: 30
-              periodSeconds: 60
-              timeoutSeconds: 5
-              failureThreshold: 2
-            readinessProbe:
-              tcpSocket:
-                port: {{ .Values.adminApiExternalPort | default 3010 }}
-              initialDelaySeconds: 15
-              periodSeconds: 60
-              timeoutSeconds: 5
-              failureThreshold: 2
-            {{- end }}
             volumeMounts:
             - name: {{ .Values.name }}-vsa-pv
               mountPath: /root/.afj

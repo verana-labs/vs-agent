@@ -16,9 +16,7 @@ export class CreateInvitationDto {
   useLegacyDid?: boolean
 
   @ApiProperty({
-    description:
-      "DIDComm envelope version for the invitation. 'v2' requires AGENT_DIDCOMM_VERSIONS to include 'v2'. " +
-      'When omitted, the agent infers the version from its configuration.',
+    description: "DIDComm envelope version for the invitation. Defaults to 'v2' when omitted.",
     enum: ['v1', 'v2'],
     required: false,
   })
@@ -75,9 +73,7 @@ export class CreatePresentationRequestDto implements CreatePresentationRequestOp
   useLegacyDid?: boolean
 
   @ApiProperty({
-    description:
-      "DIDComm envelope version for the invitation. 'v2' requires AGENT_DIDCOMM_VERSIONS to include 'v2'. " +
-      'When omitted, the agent infers the version from its configuration.',
+    description: "DIDComm envelope version for the invitation. Defaults to 'v2' when omitted.",
     enum: ['v1', 'v2'],
     required: false,
   })
@@ -123,9 +119,7 @@ export class CreateCredentialOfferDto implements CreateCredentialOfferOptions {
   useLegacyDid?: boolean
 
   @ApiProperty({
-    description:
-      "DIDComm envelope version for the invitation. 'v2' requires AGENT_DIDCOMM_VERSIONS to include 'v2'. " +
-      'When omitted, the agent infers the version from its configuration.',
+    description: "DIDComm envelope version for the invitation. Defaults to 'v2' when omitted.",
     enum: ['v1', 'v2'],
     required: false,
   })

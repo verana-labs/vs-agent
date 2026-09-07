@@ -1,9 +1,10 @@
-import type { DidCommFeatureQueryOptions, DidCommVersion } from '@credo-ts/didcomm'
+import type { DidCommFeatureQueryOptions } from '@credo-ts/didcomm'
 
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { LogLevel, ParsedDid } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common'
+import { HttpAdapterHost } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import {
   assertVerifiableService,
@@ -14,16 +15,23 @@ import {
   AuthorizationService,
   VeranaChainService,
   VeranaIndexerService,
+  readEcsClaimsFromEnv,
   VsAgentWsInboundTransport,
   VtFlowOrchestrator,
 } from '@verana-labs/vs-agent-sdk'
 import express from 'express'
 import WebSocket from 'ws'
 
+import { ErrorEnvelopeFilter } from '../common'
 import {
-  AGENT_DIDCOMM_VERSIONS,
+  ADMIN_V2_TAGS,
   ENABLE_PUBLIC_API_SWAGGER,
   ENABLED_PLUGINS,
+  TRUSTED_ECS_ECOSYSTEM_DIDS,
+  AGENT_MODE,
+  DEFAULT_LOGO_SVG,
+  DEFAULT_PRIVACY_HTML,
+  DEFAULT_TERMS_HTML,
   VERANA_CHAIN_ID,
   VERANA_INDEXER_BASE_URL,
 } from '../config'
@@ -44,6 +52,7 @@ export const setupAgent = async ({
   masterListCscaLocation,
   autoUpdateStorageOnStartup,
   veranaChain,
+  indexer,
   authorizationService,
   discoveryOptions,
   adminApiServiceEndpoint,
@@ -60,6 +69,7 @@ export const setupAgent = async ({
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
   veranaChain?: VeranaChainService
+  indexer: VeranaIndexerService
   authorizationService?: AuthorizationService
   discoveryOptions?: DidCommFeatureQueryOptions[]
   adminApiServiceEndpoint?: string
@@ -70,20 +80,6 @@ export const setupAgent = async ({
   if (endpoints.length === 0) {
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
-
-  const allowedDidCommVersions: DidCommVersion[] = ['v1', 'v2']
-  const invalidDidCommVersions = AGENT_DIDCOMM_VERSIONS.filter(
-    v => !allowedDidCommVersions.includes(v as DidCommVersion),
-  )
-  if (invalidDidCommVersions.length > 0) {
-    throw new Error(
-      `Invalid AGENT_DIDCOMM_VERSIONS values: ${invalidDidCommVersions.join(', ')}. Allowed: ${allowedDidCommVersions.join(', ')}`,
-    )
-  }
-  if (AGENT_DIDCOMM_VERSIONS.length === 0) {
-    throw new Error('AGENT_DIDCOMM_VERSIONS must contain at least one of: v1, v2')
-  }
-  const didcommVersions = AGENT_DIDCOMM_VERSIONS as DidCommVersion[]
 
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
   const [chatSetup, mrtdSetup] = await Promise.all([
@@ -100,25 +96,24 @@ export const setupAgent = async ({
       ? [
           {
             id: `vpr:verana:${VERANA_CHAIN_ID}`,
-            baseUrls: [`${VERANA_INDEXER_BASE_URL}/verana`],
+            scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
+            api: [VERANA_INDEXER_BASE_URL],
             production: true,
           },
         ]
       : undefined
 
-  const indexer = VERANA_INDEXER_BASE_URL
-    ? new VeranaIndexerService({ baseUrl: VERANA_INDEXER_BASE_URL, logger })
-    : undefined
   // eslint-disable-next-line prefer-const
   let orchestrator: VtFlowOrchestrator | undefined
 
+  const envEcsClaims = readEcsClaimsFromEnv()
   const agent = createVsAgent({
     plugins: [
       setupBaseDidComm({
         walletConfig,
         publicApiBaseUrl,
         endpoints,
-        didcommVersions,
+        didcommVersions: ['v1', 'v2'],
         vtFlow: {
           autoIssueCredentialOnRequest: true,
           autoAcceptIssuanceRequest: true,
@@ -132,9 +127,17 @@ export const setupAgent = async ({
               return null
             }
           },
+          onBeforeCredentialIssued: async ({ record, credential }) => {
+            if (!orchestrator) throw new Error('[vt-flow] orchestrator not ready, refusing to issue')
+            return {
+              credentialDigest: await orchestrator.onCredentialIssued(record.id, credential as never),
+            }
+          },
           assertVerifiableService: verifiablePublicRegistries
             ? assertVerifiableService({ verifiablePublicRegistries })
             : undefined,
+          checkEcsIssuanceExemption: async context =>
+            (await orchestrator?.checkEcsIssuanceExemption(context)) ?? false,
           autoAcceptCredentialOffer: true,
           verifyCredential: async ({ record }) => {
             if (!orchestrator) {
@@ -189,10 +192,24 @@ export const setupAgent = async ({
     displayPictureUrl,
     label,
     veranaChain,
+    indexer,
+    trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS,
+    ecsClaims: {
+      ...(AGENT_MODE === 'standalone' ? envEcsClaims : { service: envEcsClaims.service }),
+      localResources: {
+        [`${publicApiBaseUrl}/vt/default/logo.svg`]: DEFAULT_LOGO_SVG,
+        [`${publicApiBaseUrl}/vt/default/terms.html`]: DEFAULT_TERMS_HTML,
+        [`${publicApiBaseUrl}/vt/default/privacy.html`]: DEFAULT_PRIVACY_HTML,
+      },
+    },
     authorizationService,
     discoveryOptions,
     adminApiServiceEndpoint,
   })
+
+  orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl })
+
+  await agent.initialize()
 
   const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
   if (enableHttp) {
@@ -208,10 +225,6 @@ export const setupAgent = async ({
     )
   }
 
-  orchestrator = new VtFlowOrchestrator(agent, { indexer, publicApiBaseUrl })
-
-  await agent.initialize()
-
   migrateLegacyTailsFiles(agent.context)
 
   const verifyPeer = verifiablePublicRegistries
@@ -221,7 +234,7 @@ export const setupAgent = async ({
       }
     : undefined
 
-  return { agent, indexer, verifyPeer }
+  return { agent, verifyPeer }
 }
 
 export function commonAppConfig(
@@ -236,12 +249,16 @@ export function commonAppConfig(
   })
 
   // Swagger
-  const config = new DocumentBuilder()
+  const builder = new DocumentBuilder()
     .setTitle('API Documentation')
     .setDescription('API Documentation')
     .setVersion('1.0')
-    .build()
-  const document = SwaggerModule.createDocument(app, config)
+
+  if (!publicApp) {
+    for (const [name, description] of Object.entries(ADMIN_V2_TAGS)) builder.addTag(name, description)
+  }
+
+  const document = SwaggerModule.createDocument(app, builder.build())
 
   // Inject dynamic message examples from registered handlers
   if (!publicApp) {
@@ -258,6 +275,9 @@ export function commonAppConfig(
 
   // Pipes
   app.useGlobalPipes(new ValidationPipe())
+
+  // Error envelope for every v2 route
+  app.useGlobalFilters(new ErrorEnvelopeFilter(app.get(HttpAdapterHost).httpAdapter))
 
   // CORS
   if (cors) {

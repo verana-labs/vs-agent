@@ -1,8 +1,9 @@
 export enum EventType {
-  ConnectionStateUpdated = 'connection-state-updated',
-  MessageStateUpdated = 'message-state-updated',
-  MessageReceived = 'message-received',
-  PresentationStateUpdated = 'presentation-state-updated',
-  VtFlowStateUpdated = 'vt-flow-state-updated',
-  IndexerNotification = 'indexer-notification',
+  ConnectionStateUpdated = 'didcomm.connections.state-updated',
+  MessageReceived = 'didcomm.basic-messages.message-received',
+  ReceiptsMessageReceived = 'didcomm.receipts.message-receipts-received',
+  PresentationStateUpdated = 'didcomm.presentations.state-updated',
+  CredentialExchangeStateUpdated = 'didcomm.credential-exchanges.state-updated',
+  VtFlowStateUpdated = 'vt.flows.state-updated',
+  IndexerNotification = 'vpr.notification',
 }

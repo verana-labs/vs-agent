@@ -3,30 +3,54 @@ export enum ECS {
   ORG = 'ecs-org',
   PERSONA = 'ecs-persona',
   USER_AGENT = 'ecs-user-agent',
+  BADGE = 'ecs-badge',
 }
 
-const urlMap = new Map<string, string>([
-  ['vpr:verana:vna-mainnet-1', 'https://idx.testnet.verana.network/verana'],
-  ['vpr:verana:vna-testnet-1', 'https://idx.testnet.verana.network/verana'],
-  ['vpr:verana:vna-devnet-1', 'https://idx.devnet.verana.network/verana'],
-])
+const DEFAULT_CHAIN_INDEXERS: Record<string, string> = {
+  'vna-testnet-1': 'https://idx.testnet.verana.network',
+  'vna-devnet-1': 'https://idx.devnet.verana.network',
+}
 
-export function mapToEcosystem(input: string): string {
-  const canonical = input.match(/^(vpr:verana:[^:/]+):cs:(\d+)$/)
-  if (canonical) input = `${canonical[1]}/cs/v1/js/${canonical[2]}`
-  for (const [key, value] of urlMap.entries()) {
-    if (input.includes(key)) {
-      input = input.replace(key, value)
-    }
+const indexerByChain = new Map<string, string>(Object.entries(DEFAULT_CHAIN_INDEXERS))
+
+/**
+ * Registers the indexer base URL that serves schema references for a given chain id.
+ * Entries override the built-in defaults, so an agent connected to any chain can
+ * dereference `vpr:verana:<chain>:cs:<id>` references through its own indexer.
+ */
+export function configureChainIndexers(entries: Record<string, string | undefined>): void {
+  for (const [chainId, baseUrl] of Object.entries(entries)) {
+    if (!chainId || !baseUrl) continue
+    indexerByChain.set(chainId, baseUrl.replace(/\/+$/, ''))
   }
-  return input
 }
 
+/**
+ * Resolves a schema reference to a fetchable URL. VPR URIs are mapped to the indexer
+ * registered for their chain; any other input (e.g. an HTTPS URL) is returned as is.
+ *
+ * @throws Error if the input is a VPR URI that cannot be mapped to an indexer URL.
+ */
+export function mapToEcosystem(input: string): string {
+  if (!input.startsWith('vpr:verana:')) return input
+
+  const ref = input.match(/^vpr:verana:([^:/]+):cs:(\d+)$/)
+  if (!ref) throw new Error(`Malformed VPR schema reference "${input}"`)
+
+  const base = indexerByChain.get(ref[1])
+  if (!base) {
+    throw new Error(`No indexer configured for chain "${ref[1]}" needed to resolve "${input}"`)
+  }
+  return `${base}/v4/credential-schema/js/${ref[2]}`
+}
+
+// v4 spec [ECS-EC] reference digests
 export const ECS_SCHEMA_DIGESTS: Record<ECS, string> = {
-  [ECS.SERVICE]: 'sha384-PVseqJJjEGMVRcht77rE2yLqRnCiLBRLOklSuAshSEXK3eyITmUpDBhpQryJ/XIx',
-  [ECS.ORG]: 'sha384-XF10SsOaav+i+hBaXP29coZWZeaCZocFvfP9ZeHh9B7++q7YGA2QLTbFZqtYs/zA',
-  [ECS.PERSONA]: 'sha384-4vkQl6Ro6fudr+g5LL2NQJWVxaSTaYkyf0yVPVUmzA2leNNn0sJIsM07NlOAG/2I',
-  [ECS.USER_AGENT]: 'sha384-yLRK2mCokVjRlGX0nVzdEYQ1o6YWpQqgdg6+HlSxCePP+D7wvs0+70TJACLZfbF/',
+  [ECS.SERVICE]: 'sha384-0v+BAFGpnBX/RVqH9dUlMglxMrD4AKy4qUtb1lMN4iW9I2gO7XjcUfmGOf0oInP3',
+  [ECS.ORG]: 'sha384-UPn4TDqS1nMBAN3FyMzTAZOWp99zBjBD69OjpbhwOKZj7iOrS5qPwJ2SArRz0yzu',
+  [ECS.PERSONA]: 'sha384-VfXTfuks02OkoR5USaTfEdc4NU25m4+vNrLATnjC0r0Pn1S3tFTdOvGCfSYdjE2I',
+  [ECS.USER_AGENT]: 'sha384-rIWkh3zBD1Ak7CNGpAwZ/ONSmf+ywOYSF3H60ULc9/a1ZYKv6EqiQMJ2dm8dOfjm',
+  [ECS.BADGE]: 'sha384-ZxJ2aRpoF/5DJSILWwOES6bmpMg3RZYOfO2CCF8hC/YDNvU+PhCqAnAXq/66nXCq',
 }
 
 // RFC 8785 JSON Canonicalization Scheme
@@ -68,6 +92,34 @@ export async function identifySchema(schemaObj: Record<string, unknown>): Promis
     if (refDigest === actualDigest) return schemaName
   }
   return null
+}
+
+// Devnet and testnet ecosystems publish schemas that drift from the canonical ECS ones, so a
+// digest miss falls back to the schema title before giving up.
+const ECS_TITLE_BY_TYPE: Record<string, ECS> = {
+  ServiceCredential: ECS.SERVICE,
+  OrganizationCredential: ECS.ORG,
+  PersonaCredential: ECS.PERSONA,
+  UserAgentCredential: ECS.USER_AGENT,
+  BadgeCredential: ECS.BADGE,
+}
+
+/**
+ * Identifies the ECS type of a raw JSON schema string, as stored in a VPR `CredentialSchema`
+ * entry, by digest and then by title.
+ *
+ * @returns The matching ECS type, or null when the string is not parseable or matches nothing.
+ */
+export async function classifyEcsSchema(jsonSchema: string): Promise<ECS | null> {
+  try {
+    const parsed = JSON.parse(jsonSchema) as Record<string, unknown>
+    const byDigest = await identifySchema(parsed)
+    if (byDigest) return byDigest
+    const title = typeof parsed.title === 'string' ? parsed.title : ''
+    return ECS_TITLE_BY_TYPE[title] ?? null
+  } catch {
+    return null
+  }
 }
 
 type W3CCred = {

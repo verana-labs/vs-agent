@@ -10,8 +10,8 @@ manual node, docker-compose, genesis, port, or funding setup.
 - **Docker running** (Docker Desktop, or Colima / Rancher / Podman configured for testcontainers).
   testcontainers talks to the Docker daemon, that is the only hard dependency besides Node.
 - **`pnpm install`** at the repo root.
-- **`RUN_FLOW_E2E=1`** to un-skip the suite, without it every e2e `describe` is skipped (so plain
-  `pnpm test` is unaffected).
+- Nothing to un-skip: these specs are matched by `vitest.e2e.config.ts` only, so plain `pnpm test`
+  never picks them up.
 - The images are **public** on Docker Hub (`veranalabs/verana-node`, `veranalabs/verana-indexer`),
   no `docker login` needed. The first run pulls them (a few hundred MB).
 - **Apple Silicon (arm64):** the verana images are amd64-only, so set
@@ -22,13 +22,13 @@ manual node, docker-compose, genesis, port, or funding setup.
 
 ```bash
 # Linux / amd64
-RUN_FLOW_E2E=1 pnpm --filter @verana-labs/vs-agent-sdk exec vitest run tests/e2e
+pnpm --filter @verana-labs/vs-agent-sdk test:e2e
 
 # Apple Silicon
-RUN_FLOW_E2E=1 DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm --filter @verana-labs/vs-agent-sdk exec vitest run tests/e2e
+DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm --filter @verana-labs/vs-agent-sdk test:e2e
 
 # a single file (faster, one stack):
-RUN_FLOW_E2E=1 pnpm --filter @verana-labs/vs-agent-sdk exec vitest run tests/e2e/onboarding.e2e.test.ts
+pnpm --filter @verana-labs/vs-agent-sdk exec vitest run --config vitest.e2e.config.ts tests/e2e/onboarding.e2e.test.ts
 ```
 
 Expect ~2-4 min per file on amd64, longer under emulation.

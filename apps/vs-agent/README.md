@@ -14,29 +14,32 @@ In this section we will divide them depending on how likely different users will
 
 These variables are usually important for every deployment, since they define how VS Agent will be accessed from the outside world (User Agents, other Verifiable Services and your controller, who will be managing its Admin API and receiving events from it):
 
-| Variable                   | Description                                         | Default value           |
-| -------------------------- | --------------------------------------------------- | ----------------------- |
-| AGENT_PORT                 | Port where DIDComm agent will be running            | 3001                    |
-| ADMIN_PORT                 | Administration interface port                       | 3000                    |
-| AGENT_PUBLIC_DID           | Agent's public DID (in did:web or did:webvh format) | none                    |
-| AGENT_INVITATION_IMAGE_URL | Public URL for image to be shown in invitations     | none                    |
-| AGENT_LABEL                | Label to show to other DIDComm agents               | Test VS Agent           |
-| EVENTS_BASE_URL            | Base URL for sending events                         | <http://localhost:5000> |
+| Variable                   | Description                                                       | Default value           |
+| -------------------------- | ----------------------------------------------------------------- | ----------------------- |
+| AGENT_PORT                 | Port where DIDComm agent will be running                          | 3001                    |
+| ADMIN_PORT                 | Administration interface port                                     | 3000                    |
+| PUBLIC_API_BASE_URL        | Public base URL where the agent is reachable. **Required**        | none                    |
+| AGENT_PUBLIC_DID_METHOD    | DID method for the agent's public DID: `webvh` or `web`           | webvh                   |
+| AGENT_INVITATION_IMAGE_URL | Public URL for image to be shown in invitations                   | none                    |
+| AGENT_LABEL                | Label to show to other DIDComm agents                             | Test VS Agent           |
+| EVENTS_WEBHOOK_URL         | URL the agent posts every event to. No event is delivered when unset | (none)               |
+| EVENTS_WEBHOOK_API_KEY     | Secret sent as `Authorization: Bearer` with every event delivery  | (none)                  |
 
 VS Agent includes a public and an administration interface, each running in ports 3001 and 3000 respectively (which could be overriden by setting `AGENT_PORT` and `ADMIN_PORT` in case you are running the application locally and these ports are used by other apps).
 
-In order to make your agent reachable by other VS agents and user agents like Hologram, you need to expose your `AGENT_PORT` to the internet. For `did:web`, you must define an `AGENT_PUBLIC_DID` matching the external hostname (e.g. if your VS-A instance public interface is accessible at `https://myagent.com:3001`, you must set `AGENT_PUBLIC_DID` to `did:web:myagent.com%3A3001`).
-For `did:webvh`, the `SCID` is calculated automatically, and only the domain-based DID (`did:webvh:domain`) should be configured in the `AGENT_PUBLIC_DID` environment variable.
+In order to make your agent reachable by other VS agents and user agents like Hologram, you need to expose your `AGENT_PORT` to the internet and set `PUBLIC_API_BASE_URL` to the URL where it is publicly accessible. The agent derives its public DID location from that URL: the host, the port (`%3A`-encoded) and any path segments (colon-separated). For example, `https://myagent.com:3001` yields `did:web:myagent.com%3A3001`, and `https://example.com/dids/issuer` yields `did:webvh:<SCID>:example.com:dids:issuer`. For `did:webvh` (the default method), the `SCID` is calculated automatically. The URL must not contain userinfo, a query or a fragment.
 
-> **Note**: Although it is possible to run VS Agent without any public DID, it is mandatory to do so in order to make possible for the agent to create its own credential types and therefore issue credentials. Note that you'll need HTTPS in order to fully support did:web specification.
+> **Note**: You'll need HTTPS in order to fully support the did:web and did:webvh specifications.
 >
-> Public DID will be used also for agents to easily connect to it using DIDComm without the need of creating an explicit invitation by doing a GET request to `/invitation` endpoint.
+> The public DID will be used also for agents to easily connect to it using DIDComm without the need of creating an explicit invitation by doing a GET request to `/invitation` endpoint.
 >
-> If you don't specify a public DID, you might set up `PUBLIC_API_BASE_URL` and `AGENT_ENDPOINTS` manually.
+> When `PUBLIC_API_BASE_URL` contains a path, the DID document is served at `<base>/did.json` and `<base>/did.jsonl` instead of under `/.well-known`. This assumes the reverse proxy strips the base path before forwarding requests to the agent.
+>
+> The persisted DID wins across restarts: if `PUBLIC_API_BASE_URL` later derives a different location than the one the DID was created for, the agent refuses to start. Restore the previous URL, or deliberately reset the wallet to mint a new DID.
 
 You'll also need to set up an `AGENT_LABEL` and (optionally) an `AGENT_INVITATION_IMAGE_URL` so when DIDComm agents scan an invitation to your service they can identify it easily.
 
-Besides these parameters, you are likely to use your VS Agent alongside a **controller** app that will be sending messages and also receiving events from it (such as new messages arrived, new connections, etc.). For that purpose, you'll need to set up an `EVENTS_BASE_URL` for your VS Agent to be able to send WebHooks to it. See the [VS Agent API document](../../doc//vs-agent-api.md#events) for more information about the API your backend needs to implement (if you are not using the handy [JS](../../packages/client) or [NestJS](../../packages/nestjs-client) client packages).
+Besides these parameters, you are likely to use your VS Agent alongside a **controller** app that will be sending messages and also receiving events from it (such as new messages arrived, new connections, etc.). For that purpose, you'll need to set up an `EVENTS_WEBHOOK_URL` for your VS Agent to be able to send WebHooks to it. See the [VS Agent API document](../../doc//vs-agent-api.md#events) for the events your backend receives.
 
 #### Database access settings
 
@@ -99,9 +102,7 @@ These are variables that are updated only on specific use cases.
 
 | Variable                               | Description                                                                                                                                                                                                                                      | Default value            |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
-| PUBLIC_API_BASE_URL                    | Base URL for public API (e.g. invitations, short URLs). Used when no public DID is defined or you want to override it                                                                                                                            | <http://localhost:3001>  |
-| AGENT_ENDPOINTS                        | Comma-separeated list of endpoints where agent DIDComm endpoints will be accessible (including protocol and port). Used when no public DID is defined or you want to override it                                                                 | ws://localhost:3001      |
-| AGENT_DIDCOMM_VERSIONS                 | Comma-separated list of DIDComm envelope versions accepted and sent by the agent. Allowed values: `v1`, `v2`. Controls which `did-communication` / `DIDCommMessaging` services are published in the agent's DID Document. vt-flow requires `v2`. | `v1`                     |
+| AGENT_ENDPOINTS                        | Comma-separeated list of endpoints where agent DIDComm endpoints will be accessible (including protocol and port). By default they are derived from PUBLIC_API_BASE_URL                                                                          | wss://<derived location> |
 | AGENT_WALLET_KEY_DERIVATION_METHOD     | Wallet key derivation method: ARGON2I_INT, ARGON2_MOD or RAW                                                                                                                                                                                     | ARGON2I_MOD              |
 | AGENT_INVITATION_BASE_URL              | Public URL for fallback when no DIDComm agent is found                                                                                                                                                                                           | <https://hologram.zone/> |
 | REDIRECT_DEFAULT_URL_TO_INVITATION_URL | Default redirect to AGENT_INVITATION_BASE_URL                                                                                                                                                                                                    | true                     |
@@ -115,37 +116,42 @@ These are variables that are updated only on specific use cases.
 
 > **Note about storage update and backup**: When migrating a wallet from SQLite to Postgres and restoring it in VS Agent with a new (sanitized) profile name, the agent may attempt to run a storage migration and create a backup of the Postgres wallet. Askar currently does not support exporting non‑SQLite wallets, so the default backup behaviour will cause a fatal error. To avoid this, set AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP=false and/or AGENT_BACKUP_BEFORE_STORAGE_UPDATE=false in your environment. This disables the automatic update and backup features and allows the agent to start successfully with the migrated wallet.
 
-### Verana network integration (work in progress)
+### Verana network integration
 
-These variables enable on-chain features (permission management, trust registry notifications). If not set, the agent starts normally but blockchain functionality is disabled.
+These variables connect the agent to the Verana network (permission management, trust registry notifications).
 
 | Variable                                   | Required    | Description                                                                                                                                                                                                                             |
 | ------------------------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `VERANA_RPC_ENDPOINT_URL`                  | REQUIRED\*  | Verana blockchain RPC endpoint URL.                                                                                                                                                                                                     |
-| `VERANA_ACCOUNT_MNEMONIC`                  | REQUIRED\*  | BIP-39 mnemonic for the agent's Verana blockchain account.                                                                                                                                                                              |
-| `VERANA_CHAIN_ID`                          | OPTIONAL    | Chain ID (defaults to the network's chain ID if not set).                                                                                                                                                                               |
-| `VERANA_INDEXER_BASE_URL`                  | REQUIRED\*  | Verana indexer URL (e.g. `https://...`). Used to establish a WebSocket connection for subscribing to real-time ledger notifications related to the agent DID.                                                                           |
+| `VERANA_RPC_ENDPOINT_URL`                  | REQUIRED    | Verana blockchain RPC endpoint URL.                                                                                                                                                                                                     |
+| `VERANA_ACCOUNT_MNEMONIC`                  | REQUIRED    | BIP-39 mnemonic for the agent's Verana account. This account is the agent's `vs_operator`: it holds only the `VSOperatorAuthorization` records granted on the agent's own Participant entries. |
+| `VERANA_CHAIN_ID`                          | OPTIONAL    | Chain ID (the chain client defaults to the network's chain ID if not set). Required for the VS-CONN-VS trust gate.                                                                                                                      |
+| `VERANA_INDEXER_BASE_URL`                  | REQUIRED    | Verana indexer URL (e.g. `https://...`). Used to establish a WebSocket connection for subscribing to real-time ledger notifications related to the agent DID.                                                                           |
 | `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` | OPTIONAL    | Comma-separated indexer `msg` names whose default handler is disabled (or `*` for all), so a backend behind the container can override them and react via the `indexer-notification` webhook. State-sync bookkeeping is never affected. |
 | `VERANA_INDEXER_SUBSCRIPTION_SCOPE`        | OPTIONAL    | Scope of the indexer subscription and REST catch-up: `did` (default, only the agent's own DID) or `corporation` (all events for `VERANA_CORPORATION_ID`).                                                                               |
-| `VERANA_CORPORATION_ID`                    | OPTIONAL    | Corporation ID used when `VERANA_INDEXER_SUBSCRIPTION_SCOPE` is `corporation`.                                                                                                                                                          |
+| `VERANA_CORPORATION_ID`                    | REQUIRED    | The VPR `Corporation.id` the agent belongs to. Also scopes the indexer subscription when `VERANA_INDEXER_SUBSCRIPTION_SCOPE` is `corporation`.                                                                                          |
 | `AGENT_MODE`                               | OPTIONAL    | `standalone` (default) or `delegated`. Selects how the agent obtains its ECS credentials at startup.                                                                                                                                    |
-| `AGENT_DELEGATED_PARENT_VS_DID`            | CONDITIONAL | DID of the parent Verifiable Service that issues the Service credential. Required when `AGENT_MODE` is `delegated`.                                                                                                                     |
-| `TRUSTED_ECS_ECOSYSTEM_DIDS`               | CONDITIONAL | Comma-separated DIDs of the ECS ecosystems the agent trusts for essential credential schemas (WL-ECS). Required for the standalone ECS bootstrap.                                                                                       |
-
-- Required only if on-chain features are enabled.
+| `AGENT_DELEGATED_PARENT_VS_DID`            | CONDITIONAL | DID of the parent Verifiable Service that issues the Service credential. The agent onboards as a HOLDER against the parent. Required when `AGENT_MODE` is `delegated`.                                                                   |
+| `VERANA_GAS_ADJUSTMENT`                    | OPTIONAL    | Multiplier applied to the simulated gas of each transaction, the same idea as veranad's `--gas-adjustment`. Defaults to `1.5`. Raise it if a transaction reports `out of gas` although its simulation succeeded. |
+| `TRUSTED_ECS_ECOSYSTEM_DIDS`               | CONDITIONAL | Comma-separated DIDs of the ECS ecosystems the agent trusts for essential credential schemas (WL-ECS). Required when `AGENT_MODE` is `standalone`. In `delegated` mode it is optional, and it restricts the ecosystem of the parent's Service schema when set. |
 
 > The agent maintains a persistent WebSocket connection to the indexer to receive updates about permissions, trust registries, and credential schemas. These events are used to keep the agent state in sync with the ledger.
 
+##### VS-CONN-VS trust gate
+
+Every vt-flow session is gated on trust resolution: the peer DID must resolve to a Verifiable Service whose trust chain reaches a production registry. A self-signed ECS credential is not enough.
+
+As allowed by [VS-CONN-VS], a Validator still accepts a peer that is not a Verifiable Service yet when the request is an ECS Organization, Persona or Service issuance — otherwise no agent could ever onboard. The exemption is not granted on the peer's word: for an onboarding request the peer must own a `PENDING` Participant entry naming this agent as its validator, and for a direct issuance request this agent must hold an active ISSUER Participant for the requested schema. In both cases the schema must be an ECS Organization, Persona or Service schema of an ecosystem listed in `TRUSTED_ECS_ECOSYSTEM_DIDS`. An Applicant never exempts its Validator: the peer it contacts must always be a Verifiable Service.
+
 #### Admin API authentication
 
-The Admin API can run two listeners: an unauthenticated internal one (trusted by network reachability) and an authenticated external one. External callers get a bearer token by signing a challenge with their Verana account key (ADR-036) via `POST /v1/auth/challenge` and `POST /v1/auth/token`.
+The Admin API is served on a single port (`ADMIN_PORT`). Each request is classified on the peer address of its TCP connection: a request from a network in `ADMIN_API_TRUSTED_NETWORKS` is served without authentication, every other request is external. Forwarding headers such as `X-Forwarded-For` are never read for this classification. In `internal` mode every external request is rejected with `403`. In `corporation` mode an external caller gets a bearer token by signing a challenge with its Verana account key (ADR-036) via `POST /v2/auth/challenge` and `POST /v2/auth/token`, and its account must be in `ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS`. The health probes (`GET /v2/agent/health/live` and `/v2/agent/health/ready`) are always served without authentication.
 
 | Variable                                 | Required | Description                                                                                                                                          |
 | ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ADMIN_API_AUTH_MODE`                    | OPTIONAL | Comma-separated listeners to activate: `internal` (default, no auth) and/or `corporation` (external listener with ADR-036 auth).                      |
-| `ADMIN_API_PUBLIC_URL`                   | CONDITIONAL | Public `https://` origin (no trailing path) where the external listener is exposed. Required when `corporation` is in `ADMIN_API_AUTH_MODE`, must not be set otherwise. Published in the agent's DID Document as the `VsAgentAdminAPI` service. |
-| `ADMIN_API_EXTERNAL_PORT`                | OPTIONAL | Port for the external authenticated listener. Default `3010`. Only used when `corporation` is in `ADMIN_API_AUTH_MODE`.                              |
-| `ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS` | OPTIONAL | Comma-separated allowlist of Verana account addresses accepted on the external listener, applied before the per-method authorization check.          |
+| `ADMIN_API_AUTH_MODE`                    | OPTIONAL | Single value: `internal` (default, rejects every external request with `403`) or `corporation` (serves external callers after ADR-036 auth plus allowlist). |
+| `ADMIN_API_TRUSTED_NETWORKS`             | OPTIONAL | Comma-separated CIDR blocks served without authentication, in both modes. Default `127.0.0.0/8,::1/128`. Keep the source address of every public reverse proxy or ingress OUT of these blocks, otherwise internet traffic is served unauthenticated. |
+| `ADMIN_API_PUBLIC_URL`                   | CONDITIONAL | Public `https://` origin (no trailing path) where external callers reach the Admin API. Required when `ADMIN_API_AUTH_MODE` is `corporation`, must not be set otherwise. Published in the agent's DID Document as the `VsAgentAdminAPI` service. |
+| `ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS` | CONDITIONAL | Comma-separated allowlist of Verana account addresses accepted as external callers. Required non-empty when `ADMIN_API_AUTH_MODE` is `corporation`. It is the sole authorization mechanism for external callers. |
 
 > **Note:** This feature is currently under active development. The interface and behavior may change in future releases.
 
@@ -155,29 +161,41 @@ When connecting to other agents, VS-A tries to get information from them in orde
 
 VS-A fetches capabilities from the `discovery.json` file (which is located at at `/www/apps/vs-agent/discovery.json` in the deployed container) to determine available features. If you want to customize the capabilities to look for, replace the volume at this path with your own `discovery.json` file.
 
-### Self VR
+### ECS credential claims
 
-To enable the Self-Verifiable Trust Registry API endpoints, you must set the following environment variables in your `.env` file or system environment. These variables control the agent's identity, endpoints, and the data used for example credentials:
+The agent composes the claims of its own ECS credentials from the variables below. Behaviour is
+defined in [[VSA-VTI-CFG-ENV-ECS]](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-vti-cfg-env-ecs-ecs-credential-claims).
 
-| Variable                                     | Description                              | Example Value                            |
-| -------------------------------------------- | ---------------------------------------- | ---------------------------------------- |
-| `SELF_ISSUED_VTC_ORG_TYPE`                   | Organization type for example credential | `PRIVATE`                                |
-| `SELF_ISSUED_VTC_ORG_COUNTRYCODE`            | Organization country code                | `EE`                                     |
-| `SELF_ISSUED_VTC_ORG_REGISTRYID`             | Organization registry ID                 | `1234567890`                             |
-| `SELF_ISSUED_VTC_ORG_REGISTRYURL`            | Organization registry URL                | `https://registry.example.com`           |
-| `SELF_ISSUED_VTC_ORG_ADDRESS`                | Organization address                     | `Ahtri tn 12 10151 Tallinn, Estonia`     |
-| `SELF_ISSUED_VTC_SERVICE_TYPE`               | Service type for example credential      | `HealthCheckService`                     |
-| `SELF_ISSUED_VTC_SERVICE_DESCRIPTION`        | Service description                      | `Health Verification Service`            |
-| `SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED` | Minimum age required for service         | `18`                                     |
-| `SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS` | Terms and conditions URL                 | `https://service.example.com/terminos`   |
-| `SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY`      | Privacy policy URL                       | `https://service.example.com/privacidad` |
+| Variable | Claim |
+| --- | --- |
+| `ECS_CLAIMS_ORG_NAME` | `name` |
+| `ECS_CLAIMS_ORG_LOGO_URI` | `logoUri` |
+| `ECS_CLAIMS_ORG_REGISTRY_ID` | `registryId` |
+| `ECS_CLAIMS_ORG_REGISTRY_URI` | `registryUri` |
+| `ECS_CLAIMS_ORG_ADDRESS` | `address` |
+| `ECS_CLAIMS_ORG_COUNTRY_CODE` | `countryCode` |
+| `ECS_CLAIMS_ORG_LEGAL_JURISDICTION` | `legalJurisdiction` |
+| `ECS_CLAIMS_ORG_ORGANIZATION_KIND` | `organizationKind` |
+| `ECS_CLAIMS_ORG_LEI` | `lei` |
+| `ECS_CLAIMS_PERSONA_NAME` | `name` |
+| `ECS_CLAIMS_PERSONA_DESCRIPTION` | `description` |
+| `ECS_CLAIMS_PERSONA_DESCRIPTION_FORMAT` | `descriptionFormat` |
+| `ECS_CLAIMS_PERSONA_AVATAR_URI` | `avatarUri` |
+| `ECS_CLAIMS_PERSONA_CONTROLLER_COUNTRY_CODE` | `controllerCountryCode` |
+| `ECS_CLAIMS_PERSONA_CONTROLLER_JURISDICTION` | `controllerJurisdiction` |
+| `ECS_CLAIMS_SERVICE_NAME` | `name` |
+| `ECS_CLAIMS_SERVICE_TYPE` | `type` |
+| `ECS_CLAIMS_SERVICE_DESCRIPTION` | `description` |
+| `ECS_CLAIMS_SERVICE_DESCRIPTION_FORMAT` | `descriptionFormat` |
+| `ECS_CLAIMS_SERVICE_LOGO_URI` | `logoUri` |
+| `ECS_CLAIMS_SERVICE_MINIMUM_AGE_REQUIRED` | `minimumAgeRequired` |
+| `ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI` | `termsAndConditionsUri` |
+| `ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI` | `privacyPolicyUri` |
 
-> **Note:**  
-> This Self-Verifiable Trust Registry API and its configuration are **unstable** and intended for testing and development only. These endpoints and related environment variables may be removed or changed in future releases **without prior notice**.
->
-> The variables `AGENT_LABEL` and `AGENT_INVITATION_IMAGE_URL` will be used as the name and logo for services and credentials issued by the Self-Verifiable Trust Registry.
+The agent serves placeholder resources at `/vt/default/logo.svg`, `/vt/default/terms.html` and
+`/vt/default/privacy.html`, which an operator may point the `*_URI` variables at.
 
-For **more examples of how to configure these variables and use the API**, see the additional file [Self-Verifiable Trust Registry routes](../../doc/self-tr-routes.md).
+
 
 ### eMRTD (ePassport) verification
 
@@ -305,8 +323,8 @@ docker build --target vs-agent-mrtd -t vs-agent-mrtd -f apps/vs-agent/Dockerfile
 
 ```bash
 docker run \
-  -e AGENT_PUBLIC_DID=did:web:myagent.example.com \
-  -e EVENTS_BASE_URL=http://my-backend:5000 \
+  -e PUBLIC_API_BASE_URL=https://myagent.example.com \
+  -e EVENTS_WEBHOOK_URL=http://my-backend:5000/events \
   -p 3000:3000 -p 3001:3001 \
   vs-agent
 ```
@@ -323,8 +341,8 @@ services:
       dockerfile: ./apps/vs-agent/Dockerfile
       target: vs-agent                        # choose the appropriate target (vs-agent or vs-agent-mrtd)
     environment:
-      - AGENT_PUBLIC_DID=did:web:myagent.example.com
-      - EVENTS_BASE_URL=http://my-backend:5000
+      - PUBLIC_API_BASE_URL=https://myagent.example.com
+      - EVENTS_WEBHOOK_URL=http://my-backend:5000/events
     ports:
       - 3000:3000
       - 3001:3001

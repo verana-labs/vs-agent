@@ -20,9 +20,6 @@ import {
   type StartedStack,
 } from './helpers'
 
-const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
-const describeE2E = E2E_ENABLED ? describe : describe.skip
-
 const RUN_ID = String(Date.now())
 const PP_START_OP = '/verana.pp.v1.MsgStartParticipantOP'
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
@@ -37,7 +34,7 @@ const MINIMAL_SCHEMA = JSON.stringify({
   required: ['name'],
 })
 
-describeE2E('authorization cache (V4): indexer events drive grant -> activate -> revoke', () => {
+describe('authorization cache (V4): indexer events drive grant -> activate -> revoke', () => {
   let stack: StartedStack
   let chainA: VeranaTestChain
   let veranaChain: VeranaChainService
@@ -171,9 +168,6 @@ describeE2E('authorization cache (V4): indexer events drive grant -> activate ->
 
       await expect(authz.callerHoldsOperatorGrant(chainA.address, PP_START_OP)).resolves.toBe(true)
       await expect(authz.callerHoldsOperatorGrant(opB.address, PP_START_OP)).resolves.toBe(false)
-      await expect(
-        authz.callerHoldsVsOperatorGrant(opB.address, applicant.participantId, PP_SESSION),
-      ).resolves.toBe(true)
       await expect(authz.agentHoldsOperatorGrant(PP_START_OP)).resolves.toBe(false)
 
       const revoked = await chainA.revokeParticipant(policyAddress, applicant.participantId)

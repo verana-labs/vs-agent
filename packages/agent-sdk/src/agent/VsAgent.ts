@@ -15,8 +15,7 @@ import {
   DidCommV1Service,
   DidDocument,
   DidDocumentKey,
-  DidDocumentService,
-  DidRecord,
+  DidDocumentRole,
   DidRepository,
   DidsModule,
   InitConfig,
@@ -30,8 +29,8 @@ import {
 import {
   DidCommCredentialsModuleConfigOptions,
   DidCommCredentialV2Protocol,
+  DidCommDataIntegrityCredentialFormatService,
   DidCommFeatureQueryOptions,
-  DidCommJsonLdCredentialFormatService,
   DidCommModule,
   DidCommModuleConfigOptions,
   DidCommProofsModuleConfigOptions,
@@ -42,12 +41,19 @@ import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
+import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
-import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
-import { migrateWebVhVersionTimeIfBroken } from '../did/migrateWebVhVersionTime'
+import { applyArtifactServices, artifactServicesMatch } from '../did/artifactServices'
+import { getLegacyDidWeb } from '../did/legacyDidWeb'
+import {
+  authenticationHasUpdateKey,
+  hasLegacyVerificationMethods,
+  migrateLegacyDidRecord,
+} from '../did/migrations'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { connectionEvents } from '../events/ConnectionEvents'
 import { vtFlowEvents } from '../events/VtFlowEvents'
+import { EcsClaims } from '../utils/ecsClaims'
 
 const MANAGED_DIDCOMM_SERVICE_TYPES: readonly string[] = [DidCommV1Service.type, NewDidCommV2Service.type]
 
@@ -59,7 +65,7 @@ type VsAgentDidCommModule = DidCommModule<
           [
             LegacyIndyDidCommCredentialFormatService,
             AnonCredsDidCommCredentialFormatService,
-            DidCommJsonLdCredentialFormatService,
+            DidCommDataIntegrityCredentialFormatService,
           ]
         >,
       ]
@@ -93,6 +99,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public displayPictureUrl?: string
   public label: string
   public veranaChain?: VeranaChainService
+  public indexer: VeranaIndexerService
+  public trustedEcosystemDids?: string[]
+  public ecsClaims?: EcsClaims
   public authorizationService?: AuthorizationService
   public discoveryOptions?: DidCommFeatureQueryOptions[]
 
@@ -105,6 +114,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       displayPictureUrl?: string
       label: string
       veranaChain?: VeranaChainService
+      indexer: VeranaIndexerService
+      trustedEcosystemDids?: string[]
+      ecsClaims?: EcsClaims
       authorizationService?: AuthorizationService
       discoveryOptions?: DidCommFeatureQueryOptions[]
     },
@@ -117,6 +129,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.displayPictureUrl = options.displayPictureUrl
     this.label = options.label
     this.veranaChain = options.veranaChain
+    this.indexer = options.indexer
+    this.trustedEcosystemDids = options.trustedEcosystemDids
+    this.ecsClaims = options.ecsClaims
     this.authorizationService = options.authorizationService
     this.discoveryOptions = options.discoveryOptions
   }
@@ -147,12 +162,36 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
     const parsedDid = this.did ? parseDid(this.did) : null
     if (parsedDid) {
-      // If a public did is specified, check if it's already stored in the wallet. If it's not the case,
-      // create a new one and generate keys for DIDComm (if there are endpoints configured)
+      // The DID is derived from the public API base URL and is always SCID-less: its id is the
+      // location (domain[%3Aport][:path...]). Create it if the wallet holds no record yet.
       // TODO: Make DIDComm version, keys, etc. configurable. Keys can also be imported
-      const domain = parsedDid.id.includes(':') ? parsedDid.id.split(':')[1] : parsedDid.id
+      const location = parsedDid.id
+      const [domain, ...pathSegments] = location.split(':')
+      const path = pathSegments.length ? pathSegments.join('/') : undefined
 
       const existingRecord = await this.findCreatedDid(parsedDid)
+
+      if (!existingRecord) {
+        const otherMethod = parsedDid.method === 'webvh' ? 'web' : 'webvh'
+        const foreignRecord = await this.findCreatedDid({ ...parsedDid, method: otherMethod })
+        if (foreignRecord) {
+          throw new CredoError(
+            `Persisted public DID '${foreignRecord.did}' was created with method '${otherMethod}', but AGENT_PUBLIC_DID_METHOD is now '${parsedDid.method}'. Refusing to start: creating a second DID would discard the credentials, Participant entries and permissions bound to the persisted one.`,
+          )
+        }
+      }
+
+      if (existingRecord) {
+        const persistedLocation =
+          parsedDid.method === 'webvh'
+            ? (existingRecord.getTag('domain') as string | undefined)
+            : parseDid(existingRecord.did).id
+        if (persistedLocation !== location) {
+          throw new CredoError(
+            `Persisted public DID '${existingRecord.did}' was created for location '${persistedLocation}', but PUBLIC_API_BASE_URL now derives location '${location}'. Refusing to start: restore the previous URL or deliberately reset the wallet.`,
+          )
+        }
+      }
 
       // DID has not been created yet. Let's do it
       if (!existingRecord) {
@@ -160,51 +199,42 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           const didDocument = new DidDocument({ id: parsedDid.did })
           const didCommKey = await this.createAndAddDidCommKeysAndServices(didDocument)
 
-          // Add Self TR
-          await this.createAndAddLinkedVpServices(didDocument)
+          this.addLinkedVpContext(didDocument)
 
-          // Add AnonCreds Services
-          await this.createAndAddAnonCredsServices(didDocument)
+          applyArtifactServices(didDocument, { method: 'web', publicApiBaseUrl: this.publicApiBaseUrl })
 
           this.applyAdminApiService(didDocument)
 
-          await this.dids.create({
+          const createResult = await this.dids.create({
             method: 'web',
-            domain,
+            domain: location,
             didDocument,
             keys: [didCommKey],
           })
+          if (createResult.didState.state !== 'finished') {
+            throw new CredoError(
+              `Failed to create did:web record: ${(createResult.didState as { reason?: string }).reason ?? 'unknown reason'}`,
+            )
+          }
           this.did = parsedDid.did
         } else if (parsedDid.method === 'webvh') {
-          // If there is an existing did:web with the same domain, this could be an
-          // upgrade. There should be no problem on removing did:web record since we
-          // can use newer keys for DIDComm bootstrapping, but we should at least warn
-          // about that
-          const didRepository = this.dependencyManager.resolve(DidRepository)
-          const existingDidWebRecord = await didRepository.findCreatedDid(this.context, `did:web:${domain}`)
-          if (existingDidWebRecord) {
-            this.logger.warn('Existing record for legacy did:web found. Removing it')
-            await didRepository.delete(this.context, existingDidWebRecord)
-          }
-
-          const {
-            didState: { did: publicDid, didDocument },
-          } = await this.dids.create({ method: 'webvh', domain })
+          const createResult = await this.dids.create({ method: 'webvh', domain, path })
+          const { did: publicDid, didDocument } = createResult.didState
           if (!publicDid || !didDocument) {
-            this.logger.error('Failed to create did:webvh record')
-            process.exit(1)
+            throw new CredoError(
+              `Failed to create did:webvh record: ${(createResult.didState as { reason?: string }).reason ?? 'unknown reason'}`,
+            )
           }
 
           // Add DIDComm services and keys
           const didCommKey = await this.createAndAddDidCommKeysAndServices(didDocument)
 
-          // Add Linked VP services
-          await this.createAndAddLinkedVpServices(didDocument)
+          this.addLinkedVpContext(didDocument)
 
-          // Add implicit services
-          await this.createAndAddWebVhImplicitServices(didDocument)
+          applyArtifactServices(didDocument, { method: 'webvh', publicApiBaseUrl: this.publicApiBaseUrl })
 
-          didDocument.alsoKnownAs = [`did:web:${domain}`]
+          const legacyDidWeb = getLegacyDidWeb(publicDid)
+          if (legacyDidWeb) didDocument.alsoKnownAs = [legacyDidWeb]
 
           // The webvh registrar doesn't merge new keys into the DidRecord on update,
           // so persist the DIDComm key mapping directly on the existing record.
@@ -214,8 +244,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
           const result = await this.dids.update({ did: publicDid, didDocument })
           if (result.didState.state !== 'finished') {
-            this.logger.error(`Cannot update DID ${publicDid}`)
-            process.exit(1)
+            throw new CredoError(
+              `Cannot update DID ${publicDid}: ${(result.didState as { reason?: string }).reason ?? 'unknown reason'}`,
+            )
           }
           this.logger?.debug('Public did:webvh record created')
           this.did = publicDid
@@ -226,62 +257,40 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         return
       }
 
-      // Ensure the stored did:webvh log is resolvable under the current didwebvh-ts version:
-      // <2.7.4 wrote broken entry hashes (SCID placeholder), and >=2.8.0 rejects the
-      // same-second versionTimes the old create+update-at-init flow produced. Both migrations
-      // rebuild the log in-place, preserving entry #1 (and therefore the SCID and public DID).
-      if (parsedDid.method === 'webvh') {
-        try {
-          await migrateWebVhVersionTimeIfBroken(this.agentContext, existingRecord, this.logger)
-          await migrateWebVhLogIfBroken(this.agentContext, existingRecord, this.logger)
-        } catch (error) {
-          this.logger.error(
-            `Failed to migrate webvh DID log for ${existingRecord.did}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          )
-          throw error
-        }
-      }
+      await migrateLegacyDidRecord(this.agentContext, existingRecord, {
+        method: parsedDid.method,
+        logger: this.logger,
+      })
 
-      // Make sure did:webvh record has the did:web form as an alternative, in order to support
-      // implicit invitations
-      if (
-        parsedDid.method === 'webvh' &&
-        !(existingRecord?.getTag('alternativeDids') as string[])?.includes(`did:web:${domain}`)
-      ) {
-        this.logger?.debug('Adding did:web form as an alternative DID')
-
-        existingRecord.setTag('alternativeDids', [`did:web:${domain}`])
-        const didRepository = this.dependencyManager.resolve(DidRepository)
-        await didRepository.update(this.agentContext, existingRecord)
-      }
-      // Fix a legacy webvh update-key mapping before the self-heal update below relies on it.
-      if (parsedDid.method === 'webvh') await this.repairWebvhUpdateKeyMapping(existingRecord)
-
-      // DID Already exists: update it in case that agent parameters have been changed. At the moment, we can only update
-      //  DIDComm endpoints, so we'll only replace the service (if different from previous)
+      // DID already exists: reconcile the stored document with the current agent parameters,
+      // updating it only if one of the checks below finds a difference
       const didDocument = existingRecord.didDocument!
-      const hasLegacyMethods = (didDocument.verificationMethod ?? []).some(vm =>
-        ['Ed25519VerificationKey2018', 'X25519KeyAgreementKey2019'].includes(vm.type),
-      )
+      const hasLegacyMethods = hasLegacyVerificationMethods(didDocument)
       const ed25519VerificationMethodId = this.findEd25519VerificationMethodId(didDocument)
       const servicesChanged =
         !ed25519VerificationMethodId ||
         JSON.stringify(didDocument.didCommServices) !==
           JSON.stringify(this.getDidCommServices(didDocument.id, ed25519VerificationMethodId))
-      // One-shot migration for did:webvh records published before authentication-replace
-      // landed, which still carry the didwebvh-ts update key in authentication.
-      const authHasUpdateKey =
-        parsedDid.method === 'webvh' &&
-        !!ed25519VerificationMethodId &&
-        (didDocument.authentication ?? []).some(a => {
-          const id = typeof a === 'string' ? a : a.id
-          return id !== ed25519VerificationMethodId
-        })
+      const authHasUpdateKey = authenticationHasUpdateKey(
+        didDocument,
+        parsedDid.method,
+        ed25519VerificationMethodId,
+      )
       const currentAdminEntry = (didDocument.service ?? []).find(s => s.type === 'VsAgentAdminAPI')
       const adminEntryChanged = currentAdminEntry?.serviceEndpoint !== this.adminApiServiceEndpoint
-      if (hasLegacyMethods || servicesChanged || authHasUpdateKey || adminEntryChanged) {
+      // A record from an earlier version may still carry the service of the other method.
+      const artifactMethod = parsedDid.method === 'webvh' ? 'webvh' : 'web'
+      const artifactServicesChanged = !artifactServicesMatch(didDocument, {
+        method: artifactMethod,
+        publicApiBaseUrl: this.publicApiBaseUrl,
+      })
+      if (
+        hasLegacyMethods ||
+        servicesChanged ||
+        authHasUpdateKey ||
+        adminEntryChanged ||
+        artifactServicesChanged
+      ) {
         if (servicesChanged && ed25519VerificationMethodId) {
           didDocument.service = [
             ...(didDocument.service
@@ -290,6 +299,10 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             ...this.getDidCommServices(didDocument.id, ed25519VerificationMethodId),
           ]
         }
+        applyArtifactServices(didDocument, {
+          method: artifactMethod,
+          publicApiBaseUrl: this.publicApiBaseUrl,
+        })
         this.applyAdminApiService(didDocument)
         const newKeys: DidDocumentKey[] = []
         if (hasLegacyMethods) {
@@ -329,13 +342,12 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   private async findCreatedDid(parsedDid: ParsedDid) {
     const didRepository = this.dependencyManager.resolve(DidRepository)
 
-    // Particular case of webvh: parsedDid might not include the SCID, so we'll need to find it by domain
-    if (parsedDid.method === 'webvh') {
-      const domain = parsedDid.id.includes(':') ? parsedDid.id.split(':')[1] : parsedDid.id
-      return await didRepository.findSingleByQuery(this.context, { method: 'webvh', domain })
-    }
-
-    return await didRepository.findCreatedDid(this.context, parsedDid.did)
+    // Method-scoped on purpose: a location change must surface as a mismatch error in
+    // initialize, never as a lookup miss that silently mints a second DID
+    return await didRepository.findSingleByQuery(this.context, {
+      method: parsedDid.method,
+      role: DidDocumentRole.Created,
+    })
   }
 
   // Prefer Ed25519VerificationKey2020 over Multikey: webvh's update Multikey is not ours to use.
@@ -396,40 +408,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     if (existing.some(k => k.didDocumentRelativeKeyId === key.didDocumentRelativeKeyId)) return
     record.keys = [...existing, key]
     await didRepository.update(this.agentContext, record)
-  }
-
-  /**
-   * Fix a webvh update-key mapping whose `didDocumentRelativeKeyId` was stored as the full multibase
-   * (e.g. `#z6Mk...`) while the DID document verification method uses a short fragment (e.g. `#BVhGnL79`).
-   * `getKmsKeyIdForVerifiacationMethod` matches by suffix (`vm.id.endsWith(relativeKeyId)`), so the
-   * mismatch leaves the update key unresolvable and every webvh update fails with
-   * "The key ID must be present before the log can be edited." The private key is present in the KMS;
-   * only the mapping label is wrong. Idempotent: a mapping that already correlates to a VM is left alone.
-   */
-  private async repairWebvhUpdateKeyMapping(record: DidRecord): Promise<void> {
-    if (!record.didDocument || !record.keys?.length) return
-    const vms = record.didDocument.verificationMethod ?? []
-    let repaired = false
-    for (const key of record.keys) {
-      const rel = key.didDocumentRelativeKeyId
-      if (vms.some(vm => vm.id.endsWith(rel))) continue // already correlates
-      const vm = vms.find(v => `#${v.publicKeyMultibase}` === rel) // was stored as #<multibase>
-      if (!vm) continue
-      const correct = `#${vm.id.split('#')[1]}`
-      if (correct !== rel) {
-        this.logger?.warn('Fixing webvh update-key mapping', {
-          from: rel,
-          to: correct,
-          kmsKeyId: key.kmsKeyId,
-        })
-        key.didDocumentRelativeKeyId = correct
-        repaired = true
-      }
-    }
-    if (repaired) {
-      const didRepository = this.dependencyManager.resolve(DidRepository)
-      await didRepository.update(this.agentContext, record)
-    }
   }
 
   private async createAndAddDidCommKeysAndServices(didDocument: DidDocument): Promise<DidDocumentKey> {
@@ -516,62 +494,10 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     return didDocumentKey
   }
 
-  private async createAndAddLinkedVpServices(didDocument: DidDocument) {
-    const publicDid = didDocument.id
-    didDocument.service = [
-      ...(didDocument.service ?? []),
-      ...[
-        new DidDocumentService({
-          id: `${publicDid}#vpr-ecs-service-c-vp`,
-          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-service-c-vp.json`,
-          type: 'LinkedVerifiablePresentation',
-        }),
-        new DidDocumentService({
-          id: `${publicDid}#vpr-ecs-org-c-vp`,
-          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-org-c-vp.json`,
-          type: 'LinkedVerifiablePresentation',
-        }),
-      ],
-    ]
-
+  private addLinkedVpContext(didDocument: DidDocument) {
     didDocument.context = [
       ...(didDocument.context ?? []),
       'https://identity.foundation/linked-vp/contexts/v1',
-    ]
-  }
-
-  /**
-   * Basic implicit webvh services, for the moment pointing to the service VP
-   * and public base URL
-   */
-  private async createAndAddWebVhImplicitServices(didDocument: DidDocument) {
-    const publicDid = didDocument.id
-    didDocument.service = [
-      ...(didDocument.service ?? []),
-      ...[
-        new DidDocumentService({
-          id: `${publicDid}#whois`,
-          serviceEndpoint: `${this.publicApiBaseUrl}/vt/ecs-service-c-vp.json`,
-          type: 'LinkedVerifiablePresentation',
-        }),
-        new DidDocumentService({
-          id: `${publicDid}#files`,
-          serviceEndpoint: `${this.publicApiBaseUrl}`,
-          type: 'relativeRef',
-        }),
-      ],
-    ]
-  }
-
-  private async createAndAddAnonCredsServices(didDocument: DidDocument) {
-    const publicDid = didDocument.id
-    didDocument.service = [
-      ...(didDocument.service ?? []),
-      new DidDocumentService({
-        id: `${publicDid}#anoncreds`,
-        serviceEndpoint: `${this.publicApiBaseUrl}/anoncreds/v1`,
-        type: 'AnonCredsRegistry',
-      }),
     ]
   }
 

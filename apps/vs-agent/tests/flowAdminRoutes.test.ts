@@ -1,5 +1,5 @@
 import { CredoError } from '@credo-ts/core'
-import { BadRequestException, NotFoundException } from '@nestjs/common'
+import { ConflictException, NotFoundException } from '@nestjs/common'
 import { VtCredentialState, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -22,7 +22,7 @@ function makeService(
     dependencyManager: { resolve: () => vtFlowApi },
     didcomm: { connections: { findById: vi.fn().mockResolvedValue(connection) } },
   }
-  return new VtFlowsService({ getAgent: async () => agent } as never)
+  return new VtFlowsService({ getAgent: async () => agent } as never, undefined as never)
 }
 
 describe('VtFlowsService flow admin routes', () => {
@@ -54,13 +54,13 @@ describe('VtFlowsService flow admin routes', () => {
     await expect(service.editCredentialClaims('missing', {})).rejects.toThrow(NotFoundException)
   })
 
-  it('refuses oob-link and claim edits when the connection is not established', async () => {
+  it('refuses oob-link and claim edits with 409 when the connection is not established', async () => {
     const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([record]) }, { isReady: false })
-    await expect(service.sendOobLink('sess-1', 'https://x')).rejects.toThrow(BadRequestException)
-    await expect(service.editCredentialClaims('sess-1', {})).rejects.toThrow(BadRequestException)
+    await expect(service.sendOobLink('sess-1', 'https://x')).rejects.toThrow(ConflictException)
+    await expect(service.editCredentialClaims('sess-1', {})).rejects.toThrow(ConflictException)
   })
 
-  it('revokes with the REVOKED credential state and maps vt-flow errors to 400', async () => {
+  it('revokes with the REVOKED credential state and maps vt-flow errors to 409', async () => {
     const notifyCredentialStateChange = vi.fn().mockResolvedValue(record)
     const service = makeService({
       findAllByQuery: vi.fn().mockResolvedValue([record]),
@@ -75,6 +75,6 @@ describe('VtFlowsService flow admin routes', () => {
     })
 
     notifyCredentialStateChange.mockRejectedValue(new CredoError('expected COMPLETED'))
-    await expect(service.revokeCredential('sess-1')).rejects.toThrow(BadRequestException)
+    await expect(service.revokeCredential('sess-1')).rejects.toThrow(ConflictException)
   })
 })

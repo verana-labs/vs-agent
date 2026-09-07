@@ -1,7 +1,7 @@
 import { Body, Controller, HttpStatus, Inject, Logger, Post } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { HttpUtils } from '@verana-labs/vs-agent-client'
-import { EventType, MessageReceived, MessageStateUpdated } from '@verana-labs/vs-agent-model'
+import { EventType, MessageReceived } from '@verana-labs/vs-agent-model'
 
 import { MessageEventService } from './message.service'
 
@@ -34,31 +34,6 @@ export class MessageEventController {
       return { message: 'Message received updated successfully' }
     } catch (error) {
       HttpUtils.handleException(this.logger, error, 'Failed to received message state')
-    }
-  }
-
-  @Post(`/${EventType.MessageStateUpdated}`)
-  @ApiOperation({
-    summary: 'Handle the MessageStateUpdated event',
-    description: 'Processes the MessageStateUpdated event and updates the message state.',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Message state updated successfully.',
-    schema: {
-      example: { message: 'Message state updated successfully' },
-    },
-  })
-  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input data.' })
-  @ApiResponse({ status: HttpStatus.INTERNAL_SERVER_ERROR, description: 'Internal server error.' })
-  async updated(@Body() body: MessageStateUpdated): Promise<{ message: string }> {
-    try {
-      this.logger.log(`messageStateUpdated event: ${JSON.stringify(body)}`)
-
-      await this.message.updated()
-      return { message: 'Message state updated successfully' }
-    } catch (error) {
-      HttpUtils.handleException(this.logger, error, 'Failed to update message state')
     }
   }
 }

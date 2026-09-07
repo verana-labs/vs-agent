@@ -1,0 +1,15 @@
+{
+	local_certs
+}
+
+agent-validator.demo {
+	reverse_proxy agent-validator:3001
+}
+
+agent-applicant.demo {
+	reverse_proxy agent-applicant:3001
+}
+
+agent-ecosystem.demo {
+	reverse_proxy agent-ecosystem:3001
+}

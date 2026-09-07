@@ -3,11 +3,11 @@ import 'reflect-metadata'
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
+import { configureChainIndexers } from '@verana-labs/vs-agent-model'
 import {
   AuthorizationService,
   HttpInboundTransport,
   migrateVtjscServiceIds,
-  setupSelfTr,
   VsAgent,
   VsAgentWsInboundTransport,
   type VsAgentNestPlugin,
@@ -16,18 +16,22 @@ import {
   IndexerWebSocketService,
   buildDefaultIndexerHandlerRegistry,
   registerAuthorizationHandlers,
+  registerSelfIssuanceAnchorHandlers,
   EcsBootstrapService,
+  ECS_CLAIMS_VARIABLES,
+  readEcsClaimsFromEnv,
   reconcileVtjscPublications,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
-import { IncomingMessage } from 'http'
+import { IncomingMessage, Server } from 'http'
 import { Socket } from 'net'
 import * as path from 'path'
 
 import packageJson from '../package.json'
 
 import { VsAgentModule } from './admin.module'
+import { BootstrapState } from './common'
 import {
   ADMIN_LOG_LEVEL,
   ADMIN_PORT,
@@ -35,36 +39,24 @@ import {
   AGENT_ENDPOINTS,
   AGENT_INVITATION_IMAGE_URL,
   AGENT_LABEL,
-  FALLBACK_BASE64,
-  SELF_ISSUED_VTC_ORG_ADDRESS,
-  SELF_ISSUED_VTC_ORG_COUNTRYCODE,
-  SELF_ISSUED_VTC_ORG_REGISTRYID,
-  SELF_ISSUED_VTC_ORG_REGISTRYURL,
-  SELF_ISSUED_VTC_ORG_TYPE,
-  SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
-  SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
-  SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
-  SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
-  SELF_ISSUED_VTC_SERVICE_TYPE,
   UI_WELCOME_MESSAGE,
-  AGENT_DIDCOMM_VERSIONS,
   AGENT_LOG_LEVEL,
   AGENT_NAME,
   AGENT_PORT,
-  AGENT_PUBLIC_DID,
+  AGENT_PUBLIC_DID_METHOD,
   AGENT_WALLET_ID,
   AGENT_WALLET_KEY,
   AGENT_WALLET_KEY_DERIVATION_METHOD,
   askarPostgresConfig,
   keyDerivationMethodMap,
-  DEFAULT_AGENT_ENDPOINTS,
   ADMIN_API_AUTH_MODE,
   ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
-  ADMIN_API_EXTERNAL_PORT,
   ADMIN_API_PUBLIC_URL,
-  DEFAULT_PUBLIC_API_BASE_URL,
+  ADMIN_API_TRUSTED_NETWORKS,
+  validateAdminApiConfig,
   ENABLED_PLUGINS,
-  EVENTS_BASE_URL,
+  EVENTS_WEBHOOK_API_KEY,
+  EVENTS_WEBHOOK_URL,
   POSTGRES_HOST,
   PUBLIC_API_BASE_URL,
   USE_CORS,
@@ -79,14 +71,19 @@ import {
   VERANA_CORPORATION_ID,
   VERANA_INDEXER_SUBSCRIPTION_SCOPE,
   VERANA_AUTO_TRIGGER_RESOLVER,
+  VERANA_GAS_ADJUSTMENT,
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
+import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
+  derivePublicDidLocation,
+  type PublicDidLocation,
+  runWithRetries,
   type ServerConfig,
   setupAgent,
   toNestLogLevels,
@@ -95,30 +92,24 @@ import {
 } from './utils'
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
-  const { port, cors, endpoints, publicApiBaseUrl, nestPlugins = [] } = serverConfig
+  const { port, cors, publicApiBaseUrl, nestPlugins = [], bootstrapState } = serverConfig
 
   // Nest's global level governs the plain @nestjs/common loggers (the credo agent uses AGENT_LOG_LEVEL).
   const nestLogLevels = toNestLogLevels(ADMIN_LOG_LEVEL)
 
-  if (ADMIN_API_AUTH_MODE.includes('internal')) {
-    const adminApp = await NestFactory.create(VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins), {
-      logger: nestLogLevels,
-    })
-    commonAppConfig(adminApp, cors)
-    await adminApp.listen(port)
-  }
-
-  if (ADMIN_API_AUTH_MODE.includes('corporation')) {
-    const externalApp = await NestFactory.create(
-      VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins, {
-        external: true,
-        allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
-      }),
-      { logger: nestLogLevels },
-    )
-    commonAppConfig(externalApp, cors, false, false)
-    await externalApp.listen(ADMIN_API_EXTERNAL_PORT)
-  }
+  const trustedNetworks = parseTrustedNetworks(ADMIN_API_TRUSTED_NETWORKS)
+  const adminApp = await NestFactory.create(
+    VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins, {
+      authMode: ADMIN_API_AUTH_MODE,
+      allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
+      trustedNetworks,
+      bootstrapState,
+    }),
+    { logger: nestLogLevels },
+  )
+  adminApp.use(restrictDocsToTrustedPeers(trustedNetworks))
+  commonAppConfig(adminApp, cors)
+  await adminApp.listen(port)
 
   // PublicModule-specific config
   const publicApp = await NestFactory.create(PublicModule.register(agent, publicApiBaseUrl), {
@@ -141,23 +132,33 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   publicApp.use(express.static(publicDir))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
-  const enableHttp = endpoints.find(endpoint => endpoint.startsWith('http'))
-
   const webSocketServer = agent.didcomm.inboundTransports
     .find(x => x instanceof VsAgentWsInboundTransport)
     ?.getServer()
   const httpInboundTransport = agent.didcomm.inboundTransports.find(x => x instanceof HttpInboundTransport)
 
-  if (enableHttp) {
-    httpInboundTransport?.setApp(publicApp.getHttpAdapter().getInstance())
+  // When HTTP inbound DIDComm is enabled, the transport listens with the public app itself,
+  // so the DID document routes are servable before (never after) inbound DIDComm starts
+  let publicAppServer: Server | undefined
+  if (httpInboundTransport) {
+    await publicApp.init()
+    httpInboundTransport.setApp(publicApp.getHttpAdapter().getInstance())
+  } else {
+    publicAppServer = await publicApp.listen(AGENT_PORT)
   }
 
-  const httpServer = httpInboundTransport ? httpInboundTransport.server : await publicApp.listen(AGENT_PORT)
+  for (const transport of agent.didcomm.inboundTransports) {
+    await transport.start(agent.context)
+  }
+
+  const httpServer = httpInboundTransport ? httpInboundTransport.server : publicAppServer
 
   return { httpServer, webSocketServer }
 }
 
 const AUTHORIZATION_SEED_RETRY_MS = 30_000
+const VTJSC_MIGRATION_RETRY_MS = 30_000
+const VTJSC_MIGRATION_MAX_ATTEMPTS = 5
 
 const run = async () => {
   const serverLogger = new TsLogger(ADMIN_LOG_LEVEL, 'Server')
@@ -175,22 +176,39 @@ const run = async () => {
     )
   }
 
-  const parsedDid = AGENT_PUBLIC_DID ? parseDid(AGENT_PUBLIC_DID) : null
-
-  if (!AGENT_PUBLIC_DID) {
-    serverLogger.warn('AGENT_PUBLIC_DID is not defined. You must set it in production releases')
-  }
-
-  // Check it is a supported DID method
-  if (parsedDid && !['web', 'webvh'].includes(parsedDid.method)) {
-    serverLogger.error('Only did:web or did:webvh method is supported')
-    process.exit(1)
-  }
-
   const configErrors: string[] = []
-  // Verana on-chain config is optional (v1.x behaviour); validate the format only when provided.
-  if (VERANA_CORPORATION_ID && !/^\d+$/.test(VERANA_CORPORATION_ID)) {
+  let didLocation: PublicDidLocation | undefined
+  if (!PUBLIC_API_BASE_URL) {
+    configErrors.push('PUBLIC_API_BASE_URL is required')
+  } else {
+    try {
+      didLocation = derivePublicDidLocation(PUBLIC_API_BASE_URL)
+    } catch (error) {
+      configErrors.push((error as Error).message)
+    }
+  }
+  if (!['webvh', 'web'].includes(AGENT_PUBLIC_DID_METHOD)) {
+    configErrors.push(`AGENT_PUBLIC_DID_METHOD must be 'webvh' or 'web' (got '${AGENT_PUBLIC_DID_METHOD}')`)
+  }
+  if (!VERANA_CORPORATION_ID) {
+    configErrors.push('VERANA_CORPORATION_ID is required')
+  } else if (!/^\d+$/.test(VERANA_CORPORATION_ID)) {
     configErrors.push('VERANA_CORPORATION_ID must be a non-negative integer')
+  }
+  if (!VERANA_RPC_ENDPOINT_URL) {
+    configErrors.push('VERANA_RPC_ENDPOINT_URL is required')
+  }
+  if (!VERANA_INDEXER_BASE_URL) {
+    configErrors.push('VERANA_INDEXER_BASE_URL is required')
+  }
+  if (!VERANA_ACCOUNT_MNEMONIC) {
+    configErrors.push('VERANA_ACCOUNT_MNEMONIC is required')
+  }
+  if (
+    VERANA_GAS_ADJUSTMENT !== undefined &&
+    (!Number.isFinite(VERANA_GAS_ADJUSTMENT) || VERANA_GAS_ADJUSTMENT <= 0)
+  ) {
+    configErrors.push('VERANA_GAS_ADJUSTMENT must be a positive number')
   }
   if (!['standalone', 'delegated'].includes(AGENT_MODE)) {
     configErrors.push(`AGENT_MODE must be 'standalone' or 'delegated' (got '${AGENT_MODE}')`)
@@ -198,77 +216,63 @@ const run = async () => {
   if (AGENT_MODE === 'delegated' && !AGENT_DELEGATED_PARENT_VS_DID) {
     configErrors.push('AGENT_DELEGATED_PARENT_VS_DID is required when AGENT_MODE=delegated')
   }
+  if (AGENT_MODE === 'standalone' && TRUSTED_ECS_ECOSYSTEM_DIDS.length === 0) {
+    configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS is required when AGENT_MODE=standalone')
+  }
   if (TRUSTED_ECS_ECOSYSTEM_DIDS.some(did => !did.startsWith('did:'))) {
     configErrors.push('TRUSTED_ECS_ECOSYSTEM_DIDS must be a comma-separated list of DIDs')
   }
-  if (!AGENT_DIDCOMM_VERSIONS.includes('v2')) {
-    if (VERANA_RPC_ENDPOINT_URL || VERANA_INDEXER_BASE_URL) {
-      configErrors.push('vt-flow requires DIDComm v2: add v2 to AGENT_DIDCOMM_VERSIONS')
-    } else {
-      serverLogger.warn(
-        'DIDComm v2 is disabled; vt-flow will be unavailable until v2 is added to AGENT_DIDCOMM_VERSIONS',
-      )
+  // [VSA-VTI-CFG-ENV-ECS]: the agent issues its own Service credential in standalone mode, so no
+  // validator can supply a claim it is missing
+  const serviceClaims = readEcsClaimsFromEnv().service
+  if (AGENT_MODE === 'standalone') {
+    const requiredServiceClaims = [
+      'name',
+      'type',
+      'description',
+      'logoUri',
+      'minimumAgeRequired',
+      'termsAndConditionsUri',
+      'privacyPolicyUri',
+    ] as const
+    for (const claim of requiredServiceClaims) {
+      if (!serviceClaims[claim]) {
+        configErrors.push(`${ECS_CLAIMS_VARIABLES.service[claim]} is required when AGENT_MODE=standalone`)
+      }
     }
   }
-  if (configErrors.length > 0) {
+  if (serviceClaims.minimumAgeRequired && !Number.isInteger(Number(serviceClaims.minimumAgeRequired))) {
+    configErrors.push(`${ECS_CLAIMS_VARIABLES.service.minimumAgeRequired} must be an integer`)
+  }
+  if (configErrors.length > 0 || !didLocation) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
     process.exit(1)
   }
 
-  let endpoints = AGENT_ENDPOINTS
-  if (!endpoints && parsedDid) endpoints = [`wss://${decodeURIComponent(parsedDid.id)}`]
-  if (!endpoints) endpoints = DEFAULT_AGENT_ENDPOINTS
+  const parsedDid = parseDid(`did:${AGENT_PUBLIC_DID_METHOD}:${didLocation.location}`)
 
-  let publicApiBaseUrl = PUBLIC_API_BASE_URL
-  if (!publicApiBaseUrl && parsedDid) publicApiBaseUrl = `https://${decodeURIComponent(parsedDid.id)}`
-  if (!publicApiBaseUrl) publicApiBaseUrl = DEFAULT_PUBLIC_API_BASE_URL
+  let endpoints = AGENT_ENDPOINTS
+  if (!endpoints) {
+    const port = didLocation.port ? `:${didLocation.port}` : ''
+    const path = didLocation.path ? `/${didLocation.path}` : ''
+    endpoints = [`wss://${didLocation.host}${port}${path}`]
+  }
+
+  const publicApiBaseUrl = didLocation.normalizedBaseUrl
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
-  if (ADMIN_API_AUTH_MODE.length === 0) {
-    serverLogger.error('ADMIN_API_AUTH_MODE is required (comma-separated list of: internal, corporation)')
+  const adminApiConfigErrors = validateAdminApiConfig({
+    authMode: ADMIN_API_AUTH_MODE,
+    publicUrl: ADMIN_API_PUBLIC_URL,
+    allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
+    trustedNetworks: ADMIN_API_TRUSTED_NETWORKS,
+  })
+  if (adminApiConfigErrors.length > 0) {
+    serverLogger.error(`Invalid configuration:\n- ${adminApiConfigErrors.join('\n- ')}`)
     process.exit(1)
   }
-  const unknownAuthModes = ADMIN_API_AUTH_MODE.filter(mode => !['internal', 'corporation'].includes(mode))
-  if (unknownAuthModes.length > 0) {
-    serverLogger.error(
-      `ADMIN_API_AUTH_MODE has unsupported value(s): ${unknownAuthModes.join(', ')}. Allowed: internal, corporation`,
-    )
-    process.exit(1)
-  }
-  if (ADMIN_API_PUBLIC_URL) {
-    let isBareHttpsOrigin = false
-    try {
-      const url = new URL(ADMIN_API_PUBLIC_URL)
-      isBareHttpsOrigin = url.protocol === 'https:' && url.origin === ADMIN_API_PUBLIC_URL
-    } catch {
-      isBareHttpsOrigin = false
-    }
-    if (!isBareHttpsOrigin) {
-      serverLogger.error(
-        'ADMIN_API_PUBLIC_URL must be a single https:// origin (scheme + host + optional port, no trailing path)',
-      )
-      process.exit(1)
-    }
-  }
-
-  if (ADMIN_API_PUBLIC_URL && !ADMIN_API_AUTH_MODE.includes('corporation')) {
-    serverLogger.error(
-      'ADMIN_API_PUBLIC_URL must not be set unless ADMIN_API_AUTH_MODE includes "corporation"',
-    )
-    process.exit(1)
-  }
-  if (ADMIN_API_AUTH_MODE.includes('corporation') && !ADMIN_API_PUBLIC_URL) {
-    serverLogger.error('ADMIN_API_PUBLIC_URL is required when ADMIN_API_AUTH_MODE includes "corporation"')
-    process.exit(1)
-  }
-  if (ADMIN_API_AUTH_MODE.includes('corporation') && !VERANA_CORPORATION_ID) {
-    serverLogger.error('VERANA_CORPORATION_ID is required when ADMIN_API_AUTH_MODE includes "corporation"')
-    process.exit(1)
-  }
-  const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE.includes('corporation')
-    ? ADMIN_API_PUBLIC_URL
-    : undefined
+  const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE === 'corporation' ? ADMIN_API_PUBLIC_URL : undefined
 
   // Dynamically load optional plugin packages.
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
@@ -296,16 +300,17 @@ const run = async () => {
     VtFlowNestPlugin,
   ]
 
-  const indexerService = VERANA_INDEXER_BASE_URL
-    ? new VeranaIndexerService({ baseUrl: VERANA_INDEXER_BASE_URL, logger: serverLogger })
-    : undefined
+  const indexerService = new VeranaIndexerService({
+    baseUrl: VERANA_INDEXER_BASE_URL,
+    logger: serverLogger,
+  })
 
   // Connect to Verana blockchain for on-chain transactions
   let veranaChain: VeranaChainService | undefined
   let authorizationService: AuthorizationService | undefined
   if (VERANA_RPC_ENDPOINT_URL && VERANA_ACCOUNT_MNEMONIC) {
     let corporationAddress: string | undefined
-    if (VERANA_CORPORATION_ID && indexerService) {
+    if (VERANA_CORPORATION_ID) {
       const corporation = await indexerService.getCorporation(VERANA_CORPORATION_ID).catch(() => undefined)
       corporationAddress = corporation?.policy_address ?? undefined
       if (!corporationAddress) {
@@ -321,30 +326,22 @@ const run = async () => {
       corporationAddress,
       logger: serverLogger,
       autoTriggerResolver: VERANA_AUTO_TRIGGER_RESOLVER,
+      gasAdjustment: VERANA_GAS_ADJUSTMENT,
     })
     await veranaChain.start()
+    configureChainIndexers({ [veranaChain.getChainId]: VERANA_INDEXER_BASE_URL })
 
     authorizationService = new AuthorizationService({
       chain: veranaChain,
       logger: serverLogger,
       corporationId: VERANA_CORPORATION_ID ? Number(VERANA_CORPORATION_ID) : undefined,
     })
-    const seedAuthorizationCache = async (): Promise<boolean> =>
-      authorizationService!
-        .refreshForOperator()
-        .then(() => true)
-        .catch(error => {
-          serverLogger.error(
-            `[Authorization] failed to seed the authorization cache: ${(error as Error).message}`,
-          )
-          return false
-        })
-    if (!(await seedAuthorizationCache())) {
-      const retry = setInterval(async () => {
-        if (await seedAuthorizationCache()) clearInterval(retry)
-      }, AUTHORIZATION_SEED_RETRY_MS)
-      retry.unref()
-    }
+    await runWithRetries({
+      run: () => authorizationService!.refreshForOperator(),
+      intervalMs: AUTHORIZATION_SEED_RETRY_MS,
+      onError: error =>
+        serverLogger.error(`[Authorization] failed to seed the authorization cache: ${error.message}`),
+    })
 
     try {
       const balance = await veranaChain.getBalance()
@@ -361,10 +358,6 @@ const run = async () => {
         `[VeranaChain] Could not check operator authorization/balance: ${(error as Error).message}`,
       )
     }
-  } else {
-    serverLogger.warn(
-      'VERANA_RPC_ENDPOINT_URL or VERANA_ACCOUNT_MNEMONIC not set. Verana blockchain features will be disabled. Set these environment variables to enable on-chain capabilities.',
-    )
   }
 
   const discoveryOptions = (() => {
@@ -376,7 +369,8 @@ const run = async () => {
     }
   })()
 
-  const { agent, indexer, verifyPeer } = await setupAgent({
+  const { agent, verifyPeer } = await setupAgent({
+    indexer: indexerService,
     endpoints,
     discoveryOptions,
     port: AGENT_PORT,
@@ -388,7 +382,7 @@ const run = async () => {
     },
     label: AGENT_LABEL || 'Test VS Agent',
     displayPictureUrl: AGENT_INVITATION_IMAGE_URL,
-    parsedDid: parsedDid ?? undefined,
+    parsedDid,
     logLevel: AGENT_LOG_LEVEL,
     publicApiBaseUrl,
     autoDiscloseUserProfile: USER_PROFILE_AUTODISCLOSE,
@@ -399,6 +393,12 @@ const run = async () => {
     adminApiServiceEndpoint,
   })
 
+  const bootstrapState = new BootstrapState()
+  if (agent.did) {
+    bootstrapState.require('vtjsc-service-id-migration')
+  }
+  bootstrapState.require('indexer-subscription')
+
   const conf: ServerConfig = {
     port: ADMIN_PORT,
     cors: USE_CORS,
@@ -406,39 +406,29 @@ const run = async () => {
     publicApiBaseUrl,
     endpoints,
     nestPlugins,
+    bootstrapState,
   }
   const { httpServer, webSocketServer } = await startServers(agent, conf)
 
   if (agent.did) {
-    await migrateVtjscServiceIds(agent).catch((error: Error) =>
-      serverLogger.error(`[VTJSC] service id migration failed: ${error.message}`),
-    )
+    await runWithRetries({
+      run: () => migrateVtjscServiceIds(agent),
+      intervalMs: VTJSC_MIGRATION_RETRY_MS,
+      maxAttempts: VTJSC_MIGRATION_MAX_ATTEMPTS,
+      onSuccess: () => bootstrapState.complete('vtjsc-service-id-migration'),
+      onError: (error, attempt) =>
+        serverLogger.error(
+          `[VTJSC] service id migration failed (attempt ${attempt}/${VTJSC_MIGRATION_MAX_ATTEMPTS}): ${error.message}`,
+        ),
+      onExhausted: error => bootstrapState.fail('vtjsc-service-id-migration', error.message),
+    })
   }
 
-  // Initialize Self-Trust Registry
-  if (agent.did)
-    await setupSelfTr({
-      agent,
-      publicApiBaseUrl,
-      defaults: {
-        agentLabel: AGENT_LABEL,
-        agentInvitationImageUrl: AGENT_INVITATION_IMAGE_URL,
-        fallbackBase64: FALLBACK_BASE64,
-        serviceType: SELF_ISSUED_VTC_SERVICE_TYPE,
-        serviceDescription: SELF_ISSUED_VTC_SERVICE_DESCRIPTION,
-        serviceMinimumAgeRequired: SELF_ISSUED_VTC_SERVICE_MINIMUMAGEREQUIRED,
-        serviceTermsAndConditions: SELF_ISSUED_VTC_SERVICE_TERMSANDCONDITIONS,
-        servicePrivacyPolicy: SELF_ISSUED_VTC_SERVICE_PRIVACYPOLICY,
-        orgRegistryId: SELF_ISSUED_VTC_ORG_REGISTRYID,
-        orgRegistryUrl: SELF_ISSUED_VTC_ORG_REGISTRYURL,
-        orgAddress: SELF_ISSUED_VTC_ORG_ADDRESS,
-        orgType: SELF_ISSUED_VTC_ORG_TYPE,
-        orgCountryCode: SELF_ISSUED_VTC_ORG_COUNTRYCODE,
-      },
-    })
+  const ecsClaims = agent.ecsClaims ?? {}
 
-  // Deliver domain events emitted on the agent bus to the configured webhook endpoint
-  webhookEvent(agent, EVENTS_BASE_URL, serverLogger)
+  if (EVENTS_WEBHOOK_URL) {
+    webhookEvent(agent, { url: EVENTS_WEBHOOK_URL, apiKey: EVENTS_WEBHOOK_API_KEY }, serverLogger)
+  }
 
   // Register plugin events after agent is initialized
   for (const plugin of nestPlugins) {
@@ -446,7 +436,6 @@ const run = async () => {
   }
 
   // Connect to Verana indexer for on-chain notifications
-  // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
   if (VERANA_INDEXER_BASE_URL) {
     const handlerRegistry = buildDefaultIndexerHandlerRegistry()
     if (VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE.includes('*')) {
@@ -460,6 +449,14 @@ const run = async () => {
       )
     }
     if (authorizationService) registerAuthorizationHandlers(handlerRegistry, authorizationService)
+    if (VERANA_CORPORATION_ID) {
+      registerSelfIssuanceAnchorHandlers(
+        handlerRegistry,
+        indexerService,
+        Number(VERANA_CORPORATION_ID),
+        ecsClaims,
+      )
+    }
 
     const indexerCorporationId =
       VERANA_INDEXER_SUBSCRIPTION_SCOPE === 'corporation' && VERANA_CORPORATION_ID
@@ -471,16 +468,20 @@ const run = async () => {
         agent,
         handlerRegistry,
         corporationId: indexerCorporationId,
+        agentCorporationId: Number(VERANA_CORPORATION_ID),
       })
+      bootstrapState.watchIndexer(() => indexerWs.syncStatus)
+      bootstrapState.complete('indexer-subscription')
       await indexerWs.start()
     } else {
+      bootstrapState.skip('indexer-subscription')
       serverLogger.warn(
-        '[IndexerWS] subscription skipped: agent has no public DID and no VERANA_CORPORATION_ID scope',
+        '[IndexerWS] subscription skipped: agent has no public DID and VERANA_INDEXER_SUBSCRIPTION_SCOPE is not corporation',
       )
     }
 
-    if (indexerService && VERANA_CORPORATION_ID) {
-      void reconcileVtjscPublications(agent, indexerService, Number(VERANA_CORPORATION_ID)).catch(
+    if (VERANA_CORPORATION_ID) {
+      void reconcileVtjscPublications(agent, indexerService, Number(VERANA_CORPORATION_ID), ecsClaims).catch(
         (error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`),
       )
     }
@@ -488,7 +489,7 @@ const run = async () => {
 
   const ecsBootstrap = new EcsBootstrapService(
     agent,
-    indexer,
+    indexerService,
     {
       mode: AGENT_MODE as 'standalone' | 'delegated',
       trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS.length ? TRUSTED_ECS_ECOSYSTEM_DIDS : undefined,
@@ -497,10 +498,14 @@ const run = async () => {
     },
     serverLogger,
   )
-  void ecsBootstrap.run().catch((error: Error) => {
-    serverLogger.error(`[EcsBootstrap] ${error.message}`)
-    if (AGENT_MODE === 'delegated') process.exit(1)
-  })
+  bootstrapState.recordEcsBootstrap(AGENT_MODE, 'pending')
+  void ecsBootstrap.run().then(
+    () => bootstrapState.recordEcsBootstrap(AGENT_MODE, 'completed'),
+    (error: Error) => {
+      bootstrapState.recordEcsBootstrap(AGENT_MODE, 'failed', error.message)
+      serverLogger.error(`[EcsBootstrap] ${error.message}`)
+    },
+  )
 
   // Accept incoming DIDComm only after the catch-up, so the agent does not act on stale chain state.
   if (webSocketServer) {
@@ -511,10 +516,9 @@ const run = async () => {
     })
   }
 
-  // TODO: Once all Verana V4 features are implemented, this must be MANDATORY.
-  if (!VERANA_INDEXER_BASE_URL || !VERANA_CHAIN_ID) {
+  if (!VERANA_CHAIN_ID) {
     serverLogger.warn(
-      'VERANA_INDEXER_BASE_URL or VERANA_CHAIN_ID not set. The VS-CONN-VS trust gate is disabled and every peer will be accepted. Set these environment variables to enforce trust resolution.',
+      'VERANA_CHAIN_ID not set. The VS-CONN-VS trust gate is disabled and every peer will be accepted. Set this environment variable to enforce trust resolution.',
     )
   }
 
@@ -523,4 +527,7 @@ const run = async () => {
   )
 }
 
-run()
+run().catch((error: Error) => {
+  new TsLogger(ADMIN_LOG_LEVEL, 'Server').error(`Failed to start VS Agent: ${error.message}`)
+  process.exit(1)
+})

@@ -3,7 +3,13 @@ import { LogLevel, utils } from '@credo-ts/core'
 import { type DidCommVersion } from '@credo-ts/didcomm'
 import { agentDependencies } from '@credo-ts/node'
 import { type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { createVsAgent, setupBaseDidComm, VsAgent } from '@verana-labs/vs-agent-sdk'
+import {
+  createVsAgent,
+  setupBaseDidComm,
+  VeranaIndexerService,
+  VsAgent,
+  type VeranaChainService,
+} from '@verana-labs/vs-agent-sdk'
 
 import { TsLogger } from '../../src/utils'
 
@@ -12,11 +18,15 @@ export const startAgent = async ({
   domain,
   vtFlowOptions,
   didcommVersions,
+  veranaChain,
+  indexer,
 }: {
   label: string
   domain: string
   vtFlowOptions?: VtFlowModuleConfigOptions
   didcommVersions?: DidCommVersion[]
+  veranaChain?: VeranaChainService
+  indexer?: VeranaIndexerService
 }): Promise<VsAgent<any>> => {
   const walletConfig = getAskarStoreConfig(label, { inMemory: true })
 
@@ -32,7 +42,7 @@ export const startAgent = async ({
         publicApiBaseUrl: `https://${domain}`,
         endpoints: [`rxjs:${domain}`],
         vtFlow: vtFlowOptions,
-        didcommVersions,
+        didcommVersions: didcommVersions ?? ['v1', 'v2'],
       }),
       ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
       ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol()] : []),
@@ -45,6 +55,15 @@ export const startAgent = async ({
     dependencies: agentDependencies,
     publicApiBaseUrl: `https://${domain}`,
     label,
+    veranaChain,
+    // Unroutable on purpose: these agents never reach the VPR, so a test that does hit it fails
+    // loudly instead of silently talking to a real indexer.
+    indexer:
+      indexer ??
+      new VeranaIndexerService({
+        baseUrl: 'http://indexer.invalid',
+        logger: new TsLogger(LogLevel.Off, 'VeranaIndexer'),
+      }),
   })
   return agent as unknown as VsAgent<any>
 }

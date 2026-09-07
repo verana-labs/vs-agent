@@ -65,6 +65,11 @@ export interface IndexerSubscribeMessage {
   corporationId?: number
 }
 
+export interface IndexerSubscribedMessage {
+  type: 'subscribed'
+  block: number
+}
+
 export interface IndexerEventsResponse {
   events: IndexerEventRecord[]
   count: number
@@ -151,6 +156,7 @@ export interface CredentialSchemaDto {
   id: number
   ecosystem_id: number
   json_schema: string
+  digest_algorithm: string
   issuer_onboarding_mode?: string
   verifier_onboarding_mode?: string
   archived: string | null
@@ -232,6 +238,7 @@ export interface RawParticipant {
   opSummaryDigest?: string
   revoked: Date | undefined
   slashed: Date | undefined
+  vsOperator?: string
 }
 
 export interface Ecosystem {
@@ -246,10 +253,16 @@ export interface CredentialSchema {
   id: number
   ecosystemId: number
   jsonSchema: string
+  digestAlgorithm: string
   issuerOnboardingMode: number
   verifierOnboardingMode: number
   holderOnboardingMode: number
   archived: Date | undefined
+}
+
+export interface StoredDigest {
+  digest: string
+  created: Date | undefined
 }
 
 export interface OperatorAuthorization {
@@ -283,7 +296,8 @@ export interface VsOperatorAuthorization {
 
 export interface ParticipantQueryClient {
   GetParticipant(req: { id: number }): Promise<{ participant?: RawParticipant }>
-  FindParticipantsWithDID(req: object): Promise<{ participants: RawParticipant[] }>
+  /** The `pp` module exposes no query by DID alone; filter through ListParticipants instead. */
+  ListParticipants(req: object): Promise<{ participants: RawParticipant[] }>
   GetParticipantSession(req: { id: string }): Promise<{ session?: unknown }>
 }
 
@@ -293,6 +307,10 @@ export interface EcosystemQueryClient {
 
 export interface CredentialSchemaQueryClient {
   GetCredentialSchema(req: { id: number }): Promise<{ schema?: CredentialSchema }>
+}
+
+export interface DigestQueryClient {
+  GetDigest(req: { digest: string }): Promise<{ digest?: StoredDigest }>
 }
 
 export interface DelegationQueryClient {
@@ -314,6 +332,7 @@ export interface VeranaChainConfig {
   mnemonic: string
   logger: BaseLogger
   gasPrice?: string
+  gasAdjustment?: number
   corporationAddress?: string
   autoTriggerResolver?: boolean
 }

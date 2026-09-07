@@ -35,6 +35,9 @@ export interface CredentialIssuanceRequest {
   jsonSchemaCredentialId: string
   claims: JsonObject
   did?: string
+  participantSessionId?: string
+  agentParticipantId?: number
+  walletAgentParticipantId?: number
 }
 
 export interface CredentialIssuanceResponse {
@@ -42,6 +45,7 @@ export interface CredentialIssuanceResponse {
   didcommInvitationUrl?: string
   jsonSchemaCredentialId?: string
   credential?: Record<string, unknown>
+  digestJCS?: string
 }
 
 export interface CredentialRevocationRequest {

@@ -7,9 +7,6 @@ import { ValidationState, VeranaChainService, VeranaIndexerService } from '../..
 import { PARTICIPANT_ROLE_HOLDER, PARTICIPANT_ROLE_ISSUER, VeranaTestChain } from './VeranaTestChain'
 import { COOLUSER_MNEMONIC, SETUP_TIMEOUT_MS, startStack, type StartedStack } from './helpers'
 
-const E2E_ENABLED = process.env.RUN_FLOW_E2E === '1'
-const describeE2E = E2E_ENABLED ? describe : describe.skip
-
 const RUN_ID = String(Date.now())
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
 const PP_SESSION = '/verana.pp.v1.MsgCreateOrUpdateParticipantSession'
@@ -38,7 +35,7 @@ async function untilEffective<T>(fn: () => Promise<T>): Promise<T> {
   throw lastErr
 }
 
-describeE2E('applicant-side chain ops (V4)', () => {
+describe('applicant-side chain ops (V4)', () => {
   let stack: StartedStack
   let chainA: VeranaTestChain
   let veranaChain: VeranaChainService

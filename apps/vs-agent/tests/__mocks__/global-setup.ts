@@ -1,7 +1,10 @@
 import '@openwallet-foundation/askar-nodejs'
+import { configureChainIndexers } from '@verana-labs/vs-agent-model'
 import { vi } from 'vitest'
 
-import { mockResponses } from './object'
+import { mockResponses, TEST_INDEXER_BASE_URL } from './object'
+
+configureChainIndexers({ 'vna-test-1': TEST_INDEXER_BASE_URL })
 
 const fetchOriginal = global.fetch
 
@@ -33,15 +36,6 @@ vi.stubGlobal('fetch', async (input: any | URL, options?: RequestInit) => {
 vi.mock('node-fetch', async () => {
   return {
     default: vi.fn(async (url: string) => {
-      if (url === 'http://localhost:5000/message-received') {
-        return {
-          ok: true,
-          json: async () => 'ok',
-          text: async () => 'ok',
-          headers: new Map([['content-type', 'application/json']]),
-        }
-      }
-
       throw new Error(`Unhandled fetch to ${url}`)
     }),
   }

@@ -1,3 +1,3 @@
 export * from './dto/service-endpoint.dto'
-export * from './ServiceEndpointsController'
+export * from './V1ServiceEndpointsController'
 export * from './ServiceEndpointsService'

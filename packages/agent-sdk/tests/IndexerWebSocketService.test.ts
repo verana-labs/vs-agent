@@ -11,8 +11,10 @@ const { FakeWebSocket } = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void
   class FakeWebSocket {
     static instances: FakeWebSocket[] = []
+    static autoAcknowledgeSubscribe = true
     static reset(): void {
       FakeWebSocket.instances = []
+      FakeWebSocket.autoAcknowledgeSubscribe = true
     }
     private listeners: Record<string, Listener[]> = {}
     url: string
@@ -29,8 +31,20 @@ const { FakeWebSocket } = vi.hoisted(() => {
     emit(event: string, ...args: unknown[]): void {
       ;(this.listeners[event] ?? []).forEach(cb => cb(...args))
     }
-    send(data: string): void {
+    send(data: string, cb?: () => void): void {
       this.sent.push(data)
+      cb?.()
+      if (!FakeWebSocket.autoAcknowledgeSubscribe) return
+      let action: unknown
+      try {
+        action = (JSON.parse(data) as { action?: unknown }).action
+      } catch {
+        return
+      }
+      if (action !== 'subscribe') return
+      queueMicrotask(() =>
+        this.emit('message', Buffer.from(JSON.stringify({ type: 'subscribed', block: 2 }))),
+      )
     }
     close(): void {
       this.emit('close')
@@ -113,6 +127,9 @@ const readyFrame = (): Buffer =>
 const blockFrame = (block: number, events: IndexerEventRecord[]): Buffer =>
   Buffer.from(JSON.stringify({ type: 'block', block, blockTime: '', events }))
 
+const lastWs = (): InstanceType<typeof FakeWebSocket> =>
+  FakeWebSocket.instances.at(-1) as InstanceType<typeof FakeWebSocket>
+
 describe('IndexerWebSocketService', () => {
   let agent: VsAgent
   let registry: IndexerHandlerRegistry
@@ -139,16 +156,88 @@ describe('IndexerWebSocketService', () => {
       agent,
       handlerRegistry: registry,
     })
-    return service.start()
+    const started = service.start()
+    FakeWebSocket.instances.at(-1)?.emit('message', readyFrame())
+    return started
   }
-
-  const lastWs = (): InstanceType<typeof FakeWebSocket> => FakeWebSocket.instances.at(-1)!
 
   it('sends a DID-scoped subscribe when the indexer is ready', async () => {
     await startWith(async () => undefined)
     lastWs().emit('message', readyFrame())
     const subscribe = lastWs().sent.map(s => JSON.parse(s))
     expect(subscribe).toContainEqual({ action: 'subscribe', dids: ['did:web:agent.test'] })
+  })
+
+  it('waits for the subscribed acknowledgement before reading old events', async () => {
+    service = new IndexerWebSocketService({
+      indexerUrl: 'http://indexer.test',
+      agent,
+      handlerRegistry: registry,
+    })
+    const started = service.start()
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(fetchJsonMock).not.toHaveBeenCalled()
+
+    lastWs().emit('message', readyFrame())
+    await started
+
+    expect(fetchJsonMock).toHaveBeenCalled()
+  })
+
+  it('starts the catch-up anyway when the indexer never acknowledges the subscribe', async () => {
+    FakeWebSocket.autoAcknowledgeSubscribe = false
+    vi.useFakeTimers()
+    service = new IndexerWebSocketService({
+      indexerUrl: 'http://indexer.test',
+      agent,
+      handlerRegistry: registry,
+    })
+    const started = service.start()
+    lastWs().emit('message', readyFrame())
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchJsonMock).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    await started
+
+    expect(fetchJsonMock).toHaveBeenCalled()
+  })
+
+  it('skips the catch-up when the socket closes before the acknowledgement', async () => {
+    FakeWebSocket.autoAcknowledgeSubscribe = false
+    vi.useFakeTimers()
+    service = new IndexerWebSocketService({
+      indexerUrl: 'http://indexer.test',
+      agent,
+      handlerRegistry: registry,
+    })
+    const started = service.start()
+    lastWs().emit('message', readyFrame())
+    lastWs().close()
+    await started
+
+    expect(fetchJsonMock).not.toHaveBeenCalled()
+  })
+
+  it('buffers a block that arrives before the acknowledgement instead of dropping it', async () => {
+    FakeWebSocket.autoAcknowledgeSubscribe = false
+    const dispatched: string[] = []
+    registry.register({ msg: 'TestMsg', handle: async a => void dispatched.push(String(a.entity_id)) })
+    service = new IndexerWebSocketService({
+      indexerUrl: 'http://indexer.test',
+      agent,
+      handlerRegistry: registry,
+    })
+    const started = service.start()
+    const ws = lastWs()
+    ws.emit('message', readyFrame())
+    ws.emit('message', blockFrame(11, [mkEvent({ block_height: 10, tx_hash: 'aa', entity_id: 'A' })]))
+    ws.emit('message', Buffer.from(JSON.stringify({ type: 'subscribed', block: 8 })))
+    await started
+
+    await vi.waitFor(() => expect(dispatched).toEqual(['A']))
   })
 
   it('sends a corp-scoped subscribe and catch-up when corporationId is set', async () => {
@@ -159,7 +248,9 @@ describe('IndexerWebSocketService', () => {
       handlerRegistry: registry,
       corporationId: 42,
     })
-    await service.start()
+    const corpStarted = service.start()
+    lastWs().emit('message', readyFrame())
+    await corpStarted
 
     const catchupUrl = fetchJsonMock.mock.calls.at(0)?.[0] as string
     expect(catchupUrl).toContain('corporation_id=42')
@@ -352,9 +443,10 @@ describe('IndexerWebSocketService', () => {
       agent,
       handlerRegistry: registry,
     })
-    await session1.start()
+    const s1 = session1.start()
+    lastWs().emit('message', readyFrame())
+    await s1
     const ws1 = lastWs()
-    ws1.emit('message', readyFrame())
     ws1.emit('message', blockFrame(50, [tail]))
     await vi.waitFor(() => expect(dispatched).toEqual(['A']))
     session1.stop()
@@ -372,9 +464,102 @@ describe('IndexerWebSocketService', () => {
       agent,
       handlerRegistry: registry2,
     })
-    await session2.start()
+    const s2 = session2.start()
+    lastWs().emit('message', readyFrame())
+    await s2
     session2.stop()
 
     expect(dispatched).toEqual(['A'])
+  })
+
+  describe('syncStatus', () => {
+    const makeService = (): IndexerWebSocketService =>
+      new IndexerWebSocketService({ indexerUrl: 'http://indexer.test', agent, handlerRegistry: registry })
+
+    it('reports never-synced until the first catch-up completes, then synced', async () => {
+      service = makeService()
+      const started = service.start()
+
+      expect(service.syncStatus).toBe('never-synced')
+
+      lastWs().emit('message', readyFrame())
+      await started
+
+      expect(service.syncStatus).toBe('synced')
+    })
+
+    it('stays never-synced when the socket closes before the acknowledgement', async () => {
+      FakeWebSocket.autoAcknowledgeSubscribe = false
+      vi.useFakeTimers()
+      service = makeService()
+      const started = service.start()
+      lastWs().emit('message', readyFrame())
+      lastWs().close()
+      await started
+
+      expect(service.syncStatus).toBe('never-synced')
+    })
+
+    it('reports catching-up while the REST catch-up is running', async () => {
+      let releaseCatchUp: () => void = () => undefined
+      fetchJsonMock.mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            releaseCatchUp = () => resolve({ events: [], count: 0, after_block_height: 0 })
+          }),
+      )
+      service = makeService()
+      const started = service.start()
+      lastWs().emit('message', readyFrame())
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(service.syncStatus).toBe('catching-up')
+
+      releaseCatchUp()
+      await started
+
+      expect(service.syncStatus).toBe('synced')
+    })
+
+    it('reports disconnected, not catching-up, when the socket drops after a successful sync', async () => {
+      service = makeService()
+      const started = service.start()
+      lastWs().emit('message', readyFrame())
+      await started
+      expect(service.syncStatus).toBe('synced')
+
+      lastWs().close()
+
+      expect(service.syncStatus).toBe('disconnected')
+    })
+    it('goes through catching-up again after a reconnection, then back to synced', async () => {
+      vi.useFakeTimers()
+      service = makeService()
+      const started = service.start()
+      lastWs().emit('message', readyFrame())
+      await started
+      expect(service.syncStatus).toBe('synced')
+
+      lastWs().close()
+      expect(service.syncStatus).toBe('disconnected')
+
+      let releaseCatchUp: () => void = () => undefined
+      fetchJsonMock.mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            releaseCatchUp = () => resolve({ events: [], count: 0, after_block_height: 0 })
+          }),
+      )
+      await vi.advanceTimersByTimeAsync(1_000)
+      lastWs().emit('message', readyFrame())
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(service.syncStatus).toBe('catching-up')
+
+      releaseCatchUp()
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(service.syncStatus).toBe('synced')
+    })
   })
 })

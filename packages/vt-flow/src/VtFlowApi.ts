@@ -9,8 +9,10 @@ import type {
 } from './types'
 import type { Query, QueryOptions } from '@credo-ts/core'
 import type {
+  DataIntegrityCredential,
   DidCommCredentialExchangeRecord,
   DidCommCredentialProtocol,
+  DidCommDataIntegrityAcceptRequestFormat,
   DidCommMessage,
 } from '@credo-ts/didcomm'
 
@@ -41,9 +43,7 @@ export class VtFlowApi {
     private readonly config: VtFlowModuleConfig,
     private readonly credentialsModuleConfig: DidCommCredentialsModuleConfig<DidCommCredentialProtocol[]>,
     private readonly credentialExchangeRepository: DidCommCredentialExchangeRepository,
-  ) {
-    void this.config
-  }
+  ) {}
 
   public async sendOnboardingRequest(options: SendOnboardingRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
@@ -116,6 +116,20 @@ export class VtFlowApi {
 
   public async terminateSession(options: ProblemReportDispatchOptions): Promise<VtFlowRecord> {
     const { record, problemReport } = await this.vtFlowService.terminateByApplicant(
+      this.agentContext,
+      options.vtFlowRecordId,
+      {
+        code: options.code,
+        enDescription: options.enDescription,
+        fixHintEn: options.fixHintEn,
+      },
+    )
+    await this.dispatchMessage(record.connectionId, problemReport, record)
+    return record
+  }
+
+  public async terminateSessionAsValidator(options: ProblemReportDispatchOptions): Promise<VtFlowRecord> {
+    const { record, problemReport } = await this.vtFlowService.terminateByValidator(
       this.agentContext,
       options.vtFlowRecordId,
       {
@@ -202,6 +216,10 @@ export class VtFlowApi {
     return this.vtFlowService.markValidated(this.agentContext, vtFlowRecordId)
   }
 
+  public markCompleted(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    return this.vtFlowService.markCompleted(this.agentContext, vtFlowRecordId)
+  }
+
   public async offerCredentialForSession(
     options: OfferCredentialForSessionOptions,
   ): Promise<{ record: VtFlowRecord; credentialExchangeRecord: DidCommCredentialExchangeRecord }> {
@@ -247,7 +265,86 @@ export class VtFlowApi {
       record.id,
       credentialExchangeRecord,
       options.credentialDigest,
+      options.issuerParticipantId,
     )
+
+    return {
+      record: await this.vtFlowService.getById(this.agentContext, record.id),
+      credentialExchangeRecord,
+    }
+  }
+
+  /**
+   * The spec forbids delivering a credential whose digest is not anchored, so a throwing hook must abort.
+   *
+   * RFC 0809 leaves the cryptosuite of a VC Data Model 2.0 credential to the issuer, so it is not
+   * negotiated with the applicant: the module `dataIntegrityCryptosuite` applies unless the caller
+   * passes its own `credentialFormats`.
+   */
+  public async issueCredentialForSession(options: {
+    vtFlowRecordId: string
+    credentialExchangeRecordId: string
+    comment?: string
+    credentialFormats?: { dataIntegrity: DidCommDataIntegrityAcceptRequestFormat }
+  }): Promise<{ record: VtFlowRecord; credentialExchangeRecord: DidCommCredentialExchangeRecord }> {
+    const record = await this.vtFlowService.getById(this.agentContext, options.vtFlowRecordId)
+    record.assertRole(VtFlowRole.Validator)
+
+    const credentialExchangeRecord = await this.credentialExchangeRepository.getById(
+      this.agentContext,
+      options.credentialExchangeRecordId,
+    )
+    const protocol = this.credentialsModuleConfig.credentialProtocols.find(
+      p => p.version === credentialExchangeRecord.protocolVersion,
+    )
+    if (!protocol) {
+      throw new CredoError(
+        `No credential protocol registered for version '${credentialExchangeRecord.protocolVersion}'`,
+      )
+    }
+
+    const connectionRecord = credentialExchangeRecord.connectionId
+      ? await this.connectionService.getById(this.agentContext, credentialExchangeRecord.connectionId)
+      : undefined
+    connectionRecord?.assertReady()
+
+    // unlike DidCommCredentialsApi.acceptRequest, this signs without sending
+    const { message } = await protocol.acceptRequest(this.agentContext, {
+      credentialExchangeRecord,
+      comment: options.comment,
+      credentialFormats: options.credentialFormats ?? {
+        dataIntegrity: { cryptosuite: this.config.dataIntegrityCryptosuite },
+      },
+    })
+
+    const hook = this.config.onBeforeCredentialIssued
+    if (hook) {
+      const formatData = await protocol.getFormatData(this.agentContext, credentialExchangeRecord.id)
+      // the attachment, which is the exact JSON the holder will digest
+      const credential = (formatData.credential as { dataIntegrity?: DataIntegrityCredential } | undefined)
+        ?.dataIntegrity?.credential
+      if (!credential) {
+        throw new CredoError(
+          `Issued credential for '${credentialExchangeRecord.id}' has no data integrity credential body to anchor`,
+        )
+      }
+      const result = await hook({
+        agentContext: this.agentContext,
+        record,
+        credentialExchangeRecord,
+        credential,
+      })
+      if (result?.credentialDigest) {
+        await this.vtFlowService.setCredentialDigest(this.agentContext, record.id, result.credentialDigest)
+      }
+    }
+
+    const outboundMessageContext = await getOutboundDidCommMessageContext(this.agentContext, {
+      message,
+      connectionRecord,
+      associatedRecord: credentialExchangeRecord,
+    })
+    await this.messageSender.sendMessage(outboundMessageContext)
 
     return {
       record: await this.vtFlowService.getById(this.agentContext, record.id),

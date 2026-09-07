@@ -1,9 +1,7 @@
 import {
-  CREDENTIALS_CONTEXT_V2_URL,
   W3cCredential,
   W3cPresentation,
   W3cCredentialSchema,
-  DidRepository,
   ClaimFormat,
   W3cCredentialSubject,
   W3cJsonLdVerifiableCredential,
@@ -15,75 +13,19 @@ import {
 } from '@credo-ts/core'
 // No type definitions available for this library
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-//@ts-ignore
+//@ts-expect-error
 import { purposes } from '@digitalcredentials/jsonld-signatures'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
-import axios, { isAxiosError } from 'axios'
 import { createHash } from 'crypto'
 
 import { VsAgent } from '../agent/VsAgent'
+import { composeEcsClaims, EcsClaims } from './ecsClaims'
 
-import { getEcsSchemas } from './data'
-
-const ajv = new Ajv({ strict: false })
+const ajv = new Ajv({ strict: false, allErrors: true })
 addFormats(ajv)
 
-interface SelfTrDefaults {
-  agentLabel: string
-  agentInvitationImageUrl?: string
-  fallbackBase64?: string
-  serviceType: string
-  serviceDescription: string
-  serviceMinimumAgeRequired: number
-  serviceTermsAndConditions: string
-  servicePrivacyPolicy: string
-  orgRegistryId: string
-  orgRegistryUrl: string
-  orgAddress: string
-  orgType: string
-  orgCountryCode: string
-}
-
-/**
- * Base JSON-LD context for every credential and presentation issued by the agent.
- *
- * Uses the Verifiable Credentials Data Model 2.0, so credentials carry `validFrom`/`validUntil`
- * rather than the data model 1.1 `issuanceDate`/`expirationDate`. The examples context supplies
- * the `@vocab` that lets schema-driven credential subject claims expand.
- */
-export const CREDENTIAL_CONTEXT = [
-  CREDENTIALS_CONTEXT_V2_URL,
-  'https://www.w3.org/ns/credentials/examples/v2',
-]
-
-// Helpers
-export const presentations = [
-  {
-    name: 'ecs-service',
-    schemaUrl: `ecosystem/schemas-example-service-jsc.json`,
-  },
-  {
-    name: 'ecs-org',
-    schemaUrl: `ecosystem/schemas-example-org-jsc.json`,
-  },
-]
-
-export const credentials = [
-  {
-    name: 'example-service',
-    credUrl: `ecosystem/cs/v1/js/ecs-service`,
-    schemaUrl: `ecosystem/schemas-example-service-jsc.json`,
-  },
-  {
-    name: 'example-org',
-    credUrl: `ecosystem/cs/v1/js/ecs-org`,
-    schemaUrl: `ecosystem/schemas-example-org-jsc.json`,
-  },
-]
-
-// Default JSON Schema objects
 export const createJsonSchema: W3cCredentialSchema = {
   id: 'https://www.w3.org/ns/credentials/json-schema/v2.json',
   type: 'JsonSchema',
@@ -99,149 +41,35 @@ export const createJsonSubjectRef = (id: string): W3cCredentialSubject => ({
   },
 })
 
-export const mapToSelfTr = (url: string, publicApiBaseUrl: string): string =>
-  url.replace('ecosystem', `${publicApiBaseUrl}/vt`)
+// fragment format per [VT-CRED-W3C-LINKED-VP]
+export const linkedVpFragment = (schemaKey: string): string =>
+  `vpr-schemas-${schemaKey.replace(/^ecs-/, '')}-vtc-vp`
 
-const buildIntegrityData = (data: Record<string, unknown>) => {
-  return generateDigestSRI(JSON.stringify(data, Object.keys(data).sort()))
+// A plain array replacer only allowlists property names, applied at every
+// nesting level — nested objects like `claims` and `credentialSchema` would
+// serialize to `{}` since none of their own keys appear in a top-level
+// key list. Sort keys recursively instead, so the hash actually reflects
+// nested content and changes to claims invalidate the cache correctly.
+export const sortKeysDeep = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(sortKeysDeep)
+  if (value !== null && typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = sortKeysDeep((value as Record<string, unknown>)[key])
+        return acc
+      }, {})
+  }
+  return value
 }
-
-export const setupSelfTr = async ({
-  agent,
-  publicApiBaseUrl,
-  defaults,
-}: {
-  agent: VsAgent
-  publicApiBaseUrl: string
-  defaults: SelfTrDefaults
-}) => {
-  const ecsSchemas = getEcsSchemas(publicApiBaseUrl)
-
-  for (const { name, schemaUrl } of presentations) {
-    await generateVerifiablePresentation(
-      agent,
-      `${publicApiBaseUrl}/vt/${name}-c-vp.json`,
-      ecsSchemas,
-      name,
-      ['VerifiableCredential', 'VerifiableTrustCredential'],
-      {
-        id: mapToSelfTr(schemaUrl, publicApiBaseUrl),
-        type: 'JsonSchemaCredential',
-      },
-      defaults,
-    )
-  }
-
-  for (const { name, credUrl, schemaUrl } of credentials) {
-    const id = mapToSelfTr(schemaUrl, publicApiBaseUrl)
-    const ref = mapToSelfTr(credUrl, publicApiBaseUrl)
-    await generateVerifiableCredential(
-      agent,
-      id,
-      ecsSchemas,
-      name,
-      ['VerifiableCredential', 'JsonSchemaCredential'],
-      createJsonSubjectRef(ref),
-      createJsonSchema,
-      defaults,
-    )
-  }
-}
-
-/**
- * Generates and signs a verifiable credential using the agent's DID.
- * Stores the signed credential and its integrity metadata in the DID record.
- *
- * - If the claims for the subject are not provided, they are retrieved (default claims) and validated against the schema.
- * - The integrity of the claims is tracked using a Subresource Integrity (SRI) digest.
- * - If a credential with the same integrity already exists in the DID metadata, it is returned directly.
- * - Otherwise, a new credential is created, signed, and stored in the DID metadata.
- * - If a presentation is provided, the signed credential is embedded and a signed presentation is returned.
- *
- * @param agent - The VsAgent instance used for signing and DID management.
- * @param logger - Logger instance for logging operations.
- * @param ecsSchemas - Map of ECS schemas for validation.
- * @param schemaKey - Unique identifier for the credential type and metadata key.
- * @param type - Array of credential types (e.g., ['VerifiableCredential']).
- * @param subject - Subject information, including ID and optional claims.
- * @param credentialSchema - Schema definition for the credential.
- * @param presentation - Optional presentation to include the credential.
- * @returns The signed verifiable credential or presentation, with integrity metadata.
- */
-async function generateVerifiableCredential(
-  agent: VsAgent,
-  id: string,
-  ecsSchemas: Record<string, string>,
-  schemaKey: string,
-  type: string[],
-  subject: W3cCredentialSubject,
-  credentialSchema: W3cCredentialSchema,
-  defaults: SelfTrDefaults,
-  presentation?: W3cPresentation,
-): Promise<any> {
-  const logger = agent.config.logger
-  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
-
-  const { id: subjectId } = subject
-  let claims = subject.claims
-
-  if (!claims) {
-    claims = await getClaims(logger, ecsSchemas, { id: subjectId }, schemaKey, defaults)
-  }
-  const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
-  const record = didRecord.metadata.get('_vt/jsc') ?? {}
-  const metadata = record[subjectId!]
-  if (metadata?.integrityData === integrityData) return metadata.credential
-
-  const unsignedCredential = createCredential({
-    id,
-    type,
-    issuer: agent.did,
-    credentialSubject: {
-      id: subjectId,
-      claims: presentation ? claims : await addDigestSRI(subjectId, claims, ecsSchemas),
-    },
-  })
-
-  unsignedCredential.credentialSchema = presentation
-    ? credentialSchema
-    : await addDigestSRI(credentialSchema.id, credentialSchema, ecsSchemas)
-
-  // Note: this is dependant on DIDComm invitation keys. Not sure if it is fine or we should use a dedicated
-  // key for this feature
-  const verificationMethodId = getVerificationMethodId(logger, didRecord)
-
-  const signedCredential = await signerW3c(agent, unsignedCredential, verificationMethodId)
-  if (presentation) {
-    presentation.verifiableCredential = [signedCredential]
-    return await signerW3c(agent, presentation, verificationMethodId)
-  } else {
-    record[subjectId!] = {
-      credential: signedCredential.jsonCredential,
-      verifiablePresentation: {},
-      didDocumentServiceId: '',
-      integrityData,
-    }
-    didRecord.metadata.set('_vt/jsc', record)
-    await agent.context.dependencyManager.resolve(DidRepository).update(agent.context, didRecord)
-    return signedCredential.jsonCredential
-  }
-}
-
 export function createCredential(options: Partial<W3cCredentialOptions>) {
-  options.context ??= CREDENTIAL_CONTEXT
+  options.context ??= [
+    'https://www.w3.org/2018/credentials/v1',
+    'https://www.w3.org/ns/credentials/examples/v2',
+  ]
 
-  const validFrom = new Date().toISOString()
-  const validUntil = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toISOString()
-
-  // Callers may pass a data model 1.1 context, which names these properties differently
-  if (options.context[0] === CREDENTIALS_CONTEXT_V2_URL) {
-    options.validFrom ??= validFrom
-    options.validUntil ??= validUntil
-  } else {
-    options.issuanceDate ??= validFrom
-    options.expirationDate ??= validUntil
-  }
+  options.issuanceDate ??= new Date().toISOString()
+  options.expirationDate ??= new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toISOString()
 
   return new W3cCredential(options as W3cCredentialOptions)
 }
@@ -296,85 +124,11 @@ export async function signerW3c(
     })
   }
 }
-
-/**
- * Generates and signs a verifiable presentation containing a verifiable credential.
- * Stores the signed presentation and its integrity metadata in the DID record.
- *
- * - Retrieves and validates claims for the agent's DID.
- * - Computes an integrity digest for the claims.
- * - If a presentation with the same integrity already exists in the DID metadata, it is returned.
- * - Otherwise, a new presentation is created, signed, and stored in the DID metadata.
- *
- * @param agent - The VsAgent instance used for signing and DID management.
- * @param logger - Logger instance for logging operations.
- * @param ecsSchemas - Map of ECS schemas for validation.
- * @param schemaKey - Unique identifier for the presentation type and metadata key.
- * @param type - Array of credential types to include.
- * @param credentialSchema - Schema definition for the credential.
- * @returns The signed verifiable presentation, with integrity metadata.
- */
-export async function generateVerifiablePresentation(
-  agent: VsAgent,
-  id: string,
-  ecsSchemas: Record<string, string>,
-  schemaKey: string,
-  type: string[],
-  credentialSchema: W3cCredentialSchema,
-  defaults: SelfTrDefaults,
-) {
-  if (!agent.did) throw Error('The DID must be set up')
-  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
-  const didDocument = didRecord.didDocument
-  if (!didDocument) throw Error('The DID Document be set up')
-  const claims = await getClaims(agent.config.logger, ecsSchemas, { id: agent.did }, schemaKey, defaults)
-  // Use full input for integrityData to ensure update detection
-  const didDocumentServiceId = `${agent.did}#vpr-${schemaKey}-c-vp`
-  const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
-  const record = didRecord.metadata.get('_vt/vtc') ?? {}
-  const metadata = record[credentialSchema.id]
-  if (metadata?.integrityData === integrityData && metadata.attached) return metadata.verifiablePresentation
-
-  const presentation = createPresentation({
-    id,
-    holder: agent.did,
-    verifiableCredential: [],
-  })
-  const verifiablePresentation = await generateVerifiableCredential(
-    agent,
-    agent.did,
-    ecsSchemas,
-    schemaKey,
-    type,
-    { id: agent.did },
-    credentialSchema,
-    defaults,
-    presentation,
-  )
-  // Update linked VP when the presentation has changed
-  didDocument.service = didDocument.service?.map(s => {
-    if (typeof s.serviceEndpoint !== 'string') return s
-    if (s.serviceEndpoint.includes(schemaKey) && s.id !== `${agent.did}#whois`) {
-      s.id = didDocumentServiceId
-      s.serviceEndpoint = id
-    }
-    return s
-  })
-  const credential = verifiablePresentation.verifiableCredential[0]
-  record[credentialSchema.id] = {
-    credential,
-    verifiablePresentation,
-    didDocumentServiceId,
-    integrityData,
-    attached: true,
-  }
-  didRecord.metadata.set('_vt/vtc', record)
-  await agent.context.dependencyManager.resolve(DidRepository).update(agent.context, didRecord)
-  return verifiablePresentation
-}
-
 export function createPresentation(options: Partial<W3cPresentationOptions>) {
-  options.context ??= CREDENTIAL_CONTEXT
+  options.context ??= [
+    'https://www.w3.org/2018/credentials/v1',
+    'https://www.w3.org/ns/credentials/examples/v2',
+  ]
   options.type ??= ['VerifiablePresentation']
   return new W3cPresentation(options as W3cPresentationOptions)
 }
@@ -393,47 +147,19 @@ export function createPresentation(options: Partial<W3cPresentationOptions>) {
 export async function getClaims(
   logger: Logger,
   ecsSchemas: Record<string, string>,
-  { id, claims }: W3cCredentialSubject,
+  { id }: W3cCredentialSubject,
   schemaKey: string,
-  defaults: SelfTrDefaults,
+  ecsClaims: EcsClaims,
 ) {
-  // Default claims fallback
-  claims =
-    schemaKey === 'ecs-service'
-      ? {
-          name: claims?.name ?? defaults.agentLabel,
-          type: claims?.type ?? defaults.serviceType,
-          description: claims?.description ?? defaults.serviceDescription,
-          logo: await urlToBase64(
-            logger,
-            (claims?.logo as string) ?? defaults.agentInvitationImageUrl,
-            defaults.fallbackBase64 ?? '',
-          ),
-          minimumAgeRequired: claims?.minimumAgeRequired ?? defaults.serviceMinimumAgeRequired,
-          termsAndConditions: claims?.termsAndConditions ?? defaults.serviceTermsAndConditions,
-          privacyPolicy: claims?.privacyPolicy ?? defaults.servicePrivacyPolicy,
-        }
-      : {
-          name: claims?.name ?? defaults.agentLabel,
-          logo: await urlToBase64(
-            logger,
-            (claims?.logo as string) ?? defaults.agentInvitationImageUrl,
-            defaults.fallbackBase64 ?? '',
-          ),
-          registryId: claims?.registryId ?? defaults.orgRegistryId,
-          registryUrl: claims?.registryUrl ?? defaults.orgRegistryUrl,
-          address: claims?.address ?? defaults.orgAddress,
-          type: claims?.type ?? defaults.orgType,
-          countryCode: claims?.countryCode ?? defaults.orgCountryCode,
-        }
+  const claims = await composeEcsClaims(ecsClaims, schemaKey, logger)
+  if (!claims) throw new Error(`No ECS_CLAIMS_* variable is set for ${schemaKey}`)
 
   const ecsSchema = ecsSchemas[schemaKey]
   if (!ecsSchema) {
     throw new Error(`Schema not defined in data schemas for schemaKey: ${schemaKey}`)
   }
 
-  const credentialSubject = { id, ...claims }
-  validateSchema(JSON.parse(ecsSchema), credentialSubject)
+  validateSchema(JSON.parse(ecsSchema), { id, ...claims })
 
   return claims
 }
@@ -454,7 +180,17 @@ export function validateSchema(ecsSchema: AnySchemaObject, credentialSubject: Re
       params: e.params,
     }))
 
-    throw new Error(`Invalid claims for ${ecsSchema.id}: ${JSON.stringify(errorDetails, null, 2)}`)
+    throw new Error(`Invalid claims for ${ecsSchema.$id}: ${JSON.stringify(errorDetails, null, 2)}`)
+  }
+}
+
+async function fetchSchemaContent(id: string): Promise<{ content?: string; error?: string }> {
+  try {
+    const response = await fetch(mapToEcosystem(id))
+    if (!response.ok) return { error: `${response.status} ${response.statusText}` }
+    return { content: await response.text() }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) }
   }
 }
 
@@ -477,16 +213,14 @@ export async function addDigestSRI<T extends object>(
   if (!id || !data) {
     throw new Error(`id and data has requiered`)
   }
-  const response = await fetch(mapToEcosystem(id))
+  const fetched = await fetchSchemaContent(id)
   const key = id.split('/').pop()
   const fallbackSchema = key && ecsSchemas?.[key]
 
-  const schemaContent = response.ok ? await response.text() : fallbackSchema
+  const schemaContent = fetched.content ?? fallbackSchema
 
   if (!schemaContent) {
-    throw new Error(
-      `Failed to fetch schema from ${id}: ${response.status} ${response.statusText}, and no local fallback found.`,
-    )
+    throw new Error(`Failed to fetch schema from ${id}: ${fetched.error}, and no local fallback found.`)
   }
   assertValidSchema(schemaContent, id)
 
@@ -524,47 +258,6 @@ function assertValidSchema(schemaContent: string, id: string): void {
 export function generateDigestSRI(content: string, algorithm: string = 'sha384'): string {
   const hash = createHash(algorithm).update(content).digest('base64')
   return `${algorithm}-${hash}`
-}
-
-/**
- * Converts an image URL to a Base64-encoded data URI string.
- *
- * @param url - The image URL to convert.
- * @returns A Base64 data URI string, or a fallback placeholder if the image cannot be fetched or is invalid.
- */
-export async function urlToBase64(
-  logger: Logger,
-  url: string | undefined,
-  fallback: string,
-): Promise<string> {
-  if (!url) {
-    logger.warn('No URL provided for image conversion.')
-    return fallback
-  }
-
-  try {
-    const response = await axios.get(url, { responseType: 'arraybuffer' })
-
-    const contentType = response.headers['content-type']
-    if (!contentType || !contentType.startsWith('image/')) {
-      logger.warn(`The fetched resource is not an image. Content-Type: ${contentType}`)
-      return fallback
-    }
-
-    const base64 = Buffer.from(response.data).toString('base64')
-    return `data:${contentType};base64,${base64}`
-  } catch (error) {
-    if (isAxiosError(error)) {
-      logger.error(
-        `Failed to convert URL to Base64. URL: ${url}. ` +
-          `Status: ${error.response?.status ?? 'N/A'}. ` +
-          `Message: ${error.message}`,
-      )
-    } else {
-      logger.error(`Unexpected error converting URL to Base64: ${error}`)
-    }
-    return fallback
-  }
 }
 
 export function getVerificationMethodId(logger: Logger, didRecord: DidRecord): string {
