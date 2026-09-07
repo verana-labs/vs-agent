@@ -642,9 +642,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         resourceType: 'anonCredsSchema',
         relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
       })
-      expect(listed.map(record => (record.content as { id: string }).id)).toEqual([
-        anonCredsSchema.schemaId,
-      ])
+      expect(listed.map(record => (record.content as { id: string }).id)).toEqual([anonCredsSchema.schemaId])
 
       // A second run must leave it attached, which is what proves the two passes agree.
       await reconcileVtjscPublications(validator, indexer, ownCorporationId)
