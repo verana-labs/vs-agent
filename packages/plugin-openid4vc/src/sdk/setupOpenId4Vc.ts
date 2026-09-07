@@ -178,6 +178,12 @@ export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
     // malformed spelling alone stopped recognising the EUDI wallet. swiyu asks JSON first, so the
     // order is what separates the two clients.
     const isOpenId4VciKt = (ranges[0]?.includes('application/jwt') ?? false) && offersJson
+    // Up to eudi-lib-android-wallet-core 0.28 openid4vci-kt asked with a semicolon where a comma
+    // belongs. Only that spelling identifies it uniquely: swiyu also asks jwt-first with a correct
+    // comma, and it models proof_types_supported as a closed enum, so it throws on `attestation`.
+    const isLegacyOpenId4VciKt = ranges.some(
+      range => range.includes('application/jwt') && range.includes('application/json'),
+    )
     const prefersPlainMetadata =
       isOpenId4VciKt || (ranges.some(range => range.includes('application/jwt')) && offersJson)
 
@@ -199,7 +205,9 @@ export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
     const send = response.send.bind(response)
     response.send = ((body?: unknown) =>
       send(
-        typeof body === 'string' ? withKeyAttestationRequirement(body, hasKeyAttestationAnchor) : body,
+        typeof body === 'string'
+          ? withKeyAttestationRequirement(body, hasKeyAttestationAnchor && isLegacyOpenId4VciKt)
+          : body,
       )) as Response['send']
     next()
   }

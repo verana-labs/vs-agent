@@ -89,13 +89,16 @@ describe('accommodateOpenId4VciKt', () => {
   })
 
   // eudi-lib-android-wallet-core 0.29 corrected the malformed accept header, so matching the typo
-  // alone stopped recognising the EUDI wallet and its offers died on the missing member.
-  it('still recognises openid4vci-kt once it spells the accept header correctly', () => {
+  // alone stopped recognising the EUDI wallet and its offers died on the missing member. swiyu asks
+  // jwt-first with a correct comma too, and throws on an `attestation` member it cannot model, so
+  // only the member it actually needs may be widened to the corrected spelling.
+  it('gives the corrected accept header the key-attestation member but no attestation proof type', () => {
     const { sent, accept } = run('application/jwt, application/json', metadata(jwtOnly))
 
-    const expected = { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} }
     expect(accept).toBe('application/json')
-    expect(proofTypesOf(sent)).toEqual({ jwt: expected, attestation: expected })
+    expect(proofTypesOf(sent)).toEqual({
+      jwt: { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} },
+    })
   })
 
   it('leaves a jwt-only accept alone', () => {
