@@ -41,10 +41,10 @@ export function isVtFlowStateChangedEvent(state: VtFlowState) {
   }
 }
 
-export function isIndexerNotificationEvent(msg: string) {
+export function isIndexerNotificationEvent(eventType: string) {
   return (arg: unknown): arg is VsAgentIndexerNotificationEvent => {
     const { type, payload } = (arg ?? {}) as any
-    return type === VsAgentEventTypes.IndexerNotification && payload?.event?.msg === msg
+    return type === VsAgentEventTypes.IndexerNotification && payload?.event?.eventType === eventType
   }
 }
 
