@@ -18,7 +18,12 @@ import { PublicModule } from '../src/public.module'
 
 import { startAgent } from './__mocks__'
 import { FakeDidResolver } from './__mocks__/fakeDidResolver'
-import { SubjectInboundTransport, SubjectOutboundTransport, type SubjectMessage } from './helpers'
+import {
+  invitationUrl,
+  SubjectInboundTransport,
+  SubjectOutboundTransport,
+  type SubjectMessage,
+} from './helpers'
 
 const PUBLIC_API_BASE_URL = 'http://localhost:3001'
 
@@ -188,7 +193,9 @@ describe('v2 didcomm decline routes, over two agents', () => {
     const faberProofId = created.body.proofExchangeId
 
     const known = await idsOf(aliceApp, 'presentations')
-    await aliceAgent.didcomm.oob.receiveInvitationFromUrl(created.body.url, { label: aliceAgent.label })
+    await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(created.body.invitation), {
+      label: aliceAgent.label,
+    })
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
     const declined = await alice()
@@ -213,7 +220,9 @@ describe('v2 didcomm decline routes, over two agents', () => {
     const faberProofId = created.body.proofExchangeId
 
     const known = await idsOf(aliceApp, 'presentations')
-    await aliceAgent.didcomm.oob.receiveInvitationFromUrl(created.body.url, { label: aliceAgent.label })
+    await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(created.body.invitation), {
+      label: aliceAgent.label,
+    })
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
     const declined = await faber()
@@ -246,7 +255,9 @@ describe('v2 didcomm decline routes, over two agents', () => {
     const faberId = offer.body.credentialExchangeId
 
     const known = await idsOf(aliceApp, 'credential-exchanges')
-    await aliceAgent.didcomm.oob.receiveInvitationFromUrl(offer.body.url, { label: aliceAgent.label })
+    await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(offer.body.invitation), {
+      label: aliceAgent.label,
+    })
     const aliceId = await untilNewRecord(aliceApp, 'credential-exchanges', 'offer-received', known)
 
     const declined = await alice()

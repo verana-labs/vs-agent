@@ -119,7 +119,9 @@ describe('v2 didcomm presentation routes', () => {
     proofs.getFormatData.mockResolvedValue({})
     anoncreds.getCredentialDefinition.mockResolvedValue({ credentialDefinition: { schemaId: 'schema-1' } })
     anoncreds.getSchema.mockResolvedValue({ schema: govId })
-    vi.mocked(createInvitation).mockResolvedValue({ url: 'didcomm://agent.test/inv' })
+    vi.mocked(createInvitation).mockResolvedValue({
+      invitation: { '@type': 'https://didcomm.org/out-of-band/2.0/invitation', '@id': 'inv-1' },
+    } as never)
     urlShortenerService.createShortUrl.mockResolvedValue('abcd')
   })
 
@@ -230,7 +232,7 @@ describe('v2 didcomm presentation routes', () => {
 
       expect(response.body).toEqual({
         proofExchangeId: 'proof-1',
-        url: 'didcomm://agent.test/inv',
+        invitation: { '@type': 'https://didcomm.org/out-of-band/2.0/invitation', '@id': 'inv-1' },
         shortUrl: 'https://agent.test/s?id=abcd',
       })
       expect(proofRecordSpy.metadata.get('_2060/requestedCredentials')).toEqual(requestedCredentials)
@@ -238,7 +240,7 @@ describe('v2 didcomm presentation routes', () => {
       // The spec spells the field `didcommVersion`; the SDK takes `didCommVersion`.
       expect(vi.mocked(createInvitation).mock.calls[0][0]).toMatchObject({ didCommVersion: 'v1' })
       expect(urlShortenerService.createShortUrl).toHaveBeenCalledWith({
-        longUrl: 'didcomm://agent.test/inv',
+        invitation: { '@type': 'https://didcomm.org/out-of-band/2.0/invitation', '@id': 'inv-1' },
         relatedFlowId: 'proof-1',
       })
     })
