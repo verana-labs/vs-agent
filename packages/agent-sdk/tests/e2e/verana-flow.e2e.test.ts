@@ -93,7 +93,7 @@ describe('Verana blockchain integration (node + indexer, CosmJS + WebSocket)', (
         .find(emitted => emitted?.type === VsAgentEventTypes.IndexerNotification)
       expect(notification).toBeDefined()
       expect(notification.payload.event).toMatchObject({
-        msg: event.event_type,
+        eventType: event.event_type,
         blockHeight: event.block_height,
         txHash: event.tx_hash,
       })
