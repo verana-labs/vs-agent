@@ -88,17 +88,15 @@ describe('accommodateOpenId4VciKt', () => {
     expect(Object.keys(proofTypesOf(swiyu.sent))).toEqual(['jwt'])
   })
 
-  // eudi-lib-android-wallet-core 0.29 corrected the malformed accept header, so matching the typo
-  // alone stopped recognising the EUDI wallet and its offers died on the missing member. swiyu asks
-  // jwt-first with a correct comma too, and throws on an `attestation` member it cannot model, so
-  // only the member it actually needs may be widened to the corrected spelling.
-  it('gives the corrected accept header the key-attestation member but no attestation proof type', () => {
+  // The corrected comma spelling cannot identify openid4vci-kt: swiyu sends it too, and a client
+  // told `key_attestations_required` stops binding a plain JWK. swiyu then asks its federal
+  // attestation service for a key attestation it cannot obtain and the offer dies, so the
+  // accommodation stays on the malformed spelling that only the older library sends.
+  it('leaves a correctly spelled jwt-first accept untouched, so swiyu still binds a plain jwk', () => {
     const { sent, accept } = run('application/jwt, application/json', metadata(jwtOnly))
 
     expect(accept).toBe('application/json')
-    expect(proofTypesOf(sent)).toEqual({
-      jwt: { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} },
-    })
+    expect(proofTypesOf(sent)).toEqual(jwtOnly)
   })
 
   it('leaves a jwt-only accept alone', () => {

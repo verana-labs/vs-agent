@@ -177,11 +177,11 @@ export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
     // eudi-lib-android-wallet-core 0.28, as two correct ranges from 0.29, which is why matching the
     // malformed spelling alone stopped recognising the EUDI wallet. swiyu asks JSON first, so the
     // order is what separates the two clients.
-    const isOpenId4VciKt = (ranges[0]?.includes('application/jwt') ?? false) && offersJson
-    // Up to eudi-lib-android-wallet-core 0.28 openid4vci-kt asked with a semicolon where a comma
-    // belongs. Only that spelling identifies it uniquely: swiyu also asks jwt-first with a correct
-    // comma, and it models proof_types_supported as a closed enum, so it throws on `attestation`.
-    const isLegacyOpenId4VciKt = ranges.some(
+    // Only the malformed `application/jwt; application/json` identifies openid4vci-kt uniquely.
+    // swiyu sends the corrected comma spelling that eudi-lib-android-wallet-core 0.29 also adopted,
+    // and any client told `key_attestations_required` stops binding a plain JWK: swiyu then asks its
+    // federal attestation service for a key attestation it cannot get, and the offer dies.
+    const isOpenId4VciKt = ranges.some(
       range => range.includes('application/jwt') && range.includes('application/json'),
     )
     const prefersPlainMetadata =
@@ -206,7 +206,7 @@ export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
     response.send = ((body?: unknown) =>
       send(
         typeof body === 'string'
-          ? withKeyAttestationRequirement(body, hasKeyAttestationAnchor && isLegacyOpenId4VciKt)
+          ? withKeyAttestationRequirement(body, hasKeyAttestationAnchor)
           : body,
       )) as Response['send']
     next()
