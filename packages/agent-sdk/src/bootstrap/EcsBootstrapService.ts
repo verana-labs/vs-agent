@@ -12,6 +12,7 @@ import { VsAgent } from '../agent/VsAgent'
 import {
   CredentialSchemaDto,
   ParticipantDto,
+  toCredentialSchema,
   ParticipantRole,
   ParticipantState,
   VeranaChainService,
@@ -82,7 +83,7 @@ export class EcsBootstrapService {
   // StartParticipantOP costs a trust deposit and a fee, so both the authorization and the funds
   // must be there. Neither is a misconfiguration: the operator may provision the entry itself.
   private async operatorSkipReason(chain: VeranaChainService): Promise<string | null> {
-    const operatorAuths = await chain.listOperatorAuthorizations()
+    const operatorAuths = await this.indexer!.listOperatorAuthorizations(chain.address)
     if (!operatorAuths.some(auth => auth.msgTypes.includes(START_OP_MSG))) {
       return `operator ${chain.address} holds no OperatorAuthorization covering MsgStartParticipantOP`
     }
@@ -345,11 +346,13 @@ export class EcsBootstrapService {
       return
     }
 
-    const onChainSchema = await chain.getCredentialSchema(schema.id)
+    const onChainSchema = await this.indexer!.getCredentialSchema(schema.id)
+      .then(toCredentialSchema)
+      .catch(() => undefined)
     if (!onChainSchema) throw new Error(`Service schema ${schema.id} not found on chain`)
 
     if (onChainSchema.issuerOnboardingMode === ISSUER_ONBOARDING_MODE_OPEN) {
-      const operatorAuths = await chain.listOperatorAuthorizations()
+      const operatorAuths = await this.indexer!.listOperatorAuthorizations(chain.address)
       if (!operatorAuths.some(a => a.msgTypes.includes(SELF_CREATE_MSG))) {
         throw new Error(
           `operator ${chain.address} has no OperatorAuthorization covering MsgSelfCreateParticipant (required for OPEN issuer onboarding)`,

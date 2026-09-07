@@ -294,38 +294,6 @@ export interface VsOperatorAuthorization {
   records: ParticipantAuthorizationRecord[]
 }
 
-export interface ParticipantQueryClient {
-  GetParticipant(req: { id: number }): Promise<{ participant?: RawParticipant }>
-  /** The `pp` module exposes no query by DID alone; filter through ListParticipants instead. */
-  ListParticipants(req: object): Promise<{ participants: RawParticipant[] }>
-  GetParticipantSession(req: { id: string }): Promise<{ session?: unknown }>
-}
-
-export interface EcosystemQueryClient {
-  GetEcosystem(req: { id: number }): Promise<{ ecosystem?: Ecosystem }>
-}
-
-export interface CredentialSchemaQueryClient {
-  GetCredentialSchema(req: { id: number }): Promise<{ schema?: CredentialSchema }>
-}
-
-export interface DigestQueryClient {
-  GetDigest(req: { digest: string }): Promise<{ digest?: StoredDigest }>
-}
-
-export interface DelegationQueryClient {
-  ListOperatorAuthorizations(req: {
-    corporationId: number
-    operator: string
-    responseMaxSize: number
-  }): Promise<{ operatorAuthorizations: OperatorAuthorization[] }>
-  ListVSOperatorAuthorizations(req: {
-    corporationId: number
-    vsOperator: string
-    responseMaxSize: number
-  }): Promise<{ vsOperatorAuthorizations: VsOperatorAuthorization[] }>
-}
-
 export interface VeranaChainConfig {
   rpcUrl: string
   chainId?: string

@@ -141,11 +141,20 @@ describe('TrustService', () => {
       sessionMock = vi.fn(async () => ({ txHash: 'tx-1' }))
       fakeChain = {
         getChainId: 'vna-test-1',
-        findActiveIssuerParticipantId: vi.fn(async () => 12),
-        getCredentialSchema: vi.fn(async () => ({ digestAlgorithm: 'sha384' })),
+        address: 'verana1agent',
         createOrUpdateParticipantSession: sessionMock,
       }
-      faberAgent = await startAgent({ label: 'Faber Test', domain: 'faber', veranaChain: fakeChain as never })
+      const fakeIndexer = {
+        findActiveIssuerParticipantId: vi.fn(async () => 12),
+        getCredentialSchema: vi.fn(async () => ({ digest_algorithm: 'sha384' })),
+        getDigest: vi.fn(async () => undefined),
+      }
+      faberAgent = await startAgent({
+        label: 'Faber Test',
+        domain: 'faber',
+        veranaChain: fakeChain as never,
+        indexer: fakeIndexer as never,
+      })
       faberAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(faberMessages))
       faberAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
       await faberAgent.initialize()

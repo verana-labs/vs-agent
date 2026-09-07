@@ -359,8 +359,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       await applicantCompleted
       await waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Completed))
 
-      const chainParticipant = await seederChain.getParticipant(holderOp.id)
-      expect(chainParticipant).toBeDefined()
+      expect(await indexer.getParticipant(holderOp.id)).toBeDefined()
 
       const credentials = await applicant.w3cCredentials.getAll()
       expect(credentials.length).toBeGreaterThan(0)
@@ -714,7 +713,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
 
       await chainA.revokeParticipant(corpPolicyAddress, applicantIssuerParticipantId)
       await until(async () => {
-        const p = await seederChain.getParticipant(applicantIssuerParticipantId)
+        const p = await indexer.getParticipant(applicantIssuerParticipantId).catch(() => undefined)
         return p?.revoked ? true : undefined
       })
 

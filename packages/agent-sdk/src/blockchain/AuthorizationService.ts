@@ -1,6 +1,7 @@
 import { BaseLogger } from '@credo-ts/core'
 
 import { VeranaChainService } from './VeranaChainService'
+import { VeranaIndexerService } from './VeranaIndexerService'
 import { CachedVsOperatorAuthorizationRecord, DurationParam } from './types'
 
 // A lapsed grant that carries a period is still valid: the chain rolls the expiration
@@ -19,6 +20,7 @@ function isVsoaRecordActive(expiration?: Date, period?: DurationParam): boolean 
 
 export interface AuthorizationServiceConfig {
   chain: VeranaChainService
+  indexer: VeranaIndexerService
   logger: BaseLogger
   corporationId?: number
   minRefreshIntervalMs?: number
@@ -29,12 +31,14 @@ export class AuthorizationService {
   private vsoaByParticipant = new Map<number, CachedVsOperatorAuthorizationRecord>()
   private lastRefreshAt = 0
   private readonly chain: VeranaChainService
+  private readonly indexer: VeranaIndexerService
   private readonly logger: BaseLogger
   private readonly corporationId?: number
   private readonly minRefreshIntervalMs: number
 
   constructor(config: AuthorizationServiceConfig) {
     this.chain = config.chain
+    this.indexer = config.indexer
     this.logger = config.logger
     this.corporationId = config.corporationId
     this.minRefreshIntervalMs = config.minRefreshIntervalMs ?? 2_000
@@ -48,7 +52,7 @@ export class AuthorizationService {
     // Catch-up replays hit the same current chain state, so back-to-back refreshes are skipped.
     if (Date.now() - this.lastRefreshAt < this.minRefreshIntervalMs) return
 
-    const vsoas = await this.chain.listVsOperatorAuthorizations()
+    const vsoas = await this.indexer.listVsOperatorAuthorizations(this.chain.address)
     this.lastRefreshAt = Date.now()
     const rebuilt = new Map<number, CachedVsOperatorAuthorizationRecord>()
     for (const vsoa of vsoas) {
@@ -102,7 +106,7 @@ export class AuthorizationService {
   // A blank account must fail closed: the chain treats an empty filter as "any account".
   async callerHoldsOperatorGrant(account: string, msgType: string): Promise<boolean> {
     if (!account.trim()) return false
-    const auths = await this.chain.listOperatorAuthorizations(account)
+    const auths = await this.indexer.listOperatorAuthorizations(account)
     return auths.some(
       a =>
         this.inScope(a.corporationId) &&

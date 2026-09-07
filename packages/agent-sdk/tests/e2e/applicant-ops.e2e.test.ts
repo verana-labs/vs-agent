@@ -37,6 +37,26 @@ async function untilEffective<T>(fn: () => Promise<T>): Promise<T> {
 
 describe('applicant-side chain ops (V4)', () => {
   let stack: StartedStack
+  let indexer: VeranaIndexerService
+
+  const OP_STATE_NAME: Record<number, string> = {
+    [ValidationState.PENDING]: 'PENDING',
+    [ValidationState.VALIDATED]: 'VALIDATED',
+    [ValidationState.TERMINATED]: 'TERMINATED',
+  }
+
+  async function untilOpState(id: number, expected: ValidationState, timeoutMs = 90_000) {
+    const want = OP_STATE_NAME[expected]
+    const deadline = Date.now() + timeoutMs
+    let seen: string | undefined
+    for (;;) {
+      seen = (await indexer.getParticipant(id).catch(() => undefined))?.op_state
+      if (seen === want) return
+      if (Date.now() > deadline) throw new Error(`participant ${id} stayed at ${seen}, expected ${want}`)
+      await new Promise(resolve => setTimeout(resolve, 2_000))
+    }
+  }
+
   let chainA: VeranaTestChain
   let veranaChain: VeranaChainService
   let rootParticipantId: number
@@ -48,6 +68,10 @@ describe('applicant-side chain ops (V4)', () => {
 
   beforeAll(async () => {
     stack = await startStack()
+    indexer = new VeranaIndexerService({
+      baseUrl: stack.indexerWsUrl.replace(/^ws/, 'http'),
+      logger: new ConsoleLogger(LogLevel.Warn),
+    })
     chainA = await VeranaTestChain.connect(stack.rpcUrl, COOLUSER_MNEMONIC)
 
     const corp = await chainA.createCorporation({ did: `did:example:corp-${RUN_ID}` })
@@ -93,17 +117,17 @@ describe('applicant-side chain ops (V4)', () => {
         }),
       )
       expect(participantId).toBeGreaterThan(0)
-      expect((await veranaChain.getParticipant(participantId))?.opState).toBe(ValidationState.PENDING)
+      await untilOpState(participantId, ValidationState.PENDING)
 
       const digest = `sha384-${createHash('sha384').update(`cred-${RUN_ID}`).digest('base64')}`
       await veranaChain.setParticipantOPToValidated({ id: participantId, opSummaryDigest: digest })
-      expect((await veranaChain.getParticipant(participantId))?.opState).toBe(ValidationState.VALIDATED)
+      await untilOpState(participantId, ValidationState.VALIDATED)
 
       await veranaChain.renewParticipantOP(participantId)
-      expect((await veranaChain.getParticipant(participantId))?.opState).toBe(ValidationState.PENDING)
+      await untilOpState(participantId, ValidationState.PENDING)
 
       await veranaChain.cancelParticipantOPLastRequest(participantId)
-      expect((await veranaChain.getParticipant(participantId))?.opState).toBe(ValidationState.VALIDATED)
+      await untilOpState(participantId, ValidationState.VALIDATED)
 
       const second = await veranaChain.startParticipantOP({
         role: 2,
@@ -111,9 +135,7 @@ describe('applicant-side chain ops (V4)', () => {
         did: `did:example:applicant2-${RUN_ID}`,
       })
       await veranaChain.cancelParticipantOPLastRequest(second.participantId)
-      expect((await veranaChain.getParticipant(second.participantId))?.opState).toBe(
-        ValidationState.TERMINATED,
-      )
+      await untilOpState(second.participantId, ValidationState.TERMINATED)
     },
     SETUP_TIMEOUT_MS,
   )
@@ -141,25 +163,25 @@ describe('applicant-side chain ops (V4)', () => {
       })
       expect(txHash).toMatch(/^[0-9A-F]{64}$/i)
       expect(participantId).toBeGreaterThan(0)
-      expect((await veranaChain.getParticipant(participantId))?.did).toBe(`did:example:self-${RUN_ID}`)
+      expect((await indexer.getParticipant(participantId))?.did).toBe(`did:example:self-${RUN_ID}`)
     },
     SETUP_TIMEOUT_MS,
   )
 
   it(
-    'reads ecosystem, schema, and authorizations through the chain query surface',
+    'reads ecosystem, schema, and authorizations through the indexer',
     async () => {
-      const eco = await veranaChain.getEcosystem(ecosystemId)
+      const eco = await indexer.getEcosystem(ecosystemId)
       expect(eco?.id).toBe(ecosystemId)
       expect(eco?.did).toBe(`did:example:eco-${RUN_ID}`)
-      expect(eco?.corporationId).toBe(corpId)
+      expect(Number(eco?.corporation_id)).toBe(corpId)
 
-      const schema = await veranaChain.getCredentialSchema(schemaId)
+      const schema = await indexer.getCredentialSchema(schemaId)
       expect(schema?.id).toBe(schemaId)
-      expect(schema?.ecosystemId).toBe(ecosystemId)
-      expect(JSON.parse(schema?.jsonSchema ?? '{}').title).toBe('OrgCred')
+      expect(Number(schema?.ecosystem_id)).toBe(ecosystemId)
+      expect(JSON.parse(schema?.json_schema ?? '{}').title).toBe('OrgCred')
 
-      const oas = await veranaChain.listOperatorAuthorizations()
+      const oas = await indexer.listOperatorAuthorizations(veranaChain.address)
       expect(oas.some(a => a.msgTypes.includes('/verana.pp.v1.MsgStartParticipantOP'))).toBe(true)
     },
     SETUP_TIMEOUT_MS,
@@ -215,14 +237,12 @@ describe('applicant-side chain ops (V4)', () => {
       })
       await singleChain.start()
 
-      const vsoas = await singleChain.listVsOperatorAuthorizations()
+      const vsoas = await indexer.listVsOperatorAuthorizations(singleChain.address)
       const record = vsoas.flatMap(a => a.records).find(r => r.participantId === issuer.participantId)
       expect(record?.msgTypes).toEqual(expect.arrayContaining([PP_VALIDATE, PP_SESSION]))
 
       await singleChain.setParticipantOPToValidated({ id: holder.participantId, opSummaryDigest: '' })
-      expect((await singleChain.getParticipant(holder.participantId))?.opState).toBe(
-        ValidationState.VALIDATED,
-      )
+      await untilOpState(holder.participantId, ValidationState.VALIDATED)
       const session = await singleChain.createOrUpdateParticipantSession({
         id: randomUUID(),
         issuerParticipantId: issuer.participantId,
@@ -238,11 +258,6 @@ describe('applicant-side chain ops (V4)', () => {
   it(
     'is indexed with the exact event_type strings the notification handlers key on',
     async () => {
-      const indexer = new VeranaIndexerService({
-        baseUrl: stack.indexerWsUrl.replace(/^ws/, 'http'),
-        logger: new ConsoleLogger(LogLevel.Warn),
-      })
-
       const expected = [
         'StartParticipantOP',
         'SetParticipantOPToValidated',

@@ -1,7 +1,12 @@
 import { fetchJson } from '../utils/util'
 
+import { toParticipant } from './indexerMappers'
+
 import {
   CorporationDto,
+  DurationParam,
+  Participant,
+  OperatorAuthorization,
   CredentialSchemaDto,
   DigestDto,
   EcosystemDto,
@@ -11,10 +16,46 @@ import {
   ParticipantDto,
   ParticipantSessionDto,
   VeranaIdxConfig,
+  VsOperatorAuthorization,
 } from './types'
 
 // Timeout so one stuck request cannot block the whole sync queue.
 const REQUEST_TIMEOUT_MS = 30_000
+
+type RawDuration = { seconds?: number | string; nanos?: number } | string
+
+function toDuration(raw?: RawDuration | null): DurationParam | undefined {
+  if (raw == null) return undefined
+  if (typeof raw === 'string') {
+    const seconds = Number.parseFloat(raw.endsWith('s') ? raw.slice(0, -1) : raw)
+    return Number.isFinite(seconds) ? { seconds: Math.trunc(seconds) } : undefined
+  }
+  return { seconds: Number(raw.seconds ?? 0), nanos: raw.nanos }
+}
+
+const active = (p: ParticipantDto): boolean => !p.revoked && !p.slashed
+
+interface RawOperatorAuthorization {
+  id: number
+  corporation_id: number
+  operator: string
+  msg_types?: string[]
+  expiration?: string | null
+  period?: RawDuration | null
+}
+
+interface RawVsOperatorAuthorization {
+  id: number
+  corporation_id: number
+  vs_operator: string
+  records?: {
+    participant_id: number
+    msg_types?: string[]
+    with_feegrant?: boolean
+    expiration?: string | null
+    period?: RawDuration | null
+  }[]
+}
 
 export class VeranaIndexerService {
   private readonly baseUrl: string
@@ -116,6 +157,72 @@ export class VeranaIndexerService {
       REQUEST_TIMEOUT_MS,
     )
     return data.participants
+  }
+
+  async findParticipant(id: string | number): Promise<Participant | undefined> {
+    this.config.logger.debug(`[VeranaIndexer] findParticipant id=${id}`)
+    const data = await fetchJson<{ participant: ParticipantDto }>(
+      `${this.baseUrl}/v4/participant/get/${encodeURIComponent(id)}`,
+      { timeoutMs: REQUEST_TIMEOUT_MS, allowNotFound: true },
+    )
+    return data?.participant ? toParticipant(data.participant) : undefined
+  }
+
+  async findActiveHolderParticipantIdByDid(did: string): Promise<number | undefined> {
+    const participants = await this.listParticipants({ did, role: ParticipantRole.Holder })
+    return participants.find(p => p.did === did && p.role === ParticipantRole.Holder && active(p))?.id
+  }
+
+  async findActiveIssuerParticipantId(
+    did: string,
+    schemaId: number,
+    vsOperator: string,
+  ): Promise<number | undefined> {
+    const participants = await this.listParticipants({ did, schemaId, role: ParticipantRole.Issuer })
+    return participants.find(
+      p =>
+        p.did === did &&
+        p.role === ParticipantRole.Issuer &&
+        p.schema_id === schemaId &&
+        p.vs_operator === vsOperator &&
+        active(p),
+    )?.id
+  }
+
+  async listOperatorAuthorizations(operator: string): Promise<OperatorAuthorization[]> {
+    this.config.logger.debug(`[VeranaIndexer] listOperatorAuthorizations operator=${operator}`)
+    const data = await fetchJson<{ authorizations: RawOperatorAuthorization[] }>(
+      `${this.baseUrl}/v4/delegation/operator-authorizations?operator=${encodeURIComponent(operator)}`,
+      REQUEST_TIMEOUT_MS,
+    )
+    return (data.authorizations ?? []).map(a => ({
+      id: a.id,
+      corporationId: a.corporation_id,
+      operator: a.operator,
+      msgTypes: a.msg_types ?? [],
+      expiration: a.expiration ? new Date(a.expiration) : undefined,
+      period: toDuration(a.period),
+    }))
+  }
+
+  async listVsOperatorAuthorizations(vsOperator: string): Promise<VsOperatorAuthorization[]> {
+    this.config.logger.debug(`[VeranaIndexer] listVsOperatorAuthorizations vs_operator=${vsOperator}`)
+    const data = await fetchJson<{ authorizations: RawVsOperatorAuthorization[] }>(
+      `${this.baseUrl}/v4/delegation/vs-operator-authorizations?vs_operator=${encodeURIComponent(vsOperator)}`,
+      REQUEST_TIMEOUT_MS,
+    )
+    return (data.authorizations ?? []).map(a => ({
+      id: a.id,
+      corporationId: a.corporation_id,
+      vsOperator: a.vs_operator,
+      records: (a.records ?? []).map(r => ({
+        participantId: r.participant_id,
+        msgTypes: r.msg_types ?? [],
+        withFeegrant: Boolean(r.with_feegrant),
+        expiration: r.expiration ? new Date(r.expiration) : undefined,
+        period: toDuration(r.period),
+      })),
+    }))
   }
 
   async getDigest(digest: string): Promise<DigestDto | undefined> {

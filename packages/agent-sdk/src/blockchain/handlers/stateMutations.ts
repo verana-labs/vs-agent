@@ -228,7 +228,7 @@ export async function completeVtFlowRecordsWithoutCredential(
   agent: VsAgent,
   participantId: string,
 ): Promise<void> {
-  const participant = await agent.veranaChain?.getParticipant(Number(participantId))
+  const participant = await agent.indexer.findParticipant(participantId).catch(() => undefined)
   if (!participant || participant.role === HOLDER_PARTICIPANT_TYPE) return
 
   await reconcileVtFlowRecordsForParticipant(
@@ -300,7 +300,7 @@ export async function removeHolderTrustCredentialIfRevoked(
   agent: VsAgent,
   participantId: string,
 ): Promise<void> {
-  const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
+  const participant = await agent.indexer.findParticipant(participantId).catch(() => undefined)
   if (participant?.role !== HOLDER_PARTICIPANT_TYPE || participant.did !== agent.did) return
   if (!agent.publicApiBaseUrl) return
 
@@ -334,7 +334,7 @@ export async function removeSelfIssuedEcsCredentialsIfIssuerRevoked(
   participantId: string,
 ): Promise<void> {
   if (!agent.publicApiBaseUrl) return
-  const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
+  const participant = await agent.indexer.findParticipant(participantId).catch(() => undefined)
   if (participant?.role !== ISSUER_PARTICIPANT_TYPE || participant.did !== agent.did) return
 
   try {
@@ -353,7 +353,7 @@ export async function removeSelfIssuedEcsCredentialsIfIssuerRevoked(
 }
 
 export async function reconcileVtFlowRecordsOnCancel(agent: VsAgent, participantId: string): Promise<void> {
-  const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
+  const participant = await agent.indexer.findParticipant(participantId).catch(() => undefined)
   const stillValidated = Number(participant?.opState) === ValidationState.VALIDATED
 
   await reconcileVtFlowRecordsForParticipant(
@@ -395,7 +395,7 @@ export async function startParticipantOPAutoFlow(agent: VsAgent, activity: Index
   if (!chain) return
   const applicantParticipantId = Number(activity.entity_id)
   if (!Number.isFinite(applicantParticipantId)) return
-  const holderParticipant = await chain.getParticipant(applicantParticipantId)
+  const holderParticipant = await agent.indexer.findParticipant(applicantParticipantId)
   if (!holderParticipant || holderParticipant.did !== agent.did) return
   try {
     await waitUntilOwnDidIsPubliclyResolvable(agent, agent.config.logger)

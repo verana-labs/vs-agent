@@ -18,7 +18,7 @@ vi.mock('../src/utils/selfIssuedEcsCredential', () => ({
 
 const ecsClaims = {} as EcsClaims
 
-function makeAgent(chain?: Record<string, unknown>) {
+function makeAgent(chain?: Record<string, unknown>, indexer: Record<string, unknown> = makeIndexer()) {
   const metadata = new Map<string, Record<string, unknown>>()
   const didDocument = new DidDocument({
     id: DID,
@@ -48,15 +48,22 @@ function makeAgent(chain?: Record<string, unknown>) {
     dids: { getCreatedDids: async () => [didRecord], update: didsUpdate },
     context: { dependencyManager: { resolve: () => ({ update: repositoryUpdate }) } },
     veranaChain: chain,
+    indexer,
   }
   return { agent, didDocument, didsUpdate, metadata }
+}
+
+function makeIndexer(overrides: Record<string, unknown> = {}) {
+  return {
+    getCredentialSchema: vi.fn(async () => ({ id: 5, digest_algorithm: 'sha256' })),
+    getDigest: vi.fn(async () => undefined),
+    ...overrides,
+  }
 }
 
 function makeChain(overrides: Record<string, unknown> = {}) {
   return {
     address: 'verana1operator',
-    getCredentialSchema: vi.fn(async () => ({ id: 5, digestAlgorithm: 'sha256' })),
-    getDigest: vi.fn(async () => undefined),
     createOrUpdateParticipantSession: vi.fn(async () => ({ txHash: 'ABC' })),
     ...overrides,
   }
@@ -117,8 +124,9 @@ describe('ECS credential digest anchoring', () => {
   })
 
   it('sends no transaction when the digest is already anchored', async () => {
-    const chain = makeChain({ getDigest: vi.fn(async () => ({ digest: DIGEST, created: new Date() })) })
-    const { agent } = makeAgent(chain)
+    const indexer = makeIndexer({ getDigest: vi.fn(async () => ({ digest: DIGEST, created: new Date() })) })
+    const chain = makeChain()
+    const { agent } = makeAgent(chain, indexer)
 
     await rebind(agent)
 
@@ -138,8 +146,9 @@ describe('ECS credential digest anchoring', () => {
   })
 
   it('fails when the schema is not on chain', async () => {
-    const chain = makeChain({ getCredentialSchema: vi.fn(async () => undefined) })
-    const { agent } = makeAgent(chain)
+    const indexer = makeIndexer({ getCredentialSchema: vi.fn(async () => undefined) })
+    const chain = makeChain()
+    const { agent } = makeAgent(chain, indexer)
 
     await expect(rebind(agent)).rejects.toThrow('not on chain')
     expect(chain.createOrUpdateParticipantSession).not.toHaveBeenCalled()
