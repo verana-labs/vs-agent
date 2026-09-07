@@ -458,3 +458,105 @@ describe('v2 anoncreds credential definition routes', () => {
     expect(credentialDefinitionRepository.delete).not.toHaveBeenCalled()
   })
 })
+
+describe('the AnonCreds schema a credential definition builds on', () => {
+  const jsonSchemaCredentialId = 'https://eco.test/vt/schemas-5-jsc.json'
+  const ecosystemDid = 'did:webvh:QmAbC:eco.test'
+  const foreignSchemaId = `${ecosystemDid}/resources/zQmSchema`
+  const foreignSchema = { name: 'ServiceCredential', version: '1.0', attrNames: ['name'] }
+
+  const anoncreds = {
+    getCreatedSchemas: vi.fn().mockResolvedValue([]),
+    registerSchema: vi.fn(),
+  }
+  const ownSchemaRepository = { findByQuery: vi.fn(), findBySchemaId: vi.fn(), update: vi.fn() }
+  const serviceAgent = {
+    did: 'did:webvh:QmXyZ:issuer.test',
+    context: {},
+    modules: { anoncreds },
+    genericRecords: { save: vi.fn() },
+    dependencyManager: { resolve: () => ownSchemaRepository },
+  }
+
+  const service = new CredentialTypesService({
+    getAgent: vi.fn().mockResolvedValue(serviceAgent),
+  } as never)
+
+  const fetchMock = vi.fn()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    anoncreds.getCreatedSchemas.mockResolvedValue([])
+    ownSchemaRepository.findByQuery.mockResolvedValue([])
+    vi.stubGlobal('fetch', fetchMock)
+    vi.spyOn(service, 'parseJsonSchemaCredential').mockResolvedValue({
+      issuer: ecosystemDid,
+      attrNames: ['name'],
+      title: 'ServiceCredential',
+    } as never)
+  })
+
+  afterAll(() => vi.unstubAllGlobals())
+
+  const answerListing = (body: unknown, status = 200) =>
+    fetchMock.mockResolvedValue({ ok: status === 200, status, statusText: 'x', json: async () => body })
+
+  it('uses the schema the registry of the VTJSC issuer lists, and registers none of its own', async () => {
+    answerListing([{ id: foreignSchemaId, content: foreignSchema }])
+
+    await expect(
+      service.getOrRegisterAnonCredsSchema({ relatedJsonSchemaCredentialId: jsonSchemaCredentialId }),
+    ).resolves.toEqual({ schemaId: foreignSchemaId, schema: foreignSchema })
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `https://eco.test/resources?resourceType=anonCredsSchema&relatedJsonSchemaCredentialId=${encodeURIComponent(jsonSchemaCredentialId)}`,
+    )
+    expect(anoncreds.registerSchema).not.toHaveBeenCalled()
+  })
+
+  it('answers INVALID_STATE when that registry lists no schema yet', async () => {
+    answerListing([])
+
+    await expect(
+      service.getOrRegisterAnonCredsSchema({ relatedJsonSchemaCredentialId: jsonSchemaCredentialId }),
+    ).rejects.toMatchObject({ code: 'INVALID_STATE', status: 409 })
+    expect(anoncreds.registerSchema).not.toHaveBeenCalled()
+  })
+
+  it('answers RESOLVER_UNAVAILABLE when that registry cannot be reached', async () => {
+    fetchMock.mockRejectedValue(new Error('connect ECONNREFUSED'))
+
+    await expect(
+      service.getOrRegisterAnonCredsSchema({ relatedJsonSchemaCredentialId: jsonSchemaCredentialId }),
+    ).rejects.toMatchObject({ code: 'RESOLVER_UNAVAILABLE', status: 503 })
+  })
+
+  it('registers its own schema when the agent itself issued the VTJSC', async () => {
+    vi.spyOn(service, 'parseJsonSchemaCredential').mockResolvedValue({
+      issuer: serviceAgent.did,
+      attrNames: ['name'],
+      title: 'ServiceCredential',
+    } as never)
+    const ownSchemaId = `${serviceAgent.did}/resources/zQmOwn`
+    anoncreds.registerSchema.mockResolvedValue({
+      schemaState: { schemaId: ownSchemaId, schema: foreignSchema },
+      registrationMetadata: { attestedResource: { id: ownSchemaId } },
+    })
+    ownSchemaRepository.findBySchemaId.mockResolvedValue({ setTag: vi.fn() })
+
+    await expect(
+      service.getOrRegisterAnonCredsSchema({ relatedJsonSchemaCredentialId: jsonSchemaCredentialId }),
+    ).resolves.toEqual({ schemaId: ownSchemaId, schema: foreignSchema })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(anoncreds.registerSchema).toHaveBeenCalledWith({
+      schema: {
+        attrNames: ['name'],
+        name: 'ServiceCredential',
+        version: '1.0',
+        issuerId: serviceAgent.did,
+      },
+      options: { extraMetadata: { relatedJsonSchemaCredentialId: jsonSchemaCredentialId } },
+    })
+  })
+})
