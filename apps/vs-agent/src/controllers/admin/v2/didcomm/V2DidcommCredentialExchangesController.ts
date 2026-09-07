@@ -32,7 +32,7 @@ import {
 import { createInvitation } from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
-import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
+import { AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
@@ -176,23 +176,22 @@ export class V2DidcommCredentialExchangesController {
       },
     })
 
-    const { url } = await createInvitation({
+    const { invitation } = await createInvitation({
       agent,
       messages: [offer.message],
       useLegacyDid,
       didCommVersion: didcommVersion,
-      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
       imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({
-      longUrl: url,
+      invitation,
       relatedFlowId: offer.credentialExchangeRecord.id,
     })
 
     return {
       credentialExchangeId: offer.credentialExchangeRecord.id,
-      url,
+      invitation,
       shortUrl: `${this.publicApiBaseUrl}/s?id=${shortUrlId}`,
     }
   }

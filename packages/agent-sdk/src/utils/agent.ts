@@ -20,11 +20,10 @@ export async function createInvitation(options: {
   agent: VsAgent
   messages?: DidCommMessage[]
   useLegacyDid?: boolean
-  invitationBaseUrl: string
   imageUrl?: string
   didCommVersion?: DidCommVersion
 }) {
-  const { agent, messages, useLegacyDid, invitationBaseUrl, imageUrl, didCommVersion } = options
+  const { agent, messages, useLegacyDid, imageUrl, didCommVersion } = options
 
   const ourDid = (useLegacyDid && agent.did ? getLegacyDidWeb(agent.did) : undefined) ?? agent.did
 
@@ -55,9 +54,8 @@ export async function createInvitation(options: {
     })
   ).outOfBandInvitation
   return {
-    url: outOfBandInvitation.toUrl({
-      domain: invitationBaseUrl,
-    }),
+    invitation: outOfBandInvitation.v2Invitation?.toJSON() ?? outOfBandInvitation.toJSON(),
+    outOfBandInvitation,
   }
 }
 
