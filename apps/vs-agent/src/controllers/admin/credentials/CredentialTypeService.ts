@@ -22,7 +22,7 @@ import { AdminApiError, AdminApiErrorCode } from '../../../common'
 import { REVOCATION_REGISTRY_DEFAULT_CAPACITY } from '../../../config/constants'
 import { VsAgentService } from '../../../services/VsAgentService'
 
-const REGISTRY_FETCH_TIMEOUT_MS = 30_000
+const RESOLVE_TIMEOUT_MS = 30_000
 
 export class CredentialTypesService {
   private readonly logger = new Logger(CredentialTypesService.name)
@@ -346,7 +346,7 @@ export class CredentialTypesService {
     let resources: Array<{ id: string; content: AnonCredsSchema }> | undefined
     try {
       resources = await fetchJson<Array<{ id: string; content: AnonCredsSchema }>>(resourcesUrl, {
-        timeoutMs: REGISTRY_FETCH_TIMEOUT_MS,
+        timeoutMs: RESOLVE_TIMEOUT_MS,
         allowNotFound: true,
       })
     } catch (error) {
@@ -661,11 +661,29 @@ export class CredentialTypesService {
     return result
   }
 
+  /** Answers `undefined` when the document is absent, and RESOLVER_UNAVAILABLE when it cannot be read. */
+  private async resolveJson<T>(url: string): Promise<T | undefined> {
+    try {
+      return await fetchJson<T>(url, { timeoutMs: RESOLVE_TIMEOUT_MS, allowNotFound: true })
+    } catch (error) {
+      throw new AdminApiError(
+        AdminApiErrorCode.ResolverUnavailable,
+        HttpStatus.SERVICE_UNAVAILABLE,
+        `${url} cannot be reached: ${error}`,
+      )
+    }
+  }
+
   public async parseJsonSchemaCredential(jsonSchemaCredentialId: string) {
     try {
-      const jscData = await fetchJson<W3cCredential>(jsonSchemaCredentialId)
+      const jscData = await this.resolveJson<W3cCredential>(jsonSchemaCredentialId)
+      if (!jscData) throw new Error(`no document at ${jsonSchemaCredentialId}`)
+
       const subjectId = this.getCredentialSubjectId(jscData.credentialSubject)
-      const schemaData = await fetchJson<JsonObject>(mapToEcosystem(subjectId))
+      const schemaUrl = mapToEcosystem(subjectId)
+      const schemaData = await this.resolveJson<JsonObject>(schemaUrl)
+      if (!schemaData) throw new Error(`no JSON Schema at ${schemaUrl}`)
+
       const parsedSchema = schemaData as any
       const { name, attrNames } = anonCredsSchemaFromJsonSchema(parsedSchema)
 
@@ -677,7 +695,13 @@ export class CredentialTypesService {
         subjectRef: subjectId,
       }
     } catch (error) {
-      throw new Error(`Failed to parse JSON Schema Credential ${jsonSchemaCredentialId}: ${error}`)
+      // an unreachable host is a state of the resolver, not an answer about the VTJSC
+      if (error instanceof AdminApiError) throw error
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        HttpStatus.NOT_FOUND,
+        `the agent cannot resolve relatedJsonSchemaCredentialId "${jsonSchemaCredentialId}": ${error}`,
+      )
     }
   }
 }

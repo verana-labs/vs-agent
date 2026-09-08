@@ -7,7 +7,7 @@ import {
   AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
-import { ValidationPipe, VersioningType } from '@nestjs/common'
+import { HttpStatus, ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
 import { plainToInstance } from 'class-transformer'
@@ -15,7 +15,7 @@ import { validate } from 'class-validator'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ErrorEnvelopeFilter } from '../src/common'
+import { AdminApiError, AdminApiErrorCode, ErrorEnvelopeFilter } from '../src/common'
 import { CredentialTypesService } from '../src/controllers/admin/credentials'
 import { CreateCredentialDefinitionDto } from '../src/controllers/admin/v2/anoncreds/dto'
 import { V2AnoncredsCredentialDefinitionsController } from '../src/controllers/admin/v2/anoncreds/V2AnoncredsCredentialDefinitionsController'
@@ -296,7 +296,9 @@ describe('v2 anoncreds credential definition routes', () => {
 
   it('answers UNKNOWN_ID when it cannot resolve relatedJsonSchemaCredentialId', async () => {
     credentialTypesService.findAnonCredsCredentialDefinition.mockResolvedValue(undefined)
-    credentialTypesService.parseJsonSchemaCredential.mockRejectedValue(new Error('fetch failed'))
+    credentialTypesService.getOrRegisterAnonCredsSchema.mockRejectedValue(
+      new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, 'no document'),
+    )
 
     const response = await request(app.getHttpServer())
       .post('/v2/anoncreds/credential-definitions')
@@ -304,6 +306,25 @@ describe('v2 anoncreds credential definition routes', () => {
 
     expect(response.status).toBe(404)
     expect(response.body.error.code).toBe('UNKNOWN_ID')
+    expect(credentialTypesService.registerAnonCredsCredentialDefinition).not.toHaveBeenCalled()
+  })
+
+  it('answers RESOLVER_UNAVAILABLE when the host of the VTJSC cannot be reached', async () => {
+    credentialTypesService.findAnonCredsCredentialDefinition.mockResolvedValue(undefined)
+    credentialTypesService.getOrRegisterAnonCredsSchema.mockRejectedValue(
+      new AdminApiError(
+        AdminApiErrorCode.ResolverUnavailable,
+        HttpStatus.SERVICE_UNAVAILABLE,
+        'cannot be reached',
+      ),
+    )
+
+    const response = await request(app.getHttpServer())
+      .post('/v2/anoncreds/credential-definitions')
+      .send({ relatedJsonSchemaCredentialId: 'https://down.test/jsc.json' })
+
+    expect(response.status).toBe(503)
+    expect(response.body.error.code).toBe('RESOLVER_UNAVAILABLE')
     expect(credentialTypesService.registerAnonCredsCredentialDefinition).not.toHaveBeenCalled()
   })
 
@@ -512,6 +533,24 @@ describe('the AnonCreds schema a credential definition builds on', () => {
       `https://eco.test/resources?resourceType=anonCredsSchema&relatedJsonSchemaCredentialId=${encodeURIComponent(jsonSchemaCredentialId)}`,
     )
     expect(anoncreds.registerSchema).not.toHaveBeenCalled()
+  })
+
+  it('tells an absent VTJSC from one it cannot reach', async () => {
+    const realService = new CredentialTypesService({
+      getAgent: vi.fn().mockResolvedValue(serviceAgent),
+    } as never)
+
+    fetchMock.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' })
+    await expect(realService.parseJsonSchemaCredential(jsonSchemaCredentialId)).rejects.toMatchObject({
+      code: 'UNKNOWN_ID',
+      status: 404,
+    })
+
+    fetchMock.mockRejectedValue(new Error('getaddrinfo ENOTFOUND'))
+    await expect(realService.parseJsonSchemaCredential(jsonSchemaCredentialId)).rejects.toMatchObject({
+      code: 'RESOLVER_UNAVAILABLE',
+      status: 503,
+    })
   })
 
   it('answers INVALID_STATE when that registry lists no schema yet', async () => {

@@ -134,14 +134,6 @@ export class V2AnoncredsCredentialDefinitionsController {
       )
     }
 
-    // The agent must resolve the VTJSC before it writes to the registry. If the agent cannot
-    // read the VTJSC, it must answer UNKNOWN_ID. It must not answer an internal error.
-    try {
-      await this.service.parseJsonSchemaCredential(relatedJsonSchemaCredentialId)
-    } catch {
-      throw unresolvableJsonSchemaCredential(relatedJsonSchemaCredentialId)
-    }
-
     // the schema of the VTJSC issuer: the local one when this agent issued the VTJSC, the one
     // its registry lists otherwise, per [VSA-ADM-AC-CD-CREATE]
     const { schema, schemaId } = await this.service.getOrRegisterAnonCredsSchema({
@@ -456,14 +448,6 @@ function unknownCredentialDefinition(credentialDefinitionId: string): AdminApiEr
     AdminApiErrorCode.UnknownId,
     HttpStatus.NOT_FOUND,
     `no credential definition with id "${credentialDefinitionId}"`,
-  )
-}
-
-function unresolvableJsonSchemaCredential(relatedJsonSchemaCredentialId: string): AdminApiError {
-  return new AdminApiError(
-    AdminApiErrorCode.UnknownId,
-    HttpStatus.NOT_FOUND,
-    `the agent cannot resolve relatedJsonSchemaCredentialId "${relatedJsonSchemaCredentialId}"`,
   )
 }
 
