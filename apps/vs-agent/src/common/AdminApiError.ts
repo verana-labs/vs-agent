@@ -1,3 +1,6 @@
+import { HttpStatus } from '@nestjs/common'
+import { AnonCredsTrustError, AnonCredsTrustErrorReason } from '@verana-labs/vs-agent-sdk'
+
 export enum AdminApiErrorCode {
   InvalidInput = 'INVALID_INPUT',
   InvalidCursor = 'INVALID_CURSOR',
@@ -9,6 +12,9 @@ export enum AdminApiErrorCode {
   InvalidPackage = 'INVALID_PACKAGE',
   UnsupportedFormat = 'UNSUPPORTED_FORMAT',
   NotReady = 'NOT_READY',
+  NotAuthorized = 'NOT_AUTHORIZED',
+  PeerNotAuthorized = 'PEER_NOT_AUTHORIZED',
+  ResolverUnavailable = 'RESOLVER_UNAVAILABLE',
   Internal = 'INTERNAL',
 }
 
@@ -21,4 +27,37 @@ export class AdminApiError extends Error {
     super(message)
     this.name = 'AdminApiError'
   }
+}
+
+export type TrustDecisionSubject = 'agent' | 'peer'
+
+export function trustDecisionError(
+  error: unknown,
+  subject: TrustDecisionSubject,
+  notDerivableCode?: AdminApiErrorCode,
+): unknown {
+  if (!(error instanceof AnonCredsTrustError)) return error
+
+  if (error.reason === AnonCredsTrustErrorReason.Unavailable) {
+    return new AdminApiError(
+      AdminApiErrorCode.ResolverUnavailable,
+      HttpStatus.SERVICE_UNAVAILABLE,
+      error.message,
+    )
+  }
+
+  const unauthorizedCode =
+    subject === 'peer' ? AdminApiErrorCode.PeerNotAuthorized : AdminApiErrorCode.NotAuthorized
+
+  if (error.reason === AnonCredsTrustErrorReason.NotAuthorized) {
+    return new AdminApiError(unauthorizedCode, HttpStatus.CONFLICT, error.message)
+  }
+
+  const code = notDerivableCode ?? unauthorizedCode
+
+  return new AdminApiError(
+    code,
+    code === AdminApiErrorCode.InvalidInput ? HttpStatus.BAD_REQUEST : HttpStatus.CONFLICT,
+    error.message,
+  )
 }
