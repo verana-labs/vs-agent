@@ -359,7 +359,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       await applicantCompleted
       await waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Completed))
 
-      expect(await indexer.getParticipant(holderOp.id)).toBeDefined()
+      expect(await until(() => indexer.getParticipant(holderOp.id))).toBeDefined()
 
       const credentials = await applicant.w3cCredentials.getAll()
       expect(credentials.length).toBeGreaterThan(0)

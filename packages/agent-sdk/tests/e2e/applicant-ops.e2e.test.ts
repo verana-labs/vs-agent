@@ -45,6 +45,16 @@ describe('applicant-side chain ops (V4)', () => {
     [ValidationState.TERMINATED]: 'TERMINATED',
   }
 
+  async function untilIndexed<T>(read: () => Promise<T | undefined>, what: string): Promise<T> {
+    const deadline = Date.now() + 90_000
+    for (;;) {
+      const value = await read().catch(() => undefined)
+      if (value !== undefined) return value
+      if (Date.now() > deadline) throw new Error(`${what} never reached the indexer`)
+      await new Promise(resolve => setTimeout(resolve, 2_000))
+    }
+  }
+
   async function untilOpState(id: number, expected: ValidationState, timeoutMs = 90_000) {
     const want = OP_STATE_NAME[expected]
     const deadline = Date.now() + timeoutMs
@@ -163,7 +173,8 @@ describe('applicant-side chain ops (V4)', () => {
       })
       expect(txHash).toMatch(/^[0-9A-F]{64}$/i)
       expect(participantId).toBeGreaterThan(0)
-      expect((await indexer.getParticipant(participantId))?.did).toBe(`did:example:self-${RUN_ID}`)
+      const self = await untilIndexed(() => indexer.getParticipant(participantId), 'participant')
+      expect(self.did).toBe(`did:example:self-${RUN_ID}`)
     },
     SETUP_TIMEOUT_MS,
   )
@@ -171,12 +182,12 @@ describe('applicant-side chain ops (V4)', () => {
   it(
     'reads ecosystem and schema through the indexer, authorizations through the ledger',
     async () => {
-      const eco = await indexer.getEcosystem(ecosystemId)
+      const eco = await untilIndexed(() => indexer.getEcosystem(ecosystemId), 'ecosystem')
       expect(eco?.id).toBe(ecosystemId)
       expect(eco?.did).toBe(`did:example:eco-${RUN_ID}`)
       expect(Number(eco?.corporation_id)).toBe(corpId)
 
-      const schema = await indexer.getCredentialSchema(schemaId)
+      const schema = await untilIndexed(() => indexer.getCredentialSchema(schemaId), 'schema')
       expect(schema?.id).toBe(schemaId)
       expect(Number(schema?.ecosystem_id)).toBe(ecosystemId)
       expect(JSON.parse(schema?.json_schema ?? '{}').title).toBe('OrgCred')
