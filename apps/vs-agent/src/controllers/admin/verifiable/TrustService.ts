@@ -29,7 +29,6 @@ import {
 } from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, paginate, PaginationQueryDto } from '../../../common'
-import { AGENT_INVITATION_BASE_URL } from '../../../config'
 import { UrlShorteningService } from '../../../services'
 import { VsAgentService } from '../../../services/VsAgentService'
 import { CredentialTypesService } from '../credentials'
@@ -300,14 +299,13 @@ export class TrustService {
               },
             },
           })
-          const { url: longUrl } = await createInvitation({
+          const { invitation } = await createInvitation({
             agent,
             messages: [request.message],
-            invitationBaseUrl: AGENT_INVITATION_BASE_URL,
           })
 
           const shortUrlId = await this.urlShortenerService.createShortUrl({
-            longUrl,
+            invitation,
             relatedFlowId: request.credentialExchangeRecord.id,
           })
           const didcommInvitationUrl = `${this.publicApiBaseUrl}/s?id=${shortUrlId}`

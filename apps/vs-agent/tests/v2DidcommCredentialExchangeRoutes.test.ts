@@ -142,7 +142,9 @@ describe('v2 didcomm credential exchange routes', () => {
     agent.modules.anoncreds.getSchema.mockResolvedValue({ schema })
     agent.modules.anoncreds.getCreatedCredentialDefinitions.mockResolvedValue([credentialDefinition(false)])
     urlShorteningService.createShortUrl.mockResolvedValue('short-1')
-    vi.mocked(createInvitation).mockResolvedValue({ url: 'didcomm://agent.test/invite' } as never)
+    vi.mocked(createInvitation).mockResolvedValue({
+      invitation: { '@type': 'https://didcomm.org/out-of-band/2.0/invitation', '@id': 'inv-1' },
+    } as never)
   })
 
   it('walks the credential exchanges with the keyset cursor and ends with a null cursor', async () => {
@@ -252,7 +254,7 @@ describe('v2 didcomm credential exchange routes', () => {
     expect(response.status).toBe(201)
     expect(response.body).toEqual({
       credentialExchangeId: 'ce-new',
-      url: 'didcomm://agent.test/invite',
+      invitation: { '@type': 'https://didcomm.org/out-of-band/2.0/invitation', '@id': 'inv-1' },
       shortUrl: 'https://agent.test/s?id=short-1',
     })
   })

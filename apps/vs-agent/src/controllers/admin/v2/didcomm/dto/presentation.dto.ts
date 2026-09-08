@@ -103,11 +103,15 @@ export class CreatePresentationRequestResponseDto {
   @ApiProperty({ description: 'Flow identifier, for later tracking', example: 'proof-1234-5678' })
   proofExchangeId!: string
 
-  @ApiProperty({ description: 'Full DIDComm invitation URL', example: 'didcomm://example.com/...' })
-  url!: string
+  @ApiProperty({
+    description: 'The Out-of-Band invitation, in the envelope that didcommVersion selects',
+    type: 'object',
+    additionalProperties: true,
+  })
+  invitation!: Record<string, unknown>
 
   @ApiProperty({
-    description: 'Short form of the URL, for a QR code',
+    description: 'A URL under PUBLIC_API_BASE_URL that resolves to the same invitation, for a QR code',
     example: 'https://mydomain.com/s?id=abcd',
   })
   shortUrl!: string
