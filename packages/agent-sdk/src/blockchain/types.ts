@@ -428,3 +428,16 @@ export interface SelfCreateParticipantParams {
   vsOperatorAuthzFeeSpendLimit?: Coin[]
   vsOperatorAuthzPeriod?: DurationParam
 }
+
+export interface DelegationQueryClient {
+  ListOperatorAuthorizations(req: {
+    corporationId: number
+    operator: string
+    responseMaxSize: number
+  }): Promise<{ operatorAuthorizations: OperatorAuthorization[] }>
+  ListVSOperatorAuthorizations(req: {
+    corporationId: number
+    vsOperator: string
+    responseMaxSize: number
+  }): Promise<{ vsOperatorAuthorizations: VsOperatorAuthorization[] }>
+}

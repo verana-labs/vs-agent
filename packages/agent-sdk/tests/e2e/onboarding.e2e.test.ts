@@ -108,8 +108,8 @@ describe('vt-flow onboarding chain integration (V4)', () => {
         logger: new ConsoleLogger(LogLevel.Warn),
       })
 
-      expect((await indexer.listVsOperatorAuthorizations(vsoaChain.address)).length).toBeGreaterThan(0)
-      expect(await indexer.listVsOperatorAuthorizations(veranaChain.address)).toEqual([])
+      expect(await vsoaChain.hasVsOperatorAuthorization()).toBe(true)
+      expect(await veranaChain.hasVsOperatorAuthorization()).toBe(false)
       let indexed: Awaited<ReturnType<VeranaIndexerService['getParticipant']>> | undefined
       const deadline = Date.now() + 120_000
       while (Date.now() < deadline) {

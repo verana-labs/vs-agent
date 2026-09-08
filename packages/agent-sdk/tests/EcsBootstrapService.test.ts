@@ -44,6 +44,7 @@ function makeMocks() {
   const eventHandlers: ((event: { payload: Record<string, unknown> }) => Promise<void> | void)[] = []
   const chain = {
     address: 'verana1agent',
+    listOperatorAuthorizations: vi.fn().mockResolvedValue([{ msgTypes: [START_OP] }]),
     getBalance: vi.fn().mockResolvedValue({ denom: 'uvna', amount: '1000000' }),
     startParticipantOP: vi.fn().mockResolvedValue({ participantId: 77, txHash: 'AA' }),
     selfCreateParticipant: vi.fn().mockResolvedValue({ participantId: 88, txHash: 'BB' }),
@@ -56,8 +57,6 @@ function makeMocks() {
     getCredentialSchema: vi
       .fn()
       .mockResolvedValue({ ...serviceSchema, issuer_onboarding_mode: 'ECOSYSTEM_ONBOARDING_PROCESS' }),
-    listOperatorAuthorizations: vi.fn().mockResolvedValue([{ msgTypes: [START_OP] }]),
-    listVsOperatorAuthorizations: vi.fn().mockResolvedValue([]),
     findParticipant: vi.fn().mockResolvedValue(undefined),
     findActiveHolderParticipantIdByDid: vi.fn().mockResolvedValue(undefined),
     findActiveIssuerParticipantId: vi.fn().mockResolvedValue(undefined),
@@ -122,7 +121,7 @@ describe('EcsBootstrapService standalone', () => {
     ['no balance', { balance: '0' }, {}],
   ])('skips without starting anything when %s', async (_name, mockTweaks, optionTweaks) => {
     const mocks = makeMocks()
-    if ('oas' in mockTweaks) mocks.indexer.listOperatorAuthorizations.mockResolvedValue([])
+    if ('oas' in mockTweaks) mocks.chain.listOperatorAuthorizations.mockResolvedValue([])
     if ('balance' in mockTweaks) mocks.chain.getBalance.mockResolvedValue({ denom: 'uvna', amount: '0' })
 
     await makeService(mocks, optionTweaks).run()
@@ -193,7 +192,7 @@ describe('EcsBootstrapService standalone', () => {
 
   it('self-creates the Service ISSUER when the schema mode is OPEN', async () => {
     const mocks = makeMocks()
-    mocks.indexer.listOperatorAuthorizations.mockResolvedValue([{ msgTypes: [START_OP, SELF_CREATE] }])
+    mocks.chain.listOperatorAuthorizations.mockResolvedValue([{ msgTypes: [START_OP, SELF_CREATE] }])
     mocks.indexer.getCredentialSchema.mockResolvedValue({
       ...serviceSchema,
       issuer_onboarding_mode: 'OPEN',
@@ -307,7 +306,7 @@ describe('EcsBootstrapService onboarding resume', () => {
   it('resumes even when the operator can no longer start an OP', async () => {
     const mocks = makeMocks()
     onlyOwnPending(mocks)
-    mocks.indexer.listOperatorAuthorizations.mockResolvedValue([])
+    mocks.chain.listOperatorAuthorizations.mockResolvedValue([])
 
     await makeService(mocks).run()
 
@@ -485,7 +484,7 @@ describe('EcsBootstrapService delegated', () => {
   it.each([
     [
       'the operator cannot start an OP',
-      (m: ReturnType<typeof makeMocks>) => m.indexer.listOperatorAuthorizations.mockResolvedValue([]),
+      (m: ReturnType<typeof makeMocks>) => m.chain.listOperatorAuthorizations.mockResolvedValue([]),
     ],
     [
       'the operator has no balance',

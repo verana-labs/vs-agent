@@ -16,6 +16,7 @@ import {
   CreateOrUpdateParticipantSessionParams,
   CredentialSchema,
   Ecosystem,
+  DelegationQueryClient,
   OperatorAuthorization,
   Participant,
   RawParticipant,
@@ -28,6 +29,7 @@ import {
   VsOperatorAuthorization,
 } from './types'
 
+const { QueryClientImpl: DeQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/de/v1/query')
 const {
   MsgSetParticipantOPToValidated,
   MsgCreateOrUpdateParticipantSession,
@@ -39,14 +41,6 @@ const {
   MsgSelfCreateParticipant,
   MsgSelfCreateParticipantResponse,
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/tx')
-
-// ParticipantRole.HOLDER (x/pp/types); the only role whose vs_operator may send TriggerResolver (chain Path 1).
-const _PARTICIPANT_ROLE_HOLDER = 6
-const _PARTICIPANT_ROLE_ISSUER = 1
-
-// QueryListParticipantsRequest.response_max_size caps at 1024 and defaults to 64. The node applies
-// the other filters loosely, so ask for the largest page and match the fields again here.
-const _PARTICIPANT_QUERY_MAX_SIZE = 1024
 
 // A simulation signs with an empty signature and runs against the state of the moment, so it
 // reports less gas than the delivery consumes. Cosmos SDK 0.47 made the difference larger (see
@@ -74,6 +68,7 @@ function _mapParticipant(p: RawParticipant): Participant {
 }
 
 export class VeranaChainService {
+  private deQuery!: DelegationQueryClient
   private signingClient!: SigningStargateClient
   private operatorAddress!: string
   private chainId!: string
@@ -124,10 +119,53 @@ export class VeranaChainService {
       throw new Error(`[VeranaChain] Chain ID mismatch: expected "${chainId}", got "${this.chainId}"`)
     }
     logger.info(`[VeranaChain] Connected to chain: ${this.chainId}`)
+
+    const queryClient = new QueryClient(cometClient)
+    this.deQuery = new DeQueryClientImpl(createProtobufRpcClient(queryClient)) as DelegationQueryClient
   }
 
   // Query API (unsigned)
-  // [VSA-VPR-QRY]: the one read left on the ledger, the indexer serves no account balance.
+  async hasVsOperatorAuthorization(): Promise<boolean> {
+    return (await this.listVsOperatorAuthorizations()).length > 0
+  }
+
+  async listOperatorAuthorizations(operator?: string): Promise<OperatorAuthorization[]> {
+    const result = await this.deQuery.ListOperatorAuthorizations({
+      corporationId: 0,
+      operator: operator ?? this.operatorAddress,
+      responseMaxSize: 64,
+    })
+    return result.operatorAuthorizations.map(a => ({
+      id: a.id,
+      corporationId: a.corporationId,
+      operator: a.operator,
+      msgTypes: a.msgTypes,
+      expiration: a.expiration,
+      period: a.period,
+    }))
+  }
+
+  async listVsOperatorAuthorizations(vsOperator?: string): Promise<VsOperatorAuthorization[]> {
+    const result = await this.deQuery.ListVSOperatorAuthorizations({
+      corporationId: 0,
+      vsOperator: vsOperator ?? this.operatorAddress,
+      responseMaxSize: 64,
+    })
+    return result.vsOperatorAuthorizations.map(a => ({
+      id: a.id,
+      corporationId: a.corporationId,
+      vsOperator: a.vsOperator,
+      records: a.records.map(r => ({
+        participantId: r.participantId,
+        msgTypes: r.msgTypes,
+        withFeegrant: r.withFeegrant,
+        expiration: r.expiration,
+        period: r.period,
+      })),
+    }))
+  }
+
+  // [VSA-VPR-QRY]: reads that must be immediately consistent stay here, the indexer serves no account balance.
   async getBalance(denom = 'uvna'): Promise<Coin> {
     return this.signingClient.getBalance(this.operatorAddress, denom)
   }

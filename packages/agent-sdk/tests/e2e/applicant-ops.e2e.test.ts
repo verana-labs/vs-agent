@@ -169,7 +169,7 @@ describe('applicant-side chain ops (V4)', () => {
   )
 
   it(
-    'reads ecosystem, schema, and authorizations through the indexer',
+    'reads ecosystem and schema through the indexer, authorizations through the ledger',
     async () => {
       const eco = await indexer.getEcosystem(ecosystemId)
       expect(eco?.id).toBe(ecosystemId)
@@ -181,7 +181,7 @@ describe('applicant-side chain ops (V4)', () => {
       expect(Number(schema?.ecosystem_id)).toBe(ecosystemId)
       expect(JSON.parse(schema?.json_schema ?? '{}').title).toBe('OrgCred')
 
-      const oas = await indexer.listOperatorAuthorizations(veranaChain.address)
+      const oas = await veranaChain.listOperatorAuthorizations()
       expect(oas.some(a => a.msgTypes.includes('/verana.pp.v1.MsgStartParticipantOP'))).toBe(true)
     },
     SETUP_TIMEOUT_MS,
@@ -237,7 +237,7 @@ describe('applicant-side chain ops (V4)', () => {
       })
       await singleChain.start()
 
-      const vsoas = await indexer.listVsOperatorAuthorizations(singleChain.address)
+      const vsoas = await singleChain.listVsOperatorAuthorizations()
       const record = vsoas.flatMap(a => a.records).find(r => r.participantId === issuer.participantId)
       expect(record?.msgTypes).toEqual(expect.arrayContaining([PP_VALIDATE, PP_SESSION]))
 
