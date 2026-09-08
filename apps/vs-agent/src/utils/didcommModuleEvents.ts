@@ -6,6 +6,10 @@ import {
   DidCommMediaSharingState,
   DidCommMediaSharingStateChangedEvent,
 } from '@2060.io/credo-ts-didcomm-media-sharing'
+import {
+  DidCommConnectionProfileUpdatedEvent,
+  DidCommProfileEventTypes,
+} from '@2060.io/credo-ts-didcomm-user-profile'
 
 type Message = Record<string, any>
 
@@ -38,12 +42,6 @@ const CATALOG: Record<string, (message: Message, connectionId: string) => Record
       action,
       timestamp,
     })),
-  }),
-  'https://didcomm.org/user-profile/1.0/profile': (message, connectionId) => ({
-    connectionId,
-    threadId: message.threadId,
-    profile: message.profile,
-    sendBackYours: message.sendBackYours ?? false,
   }),
   'https://didcomm.org/user-profile/1.0/request-profile': (message, connectionId) => ({
     connectionId,
@@ -86,7 +84,10 @@ const CATALOG: Record<string, (message: Message, connectionId: string) => Record
   }),
 }
 
-const FROM_RECORD = 'https://didcomm.org/media-sharing/1.0/share-media'
+const FROM_MODULE_EVENT = new Set([
+  'https://didcomm.org/media-sharing/1.0/share-media',
+  'https://didcomm.org/user-profile/1.0/profile',
+])
 
 export function registerDidcommModuleEvents(agent: VsAgent, deliver: Deliver): void {
   agent.didcomm.registerMessageHandlerMiddleware(async (context, next) => {
@@ -95,7 +96,7 @@ export function registerDidcommModuleEvents(agent: VsAgent, deliver: Deliver): v
     if (!connection) return
 
     const module = MODULES[protocolOf(message.type)]
-    if (!module || message.type === FROM_RECORD) return
+    if (!module || FROM_MODULE_EVENT.has(message.type)) return
 
     const data = CATALOG[message.type]?.(message as Message, connection.id) ?? {
       connectionId: connection.id,
@@ -105,6 +106,18 @@ export function registerDidcommModuleEvents(agent: VsAgent, deliver: Deliver): v
     deliver(`didcomm.${module}.${messageNameOf(message.type)}-received`, data)
   })
 
+  agent.events.on<DidCommConnectionProfileUpdatedEvent>(
+    DidCommProfileEventTypes.ConnectionProfileUpdated,
+    ({ payload }) => {
+      deliver('didcomm.user-profile.profile-received', {
+        connectionId: payload.connection.id,
+        threadId: payload.threadId,
+        profile: payload.profile,
+        sendBackYours: payload.sendBackYoursRequested ?? false,
+      })
+    },
+  )
+
   agent.events.on<DidCommMediaSharingStateChangedEvent>(
     DidCommMediaSharingEventTypes.StateChanged,
     ({ payload: { mediaSharingRecord: record } }) => {
@@ -113,7 +126,7 @@ export function registerDidcommModuleEvents(agent: VsAgent, deliver: Deliver): v
 
       deliver('didcomm.media-sharing.share-media-received', {
         connectionId: record.connectionId,
-        threadId: record.parentThreadId,
+        threadId: record.threadId,
         description: record.description,
         items: record.items,
       })

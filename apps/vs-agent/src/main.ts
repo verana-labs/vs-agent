@@ -60,7 +60,6 @@ import {
   POSTGRES_HOST,
   PUBLIC_API_BASE_URL,
   USE_CORS,
-  USER_PROFILE_AUTODISCLOSE,
   MASTER_LIST_CSCA_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
   VERANA_INDEXER_BASE_URL,
@@ -80,7 +79,6 @@ import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
-  applyEcsServiceProfile,
   commonAppConfig,
   derivePublicDidLocation,
   type PublicDidLocation,
@@ -386,7 +384,6 @@ const run = async () => {
     parsedDid,
     logLevel: AGENT_LOG_LEVEL,
     publicApiBaseUrl,
-    autoDiscloseUserProfile: USER_PROFILE_AUTODISCLOSE,
     masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
     veranaChain,
@@ -435,10 +432,6 @@ const run = async () => {
   for (const plugin of nestPlugins) {
     plugin.registerEvents?.(agent, conf.logger)
   }
-
-  await applyEcsServiceProfile(agent, serverLogger).catch(error =>
-    serverLogger.warn(`[UserProfile] could not derive the default profile: ${error.message}`),
-  )
 
   // Connect to Verana indexer for on-chain notifications
   if (VERANA_INDEXER_BASE_URL) {

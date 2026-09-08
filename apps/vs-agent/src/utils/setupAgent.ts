@@ -48,7 +48,6 @@ export const setupAgent = async ({
   logLevel,
   publicApiBaseUrl,
   parsedDid,
-  autoDiscloseUserProfile,
   masterListCscaLocation,
   autoUpdateStorageOnStartup,
   veranaChain,
@@ -64,7 +63,6 @@ export const setupAgent = async ({
   endpoints: string[]
   logLevel?: LogLevel
   publicApiBaseUrl: string
-  autoDiscloseUserProfile?: boolean
   parsedDid?: ParsedDid
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
@@ -185,7 +183,6 @@ export const setupAgent = async ({
     },
     walletConfig,
     did: publicDid,
-    autoDiscloseUserProfile,
     dependencies: agentDependencies,
     publicApiBaseUrl,
     masterListCscaLocation,

@@ -93,7 +93,6 @@ interface AgentOptions<TModules extends BaseAgentModules> {
 
 export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> extends Agent<TModules> {
   public did?: string
-  public autoDiscloseUserProfile?: boolean
   public publicApiBaseUrl: string
   public adminApiServiceEndpoint?: string
   public displayPictureUrl?: string
@@ -108,7 +107,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public constructor(
     options: AgentOptions<TModules> & {
       did?: string
-      autoDiscloseUserProfile?: boolean
       publicApiBaseUrl: string
       adminApiServiceEndpoint?: string
       displayPictureUrl?: string
@@ -123,7 +121,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   ) {
     super(options)
     this.did = options.did
-    this.autoDiscloseUserProfile = options.autoDiscloseUserProfile
     this.publicApiBaseUrl = options.publicApiBaseUrl
     this.adminApiServiceEndpoint = options.adminApiServiceEndpoint
     this.displayPictureUrl = options.displayPictureUrl
@@ -147,18 +144,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     await connectionEvents(this, { discoveryOptions: this.discoveryOptions, logger })
     await baseMessageEvents(this as VsAgent, logger)
     await vtFlowEvents(this as VsAgent, logger)
-
-    if (this.hasUserProfile) {
-      // Make sure default User Profile corresponds to settings in environment variables
-      const imageUrl = this.displayPictureUrl
-      const displayPicture = imageUrl ? { links: [imageUrl], mimeType: 'image/png' } : undefined
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (this.modules as any).userProfile.updateUserProfileData({
-        displayName: this.label,
-        displayPicture,
-      }) // TODO: Move this logic to the ChatPlugin
-    }
 
     const parsedDid = this.did ? parseDid(this.did) : null
     if (parsedDid) {
@@ -509,7 +494,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 export interface VsAgentOptions {
   config: InitConfig
   did?: string
-  autoDiscloseUserProfile?: boolean
   dependencies: AgentDependencies
   publicApiBaseUrl: string
   adminApiServiceEndpoint?: string

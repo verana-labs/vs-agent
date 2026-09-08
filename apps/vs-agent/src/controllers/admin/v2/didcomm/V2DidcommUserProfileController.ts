@@ -8,6 +8,7 @@ import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '
 
 import { AdminApiError, AdminApiErrorCode } from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
+import { ecsServiceProfile } from '../../../../utils/userProfileDefaults'
 
 import { RequestProfileBodyDto, SendProfileBodyDto, SentMessageDto } from './dto'
 import { connectionOf, moduleService, sendMessage } from './moduleEndpoint'
@@ -30,12 +31,12 @@ export class V2DidcommUserProfileController {
     const service = moduleService(agent, DidCommUserProfileService, 'user-profile')
     const connection = await connectionOf(agent, body.connectionId)
 
-    const profile = (body.profile as DidCommUserProfileData | undefined) ?? (await stored(service, agent))
+    const profile = (body.profile as DidCommUserProfileData | undefined) ?? (await ecsServiceProfile(agent))
     if (!profile) {
       throw new AdminApiError(
         AdminApiErrorCode.InvalidState,
         HttpStatus.CONFLICT,
-        'the agent stores no profile values',
+        'the agent holds no ECS-Service credential to derive a profile from',
       )
     }
 
@@ -66,22 +67,4 @@ export class V2DidcommUserProfileController {
 
     return { id: await sendMessage(agent, connection, message) }
   }
-}
-
-async function stored(
-  service: DidCommUserProfileService,
-  agent: Awaited<ReturnType<VsAgentService['getAgent']>>,
-): Promise<DidCommUserProfileData | undefined> {
-  const record = await service.getUserProfile(agent.context)
-  const profile: DidCommUserProfileData = {
-    displayName: record.displayName,
-    displayPicture: record.displayPicture,
-    displayIcon: record.displayIcon,
-    description: record.description,
-    preferredLanguage: record.preferredLanguage,
-  }
-
-  return Object.values(profile).some(value => value !== undefined && value !== null && value !== '')
-    ? profile
-    : undefined
 }

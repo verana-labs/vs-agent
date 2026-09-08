@@ -180,6 +180,85 @@ describe('Events API delivery', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('delivers a received profile from the module event, with the picture resolved', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit('DidCommConnectionProfileUpdated', {
+      connection: { id: 'conn-1' },
+      threadId: 't-9',
+      sendBackYoursRequested: true,
+      profile: {
+        displayName: 'Alice',
+        displayPicture: { mimeType: 'image/png', links: ['https://pics.example/a.png'] },
+      },
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.user-profile.profile-received')
+    expect(body.data).toEqual({
+      connectionId: 'conn-1',
+      threadId: 't-9',
+      sendBackYours: true,
+      profile: {
+        displayName: 'Alice',
+        displayPicture: { mimeType: 'image/png', links: ['https://pics.example/a.png'] },
+      },
+    })
+  })
+
+  it('leaves profile and share-media to their module events, so the middleware sends nothing', async () => {
+    const { agent, process } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+    const connection = { id: 'conn-1' }
+
+    await process({
+      connection,
+      message: {
+        type: 'https://didcomm.org/user-profile/1.0/profile',
+        threadId: 't-9',
+        profile: { displayName: 'Alice', displayPicture: '#displayPicture' },
+        toJSON: () => ({}),
+      },
+    })
+    await process({
+      connection,
+      message: {
+        type: 'https://didcomm.org/media-sharing/1.0/share-media',
+        threadId: 't-10',
+        toJSON: () => ({}),
+      },
+    })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('delivers a shared media record with the thread id of an unsolicited share', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit('DidCommMediaSharingStateChangedEvent', {
+      mediaSharingRecord: {
+        connectionId: 'conn-1',
+        role: 'receiver',
+        state: 'media-shared',
+        threadId: 'share-thread-1',
+        parentThreadId: undefined,
+        description: 'a photo',
+        items: [{ id: 'i-1', uri: 'https://media.example/1', mimeType: 'image/png' }],
+      },
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.media-sharing.share-media-received')
+    expect(body.data).toEqual({
+      connectionId: 'conn-1',
+      threadId: 'share-thread-1',
+      description: 'a photo',
+      items: [{ id: 'i-1', uri: 'https://media.example/1', mimeType: 'image/png' }],
+    })
+  })
+
   it('delivers an abandoned presentation with its reason in the record', async () => {
     const { agent, emit } = fakeAgent()
     webhookEvent(agent as never, { url: URL }, logger as never)

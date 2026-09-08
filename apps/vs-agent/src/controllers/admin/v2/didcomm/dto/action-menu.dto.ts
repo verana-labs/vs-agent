@@ -5,6 +5,7 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsBoolean,
+  IsDefined,
   IsEnum,
   IsNotEmpty,
   IsOptional,
@@ -112,6 +113,7 @@ export class SendMenuBodyDto {
   connectionId!: string
 
   @ApiProperty({ type: ActionMenuDto, description: 'The menu to send' })
+  @IsDefined()
   @ValidateNested()
   @Type(() => ActionMenuDto)
   menu!: ActionMenuDto
