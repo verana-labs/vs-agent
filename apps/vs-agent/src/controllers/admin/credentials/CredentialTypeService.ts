@@ -440,7 +440,12 @@ export class CredentialTypesService {
       return { schemaId: resolved.schemaId, schema: resolved.schema }
     }
 
-    const foundSchema = await this.findAnonCredsSchema(options)
+    // The VTJSC defines the schema shape, so the caller's name cannot be used here because it would create a second schema for the same VTJSC.
+    const foundSchema = await this.findAnonCredsSchema(
+      options.relatedJsonSchemaCredentialId
+        ? { relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId }
+        : options,
+    )
 
     if (foundSchema) {
       return {
@@ -449,10 +454,11 @@ export class CredentialTypesService {
       }
     } else {
       // No schema found. A new one will be created
-      const schemaAttributes = options.attributes ?? parsedJsc?.attrNames
-      const schemaName = options.name ?? parsedJsc?.title
-      const credentialSchemaId = parsedJsc?.subjectRef?.match(/:cs:(\d+)$/)?.[1]
-      const schemaVersion = options.version ?? credentialSchemaId ?? '1.0'
+      const schemaAttributes = parsedJsc?.attrNames ?? options.attributes
+      const schemaName = parsedJsc?.title ?? options.name
+      const schemaVersion = parsedJsc
+        ? (parsedJsc.subjectRef?.match(/:cs:(\d+)$/)?.[1] ?? '1.0')
+        : (options.version ?? '1.0')
 
       if (!schemaAttributes || !schemaName) {
         throw new Error('Schema must include both name and attributes (provided or derived from JSON Schema)')

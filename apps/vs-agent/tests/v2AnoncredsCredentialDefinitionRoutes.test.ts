@@ -553,6 +553,38 @@ describe('the AnonCreds schema a credential definition builds on', () => {
     })
   })
 
+  it('ignores a name and a version the caller sends for a VTJSC it issued itself', async () => {
+    vi.spyOn(service, 'parseJsonSchemaCredential').mockResolvedValue({
+      issuer: serviceAgent.did,
+      attrNames: ['name'],
+      title: 'ServiceCredential',
+      subjectRef: 'vpr:verana:vna-1:cs:5',
+    } as never)
+    const ownSchemaId = `${serviceAgent.did}/resources/zQmOwn`
+    anoncreds.registerSchema.mockResolvedValue({
+      schemaState: { schemaId: ownSchemaId, schema: foreignSchema },
+      registrationMetadata: { attestedResource: { id: ownSchemaId } },
+    })
+    ownSchemaRepository.findBySchemaId.mockResolvedValue({ setTag: vi.fn() })
+
+    await service.getOrRegisterAnonCredsSchema({
+      relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+      name: 'CallerPicked',
+      version: '9.9',
+    })
+
+    // the lookup and the registration both follow the VTJSC, so the agent keeps one schema for it
+    expect(anoncreds.getCreatedSchemas).toHaveBeenCalledWith({
+      name: undefined,
+      version: undefined,
+      relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+    })
+    expect(anoncreds.registerSchema).toHaveBeenCalledWith({
+      schema: { attrNames: ['name'], name: 'ServiceCredential', version: '5', issuerId: serviceAgent.did },
+      options: { extraMetadata: { relatedJsonSchemaCredentialId: jsonSchemaCredentialId } },
+    })
+  })
+
   it('answers INVALID_STATE when that registry lists no schema yet', async () => {
     answerListing([])
 
