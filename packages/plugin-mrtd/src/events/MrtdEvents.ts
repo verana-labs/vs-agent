@@ -6,7 +6,13 @@ import {
   MrzDataReceivedEvent,
 } from '@2060.io/credo-ts-didcomm-mrtd'
 import { BaseLogger } from '@credo-ts/core'
-import { emitVsAgentEvent, msgToEvent, VsAgent, VsAgentEventTypes } from '@verana-labs/vs-agent-sdk'
+import {
+  emitModuleMessageEvent,
+  emitVsAgentEvent,
+  msgToEvent,
+  VsAgent,
+  VsAgentEventTypes,
+} from '@verana-labs/vs-agent-sdk'
 
 import { EMrtdDataSubmitMessage } from '../model/EMrtdDataSubmitMessage'
 import { MrtdSubmitState } from '../model/MrtdSubmitState'
@@ -31,6 +37,11 @@ export const mrtdEvents = (agent: VsAgent<any>, logger: BaseLogger) => {
 
     msg.id = await getRecordId(agent, msg.id)
     emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
+    emitModuleMessageEvent(agent, 'didcomm.mrtd.mrz-data-received', {
+      connectionId: connection.id,
+      threadId,
+      mrzData,
+    })
   })
 
   agent.events.on(MrtdEventTypes.EMrtdDataReceived, async ({ payload }: EMrtdDataReceivedEvent) => {
@@ -45,11 +56,22 @@ export const mrtdEvents = (agent: VsAgent<any>, logger: BaseLogger) => {
 
     msg.id = await getRecordId(agent, msg.id)
     emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
+    emitModuleMessageEvent(agent, 'didcomm.mrtd.emrtd-data-received', {
+      connectionId: connection.id,
+      threadId,
+      dataGroups,
+    })
   })
 
   // MRTD problem reports
   agent.events.on(MrtdEventTypes.MrtdProblemReport, async ({ payload }: MrtdProblemReportEvent) => {
     const { connection, description, threadId } = payload
+
+    emitModuleMessageEvent(agent, 'didcomm.mrtd.problem-report-received', {
+      connectionId: connection.id,
+      threadId,
+      reason: description.code,
+    })
 
     const stateMap: Record<MrtdProblemReportReason, MrtdSubmitState> = {
       'e.p.emrtd-refused': MrtdSubmitState.Declined,

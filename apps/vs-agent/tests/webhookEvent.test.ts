@@ -133,22 +133,49 @@ describe('Events API delivery', () => {
     })
 
     fetchMock.mockClear()
-    const plaintext = { '@type': 'https://didcomm.org/reactions/1.0/message-reactions', reactions: [] }
     await process({
       connection,
-      message: { type: plaintext['@type'], threadId: 't-2', toJSON: () => plaintext },
+      message: {
+        type: 'https://didcomm.org/reactions/1.0/message-reactions',
+        threadId: 't-2',
+        reactions: [{ messageId: 'm-1', emoji: '\u{1F44D}', action: 'react', timestamp: new Date(0) }],
+      },
     })
     const reactions = (await delivered()).body
     expect(reactions.type).toBe('didcomm.reactions.message-reactions-received')
-    expect(reactions.data).toEqual({ connectionId: 'conn-1', threadId: 't-2', message: plaintext })
+    expect(reactions.data).toEqual({
+      connectionId: 'conn-1',
+      reactions: [
+        { messageId: 'm-1', emoji: '\u{1F44D}', action: 'react', timestamp: '1970-01-01T00:00:00.000Z' },
+      ],
+    })
 
     fetchMock.mockClear()
     await process({
       connection,
-      message: { type: 'https://didcomm.org/trust-ping/1.0/ping', threadId: 't-3', toJSON: () => ({}) },
+      message: {
+        type: 'https://didcomm.org/calls/1.0/call-offer',
+        threadId: 't-3',
+        callType: 'video',
+        parameters: { wsUrl: 'wss://calls.example' },
+      },
+    })
+    const call = (await delivered()).body
+    expect(call.type).toBe('didcomm.calls.call-offer-received')
+    expect(call.data).toEqual({
+      connectionId: 'conn-1',
+      threadId: 't-3',
+      callType: 'video',
+      parameters: { wsUrl: 'wss://calls.example' },
+    })
+
+    fetchMock.mockClear()
+    await process({
+      connection,
+      message: { type: 'https://didcomm.org/trust-ping/1.0/ping', threadId: 't-4', toJSON: () => ({}) },
     })
     await process({
-      message: { type: plaintext['@type'], threadId: 't-4', toJSON: () => plaintext },
+      message: { type: 'https://didcomm.org/reactions/1.0/message-reactions', threadId: 't-5' },
     })
     expect(fetchMock).not.toHaveBeenCalled()
   })

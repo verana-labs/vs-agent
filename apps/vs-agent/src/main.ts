@@ -80,6 +80,7 @@ import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
+  applyEcsServiceProfile,
   commonAppConfig,
   derivePublicDidLocation,
   type PublicDidLocation,
@@ -434,6 +435,10 @@ const run = async () => {
   for (const plugin of nestPlugins) {
     plugin.registerEvents?.(agent, conf.logger)
   }
+
+  await applyEcsServiceProfile(agent, serverLogger).catch(error =>
+    serverLogger.warn(`[UserProfile] could not derive the default profile: ${error.message}`),
+  )
 
   // Connect to Verana indexer for on-chain notifications
   if (VERANA_INDEXER_BASE_URL) {
