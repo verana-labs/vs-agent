@@ -1,4 +1,5 @@
 import type { VeranaChainService } from '../src/blockchain/VeranaChainService'
+import type { VeranaIndexerService } from '../src/blockchain/VeranaIndexerService'
 
 import { describe, expect, it, vi } from 'vitest'
 
@@ -18,16 +19,16 @@ const logger = {
 function makeChain(overrides: Partial<Record<'vsoas' | 'oas', unknown[]>> = {}) {
   const listVsOperatorAuthorizations = vi.fn().mockResolvedValue(overrides.vsoas ?? [])
   const listOperatorAuthorizations = vi.fn().mockResolvedValue(overrides.oas ?? [])
-  const chain = {
-    address: 'verana1agent',
+  const chain = { address: 'verana1agent' } as unknown as VeranaChainService
+  const indexer = {
     listVsOperatorAuthorizations,
     listOperatorAuthorizations,
-  } as unknown as VeranaChainService
-  return { chain, listVsOperatorAuthorizations, listOperatorAuthorizations }
+  } as unknown as VeranaIndexerService
+  return { chain, indexer, listVsOperatorAuthorizations, listOperatorAuthorizations }
 }
 
-function makeAuthz(chain: VeranaChainService) {
-  return new AuthorizationService({ chain, logger, minRefreshIntervalMs: 0 })
+function makeAuthz(chain: VeranaChainService, indexer: VeranaIndexerService) {
+  return new AuthorizationService({ chain, indexer, logger, minRefreshIntervalMs: 0 })
 }
 
 const future = new Date(Date.now() + 3_600_000)
@@ -35,7 +36,7 @@ const past = new Date(Date.now() - 1_000)
 
 describe('AuthorizationService', () => {
   it('caches VSOA records per participant and gates canSign on msg type and expiration', async () => {
-    const { chain } = makeChain({
+    const { chain, indexer } = makeChain({
       vsoas: [
         {
           id: 1,
@@ -54,7 +55,7 @@ describe('AuthorizationService', () => {
         },
       ],
     })
-    const authz = makeAuthz(chain)
+    const authz = makeAuthz(chain, indexer)
     await authz.refreshForOperator()
 
     expect(authz.canSign(10, PP_VALIDATE)).toBe(true)
@@ -69,7 +70,7 @@ describe('AuthorizationService', () => {
   })
 
   it('treats a lapsed record with a period as active (chain auto-renews at check time)', async () => {
-    const { chain } = makeChain({
+    const { chain, indexer } = makeChain({
       vsoas: [
         {
           id: 1,
@@ -94,7 +95,7 @@ describe('AuthorizationService', () => {
         },
       ],
     })
-    const authz = makeAuthz(chain)
+    const authz = makeAuthz(chain, indexer)
     await authz.refreshForOperator()
 
     expect(authz.canSign(10, PP_SESSION)).toBe(true)
@@ -104,7 +105,7 @@ describe('AuthorizationService', () => {
   })
 
   it('drops revoked records on refresh and immediately on invalidateParticipant', async () => {
-    const { chain, listVsOperatorAuthorizations } = makeChain()
+    const { chain, indexer, listVsOperatorAuthorizations } = makeChain()
     listVsOperatorAuthorizations.mockResolvedValueOnce([
       {
         id: 1,
@@ -113,7 +114,7 @@ describe('AuthorizationService', () => {
         records: [{ participantId: 10, msgTypes: [PP_SESSION], withFeegrant: false, expiration: future }],
       },
     ])
-    const authz = makeAuthz(chain)
+    const authz = makeAuthz(chain, indexer)
     await authz.refreshForOperator()
     expect(authz.canSign(10, PP_SESSION)).toBe(true)
 
@@ -126,15 +127,37 @@ describe('AuthorizationService', () => {
   })
 
   it('skips refreshes inside the configured interval', async () => {
-    const { chain, listVsOperatorAuthorizations } = makeChain()
-    const authz = new AuthorizationService({ chain, logger, minRefreshIntervalMs: 60_000 })
+    const { chain, indexer, listVsOperatorAuthorizations } = makeChain()
+    const authz = new AuthorizationService({ chain, indexer, logger, minRefreshIntervalMs: 60_000 })
     await authz.refreshForOperator()
     await authz.refreshForOperator()
     expect(listVsOperatorAuthorizations).toHaveBeenCalledTimes(1)
   })
 
+  it('asks the indexer for the block of the event that triggered the refresh', async () => {
+    const { chain, indexer, listVsOperatorAuthorizations } = makeChain()
+    const authz = makeAuthz(chain, indexer)
+
+    await authz.refreshForOperator(412)
+
+    expect(listVsOperatorAuthorizations).toHaveBeenCalledWith('verana1agent', 412)
+  })
+
+  it('refreshes inside the interval when the cache has not covered the requested block', async () => {
+    const { chain, indexer, listVsOperatorAuthorizations } = makeChain()
+    const authz = new AuthorizationService({ chain, indexer, logger, minRefreshIntervalMs: 60_000 })
+
+    await authz.refreshForOperator(412)
+    await authz.refreshForOperator(412)
+    expect(listVsOperatorAuthorizations).toHaveBeenCalledTimes(1)
+
+    // a revoke one block later must not be swallowed by the throttle
+    await authz.refreshForOperator(413)
+    expect(listVsOperatorAuthorizations).toHaveBeenCalledTimes(2)
+  })
+
   it('reports feegrant presence only for active with_feegrant records', async () => {
-    const { chain } = makeChain({
+    const { chain, indexer } = makeChain({
       vsoas: [
         {
           id: 1,
@@ -148,7 +171,7 @@ describe('AuthorizationService', () => {
         },
       ],
     })
-    const authz = makeAuthz(chain)
+    const authz = makeAuthz(chain, indexer)
     await authz.refreshForOperator()
 
     expect(authz.hasFeegrant(10)).toBe(true)
@@ -157,8 +180,8 @@ describe('AuthorizationService', () => {
   })
 
   it('checks operator and vs-operator grants on demand for the given account', async () => {
-    const { chain, listOperatorAuthorizations, listVsOperatorAuthorizations } = makeChain()
-    const authz = makeAuthz(chain)
+    const { chain, indexer, listOperatorAuthorizations } = makeChain()
+    const authz = makeAuthz(chain, indexer)
 
     listOperatorAuthorizations.mockResolvedValueOnce([
       { id: 3, corporationId: 7, operator: 'verana1agent', msgTypes: [PP_START_OP], expiration: future },
@@ -174,10 +197,10 @@ describe('AuthorizationService', () => {
   })
 
   it('fails closed on a blank caller account without querying the chain', async () => {
-    const { chain, listOperatorAuthorizations, listVsOperatorAuthorizations } = makeChain({
+    const { chain, indexer, listOperatorAuthorizations, listVsOperatorAuthorizations } = makeChain({
       oas: [{ id: 3, corporationId: 7, operator: 'verana1other', msgTypes: [PP_VALIDATE] }],
     })
-    const authz = makeAuthz(chain)
+    const authz = makeAuthz(chain, indexer)
 
     await expect(authz.callerHoldsOperatorGrant('', PP_VALIDATE)).resolves.toBe(false)
     await expect(authz.callerHoldsOperatorGrant('   ', PP_VALIDATE)).resolves.toBe(false)

@@ -1,8 +1,6 @@
 import {
   CredentialSchema,
   CredentialSchemaDto,
-  Ecosystem,
-  EcosystemDto,
   Participant,
   ParticipantDto,
   ParticipantRole,
@@ -57,15 +55,5 @@ export function toCredentialSchema(dto: CredentialSchemaDto): CredentialSchema {
     verifierOnboardingMode: ONBOARDING_MODE[dto.verifier_onboarding_mode ?? ''] ?? 0,
     holderOnboardingMode: 0,
     archived: date(dto.archived),
-  }
-}
-
-export function toEcosystem(dto: EcosystemDto): Ecosystem {
-  return {
-    id: dto.id,
-    did: dto.did,
-    corporationId: dto.corporation_id,
-    archived: Boolean(dto.archived),
-    activeVersion: dto.active_version ?? 0,
   }
 }

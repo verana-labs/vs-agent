@@ -227,20 +227,6 @@ export interface DigestDto {
   created: string
 }
 
-export interface RawParticipant {
-  id: number
-  schemaId: number
-  role: number
-  did: string
-  corporationId?: number
-  validatorParticipantId: number
-  opState?: number
-  opSummaryDigest?: string
-  revoked: Date | undefined
-  slashed: Date | undefined
-  vsOperator?: string
-}
-
 export interface Ecosystem {
   id: number
   did: string
@@ -258,11 +244,6 @@ export interface CredentialSchema {
   verifierOnboardingMode: number
   holderOnboardingMode: number
   archived: Date | undefined
-}
-
-export interface StoredDigest {
-  digest: string
-  created: Date | undefined
 }
 
 export interface OperatorAuthorization {
@@ -427,17 +408,4 @@ export interface SelfCreateParticipantParams {
   vsOperatorAuthzWithFeegrant?: boolean
   vsOperatorAuthzFeeSpendLimit?: Coin[]
   vsOperatorAuthzPeriod?: DurationParam
-}
-
-export interface DelegationQueryClient {
-  ListOperatorAuthorizations(req: {
-    corporationId: number
-    operator: string
-    responseMaxSize: number
-  }): Promise<{ operatorAuthorizations: OperatorAuthorization[] }>
-  ListVSOperatorAuthorizations(req: {
-    corporationId: number
-    vsOperator: string
-    responseMaxSize: number
-  }): Promise<{ vsOperatorAuthorizations: VsOperatorAuthorization[] }>
 }

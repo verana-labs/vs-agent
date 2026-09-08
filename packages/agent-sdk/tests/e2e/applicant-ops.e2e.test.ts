@@ -192,7 +192,7 @@ describe('applicant-side chain ops (V4)', () => {
       expect(Number(schema?.ecosystem_id)).toBe(ecosystemId)
       expect(JSON.parse(schema?.json_schema ?? '{}').title).toBe('OrgCred')
 
-      const oas = await veranaChain.listOperatorAuthorizations()
+      const oas = await indexer.listOperatorAuthorizations(veranaChain.address)
       expect(oas.some(a => a.msgTypes.includes('/verana.pp.v1.MsgStartParticipantOP'))).toBe(true)
     },
     SETUP_TIMEOUT_MS,
@@ -248,7 +248,7 @@ describe('applicant-side chain ops (V4)', () => {
       })
       await singleChain.start()
 
-      const vsoas = await singleChain.listVsOperatorAuthorizations()
+      const vsoas = await indexer.listVsOperatorAuthorizations(singleChain.address)
       const record = vsoas.flatMap(a => a.records).find(r => r.participantId === issuer.participantId)
       expect(record?.msgTypes).toEqual(expect.arrayContaining([PP_VALIDATE, PP_SESSION]))
 

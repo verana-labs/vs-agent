@@ -197,7 +197,7 @@ export class VtFlowsService {
     records: VtFlowRecord[],
     validatorParticipantId: string,
   ): Promise<VtFlowRecord[]> {
-    const chain = this.requireChain(agent)
+    this.requireChain(agent)
     const validatorByApplicant = new Map<string, string | undefined>()
     const kept: VtFlowRecord[] = []
     for (const record of records) {

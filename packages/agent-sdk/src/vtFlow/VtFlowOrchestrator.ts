@@ -79,7 +79,7 @@ export class VtFlowOrchestrator {
   ) {}
 
   async startOnboardingProcess(input: StartOnboardingProcessInput): Promise<VtFlowRecord> {
-    const chain = this.requireChain()
+    this.requireChain()
     if (!this.agent.did) throw new Error('Agent has no public DID')
 
     const holderParticipant = await this.agent.indexer.findParticipant(input.applicantParticipantId)
@@ -219,7 +219,7 @@ export class VtFlowOrchestrator {
    * that validateOnboardingProcess built, so that the process does not build the credential twice.
    */
   async offerOnboardingCredential(input: OfferOnboardingCredentialInput): Promise<VtFlowRecord> {
-    const chain = this.requireChain()
+    this.requireChain()
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(input.vtFlowRecordId)
     if (!record) throw new Error(`vt-flow record ${input.vtFlowRecordId} not found`)

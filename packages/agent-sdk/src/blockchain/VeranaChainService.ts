@@ -4,8 +4,6 @@ import {
   SigningStargateClient,
   GasPrice,
   assertIsDeliverTxSuccess,
-  QueryClient,
-  createProtobufRpcClient,
   type DeliverTxResponse,
 } from '@cosmjs/stargate'
 import { connectComet } from '@cosmjs/tendermint-rpc'
@@ -14,22 +12,13 @@ import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@v
 import {
   Coin,
   CreateOrUpdateParticipantSessionParams,
-  CredentialSchema,
-  Ecosystem,
-  DelegationQueryClient,
-  OperatorAuthorization,
-  Participant,
-  RawParticipant,
   SelfCreateParticipantParams,
   SetParticipantOPToValidatedParams,
   StartParticipantOPParams,
-  StoredDigest,
   VERANA_BECH32_PREFIX,
   VeranaChainConfig,
-  VsOperatorAuthorization,
 } from './types'
 
-const { QueryClientImpl: DeQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/de/v1/query')
 const {
   MsgSetParticipantOPToValidated,
   MsgCreateOrUpdateParticipantSession,
@@ -47,28 +36,7 @@ const {
 // cosmos-sdk#16020), and cosmjs answers it with a default multiplier of 1.4. Not always enough.
 const DEFAULT_GAS_ADJUSTMENT = 1.5
 
-// the chain answers a query for an unknown record with a NotFound error, not with an empty result
-function _isNotFoundError(error: unknown): boolean {
-  return /not found|NotFound|key not found/i.test((error as Error)?.message ?? '')
-}
-
-function _mapParticipant(p: RawParticipant): Participant {
-  return {
-    id: p.id,
-    schemaId: p.schemaId,
-    role: p.role,
-    did: p.did,
-    corporation: p.corporationId != null ? String(p.corporationId) : '',
-    validatorParticipantId: p.validatorParticipantId,
-    opState: p.opState as unknown as Participant['opState'],
-    opSummaryDigest: p.opSummaryDigest ?? '',
-    revoked: p.revoked,
-    slashed: p.slashed,
-  }
-}
-
 export class VeranaChainService {
-  private deQuery!: DelegationQueryClient
   private signingClient!: SigningStargateClient
   private operatorAddress!: string
   private chainId!: string
@@ -119,53 +87,9 @@ export class VeranaChainService {
       throw new Error(`[VeranaChain] Chain ID mismatch: expected "${chainId}", got "${this.chainId}"`)
     }
     logger.info(`[VeranaChain] Connected to chain: ${this.chainId}`)
-
-    const queryClient = new QueryClient(cometClient)
-    this.deQuery = new DeQueryClientImpl(createProtobufRpcClient(queryClient)) as DelegationQueryClient
   }
 
-  // Query API (unsigned)
-  async hasVsOperatorAuthorization(): Promise<boolean> {
-    return (await this.listVsOperatorAuthorizations()).length > 0
-  }
-
-  async listOperatorAuthorizations(operator?: string): Promise<OperatorAuthorization[]> {
-    const result = await this.deQuery.ListOperatorAuthorizations({
-      corporationId: 0,
-      operator: operator ?? this.operatorAddress,
-      responseMaxSize: 64,
-    })
-    return result.operatorAuthorizations.map(a => ({
-      id: a.id,
-      corporationId: a.corporationId,
-      operator: a.operator,
-      msgTypes: a.msgTypes,
-      expiration: a.expiration,
-      period: a.period,
-    }))
-  }
-
-  async listVsOperatorAuthorizations(vsOperator?: string): Promise<VsOperatorAuthorization[]> {
-    const result = await this.deQuery.ListVSOperatorAuthorizations({
-      corporationId: 0,
-      vsOperator: vsOperator ?? this.operatorAddress,
-      responseMaxSize: 64,
-    })
-    return result.vsOperatorAuthorizations.map(a => ({
-      id: a.id,
-      corporationId: a.corporationId,
-      vsOperator: a.vsOperator,
-      records: a.records.map(r => ({
-        participantId: r.participantId,
-        msgTypes: r.msgTypes,
-        withFeegrant: r.withFeegrant,
-        expiration: r.expiration,
-        period: r.period,
-      })),
-    }))
-  }
-
-  // [VSA-VPR-QRY]: reads that must be immediately consistent stay here, the indexer serves no account balance.
+  // [VSA-VPR-QRY]: the one read left on the ledger, the indexer serves no account balance.
   async getBalance(denom = 'uvna'): Promise<Coin> {
     return this.signingClient.getBalance(this.operatorAddress, denom)
   }
