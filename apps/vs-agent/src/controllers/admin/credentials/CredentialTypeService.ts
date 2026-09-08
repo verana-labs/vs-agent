@@ -451,7 +451,8 @@ export class CredentialTypesService {
       // No schema found. A new one will be created
       const schemaAttributes = options.attributes ?? parsedJsc?.attrNames
       const schemaName = options.name ?? parsedJsc?.title
-      const schemaVersion = options.version ?? '1.0'
+      const credentialSchemaId = parsedJsc?.subjectRef?.match(/:cs:(\d+)$/)?.[1]
+      const schemaVersion = options.version ?? credentialSchemaId ?? '1.0'
 
       if (!schemaAttributes || !schemaName) {
         throw new Error('Schema must include both name and attributes (provided or derived from JSON Schema)')
@@ -482,7 +483,7 @@ export class CredentialTypesService {
           schema: {
             attrNames: schemaAttributes,
             name: schemaName,
-            version: options.version ?? '1.0',
+            version: schemaVersion,
             issuerId: agent.did,
           },
           options: schemaRegistrationOptions,

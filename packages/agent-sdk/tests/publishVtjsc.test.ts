@@ -115,7 +115,7 @@ describe('publishVtjscIfOwner', () => {
     await publishVtjscIfOwner(stateWith(7), agent as never, '5', 7)
 
     expect(anoncreds.registerSchema).toHaveBeenCalledWith({
-      schema: { attrNames: ['name'], name: 'x', version: '1.0', issuerId: agent.did },
+      schema: { attrNames: ['name'], name: 'x', version: '5', issuerId: agent.did },
       options: { extraMetadata: { relatedJsonSchemaCredentialId: jscId(5) } },
     })
   })
@@ -128,6 +128,28 @@ describe('publishVtjscIfOwner', () => {
 
     expect(anoncreds.getCreatedSchemas).toHaveBeenCalledWith({ relatedJsonSchemaCredentialId: jscId(5) })
     expect(anoncreds.registerSchema).not.toHaveBeenCalled()
+  })
+
+  it('keeps the schemas of two VTJSCs apart when both derive the same name and attributes', async () => {
+    const { agent, anoncreds } = makeAgent()
+    const state = stateWith(7)
+    state.credentialSchemas['6'] = {
+      ...state.credentialSchemas['5'],
+      id: 6,
+    }
+
+    createJsc.mockResolvedValueOnce({ id: jscId(5) }).mockResolvedValueOnce({ id: jscId(6) })
+    await publishVtjscIfOwner(state, agent as never, '5', 7)
+    await publishVtjscIfOwner(state, agent as never, '6', 7)
+
+    expect(anoncreds.registerSchema).toHaveBeenCalledWith({
+      schema: { attrNames: ['name'], name: 'x', version: '5', issuerId: agent.did },
+      options: { extraMetadata: { relatedJsonSchemaCredentialId: jscId(5) } },
+    })
+    expect(anoncreds.registerSchema).toHaveBeenCalledWith({
+      schema: { attrNames: ['name'], name: 'x', version: '6', issuerId: agent.did },
+      options: { extraMetadata: { relatedJsonSchemaCredentialId: jscId(6) } },
+    })
   })
 
   it('publishes no schema for an ecosystem of another corporation', async () => {
@@ -258,7 +280,7 @@ describe('reconcileVtjscPublications', () => {
       expect.objectContaining({ schemaBaseId: '5' }),
     )
     expect(agent.anoncreds.registerSchema).toHaveBeenCalledWith({
-      schema: { attrNames: ['name'], name: 'kept', version: '1.0', issuerId: agent.did },
+      schema: { attrNames: ['name'], name: 'kept', version: '5', issuerId: agent.did },
       options: { extraMetadata: { relatedJsonSchemaCredentialId: jscId(5) } },
     })
   })

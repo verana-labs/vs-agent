@@ -470,7 +470,7 @@ export async function reconcileVtjscPublications(
       // an agent that published a VTJSC before [VSA-PUB-AC-5] has no AnonCreds schema for it yet
       if (!jsonSchemaCredentialId) continue
       try {
-        await publishAnonCredsSchemaForVtjsc(agent, schema.json_schema, jsonSchemaCredentialId)
+        await publishAnonCredsSchemaForVtjsc(agent, schema.id, schema.json_schema, jsonSchemaCredentialId)
       } catch (e) {
         agent.config.logger.error(
           `[VTJSC] Failed to reconcile the AnonCreds schema of ${jsonSchemaCredentialId}`,
@@ -628,6 +628,7 @@ async function reconcileSelfIssuedEcsCredentials(
  */
 export async function publishAnonCredsSchemaForVtjsc(
   agent: VsAgent,
+  credentialSchemaId: string | number,
   jsonSchema: string | object,
   jsonSchemaCredentialId: string,
 ): Promise<string | undefined> {
@@ -639,7 +640,8 @@ export async function publishAnonCredsSchemaForVtjsc(
   if (published) return published.schemaId
 
   const { name, attrNames } = anonCredsSchemaFromJsonSchema(jsonSchema)
-  const version = '1.0'
+  // used for consistency when a similar schema already exists
+  const version = String(credentialSchemaId)
 
   const { schemaState, registrationMetadata } = await agent.modules.anoncreds.registerSchema({
     schema: { attrNames, name, version, issuerId: agent.did },
@@ -724,7 +726,12 @@ export async function publishVtjscIfOwner(
   // an AnonCreds failure keeps the VTJSC: the startup reconciliation retries the schema
   if (!jsonSchemaCredentialId) return
   try {
-    const schemaId = await publishAnonCredsSchemaForVtjsc(agent, schema.jsonSchema, jsonSchemaCredentialId)
+    const schemaId = await publishAnonCredsSchemaForVtjsc(
+      agent,
+      schema.id,
+      schema.jsonSchema,
+      jsonSchemaCredentialId,
+    )
     agent.config.logger.info(
       `[VTJSC] Published the AnonCreds schema ${schemaId} of ${jsonSchemaCredentialId}`,
     )
