@@ -4,6 +4,7 @@ import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 // The AnonCreds binding adds itself to the shared module on import.
 import '@hyperledger/anoncreds-nodejs'
 
+import { LogLevel } from '@credo-ts/core'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
@@ -12,11 +13,19 @@ import { Subject } from 'rxjs'
 import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import {
+  createJsc,
+  ParticipantState,
+  VeranaIndexerService,
+  type VeranaChainService,
+} from '@verana-labs/vs-agent-sdk'
+
 import { VsAgentModule } from '../src/admin.module'
 import { ErrorEnvelopeFilter } from '../src/common'
 import { PublicModule } from '../src/public.module'
+import { TsLogger } from '../src/utils'
 
-import { startAgent } from './__mocks__'
+import { mockResponses, startAgent } from './__mocks__'
 import { FakeDidResolver } from './__mocks__/fakeDidResolver'
 import {
   invitationUrl,
@@ -53,7 +62,68 @@ async function startAdminApi(agent: VsAgent<BaseAgentModules>): Promise<INestApp
  * `abandoned`, because a problem report is a failure for the peer.
  */
 
-const JSON_SCHEMA_CREDENTIAL_ID = 'https://example.org/vt/schemas-example-org-jsc.json'
+let JSON_SCHEMA_CREDENTIAL_ID: string
+
+const CHAIN_ID = 'vna-test-1'
+const CREDENTIAL_SCHEMA_ID = 7
+const ECOSYSTEM_ID = 3
+const CREDENTIAL_SCHEMA_REFERENCE = `vpr:verana:${CHAIN_ID}:cs:${CREDENTIAL_SCHEMA_ID}`
+
+const veranaChain = { getChainId: CHAIN_ID } as unknown as VeranaChainService
+
+function fakeIndexer(ecosystemDid: string): VeranaIndexerService {
+  const indexer = new VeranaIndexerService({
+    baseUrl: 'http://indexer.test',
+    logger: new TsLogger(LogLevel.Off, 'VeranaIndexer'),
+  })
+
+  vi.spyOn(indexer, 'getCredentialSchema').mockResolvedValue({
+    id: CREDENTIAL_SCHEMA_ID,
+    ecosystem_id: ECOSYSTEM_ID,
+    json_schema: '{}',
+    digest_algorithm: 'sha-384',
+    archived: null,
+    created: '2026-01-01T00:00:00Z',
+    modified: '2026-01-01T00:00:00Z',
+  })
+
+  vi.spyOn(indexer, 'getEcosystem').mockResolvedValue({
+    id: ECOSYSTEM_ID,
+    did: ecosystemDid,
+    corporation_id: 1,
+    archived: null,
+  })
+
+  vi.spyOn(indexer, 'listParticipants').mockImplementation(async filter => {
+    if (filter.did !== ecosystemDid || filter.schemaId !== CREDENTIAL_SCHEMA_ID || !filter.role) return []
+    return [
+      {
+        id: 1,
+        did: ecosystemDid,
+        role: filter.role,
+        schema_id: CREDENTIAL_SCHEMA_ID,
+        participant_state: ParticipantState.Active,
+        revoked: null,
+        slashed: null,
+        modified: '2026-01-01T00:00:00Z',
+      },
+    ]
+  })
+
+  return indexer
+}
+
+async function publishVtjsc(agent: VsAgent<BaseAgentModules>, publicApiBaseUrl: string): Promise<string> {
+  const credential = (await createJsc(
+    agent,
+    publicApiBaseUrl,
+    {},
+    { schemaBaseId: 'example-org', jsonSchemaRef: CREDENTIAL_SCHEMA_REFERENCE },
+  )) as { id: string }
+
+  mockResponses[credential.id] = credential
+  return credential.id
+}
 
 const claims = [
   { name: 'id', value: 'https://example.org/org/123' },
@@ -86,14 +156,14 @@ describe('v2 didcomm decline routes, over two agents', () => {
   const alice = () => request(aliceApp.getHttpServer())
 
   beforeAll(async () => {
-    faberAgent = await startAgent({ label: 'Faber', domain: 'faber' })
+    faberAgent = await startAgent({ label: 'Faber', domain: 'faber', veranaChain })
     faberAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(faberMessages))
     faberAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
     faberAgent.dids.config.resolvers.unshift(resolver)
     await faberAgent.initialize()
     faberApp = await startAdminApi(faberAgent)
 
-    aliceAgent = await startAgent({ label: 'Alice', domain: 'alice' })
+    aliceAgent = await startAgent({ label: 'Alice', domain: 'alice', veranaChain })
     aliceAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(aliceMessages))
     aliceAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
     aliceAgent.dids.config.resolvers.unshift(resolver)
@@ -103,6 +173,12 @@ describe('v2 didcomm decline routes, over two agents', () => {
     // No DID is on a reachable host. Each agent resolves the other from memory.
     await resolver.registerAgent(faberAgent)
     await resolver.registerAgent(aliceAgent)
+
+    JSON_SCHEMA_CREDENTIAL_ID = await publishVtjsc(faberAgent, 'https://faber')
+    const ecosystemDid = faberAgent.did
+    if (!ecosystemDid) throw new Error('Faber has no public DID')
+    faberAgent.indexer = fakeIndexer(ecosystemDid)
+    aliceAgent.indexer = fakeIndexer(ecosystemDid)
 
     // Alice reads the AnonCreds resources of Faber from the test server of Faber. The test
     // replaces a private method of the registry, thus the prototype needs a loose type.
