@@ -153,7 +153,7 @@ export class TrustService {
       id: `${did}#${utils.uuid()}`,
       type: ['VerifiableCredential', 'VerifiableTrustCredential'],
       issuer: agent.did,
-      credentialSubject: { id: did, ...claims },
+      credentialSubject: { ...claims, id: did },
       credentialSchema: { id: jsonSchemaCredentialId, type: 'JsonSchemaCredential' },
     })
     const verificationMethodId = getVerificationMethodId(agent.config.logger, didRecord)

@@ -12,6 +12,7 @@ import {
   signerW3c,
   sortKeysDeep,
 } from './setupSelfTr'
+import { isDataIntegrityVcdm2Credential } from './vcdm2'
 
 const buildIntegrityData = (data: Record<string, unknown>) => {
   return generateDigestSRI(JSON.stringify(sortKeysDeep(data)))
@@ -30,6 +31,8 @@ function storedCredentialIsCurrent(
   didRecord: DidRecord,
 ): boolean {
   if (!credential) return false
+  // a credential published by an older agent as data model 1.1 is rebuilt on upgrade
+  if (!isDataIntegrityVcdm2Credential(credential)) return false
 
   const issuer = typeof credential.issuer === 'string' ? credential.issuer : credential.issuer?.id
   if (issuer !== did) return false
@@ -75,7 +78,7 @@ async function signSelfIssuedEcsCredential(
     id: agent.did,
     type,
     issuer: agent.did,
-    credentialSubject: { id: agent.did, ...claims },
+    credentialSubject: { ...claims, id: agent.did },
     credentialSchema: { id: credentialSchema.id, type: credentialSchema.type },
   })
   const verificationMethodId = getVerificationMethodId(agent.config.logger, didRecord)

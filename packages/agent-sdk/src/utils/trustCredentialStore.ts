@@ -285,7 +285,7 @@ export async function createJsc(
     ? { ...claims, digestSRI: precomputedDigestSRI }
     : await addDigestSRI(subjectId, claims, ecsSchemas)
 
-  const credentialSubject = { id: subjectId, ...subjectClaims }
+  const credentialSubject = { ...subjectClaims, id: subjectId }
   const schemaPresentation = `schemas-${schemaBaseId}-vtjsc-vp.json`
   const schemaCredential = `schemas-${schemaBaseId}-jsc.json`
   const serviceEndpoint = `${publicApiBaseUrl}/vt/${schemaPresentation}`
@@ -473,11 +473,7 @@ async function anchorCredentialDigest(
   if (!schema) throw new Error(`[DigestAnchor] Credential schema ${schemaId} is not on chain`)
 
   // the credential as published, which is what a verifier digests
-  // verre types the parameter as a credo class until its next release, but digests the plain JSON
-  const digest = computeCredentialDigestJCS(
-    credential as unknown as W3cJsonLdVerifiableCredential,
-    schema.digestAlgorithm,
-  )
+  const digest = computeCredentialDigestJCS(credential, schema.digestAlgorithm)
   // the same credential gives the same digest on each run, so an anchored digest needs no second transaction
   if (await chain.getDigest(digest)) return
 

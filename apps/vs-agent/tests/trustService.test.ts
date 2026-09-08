@@ -10,7 +10,7 @@ import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 
 import { MessageService, TrustService } from '../src/controllers'
 
-import { computeCredentialDigestJCS } from '@verana-labs/verre'
+import { computeCredentialDigestJCS, verifySignature } from '@verana-labs/verre'
 
 import { isCredentialStateChangedEvent, startAgent, startServersTesting } from './__mocks__'
 import {
@@ -20,6 +20,20 @@ import {
   waitForEvent,
   type SubjectMessage,
 } from './helpers'
+
+/** verre, as a third-party resolver would run it, against the agent's own DID Document */
+async function verreVerifies(agent: VsAgent<BaseAgentModules>, document: unknown) {
+  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
+  const resolver = {
+    resolve: async () => ({
+      didResolutionMetadata: {},
+      didDocumentMetadata: {},
+      didDocument: didRecord.didDocument!.toJSON(),
+    }),
+  }
+  const silent = { debug() {}, info() {}, warn() {}, error() {} }
+  return await verifySignature(document as never, resolver as never, silent)
+}
 
 describe('TrustService', () => {
   let faberApp: INestApplication
@@ -77,7 +91,8 @@ describe('TrustService', () => {
       )
 
       const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
-      const entry = Object.values(didRecord.metadata.get('_vt/jsc')!).find(
+      const entries = Object.values(didRecord.metadata.get('_vt/jsc')!) as Array<Record<string, any>>
+      const entry = entries.find(
         e => e.didDocumentServiceId === `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`,
       )!
 
@@ -101,6 +116,7 @@ describe('TrustService', () => {
       expect(entry.verifiablePresentation.proof).toEqual(
         expect.objectContaining({ type: 'DataIntegrityProof', proofPurpose: 'authentication' }),
       )
+      expect(await verreVerifies(jscFaberAgent, entry.verifiablePresentation)).toEqual({ result: true })
     })
 
     it('renames pre-vtjsc service ids on migration without re-signing', async () => {
@@ -236,6 +252,7 @@ describe('TrustService', () => {
       expect(credentialResponse.digestJCS).toBe(
         computeCredentialDigestJCS(credentialResponse.credential as never, 'sha384'),
       )
+      expect(await verreVerifies(faberAgent, credentialResponse.credential)).toEqual({ result: true })
       expect(sessionMock).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',

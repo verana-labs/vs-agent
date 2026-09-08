@@ -190,6 +190,23 @@ describe('stored self-issued VTC revalidation', () => {
     expect(storedEntry(metadata, JSC_URL).credential.proof.verificationMethod).toBe(`${DID}#key-1`)
   })
 
+  it('rebuilds a credential an older agent secured as data model 1.1 with a linked data proof', async () => {
+    const { agent, metadata, repositoryUpdate } = makeAgent()
+
+    await publish(agent, beforePublish)
+    const stored = storedEntry(metadata, JSC_URL)
+    stored.credential['@context'] = ['https://www.w3.org/2018/credentials/v1']
+    stored.credential.proof = { type: 'Ed25519Signature2020', verificationMethod: `${DID}#key-1` }
+
+    await publish(agent, beforePublish)
+
+    expect(repositoryUpdate).toHaveBeenCalledTimes(2)
+    expect(storedEntry(metadata, JSC_URL).credential['@context'][0]).toBe(
+      'https://www.w3.org/ns/credentials/v2',
+    )
+    expect(storedEntry(metadata, JSC_URL).credential.proof.type).toBe('DataIntegrityProof')
+  })
+
   it('rebuilds when the stored credential is bound to another json schema credential', async () => {
     const { agent, metadata, repositoryUpdate } = makeAgent()
 

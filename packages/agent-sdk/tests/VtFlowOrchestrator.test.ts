@@ -17,7 +17,14 @@ function verify(indexer: Record<string, unknown>) {
   const agent: Record<string, unknown> = {
     dependencyManager: { resolve: () => ({ findById: async () => record }) },
     didcomm: {
-      credentials: { getFormatData: async () => ({ credential: { dataIntegrity: { credential: {} } } }) },
+      credentials: {
+        // verre only digests JSON-LD, so the received credential must at least carry its context
+        getFormatData: async () => ({
+          credential: {
+            dataIntegrity: { credential: { '@context': ['https://www.w3.org/ns/credentials/v2'] } },
+          },
+        }),
+      },
     },
   }
   const defaults = {
