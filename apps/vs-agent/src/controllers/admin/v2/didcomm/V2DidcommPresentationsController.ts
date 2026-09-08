@@ -40,7 +40,7 @@ import {
   Page,
   paginate,
 } from '../../../../common'
-import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
+import { AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 import { CredentialTypesService } from '../../credentials'
@@ -168,23 +168,22 @@ export class V2DidcommPresentationsController {
     request.proofRecord.metadata.set(REQUESTED_CREDENTIALS_METADATA, requestedCredentials)
     await agent.didcomm.proofs.update(request.proofRecord)
 
-    const { url } = await createInvitation({
+    const { invitation } = await createInvitation({
       agent,
       messages: [request.message],
       useLegacyDid,
       didCommVersion: didcommVersion,
-      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
       imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({
-      longUrl: url,
+      invitation,
       relatedFlowId: request.proofRecord.id,
     })
 
     return {
       proofExchangeId: request.proofRecord.id,
-      url,
+      invitation,
       shortUrl: `${this.publicApiBaseUrl}/s?id=${shortUrlId}`,
     }
   }

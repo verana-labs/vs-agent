@@ -3,14 +3,25 @@ import { Expose } from 'class-transformer'
 import { Event } from './Event'
 import { EventType } from './EventType'
 
+export interface IndexerNotificationPayload {
+  module: string
+  action: string
+  messageType: string
+  txIndex: number
+  messageIndex: number
+  sender: string
+  relatedDids: string[]
+  entityType?: string
+  entityId?: string
+}
+
 export interface IndexerNotificationOptions {
-  msg: string
-  entityType: string
-  entityId: string
-  changes: Record<string, unknown>
+  eventType: string
+  did: string
   blockHeight: number
   txHash: string
-  operatorAddress: string
+  payload: IndexerNotificationPayload
+  changes?: Record<string, unknown>
   timestamp?: Date
 }
 
@@ -19,14 +30,13 @@ export class IndexerNotification extends Event {
     super()
 
     if (options) {
-      this.msg = options.msg
-      this.entityType = options.entityType
-      this.entityId = options.entityId
-      this.changes = options.changes
+      this.eventType = options.eventType
+      this.did = options.did
       this.blockHeight = options.blockHeight
       this.txHash = options.txHash
-      this.operatorAddress = options.operatorAddress
       this.timestamp = options.timestamp ?? new Date()
+      this.payload = options.payload
+      this.changes = options.changes
     }
   }
 
@@ -34,16 +44,10 @@ export class IndexerNotification extends Event {
   public static readonly type = EventType.IndexerNotification
 
   @Expose()
-  public msg!: string
+  public eventType!: string
 
   @Expose()
-  public entityType!: string
-
-  @Expose()
-  public entityId!: string
-
-  @Expose()
-  public changes!: Record<string, unknown>
+  public did!: string
 
   @Expose()
   public blockHeight!: number
@@ -52,5 +56,8 @@ export class IndexerNotification extends Event {
   public txHash!: string
 
   @Expose()
-  public operatorAddress!: string
+  public payload!: IndexerNotificationPayload
+
+  @Expose()
+  public changes?: Record<string, unknown>
 }

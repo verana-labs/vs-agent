@@ -64,12 +64,12 @@ export class V1InvitationController {
   })
   @ApiBody({ type: CreateInvitationDto, required: false })
   public async createInvitation(@Body() options?: CreateInvitationDto): Promise<CreateInvitationResult> {
-    return await createInvitation({
+    const { outOfBandInvitation } = await createInvitation({
       agent: await this.agentService.getAgent(),
       useLegacyDid: options?.useLegacyDid,
       didCommVersion: options?.didCommVersion,
-      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
     })
+    return { url: outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL }) }
   }
 
   @Get('/')
@@ -89,11 +89,11 @@ export class V1InvitationController {
   })
   @ApiQuery({ name: 'legacy', required: false, type: Boolean })
   public async getInvitation(@Query('legacy') useLegacyDid?: boolean): Promise<CreateInvitationResult> {
-    return await createInvitation({
+    const { outOfBandInvitation } = await createInvitation({
       agent: await this.agentService.getAgent(),
       useLegacyDid,
-      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
     })
+    return { url: outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL }) }
   }
 
   @Post('/receive')
@@ -312,17 +312,17 @@ export class V1InvitationController {
     request.proofRecord.metadata.set('_2060/callbackParameters', { ref, callbackUrl })
     await agent.didcomm.proofs.update(request.proofRecord)
 
-    const { url } = await createInvitation({
+    const { invitation, outOfBandInvitation } = await createInvitation({
       agent,
       messages: [request.message],
       useLegacyDid,
       didCommVersion,
-      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
       imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
+    const url = outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({
-      longUrl: url,
+      invitation,
       relatedFlowId: request.proofRecord.id,
     })
     const shortUrl = `${this.publicApiBaseUrl}/s?id=${shortUrlId}`
@@ -437,17 +437,17 @@ export class V1InvitationController {
         },
       })
 
-      const { url } = await createInvitation({
+      const { invitation, outOfBandInvitation } = await createInvitation({
         agent: await this.agentService.getAgent(),
         messages: [request.message],
         useLegacyDid,
         didCommVersion,
-        invitationBaseUrl: AGENT_INVITATION_BASE_URL,
         imageUrl: AGENT_INVITATION_IMAGE_URL,
       })
+      const url = outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL })
 
       const shortUrlId = await this.urlShortenerService.createShortUrl({
-        longUrl: url,
+        invitation,
         relatedFlowId: request.credentialExchangeRecord.id,
       })
       const shortUrl = `${this.publicApiBaseUrl}/s?id=${shortUrlId}`

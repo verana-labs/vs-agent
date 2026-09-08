@@ -759,12 +759,14 @@ record. A `message-received` event carries the inbound message.
 | `didcomm.credential-exchanges.state-updated` | A credential exchange record is created or changes state | the credential exchange record as `GET /v2/didcomm/credential-exchanges/{credentialExchangeId}` returns it, plus `previousState` |
 | `didcomm.{module}.{message-type}-received` | The agent receives a message of an extension protocol module: `reactions`, `user-profile`, `media-sharing`, `calls`, `action-menu`, `question-answer` or `mrtd` | `connectionId`, `threadId` and `message`, the plaintext DIDComm message |
 | `vt.flows.state-updated` | The Flow State of a credential acquisition flow changes | the flow record as `GET /v2/vt/flows/{participantSessionId}` returns it, plus `previousState` |
-| `vpr.notification` | The agent processes an indexer event | `msg`, `entityType`, `entityId`, `changes`, `blockHeight`, `txHash` and `operatorAddress` |
+| `vpr.notification` | The agent processes an indexer event | the camelCase mapping of the indexer event: `eventType`, `did`, `blockHeight`, `txHash`, `timestamp` and `payload` (`module`, `action`, `messageType`, `txIndex`, `messageIndex`, `sender`, `relatedDids`, `entityType`, `entityId`), plus `changes` when the agent resolved the entity |
 
-The `vpr.notification` event is emitted for every indexer activity, regardless of which default handlers
-are active, so a backend can react to `msg` types the default implementation does not cover, or override the
-ones that it does (together with the `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` environment variable). The
-state-sync bookkeeping the agent needs internally always runs and is never affected by overriding handlers.
+The `vpr.notification` event is emitted for every processed indexer event, including one the agent cannot
+resolve to an entity, and regardless of which default handlers are active, so a backend can react to
+`eventType` values the default implementation does not cover, or override the ones that it does (together
+with the `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` environment variable). An event discarded as an
+idempotent duplicate is not delivered. The state-sync bookkeeping the agent needs internally always runs and
+is never affected by overriding handlers.
 
 ## Invitations
 

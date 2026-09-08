@@ -1,3 +1,3 @@
 export * from './didcomm'
-export * from './invitation'
+export * from './short-url'
 export * from './self-tr'

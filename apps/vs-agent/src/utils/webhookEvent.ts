@@ -184,7 +184,7 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
   )
 }
 
-const dataOf = ({ type: _type, timestamp: _timestamp, ...data }: Event): Record<string, unknown> => data
+const dataOf = ({ type: _type, ...data }: Event): Record<string, unknown> => data
 
 const protocolOf = (messageType: string): string => messageType.slice(0, messageType.lastIndexOf('/'))
 
