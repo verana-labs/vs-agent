@@ -50,9 +50,9 @@
   "packageManager": "pnpm@9.15.3",
   "pnpm": {
     "patchedDependencies": {
-      "@credo-ts/anoncreds@0.7.1-pr-2704-20260905135824": "patches/@credo-ts__anoncreds@0.7.1-pr-2704-20260905135824.patch",
-      "@credo-ts/core@0.7.1-pr-2704-20260905135824": "patches/@credo-ts__core@0.7.1-pr-2704-20260905135824.patch",
-      "@credo-ts/didcomm@0.7.1-pr-2704-20260905135824": "patches/@credo-ts__didcomm@0.7.1-pr-2704-20260905135824.patch"
+      "@credo-ts/anoncreds@0.7.1-pr-2704-20260909134930": "patches/@credo-ts__anoncreds@0.7.1-pr-2704-20260909134930.patch",
+      "@credo-ts/core@0.7.1-pr-2704-20260909134930": "patches/@credo-ts__core@0.7.1-pr-2704-20260909134930.patch",
+      "@credo-ts/didcomm@0.7.1-pr-2704-20260909134930": "patches/@credo-ts__didcomm@0.7.1-pr-2704-20260909134930.patch"
     },
     "overrides": {
       "libphonenumber-js": "^1.12.33",

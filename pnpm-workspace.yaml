@@ -4,11 +4,11 @@ packages:
   - 'examples/*'
 
 catalog:
-  '@credo-ts/action-menu': 0.7.1-pr-2704-20260905135824
-  '@credo-ts/anoncreds': 0.7.1-pr-2704-20260905135824
-  '@credo-ts/askar': 0.7.1-pr-2704-20260905135824
-  '@credo-ts/core': 0.7.1-pr-2704-20260905135824
-  '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824
-  '@credo-ts/node': 0.7.1-pr-2704-20260905135824
-  '@credo-ts/question-answer': 0.7.1-pr-2704-20260905135824
-  '@credo-ts/webvh': 0.7.1-pr-2704-20260905135824
+  '@credo-ts/action-menu': 0.7.1-pr-2704-20260909134930
+  '@credo-ts/anoncreds': 0.7.1-pr-2704-20260909134930
+  '@credo-ts/askar': 0.7.1-pr-2704-20260909134930
+  '@credo-ts/core': 0.7.1-pr-2704-20260909134930
+  '@credo-ts/didcomm': 0.7.1-pr-2704-20260909134930
+  '@credo-ts/node': 0.7.1-pr-2704-20260909134930
+  '@credo-ts/question-answer': 0.7.1-pr-2704-20260909134930
+  '@credo-ts/webvh': 0.7.1-pr-2704-20260909134930
