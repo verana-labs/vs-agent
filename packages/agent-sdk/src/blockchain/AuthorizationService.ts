@@ -10,12 +10,9 @@ function renews(period?: DurationParam): boolean {
   return period != null && (period.seconds > 0 || (period.nanos ?? 0) > 0)
 }
 
-function isOperatorAuthorizationActive(expiration?: Date, period?: DurationParam): boolean {
+// An unset expiration means the grant never expires (AUTHZ-CHECK-3 step 4, AUTHZ-CHECK-1 step 2).
+function isAuthorizationActive(expiration?: Date, period?: DurationParam): boolean {
   return expiration === undefined || expiration.getTime() > Date.now() || renews(period)
-}
-
-function isVsoaRecordActive(expiration?: Date, period?: DurationParam): boolean {
-  return expiration != null && (expiration.getTime() > Date.now() || renews(period))
 }
 
 export interface AuthorizationServiceConfig {
@@ -84,7 +81,7 @@ export class AuthorizationService {
   canSign(participantId: number, msgType: string): boolean {
     const record = this.vsoaByParticipant.get(participantId)
     return (
-      !!record && record.msgTypes.includes(msgType) && isVsoaRecordActive(record.expiration, record.period)
+      !!record && record.msgTypes.includes(msgType) && isAuthorizationActive(record.expiration, record.period)
     )
   }
 
@@ -117,7 +114,7 @@ export class AuthorizationService {
       a =>
         this.inScope(a.corporationId) &&
         a.msgTypes.includes(msgType) &&
-        isOperatorAuthorizationActive(a.expiration, a.period),
+        isAuthorizationActive(a.expiration, a.period),
     )
   }
 }
