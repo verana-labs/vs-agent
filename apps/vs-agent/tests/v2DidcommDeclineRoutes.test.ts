@@ -25,7 +25,7 @@ import { ErrorEnvelopeFilter } from '../src/common'
 import { PublicModule } from '../src/public.module'
 import { TsLogger } from '../src/utils'
 
-import { mockResponses, startAgent } from './__mocks__'
+import { issueVtjscFrom, mockResponses, startAgent } from './__mocks__'
 import { FakeDidResolver } from './__mocks__/fakeDidResolver'
 import {
   invitationUrl,
@@ -200,6 +200,8 @@ describe('v2 didcomm decline routes, over two agents', () => {
       }
       return original.call(this, ...args)
     })
+
+    issueVtjscFrom(faberAgent.did)
 
     const credentialDefinition = await faber()
       .post('/v2/anoncreds/credential-definitions')
