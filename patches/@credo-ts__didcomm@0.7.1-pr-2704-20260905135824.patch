@@ -577,7 +577,7 @@ index 0000000..74139be
 +		if (Array.isArray(offeredCredentialJson.credentialSubject)) throw new CredoError("Invalid credential subject. Multiple credential subjects are not yet supported.");
 +		const credentialSubjectMatches = Object.entries(offeredCredentialJson.credentialSubject).every(([key, offeredValue]) => {
 +			const receivedValue = credentialJson.credentialSubject[key];
-+			if (!offeredValue || !receivedValue) return false;
++			if (offeredValue === undefined || receivedValue === undefined) return false;
 +			if (typeof offeredValue === "number" || typeof receivedValue === "number") return offeredValue.toString() === receivedValue.toString();
 +			return deepEquality(offeredValue, receivedValue);
 +		});

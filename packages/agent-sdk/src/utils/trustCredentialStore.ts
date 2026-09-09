@@ -338,6 +338,13 @@ export async function removeTrustCredential(agent: VsAgent, schemaId: string, ke
   return await deleteMetadataEntry(agent, schemaId, didRecord, key)
 }
 
+/**
+ * Removes the linked VP and the stored credential an exchange delivered, as
+ * [VSA-VTI-FLOW-OP-REVOKE] requires of the applicant. The credential is read from the RFC 0809
+ * format data of the exchange; exchanges earlier versions completed over other formats are not
+ * migrated. Returns the credential id, or `undefined` when none is found, in which case nothing is
+ * removed.
+ */
 export async function removeStoredTrustCredential(
   agent: VsAgent,
   credentialExchangeRecordId: string,
@@ -345,7 +352,12 @@ export async function removeStoredTrustCredential(
   const formatData = await agent.didcomm.credentials.getFormatData(credentialExchangeRecordId)
   const credentialId = (formatData.credential as { dataIntegrity?: DataIntegrityCredential } | undefined)
     ?.dataIntegrity?.credential?.id
-  if (typeof credentialId !== 'string') return undefined
+  if (typeof credentialId !== 'string') {
+    agent.config.logger.warn(
+      `[trust-credential] Credential exchange ${credentialExchangeRecordId} carries no RFC 0809 credential id; its linked VP and stored credential are left in place`,
+    )
+    return undefined
+  }
 
   await removeTrustCredential(agent, credentialId, '_vt/vtc')
 

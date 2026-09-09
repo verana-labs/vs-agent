@@ -127,10 +127,22 @@ describe('applyStateMutation', () => {
     expect(state.ecosystems['3']).toMatchObject({ id: 3, archived: false })
   })
 
-  it('removes the revoked HOLDER credential and its linked VP by credential id', async () => {
+  const CREDENTIAL_ID = 'did:web:agent#cred-1'
+  const storedRecord = (id: string) => ({ id, getTags: () => ({ givenId: CREDENTIAL_ID }) })
+
+  /**
+   * A HOLDER whose only applicant exchange `cx-1` delivered the credential its linked VP publishes.
+   * Format data is what credo returns for the exchange; the stored records are what its
+   * attachment format left in each W3C store.
+   */
+  function revokedHolderAgent(exchange: {
+    formatData: Record<string, unknown>
+    v1Records?: ReturnType<typeof storedRecord>[]
+    v2Records?: ReturnType<typeof storedRecord>[]
+  }) {
     const vtc: Record<string, unknown> = {
       'https://validator/jsc.json': {
-        credential: { id: 'did:web:agent#cred-1' },
+        credential: { id: CREDENTIAL_ID },
         verifiablePresentation: { id: 'https://agent/vp.json' },
         didDocumentServiceId: 'did:web:agent#vtc-1',
       },
@@ -152,10 +164,10 @@ describe('applyStateMutation', () => {
     const findAllByQuery = vi
       .fn()
       .mockResolvedValue([{ role: VtFlowRole.Applicant, credentialExchangeRecordId: 'cx-1' }])
-    const getFormatData = vi
-      .fn()
-      .mockResolvedValue({ credential: { dataIntegrity: { credential: { id: 'did:web:agent#cred-1' } } } })
+    const getFormatData = vi.fn().mockResolvedValue(exchange.formatData)
+    const deleteV1ById = vi.fn()
     const deleteV2ById = vi.fn()
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const agent = {
       did: 'did:web:agent',
       publicApiBaseUrl: 'https://agent',
@@ -169,20 +181,38 @@ describe('applyStateMutation', () => {
       },
       didcomm: { credentials: { getFormatData } },
       dids: { getCreatedDids: vi.fn().mockResolvedValue([didRecord]), update: vi.fn() },
-      // a data model 2.0 credential received over RFC 0809 lives in a W3cV2CredentialRecord
+      // a data model 2.0 credential received over RFC 0809 lives in a W3cV2CredentialRecord, a data
+      // model 1.1 one in a W3cCredentialRecord
       w3cV2Credentials: {
-        getAll: vi
-          .fn()
-          .mockResolvedValue([{ id: 'w3c-v2-1', getTags: () => ({ givenId: 'did:web:agent#cred-1' }) }]),
+        getAll: vi.fn().mockResolvedValue(exchange.v2Records ?? []),
         deleteById: deleteV2ById,
       },
-      w3cCredentials: { getAll: vi.fn().mockResolvedValue([]), deleteById: vi.fn() },
-      config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
+      w3cCredentials: {
+        getAll: vi.fn().mockResolvedValue(exchange.v1Records ?? []),
+        deleteById: deleteV1ById,
+      },
+      config: { logger },
     }
+    return {
+      agent,
+      metadataStore,
+      didRecord,
+      findAllByQuery,
+      deleteV1ById,
+      deleteV2ById,
+      logger,
+    }
+  }
+
+  it('removes the revoked HOLDER credential and its linked VP by credential id', async () => {
+    const { agent, metadataStore, didRecord, findAllByQuery, deleteV2ById } = revokedHolderAgent({
+      formatData: { credential: { dataIntegrity: { credential: { id: CREDENTIAL_ID } } } },
+      v2Records: [storedRecord('w3c-v2-1')],
+    })
 
     await removeHolderTrustCredentialIfRevoked(agent as never, '12')
 
-    expect(getFormatData).toHaveBeenCalledWith('cx-1')
+    expect(agent.didcomm.credentials.getFormatData).toHaveBeenCalledWith('cx-1')
     expect(metadataStore['_vt/vtc']['https://validator/jsc.json']).toBeUndefined()
     expect(didRecord.didDocument.service).toEqual([])
     expect(deleteV2ById).toHaveBeenCalledWith('w3c-v2-1')
@@ -192,6 +222,21 @@ describe('applyStateMutation', () => {
     findAllByQuery.mockClear()
     await removeHolderTrustCredentialIfRevoked(agent as never, '13')
     expect(findAllByQuery).not.toHaveBeenCalled()
+  })
+
+  it('warns and leaves the linked VP when the exchange carries no credential id', async () => {
+    const { agent, metadataStore, didRecord, deleteV1ById, deleteV2ById, logger } = revokedHolderAgent({
+      formatData: { credential: {} },
+      v1Records: [storedRecord('w3c-1')],
+    })
+
+    await removeHolderTrustCredentialIfRevoked(agent as never, '12')
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('cx-1'))
+    expect(metadataStore['_vt/vtc']['https://validator/jsc.json']).toBeDefined()
+    expect(didRecord.didDocument.service).toEqual([{ id: 'did:web:agent#vtc-1' }])
+    expect(deleteV1ById).not.toHaveBeenCalled()
+    expect(deleteV2ById).not.toHaveBeenCalled()
   })
 
   it('withdraws the self-issued ECS credential of a revoked ISSUER participant', async () => {

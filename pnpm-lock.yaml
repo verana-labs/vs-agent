@@ -27,7 +27,7 @@ patchedDependencies:
     hash: b2rlqmwyi22cgecutzvl624tma
     path: patches/@credo-ts__core@0.7.1-pr-2704-20260905135824.patch
   '@credo-ts/didcomm@0.7.1-pr-2704-20260905135824':
-    hash: cfc2dfsx5ywmhdtax5qh4pp4sm
+    hash: kr5bhf7erahjwiudejtdm6wriy
     path: patches/@credo-ts__didcomm@0.7.1-pr-2704-20260905135824.patch
 
 importers:
@@ -78,7 +78,7 @@ importers:
         version: 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.7.2)
       '@credo-ts/didcomm':
         specifier: 0.7.1-pr-2704-20260905135824
-        version: 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.7.2)
+        version: 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.7.2)
       '@credo-ts/node':
         specifier: 0.7.1-pr-2704-20260905135824
         version: 0.7.1-pr-2704-20260905135824(typescript@5.7.2)
@@ -469,7 +469,7 @@ importers:
         version: 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
       '@credo-ts/didcomm':
         specifier: 0.7.1-pr-2704-20260905135824
-        version: 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+        version: 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       '@credo-ts/node':
         specifier: 0.7.1-pr-2704-20260905135824
         version: 0.7.1-pr-2704-20260905135824(typescript@5.8.3)
@@ -558,16 +558,16 @@ importers:
     dependencies:
       '@2060.io/credo-ts-didcomm-reactions':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-receipts':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))
       '@credo-ts/core':
         specifier: 0.7.1-pr-2704-20260905135824
         version: 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
       '@credo-ts/didcomm':
         specifier: 0.7.1-pr-2704-20260905135824
-        version: 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+        version: 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       class-transformer:
         specifier: 0.5.1
         version: 0.5.1
@@ -583,13 +583,13 @@ importers:
     dependencies:
       '@2060.io/credo-ts-didcomm-mrtd':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))(typescript@5.8.3)
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))(typescript@5.8.3)
       '@credo-ts/core':
         specifier: 0.7.1-pr-2704-20260905135824
         version: 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
       '@credo-ts/didcomm':
         specifier: 0.7.1-pr-2704-20260905135824
-        version: 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+        version: 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       '@nestjs/common':
         specifier: ^10.0.0
         version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -623,7 +623,7 @@ importers:
     devDependencies:
       '@2060.io/credo-ts-didcomm-receipts':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))
       '@nestjs/cli':
         specifier: ^10.0.0
         version: 10.4.9
@@ -650,19 +650,19 @@ importers:
     dependencies:
       '@2060.io/credo-ts-didcomm-calls':
         specifier: 0.1.0
-        version: 0.1.0(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))
+        version: 0.1.0(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-media-sharing':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-reactions':
         specifier: ^0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-receipts':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-user-profile':
         specifier: 0.1.0
-        version: 0.1.0(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))
+        version: 0.1.0(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))
       '@credo-ts/action-menu':
         specifier: 0.7.1-pr-2704-20260905135824
         version: 0.7.1-pr-2704-20260905135824(typescript@5.8.3)
@@ -671,7 +671,7 @@ importers:
         version: 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
       '@credo-ts/didcomm':
         specifier: 0.7.1-pr-2704-20260905135824
-        version: 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+        version: 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       '@credo-ts/question-answer':
         specifier: 0.7.1-pr-2704-20260905135824
         version: 0.7.1-pr-2704-20260905135824(typescript@5.8.3)
@@ -689,13 +689,13 @@ importers:
     dependencies:
       '@2060.io/credo-ts-didcomm-mrtd':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))(typescript@5.8.3)
+        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))(typescript@5.8.3)
       '@credo-ts/core':
         specifier: 0.7.1-pr-2704-20260905135824
         version: 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
       '@credo-ts/didcomm':
         specifier: 0.7.1-pr-2704-20260905135824
-        version: 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+        version: 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       '@nestjs/common':
         specifier: ^10.0.0
         version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -719,7 +719,7 @@ importers:
         version: 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
       '@credo-ts/didcomm':
         specifier: 0.7.1-pr-2704-20260905135824
-        version: 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+        version: 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       class-transformer:
         specifier: 0.5.1
         version: 0.5.1
@@ -5309,18 +5309,18 @@ packages:
 
 snapshots:
 
-  '@2060.io/credo-ts-didcomm-calls@0.1.0(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))':
+  '@2060.io/credo-ts-didcomm-calls@0.1.0(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.1
       tsyringe: 4.8.0
 
-  '@2060.io/credo-ts-didcomm-media-sharing@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))':
+  '@2060.io/credo-ts-didcomm-media-sharing@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
@@ -5328,10 +5328,10 @@ snapshots:
       tsyringe: 4.8.0
       uuid: 9.0.1
 
-  '@2060.io/credo-ts-didcomm-mrtd@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))(typescript@5.8.3)':
+  '@2060.io/credo-ts-didcomm-mrtd@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))(typescript@5.8.3)':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       '@li0ard/tsemrtd': 0.3.4(typescript@5.8.3)
       '@peculiar/asn1-x509': 2.6.1
       '@peculiar/x509': 1.14.3
@@ -5348,20 +5348,20 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@2060.io/credo-ts-didcomm-reactions@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))':
+  '@2060.io/credo-ts-didcomm-reactions@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
       rxjs: 7.8.2
       uuid: 9.0.1
 
-  '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))':
+  '@2060.io/credo-ts-didcomm-receipts@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
@@ -5369,10 +5369,10 @@ snapshots:
       tsyringe: 4.8.0
       uuid: 9.0.1
 
-  '@2060.io/credo-ts-didcomm-user-profile@0.1.0(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3))':
+  '@2060.io/credo-ts-didcomm-user-profile@0.1.0(@credo-ts/core@0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3))':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.1
       reflect-metadata: 0.1.14
@@ -5724,7 +5724,7 @@ snapshots:
   '@credo-ts/action-menu@0.7.1-pr-2704-20260905135824(typescript@5.8.3)':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.3
       rxjs: 7.8.2
@@ -5737,7 +5737,7 @@ snapshots:
     dependencies:
       '@astronautlabs/jsonpath': 1.1.2
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.7.2)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.7.2)
       '@hyperledger/anoncreds-shared': 0.4.0
       '@sphereon/pex-models': 2.3.2
       class-transformer: 0.5.1
@@ -5752,7 +5752,7 @@ snapshots:
     dependencies:
       '@astronautlabs/jsonpath': 1.1.2
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       '@hyperledger/anoncreds-shared': 0.4.0
       '@sphereon/pex-models': 2.3.2
       class-transformer: 0.5.1
@@ -5885,7 +5885,7 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.7.2)':
+  '@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.7.2)':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.7.2)
       '@stablelib/ed25519': 2.0.2
@@ -5899,7 +5899,7 @@ snapshots:
       - supports-color
       - typescript
 
-  '@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)':
+  '@credo-ts/didcomm@0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
       '@stablelib/ed25519': 2.0.2
@@ -5916,7 +5916,7 @@ snapshots:
   '@credo-ts/node@0.7.1-pr-2704-20260905135824(typescript@5.7.2)':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.7.2)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.7.2)
       '@types/express': 5.0.6
       express: 5.2.1
       rxjs: 7.8.2
@@ -5931,7 +5931,7 @@ snapshots:
   '@credo-ts/node@0.7.1-pr-2704-20260905135824(typescript@5.8.3)':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       '@types/express': 5.0.6
       express: 5.2.1
       rxjs: 7.8.2
@@ -5946,7 +5946,7 @@ snapshots:
   '@credo-ts/question-answer@0.7.1-pr-2704-20260905135824(typescript@5.8.3)':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260905135824(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=cfc2dfsx5ywmhdtax5qh4pp4sm)(typescript@5.8.3)
+      '@credo-ts/didcomm': 0.7.1-pr-2704-20260905135824(patch_hash=kr5bhf7erahjwiudejtdm6wriy)(typescript@5.8.3)
       class-transformer: 0.5.1
       class-validator: 0.14.3
       rxjs: 7.8.2

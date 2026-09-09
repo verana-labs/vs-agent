@@ -278,6 +278,54 @@ describe('VC Data Model 2.0 issuance over the Data Integrity credential format',
     ).rejects.toThrow(/Missing credential attributes|does not match the offered credential/)
   })
 
+  it('accepts a received credential whose claims include zero, false and an empty string', async () => {
+    // the ECS service schema requires `minimumAgeRequired` and allows 0, so a falsy claim value is
+    // both legal and mandatory; the holder must not mistake it for a missing claim
+    const credential = toOfferedCredentialJson(
+      createW3cV2Credential({
+        id: `${did}#vtc-2`,
+        type: ['VerifiableCredential', 'VerifiableTrustCredential'],
+        issuer: did,
+        credentialSubject: {
+          id: did,
+          name: 'Test Service',
+          minimumAgeRequired: 0,
+          requiresRegistration: false,
+          description: '',
+        },
+        credentialSchema: {
+          id: 'https://example.org/vt/schemas-example-service-jsc.json',
+          type: 'JsonSchemaCredential',
+        },
+      }),
+    )
+    const { credentialExchangeRecord, offerAttachment, requestAttachment } = await offerAndRequest(credential)
+    const { attachment } = await formatService.acceptRequest(agent.context, {
+      credentialExchangeRecord,
+      offerAttachment,
+      requestAttachment,
+      credentialFormats: { dataIntegrity: { cryptosuite: 'eddsa-jcs-2022' } },
+    })
+
+    await formatService.processCredential(agent.context, {
+      credentialExchangeRecord,
+      attachment,
+      requestAttachment,
+      offerAttachment,
+    })
+
+    // stored as received, falsy values included
+    const stored = await agent.w3cV2Credentials.getById(
+      credentialExchangeRecord.credentials[0].credentialRecordId,
+    )
+    const received = stored.firstCredential as W3cV2DataIntegrityVerifiableCredential
+    expect(received.securedCredential.credentialSubject).toMatchObject({
+      minimumAgeRequired: 0,
+      requiresRegistration: false,
+      description: '',
+    })
+  }, 30_000)
+
   it('publishes the received credential in a data model 2.0 linked VP secured with a DataIntegrityProof', async () => {
     const { credentialExchangeRecord, offerAttachment, requestAttachment } = await offerAndRequest()
     const { attachment } = await formatService.acceptRequest(agent.context, {
