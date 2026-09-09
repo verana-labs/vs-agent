@@ -239,6 +239,17 @@ describe('deriveCredentialSchema', () => {
     expect(reason).toBe(AnonCredsTrustErrorReason.NotDerivable)
   })
 
+  it('fails when the VPR holds no CredentialSchema of the reference', async () => {
+    const { agent, service } = makeAgent()
+    agent.indexer.getCredentialSchema = vi.fn(async () => undefined) as never
+
+    const reason = await reasonOf(
+      service.deriveCredentialSchema({ credentialDefinitionId: CREDENTIAL_DEFINITION_ID }),
+    )
+
+    expect(reason).toBe(AnonCredsTrustErrorReason.NotDerivable)
+  })
+
   it('reports an indexer that does not answer as unavailable', async () => {
     const { agent, service } = makeAgent()
     agent.indexer.getCredentialSchema = vi.fn(async () => {

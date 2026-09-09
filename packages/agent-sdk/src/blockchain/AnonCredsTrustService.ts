@@ -289,17 +289,17 @@ export class AnonCredsTrustService {
 
     const credentialSchemaId = Number(parsed[2])
 
-    let ecosystemDid: string | undefined
-    try {
-      const credentialSchema = await this.agent.indexer.getCredentialSchema(credentialSchemaId)
-      const ecosystem = await this.agent.indexer.getEcosystem(credentialSchema.ecosystem_id)
-      ecosystemDid = ecosystem?.did
-    } catch (error) {
-      throw unavailable(
-        `the agent cannot read the CredentialSchema ${credentialSchemaId} of the VTJSC "${jsonSchemaCredentialId}": ${error}`,
-      )
-    }
+    const credentialSchema = await this.requireFromIndexer(
+      () => this.agent.indexer.getCredentialSchema(credentialSchemaId, { allowNotFound: true }),
+      `CredentialSchema ${credentialSchemaId}, which the VTJSC "${jsonSchemaCredentialId}" names`,
+    )
 
+    const ecosystem = await this.requireFromIndexer(
+      () => this.agent.indexer.getEcosystem(credentialSchema.ecosystem_id, { allowNotFound: true }),
+      `Ecosystem ${credentialSchema.ecosystem_id}, which the CredentialSchema ${credentialSchemaId} names`,
+    )
+
+    const ecosystemDid = ecosystem.did
     if (!ecosystemDid) {
       throw notDerivable(`the Ecosystem of the CredentialSchema ${credentialSchemaId} carries no DID`)
     }
@@ -314,6 +314,18 @@ export class AnonCredsTrustService {
     const link = { credentialSchemaId, ecosystemDid }
     this.credentialSchemaLinks.set(jsonSchemaCredentialId, link)
     return link
+  }
+
+  private async requireFromIndexer<T>(read: () => Promise<T | undefined>, describe: string): Promise<T> {
+    let value: T | undefined
+    try {
+      value = await read()
+    } catch (error) {
+      throw unavailable(`the agent cannot read the ${describe}: ${error}`)
+    }
+
+    if (!value) throw notDerivable(`the VPR holds no ${describe}`)
+    return value
   }
 
   private async verifyVtjscProof(jsonSchemaCredentialId: string, document: VtjscDocument): Promise<void> {
