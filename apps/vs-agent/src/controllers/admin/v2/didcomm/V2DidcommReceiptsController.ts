@@ -1,6 +1,7 @@
-import { DidCommMessageReceipt, DidCommReceiptsService } from '@2060.io/credo-ts-didcomm-receipts'
+import type { ChatAgentModules } from '@verana-labs/vs-agent-plugin-chat'
+import type { VsAgent } from '@verana-labs/vs-agent-sdk'
+
 import { Body, Controller, HttpStatus, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
-import { DidCommMessageSender, DidCommOutboundMessageContext } from '@credo-ts/didcomm'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
 import { AdminApiError, AdminApiErrorCode, unknownConnection } from '../../../../common'
@@ -27,33 +28,28 @@ export class V2DidcommReceiptsController {
   @ApiNotFoundResponse({ description: 'No connection with the given id' })
   public async sendReceipts(@Body() body: SendReceiptsBodyDto): Promise<SendReceiptsResponseDto> {
     const agent = await this.vsAgentService.getAgent()
+    const { modules } = agent as unknown as VsAgent<ChatAgentModules>
 
-    if (!agent.context.dependencyManager.isRegistered(DidCommReceiptsService)) {
+    if (!('receipts' in modules)) {
       throw new AdminApiError(
         AdminApiErrorCode.UnknownId,
         HttpStatus.NOT_FOUND,
         'this deployment does not serve the receipts module',
       )
     }
-    const receiptsService = agent.context.dependencyManager.resolve(DidCommReceiptsService)
 
     const connection = await agent.didcomm.connections.findById(body.connectionId)
     if (!connection) throw unknownConnection(body.connectionId)
-    const message = await receiptsService.createReceiptsMessage({
-      receipts: body.receipts.map(
-        receipt =>
-          new DidCommMessageReceipt({
-            messageId: receipt.messageId,
-            state: receipt.state,
-            timestamp: receipt.timestamp ? new Date(receipt.timestamp) : undefined,
-          }),
-      ),
+
+    const { messageId } = await modules.receipts.send({
+      connectionId: body.connectionId,
+      receipts: body.receipts.map(receipt => ({
+        messageId: receipt.messageId,
+        state: receipt.state,
+        timestamp: receipt.timestamp ? new Date(receipt.timestamp) : undefined,
+      })),
     })
 
-    await agent.context.dependencyManager
-      .resolve(DidCommMessageSender)
-      .sendMessage(new DidCommOutboundMessageContext(message, { agentContext: agent.context, connection }))
-
-    return { id: message.id }
+    return { id: messageId }
   }
 }
