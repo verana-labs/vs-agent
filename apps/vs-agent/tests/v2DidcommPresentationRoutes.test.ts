@@ -753,6 +753,28 @@ describe('v2 didcomm presentation routes', () => {
         expect(proofs.acceptRequest).not.toHaveBeenCalled()
       })
 
+      it('answers PEER_NOT_AUTHORIZED when one group of the AnonCreds request carries no restriction', async () => {
+        proofs.getFormatData.mockResolvedValue({
+          request: {
+            anoncreds: {
+              requested_attributes: {
+                'gov-id': { names: ['firstName'], restrictions: [{ cred_def_id: 'cred-def-1' }] },
+                'gov-id-2': { names: ['lastName'] },
+              },
+              requested_predicates: {},
+            },
+          },
+        })
+
+        const response = await request(app.getHttpServer()).post(
+          '/v2/didcomm/presentations/p-1/accept-request',
+        )
+
+        expect(response.status).toBe(409)
+        expect(response.body.error.code).toBe('PEER_NOT_AUTHORIZED')
+        expect(proofs.acceptRequest).not.toHaveBeenCalled()
+      })
+
       it('answers PEER_NOT_AUTHORIZED when the AnonCreds request restricts no group', async () => {
         proofs.getFormatData.mockResolvedValue({
           request: { anoncreds: { requested_attributes: { 'gov-id': { names: ['firstName'] } } } },

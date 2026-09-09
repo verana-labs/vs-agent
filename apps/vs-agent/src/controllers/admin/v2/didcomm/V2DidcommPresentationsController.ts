@@ -257,22 +257,31 @@ export class V2DidcommPresentationsController {
     const anonCredsRequest = requestFormatData.request?.anoncreds ?? requestFormatData.request?.indy
 
     if (anonCredsRequest) {
-      const requestedRestrictions = [
+      const requestedGroups = [
         ...Object.values(anonCredsRequest.requested_attributes ?? {}),
         ...Object.values(anonCredsRequest.requested_predicates ?? {}),
-      ].flatMap(group => group.restrictions ?? [])
+      ]
 
-      if (requestedRestrictions.length === 0) {
+      if (requestedGroups.length === 0) {
         throw peerNotAuthorized(
-          `the request of presentation "${proofExchangeId}" restricts no group, so it binds to no CredentialSchema`,
+          `the request of presentation "${proofExchangeId}" asks for no group, so it binds to no CredentialSchema`,
         )
       }
 
       try {
         const credentialSchemaIds = new Set<number>()
-        for (const restriction of requestedRestrictions) {
-          const { credentialSchemaId } = await deriveFromRestriction(agent, restriction)
-          credentialSchemaIds.add(credentialSchemaId)
+        for (const group of requestedGroups) {
+          const restrictions = group.restrictions ?? []
+          if (restrictions.length === 0) {
+            throw peerNotAuthorized(
+              `a group of the request of presentation "${proofExchangeId}" restricts no credential, so it binds to no CredentialSchema`,
+            )
+          }
+
+          for (const restriction of restrictions) {
+            const { credentialSchemaId } = await deriveFromRestriction(agent, restriction)
+            credentialSchemaIds.add(credentialSchemaId)
+          }
         }
 
         for (const credentialSchemaId of credentialSchemaIds) {
