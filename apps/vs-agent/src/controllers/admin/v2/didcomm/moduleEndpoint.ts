@@ -1,3 +1,4 @@
+import type { ChatAgentModules } from '@verana-labs/vs-agent-plugin-chat'
 import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { BaseRecord } from '@credo-ts/core'
@@ -12,6 +13,23 @@ import { HttpStatus } from '@nestjs/common'
 import { AdminApiError, AdminApiErrorCode, unknownConnection } from '../../../../common'
 
 type Agent = VsAgent<BaseAgentModules>
+type ChatAgent = VsAgent<ChatAgentModules>
+
+export function chatModuleApi<K extends keyof ChatAgent['modules']>(
+  agent: Agent,
+  key: K,
+  module: string,
+): ChatAgent['modules'][K] {
+  const { modules } = agent as unknown as ChatAgent
+  if (!(key in modules)) {
+    throw new AdminApiError(
+      AdminApiErrorCode.UnknownId,
+      HttpStatus.NOT_FOUND,
+      `this deployment does not serve the ${module} module`,
+    )
+  }
+  return modules[key]
+}
 
 export function moduleService<T>(agent: Agent, service: new (...args: any[]) => T, module: string): T {
   const { dependencyManager } = agent.context

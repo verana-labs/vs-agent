@@ -62,7 +62,8 @@
       "@hyperledger/anoncreds-shared": "0.4.0"
     },
     "patchedDependencies": {
-      "@2060.io/credo-ts-didcomm-receipts@0.1.1": "patches/@2060.io__credo-ts-didcomm-receipts@0.1.1.patch"
+      "@2060.io/credo-ts-didcomm-receipts@0.1.1": "patches/@2060.io__credo-ts-didcomm-receipts@0.1.1.patch",
+      "@2060.io/credo-ts-didcomm-reactions@0.1.1": "patches/@2060.io__credo-ts-didcomm-reactions@0.1.1.patch"
     }
   }
 }

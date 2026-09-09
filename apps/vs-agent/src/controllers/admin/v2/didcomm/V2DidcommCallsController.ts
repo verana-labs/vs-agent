@@ -1,11 +1,11 @@
-import { DidCommCallsService, DidCommCallType } from '@2060.io/credo-ts-didcomm-calls'
+import type { DidCommCallType } from '@2060.io/credo-ts-didcomm-calls'
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
 import { VsAgentService } from '../../../../services/VsAgentService'
 
 import { AcceptCallBodyDto, CallThreadBodyDto, OfferCallBodyDto, SentMessageDto } from './dto'
-import { connectionOf, moduleService, sendMessage } from './moduleEndpoint'
+import { chatModuleApi, connectionOf } from './moduleEndpoint'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/calls', version: '2' })
@@ -18,8 +18,9 @@ export class V2DidcommCallsController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async offerCall(@Body() body: OfferCallBodyDto): Promise<SentMessageDto> {
-    const { agent, service, connection } = await this.callsContext(body.connectionId)
-    const message = service.createOffer({
+    const api = await this.callsApi(body.connectionId)
+    const { messageId } = await api.offer({
+      connectionId: body.connectionId,
       callType: body.callType as DidCommCallType,
       parameters: body.parameters,
       description: body.description,
@@ -27,7 +28,7 @@ export class V2DidcommCallsController {
       offerExpirationTime: body.offerExpirationTime ? new Date(body.offerExpirationTime) : undefined,
     })
 
-    return { id: await sendMessage(agent, connection, message) }
+    return { id: messageId }
   }
 
   @Post('accept')
@@ -35,10 +36,14 @@ export class V2DidcommCallsController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async acceptCall(@Body() body: AcceptCallBodyDto): Promise<SentMessageDto> {
-    const { agent, service, connection } = await this.callsContext(body.connectionId)
-    const message = service.createAccept({ threadId: body.threadId, parameters: body.parameters })
+    const api = await this.callsApi(body.connectionId)
+    const { messageId } = await api.accept({
+      connectionId: body.connectionId,
+      threadId: body.threadId,
+      parameters: body.parameters,
+    })
 
-    return { id: await sendMessage(agent, connection, message) }
+    return { id: messageId }
   }
 
   @Post('reject')
@@ -46,10 +51,10 @@ export class V2DidcommCallsController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async rejectCall(@Body() body: CallThreadBodyDto): Promise<SentMessageDto> {
-    const { agent, service, connection } = await this.callsContext(body.connectionId)
-    const message = service.createReject({ threadId: body.threadId })
+    const api = await this.callsApi(body.connectionId)
+    const { messageId } = await api.reject({ connectionId: body.connectionId, threadId: body.threadId })
 
-    return { id: await sendMessage(agent, connection, message) }
+    return { id: messageId }
   }
 
   @Post('end')
@@ -57,16 +62,17 @@ export class V2DidcommCallsController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async endCall(@Body() body: CallThreadBodyDto): Promise<SentMessageDto> {
-    const { agent, service, connection } = await this.callsContext(body.connectionId)
-    const message = service.createEnd({ threadId: body.threadId })
+    const api = await this.callsApi(body.connectionId)
+    const { messageId } = await api.hangup({ connectionId: body.connectionId, threadId: body.threadId })
 
-    return { id: await sendMessage(agent, connection, message) }
+    return { id: messageId }
   }
 
-  private async callsContext(connectionId: string) {
+  private async callsApi(connectionId: string) {
     const agent = await this.vsAgentService.getAgent()
-    const service = moduleService(agent, DidCommCallsService, 'calls')
+    const api = chatModuleApi(agent, 'calls', 'calls')
+    await connectionOf(agent, connectionId)
 
-    return { agent, service, connection: await connectionOf(agent, connectionId) }
+    return api
   }
 }

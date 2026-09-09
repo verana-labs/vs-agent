@@ -20,6 +20,9 @@ overrides:
   '@credo-ts/webvh': 0.7.1-pr-2704-20260901064803
 
 patchedDependencies:
+  '@2060.io/credo-ts-didcomm-reactions@0.1.1':
+    hash: jiquxbwqbflfxijl4g6pf5ovma
+    path: patches/@2060.io__credo-ts-didcomm-reactions@0.1.1.patch
   '@2060.io/credo-ts-didcomm-receipts@0.1.1':
     hash: urbu2geka7wukddbib4mtcvh34
     path: patches/@2060.io__credo-ts-didcomm-receipts@0.1.1.patch
@@ -69,7 +72,7 @@ importers:
         version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.7.2))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.7.2))
       '@2060.io/credo-ts-didcomm-reactions':
         specifier: ^0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.7.2))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.7.2))
+        version: 0.1.1(patch_hash=jiquxbwqbflfxijl4g6pf5ovma)(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.7.2))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.7.2))
       '@2060.io/credo-ts-didcomm-user-profile':
         specifier: 0.1.0
         version: 0.1.0(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.7.2))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.7.2))
@@ -89,9 +92,6 @@ importers:
         specifier: 0.7.1-pr-2704-20260901064803
         version: 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       '@credo-ts/node':
-        specifier: 0.7.1-pr-2704-20260901064803
-        version: 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
-      '@credo-ts/question-answer':
         specifier: 0.7.1-pr-2704-20260901064803
         version: 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       '@credo-ts/webvh':
@@ -570,7 +570,7 @@ importers:
     dependencies:
       '@2060.io/credo-ts-didcomm-reactions':
         specifier: 0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
+        version: 0.1.1(patch_hash=jiquxbwqbflfxijl4g6pf5ovma)(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-receipts':
         specifier: 0.1.1
         version: 0.1.1(patch_hash=urbu2geka7wukddbib4mtcvh34)(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
@@ -668,7 +668,7 @@ importers:
         version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-reactions':
         specifier: ^0.1.1
-        version: 0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
+        version: 0.1.1(patch_hash=jiquxbwqbflfxijl4g6pf5ovma)(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
       '@2060.io/credo-ts-didcomm-receipts':
         specifier: 0.1.1
         version: 0.1.1(patch_hash=urbu2geka7wukddbib4mtcvh34)(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))
@@ -5387,7 +5387,7 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@2060.io/credo-ts-didcomm-reactions@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.7.2))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.7.2))':
+  '@2060.io/credo-ts-didcomm-reactions@0.1.1(patch_hash=jiquxbwqbflfxijl4g6pf5ovma)(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.7.2))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.7.2))':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
       '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
@@ -5397,7 +5397,7 @@ snapshots:
       rxjs: 7.8.2
       uuid: 9.0.1
 
-  '@2060.io/credo-ts-didcomm-reactions@0.1.1(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))':
+  '@2060.io/credo-ts-didcomm-reactions@0.1.1(patch_hash=jiquxbwqbflfxijl4g6pf5ovma)(@credo-ts/core@0.7.1-pr-2704-20260901064803(typescript@5.8.3))(@credo-ts/didcomm@0.7.1-pr-2704-20260901064803(typescript@5.8.3))':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
       '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.8.3)
@@ -6013,18 +6013,6 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
-
-  '@credo-ts/question-answer@0.7.1-pr-2704-20260901064803(typescript@5.7.2)':
-    dependencies:
-      '@credo-ts/core': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
-      '@credo-ts/didcomm': 0.7.1-pr-2704-20260901064803(typescript@5.7.2)
-      class-transformer: 0.5.1
-      class-validator: 0.14.3
-      rxjs: 7.8.2
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-      - typescript
 
   '@credo-ts/question-answer@0.7.1-pr-2704-20260901064803(typescript@5.8.3)':
     dependencies:

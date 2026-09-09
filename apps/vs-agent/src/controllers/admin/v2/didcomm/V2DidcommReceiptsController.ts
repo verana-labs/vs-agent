@@ -1,11 +1,10 @@
-import { DidCommMessageReceipt, DidCommReceiptsService } from '@2060.io/credo-ts-didcomm-receipts'
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
 import { VsAgentService } from '../../../../services/VsAgentService'
 
 import { SendReceiptsBodyDto, SentMessageDto } from './dto'
-import { connectionOf, moduleService, sendMessage } from './moduleEndpoint'
+import { chatModuleApi, connectionOf } from './moduleEndpoint'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/receipts', version: '2' })
@@ -22,20 +21,18 @@ export class V2DidcommReceiptsController {
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async sendReceipts(@Body() body: SendReceiptsBodyDto): Promise<SentMessageDto> {
     const agent = await this.vsAgentService.getAgent()
-    const service = moduleService(agent, DidCommReceiptsService, 'receipts')
-    const connection = await connectionOf(agent, body.connectionId)
+    const api = chatModuleApi(agent, 'receipts', 'receipts')
+    await connectionOf(agent, body.connectionId)
 
-    const message = await service.createReceiptsMessage({
-      receipts: body.receipts.map(
-        receipt =>
-          new DidCommMessageReceipt({
-            messageId: receipt.messageId,
-            state: receipt.state,
-            timestamp: receipt.timestamp ? new Date(receipt.timestamp) : undefined,
-          }),
-      ),
+    const { messageId } = await api.send({
+      connectionId: body.connectionId,
+      receipts: body.receipts.map(receipt => ({
+        messageId: receipt.messageId,
+        state: receipt.state,
+        timestamp: receipt.timestamp ? new Date(receipt.timestamp) : undefined,
+      })),
     })
 
-    return { id: await sendMessage(agent, connection, message) }
+    return { id: messageId }
   }
 }
