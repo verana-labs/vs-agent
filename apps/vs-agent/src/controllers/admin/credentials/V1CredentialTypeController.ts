@@ -40,6 +40,7 @@ import {
   CredentialTypeResult,
   ImportCredentialTypeOptions,
 } from '@verana-labs/vs-agent-model'
+import { findAttestedResource } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
 
@@ -272,10 +273,7 @@ export class V1CredentialTypesController {
       credentialTypeId,
     )
     await keyCorrectnessProofRepository.delete(agent.context, keyCorrectnessProofRecord)
-    const [credDefAttested] = await agent.genericRecords.findAllByQuery({
-      type: 'AttestedResource',
-      attestedResourceId: credentialTypeId,
-    })
+    const credDefAttested = await findAttestedResource(agent, { attestedResourceId: credentialTypeId })
     if (credDefAttested) await agent.genericRecords.delete(credDefAttested)
 
     if (deleteAssociatedRevocationRegistries === 'true') {

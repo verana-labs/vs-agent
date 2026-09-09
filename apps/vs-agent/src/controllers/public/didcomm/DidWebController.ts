@@ -15,6 +15,8 @@ import {
   Res,
 } from '@nestjs/common'
 import {
+  findAttestedResource,
+  findAttestedResources,
   getLegacyDidDocument,
   getTailsDirectoryPath,
   isValidTailsFileName,
@@ -113,7 +115,7 @@ export class DidWebController {
 
     if (schemaRecord) {
       agent.config.logger.debug(`schema found: ${schemaId}`)
-      return res.send({ resource: schemaRecord.schema, resourceMetadata: {} })
+      return res.send({ resource: schemaRecord.schema, resourceMetadata: vtjscMetadata(schemaRecord) })
     }
 
     agent.config.logger.debug(`schema not found: ${schemaId}`)
@@ -139,7 +141,7 @@ export class DidWebController {
     if (credentialDefinitionRecord) {
       return res.send({
         resource: credentialDefinitionRecord.credentialDefinition,
-        resourceMetadata: {},
+        resourceMetadata: vtjscMetadata(credentialDefinitionRecord),
       })
     }
 
@@ -237,11 +239,7 @@ export class DidWebController {
     }
     const agent = await this.agentService.getAgent()
     this.assertDidMethod(agent, 'webvh')
-    const records = await agent.genericRecords.findAllByQuery({
-      type: 'AttestedResource',
-      resourceType,
-      relatedJsonSchemaCredentialId,
-    })
+    const records = await findAttestedResources(agent, { resourceType, relatedJsonSchemaCredentialId })
 
     if (!records || records.length === 0) {
       throw new NotFoundException('No entries found for resourceType')
@@ -258,10 +256,7 @@ export class DidWebController {
 
     agent.config.logger.debug(`requested resource ${resourceId}`)
 
-    const [record] = await agent.genericRecords.findAllByQuery({
-      attestedResourceId: resourcePath,
-      type: 'AttestedResource',
-    })
+    const record = await findAttestedResource(agent, { attestedResourceId: resourcePath })
 
     if (!record) {
       throw new NotFoundException('Resource not found')
@@ -269,6 +264,12 @@ export class DidWebController {
 
     res.send(record.content)
   }
+}
+
+/** The did:web resource metadata, which names the VTJSC that governs the object, per [VSA-PUB-AC-5]. */
+function vtjscMetadata(record: { getTag(name: string): unknown }): Record<string, string> {
+  const relatedJsonSchemaCredentialId = record.getTag('relatedJsonSchemaCredentialId')
+  return typeof relatedJsonSchemaCredentialId === 'string' ? { relatedJsonSchemaCredentialId } : {}
 }
 
 async function resolveDidDocumentData(agent: VsAgent) {
