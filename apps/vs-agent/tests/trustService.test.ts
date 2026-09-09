@@ -48,7 +48,7 @@ describe('TrustService', () => {
       jscFaberAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(faberMessages))
       jscFaberAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
       await jscFaberAgent.initialize()
-      jscFaberApp = await startServersTesting(jscFaberAgent)
+      jscFaberApp = await startServersTesting(jscFaberAgent, { chat: false })
       jscFaberService = jscFaberApp.get<TrustService>(TrustService)
     })
 
@@ -150,7 +150,7 @@ describe('TrustService', () => {
       faberAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(faberMessages))
       faberAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
       await faberAgent.initialize()
-      faberApp = await startServersTesting(faberAgent)
+      faberApp = await startServersTesting(faberAgent, { chat: false })
 
       aliceAgent = await startAgent({ label: 'Alice Test', domain: 'alice' })
       aliceAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(aliceMessages))
@@ -158,7 +158,7 @@ describe('TrustService', () => {
       await aliceAgent.initialize()
       ;[aliceConnection, faberConnection] = await makeConnection(aliceAgent, faberAgent)
       aliceEvents = vi.spyOn(aliceAgent.events, 'emit')
-      await startServersTesting(aliceAgent)
+      await startServersTesting(aliceAgent, { chat: false })
 
       faberService = faberApp.get<TrustService>(TrustService)
       faberMsgService = faberApp.get<MessageService>(MessageService)
