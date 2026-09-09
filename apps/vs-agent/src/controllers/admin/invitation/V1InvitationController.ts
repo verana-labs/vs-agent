@@ -21,7 +21,7 @@ import {
   CreateInvitationResult,
   ReceiveInvitationResult,
 } from '@verana-labs/vs-agent-model'
-import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
+import { createInvitation, fetchJson, REQUESTED_CREDENTIAL_SCHEMAS_METADATA } from '@verana-labs/vs-agent-sdk'
 
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../config'
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
@@ -290,6 +290,20 @@ export class V1InvitationController {
       restrictions,
     }
 
+    let requestedCredentialSchemaId: number | undefined
+    try {
+      const derived = await agent.anonCredsTrust.deriveCredentialSchema(
+        relatedJsonSchemaCredentialId
+          ? { schemaId: restrictions[0].schema_id! }
+          : { credentialDefinitionId: credentialDefinitionId! },
+      )
+      requestedCredentialSchemaId = derived.credentialSchemaId
+    } catch (error) {
+      agent.config.logger.warn(
+        `[V1Invitation] the requested credential binds to no CredentialSchema, so the presentation cannot be checked: ${error}`,
+      )
+    }
+
     let nonRevoked: AnonCredsNonRevokedInterval | undefined
     if (requireNonRevocation) {
       const now = dateToTimestamp(new Date())
@@ -310,6 +324,9 @@ export class V1InvitationController {
 
     request.proofRecord.metadata.set('_2060/requestedCredentials', requestedCredentials)
     request.proofRecord.metadata.set('_2060/callbackParameters', { ref, callbackUrl })
+    if (requestedCredentialSchemaId !== undefined) {
+      request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, [requestedCredentialSchemaId])
+    }
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { invitation, outOfBandInvitation } = await createInvitation({

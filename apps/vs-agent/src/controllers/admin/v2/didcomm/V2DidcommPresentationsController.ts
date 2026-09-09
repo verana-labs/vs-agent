@@ -30,7 +30,17 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
+import {
+  AnonCredsTrustError,
+  AnonCredsTrustErrorReason,
+  createInvitation,
+  DerivedCredentialSchema,
+  fetchJson,
+  ParticipantRole,
+  REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+  type BaseAgentModules,
+  type VsAgent,
+} from '@verana-labs/vs-agent-sdk'
 
 import {
   AdminApiError,
@@ -39,6 +49,7 @@ import {
   mapPageAsync,
   Page,
   paginate,
+  trustDecisionError,
 } from '../../../../common'
 import { AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
@@ -130,6 +141,7 @@ export class V2DidcommPresentationsController {
     // One requested-attribute group per entry, so a request may span several credentials. Groups are
     // keyed by schema name, suffixed when two entries resolve to schemas that share a name.
     const requestedAttributes: Record<string, AnonCredsRequestedAttribute> = {}
+    const requestedCredentialSchemas: number[] = []
     for (const entry of requestedCredentials) {
       const { schema, restrictions } = await this.resolve(entry)
       const attributes = entry.attributes ?? schema.attrNames
@@ -139,6 +151,17 @@ export class V2DidcommPresentationsController {
         throw invalidInput(
           `attributes [${unknown.join(', ')}] are absent from schema "${schema.name}", which defines [${schema.attrNames.join(', ')}]`,
         )
+      }
+
+      try {
+        const { credentialSchemaId } = await deriveFromRestriction(agent, restrictions[0])
+        await agent.anonCredsTrust.assertOwnAuthorization({
+          role: ParticipantRole.Verifier,
+          credentialSchemaId,
+        })
+        requestedCredentialSchemas.push(credentialSchemaId)
+      } catch (error) {
+        throw trustDecisionError(error, 'agent', AdminApiErrorCode.InvalidInput)
       }
 
       requestedAttributes[uniqueKey(requestedAttributes, schema.name)] = { names: attributes, restrictions }
@@ -166,6 +189,7 @@ export class V2DidcommPresentationsController {
     })
 
     request.proofRecord.metadata.set(REQUESTED_CREDENTIALS_METADATA, requestedCredentials)
+    request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, requestedCredentialSchemas)
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { invitation } = await createInvitation({
@@ -217,6 +241,60 @@ export class V2DidcommPresentationsController {
     if (!record) throw unknownPresentation(proofExchangeId)
 
     requireProofState(record, DidCommProofState.RequestReceived)
+
+    const connection = record.connectionId
+      ? await agent.didcomm.connections.findById(record.connectionId)
+      : undefined
+    const verifierDid = connection?.theirDid
+
+    if (!verifierDid) {
+      throw peerNotAuthorized(
+        `the verifier of presentation "${proofExchangeId}" established no DID, so the agent cannot check its Participant entry`,
+      )
+    }
+
+    const requestFormatData = await agent.didcomm.proofs.getFormatData(proofExchangeId)
+    const anonCredsRequest = requestFormatData.request?.anoncreds ?? requestFormatData.request?.indy
+
+    if (anonCredsRequest) {
+      const requestedGroups = [
+        ...Object.values(anonCredsRequest.requested_attributes ?? {}),
+        ...Object.values(anonCredsRequest.requested_predicates ?? {}),
+      ]
+
+      if (requestedGroups.length === 0) {
+        throw peerNotAuthorized(
+          `the request of presentation "${proofExchangeId}" asks for no group, so it binds to no CredentialSchema`,
+        )
+      }
+
+      try {
+        const credentialSchemaIds = new Set<number>()
+        for (const group of requestedGroups) {
+          const restrictions = group.restrictions ?? []
+          if (restrictions.length === 0) {
+            throw peerNotAuthorized(
+              `a group of the request of presentation "${proofExchangeId}" restricts no credential, so it binds to no CredentialSchema`,
+            )
+          }
+
+          for (const restriction of restrictions) {
+            const { credentialSchemaId } = await deriveFromRestriction(agent, restriction)
+            credentialSchemaIds.add(credentialSchemaId)
+          }
+        }
+
+        for (const credentialSchemaId of credentialSchemaIds) {
+          await agent.anonCredsTrust.assertAuthorized({
+            did: verifierDid,
+            role: ParticipantRole.Verifier,
+            credentialSchemaId,
+          })
+        }
+      } catch (error) {
+        throw trustDecisionError(error, 'peer')
+      }
+    }
 
     // `getCredentialsForRequest` returns the matches of each group of the request, and an empty
     // group shows that the credential store cannot answer that group. The agent asks first
@@ -481,6 +559,26 @@ export class V2DidcommPresentationsController {
   }
 }
 
+async function deriveFromRestriction(
+  agent: VsAgent<BaseAgentModules>,
+  restriction: AnonCredsProofRequestRestriction | undefined,
+): Promise<DerivedCredentialSchema> {
+  if (restriction?.schema_id) {
+    return agent.anonCredsTrust.deriveCredentialSchema({ schemaId: restriction.schema_id })
+  }
+
+  if (restriction?.cred_def_id) {
+    return agent.anonCredsTrust.deriveCredentialSchema({
+      credentialDefinitionId: restriction.cred_def_id,
+    })
+  }
+
+  throw new AnonCredsTrustError(
+    AnonCredsTrustErrorReason.NotDerivable,
+    'a requested credential without a schema or credential definition restriction binds to no CredentialSchema',
+  )
+}
+
 function uniqueKey(taken: Record<string, unknown>, name: string): string {
   if (!(name in taken)) return name
 
@@ -505,6 +603,10 @@ function requireProofState(record: DidCommProofExchangeRecord, expected: DidComm
     HttpStatus.CONFLICT,
     `presentation "${record.id}" is in state "${record.state}", not "${expected}"`,
   )
+}
+
+function peerNotAuthorized(message: string): AdminApiError {
+  return new AdminApiError(AdminApiErrorCode.PeerNotAuthorized, HttpStatus.CONFLICT, message)
 }
 
 function noCompatibleCredentials(message: string): AdminApiError {

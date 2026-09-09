@@ -9,7 +9,12 @@ import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
-import { createInvitation } from '@verana-labs/vs-agent-sdk'
+import {
+  AnonCredsTrustError,
+  AnonCredsTrustErrorReason,
+  createInvitation,
+  ParticipantRole,
+} from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
 import { CreateCredentialOfferBodyDto } from '../src/controllers/admin/v2/didcomm/dto'
@@ -74,9 +79,21 @@ const records = [
 
 const events = { emit: vi.fn() }
 
+const ISSUER_DID = 'did:webvh:QmIssuer:issuer.example'
+const CREDENTIAL_SCHEMA_ID = 7
+
+const anonCredsTrust = {
+  deriveCredentialSchema: vi.fn(),
+  assertOwnAuthorization: vi.fn(),
+  assertAuthorized: vi.fn(),
+}
+
+const anonCredsOffer = { offer: { anoncreds: { cred_def_id: 'credDef:a', schema_id: 'schema:phone' } } }
+
 const agent = {
   events,
   context: {},
+  anonCredsTrust,
   modules: {
     anoncreds: {
       getCreatedCredentialDefinitions: vi.fn(),
@@ -140,6 +157,15 @@ describe('v2 didcomm credential exchange routes', () => {
       offerAttributes: [{ name: 'phoneNumber', value: '+57128348520' }],
     })
     agent.modules.anoncreds.getSchema.mockResolvedValue({ schema })
+    anonCredsTrust.deriveCredentialSchema.mockResolvedValue({
+      credentialSchemaId: CREDENTIAL_SCHEMA_ID,
+      ecosystemDid: 'did:webvh:QmEcosystem:ecosystem.example',
+      jsonSchemaCredentialId: 'https://ecosystem.example/vt/schemas-org-jsc.json',
+      anonCredsSchemaId: 'schema:phone',
+      issuerId: ISSUER_DID,
+    })
+    anonCredsTrust.assertOwnAuthorization.mockResolvedValue(undefined)
+    anonCredsTrust.assertAuthorized.mockResolvedValue(undefined)
     agent.modules.anoncreds.getCreatedCredentialDefinitions.mockResolvedValue([credentialDefinition(false)])
     urlShorteningService.createShortUrl.mockResolvedValue('short-1')
     vi.mocked(createInvitation).mockResolvedValue({
@@ -609,6 +635,129 @@ describe('v2 didcomm credential exchange routes', () => {
 
       expect(response.status).toBe(404)
       expect(response.body.error.code).toBe('UNKNOWN_ID')
+    })
+  })
+  describe('the AnonCreds trust decision', () => {
+    const offerBody = {
+      credentialDefinitionId: 'credDef:a',
+      claims: [{ name: 'phoneNumber', value: '+57128348520' }],
+    }
+
+    beforeEach(() => {
+      agent.didcomm.credentials.createOffer.mockResolvedValue({
+        message: { id: 'msg-1' },
+        credentialExchangeRecord: { id: 'ce-a' },
+      })
+      agent.didcomm.credentials.findById.mockResolvedValue(
+        exchangeRecord({ id: 'ce-a', createdAt: '2026-01-01T00:00:00.000Z', state: 'offer-received' }),
+      )
+      agent.didcomm.credentials.acceptOffer.mockResolvedValue(
+        exchangeRecord({ id: 'ce-a', createdAt: '2026-01-01T00:00:00.000Z', state: 'request-sent' }),
+      )
+    })
+
+    it('holds an active ISSUER Participant before it offers', async () => {
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/credential-offer').send(offerBody)
+
+      expect(response.status).toBe(201)
+      expect(anonCredsTrust.deriveCredentialSchema).toHaveBeenCalledWith({
+        credentialDefinitionId: 'credDef:a',
+      })
+      expect(anonCredsTrust.assertOwnAuthorization).toHaveBeenCalledWith({
+        role: ParticipantRole.Issuer,
+        credentialSchemaId: CREDENTIAL_SCHEMA_ID,
+      })
+    })
+
+    it('answers NOT_AUTHORIZED when the agent holds no ISSUER Participant for the offer', async () => {
+      anonCredsTrust.assertOwnAuthorization.mockRejectedValue(
+        new AnonCredsTrustError(AnonCredsTrustErrorReason.NotAuthorized, 'no issuer participant'),
+      )
+
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/credential-offer').send(offerBody)
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('NOT_AUTHORIZED')
+      expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
+    })
+
+    it('answers NOT_AUTHORIZED, and not INVALID_INPUT, when the offer binds to no CredentialSchema', async () => {
+      anonCredsTrust.deriveCredentialSchema.mockRejectedValue(
+        new AnonCredsTrustError(AnonCredsTrustErrorReason.NotDerivable, 'no relatedJsonSchemaCredentialId'),
+      )
+
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/credential-offer').send(offerBody)
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('NOT_AUTHORIZED')
+      expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
+    })
+
+    it('answers RESOLVER_UNAVAILABLE when it cannot complete the check of an offer', async () => {
+      anonCredsTrust.deriveCredentialSchema.mockRejectedValue(
+        new AnonCredsTrustError(AnonCredsTrustErrorReason.Unavailable, 'the indexer is unreachable'),
+      )
+
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/credential-offer').send(offerBody)
+
+      expect(response.status).toBe(503)
+      expect(response.body.error.code).toBe('RESOLVER_UNAVAILABLE')
+      expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
+    })
+
+    it('checks the ISSUER Participant of the issuer before it accepts an offer', async () => {
+      agent.didcomm.credentials.getFormatData.mockResolvedValue(anonCredsOffer)
+
+      const response = await request(app.getHttpServer()).post(
+        '/v2/didcomm/credential-exchanges/ce-a/accept-offer',
+      )
+
+      expect(response.status).toBe(200)
+      expect(anonCredsTrust.assertAuthorized).toHaveBeenCalledWith({
+        did: ISSUER_DID,
+        role: ParticipantRole.Issuer,
+        credentialSchemaId: CREDENTIAL_SCHEMA_ID,
+      })
+    })
+
+    it('answers PEER_NOT_AUTHORIZED when the issuer of the offer holds no ISSUER Participant', async () => {
+      agent.didcomm.credentials.getFormatData.mockResolvedValue(anonCredsOffer)
+      anonCredsTrust.assertAuthorized.mockRejectedValue(
+        new AnonCredsTrustError(AnonCredsTrustErrorReason.NotAuthorized, 'no issuer participant'),
+      )
+
+      const response = await request(app.getHttpServer()).post(
+        '/v2/didcomm/credential-exchanges/ce-a/accept-offer',
+      )
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('PEER_NOT_AUTHORIZED')
+      expect(agent.didcomm.credentials.acceptOffer).not.toHaveBeenCalled()
+    })
+
+    it('refuses an AnonCreds offer that names no credential definition', async () => {
+      agent.didcomm.credentials.getFormatData.mockResolvedValue({ offer: { anoncreds: {} } })
+
+      const response = await request(app.getHttpServer()).post(
+        '/v2/didcomm/credential-exchanges/ce-a/accept-offer',
+      )
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('PEER_NOT_AUTHORIZED')
+      expect(anonCredsTrust.deriveCredentialSchema).not.toHaveBeenCalled()
+      expect(agent.didcomm.credentials.acceptOffer).not.toHaveBeenCalled()
+    })
+
+    it('runs no AnonCreds check on an offer of another format', async () => {
+      agent.didcomm.credentials.getFormatData.mockResolvedValue({ offer: { jsonld: {} } })
+
+      const response = await request(app.getHttpServer()).post(
+        '/v2/didcomm/credential-exchanges/ce-a/accept-offer',
+      )
+
+      expect(response.status).toBe(200)
+      expect(anonCredsTrust.deriveCredentialSchema).not.toHaveBeenCalled()
+      expect(agent.didcomm.credentials.acceptOffer).toHaveBeenCalled()
     })
   })
 })
