@@ -382,6 +382,7 @@ async function anchorCredentialDigest(
   agent.config.logger.info(
     `[DigestAnchor] Anchored digest ${digest} for schema ${schemaId} against issuer participant ${issuerParticipantId} (tx ${txHash})`,
   )
+  await agent.indexer.waitForDigest(digest)
 }
 
 // replaces the self-TR example JSC binding with the on-chain VTJSC so resolvers can link the credential to the VPR

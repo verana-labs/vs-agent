@@ -57,6 +57,7 @@ function makeIndexer(overrides: Record<string, unknown> = {}) {
   return {
     getCredentialSchema: vi.fn(async () => ({ id: 5, digest_algorithm: 'sha256' })),
     getDigest: vi.fn(async () => undefined),
+    waitForDigest: vi.fn(async () => {}),
     ...overrides,
   }
 }

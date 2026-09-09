@@ -25,7 +25,8 @@ const REQUEST_TIMEOUT_MS = 30_000
 // The delegation projection runs on its own bull job, so it can trail the event stream that told the
 // agent to refresh. `atBlock` is that job's checkpoint: waiting for it closes the read-after-write gap.
 const DELEGATION_CATCHUP_TIMEOUT_MS = 15_000
-const DELEGATION_CATCHUP_INTERVAL_MS = 500
+const CATCHUP_INTERVAL_MS = 500
+const DIGEST_CATCHUP_TIMEOUT_MS = 15_000
 
 type RawDuration = { seconds?: number | string; nanos?: number } | string
 
@@ -210,7 +211,7 @@ export class VeranaIndexerService {
           `[VeranaIndexer] delegation checkpoint ${atBlock} never reached block ${minBlock} for ${path}`,
         )
       }
-      await new Promise(resolve => setTimeout(resolve, DELEGATION_CATCHUP_INTERVAL_MS))
+      await new Promise(resolve => setTimeout(resolve, CATCHUP_INTERVAL_MS))
     }
   }
 
@@ -251,6 +252,20 @@ export class VeranaIndexerService {
         period: toDuration(r.period),
       })),
     }))
+  }
+
+  // Anchoring is a write this agent reads back on its next run, so the redundant-transaction check
+  // only holds if the indexer has caught up first. A timeout costs one extra anchoring, not a boot.
+  async waitForDigest(digest: string): Promise<void> {
+    const deadline = Date.now() + DIGEST_CATCHUP_TIMEOUT_MS
+    for (;;) {
+      if (await this.getDigest(digest)) return
+      if (Date.now() >= deadline) {
+        this.config.logger.warn(`[VeranaIndexer] digest ${digest} was not indexed before the deadline`)
+        return
+      }
+      await new Promise(resolve => setTimeout(resolve, CATCHUP_INTERVAL_MS))
+    }
   }
 
   async getDigest(digest: string): Promise<DigestDto | undefined> {
