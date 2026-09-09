@@ -190,3 +190,14 @@ export const mockResponses: { [key: string]: any } = {
   'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-service': jsonSchemaServiceMock,
   'https://www.w3.org/ns/credentials/json-schema/v2.json': jsonSchemaV2Mock,
 }
+
+/**
+ * Points the shared VTJSC fixture at a local agent, so that agent publishes its AnonCreds schema.
+ * An agent that issues no VTJSC builds on the schema its registry lists, per [VSA-PUB-AC-5].
+ */
+export function issueVtjscFrom(did: string | undefined) {
+  mockResponses['https://example.org/vt/schemas-example-org-jsc.json'] = {
+    ...jsonSchemaCredentialMock,
+    issuer: did,
+  }
+}

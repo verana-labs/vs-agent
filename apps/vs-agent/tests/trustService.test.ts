@@ -13,6 +13,7 @@ import { MessageService, TrustService } from '../src/controllers'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { isCredentialStateChangedEvent, startAgent, startServersTesting } from './__mocks__'
+import { issueVtjscFrom } from './__mocks__'
 import {
   makeConnection,
   SubjectInboundTransport,
@@ -278,6 +279,8 @@ describe('TrustService', () => {
     })
 
     it('should issue a valid anoncreds credential', async () => {
+      issueVtjscFrom(faberAgent.did)
+
       // Mocks
       const original = WebVhAnonCredsRegistry.prototype['_resolveAndValidateAttestedResource']
       vi.spyOn(

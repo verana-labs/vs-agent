@@ -17,7 +17,7 @@ import { VsAgentModule } from '../src/admin.module'
 import { ErrorEnvelopeFilter } from '../src/common'
 import { PublicModule } from '../src/public.module'
 
-import { startAgent } from './__mocks__'
+import { issueVtjscFrom, startAgent } from './__mocks__'
 import { FakeDidResolver } from './__mocks__/fakeDidResolver'
 import {
   invitationUrl,
@@ -131,6 +131,8 @@ describe('v2 didcomm accept routes, over two agents', () => {
       }
       return original.call(this, ...args)
     })
+
+    issueVtjscFrom(faberAgent.did)
 
     const credentialDefinition = await faber()
       .post('/v2/anoncreds/credential-definitions')

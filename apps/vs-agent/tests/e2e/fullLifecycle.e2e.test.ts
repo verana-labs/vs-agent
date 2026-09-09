@@ -8,6 +8,7 @@ import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
 import {
   createJsc,
   EcsBootstrapService,
+  findAttestedResources,
   getEcsSchemas,
   ParticipantRole,
   ParticipantState,
@@ -621,9 +622,32 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       expect(await serviceIds()).toContain(serviceId)
       expect(await jscKeys()).toContain(schemaRef)
 
+      // The pass also publishes the AnonCreds schema of the VTJSC, per [VSA-PUB-AC-5]. beforeAll
+      // built the VTJSC with createJsc alone, so this agent stands for one deployed before the rule.
+      const jsonSchemaCredentialId = `${validator.publicApiBaseUrl}/vt/schemas-${orgSchemaId}-jsc.json`
+      const publishedSchemas = () =>
+        validator.modules.anoncreds.getCreatedSchemas({
+          relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+        })
+
+      const [anonCredsSchema] = await publishedSchemas()
+      expect(anonCredsSchema.schema).toMatchObject({
+        name: 'OrganizationCredential',
+        attrNames: ['id', 'name'],
+        issuerId: validator.did,
+      })
+
+      // An issuer of another DID reads the schema from this listing, so it must carry the tag.
+      const listed = await findAttestedResources(validator, {
+        resourceType: 'anonCredsSchema',
+        relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+      })
+      expect(listed.map(record => (record.content as { id: string }).id)).toEqual([anonCredsSchema.schemaId])
+
       // A second run must leave it attached, which is what proves the two passes agree.
       await reconcileVtjscPublications(validator, indexer, ownCorporationId)
       expect(await serviceIds()).toContain(serviceId)
+      expect(await publishedSchemas()).toHaveLength(1)
     },
     SETUP_TIMEOUT_MS,
   )

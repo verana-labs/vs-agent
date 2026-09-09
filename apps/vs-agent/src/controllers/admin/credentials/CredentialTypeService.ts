@@ -5,20 +5,24 @@ import {
   AnonCredsSchema,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
-import { JsonObject, parseDid, Proof, TagsBase, utils, W3cCredential } from '@credo-ts/core'
+import { JsonObject, parseDid, Proof, W3cCredential } from '@credo-ts/core'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { HttpStatus, Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
-import { deleteTailsFile, fetchJson, VsAgent } from '@verana-labs/vs-agent-sdk'
+import {
+  anonCredsSchemaFromJsonSchema,
+  deleteTailsFile,
+  fetchJson,
+  findAttestedResource,
+  saveAttestedResource,
+  VsAgent,
+} from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, AdminApiErrorCode } from '../../../common'
 import { REVOCATION_REGISTRY_DEFAULT_CAPACITY } from '../../../config/constants'
 import { VsAgentService } from '../../../services/VsAgentService'
 
-type Tags = TagsBase & {
-  type?: never
-  attestedResourceId?: never
-}
+const RESOLVE_TIMEOUT_MS = 30_000
 
 export class CredentialTypesService {
   private readonly logger = new Logger(CredentialTypesService.name)
@@ -88,7 +92,7 @@ export class CredentialTypesService {
       `revocationRegistryDefinitionState: ${JSON.stringify(revocationRegistryDefinitionState)}`,
     )
 
-    await this.saveAttestedResource(agent, revocationRegistration, {
+    await saveAttestedResource(agent, revocationRegistration, {
       resourceType: 'anonCredsRevocRegDef',
     })
 
@@ -169,8 +173,7 @@ export class CredentialTypesService {
     )
     if (!revDef) return false
 
-    const [revRegAttested] = await agent.genericRecords.findAllByQuery({
-      type: 'AttestedResource',
+    const revRegAttested = await findAttestedResource(agent, {
       attestedResourceId: revocationRegistryDefinitionId,
     })
     if (revRegAttested) {
@@ -178,10 +181,7 @@ export class CredentialTypesService {
       if (Array.isArray(links)) {
         for (const link of links) {
           if (link?.type === 'anonCredsStatusList' && link.id) {
-            const [statusListRecord] = await agent.genericRecords.findAllByQuery({
-              type: 'AttestedResource',
-              attestedResourceId: link.id,
-            })
+            const statusListRecord = await findAttestedResource(agent, { attestedResourceId: link.id })
             if (statusListRecord) await agent.genericRecords.delete(statusListRecord)
           }
         }
@@ -214,9 +214,8 @@ export class CredentialTypesService {
     statusRegistration: Record<string, unknown>,
     timestamp: number | undefined,
   ) {
-    const [revRegDefRecord] = await agent.genericRecords.findAllByQuery({
+    const revRegDefRecord = await findAttestedResource(agent, {
       attestedResourceId: revocationRegistryDefinitionId,
-      type: 'AttestedResource',
     })
     if (!revRegDefRecord) {
       throw new Error(`Revocation registry definition record not found for ${revocationRegistryDefinitionId}`)
@@ -236,7 +235,7 @@ export class CredentialTypesService {
       },
     )
 
-    await this.saveAttestedResource(agent, statusRegistration, { resourceType: 'anonCredsStatusList' })
+    await saveAttestedResource(agent, statusRegistration, { resourceType: 'anonCredsStatusList' })
 
     revRegDefRecord.content = registrationMetadata
     await agent.genericRecords.update(revRegDefRecord)
@@ -287,19 +286,6 @@ export class CredentialTypesService {
     return { timestamp: revocationStatusList.timestamp }
   }
 
-  public async saveAttestedResource(agent: VsAgent, resource: Record<string, unknown>, tags?: Tags) {
-    if (!resource) return
-    return await agent.genericRecords.save({
-      id: utils.uuid(),
-      content: resource,
-      tags: {
-        attestedResourceId: resource.id as string,
-        type: 'AttestedResource',
-        ...tags,
-      },
-    })
-  }
-
   public async findAnonCredsSchema(options: {
     schemaId?: string
     attributes?: string[]
@@ -324,7 +310,8 @@ export class CredentialTypesService {
       throw new Error('Either relatedJsonSchemaCredentialId or "name" and "version" must be provided')
     }
 
-    if (!issuerDid) {
+    // the agent is the registry of its own objects, so it reads them from its records
+    if (!issuerDid || issuerDid === agent.did) {
       const hasFilters = name != null || version != null || relatedJsonSchemaCredentialId != null
 
       if (!hasFilters) return undefined
@@ -355,9 +342,23 @@ export class CredentialTypesService {
     }
 
     const resourcesUrl = `https://${parsedIssuer}/resources?${params.toString()}`
-    const response = await fetch(resourcesUrl)
-    if (!response.ok) return undefined
-    const [resource] = (await response.json()) as Array<{ id: string; content: AnonCredsSchema }>
+
+    let resources: Array<{ id: string; content: AnonCredsSchema }> | undefined
+    try {
+      resources = await fetchJson<Array<{ id: string; content: AnonCredsSchema }>>(resourcesUrl, {
+        timeoutMs: RESOLVE_TIMEOUT_MS,
+        allowNotFound: true,
+      })
+    } catch (error) {
+      throw new AdminApiError(
+        AdminApiErrorCode.ResolverUnavailable,
+        HttpStatus.SERVICE_UNAVAILABLE,
+        `the AnonCreds registry at ${resourcesUrl} cannot be reached: ${error}`,
+      )
+    }
+
+    const [resource] = resources ?? []
+    if (!resource) return undefined
 
     return {
       schemaId: resource.id,
@@ -417,7 +418,34 @@ export class CredentialTypesService {
     if (!agent.did) {
       throw new Error('Agent does not have any defined public DID')
     }
-    const foundSchema = await this.findAnonCredsSchema(options)
+
+    const parsedJsc = options.relatedJsonSchemaCredentialId
+      ? await this.parseJsonSchemaCredential(options.relatedJsonSchemaCredentialId)
+      : undefined
+
+    // an issuer of another DID builds on the schema of the VTJSC issuer and creates none of its
+    // own: no request that names the VTJSC accepts a local schema, per [VSA-ADM-AC-CD-CREATE]
+    if (options.relatedJsonSchemaCredentialId && parsedJsc && parsedJsc.issuer !== agent.did) {
+      const resolved = await this.findAnonCredsSchema({
+        relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId,
+        issuerDid: parsedJsc.issuer,
+      })
+      if (!resolved) {
+        throw new AdminApiError(
+          AdminApiErrorCode.InvalidState,
+          HttpStatus.CONFLICT,
+          `the registry of "${parsedJsc.issuer}" lists no AnonCreds schema for "${options.relatedJsonSchemaCredentialId}" yet`,
+        )
+      }
+      return { schemaId: resolved.schemaId, schema: resolved.schema }
+    }
+
+    // The VTJSC defines the schema shape, so the caller's name cannot be used here because it would create a second schema for the same VTJSC.
+    const foundSchema = await this.findAnonCredsSchema(
+      options.relatedJsonSchemaCredentialId
+        ? { relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId }
+        : options,
+    )
 
     if (foundSchema) {
       return {
@@ -426,12 +454,11 @@ export class CredentialTypesService {
       }
     } else {
       // No schema found. A new one will be created
-      const parsedJsc = options.relatedJsonSchemaCredentialId
-        ? await this.parseJsonSchemaCredential(options.relatedJsonSchemaCredentialId)
-        : undefined
-      const schemaAttributes = options.attributes ?? parsedJsc?.attrNames
-      const schemaName = options.name ?? parsedJsc?.title
-      const schemaVersion = options.version ?? '1.0'
+      const schemaAttributes = parsedJsc?.attrNames ?? options.attributes
+      const schemaName = parsedJsc?.title ?? options.name
+      const schemaVersion = parsedJsc
+        ? (parsedJsc.subjectRef?.match(/:cs:(\d+)$/)?.[1] ?? '1.0')
+        : (options.version ?? '1.0')
 
       if (!schemaAttributes || !schemaName) {
         throw new Error('Schema must include both name and attributes (provided or derived from JSON Schema)')
@@ -462,7 +489,7 @@ export class CredentialTypesService {
           schema: {
             attrNames: schemaAttributes,
             name: schemaName,
-            version: options.version ?? '1.0',
+            version: schemaVersion,
             issuerId: agent.did,
           },
           options: schemaRegistrationOptions,
@@ -487,7 +514,7 @@ export class CredentialTypesService {
 
       await schemaRepository.update(agent.context, schemaRecord)
 
-      await this.saveAttestedResource(agent, schemaRegistration, {
+      await saveAttestedResource(agent, schemaRegistration, {
         resourceType: 'anonCredsSchema',
         relatedJsonSchemaCredentialId: options.relatedJsonSchemaCredentialId,
       })
@@ -559,7 +586,7 @@ export class CredentialTypesService {
       credentialDefinitionRecord.setTag('relatedJsonSchemaCredentialId', relatedJsonSchemaCredentialId)
     }
 
-    await this.saveAttestedResource(agent, credentialRegistration, {
+    await saveAttestedResource(agent, credentialRegistration, {
       resourceType: 'anonCredsCredDef',
       relatedJsonSchemaCredentialId,
     })
@@ -640,26 +667,47 @@ export class CredentialTypesService {
     return result
   }
 
+  /** Answers `undefined` when the document is absent, and RESOLVER_UNAVAILABLE when it cannot be read. */
+  private async resolveJson<T>(url: string): Promise<T | undefined> {
+    try {
+      return await fetchJson<T>(url, { timeoutMs: RESOLVE_TIMEOUT_MS, allowNotFound: true })
+    } catch (error) {
+      throw new AdminApiError(
+        AdminApiErrorCode.ResolverUnavailable,
+        HttpStatus.SERVICE_UNAVAILABLE,
+        `${url} cannot be reached: ${error}`,
+      )
+    }
+  }
+
   public async parseJsonSchemaCredential(jsonSchemaCredentialId: string) {
     try {
-      const jscData = await fetchJson<W3cCredential>(jsonSchemaCredentialId)
-      const subjectId = this.getCredentialSubjectId(jscData.credentialSubject)
-      const schemaData = await fetchJson<JsonObject>(mapToEcosystem(subjectId))
-      const parsedSchema = schemaData as any
-      const subjectProps = parsedSchema?.properties?.credentialSubject?.properties ?? {}
+      const jscData = await this.resolveJson<W3cCredential>(jsonSchemaCredentialId)
+      if (!jscData) throw new Error(`no document at ${jsonSchemaCredentialId}`)
 
-      const attrNames = Object.keys(subjectProps).map(String)
-      if (attrNames.length === 0) {
-        throw new Error(`No properties found in credentialSubject of schema from ${jsonSchemaCredentialId}`)
-      }
+      const subjectId = this.getCredentialSubjectId(jscData.credentialSubject)
+      const schemaUrl = mapToEcosystem(subjectId)
+      const schemaData = await this.resolveJson<JsonObject>(schemaUrl)
+      if (!schemaData) throw new Error(`no JSON Schema at ${schemaUrl}`)
+
+      const parsedSchema = schemaData as any
+      const { name, attrNames } = anonCredsSchemaFromJsonSchema(parsedSchema)
+
       return {
         parsedSchema,
         attrNames,
-        title: parsedSchema?.title as string | undefined,
+        title: name,
+        issuer: typeof jscData.issuer === 'string' ? jscData.issuer : jscData.issuer.id,
         subjectRef: subjectId,
       }
     } catch (error) {
-      throw new Error(`Failed to parse JSON Schema Credential ${jsonSchemaCredentialId}: ${error}`)
+      // an unreachable host is a state of the resolver, not an answer about the VTJSC
+      if (error instanceof AdminApiError) throw error
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        HttpStatus.NOT_FOUND,
+        `the agent cannot resolve relatedJsonSchemaCredentialId "${jsonSchemaCredentialId}": ${error}`,
+      )
     }
   }
 }
