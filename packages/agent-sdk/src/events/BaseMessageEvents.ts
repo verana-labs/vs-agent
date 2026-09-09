@@ -40,6 +40,8 @@ import { getRecordId } from '../utils/agent'
 import { emitVsAgentEvent, msgToEvent, VsAgentEventTypes } from './VsAgentEvents'
 
 export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => {
+  registerAnonCredsTrustDecision(agent, logger)
+
   // Proofs protocol messages (proof presentation and problem reports)
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
@@ -119,14 +121,6 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
             connection.id,
           )
           const formatData = await agent.didcomm.proofs.getFormatData(record.id)
-
-          await applyAnonCredsTrustDecision(
-            agent,
-            record,
-            connection,
-            formatData.presentation?.anoncreds ?? formatData.presentation?.indy,
-            logger,
-          )
 
           const revealedAttributes =
             formatData.presentation?.anoncreds?.requested_proof.revealed_attrs ??
@@ -245,14 +239,46 @@ interface PresentedAnonCredsProof {
   identifiers?: Array<{ cred_def_id: string }>
 }
 
+function registerAnonCredsTrustDecision(agent: VsAgent<BaseAgentModules>, logger: BaseLogger): void {
+  agent.didcomm.registerMessageHandlerMiddleware(async (messageContext, next) => {
+    await next()
+
+    const { connection, message } = messageContext
+    const isPresentation = [
+      DidCommPresentationV1Message.type.messageTypeUri,
+      DidCommPresentationV2Message.type.messageTypeUri,
+    ].includes(message.type)
+
+    if (!isPresentation || !connection) return
+
+    try {
+      const record = await agent.didcomm.proofs.getByThreadAndConnectionId(message.threadId, connection.id)
+      const formatData = await agent.didcomm.proofs.getFormatData(record.id)
+
+      const abandoned = await applyAnonCredsTrustDecision(
+        agent,
+        record,
+        connection,
+        formatData.presentation?.anoncreds ?? formatData.presentation?.indy,
+        logger,
+      )
+
+      if (abandoned) messageContext.responseMessage = undefined
+    } catch (error) {
+      logger.error(`The agent cannot apply the AnonCreds trust decision to ${message.threadId}: ${error}`)
+      messageContext.responseMessage = undefined
+    }
+  })
+}
+
 async function applyAnonCredsTrustDecision(
   agent: VsAgent<BaseAgentModules>,
   record: DidCommProofExchangeRecord,
   connection: DidCommConnectionRecord,
   presentation: PresentedAnonCredsProof | undefined,
   logger: BaseLogger,
-): Promise<void> {
-  if (record.role !== DidCommProofRole.Verifier || !presentation) return
+): Promise<boolean> {
+  if (record.role !== DidCommProofRole.Verifier || !presentation) return false
 
   const identifiers = presentation.identifiers ?? []
   if (identifiers.length === 0) {
@@ -264,7 +290,7 @@ async function applyAnonCredsTrustDecision(
       'the agent cannot read the credential definitions of the presentation',
       logger,
     )
-    return
+    return true
   }
 
   const requestedCredentialSchemas =
@@ -323,7 +349,7 @@ async function applyAnonCredsTrustDecision(
     )
   }
 
-  if (unaccredited.length === 0 && unchecked.length === 0) return
+  if (unaccredited.length === 0 && unchecked.length === 0) return false
 
   const code =
     unaccredited.length > 0
@@ -338,6 +364,8 @@ async function applyAnonCredsTrustDecision(
     [...unaccredited, ...unchecked].join('; '),
     logger,
   )
+
+  return true
 }
 
 async function abandonPresentation(

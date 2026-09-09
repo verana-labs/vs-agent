@@ -6,6 +6,11 @@ import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 import '@hyperledger/anoncreds-nodejs'
 
 import { LogLevel } from '@credo-ts/core'
+import {
+  DidCommMessageSender,
+  DidCommPresentationV2AckMessage,
+  DidCommPresentationV2ProblemReportMessage,
+} from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
@@ -15,6 +20,7 @@ import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
+  createInvitation,
   createJsc,
   ParticipantRole,
   ParticipantState,
@@ -393,6 +399,55 @@ describe('v2 didcomm accept routes, over two agents', () => {
       expect(acknowledged.body.error.code).toBe('INVALID_STATE')
     } finally {
       issuerParticipantIsActive = true
+    }
+  }, 120_000)
+  it('never acknowledges a presentation that fails the trust decision, whatever the autoAccept policy', async () => {
+    const messageSender = faberAgent.dependencyManager.resolve(DidCommMessageSender)
+    const sendMessage = vi.spyOn(messageSender, 'sendMessage')
+
+    // no autoAcceptProof: the exchange takes the module default, which is ContentApproved
+    const requested = await faberAgent.didcomm.proofs.createRequest({
+      protocolVersion: 'v2',
+      proofFormats: {
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: {
+            'gov-id': { names: ['name'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+          },
+        },
+      },
+    })
+    const faberProofId = requested.proofRecord.id
+    const { invitation } = await createInvitation({ agent: faberAgent, messages: [requested.message] })
+
+    issuerParticipantIsActive = false
+
+    try {
+      const known = await idsOf(aliceApp, 'presentations')
+      await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(invitation), {
+        label: aliceAgent.label,
+      })
+      const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
+
+      const accepted = await alice().post(`/v2/didcomm/presentations/${aliceProofId}/accept-request`)
+      expect(accepted.body.error ?? accepted.status).toBe(200)
+
+      await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+      const sentTypes = sendMessage.mock.calls.map(call => call[0].message.type)
+      expect(sentTypes).toContain(DidCommPresentationV2ProblemReportMessage.type.messageTypeUri)
+      expect(sentTypes).not.toContain(DidCommPresentationV2AckMessage.type.messageTypeUri)
+
+      const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+      expect(abandoned.body.verified).toBe(false)
+      expect(abandoned.body.errorMessage).toContain('e.p.issuer-not-authorized')
+
+      const prover = await alice().get(`/v2/didcomm/presentations/${aliceProofId}`)
+      expect(prover.body.state).not.toBe('done')
+    } finally {
+      issuerParticipantIsActive = true
+      sendMessage.mockRestore()
     }
   }, 120_000)
 })
