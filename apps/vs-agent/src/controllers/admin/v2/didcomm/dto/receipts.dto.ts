@@ -1,4 +1,3 @@
-import { MessageState } from '@2060.io/credo-ts-didcomm-receipts'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
@@ -11,6 +10,14 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator'
+
+export enum MessageState {
+  Created = 'created',
+  Submitted = 'submitted',
+  Received = 'received',
+  Viewed = 'viewed',
+  Deleted = 'deleted',
+}
 
 /**
  * One entry of [VSA-ADM-DC-RC-SEND] sendReceipts.

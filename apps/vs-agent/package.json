@@ -59,7 +59,6 @@
     "@2060.io/credo-ts-didcomm-calls": "0.1.0",
     "@2060.io/credo-ts-didcomm-media-sharing": "0.1.1",
     "@2060.io/credo-ts-didcomm-reactions": "^0.1.1",
-    "@2060.io/credo-ts-didcomm-receipts": "0.1.1",
     "@2060.io/credo-ts-didcomm-user-profile": "0.1.0",
     "@credo-ts/action-menu": "catalog:",
     "@credo-ts/anoncreds": "catalog:",
