@@ -296,8 +296,8 @@ async function applyAnonCredsTrustDecision(
   const requestedCredentialSchemas =
     (record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA) as number[] | null) ?? []
 
-  // Only createPresentationRequest records these, so a V1 request abandons here. V1 is on its
-  // way out, so it is not wired for it.
+  // A request whose creator recorded no CredentialSchema cannot be checked against what it asked
+  // for, so it abandons rather than accepting any schema.
   if (requestedCredentialSchemas.length === 0) {
     await abandonPresentation(
       agent,
