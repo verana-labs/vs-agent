@@ -12,7 +12,7 @@ import {
   W3cV2Presentation,
   W3cV2PresentationOptions,
 } from '@credo-ts/core'
-import { DEFAULT_DATA_INTEGRITY_CRYPTOSUITE } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { DEFAULT_DATA_INTEGRITY_CRYPTOSUITE, VtFlowModuleConfig } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
@@ -72,8 +72,21 @@ export function createCredential(options: Partial<W3cV2CredentialOptions>): W3cV
 }
 
 /**
- * Secures a W3C credential or presentation with a Data Integrity proof (`eddsa-jcs-2022`) using the
- * provided agent and verification method.
+ * The Data Integrity cryptosuite this agent is configured with, read from the registered
+ * `VtFlowModuleConfig` so the self trust registry secures its credentials and linked VPs with the
+ * same suite `VtFlowApi.issueCredentialForSession` applies to the credentials it issues. Falls back
+ * to the module default when the vt-flow module is not registered on the agent.
+ */
+export function getDataIntegrityCryptosuite(agent: Pick<VsAgent, 'context'>): string {
+  const { dependencyManager } = agent.context
+  return dependencyManager.isRegistered(VtFlowModuleConfig)
+    ? dependencyManager.resolve(VtFlowModuleConfig).dataIntegrityCryptosuite
+    : DEFAULT_DATA_INTEGRITY_CRYPTOSUITE
+}
+
+/**
+ * Secures a W3C credential or presentation with a Data Integrity proof under the cryptosuite the
+ * agent is configured with, using the provided verification method.
  *
  * A credential is secured for `assertionMethod` and a presentation for `authentication`, the proof
  * purposes VC Data Integrity defines for each; the presentation is published from the DID Document
@@ -101,11 +114,13 @@ export async function signerW3c(
   obj: W3cV2Credential | W3cV2Presentation,
   verificationMethod: string,
 ) {
+  const cryptosuite = getDataIntegrityCryptosuite(agent)
+
   if (obj instanceof W3cV2Credential) {
     return await agent.w3cV2Credentials.signCredential<ClaimFormat.DiVc>({
       format: ClaimFormat.DiVc,
       credential: obj,
-      cryptosuite: DEFAULT_DATA_INTEGRITY_CRYPTOSUITE,
+      cryptosuite,
       verificationMethod,
     })
   }
@@ -115,7 +130,7 @@ export async function signerW3c(
   return await agent.w3cV2Credentials.signPresentation<ClaimFormat.DiVp>({
     format: ClaimFormat.DiVp,
     presentation: obj,
-    cryptosuite: DEFAULT_DATA_INTEGRITY_CRYPTOSUITE,
+    cryptosuite,
     verificationMethod,
   } as W3cV2DiSignPresentationOptions)
 }

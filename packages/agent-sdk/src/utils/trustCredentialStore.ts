@@ -17,7 +17,6 @@ import {
 //@ts-expect-error
 import { purposes } from '@digitalcredentials/jsonld-signatures'
 import type { DataIntegrityCredential } from '@credo-ts/didcomm'
-import { DEFAULT_DATA_INTEGRITY_CRYPTOSUITE } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { VsAgent } from '../agent/VsAgent'
@@ -28,6 +27,7 @@ import {
   createCredential,
   createJsonSchema,
   createJsonSubjectRef,
+  getDataIntegrityCryptosuite,
   getVerificationMethodId,
   linkedVpFragment,
   signerW3c,
@@ -82,19 +82,18 @@ function trustPresentationId(presentation: TrustPresentation): string | undefine
 
 /**
  * Wraps a VC Data Model 2.0 credential in a data model 2.0 presentation secured with a
- * DataIntegrityProof, the counterpart of the linked data proof a data model 1.1 linked VP carries.
- * The presentation is published from the DID Document rather than presented to a verifier, so
- * there is no challenge to bind; its proof purpose is `authentication`, as Data Integrity defines
- * for presentations.
+ * DataIntegrityProof under the cryptosuite the agent is configured with, the counterpart of the
+ * linked data proof a data model 1.1 linked VP carries. The presentation is published from the DID
+ * Document rather than presented to a verifier, so there is no challenge to bind; its proof purpose
+ * is `authentication`, as Data Integrity defines for presentations.
  */
 export async function signLinkedDataIntegrityPresentation(
-  agent: Pick<VsAgent, 'w3cV2Credentials'>,
+  agent: Pick<VsAgent, 'w3cV2Credentials' | 'context'>,
   options: {
     id: string
     holder: string
     credential: W3cV2DataIntegrityVerifiableCredential
     verificationMethodId: string
-    cryptosuite?: string
   },
 ): Promise<W3cV2DataIntegrityVerifiablePresentation> {
   const presentation = new W3cV2Presentation({
@@ -107,7 +106,7 @@ export async function signLinkedDataIntegrityPresentation(
   return await agent.w3cV2Credentials.signPresentation<ClaimFormat.DiVp>({
     format: ClaimFormat.DiVp,
     presentation,
-    cryptosuite: options.cryptosuite ?? DEFAULT_DATA_INTEGRITY_CRYPTOSUITE,
+    cryptosuite: getDataIntegrityCryptosuite(agent),
     verificationMethod: options.verificationMethodId,
   } as W3cV2DiSignPresentationOptions)
 }

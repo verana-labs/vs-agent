@@ -78,7 +78,9 @@ function makeAgent() {
     did: DID,
     config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
     dids: { getCreatedDids: async () => [didRecord], update: didsUpdate },
-    context: { dependencyManager: { resolve: () => ({ update: repositoryUpdate }) } },
+    context: {
+      dependencyManager: { isRegistered: () => false, resolve: () => ({ update: repositoryUpdate }) },
+    },
     w3cV2Credentials: {
       signCredential: async ({ credential }: { credential: W3cV2Credential }) =>
         new W3cV2DataIntegrityVerifiableCredential({

@@ -91,7 +91,7 @@ function agentAfterRealCredential(integrityData: string) {
           securedPresentation: { ...presentation.toJSON(), id: VP_ID, proof: { type: 'DataIntegrityProof' } },
         }),
       },
-      context: { dependencyManager: { resolve: () => ({ update: vi.fn() }) } },
+      context: { dependencyManager: { isRegistered: () => false, resolve: () => ({ update: vi.fn() }) } },
     },
     didDocument,
   }

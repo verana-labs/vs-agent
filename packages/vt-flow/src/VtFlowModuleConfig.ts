@@ -73,7 +73,7 @@ export interface VtFlowEcsIssuanceExemptionContext extends VtFlowAssertVerifiabl
 /** VS-CONN-VS exemption: a Validator MAY accept a peer that is not yet a Verifiable Service when the purpose of the request is the issuance of an ECS Organization, Persona or Service credential. Consulted only on the Validator side, only after `assertVerifiableService` rejected the peer; return `true` to let the flow proceed. */
 export type VtFlowEcsIssuanceExemptionHook = (ctx: VtFlowEcsIssuanceExemptionContext) => Promise<boolean>
 
-/** Cryptosuite securing the VC Data Model 2.0 credentials this agent issues over RFC 0809. */
+/** Default Data Integrity cryptosuite, applied when `dataIntegrityCryptosuite` is not configured. */
 export const DEFAULT_DATA_INTEGRITY_CRYPTOSUITE = 'eddsa-jcs-2022'
 
 /** Options accepted by VtFlowModule; all flags default to false, `oobExpirationDays` defaults to 7, `terminalRetentionDays` to 90, `dataIntegrityCryptosuite` to `eddsa-jcs-2022`. */
@@ -81,9 +81,12 @@ export interface VtFlowModuleConfigOptions {
   oobExpirationDays?: number
   terminalRetentionDays?: number
   /**
-   * Data Integrity cryptosuite used when issuing a VC Data Model 2.0 credential. RFC 0809 leaves
-   * this choice to the issuer, so it is never negotiated with the applicant. Ignored for data
-   * model 1.1 credentials, which are secured with a linked data signature suite instead.
+   * Data Integrity cryptosuite securing the VC Data Model 2.0 credentials this agent issues. RFC 0809
+   * leaves this choice to the issuer, so it is never negotiated with the applicant. Other components
+   * of the agent that produce Data Integrity proofs, such as the self trust registry in
+   * `@verana-labs/vs-agent-sdk`, resolve the registered `VtFlowModuleConfig` and apply the same
+   * suite, so one setting governs every proof the agent signs. Ignored for data model 1.1
+   * credentials, which are secured with a linked data signature suite instead.
    */
   dataIntegrityCryptosuite?: string
   autoAcceptOnboardingRequest?: boolean
