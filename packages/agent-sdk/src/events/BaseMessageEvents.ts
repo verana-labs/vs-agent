@@ -296,6 +296,20 @@ async function applyAnonCredsTrustDecision(
   const requestedCredentialSchemas =
     (record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA) as number[] | null) ?? []
 
+  // Only createPresentationRequest records these, so a V1 request abandons here. V1 is on its
+  // way out, so it is not wired for it.
+  if (requestedCredentialSchemas.length === 0) {
+    await abandonPresentation(
+      agent,
+      record,
+      connection,
+      AnonCredsTrustProblemCode.TrustResolutionUnavailable,
+      'the exchange records no CredentialSchema of its requested credentials',
+      logger,
+    )
+    return true
+  }
+
   const issuersByCredentialSchema = new Map<number, string[]>()
   const unaccredited: string[] = []
   const unchecked: string[] = []
@@ -304,10 +318,7 @@ async function applyAnonCredsTrustDecision(
     try {
       const derived = await agent.anonCredsTrust.deriveCredentialSchema({ credentialDefinitionId })
 
-      if (
-        requestedCredentialSchemas.length > 0 &&
-        !requestedCredentialSchemas.includes(derived.credentialSchemaId)
-      ) {
+      if (!requestedCredentialSchemas.includes(derived.credentialSchemaId)) {
         unaccredited.push(
           `${credentialDefinitionId} presents the CredentialSchema ${derived.credentialSchemaId}, which the request does not ask for`,
         )

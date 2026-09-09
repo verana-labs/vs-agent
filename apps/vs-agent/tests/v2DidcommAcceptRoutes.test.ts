@@ -24,6 +24,7 @@ import {
   createJsc,
   ParticipantRole,
   ParticipantState,
+  REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
   VeranaIndexerService,
   type VeranaChainService,
 } from '@verana-labs/vs-agent-sdk'
@@ -418,6 +419,9 @@ describe('v2 didcomm accept routes, over two agents', () => {
         },
       },
     })
+    requested.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, [CREDENTIAL_SCHEMA_ID])
+    await faberAgent.didcomm.proofs.update(requested.proofRecord)
+
     const faberProofId = requested.proofRecord.id
     const { invitation } = await createInvitation({ agent: faberAgent, messages: [requested.message] })
 
@@ -449,5 +453,36 @@ describe('v2 didcomm accept routes, over two agents', () => {
       issuerParticipantIsActive = true
       sendMessage.mockRestore()
     }
+  }, 120_000)
+  it('abandons a presentation whose exchange records no CredentialSchema of its request', async () => {
+    const requested = await faberAgent.didcomm.proofs.createRequest({
+      protocolVersion: 'v2',
+      proofFormats: {
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: {
+            'gov-id': { names: ['name'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+          },
+        },
+      },
+    })
+    const faberProofId = requested.proofRecord.id
+    const { invitation } = await createInvitation({ agent: faberAgent, messages: [requested.message] })
+
+    const known = await idsOf(aliceApp, 'presentations')
+    await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(invitation), {
+      label: aliceAgent.label,
+    })
+    const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
+
+    const accepted = await alice().post(`/v2/didcomm/presentations/${aliceProofId}/accept-request`)
+    expect(accepted.body.error ?? accepted.status).toBe(200)
+
+    await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+    const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(abandoned.body.verified).toBe(false)
+    expect(abandoned.body.errorMessage).toContain('e.p.trust-resolution-unavailable')
   }, 120_000)
 })
