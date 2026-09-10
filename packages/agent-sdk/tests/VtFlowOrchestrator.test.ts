@@ -92,7 +92,8 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
     }
     const agent = {
       did: 'did:web:agent',
-      label: 'Agent',
+      publicApiBaseUrl: 'https://agent.example',
+      dids: { getCreatedDids: vi.fn(async () => []) },
       config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
       indexer: { findParticipant: vi.fn(async (id: number) => (Number(id) === 5 ? holder : validator)) },
       veranaChain: {

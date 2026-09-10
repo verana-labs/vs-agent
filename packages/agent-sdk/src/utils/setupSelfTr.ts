@@ -20,7 +20,7 @@ import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
 import { createHash } from 'crypto'
 
-import { VsAgent } from '../agent/VsAgent'
+import type { VsAgent } from '../agent/VsAgent'
 import { composeEcsClaims, EcsClaims } from './ecsClaims'
 
 const ajv = new Ajv({ strict: false, allErrors: true })
@@ -42,8 +42,9 @@ export const createJsonSubjectRef = (id: string): W3cCredentialSubject => ({
 })
 
 // fragment format per [VT-CRED-W3C-LINKED-VP]
+export const linkedVpSchemaId = (schemaKey: string): string => schemaKey.replace(/^ecs-/, '')
 export const linkedVpFragment = (schemaKey: string): string =>
-  `vpr-schemas-${schemaKey.replace(/^ecs-/, '')}-vtc-vp`
+  `vpr-schemas-${linkedVpSchemaId(schemaKey)}-vtc-vp`
 
 // A plain array replacer only allowlists property names, applied at every
 // nesting level — nested objects like `claims` and `credentialSchema` would

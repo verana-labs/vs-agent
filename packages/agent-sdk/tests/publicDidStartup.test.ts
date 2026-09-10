@@ -51,7 +51,6 @@ function makeAgent(did: string, wallet: AskarModuleConfigStoreOptions): VsAgent 
     did,
     dependencies: agentDependencies,
     publicApiBaseUrl: `https://${domain}`,
-    label: 'Public DID Startup Test',
     indexer: new VeranaIndexerService({
       baseUrl: 'https://indexer.invalid',
       logger: new ConsoleLogger(LogLevel.Off),
