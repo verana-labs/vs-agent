@@ -4,8 +4,6 @@ import {
   SigningStargateClient,
   GasPrice,
   assertIsDeliverTxSuccess,
-  QueryClient,
-  createProtobufRpcClient,
   type DeliverTxResponse,
 } from '@cosmjs/stargate'
 import { connectComet } from '@cosmjs/tendermint-rpc'
@@ -14,36 +12,13 @@ import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@v
 import {
   Coin,
   CreateOrUpdateParticipantSessionParams,
-  CredentialSchema,
-  CredentialSchemaQueryClient,
-  DelegationQueryClient,
-  DigestQueryClient,
-  Ecosystem,
-  EcosystemQueryClient,
-  OperatorAuthorization,
-  Participant,
-  ParticipantQueryClient,
-  RawParticipant,
   SelfCreateParticipantParams,
   SetParticipantOPToValidatedParams,
   StartParticipantOPParams,
-  StoredDigest,
   VERANA_BECH32_PREFIX,
   VeranaChainConfig,
-  VsOperatorAuthorization,
 } from './types'
 
-const { QueryClientImpl: CsQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/cs/v1/query')
-const { QueryClientImpl: DeQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/de/v1/query')
-const { QueryClientImpl: DiQueryClientImpl } = require('@verana-labs/verana-types/codec/verana/di/v1/query')
-const {
-  QueryClientImpl: EcQueryClientImpl,
-  QueryGetEcosystemRequest,
-} = require('@verana-labs/verana-types/codec/verana/ec/v1/query')
-const {
-  QueryClientImpl: PpQueryClientImpl,
-  QueryListParticipantsRequest,
-} = require('@verana-labs/verana-types/codec/verana/pp/v1/query')
 const {
   MsgSetParticipantOPToValidated,
   MsgCreateOrUpdateParticipantSession,
@@ -56,38 +31,10 @@ const {
   MsgSelfCreateParticipantResponse,
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/tx')
 
-// ParticipantRole.HOLDER (x/pp/types); the only role whose vs_operator may send TriggerResolver (chain Path 1).
-const PARTICIPANT_ROLE_HOLDER = 6
-const PARTICIPANT_ROLE_ISSUER = 1
-
-// QueryListParticipantsRequest.response_max_size caps at 1024 and defaults to 64. The node applies
-// the other filters loosely, so ask for the largest page and match the fields again here.
-const PARTICIPANT_QUERY_MAX_SIZE = 1024
-
 // A simulation signs with an empty signature and runs against the state of the moment, so it
 // reports less gas than the delivery consumes. Cosmos SDK 0.47 made the difference larger (see
 // cosmos-sdk#16020), and cosmjs answers it with a default multiplier of 1.4. Not always enough.
 const DEFAULT_GAS_ADJUSTMENT = 1.5
-
-// the chain answers a query for an unknown record with a NotFound error, not with an empty result
-function isNotFoundError(error: unknown): boolean {
-  return /not found|NotFound|key not found/i.test((error as Error)?.message ?? '')
-}
-
-function mapParticipant(p: RawParticipant): Participant {
-  return {
-    id: p.id,
-    schemaId: p.schemaId,
-    role: p.role,
-    did: p.did,
-    corporation: p.corporationId != null ? String(p.corporationId) : '',
-    validatorParticipantId: p.validatorParticipantId,
-    opState: p.opState as unknown as Participant['opState'],
-    opSummaryDigest: p.opSummaryDigest ?? '',
-    revoked: p.revoked,
-    slashed: p.slashed,
-  }
-}
 
 export class VeranaChainService {
   private signingClient!: SigningStargateClient
@@ -95,12 +42,6 @@ export class VeranaChainService {
   private chainId!: string
   private corporationAddress!: string
   private gasAdjustment!: number
-
-  private ppQuery!: ParticipantQueryClient
-  private deQuery!: DelegationQueryClient
-  private ecQuery!: EcosystemQueryClient
-  private csQuery!: CredentialSchemaQueryClient
-  private diQuery!: DigestQueryClient
 
   constructor(private readonly config: VeranaChainConfig) {}
 
@@ -146,98 +87,11 @@ export class VeranaChainService {
       throw new Error(`[VeranaChain] Chain ID mismatch: expected "${chainId}", got "${this.chainId}"`)
     }
     logger.info(`[VeranaChain] Connected to chain: ${this.chainId}`)
-
-    const queryClient = new QueryClient(cometClient)
-    const rpc = createProtobufRpcClient(queryClient)
-    this.ppQuery = new PpQueryClientImpl(rpc) as ParticipantQueryClient
-    this.deQuery = new DeQueryClientImpl(rpc) as DelegationQueryClient
-    this.ecQuery = new EcQueryClientImpl(rpc) as EcosystemQueryClient
-    this.csQuery = new CsQueryClientImpl(rpc) as CredentialSchemaQueryClient
-    this.diQuery = new DiQueryClientImpl(rpc) as DigestQueryClient
   }
 
-  // Query API (unsigned)
-  async getParticipant(id: number): Promise<Participant | undefined> {
-    const result = await this.ppQuery.GetParticipant({ id })
-    return result.participant ? mapParticipant(result.participant) : undefined
-  }
-
+  // [VSA-VPR-QRY]: the one read left on the ledger, the indexer serves no account balance.
   async getBalance(denom = 'uvna'): Promise<Coin> {
     return this.signingClient.getBalance(this.operatorAddress, denom)
-  }
-
-  async hasVsOperatorAuthorization(): Promise<boolean> {
-    return (await this.listVsOperatorAuthorizations()).length > 0
-  }
-
-  async listOperatorAuthorizations(operator?: string): Promise<OperatorAuthorization[]> {
-    const result = await this.deQuery.ListOperatorAuthorizations({
-      corporationId: 0,
-      operator: operator ?? this.operatorAddress,
-      responseMaxSize: 64,
-    })
-    return result.operatorAuthorizations.map(a => ({
-      id: a.id,
-      corporationId: a.corporationId,
-      operator: a.operator,
-      msgTypes: a.msgTypes,
-      expiration: a.expiration,
-      period: a.period,
-    }))
-  }
-
-  async listVsOperatorAuthorizations(vsOperator?: string): Promise<VsOperatorAuthorization[]> {
-    const result = await this.deQuery.ListVSOperatorAuthorizations({
-      corporationId: 0,
-      vsOperator: vsOperator ?? this.operatorAddress,
-      responseMaxSize: 64,
-    })
-    return result.vsOperatorAuthorizations.map(a => ({
-      id: a.id,
-      corporationId: a.corporationId,
-      vsOperator: a.vsOperator,
-      records: a.records.map(r => ({
-        participantId: r.participantId,
-        msgTypes: r.msgTypes,
-        withFeegrant: r.withFeegrant,
-        expiration: r.expiration,
-        period: r.period,
-      })),
-    }))
-  }
-
-  async getEcosystem(id: number): Promise<Ecosystem | undefined> {
-    // fromPartial fills the unused request fields with defaults so the request encodes correctly.
-    const result = await this.ecQuery.GetEcosystem(QueryGetEcosystemRequest.fromPartial({ id }))
-    if (!result.ecosystem) return undefined
-    const { id: ecosystemId, did, corporationId, archived, activeVersion } = result.ecosystem
-    return { id: ecosystemId, did, corporationId, archived, activeVersion }
-  }
-
-  async getCredentialSchema(id: number): Promise<CredentialSchema | undefined> {
-    const result = await this.csQuery.GetCredentialSchema({ id })
-    if (!result.schema) return undefined
-    const s = result.schema
-    return {
-      id: s.id,
-      ecosystemId: s.ecosystemId,
-      jsonSchema: s.jsonSchema,
-      digestAlgorithm: s.digestAlgorithm,
-      issuerOnboardingMode: s.issuerOnboardingMode,
-      verifierOnboardingMode: s.verifierOnboardingMode,
-      holderOnboardingMode: s.holderOnboardingMode,
-      archived: s.archived,
-    }
-  }
-
-  async getDigest(digest: string): Promise<StoredDigest | undefined> {
-    try {
-      const result = await this.diQuery.GetDigest({ digest })
-      return result.digest
-    } catch (error) {
-      if (isNotFoundError(error)) return undefined
-      throw error
-    }
   }
 
   // Transaction API (signed)
@@ -346,39 +200,6 @@ export class VeranaChainService {
       value,
     })
     return { txHash: result.transactionHash }
-  }
-
-  async findActiveHolderParticipantIdByDid(did: string): Promise<number | undefined> {
-    // fromPartial fills the unused fields with defaults so the request encodes correctly.
-    const request = QueryListParticipantsRequest.fromPartial({
-      did,
-      role: PARTICIPANT_ROLE_HOLDER,
-      responseMaxSize: PARTICIPANT_QUERY_MAX_SIZE,
-    })
-    const { participants } = await this.ppQuery.ListParticipants(request)
-    return participants.find(
-      p => p.did === did && p.role === PARTICIPANT_ROLE_HOLDER && !p.revoked && !p.slashed,
-    )?.id
-  }
-
-  async findActiveIssuerParticipantId(did: string, schemaId: number): Promise<number | undefined> {
-    const request = QueryListParticipantsRequest.fromPartial({
-      did,
-      schemaId,
-      role: PARTICIPANT_ROLE_ISSUER,
-      grantee: this.operatorAddress,
-      responseMaxSize: PARTICIPANT_QUERY_MAX_SIZE,
-    })
-    const { participants } = await this.ppQuery.ListParticipants(request)
-    return participants.find(
-      p =>
-        p.did === did &&
-        p.role === PARTICIPANT_ROLE_ISSUER &&
-        p.schemaId === schemaId &&
-        p.vsOperator === this.operatorAddress &&
-        !p.revoked &&
-        !p.slashed,
-    )?.id
   }
 
   async triggerResolver(participantId: number): Promise<{ txHash: string }> {

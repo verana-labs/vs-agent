@@ -361,15 +361,15 @@ async function anchorCredentialDigest(
   if (!credential) throw new Error(`[DigestAnchor] The presentation for schema ${schemaId} has no credential`)
   if (!agent.did) throw new Error('[DigestAnchor] The agent has no public DID')
 
-  const schema = await chain.getCredentialSchema(schemaId)
+  const schema = await agent.indexer.getCredentialSchema(schemaId).catch(() => undefined)
   if (!schema) throw new Error(`[DigestAnchor] Credential schema ${schemaId} is not on chain`)
 
   const digest = computeCredentialDigestJCS(
     JsonTransformer.toJSON(credential) as unknown as W3cJsonLdVerifiableCredential,
-    schema.digestAlgorithm,
+    schema.digest_algorithm,
   )
   // the same credential gives the same digest on each run, so an anchored digest needs no second transaction
-  if (await chain.getDigest(digest)) return
+  if (await agent.indexer.getDigest(digest)) return
 
   // A self-issued credential has no counterparty, so the session names only the issuer.
   const { txHash } = await chain.createOrUpdateParticipantSession({
@@ -382,6 +382,7 @@ async function anchorCredentialDigest(
   agent.config.logger.info(
     `[DigestAnchor] Anchored digest ${digest} for schema ${schemaId} against issuer participant ${issuerParticipantId} (tx ${txHash})`,
   )
+  await agent.indexer.waitForDigest(digest)
 }
 
 // replaces the self-TR example JSC binding with the on-chain VTJSC so resolvers can link the credential to the VPR

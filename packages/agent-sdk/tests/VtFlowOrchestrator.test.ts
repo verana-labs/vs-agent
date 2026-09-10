@@ -94,7 +94,11 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
       did: 'did:web:agent',
       label: 'Agent',
       config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
-      veranaChain: { getParticipant: vi.fn(async (id: number) => (id === 5 ? holder : validator)) },
+      indexer: { findParticipant: vi.fn(async (id: number) => (Number(id) === 5 ? holder : validator)) },
+      veranaChain: {
+        startParticipantOP: vi.fn(async () => ({ participantId: 5, txHash: 'AA' })),
+        renewParticipantOP: vi.fn(async () => ({ txHash: 'BB' })),
+      },
       dependencyManager: { resolve: () => vtFlowApi },
       context: { resolve: () => ({ update: vi.fn().mockResolvedValue(undefined) }) },
       didcomm: {
@@ -182,8 +186,8 @@ describe('VtFlowOrchestrator onboarding validation', () => {
       did: 'did:web:validator',
       config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
       dependencyManager: { resolve: () => vtFlowApi },
-      veranaChain: {
-        getParticipant: vi.fn(async () => ({
+      indexer: {
+        findParticipant: vi.fn(async () => ({
           id: 94,
           role,
           schemaId: 22,
@@ -191,6 +195,8 @@ describe('VtFlowOrchestrator onboarding validation', () => {
           corporation: 'verana1corp',
           validatorParticipantId: 93,
         })),
+      },
+      veranaChain: {
         setParticipantOPToValidated: vi.fn(async () => undefined),
       },
     }

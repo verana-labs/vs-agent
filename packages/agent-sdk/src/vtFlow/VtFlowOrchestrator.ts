@@ -79,10 +79,10 @@ export class VtFlowOrchestrator {
   ) {}
 
   async startOnboardingProcess(input: StartOnboardingProcessInput): Promise<VtFlowRecord> {
-    const chain = this.requireChain()
+    this.requireChain()
     if (!this.agent.did) throw new Error('Agent has no public DID')
 
-    const holderParticipant = await chain.getParticipant(input.applicantParticipantId)
+    const holderParticipant = await this.agent.indexer.findParticipant(input.applicantParticipantId)
     if (!holderParticipant) {
       throw new Error(`Applicant participant ${input.applicantParticipantId} not found on chain`)
     }
@@ -103,7 +103,9 @@ export class VtFlowOrchestrator {
       throw new Error(`Applicant participant ${input.applicantParticipantId} has no validator_participant_id`)
     }
 
-    const validatorParticipant = await chain.getParticipant(Number(holderParticipant.validatorParticipantId))
+    const validatorParticipant = await this.agent.indexer.findParticipant(
+      Number(holderParticipant.validatorParticipantId),
+    )
     if (!validatorParticipant?.did) {
       throw new Error(`Validator participant ${holderParticipant.validatorParticipantId} not resolvable`)
     }
@@ -186,7 +188,7 @@ export class VtFlowOrchestrator {
     if (!record.participantId) throw new Error('Record has no participantId')
 
     const participantId = Number(record.participantId)
-    const participant = await chain.getParticipant(participantId)
+    const participant = await this.agent.indexer.findParticipant(participantId)
     if (!participant) throw new Error(`Applicant participant ${participantId} not found on chain`)
     if (!participant.did) throw new Error('Applicant participant has no DID')
 
@@ -217,13 +219,14 @@ export class VtFlowOrchestrator {
    * that validateOnboardingProcess built, so that the process does not build the credential twice.
    */
   async offerOnboardingCredential(input: OfferOnboardingCredentialInput): Promise<VtFlowRecord> {
-    const chain = this.requireChain()
+    this.requireChain()
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(input.vtFlowRecordId)
     if (!record) throw new Error(`vt-flow record ${input.vtFlowRecordId} not found`)
     if (!record.participantId) throw new Error('Record has no participantId')
 
-    const participant = input.participant ?? (await chain.getParticipant(Number(record.participantId)))
+    const participant =
+      input.participant ?? (await this.agent.indexer.findParticipant(Number(record.participantId)))
     if (!participant?.did) throw new Error('Applicant participant has no DID')
 
     const unsignedCredentialJson =
