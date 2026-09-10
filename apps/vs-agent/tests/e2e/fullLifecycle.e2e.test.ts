@@ -18,6 +18,7 @@ import {
   reconcileVtFlowRecordsOnCancel,
   reconcileVtjscPublications,
   removeSelfIssuedEcsCredentialsIfIssuerRevoked,
+  REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
   resolveJsonSchemaCredentialId,
   VeranaChainService,
   VeranaIndexerService,
@@ -28,6 +29,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
   PARTICIPANT_ROLE_ISSUER,
+  PARTICIPANT_ROLE_VERIFIER,
   VeranaTestChain,
 } from '../../../../packages/agent-sdk/tests/e2e/VeranaTestChain'
 import {
@@ -39,7 +41,9 @@ import {
 import { mockResponses, startAgent } from '../__mocks__'
 import { FakeDidResolver } from '../__mocks__/fakeDidResolver'
 import { AdminApiError } from '../../src/common'
+import { CredentialTypesService } from '../../src/controllers/admin/credentials'
 import { V2DidcommCredentialExchangesController } from '../../src/controllers/admin/v2/didcomm/V2DidcommCredentialExchangesController'
+import { V2DidcommPresentationsController } from '../../src/controllers/admin/v2/didcomm/V2DidcommPresentationsController'
 import {
   isVtFlowStateChangedEvent,
   SubjectInboundTransport,
@@ -760,13 +764,26 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
 
     let validatorDid: string
     let trustSchemaId: number
+    let trustRootParticipantId: number
     let trustParticipantId: number
     let jsonSchemaCredentialId: string
     let anonCredsSchemaId: string
     let credentialDefinitionId: string
     let controller: V2DidcommCredentialExchangesController
+    let presentations: V2DidcommPresentationsController
 
     const offerBody = () => ({ credentialDefinitionId, claims })
+
+    const untilParticipantCount = (role: ParticipantRole, count: number) =>
+      until(async () => {
+        const participants = await indexer.listParticipants({
+          did: validatorDid,
+          role,
+          schemaId: trustSchemaId,
+          participantState: ParticipantState.Active,
+        })
+        return participants.length === count ? true : undefined
+      })
 
     beforeAll(async () => {
       if (!validator.did) throw new Error('the validator agent has no public DID')
@@ -783,16 +800,13 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         schemaId: trustSchemaId,
         did: `did:example:trust-root-${RUN_ID}`,
       })
+      trustRootParticipantId = root.participantId
       const participant = await chainA.startParticipantOp(corpPolicyAddress, {
         role: PARTICIPANT_ROLE_ISSUER,
-        validatorParticipantId: root.participantId,
+        validatorParticipantId: trustRootParticipantId,
         did: validatorDid,
       })
       trustParticipantId = participant.participantId
-      await seederChain.setParticipantOPToValidated({
-        id: trustParticipantId,
-        opSummaryDigest: 'sha384-trust',
-      })
 
       const vtjsc = (await createJsc(
         validator,
@@ -878,17 +892,34 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         { createShortUrl: async () => 'short-trust' } as never,
         validator.publicApiBaseUrl,
       )
-
-      await until(async () => {
-        const participants = await indexer.listParticipants({
-          did: validatorDid,
-          role: ParticipantRole.Issuer,
-          schemaId: trustSchemaId,
-          participantState: ParticipantState.Active,
-        })
-        return participants.length > 0 ? true : undefined
-      })
+      presentations = new V2DidcommPresentationsController(
+        { getAgent: async () => validator } as never,
+        { createShortUrl: async () => 'short-trust' } as never,
+        new CredentialTypesService({ getAgent: async () => validator } as never),
+        validator.publicApiBaseUrl,
+      )
     }, SETUP_TIMEOUT_MS)
+
+    it(
+      'refuses an offer until the chain validates the ISSUER Participant',
+      async () => {
+        const error = await controller.createCredentialOffer(offerBody() as never).catch(caught => caught)
+
+        expect(error).toBeInstanceOf(AdminApiError)
+        expect(error.code).toBe('NOT_AUTHORIZED')
+        expect(error.status).toBe(409)
+
+        await seederChain.setParticipantOPToValidated({
+          id: trustParticipantId,
+          opSummaryDigest: 'sha384-trust',
+        })
+        await untilParticipantCount(ParticipantRole.Issuer, 1)
+
+        const offer = await controller.createCredentialOffer(offerBody() as never)
+        expect(offer.credentialExchangeId).toBeDefined()
+      },
+      SETUP_TIMEOUT_MS,
+    )
 
     it(
       'derives the CredentialSchema and the Ecosystem DID from the indexer',
@@ -961,21 +992,105 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         expect(offer.credentialExchangeId).toBeDefined()
 
         await chainA.revokeParticipant(corpPolicyAddress, trustParticipantId)
-        await until(async () => {
-          const participants = await indexer.listParticipants({
-            did: validatorDid,
-            role: ParticipantRole.Issuer,
-            schemaId: trustSchemaId,
-            participantState: ParticipantState.Active,
-          })
-          return participants.length === 0 ? true : undefined
-        })
+        await untilParticipantCount(ParticipantRole.Issuer, 0)
 
         const error = await controller.createCredentialOffer(offerBody() as never).catch(caught => caught)
 
         expect(error).toBeInstanceOf(AdminApiError)
         expect(error.code).toBe('NOT_AUTHORIZED')
         expect(error.status).toBe(409)
+      },
+      SETUP_TIMEOUT_MS,
+    )
+
+    it(
+      'requests a presentation once the chain validates the VERIFIER Participant, and refuses once it revokes it',
+      async () => {
+        const byCredentialDefinition = () => ({ requestedCredentials: [{ credentialDefinitionId }] })
+        const byJsonSchemaCredential = () => ({ requestedCredentials: [{ jsonSchemaCredentialId }] })
+
+        for (const body of [byCredentialDefinition(), byJsonSchemaCredential()]) {
+          const error = await presentations.createPresentationRequest(body as never).catch(caught => caught)
+
+          expect(error).toBeInstanceOf(AdminApiError)
+          expect(error.code).toBe('NOT_AUTHORIZED')
+          expect(error.status).toBe(409)
+        }
+
+        const verifier = await chainA.startParticipantOp(corpPolicyAddress, {
+          role: PARTICIPANT_ROLE_VERIFIER,
+          validatorParticipantId: trustRootParticipantId,
+          did: validatorDid,
+        })
+        await seederChain.setParticipantOPToValidated({
+          id: verifier.participantId,
+          opSummaryDigest: 'sha384-verifier',
+        })
+        await untilParticipantCount(ParticipantRole.Verifier, 1)
+
+        const cases = [
+          [byCredentialDefinition(), { cred_def_id: credentialDefinitionId }],
+          [byJsonSchemaCredential(), { schema_id: anonCredsSchemaId }],
+        ] as const
+
+        for (const [body, restriction] of cases) {
+          const { proofExchangeId } = await presentations.createPresentationRequest(body as never)
+
+          const record = await validator.didcomm.proofs.getById(proofExchangeId)
+          expect(record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA)).toEqual({
+            AnonCredsTrustCredential: {
+              credentialSchemaId: trustSchemaId,
+              ecosystemDid: validatorDid,
+              jsonSchemaCredentialId,
+            },
+          })
+
+          const { request } = await validator.didcomm.proofs.getFormatData(proofExchangeId)
+          const groups = Object.values(request?.anoncreds?.requested_attributes ?? {})
+          expect(groups[0]?.restrictions).toEqual([restriction])
+        }
+
+        await chainA.revokeParticipant(corpPolicyAddress, verifier.participantId)
+        await untilParticipantCount(ParticipantRole.Verifier, 0)
+
+        const error = await presentations
+          .createPresentationRequest(byCredentialDefinition() as never)
+          .catch(caught => caught)
+
+        expect(error).toBeInstanceOf(AdminApiError)
+        expect(error.code).toBe('NOT_AUTHORIZED')
+        expect(error.status).toBe(409)
+      },
+      SETUP_TIMEOUT_MS,
+    )
+
+    it(
+      'answers RESOLVER_UNAVAILABLE, and starts no exchange, while the indexer is unreachable',
+      async () => {
+        const reachable = validator.indexer
+        validator.indexer = new VeranaIndexerService({ baseUrl: 'http://127.0.0.1:1', logger })
+
+        const credentialExchanges = (await validator.didcomm.credentials.getAll()).length
+        const proofExchanges = (await validator.didcomm.proofs.getAll()).length
+
+        try {
+          const offerError = await controller.createCredentialOffer(offerBody() as never).catch(c => c)
+          expect(offerError).toBeInstanceOf(AdminApiError)
+          expect(offerError.code).toBe('RESOLVER_UNAVAILABLE')
+          expect(offerError.status).toBe(503)
+
+          const requestError = await presentations
+            .createPresentationRequest({ requestedCredentials: [{ credentialDefinitionId }] } as never)
+            .catch(c => c)
+          expect(requestError).toBeInstanceOf(AdminApiError)
+          expect(requestError.code).toBe('RESOLVER_UNAVAILABLE')
+          expect(requestError.status).toBe(503)
+
+          expect((await validator.didcomm.credentials.getAll()).length).toBe(credentialExchanges)
+          expect((await validator.didcomm.proofs.getAll()).length).toBe(proofExchanges)
+        } finally {
+          validator.indexer = reachable
+        }
       },
       SETUP_TIMEOUT_MS,
     )
