@@ -49,14 +49,14 @@ export function registerAuthorizationHandlers(
   }
 
   for (const msg of REFRESH_MSGS) {
-    wrap(msg, () => authorizationService.refreshForOperator())
+    wrap(msg, activity => authorizationService.refreshForOperator(Number(activity.block_height)))
   }
 
   for (const msg of REVOKE_MSGS) {
     wrap(msg, async activity => {
       const participantId = Number(activity.entity_id)
       if (Number.isFinite(participantId)) authorizationService.invalidateParticipant(participantId)
-      await authorizationService.refreshForOperator()
+      await authorizationService.refreshForOperator(Number(activity.block_height))
     })
   }
 }

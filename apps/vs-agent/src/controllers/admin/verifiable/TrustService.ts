@@ -194,21 +194,25 @@ export class TrustService {
 
     if (!agent.did)
       throw new HttpException('ANCHORING_FAILED: agent has no public DID', HttpStatus.BAD_GATEWAY)
-    const issuerParticipantId = await chain.findActiveIssuerParticipantId(agent.did, schemaId)
+    const issuerParticipantId = await agent.indexer.findActiveIssuerParticipantId(
+      agent.did,
+      schemaId,
+      chain.address,
+    )
     if (issuerParticipantId === undefined)
       throw new HttpException(
         `ANCHORING_FAILED: no active ISSUER participant for schema ${schemaId}`,
         HttpStatus.BAD_GATEWAY,
       )
 
-    const schema = await chain.getCredentialSchema(schemaId)
-    if (!schema?.digestAlgorithm)
+    const schema = await agent.indexer.getCredentialSchema(schemaId).catch(() => undefined)
+    if (!schema?.digest_algorithm)
       throw new HttpException(
         `ANCHORING_FAILED: credential schema ${schemaId} has no digest_algorithm`,
         HttpStatus.BAD_GATEWAY,
       )
 
-    const digestJCS = computeCredentialDigestJCS(credential as never, schema.digestAlgorithm)
+    const digestJCS = computeCredentialDigestJCS(credential as never, schema.digest_algorithm)
     try {
       await chain.createOrUpdateParticipantSession({
         id: session.participantSessionId,

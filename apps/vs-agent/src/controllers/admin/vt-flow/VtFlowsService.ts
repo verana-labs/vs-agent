@@ -197,13 +197,13 @@ export class VtFlowsService {
     records: VtFlowRecord[],
     validatorParticipantId: string,
   ): Promise<VtFlowRecord[]> {
-    const chain = this.requireChain(agent)
+    this.requireChain(agent)
     const validatorByApplicant = new Map<string, string | undefined>()
     const kept: VtFlowRecord[] = []
     for (const record of records) {
       if (!record.participantId) continue
       if (!validatorByApplicant.has(record.participantId)) {
-        const participant = await chain.getParticipant(Number(record.participantId)).catch(() => undefined)
+        const participant = await agent.indexer.findParticipant(record.participantId).catch(() => undefined)
         validatorByApplicant.set(
           record.participantId,
           participant?.validatorParticipantId ? String(participant.validatorParticipantId) : undefined,
