@@ -50,10 +50,18 @@ export function isConnectionProfileUpdatedEvent(arg: unknown): arg is DidCommCon
   )
 }
 
-export const startServersTesting = async (agent: VsAgent<BaseAgentModules>): Promise<INestApplication> => {
+export const startServersTesting = async (
+  agent: VsAgent<BaseAgentModules>,
+  options?: { chat?: boolean },
+): Promise<INestApplication> => {
+  const chat = options?.chat !== false
   const moduleRef = await Test.createTestingModule({
     imports: [
-      VsAgentModule.register(agent, 'http://localhost:3001', [MessagingPlugin, ChatPlugin]),
+      VsAgentModule.register(
+        agent,
+        'http://localhost:3001',
+        chat ? [MessagingPlugin, ChatPlugin] : [MessagingPlugin],
+      ),
       PublicModule.register(agent, 'http://localhost:3001'),
     ],
   }).compile()
@@ -66,6 +74,6 @@ export const startServersTesting = async (agent: VsAgent<BaseAgentModules>): Pro
     publicApiBaseUrl: 'http://localhost:3001',
     endpoints: agent.didcomm.config.endpoints,
   }
-  chatEvents(agent as any, conf.logger)
+  if (chat) chatEvents(agent as any, conf.logger)
   return app
 }

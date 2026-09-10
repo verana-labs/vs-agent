@@ -39,6 +39,7 @@ import {
 import { VtFlowModule } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
+import { AnonCredsTrustService } from '../blockchain/AnonCredsTrustService'
 import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
@@ -104,6 +105,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public ecsClaims?: EcsClaims
   public authorizationService?: AuthorizationService
   public discoveryOptions?: DidCommFeatureQueryOptions[]
+  public readonly anonCredsTrust: AnonCredsTrustService
 
   public constructor(
     options: AgentOptions<TModules> & {
@@ -134,6 +136,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.ecsClaims = options.ecsClaims
     this.authorizationService = options.authorizationService
     this.discoveryOptions = options.discoveryOptions
+    this.anonCredsTrust = new AnonCredsTrustService(this as VsAgent)
   }
 
   private get hasUserProfile(): boolean {

@@ -28,7 +28,7 @@ import {
   TerminateConnectionMessage,
   VerifiableCredentialRequestedProofItem,
 } from '@verana-labs/vs-agent-model'
-import { validateSchema, VsAgent } from '@verana-labs/vs-agent-sdk'
+import { REQUESTED_CREDENTIAL_SCHEMAS_METADATA, validateSchema, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { CredentialTypesService } from '../../credentials'
 
@@ -350,6 +350,16 @@ export class BaseMessageHandler implements MessageHandler {
             credentialDefinitionId,
             attributes,
           } as RequestedCredential)
+          try {
+            const { credentialSchemaId } = await agent.anonCredsTrust.deriveCredentialSchema({
+              credentialDefinitionId,
+            })
+            record.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, [credentialSchemaId])
+          } catch (error) {
+            agent.config.logger.warn(
+              `[BaseMessageHandler] the requested credential binds to no CredentialSchema, so the presentation cannot be checked: ${error}`,
+            )
+          }
           await agent.didcomm.proofs.update(record)
         }
       }
