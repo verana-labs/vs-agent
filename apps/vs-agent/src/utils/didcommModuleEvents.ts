@@ -11,19 +11,21 @@ import {
   DidCommProfileEventTypes,
 } from '@2060.io/credo-ts-didcomm-user-profile'
 
+import { moduleOf } from './didcommModules'
+
 type Message = Record<string, any>
 
 type Deliver = (type: string, data: unknown) => void
 
-const MODULES: Record<string, string> = {
-  'https://didcomm.org/receipts/1.0': 'receipts',
-  'https://didcomm.org/reactions/1.0': 'reactions',
-  'https://didcomm.org/user-profile/1.0': 'user-profile',
-  'https://didcomm.org/media-sharing/1.0': 'media-sharing',
-  'https://didcomm.org/calls/1.0': 'calls',
-  'https://didcomm.org/action-menu/1.0': 'action-menu',
-  'https://didcomm.org/questionanswer/1.0': 'question-answer',
-}
+const MIDDLEWARE_MODULES = new Set([
+  'receipts',
+  'reactions',
+  'user-profile',
+  'media-sharing',
+  'calls',
+  'action-menu',
+  'question-answer',
+])
 
 const CATALOG: Record<string, (message: Message, connectionId: string) => Record<string, unknown>> = {
   'https://didcomm.org/receipts/1.0/message-receipts': (message, connectionId) => ({
@@ -95,8 +97,8 @@ export function registerDidcommModuleEvents(agent: VsAgent, deliver: Deliver): v
     const { message, connection } = context
     if (!connection) return
 
-    const module = MODULES[protocolOf(message.type)]
-    if (!module || FROM_MODULE_EVENT.has(message.type)) return
+    const module = moduleOf(protocolOf(message.type))
+    if (!module || !MIDDLEWARE_MODULES.has(module) || FROM_MODULE_EVENT.has(message.type)) return
 
     const data = CATALOG[message.type]?.(message as Message, connection.id) ?? {
       connectionId: connection.id,
