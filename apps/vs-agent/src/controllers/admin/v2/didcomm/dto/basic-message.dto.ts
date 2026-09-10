@@ -59,7 +59,7 @@ export class BasicMessageRecordDto {
   })
   sentTime!: string
 
-  @ApiProperty({ description: 'When the agent stored the record' })
+  @ApiProperty({ type: String, format: 'date-time', description: 'When the flow was created' })
   createdAt!: Date
 }
 
