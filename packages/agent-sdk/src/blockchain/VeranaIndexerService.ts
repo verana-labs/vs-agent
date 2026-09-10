@@ -36,13 +36,21 @@ export class VeranaIndexerService {
     return fetchJson<IndexerEventsResponse>(url, REQUEST_TIMEOUT_MS)
   }
 
-  async getEcosystem(id: string | number): Promise<EcosystemDto> {
+  async getEcosystem(id: string | number): Promise<EcosystemDto>
+  async getEcosystem(id: string | number, options: { allowNotFound: true }): Promise<EcosystemDto | undefined>
+  async getEcosystem(
+    id: string | number,
+    options?: { allowNotFound?: boolean },
+  ): Promise<EcosystemDto | undefined> {
     this.config.logger.debug(`[VeranaIndexer] getEcosystem id=${id}`)
-    const data = await fetchJson<{ ecosystem: EcosystemDto }>(
-      `${this.baseUrl}/v4/ecosystem/get/${encodeURIComponent(id)}`,
-      REQUEST_TIMEOUT_MS,
-    )
-    return data.ecosystem
+    const url = `${this.baseUrl}/v4/ecosystem/get/${encodeURIComponent(id)}`
+    const data = options?.allowNotFound
+      ? await fetchJson<{ ecosystem: EcosystemDto }>(url, {
+          timeoutMs: REQUEST_TIMEOUT_MS,
+          allowNotFound: true,
+        })
+      : await fetchJson<{ ecosystem: EcosystemDto }>(url, REQUEST_TIMEOUT_MS)
+    return data?.ecosystem
   }
 
   async listEcosystems(): Promise<EcosystemDto[]> {
@@ -63,13 +71,24 @@ export class VeranaIndexerService {
     return data.schemas
   }
 
-  async getCredentialSchema(id: string | number): Promise<CredentialSchemaDto> {
+  async getCredentialSchema(id: string | number): Promise<CredentialSchemaDto>
+  async getCredentialSchema(
+    id: string | number,
+    options: { allowNotFound: true },
+  ): Promise<CredentialSchemaDto | undefined>
+  async getCredentialSchema(
+    id: string | number,
+    options?: { allowNotFound?: boolean },
+  ): Promise<CredentialSchemaDto | undefined> {
     this.config.logger.debug(`[VeranaIndexer] getCredentialSchema id=${id}`)
-    const data = await fetchJson<{ schema: CredentialSchemaDto }>(
-      `${this.baseUrl}/v4/credential-schema/get/${encodeURIComponent(id)}`,
-      REQUEST_TIMEOUT_MS,
-    )
-    return data.schema
+    const url = `${this.baseUrl}/v4/credential-schema/get/${encodeURIComponent(id)}`
+    const data = options?.allowNotFound
+      ? await fetchJson<{ schema: CredentialSchemaDto }>(url, {
+          timeoutMs: REQUEST_TIMEOUT_MS,
+          allowNotFound: true,
+        })
+      : await fetchJson<{ schema: CredentialSchemaDto }>(url, REQUEST_TIMEOUT_MS)
+    return data?.schema
   }
 
   async getParticipant(id: string | number): Promise<ParticipantDto> {
