@@ -17,9 +17,7 @@ adminApiTrustedNetworks: "" # Comma-separated CIDR blocks served without authent
 adminApiCorporationAllowedAccounts: "" # Comma-separated allowlist of Verana account addresses, required non-empty when adminApiAuthMode is corporation
 
 # Agent configuration
-didcommLabel: "VS Agent"
 eventsWebhookUrl: "" # leave empty to deliver no event
-didcommInvitationImageUrl: "https://image.{{ .Values.global.domain }}/invitation.png"
 # enablePublicApiSwagger: true # Enable Swagger documentation for the VS Agent service (its recommended only for development environments)
 publicDidMethod: "webvh"
 

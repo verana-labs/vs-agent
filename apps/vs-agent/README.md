@@ -16,18 +16,16 @@ These variables are usually important for every deployment, since they define ho
 
 | Variable                   | Description                                                       | Default value           |
 | -------------------------- | ----------------------------------------------------------------- | ----------------------- |
-| AGENT_PORT                 | Port where DIDComm agent will be running                          | 3001                    |
-| ADMIN_PORT                 | Administration interface port                                     | 3000                    |
+| PUBLIC_API_PORT            | Port where the public endpoints and inbound DIDComm are served    | 3001                    |
+| ADMIN_API_PORT             | Administration API port, must differ from PUBLIC_API_PORT         | 3000                    |
 | PUBLIC_API_BASE_URL        | Public base URL where the agent is reachable. **Required**        | none                    |
 | AGENT_PUBLIC_DID_METHOD    | DID method for the agent's public DID: `webvh` or `web`           | webvh                   |
-| AGENT_INVITATION_IMAGE_URL | Public URL for image to be shown in invitations                   | none                    |
-| AGENT_LABEL                | Label to show to other DIDComm agents                             | Test VS Agent           |
 | EVENTS_WEBHOOK_URL         | URL the agent posts every event to. No event is delivered when unset | (none)               |
 | EVENTS_WEBHOOK_API_KEY     | Secret sent as `Authorization: Bearer` with every event delivery  | (none)                  |
 
-VS Agent includes a public and an administration interface, each running in ports 3001 and 3000 respectively (which could be overriden by setting `AGENT_PORT` and `ADMIN_PORT` in case you are running the application locally and these ports are used by other apps).
+VS Agent includes a public and an administration interface, each running in ports 3001 and 3000 respectively (which could be overriden by setting `PUBLIC_API_PORT` and `ADMIN_API_PORT` in case you are running the application locally and these ports are used by other apps).
 
-In order to make your agent reachable by other VS agents and user agents like Hologram, you need to expose your `AGENT_PORT` to the internet and set `PUBLIC_API_BASE_URL` to the URL where it is publicly accessible. The agent derives its public DID location from that URL: the host, the port (`%3A`-encoded) and any path segments (colon-separated). For example, `https://myagent.com:3001` yields `did:web:myagent.com%3A3001`, and `https://example.com/dids/issuer` yields `did:webvh:<SCID>:example.com:dids:issuer`. For `did:webvh` (the default method), the `SCID` is calculated automatically. The URL must not contain userinfo, a query or a fragment.
+In order to make your agent reachable by other VS agents and user agents like Hologram, you need to expose your `PUBLIC_API_PORT` to the internet and set `PUBLIC_API_BASE_URL` to the URL where it is publicly accessible. The agent derives its public DID location from that URL: the host, the port (`%3A`-encoded) and any path segments (colon-separated). For example, `https://myagent.com:3001` yields `did:web:myagent.com%3A3001`, and `https://example.com/dids/issuer` yields `did:webvh:<SCID>:example.com:dids:issuer`. For `did:webvh` (the default method), the `SCID` is calculated automatically. The URL must not contain userinfo, a query or a fragment.
 
 > **Note**: You'll need HTTPS in order to fully support the did:web and did:webvh specifications.
 >
@@ -36,8 +34,6 @@ In order to make your agent reachable by other VS agents and user agents like Ho
 > When `PUBLIC_API_BASE_URL` contains a path, the DID document is served at `<base>/did.json` and `<base>/did.jsonl` instead of under `/.well-known`. This assumes the reverse proxy strips the base path before forwarding requests to the agent.
 >
 > The persisted DID wins across restarts: if `PUBLIC_API_BASE_URL` later derives a different location than the one the DID was created for, the agent refuses to start. Restore the previous URL, or deliberately reset the wallet to mint a new DID.
-
-You'll also need to set up an `AGENT_LABEL` and (optionally) an `AGENT_INVITATION_IMAGE_URL` so when DIDComm agents scan an invitation to your service they can identify it easily.
 
 Besides these parameters, you are likely to use your VS Agent alongside a **controller** app that will be sending messages and also receiving events from it (such as new messages arrived, new connections, etc.). For that purpose, you'll need to set up an `EVENTS_WEBHOOK_URL` for your VS Agent to be able to send WebHooks to it. See the [VS Agent API document](../../doc//vs-agent-api.md#events) for the events your backend receives.
 
@@ -79,22 +75,11 @@ Here is a couple of variables that you may want to take care in case of troubles
 
 | Variable        | Description                                                          | Default value |
 | --------------- | -------------------------------------------------------------------- | ------------- |
-| AGENT_LOG_LEVEL | Credo Agent Log level                                                | 4 (warn)      |
-| ADMIN_LOG_LEVEL | Admin interface Log level                                            | 3 (info)     |
+| AGENT_LOG_LEVEL | Agent log level: trace, debug, info, warn, error or off              | warn          |
+| ADMIN_API_LOG_LEVEL | Administration API log level, same values                        | info          |
 | USE_CORS        | Enable Cross-Origin Resource Sharing (only for development purposes) | false         |
 | ENABLE_PUBLIC_API_SWAGGER  | Enable Swagger documentation for public API (recommended only for development environments) | false |
 
-
-Possible log levels:
-
-- 0: test
-- 1: trace
-- 2: debug
-- 3: info
-- 4: warn
-- 5: error
-- 6: fatal
-- 7: off
 
 #### Advanced/specific use variables
 
@@ -102,11 +87,8 @@ These are variables that are updated only on specific use cases.
 
 | Variable                               | Description                                                                                                                                                                                                                                      | Default value            |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
-| AGENT_ENDPOINTS                        | Comma-separeated list of endpoints where agent DIDComm endpoints will be accessible (including protocol and port). By default they are derived from PUBLIC_API_BASE_URL                                                                          | wss://<derived location> |
 | AGENT_WALLET_KEY_DERIVATION_METHOD     | Wallet key derivation method: ARGON2I_INT, ARGON2_MOD or RAW                                                                                                                                                                                     | ARGON2I_MOD              |
-| AGENT_INVITATION_BASE_URL              | Public URL for fallback when no DIDComm agent is found                                                                                                                                                                                           | <https://hologram.zone/> |
-| REDIRECT_DEFAULT_URL_TO_INVITATION_URL | Default redirect to AGENT_INVITATION_BASE_URL                                                                                                                                                                                                    | true                     |
-| MASTER_LIST_CSCA_LOCATION              | **Enables the eMRTD verification module**. Location (URL or absolute path) of the CSCA Master List in **LDIF** format When set, VS Agent loads trust anchors at startup and activates ePassport verification capabilities.                       | none                     |
+| MRTD_MASTER_LIST_CSCA_LOCATION              | **Enables the eMRTD verification module**. Location (URL or absolute path) of the CSCA Master List in **LDIF** format When set, VS Agent loads trust anchors at startup and activates ePassport verification capabilities.                       | none                     |
 | AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP   | Toggle automatic storage migration on startup. If true, the agent runs migrations and attempts to make a backup of the wallet on startup                                                                                                         | false                    |
 | AGENT_BACKUP_BEFORE_STORAGE_UPDATE     | Toggle backup before storage update. If true, the agent creates a backup of the wallet using Askar's export before performing storage migrations                                                                                                 | false                    |
 | VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. Set by the Docker image in production, only override in development. See [Plugin system](#plugin-system) for available values.                                                               | `messaging,chat`         |
@@ -143,7 +125,7 @@ As allowed by [VS-CONN-VS], a Validator still accepts a peer that is not a Verif
 
 #### Admin API authentication
 
-The Admin API is served on a single port (`ADMIN_PORT`). Each request is classified on the peer address of its TCP connection: a request from a network in `ADMIN_API_TRUSTED_NETWORKS` is served without authentication, every other request is external. Forwarding headers such as `X-Forwarded-For` are never read for this classification. In `internal` mode every external request is rejected with `403`. In `corporation` mode an external caller gets a bearer token by signing a challenge with its Verana account key (ADR-036) via `POST /v2/auth/challenge` and `POST /v2/auth/token`, and its account must be in `ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS`. The health probes (`GET /v2/agent/health/live` and `/v2/agent/health/ready`) are always served without authentication.
+The Admin API is served on a single port (`ADMIN_API_PORT`). Each request is classified on the peer address of its TCP connection: a request from a network in `ADMIN_API_TRUSTED_NETWORKS` is served without authentication, every other request is external. Forwarding headers such as `X-Forwarded-For` are never read for this classification. In `internal` mode every external request is rejected with `403`. In `corporation` mode an external caller gets a bearer token by signing a challenge with its Verana account key (ADR-036) via `POST /v2/auth/challenge` and `POST /v2/auth/token`, and its account must be in `ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS`. The health probes (`GET /v2/agent/health/live` and `/v2/agent/health/ready`) are always served without authentication.
 
 | Variable                                 | Required | Description                                                                                                                                          |
 | ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -203,7 +185,7 @@ The **eMRTD verification module** allows VS Agent to verify the authenticity and
 #### Master List format and location
 
 - **Format:** The Master List **must be in LDIF** format (`.ldif`). Other formats are not supported.
-- **Location:** Provide the location via `MASTER_LIST_CSCA_LOCATION` using one of the following:
+- **Location:** Provide the location via `MRTD_MASTER_LIST_CSCA_LOCATION` using one of the following:
   - `https://...` — fetch over HTTPS on startup.
   - `file:///...` — local file through a file URL.
   - Absolute path — e.g., `/opt/icao/csca.ldif` inside the container/host.
@@ -211,7 +193,7 @@ The **eMRTD verification module** allows VS Agent to verify the authenticity and
 
 #### How it works
 
-1. On startup, VS Agent checks the environment variable `MASTER_LIST_CSCA_LOCATION`.
+1. On startup, VS Agent checks the environment variable `MRTD_MASTER_LIST_CSCA_LOCATION`.
 2. If present, the agent parses the Master List and loads the CSCA certificates as trust anchors.
 3. During verification, the agent validates the `EF.SOD` signature against the DS certificate chain anchored in the CSCA and verifies the integrity of the referenced Data Groups by recomputing and comparing the digests.
 4. Verification results are made available to the internal flows of VS Agent (exact endpoints and payloads depend on your integration).
@@ -220,7 +202,7 @@ The **eMRTD verification module** allows VS Agent to verify the authenticity and
 
 - The Master List must be a valid `.ldif` file containing CSCA certificates. Make sure the file is present inside the running container or host environment and readable by the process user.
 
-- If MASTER_LIST_CSCA_LOCATION is not set, the eMRTD Authenticity & Integrity Verification remains disabled and the agent only send EMrtd data parsed.
+- If MRTD_MASTER_LIST_CSCA_LOCATION is not set, the eMRTD Authenticity & Integrity Verification remains disabled and the agent only send EMrtd data parsed.
 
 - For more information about authenticity & integrity verification, see: [credo-ts-didcomm-mrtd Authenticity & Integrity Verification](https://github.com/2060-io/credo-ts-didcomm-ext/blob/main/packages/mrtd/docs/mrtd-authenticity-integrity.md).
 
@@ -230,8 +212,8 @@ Use the `vs-agent-mrtd` Docker image (it bundles `@verana-labs/vs-agent-plugin-m
 
 ```bash
 # .env example
-MASTER_LIST_CSCA_LOCATION=/opt/vs-agent/icao/ML_ICAO_2025-07-10.ldif
-MASTER_LIST_CSCA_LOCATION=https://pkddownloadsg.icao.int/file?id=f6e328050fd481060e787569dd8e998c43f14230
+MRTD_MASTER_LIST_CSCA_LOCATION=/opt/vs-agent/icao/ML_ICAO_2025-07-10.ldif
+MRTD_MASTER_LIST_CSCA_LOCATION=https://pkddownloadsg.icao.int/file?id=f6e328050fd481060e787569dd8e998c43f14230
 ```
 
 ## Plugin system

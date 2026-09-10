@@ -117,12 +117,6 @@ The Chatbot service loads and registers this file with VS Agent on startup. To a
 
 #### Other configurations
 
-- Disable redirect to pure invitation URL:
-
-```bash
-export REDIRECT_DEFAULT_URL_TO_INVITATION_URL=false
-```
-
 - Adjust ports or service names in `docker-compose.yml`.
 
 ## Flow Diagram
