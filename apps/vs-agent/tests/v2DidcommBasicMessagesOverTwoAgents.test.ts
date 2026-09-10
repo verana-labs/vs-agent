@@ -30,9 +30,10 @@ const HOOK = 'http://events.test/hook'
 const MESSAGE_RECEIVED = 'didcomm.basic-messages.message-received'
 
 async function startAdminApi(agent: VsAgent<BaseAgentModules>): Promise<INestApplication> {
+  const mrtd = await import('@verana-labs/vs-agent-plugin-mrtd').catch(() => null)
   const moduleRef = await Test.createTestingModule({
     imports: [
-      VsAgentModule.register(agent, PUBLIC_API_BASE_URL, []),
+      VsAgentModule.register(agent, PUBLIC_API_BASE_URL, mrtd ? [mrtd.MrtdPlugin()] : []),
       PublicModule.register(agent, PUBLIC_API_BASE_URL),
     ],
   }).compile()

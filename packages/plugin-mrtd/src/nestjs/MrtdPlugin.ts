@@ -10,6 +10,7 @@ export const MrtdPlugin = (options?: MrtdPluginOptions): VsAgentNestPlugin => ({
   name: 'mrtd',
   credoPlugin: setupMrtdProtocol(options),
   controllers: [V2DidcommMrtdController],
+  didcommModules: [{ module: 'mrtd', prefixes: ['https://didcomm.org/mrtd/'] }],
   providers: [MrtdMessageHandler],
   messageHandlers: [MrtdMessageHandler],
   registerEvents: (agent, config) => {

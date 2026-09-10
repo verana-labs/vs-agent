@@ -1,7 +1,4 @@
-export interface DidcommModule {
-  module: string
-  prefixes: string[]
-}
+import type { DidcommModule } from '@verana-labs/vs-agent-sdk'
 
 export const DIDCOMM_MODULES: readonly DidcommModule[] = [
   {
@@ -18,7 +15,6 @@ export const DIDCOMM_MODULES: readonly DidcommModule[] = [
   { module: 'calls', prefixes: ['https://didcomm.org/calls/'] },
   { module: 'action-menu', prefixes: ['https://didcomm.org/action-menu/'] },
   { module: 'question-answer', prefixes: ['https://didcomm.org/questionanswer/'] },
-  { module: 'mrtd', prefixes: ['https://didcomm.org/mrtd/'] },
 ]
 
 export function moduleOf(protocol: string): string | undefined {

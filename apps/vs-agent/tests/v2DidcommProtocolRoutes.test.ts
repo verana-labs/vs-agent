@@ -3,10 +3,12 @@ import type { INestApplication } from '@nestjs/common'
 import { VersioningType } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
+import { MrtdPlugin } from '@verana-labs/vs-agent-plugin-mrtd'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { V2DidcommController } from '../src/controllers/admin/v2/didcomm/V2DidcommController'
 import { VsAgentService } from '../src/services/VsAgentService'
+import { DIDCOMM_MODULES } from '../src/utils/didcommModules'
 
 const FULL_REGISTRY = [
   'https://didcomm.org/action-menu/1.0',
@@ -54,7 +56,13 @@ describe('v2 didcomm protocol routes', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [V2DidcommController],
-      providers: [{ provide: VsAgentService, useValue: vsAgentService }],
+      providers: [
+        { provide: VsAgentService, useValue: vsAgentService },
+        {
+          provide: 'DIDCOMM_MODULES',
+          useValue: [...DIDCOMM_MODULES, ...(MrtdPlugin().didcommModules ?? [])],
+        },
+      ],
     }).compile()
 
     app = moduleRef.createNestApplication()

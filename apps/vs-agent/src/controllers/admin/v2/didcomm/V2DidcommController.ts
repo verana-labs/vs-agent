@@ -1,16 +1,19 @@
 import { DidCommFeatureQuery, DidCommProtocol } from '@credo-ts/didcomm'
 import { Controller, Get, Inject } from '@nestjs/common'
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
+import type { DidcommModule } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../../services/VsAgentService'
-import { DIDCOMM_MODULES } from '../../../../utils/didcommModules'
 
 import { ProtocolModuleDto } from './dto'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm', version: '2' })
 export class V2DidcommController {
-  public constructor(@Inject(VsAgentService) private readonly vsAgentService: VsAgentService) {}
+  public constructor(
+    @Inject(VsAgentService) private readonly vsAgentService: VsAgentService,
+    @Inject('DIDCOMM_MODULES') private readonly modules: readonly DidcommModule[],
+  ) {}
 
   @Get('protocols')
   @ApiOperation({
@@ -25,7 +28,7 @@ export class V2DidcommController {
       .query(new DidCommFeatureQuery({ featureType: DidCommProtocol.type, match: '*' }))
       .map(feature => feature.id)
 
-    return DIDCOMM_MODULES.flatMap(({ module, prefixes }) => {
+    return this.modules.flatMap(({ module, prefixes }) => {
       const protocols = registered.filter(id => prefixes.some(prefix => id.startsWith(prefix))).sort()
       return protocols.length > 0 ? [{ module, protocols }] : []
     })
