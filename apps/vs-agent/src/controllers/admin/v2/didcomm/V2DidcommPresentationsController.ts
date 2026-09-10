@@ -3,7 +3,7 @@ import type { DidCommProofExchangeRecord, DidCommProofStateChangedEvent } from '
 
 import { AnonCredsNonRevokedInterval, AnonCredsSchema, dateToTimestamp } from '@credo-ts/anoncreds'
 import { DidCommAutoAcceptProof, DidCommProofEventTypes, DidCommProofState } from '@credo-ts/didcomm'
-import { RecordNotFoundError, W3cCredential } from '@credo-ts/core'
+import { parseDid, RecordNotFoundError, W3cCredential } from '@credo-ts/core'
 import {
   Body,
   Controller,
@@ -28,6 +28,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
 import {
@@ -66,6 +67,8 @@ import {
   RequestedCredentialDto,
 } from './dto'
 import { REQUESTED_CREDENTIALS_METADATA, toPresentationDto } from './mappers'
+
+const PUBLIC_DID_METHODS = ['web', 'webvh']
 
 /**
  * Presentation flows this agent requested over DIDComm.
@@ -230,7 +233,12 @@ export class V2DidcommPresentationsController {
   @ApiNotFoundResponse({ description: 'No presentation with the given id' })
   @ApiConflictResponse({
     description:
-      'The exchange is not in state `request-received`, or no credential set satisfies the request',
+      'The exchange is not in state `request-received`, no credential set satisfies the request, or ' +
+      '`PEER_NOT_AUTHORIZED`: the verifier holds no active VERIFIER `Participant` for the ' +
+      '`CredentialSchema` of a requested credential',
+  })
+  @ApiServiceUnavailableResponse({
+    description: '`RESOLVER_UNAVAILABLE`: the agent cannot complete the check',
   })
   public async acceptPresentationRequest(
     @Param('proofExchangeId') proofExchangeId: string,
@@ -247,16 +255,24 @@ export class V2DidcommPresentationsController {
       : undefined
     const verifierDid = connection?.theirDid
 
-    if (!verifierDid) {
-      throw peerNotAuthorized(
-        `the verifier of presentation "${proofExchangeId}" established no DID, so the agent cannot check its Participant entry`,
-      )
-    }
-
     const requestFormatData = await agent.didcomm.proofs.getFormatData(proofExchangeId)
     const anonCredsRequest = requestFormatData.request?.anoncreds ?? requestFormatData.request?.indy
 
     if (anonCredsRequest) {
+      if (!verifierDid) {
+        throw peerNotAuthorized(
+          `the verifier of presentation "${proofExchangeId}" established no DID, so the agent cannot check its Participant entry`,
+        )
+      }
+
+      // A service connects with its public DID, so another method cannot be checked, per
+      // [VSA-VTI-FLOW-VERIFY-AC-6]
+      if (!PUBLIC_DID_METHODS.includes(parseDid(verifierDid).method)) {
+        throw peerNotAuthorized(
+          `the verifier of presentation "${proofExchangeId}" connected with "${verifierDid}", which is no did:web or did:webvh DID, so the agent cannot check its Participant entry`,
+        )
+      }
+
       const requestedGroups = [
         ...Object.values(anonCredsRequest.requested_attributes ?? {}),
         ...Object.values(anonCredsRequest.requested_predicates ?? {}),
