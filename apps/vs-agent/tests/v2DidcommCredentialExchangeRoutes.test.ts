@@ -681,15 +681,15 @@ describe('v2 didcomm credential exchange routes', () => {
       expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
     })
 
-    it('answers NOT_AUTHORIZED, and not INVALID_INPUT, when the offer binds to no CredentialSchema', async () => {
+    it('answers INVALID_INPUT when the offer binds to no CredentialSchema', async () => {
       anonCredsTrust.deriveCredentialSchema.mockRejectedValue(
         new AnonCredsTrustError(AnonCredsTrustErrorReason.NotDerivable, 'no relatedJsonSchemaCredentialId'),
       )
 
       const response = await request(app.getHttpServer()).post('/v2/didcomm/credential-offer').send(offerBody)
 
-      expect(response.status).toBe(409)
-      expect(response.body.error.code).toBe('NOT_AUTHORIZED')
+      expect(response.status).toBe(400)
+      expect(response.body.error.code).toBe('INVALID_INPUT')
       expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
     })
 
