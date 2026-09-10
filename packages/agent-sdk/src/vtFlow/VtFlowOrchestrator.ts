@@ -16,6 +16,7 @@ import {
   type VtFlowEcsIssuanceExemptionContext,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
+import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
 import { BaseAgentModules, VsAgent } from '../agent'
 import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
@@ -31,6 +32,7 @@ import {
   connectToPublicDid,
   createCredential,
   createVtc,
+  linkedVpSchemaId,
   removeStoredTrustCredential,
   resolveJsonSchemaCredentialId,
   validateSchema,
@@ -521,7 +523,18 @@ export class VtFlowOrchestrator {
       )
     }
     const w3cCredential = JsonTransformer.fromJSON(jsonld, W3cJsonLdVerifiableCredential)
-    await createVtc(this.agent, this.options.publicApiBaseUrl, schemaBaseId, w3cCredential)
+    const ecsKey = /^\d+$/.test(schemaBaseId) ? await this.ecsSchemaKey(schemaBaseId) : null
+    await createVtc(
+      this.agent,
+      this.options.publicApiBaseUrl,
+      ecsKey ? linkedVpSchemaId(ecsKey) : schemaBaseId,
+      w3cCredential,
+    )
+  }
+
+  private async ecsSchemaKey(schemaId: string): Promise<ECS | null> {
+    const schema = await this.agent.indexer.getCredentialSchema(schemaId, { allowNotFound: true })
+    return schema ? classifyEcsSchema(schema.json_schema) : null
   }
 
   private extractSchemaBaseId(jscUrl: string): string | undefined {
