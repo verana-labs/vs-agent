@@ -171,7 +171,7 @@ export class V2DidcommCredentialExchangesController {
         credentialSchemaId,
       })
     } catch (error) {
-      throw trustDecisionError(error, 'agent')
+      throw trustDecisionError(error, 'agent', AdminApiErrorCode.InvalidInput)
     }
 
     // The specification makes the caller run the issuer steps, unless the caller sets
