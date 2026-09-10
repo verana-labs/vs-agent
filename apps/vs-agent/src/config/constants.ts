@@ -1,5 +1,4 @@
 import { AskarPostgresStorageConfig } from '@credo-ts/askar'
-import { LogLevel } from '@credo-ts/core'
 import { DidCommProofState } from '@credo-ts/didcomm'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import dotenv from 'dotenv'
@@ -13,17 +12,8 @@ export const AGENT_VERSION: string = packageJson.version
 
 // Basic parameters
 
-export const AGENT_PORT = Number(process.env.AGENT_PORT || 3001)
-export const ADMIN_PORT = Number(process.env.ADMIN_PORT || 3000)
-
-export const AGENT_NAME = process.env.AGENT_NAME // This one is deprecated. Only used to throw error if it is defined
-export const AGENT_LABEL = process.env.AGENT_LABEL || 'Test VS Agent'
-export const UI_WELCOME_MESSAGE = process.env.UI_WELCOME_MESSAGE || 'Welcome to VS Agent'
-export const AGENT_INVITATION_IMAGE_URL = process.env.AGENT_INVITATION_IMAGE_URL
-export const AGENT_ENDPOINT = process.env.AGENT_ENDPOINT
-export const AGENT_ENDPOINTS = process.env.AGENT_ENDPOINT
-  ? [process.env.AGENT_ENDPOINT]
-  : process.env.AGENT_ENDPOINTS?.replace(/\s+/g, '').split(',')
+export const PUBLIC_API_PORT = Number(process.env.PUBLIC_API_PORT || 3001)
+export const ADMIN_API_PORT = Number(process.env.ADMIN_API_PORT || 3000)
 
 export const AGENT_PUBLIC_DID_METHOD = (process.env.AGENT_PUBLIC_DID_METHOD ?? 'webvh').trim().toLowerCase()
 export const PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL
@@ -75,20 +65,11 @@ export const REDIS_HOST = process.env.REDIS_HOST
 export const REDIS_PASSWORD = process.env.REDIS_PASSWORD
 
 // Dev/debugging settings
-export const AGENT_LOG_LEVEL = process.env.AGENT_LOG_LEVEL
-  ? Number(process.env.AGENT_LOG_LEVEL)
-  : LogLevel.Warn
-export const ADMIN_LOG_LEVEL = process.env.ADMIN_LOG_LEVEL
-  ? Number(process.env.ADMIN_LOG_LEVEL)
-  : LogLevel.Info
+export const AGENT_LOG_LEVEL_NAME = (process.env.AGENT_LOG_LEVEL ?? 'warn').trim().toLowerCase()
+export const ADMIN_API_LOG_LEVEL_NAME = (process.env.ADMIN_API_LOG_LEVEL ?? 'info').trim().toLowerCase()
 
 export const USE_CORS = Boolean(process.env.USE_CORS || false)
 export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER === 'false')
-
-// Advanced settings
-export const AGENT_INVITATION_BASE_URL = process.env.AGENT_INVITATION_BASE_URL ?? 'https://hologram.zone/'
-export const REDIRECT_DEFAULT_URL_TO_INVITATION_URL =
-  process.env.REDIRECT_DEFAULT_URL_TO_INVITATION_URL !== 'false'
 
 // Placeholder resources the agent serves under /vt/default, so an operator can point an
 // ECS_CLAIMS_*_URI at the agent itself.
@@ -160,7 +141,7 @@ export const TERMINAL_STATES: string[] = [
 export const REVOCATION_REGISTRY_DEFAULT_CAPACITY = 1000
 
 // Utils params
-export const MASTER_LIST_CSCA_LOCATION = process.env.MASTER_LIST_CSCA_LOCATION
+export const MRTD_MASTER_LIST_CSCA_LOCATION = process.env.MRTD_MASTER_LIST_CSCA_LOCATION
 
 //Storage update configuration sqlite
 export const AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP =

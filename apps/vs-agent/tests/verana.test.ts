@@ -120,7 +120,7 @@ describe('verana: indexer notifications', () => {
 
     const { connectionRecord } = await applicant.didcomm.oob.receiveImplicitInvitation({
       did: validator.did,
-      label: applicant.label,
+      label: 'Applicant',
       didCommVersion: 'v2',
       ourDid: applicant.did,
     })

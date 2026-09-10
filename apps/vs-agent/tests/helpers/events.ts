@@ -5,6 +5,7 @@ import {
   type VtFlowStateChangedEvent,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
+  agentDisplayName,
   VsAgentEventTypes,
   type BaseAgentModules,
   type VsAgent,
@@ -19,7 +20,7 @@ export async function makeConnection(agentA: VsAgent<BaseAgentModules>, agentB: 
 
   let { connectionRecord: agentBConnection } = await agentB.didcomm.oob.receiveInvitation(
     agentAOutOfBand.outOfBandInvitation,
-    { label: agentB.label },
+    { label: await agentDisplayName(agentB) },
   )
 
   agentBConnection = await agentB.didcomm.connections.returnWhenIsConnected(agentBConnection!.id)
