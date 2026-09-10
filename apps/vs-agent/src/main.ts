@@ -332,6 +332,7 @@ const run = async () => {
 
     authorizationService = new AuthorizationService({
       chain: veranaChain,
+      indexer: indexerService,
       logger: serverLogger,
       corporationId: VERANA_CORPORATION_ID ? Number(VERANA_CORPORATION_ID) : undefined,
     })

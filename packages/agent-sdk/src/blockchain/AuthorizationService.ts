@@ -1,6 +1,7 @@
 import { BaseLogger } from '@credo-ts/core'
 
 import { VeranaChainService } from './VeranaChainService'
+import { VeranaIndexerService } from './VeranaIndexerService'
 import { CachedVsOperatorAuthorizationRecord, DurationParam } from './types'
 
 // A lapsed grant that carries a period is still valid: the chain rolls the expiration
@@ -9,16 +10,14 @@ function renews(period?: DurationParam): boolean {
   return period != null && (period.seconds > 0 || (period.nanos ?? 0) > 0)
 }
 
-function isOperatorAuthorizationActive(expiration?: Date, period?: DurationParam): boolean {
+// An unset expiration means the grant never expires (AUTHZ-CHECK-3 step 4, AUTHZ-CHECK-1 step 2).
+function isAuthorizationActive(expiration?: Date, period?: DurationParam): boolean {
   return expiration === undefined || expiration.getTime() > Date.now() || renews(period)
-}
-
-function isVsoaRecordActive(expiration?: Date, period?: DurationParam): boolean {
-  return expiration != null && (expiration.getTime() > Date.now() || renews(period))
 }
 
 export interface AuthorizationServiceConfig {
   chain: VeranaChainService
+  indexer: VeranaIndexerService
   logger: BaseLogger
   corporationId?: number
   minRefreshIntervalMs?: number
@@ -28,13 +27,16 @@ export interface AuthorizationServiceConfig {
 export class AuthorizationService {
   private vsoaByParticipant = new Map<number, CachedVsOperatorAuthorizationRecord>()
   private lastRefreshAt = 0
+  private lastRefreshAtBlock = 0
   private readonly chain: VeranaChainService
+  private readonly indexer: VeranaIndexerService
   private readonly logger: BaseLogger
   private readonly corporationId?: number
   private readonly minRefreshIntervalMs: number
 
   constructor(config: AuthorizationServiceConfig) {
     this.chain = config.chain
+    this.indexer = config.indexer
     this.logger = config.logger
     this.corporationId = config.corporationId
     this.minRefreshIntervalMs = config.minRefreshIntervalMs ?? 2_000
@@ -44,12 +46,17 @@ export class AuthorizationService {
     return this.corporationId === undefined || corporationId === this.corporationId
   }
 
-  async refreshForOperator(): Promise<void> {
-    // Catch-up replays hit the same current chain state, so back-to-back refreshes are skipped.
-    if (Date.now() - this.lastRefreshAt < this.minRefreshIntervalMs) return
+  // `minBlock` is the block of the indexer event that triggered the refresh. The delegation
+  // projection has its own checkpoint, so without it a read can still answer with pre-event state.
+  async refreshForOperator(minBlock?: number): Promise<void> {
+    // Catch-up replays hit the same current chain state, so back-to-back refreshes are skipped,
+    // unless the caller needs a block this cache has not covered yet.
+    const staleForBlock = minBlock !== undefined && minBlock > this.lastRefreshAtBlock
+    if (!staleForBlock && Date.now() - this.lastRefreshAt < this.minRefreshIntervalMs) return
 
-    const vsoas = await this.chain.listVsOperatorAuthorizations()
+    const vsoas = await this.indexer.listVsOperatorAuthorizations(this.chain.address, minBlock)
     this.lastRefreshAt = Date.now()
+    if (minBlock !== undefined) this.lastRefreshAtBlock = minBlock
     const rebuilt = new Map<number, CachedVsOperatorAuthorizationRecord>()
     for (const vsoa of vsoas) {
       if (!this.inScope(vsoa.corporationId)) continue
@@ -74,7 +81,7 @@ export class AuthorizationService {
   canSign(participantId: number, msgType: string): boolean {
     const record = this.vsoaByParticipant.get(participantId)
     return (
-      !!record && record.msgTypes.includes(msgType) && isVsoaRecordActive(record.expiration, record.period)
+      !!record && record.msgTypes.includes(msgType) && isAuthorizationActive(record.expiration, record.period)
     )
   }
 
@@ -102,12 +109,12 @@ export class AuthorizationService {
   // A blank account must fail closed: the chain treats an empty filter as "any account".
   async callerHoldsOperatorGrant(account: string, msgType: string): Promise<boolean> {
     if (!account.trim()) return false
-    const auths = await this.chain.listOperatorAuthorizations(account)
+    const auths = await this.indexer.listOperatorAuthorizations(account)
     return auths.some(
       a =>
         this.inScope(a.corporationId) &&
         a.msgTypes.includes(msgType) &&
-        isOperatorAuthorizationActive(a.expiration, a.period),
+        isAuthorizationActive(a.expiration, a.period),
     )
   }
 }
