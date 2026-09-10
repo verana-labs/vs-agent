@@ -1,5 +1,6 @@
 export * from './dto'
 export * from './V2DidcommActionMenuController'
+export * from './V2DidcommBasicMessagesController'
 export * from './V2DidcommCallsController'
 export * from './V2DidcommConnectionsController'
 export * from './V2DidcommController'
