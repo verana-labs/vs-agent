@@ -29,9 +29,16 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { createInvitation } from '@verana-labs/vs-agent-sdk'
+import { createInvitation, ParticipantRole } from '@verana-labs/vs-agent-sdk'
 
-import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
+import {
+  AdminApiError,
+  AdminApiErrorCode,
+  createdAtKey,
+  Page,
+  paginate,
+  trustDecisionError,
+} from '../../../../common'
 import { AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
@@ -153,6 +160,18 @@ export class V2DidcommCredentialExchangesController {
       throw invalidInput(
         'a revocable credential definition needs `revocationRegistryDefinitionId` and `revocationRegistryIndex`',
       )
+    }
+
+    try {
+      const { credentialSchemaId } = await agent.anonCredsTrust.deriveCredentialSchema({
+        credentialDefinitionId,
+      })
+      await agent.anonCredsTrust.assertOwnAuthorization({
+        role: ParticipantRole.Issuer,
+        credentialSchemaId,
+      })
+    } catch (error) {
+      throw trustDecisionError(error, 'agent')
     }
 
     // The specification makes the caller run the issuer steps, unless the caller sets
@@ -301,6 +320,36 @@ export class V2DidcommCredentialExchangesController {
 
     requireCredentialState(record, DidCommCredentialState.OfferReceived)
 
+    const formatData = await agent.didcomm.credentials.getFormatData(credentialExchangeId)
+    const anonCredsOffer = formatData.offer?.anoncreds ?? formatData.offer?.indy
+
+    if (anonCredsOffer) {
+      try {
+        if (!anonCredsOffer.cred_def_id) {
+          throw peerNotAuthorized(
+            `the AnonCreds offer of exchange "${credentialExchangeId}" names no credential definition`,
+          )
+        }
+
+        const { credentialSchemaId, issuerId } = await agent.anonCredsTrust.deriveCredentialSchema({
+          credentialDefinitionId: anonCredsOffer.cred_def_id,
+        })
+        if (!issuerId) {
+          throw peerNotAuthorized(
+            `the credential definition "${anonCredsOffer.cred_def_id}" of the offer names no issuer`,
+          )
+        }
+
+        await agent.anonCredsTrust.assertAuthorized({
+          did: issuerId,
+          role: ParticipantRole.Issuer,
+          credentialSchemaId,
+        })
+      } catch (error) {
+        throw trustDecisionError(error, 'peer')
+      }
+    }
+
     // The specification makes the caller store the credential with `acceptCredential`, so the
     // exchange stops here until that call arrives.
     const updated = await agent.didcomm.credentials.acceptOffer({
@@ -443,6 +492,10 @@ export class V2DidcommCredentialExchangesController {
 
 function invalidInput(message: string): AdminApiError {
   return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, message)
+}
+
+function peerNotAuthorized(message: string): AdminApiError {
+  return new AdminApiError(AdminApiErrorCode.PeerNotAuthorized, HttpStatus.CONFLICT, message)
 }
 
 function unknownCredentialExchange(credentialExchangeId: string): AdminApiError {

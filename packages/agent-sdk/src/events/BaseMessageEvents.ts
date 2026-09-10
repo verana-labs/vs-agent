@@ -1,4 +1,5 @@
 import type { BaseAgentModules, VsAgent } from '../agent/VsAgent'
+import type { DidCommConnectionRecord, DidCommProofExchangeRecord } from '@credo-ts/didcomm'
 
 import { DidCommPresentationV1Message, DidCommPresentationV1ProblemReportMessage } from '@credo-ts/anoncreds'
 import { BaseLogger } from '@credo-ts/core'
@@ -8,8 +9,14 @@ import {
   DidCommCredentialStateChangedEvent,
   DidCommEventTypes,
   DidCommMessageProcessedEvent,
+  DidCommMessageSender,
   DidCommPresentationV2Message,
   DidCommPresentationV2ProblemReportMessage,
+  DidCommProofEventTypes,
+  DidCommProofRole,
+  DidCommProofState,
+  DidCommProofStateChangedEvent,
+  getOutboundDidCommMessageContext,
 } from '@credo-ts/didcomm'
 import {
   Claim,
@@ -21,11 +28,20 @@ import {
   VerifiableCredentialSubmittedProofItem,
 } from '@verana-labs/vs-agent-model'
 
+import {
+  AnonCredsTrustError,
+  AnonCredsTrustErrorReason,
+  AnonCredsTrustProblemCode,
+  REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+} from '../blockchain/AnonCredsTrustService'
+import { ParticipantRole } from '../blockchain/types'
 import { getRecordId } from '../utils/agent'
 
 import { emitVsAgentEvent, msgToEvent, VsAgentEventTypes } from './VsAgentEvents'
 
 export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => {
+  registerAnonCredsTrustDecision(agent, logger)
+
   // Proofs protocol messages (proof presentation and problem reports)
   agent.events.on(
     DidCommEventTypes.DidCommMessageProcessed,
@@ -217,4 +233,188 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
       }
     },
   )
+}
+
+interface PresentedAnonCredsProof {
+  identifiers?: Array<{ cred_def_id: string }>
+}
+
+function registerAnonCredsTrustDecision(agent: VsAgent<BaseAgentModules>, logger: BaseLogger): void {
+  agent.didcomm.registerMessageHandlerMiddleware(async (messageContext, next) => {
+    await next()
+
+    const { connection, message } = messageContext
+    const isPresentation = [
+      DidCommPresentationV1Message.type.messageTypeUri,
+      DidCommPresentationV2Message.type.messageTypeUri,
+    ].includes(message.type)
+
+    if (!isPresentation || !connection) return
+
+    try {
+      const record = await agent.didcomm.proofs.getByThreadAndConnectionId(message.threadId, connection.id)
+      const formatData = await agent.didcomm.proofs.getFormatData(record.id)
+
+      const abandoned = await applyAnonCredsTrustDecision(
+        agent,
+        record,
+        connection,
+        formatData.presentation?.anoncreds ?? formatData.presentation?.indy,
+        logger,
+      )
+
+      if (abandoned) messageContext.responseMessage = undefined
+    } catch (error) {
+      logger.error(`The agent cannot apply the AnonCreds trust decision to ${message.threadId}: ${error}`)
+      messageContext.responseMessage = undefined
+    }
+  })
+}
+
+async function applyAnonCredsTrustDecision(
+  agent: VsAgent<BaseAgentModules>,
+  record: DidCommProofExchangeRecord,
+  connection: DidCommConnectionRecord,
+  presentation: PresentedAnonCredsProof | undefined,
+  logger: BaseLogger,
+): Promise<boolean> {
+  if (record.role !== DidCommProofRole.Verifier || !presentation) return false
+
+  const identifiers = presentation.identifiers ?? []
+  if (identifiers.length === 0) {
+    await abandonPresentation(
+      agent,
+      record,
+      connection,
+      AnonCredsTrustProblemCode.TrustResolutionUnavailable,
+      'the agent cannot read the credential definitions of the presentation',
+      logger,
+    )
+    return true
+  }
+
+  const requestedCredentialSchemas =
+    (record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA) as number[] | null) ?? []
+
+  // A request whose creator recorded no CredentialSchema cannot be checked against what it asked
+  // for, so it abandons rather than accepting any schema.
+  if (requestedCredentialSchemas.length === 0) {
+    await abandonPresentation(
+      agent,
+      record,
+      connection,
+      AnonCredsTrustProblemCode.TrustResolutionUnavailable,
+      'the exchange records no CredentialSchema of its requested credentials',
+      logger,
+    )
+    return true
+  }
+
+  const issuersByCredentialSchema = new Map<number, string[]>()
+  const unaccredited: string[] = []
+  const unchecked: string[] = []
+
+  for (const { cred_def_id: credentialDefinitionId } of identifiers) {
+    try {
+      const derived = await agent.anonCredsTrust.deriveCredentialSchema({ credentialDefinitionId })
+
+      if (!requestedCredentialSchemas.includes(derived.credentialSchemaId)) {
+        unaccredited.push(
+          `${credentialDefinitionId} presents the CredentialSchema ${derived.credentialSchemaId}, which the request does not ask for`,
+        )
+        continue
+      }
+
+      if (!derived.issuerId) {
+        unaccredited.push(`${credentialDefinitionId} names no issuer`)
+        continue
+      }
+
+      const issuers = issuersByCredentialSchema.get(derived.credentialSchemaId) ?? []
+      issuers.push(derived.issuerId)
+      issuersByCredentialSchema.set(derived.credentialSchemaId, issuers)
+    } catch (error) {
+      const cannotCheck =
+        !(error instanceof AnonCredsTrustError) || error.reason === AnonCredsTrustErrorReason.Unavailable
+      if (cannotCheck) unchecked.push(`${error}`)
+      else unaccredited.push(`${error}`)
+    }
+  }
+
+  for (const [credentialSchemaId, issuers] of issuersByCredentialSchema) {
+    const result = await agent.anonCredsTrust.findUnaccreditedDids(
+      issuers,
+      ParticipantRole.Issuer,
+      credentialSchemaId,
+    )
+    unaccredited.push(
+      ...result.unaccredited.map(
+        did => `${did} holds no active ISSUER Participant for the CredentialSchema ${credentialSchemaId}`,
+      ),
+    )
+    unchecked.push(
+      ...result.unchecked.map(
+        did =>
+          `the agent cannot check the ISSUER Participant of ${did} for the CredentialSchema ${credentialSchemaId}`,
+      ),
+    )
+  }
+
+  if (unaccredited.length === 0 && unchecked.length === 0) return false
+
+  const code =
+    unaccredited.length > 0
+      ? AnonCredsTrustProblemCode.IssuerNotAuthorized
+      : AnonCredsTrustProblemCode.TrustResolutionUnavailable
+
+  await abandonPresentation(
+    agent,
+    record,
+    connection,
+    code,
+    [...unaccredited, ...unchecked].join('; '),
+    logger,
+  )
+
+  return true
+}
+
+async function abandonPresentation(
+  agent: VsAgent<BaseAgentModules>,
+  record: DidCommProofExchangeRecord,
+  connection: DidCommConnectionRecord,
+  code: AnonCredsTrustProblemCode,
+  description: string,
+  logger: BaseLogger,
+): Promise<void> {
+  logger.warn(`The presentation ${record.id} fails the AnonCreds trust decision (${code}): ${description}`)
+
+  record.isVerified = false
+  record.errorMessage = `${code}: ${description}`
+
+  const problemReport =
+    record.protocolVersion === 'v1'
+      ? new DidCommPresentationV1ProblemReportMessage({ description: { code, en: description } })
+      : new DidCommPresentationV2ProblemReportMessage({ description: { code, en: description } })
+  problemReport.setThread({ threadId: record.threadId, parentThreadId: record.parentThreadId })
+
+  try {
+    const outboundMessageContext = await getOutboundDidCommMessageContext(agent.context, {
+      message: problemReport,
+      associatedRecord: record,
+      connectionRecord: connection,
+    })
+    await agent.dependencyManager.resolve(DidCommMessageSender).sendMessage(outboundMessageContext)
+  } catch (error) {
+    logger.error(`The agent cannot send the problem report of presentation ${record.id}: ${error}`)
+  }
+
+  const previousState = record.state
+  record.state = DidCommProofState.Abandoned
+  await agent.didcomm.proofs.update(record)
+
+  agent.events.emit<DidCommProofStateChangedEvent>(agent.context, {
+    type: DidCommProofEventTypes.ProofStateChanged,
+    payload: { proofRecord: record.clone(), previousState },
+  })
 }
