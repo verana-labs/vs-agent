@@ -13,6 +13,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
+  AUTO_ACCEPT_PRESENTATION_METADATA,
   createInvitation,
   fetchJson,
   ParticipantRole,
@@ -483,20 +484,23 @@ describe('v2 didcomm presentation routes', () => {
   })
 
   describe('autoAccept', () => {
-    it('stops the agent from acknowledging a presentation on its own by default', async () => {
+    it.each([
+      { name: 'by default', body: {}, autoAccept: false },
+      { name: 'when the caller refuses it', body: { autoAccept: false }, autoAccept: false },
+      { name: 'when the caller asks for it', body: { autoAccept: true }, autoAccept: true },
+    ])('delegates no acknowledgement to Credo, and records the policy $name', async ({
+      body,
+      autoAccept,
+    }) => {
+      const record = { id: 'proof-1', metadata: metadata() }
+      proofs.createRequest.mockResolvedValue({ proofRecord: record, message: { id: 'msg-1' } })
+
       await request(app.getHttpServer())
         .post('/v2/didcomm/presentation-request')
-        .send({ requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }] })
+        .send({ requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }], ...body })
 
       expect(proofs.createRequest.mock.calls[0][0].autoAcceptProof).toBe('never')
-    })
-
-    it('lets the agent complete its verifier steps when the caller asks for it', async () => {
-      await request(app.getHttpServer())
-        .post('/v2/didcomm/presentation-request')
-        .send({ requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }], autoAccept: true })
-
-      expect(proofs.createRequest.mock.calls[0][0].autoAcceptProof).toBe('contentApproved')
+      expect(record.metadata.get(AUTO_ACCEPT_PRESENTATION_METADATA)).toEqual({ autoAccept })
     })
   })
 
@@ -652,7 +656,13 @@ describe('v2 didcomm presentation routes', () => {
           role: ParticipantRole.Verifier,
           credentialSchemaId: CREDENTIAL_SCHEMA_ID,
         })
-        expect(record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA)).toEqual([CREDENTIAL_SCHEMA_ID])
+        expect(record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA)).toEqual({
+          'gov-id': {
+            credentialSchemaId: CREDENTIAL_SCHEMA_ID,
+            ecosystemDid: 'did:webvh:QmEcosystem:ecosystem.example',
+            jsonSchemaCredentialId: 'https://ecosystem.example/vt/schemas-org-jsc.json',
+          },
+        })
       })
 
       it('answers NOT_AUTHORIZED when the agent holds no VERIFIER Participant', async () => {
