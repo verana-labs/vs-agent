@@ -5,7 +5,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   ParticipantRole,
   ParticipantState,
-  ValidationState,
   VeranaChainService,
   VeranaIndexerService,
 } from '../../src/blockchain'
@@ -101,18 +100,15 @@ describe('vt-flow onboarding chain integration (V4)', () => {
         digest,
       })
 
-      const onChain = await veranaChain.getParticipant(applicant.participantId)
-      expect(onChain?.opState).toBe(ValidationState.VALIDATED)
-
-      expect(await vsoaChain.hasVsOperatorAuthorization()).toBe(true)
-      expect(await veranaChain.hasVsOperatorAuthorization()).toBe(false)
-
       // V4 indexer REST: confirm the participant is indexed with the migrated wire fields
       // (/v4/participant/get/:id, {participant} wrapper, op_state/op_summary_digest/validator_participant_id).
       const indexer = new VeranaIndexerService({
         baseUrl: stack.indexerWsUrl.replace(/^ws/, 'http'),
         logger: new ConsoleLogger(LogLevel.Warn),
       })
+
+      expect((await indexer.listVsOperatorAuthorizations(vsoaChain.address)).length).toBeGreaterThan(0)
+      expect(await indexer.listVsOperatorAuthorizations(veranaChain.address)).toEqual([])
       let indexed: Awaited<ReturnType<VeranaIndexerService['getParticipant']>> | undefined
       const deadline = Date.now() + 120_000
       while (Date.now() < deadline) {

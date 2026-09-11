@@ -1,5 +1,7 @@
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
+import { AnonCredsCredentialDefinitionRepository, AnonCredsSchemaRepository } from '@credo-ts/anoncreds'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { ConsoleLogger, DidRepository, LogLevel } from '@credo-ts/core'
 import { VtFlowApi, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
@@ -8,6 +10,7 @@ import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
 import {
   createJsc,
   EcsBootstrapService,
+  findAttestedResources,
   getEcsSchemas,
   ParticipantRole,
   ParticipantState,
@@ -33,8 +36,10 @@ import {
   startStack,
   type StartedStack,
 } from '../../../../packages/agent-sdk/tests/e2e/helpers'
-import { startAgent } from '../__mocks__'
+import { mockResponses, startAgent } from '../__mocks__'
 import { FakeDidResolver } from '../__mocks__/fakeDidResolver'
+import { AdminApiError } from '../../src/common'
+import { V2DidcommCredentialExchangesController } from '../../src/controllers/admin/v2/didcomm/V2DidcommCredentialExchangesController'
 import {
   isVtFlowStateChangedEvent,
   SubjectInboundTransport,
@@ -359,8 +364,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       await applicantCompleted
       await waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Completed))
 
-      const chainParticipant = await seederChain.getParticipant(holderOp.id)
-      expect(chainParticipant).toBeDefined()
+      expect(await until(() => indexer.getParticipant(holderOp.id))).toBeDefined()
 
       const credentials = await applicant.w3cCredentials.getAll()
       expect(credentials.length).toBeGreaterThan(0)
@@ -621,9 +625,32 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       expect(await serviceIds()).toContain(serviceId)
       expect(await jscKeys()).toContain(schemaRef)
 
+      // The pass also publishes the AnonCreds schema of the VTJSC, per [VSA-PUB-AC-5]. beforeAll
+      // built the VTJSC with createJsc alone, so this agent stands for one deployed before the rule.
+      const jsonSchemaCredentialId = `${validator.publicApiBaseUrl}/vt/schemas-${orgSchemaId}-jsc.json`
+      const publishedSchemas = () =>
+        validator.modules.anoncreds.getCreatedSchemas({
+          relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+        })
+
+      const [anonCredsSchema] = await publishedSchemas()
+      expect(anonCredsSchema.schema).toMatchObject({
+        name: 'OrganizationCredential',
+        attrNames: ['id', 'name'],
+        issuerId: validator.did,
+      })
+
+      // An issuer of another DID reads the schema from this listing, so it must carry the tag.
+      const listed = await findAttestedResources(validator, {
+        resourceType: 'anonCredsSchema',
+        relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+      })
+      expect(listed.map(record => (record.content as { id: string }).id)).toEqual([anonCredsSchema.schemaId])
+
       // A second run must leave it attached, which is what proves the two passes agree.
       await reconcileVtjscPublications(validator, indexer, ownCorporationId)
       expect(await serviceIds()).toContain(serviceId)
+      expect(await publishedSchemas()).toHaveLength(1)
     },
     SETUP_TIMEOUT_MS,
   )
@@ -714,7 +741,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
 
       await chainA.revokeParticipant(corpPolicyAddress, applicantIssuerParticipantId)
       await until(async () => {
-        const p = await seederChain.getParticipant(applicantIssuerParticipantId)
+        const p = await indexer.getParticipant(applicantIssuerParticipantId).catch(() => undefined)
         return p?.revoked ? true : undefined
       })
 
@@ -727,4 +754,230 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
     },
     SETUP_TIMEOUT_MS,
   )
+  describe('the AnonCreds trust decision', () => {
+    const stranger = `did:example:stranger-${RUN_ID}`
+    const claims = [{ name: 'name', value: 'Test Credential' }]
+
+    let validatorDid: string
+    let trustSchemaId: number
+    let trustParticipantId: number
+    let jsonSchemaCredentialId: string
+    let anonCredsSchemaId: string
+    let credentialDefinitionId: string
+    let controller: V2DidcommCredentialExchangesController
+
+    const offerBody = () => ({ credentialDefinitionId, claims })
+
+    beforeAll(async () => {
+      if (!validator.did) throw new Error('the validator agent has no public DID')
+      validatorDid = validator.did
+
+      const ecosystem = await chainA.createEcosystem(corpPolicyAddress, { did: validatorDid })
+      const schema = await chainA.createCredentialSchema(corpPolicyAddress, {
+        ecosystemId: ecosystem.ecosystemId,
+        jsonSchema: ecsSchema('AnonCredsTrustCredential'),
+      })
+      trustSchemaId = schema.schemaId
+
+      const root = await chainA.createRootParticipant(corpPolicyAddress, {
+        schemaId: trustSchemaId,
+        did: `did:example:trust-root-${RUN_ID}`,
+      })
+      const participant = await chainA.startParticipantOp(corpPolicyAddress, {
+        role: PARTICIPANT_ROLE_ISSUER,
+        validatorParticipantId: root.participantId,
+        did: validatorDid,
+      })
+      trustParticipantId = participant.participantId
+      await seederChain.setParticipantOPToValidated({
+        id: trustParticipantId,
+        opSummaryDigest: 'sha384-trust',
+      })
+
+      const vtjsc = (await createJsc(
+        validator,
+        validator.publicApiBaseUrl,
+        getEcsSchemas(validator.publicApiBaseUrl),
+        {
+          schemaBaseId: String(trustSchemaId),
+          jsonSchemaRef: `vpr:verana:${validatorChain.getChainId}:cs:${trustSchemaId}`,
+          precomputedDigestSRI: await computeSchemaDigest(JSON.parse(ecsSchema('AnonCredsTrustCredential'))),
+        },
+      )) as { id: string }
+      jsonSchemaCredentialId = vtjsc.id
+      mockResponses[jsonSchemaCredentialId] = vtjsc
+
+      const attestedResources: Record<string, unknown> = {}
+      const registryPrototype = WebVhAnonCredsRegistry.prototype as unknown as Record<
+        string,
+        (...args: unknown[]) => Promise<unknown>
+      >
+      const resolveAttestedResource = registryPrototype._resolveAndValidateAttestedResource
+      vi.spyOn(registryPrototype, '_resolveAndValidateAttestedResource').mockImplementation(async function (
+        this: unknown,
+        ...args: unknown[]
+      ) {
+        const resource = attestedResources[args[1] as string]
+        if (!resource) return resolveAttestedResource.call(this, ...args)
+        return { resolutionResult: { content: resource }, resourceObject: resource }
+      })
+
+      const { schemaState, registrationMetadata: schemaRegistration } =
+        await validator.modules.anoncreds.registerSchema({
+          schema: {
+            attrNames: ['name'],
+            name: 'AnonCredsTrustCredential',
+            version: String(trustSchemaId),
+            issuerId: validatorDid,
+          },
+          options: { extraMetadata: { relatedJsonSchemaCredentialId: jsonSchemaCredentialId } },
+        })
+      if (!schemaState.schemaId) throw new Error(`the AnonCreds schema is absent: ${schemaState.state}`)
+      anonCredsSchemaId = schemaState.schemaId
+      attestedResources[anonCredsSchemaId] = (
+        schemaRegistration as { attestedResource: Record<string, unknown> }
+      ).attestedResource
+
+      const schemaRepository = validator.dependencyManager.resolve(AnonCredsSchemaRepository)
+      const schemaRecord = await schemaRepository.getBySchemaId(validator.context, anonCredsSchemaId)
+      schemaRecord.setTag('relatedJsonSchemaCredentialId', jsonSchemaCredentialId)
+      await schemaRepository.update(validator.context, schemaRecord)
+
+      const { credentialDefinitionState, registrationMetadata: credentialDefinitionRegistration } =
+        await validator.modules.anoncreds.registerCredentialDefinition({
+          credentialDefinition: {
+            issuerId: validatorDid,
+            schemaId: anonCredsSchemaId,
+            tag: `trust.${trustSchemaId}`,
+          },
+          options: {
+            supportRevocation: false,
+            extraMetadata: { relatedJsonSchemaCredentialId: jsonSchemaCredentialId },
+          },
+        })
+      if (!credentialDefinitionState.credentialDefinitionId) {
+        throw new Error(`the credential definition is absent: ${credentialDefinitionState.state}`)
+      }
+      credentialDefinitionId = credentialDefinitionState.credentialDefinitionId
+      attestedResources[credentialDefinitionId] = (
+        credentialDefinitionRegistration as { attestedResource: Record<string, unknown> }
+      ).attestedResource
+
+      const credentialDefinitionRepository = validator.dependencyManager.resolve(
+        AnonCredsCredentialDefinitionRepository,
+      )
+      const credentialDefinitionRecord = await credentialDefinitionRepository.getByCredentialDefinitionId(
+        validator.context,
+        credentialDefinitionId,
+      )
+      credentialDefinitionRecord.setTag('relatedJsonSchemaCredentialId', jsonSchemaCredentialId)
+      await credentialDefinitionRepository.update(validator.context, credentialDefinitionRecord)
+
+      controller = new V2DidcommCredentialExchangesController(
+        { getAgent: async () => validator } as never,
+        { createShortUrl: async () => 'short-trust' } as never,
+        validator.publicApiBaseUrl,
+      )
+
+      await until(async () => {
+        const participants = await indexer.listParticipants({
+          did: validatorDid,
+          role: ParticipantRole.Issuer,
+          schemaId: trustSchemaId,
+          participantState: ParticipantState.Active,
+        })
+        return participants.length > 0 ? true : undefined
+      })
+    }, SETUP_TIMEOUT_MS)
+
+    it(
+      'derives the CredentialSchema and the Ecosystem DID from the indexer',
+      async () => {
+        const fromCredentialDefinition = await validator.anonCredsTrust.deriveCredentialSchema({
+          credentialDefinitionId,
+        })
+
+        expect(fromCredentialDefinition).toEqual({
+          credentialSchemaId: trustSchemaId,
+          ecosystemDid: validatorDid,
+          jsonSchemaCredentialId,
+          anonCredsSchemaId,
+          issuerId: validatorDid,
+        })
+
+        const fromSchema = await validator.anonCredsTrust.deriveCredentialSchema({
+          schemaId: anonCredsSchemaId,
+        })
+
+        expect(fromSchema.credentialSchemaId).toBe(trustSchemaId)
+        expect(fromSchema.ecosystemDid).toBe(validatorDid)
+        expect(fromSchema.issuerId).toBeUndefined()
+      },
+      SETUP_TIMEOUT_MS,
+    )
+
+    it(
+      'reads the Participant entries of the indexer at the present time',
+      async () => {
+        await expect(
+          validator.anonCredsTrust.assertAuthorized({
+            did: validatorDid,
+            role: ParticipantRole.Issuer,
+            credentialSchemaId: trustSchemaId,
+          }),
+        ).resolves.toBeUndefined()
+
+        await expect(
+          validator.anonCredsTrust.assertAuthorized({
+            did: stranger,
+            role: ParticipantRole.Issuer,
+            credentialSchemaId: trustSchemaId,
+          }),
+        ).rejects.toThrow('holds no active ISSUER Participant')
+
+        await expect(
+          validator.anonCredsTrust.assertAuthorized({
+            did: validatorDid,
+            role: ParticipantRole.Verifier,
+            credentialSchemaId: trustSchemaId,
+          }),
+        ).rejects.toThrow('holds no active VERIFIER Participant')
+
+        const result = await validator.anonCredsTrust.findUnaccreditedDids(
+          [validatorDid, stranger],
+          ParticipantRole.Issuer,
+          trustSchemaId,
+        )
+
+        expect(result).toEqual({ unaccredited: [stranger], unchecked: [] })
+      },
+      SETUP_TIMEOUT_MS,
+    )
+
+    it(
+      'offers a credential while it holds the ISSUER Participant, and refuses once the chain revokes it',
+      async () => {
+        const offer = await controller.createCredentialOffer(offerBody() as never)
+        expect(offer.credentialExchangeId).toBeDefined()
+
+        await chainA.revokeParticipant(corpPolicyAddress, trustParticipantId)
+        await until(async () => {
+          const participants = await indexer.listParticipants({
+            did: validatorDid,
+            role: ParticipantRole.Issuer,
+            schemaId: trustSchemaId,
+            participantState: ParticipantState.Active,
+          })
+          return participants.length === 0 ? true : undefined
+        })
+
+        const error = await controller.createCredentialOffer(offerBody() as never).catch(caught => caught)
+
+        expect(error).toBeInstanceOf(AdminApiError)
+        expect(error.code).toBe('NOT_AUTHORIZED')
+        expect(error.status).toBe(409)
+      },
+      SETUP_TIMEOUT_MS,
+    )
+  })
 })

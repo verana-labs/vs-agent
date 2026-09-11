@@ -1,5 +1,6 @@
 import type { VsAgent } from '../agent/VsAgent'
 
+import { GenericRecord, TagsBase, utils } from '@credo-ts/core'
 import {
   DidCommConnectionRepository,
   DidCommHandshakeProtocol,
@@ -111,4 +112,41 @@ export async function connectToPublicDid(agent: VsAgent, peerPublicDid: string):
 export async function getRecordId(agent: VsAgent, id: string): Promise<string> {
   const record = await agent.genericRecords.findById(id)
   return (record?.getTag('messageId') as string) ?? id
+}
+
+/** The record type of every attested resource of the AnonCreds registry, per [VSA-PUB-AC]. */
+export const ATTESTED_RESOURCE_TYPE = 'AttestedResource'
+
+export type AttestedResourceTags = TagsBase & {
+  type?: never
+  attestedResourceId?: never
+}
+
+export async function saveAttestedResource(
+  agent: VsAgent,
+  resource: Record<string, unknown>,
+  tags?: AttestedResourceTags,
+): Promise<GenericRecord | undefined> {
+  if (!resource) return undefined
+  return await agent.genericRecords.save({
+    id: utils.uuid(),
+    content: resource,
+    tags: {
+      attestedResourceId: resource.id as string,
+      type: ATTESTED_RESOURCE_TYPE,
+      ...tags,
+    },
+  })
+}
+
+export async function findAttestedResources(agent: VsAgent, query: TagsBase): Promise<GenericRecord[]> {
+  return await agent.genericRecords.findAllByQuery({ ...query, type: ATTESTED_RESOURCE_TYPE })
+}
+
+export async function findAttestedResource(
+  agent: VsAgent,
+  query: TagsBase,
+): Promise<GenericRecord | undefined> {
+  const [record] = await findAttestedResources(agent, query)
+  return record
 }

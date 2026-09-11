@@ -52,11 +52,11 @@
       },
       "correctness": {
         "noUnusedVariables": {
-          "level": "warn",
+          "level": "error",
           "fix": "safe"
         },
         "noUnusedFunctionParameters": "off",
-        "noUnusedImports": "warn",
+        "noUnusedImports": "error",
         "noUndeclaredDependencies": "off",
         "noInvalidUseBeforeDeclaration": "error",
         "noSwitchDeclarations": "warn",

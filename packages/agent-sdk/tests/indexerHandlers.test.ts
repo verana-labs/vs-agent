@@ -171,8 +171,8 @@ describe('applyStateMutation', () => {
     const agent = {
       did: 'did:web:agent',
       publicApiBaseUrl: 'https://agent',
-      veranaChain: {
-        getParticipant: vi.fn().mockResolvedValue({ role: 6, did: 'did:web:agent', schemaId: 4 }),
+      indexer: {
+        findParticipant: vi.fn().mockResolvedValue({ role: 6, did: 'did:web:agent', schemaId: 4 }),
       },
       context: {
         dependencyManager: {
@@ -218,7 +218,7 @@ describe('applyStateMutation', () => {
     expect(deleteV2ById).toHaveBeenCalledWith('w3c-v2-1')
 
     // Non-HOLDER participants are left alone.
-    agent.veranaChain.getParticipant.mockResolvedValue({ role: 1, did: 'did:web:agent', schemaId: 4 })
+    agent.indexer.findParticipant.mockResolvedValue({ role: 1, did: 'did:web:agent', schemaId: 4 })
     findAllByQuery.mockClear()
     await removeHolderTrustCredentialIfRevoked(agent as never, '13')
     expect(findAllByQuery).not.toHaveBeenCalled()
@@ -266,8 +266,8 @@ describe('applyStateMutation', () => {
     const agent = {
       did: 'did:web:agent',
       publicApiBaseUrl: 'https://agent',
-      veranaChain: {
-        getParticipant: vi.fn().mockResolvedValue({ id: 7, role: 1, did: 'did:web:agent', schemaId: 9 }),
+      indexer: {
+        findParticipant: vi.fn().mockResolvedValue({ id: 7, role: 1, did: 'did:web:agent', schemaId: 9 }),
       },
       context: { dependencyManager: { resolve: () => ({ update: vi.fn() }) } },
       dids: { getCreatedDids: vi.fn().mockResolvedValue([didRecord]), update: vi.fn() },
@@ -283,7 +283,7 @@ describe('applyStateMutation', () => {
     expect(publishSelfIssuedEcsPresentation).not.toHaveBeenCalled()
 
     // A HOLDER participant is not this handler's business.
-    agent.veranaChain.getParticipant.mockResolvedValue({ id: 8, role: 6, did: 'did:web:agent' })
+    agent.indexer.findParticipant.mockResolvedValue({ id: 8, role: 6, did: 'did:web:agent' })
     await removeSelfIssuedEcsCredentialsIfIssuerRevoked(agent as never, '8')
     expect(metadataStore['_vt/vtc']['https://ecosystem/vt/schemas-3-jsc.json']).toBeDefined()
   })
@@ -315,8 +315,8 @@ describe('reconcileVtFlowRecordsOnCancel', () => {
   function makeCancelAgent(opState: number | undefined, records: Record<string, unknown>[]) {
     const updateState = vi.fn().mockResolvedValue(undefined)
     const agent = {
-      veranaChain: {
-        getParticipant:
+      indexer: {
+        findParticipant:
           opState === undefined
             ? vi.fn().mockRejectedValue(new Error('participant not found'))
             : vi.fn().mockResolvedValue({ opState }),

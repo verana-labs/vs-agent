@@ -1,3 +1,4 @@
+import { AnonCredsSchemaRepository } from '@credo-ts/anoncreds'
 import { AgentContext } from '@credo-ts/core'
 import {
   VtFlowApi,
@@ -12,6 +13,7 @@ import { classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../../types'
+import { saveAttestedResource } from '../../utils/agent'
 import { getEcsSchemas } from '../../utils/data'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../../utils/didReadiness'
 import { generateDigestSRI } from '../../utils/setupSelfTr'
@@ -25,6 +27,7 @@ import {
   removeStoredTrustCredential,
   withdrawSelfIssuedEcsCredentials,
 } from '../../utils/trustCredentialStore'
+import { anonCredsSchemaFromJsonSchema } from '../../utils/util'
 import { isDataIntegrityVcdm2Credential } from '../../utils/vcdm2'
 import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
 import { VtFlowOrchestrator } from '../../vtFlow'
@@ -229,7 +232,7 @@ export async function completeVtFlowRecordsWithoutCredential(
   agent: VsAgent,
   participantId: string,
 ): Promise<void> {
-  const participant = await agent.veranaChain?.getParticipant(Number(participantId))
+  const participant = await agent.indexer.findParticipant(participantId).catch(() => undefined)
   if (!participant || participant.role === HOLDER_PARTICIPANT_TYPE) return
 
   await reconcileVtFlowRecordsForParticipant(
@@ -301,7 +304,7 @@ export async function removeHolderTrustCredentialIfRevoked(
   agent: VsAgent,
   participantId: string,
 ): Promise<void> {
-  const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
+  const participant = await agent.indexer.findParticipant(participantId).catch(() => undefined)
   if (participant?.role !== HOLDER_PARTICIPANT_TYPE || participant.did !== agent.did) return
   if (!agent.publicApiBaseUrl) return
 
@@ -335,7 +338,7 @@ export async function removeSelfIssuedEcsCredentialsIfIssuerRevoked(
   participantId: string,
 ): Promise<void> {
   if (!agent.publicApiBaseUrl) return
-  const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
+  const participant = await agent.indexer.findParticipant(participantId).catch(() => undefined)
   if (participant?.role !== ISSUER_PARTICIPANT_TYPE || participant.did !== agent.did) return
 
   try {
@@ -354,7 +357,7 @@ export async function removeSelfIssuedEcsCredentialsIfIssuerRevoked(
 }
 
 export async function reconcileVtFlowRecordsOnCancel(agent: VsAgent, participantId: string): Promise<void> {
-  const participant = await agent.veranaChain?.getParticipant(Number(participantId)).catch(() => undefined)
+  const participant = await agent.indexer.findParticipant(participantId).catch(() => undefined)
   const stillValidated = Number(participant?.opState) === ValidationState.VALIDATED
 
   await reconcileVtFlowRecordsForParticipant(
@@ -396,7 +399,7 @@ export async function startParticipantOPAutoFlow(agent: VsAgent, activity: Index
   if (!chain) return
   const applicantParticipantId = Number(activity.entity_id)
   if (!Number.isFinite(applicantParticipantId)) return
-  const holderParticipant = await chain.getParticipant(applicantParticipantId)
+  const holderParticipant = await agent.indexer.findParticipant(applicantParticipantId)
   if (!holderParticipant || holderParticipant.did !== agent.did) return
   try {
     await waitUntilOwnDidIsPubliclyResolvable(agent, agent.config.logger)
@@ -439,6 +442,7 @@ export async function reconcileVtjscPublications(
       const existingDigest = (
         existingJsc?.credential?.credentialSubject as { digestSRI?: string } | undefined
       )?.digestSRI
+      let jsonSchemaCredentialId = existingJsc?.credential?.id
       try {
         // a VTJSC an older agent published as data model 1.1 is rebuilt as well
         if (
@@ -446,11 +450,17 @@ export async function reconcileVtjscPublications(
           existingDigest !== expectedDigest ||
           !isDataIntegrityVcdm2Credential(existingJsc.credential)
         ) {
-          await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
-            schemaBaseId: String(schema.id),
-            jsonSchemaRef: schemaRef,
-            precomputedDigestSRI: expectedDigest,
-          })
+          const credential = await createJsc(
+            agent,
+            agent.publicApiBaseUrl,
+            getEcsSchemas(agent.publicApiBaseUrl),
+            {
+              schemaBaseId: String(schema.id),
+              jsonSchemaRef: schemaRef,
+              precomputedDigestSRI: expectedDigest,
+            },
+          )
+          jsonSchemaCredentialId = credential.id
           agent.config.logger.info(
             `[VTJSC] Reconciled VTJSC for schema ${schema.id} (ecosystem ${ecosystem.id})`,
           )
@@ -461,6 +471,17 @@ export async function reconcileVtjscPublications(
         }
       } catch (e) {
         agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
+      }
+
+      // an agent that published a VTJSC before [VSA-PUB-AC-5] has no AnonCreds schema for it yet
+      if (!jsonSchemaCredentialId) continue
+      try {
+        await publishAnonCredsSchemaForVtjsc(agent, schema.id, schema.json_schema, jsonSchemaCredentialId)
+      } catch (e) {
+        agent.config.logger.error(
+          `[VTJSC] Failed to reconcile the AnonCreds schema of ${jsonSchemaCredentialId}`,
+          e as Error,
+        )
       }
     }
   }
@@ -607,6 +628,57 @@ async function reconcileSelfIssuedEcsCredentials(
   }
 }
 
+/**
+ * Publishes the one AnonCreds schema that governs every credential of a VTJSC, per [VSA-PUB-AC-5].
+ * Only the issuer of the VTJSC publishes it. The call is idempotent.
+ */
+export async function publishAnonCredsSchemaForVtjsc(
+  agent: VsAgent,
+  credentialSchemaId: string | number,
+  jsonSchema: string | object,
+  jsonSchemaCredentialId: string,
+): Promise<string | undefined> {
+  if (!agent.did) return undefined
+
+  const [published] = await agent.modules.anoncreds.getCreatedSchemas({
+    relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+  })
+  if (published) return published.schemaId
+
+  const { name, attrNames } = anonCredsSchemaFromJsonSchema(jsonSchema)
+  // used for consistency when a similar schema already exists
+  const version = String(credentialSchemaId)
+
+  const { schemaState, registrationMetadata } = await agent.modules.anoncreds.registerSchema({
+    schema: { attrNames, name, version, issuerId: agent.did },
+    options: { extraMetadata: { relatedJsonSchemaCredentialId: jsonSchemaCredentialId } },
+  })
+
+  if (schemaState.state !== 'finished') {
+    const detail = schemaState.state === 'failed' ? schemaState.reason : schemaState.state
+    throw new Error(`Failed to register the AnonCreds schema of ${jsonSchemaCredentialId}: ${detail}`)
+  }
+
+  const { schemaId } = schemaState
+  const schemaRepository = agent.dependencyManager.resolve(AnonCredsSchemaRepository)
+  const schemaRecord = await schemaRepository.findBySchemaId(agent.context, schemaId)
+  if (schemaRecord) {
+    schemaRecord.setTag('relatedJsonSchemaCredentialId', jsonSchemaCredentialId)
+    await schemaRepository.update(agent.context, schemaRecord)
+  }
+
+  // the did:web layout builds no attested resource: it serves the object from the AnonCreds record
+  const { attestedResource } = registrationMetadata as { attestedResource?: Record<string, unknown> }
+  if (attestedResource) {
+    await saveAttestedResource(agent, attestedResource, {
+      resourceType: 'anonCredsSchema',
+      relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+    })
+  }
+
+  return schemaId
+}
+
 export async function publishVtjscIfOwner(
   state: VeranaSyncState,
   agent: VsAgent,
@@ -641,16 +713,38 @@ export async function publishVtjscIfOwner(
 
   const digestSRI = generateDigestSRI(schema.jsonSchema)
 
+  let jsonSchemaCredentialId: string | undefined
   try {
-    await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
+    const credential = await createJsc(agent, agent.publicApiBaseUrl, getEcsSchemas(agent.publicApiBaseUrl), {
       schemaBaseId: String(schema.id),
       jsonSchemaRef,
       precomputedDigestSRI: digestSRI,
     })
+    jsonSchemaCredentialId = credential.id
     agent.config.logger.info(
       `[VTJSC] Published VTJSC for schema ${schema.id} (Ecosystem ${schema.ecosystemId}) at block ${state.lastBlockHeight}`,
     )
   } catch (e) {
     agent.config.logger.error(`[VTJSC] Failed to publish VTJSC for schema ${schema.id}`, e as Error)
+    return
+  }
+
+  // an AnonCreds failure keeps the VTJSC: the startup reconciliation retries the schema
+  if (!jsonSchemaCredentialId) return
+  try {
+    const schemaId = await publishAnonCredsSchemaForVtjsc(
+      agent,
+      schema.id,
+      schema.jsonSchema,
+      jsonSchemaCredentialId,
+    )
+    agent.config.logger.info(
+      `[VTJSC] Published the AnonCreds schema ${schemaId} of ${jsonSchemaCredentialId}`,
+    )
+  } catch (e) {
+    agent.config.logger.error(
+      `[VTJSC] Failed to publish the AnonCreds schema of ${jsonSchemaCredentialId}`,
+      e as Error,
+    )
   }
 }

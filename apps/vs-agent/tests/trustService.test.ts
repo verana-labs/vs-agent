@@ -13,6 +13,7 @@ import { MessageService, TrustService } from '../src/controllers'
 import { computeCredentialDigestJCS, verifySignature } from '@verana-labs/verre'
 
 import { isCredentialStateChangedEvent, startAgent, startServersTesting } from './__mocks__'
+import { issueVtjscFrom } from './__mocks__'
 import {
   makeConnection,
   SubjectInboundTransport,
@@ -61,7 +62,7 @@ describe('TrustService', () => {
       jscFaberAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(faberMessages))
       jscFaberAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
       await jscFaberAgent.initialize()
-      jscFaberApp = await startServersTesting(jscFaberAgent)
+      jscFaberApp = await startServersTesting(jscFaberAgent, { chat: false })
       jscFaberService = jscFaberApp.get<TrustService>(TrustService)
     })
 
@@ -190,15 +191,24 @@ describe('TrustService', () => {
       sessionMock = vi.fn(async () => ({ txHash: 'tx-1' }))
       fakeChain = {
         getChainId: 'vna-test-1',
-        findActiveIssuerParticipantId: vi.fn(async () => 12),
-        getCredentialSchema: vi.fn(async () => ({ digestAlgorithm: 'sha384' })),
+        address: 'verana1agent',
         createOrUpdateParticipantSession: sessionMock,
       }
-      faberAgent = await startAgent({ label: 'Faber Test', domain: 'faber', veranaChain: fakeChain as never })
+      const fakeIndexer = {
+        findActiveIssuerParticipantId: vi.fn(async () => 12),
+        getCredentialSchema: vi.fn(async () => ({ digest_algorithm: 'sha384' })),
+        getDigest: vi.fn(async () => undefined),
+      }
+      faberAgent = await startAgent({
+        label: 'Faber Test',
+        domain: 'faber',
+        veranaChain: fakeChain as never,
+        indexer: fakeIndexer as never,
+      })
       faberAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(faberMessages))
       faberAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
       await faberAgent.initialize()
-      faberApp = await startServersTesting(faberAgent)
+      faberApp = await startServersTesting(faberAgent, { chat: false })
 
       aliceAgent = await startAgent({ label: 'Alice Test', domain: 'alice' })
       aliceAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(aliceMessages))
@@ -206,7 +216,7 @@ describe('TrustService', () => {
       await aliceAgent.initialize()
       ;[aliceConnection, faberConnection] = await makeConnection(aliceAgent, faberAgent)
       aliceEvents = vi.spyOn(aliceAgent.events, 'emit')
-      await startServersTesting(aliceAgent)
+      await startServersTesting(aliceAgent, { chat: false })
 
       faberService = faberApp.get<TrustService>(TrustService)
       faberMsgService = faberApp.get<MessageService>(MessageService)
@@ -331,6 +341,8 @@ describe('TrustService', () => {
     })
 
     it('should issue a valid anoncreds credential', async () => {
+      issueVtjscFrom(faberAgent.did)
+
       // Mocks
       const original = WebVhAnonCredsRegistry.prototype['_resolveAndValidateAttestedResource']
       vi.spyOn(
