@@ -1,8 +1,14 @@
 import type { BaseAgentModules, VsAgent } from '../agent/VsAgent'
 
-import { JsonTransformer, W3cJsonLdVerifiableCredential } from '@credo-ts/core'
+import {
+  JsonTransformer,
+  W3cJsonLdVerifiableCredential,
+  type W3cV2DataIntegritySecuredCredential,
+  W3cV2DataIntegrityVerifiableCredential,
+} from '@credo-ts/core'
 
 import { fetchJson } from '../utils/util'
+import { isVcdm2Credential } from '../utils/vcdm2'
 
 import { ParticipantDto, ParticipantRole, ParticipantState } from './types'
 
@@ -77,6 +83,7 @@ interface ResolvedAnonCredsObject {
 }
 
 interface VtjscDocument {
+  '@context'?: unknown
   issuer?: string | { id?: string }
   credentialSubject?: VtjscSubject | VtjscSubject[]
 }
@@ -343,16 +350,29 @@ export class AnonCredsTrustService {
     return value
   }
 
+  /**
+   * A VTJSC is a data model 2.0 credential secured with a DataIntegrityProof, as
+   * [VT-JSON-SCHEMA-CRED-W3C] requires; one an ecosystem still publishes as data model 1.1 with a
+   * linked data proof is verified through the 1.1 API, as verre accepts both.
+   */
   private async verifyVtjscProof(jsonSchemaCredentialId: string, document: VtjscDocument): Promise<void> {
-    let credential: W3cJsonLdVerifiableCredential
+    let verify: () => Promise<{ isValid: boolean; error?: Error }>
     try {
-      credential = JsonTransformer.fromJSON(document, W3cJsonLdVerifiableCredential)
+      if (isVcdm2Credential(document)) {
+        const credential = W3cV2DataIntegrityVerifiableCredential.fromObject(
+          document as unknown as W3cV2DataIntegritySecuredCredential,
+        )
+        verify = () => this.agent.w3cV2Credentials.verifyCredential({ credential })
+      } else {
+        const credential = JsonTransformer.fromJSON(document, W3cJsonLdVerifiableCredential)
+        verify = () => this.agent.w3cCredentials.verifyCredential({ credential })
+      }
     } catch (error) {
       throw notDerivable(`the document at "${jsonSchemaCredentialId}" is no verifiable credential: ${error}`)
     }
 
     try {
-      const result = await this.agent.w3cCredentials.verifyCredential({ credential })
+      const result = await verify()
       if (result.isValid) return
 
       throw notDerivable(
