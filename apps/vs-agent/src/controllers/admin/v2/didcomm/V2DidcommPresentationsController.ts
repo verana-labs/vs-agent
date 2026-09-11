@@ -269,7 +269,7 @@ export class V2DidcommPresentationsController {
       // [VSA-VTI-FLOW-VERIFY-AC-6]
       if (!PUBLIC_DID_METHODS.includes(parseDid(verifierDid).method)) {
         throw peerNotAuthorized(
-          `the verifier of presentation "${proofExchangeId}" connected with "${verifierDid}", which is no did:web or did:webvh DID, so the agent cannot check its Participant entry`,
+          `Unable to check verifier Participant entry for presentation "${proofExchangeId}": "${verifierDid}" is not supported. Supported methods: ${SUPPORTED_DID_METHODS}`,
         )
       }
 
