@@ -83,6 +83,13 @@ export async function decidePresentation(input: {
   }
 }
 
+export function assertCredentialExpires(credential: unknown): void {
+  if (!isRecord(credential) || credential.claimFormat !== ClaimFormat.SdJwtDc) return
+  if (!isRecord(credential.payload) || typeof credential.payload.exp !== 'number') {
+    throw new Error("the presented SD-JWT VC carries no numeric 'exp' claim")
+  }
+}
+
 function blocked(
   did: string | null,
   vtjscId: string | null,

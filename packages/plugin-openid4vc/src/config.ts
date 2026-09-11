@@ -14,7 +14,7 @@ import { isRecord } from './utils/isRecord'
 
 const MAX_TTL_SECONDS = 31_536_000
 const MIN_TTL_SECONDS = 60
-const RESERVED_CREDENTIAL_CLAIMS = new Set(['vct', 'iat', 'exp', 'iss', 'cnf', 'status'])
+const RESERVED_CREDENTIAL_CLAIMS = new Set(['vct', 'iat', 'exp', 'nbf', 'iss', 'cnf', 'status'])
 
 /** [VSA-VTI-CFG-ENV-OID] Validation of the OpenID4VC configuration file. */
 export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void {

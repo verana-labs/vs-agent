@@ -1,5 +1,6 @@
 import type { OpenId4VcPluginOptions } from '../src/types'
 
+import { ClaimFormat } from '@credo-ts/core'
 import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 
@@ -107,6 +108,24 @@ describe('setupOpenId4Vc', () => {
 
     expect(anchors).toEqual(['MIIB-trusted-root'])
     expect(anchors).not.toEqual(['MIIB-peer-certificate'])
+  })
+
+  it('fails the verification of a presented SD-JWT VC that carries no numeric exp', () => {
+    const setup = setupOpenId4Vc(validOptions())
+    const getTrustedCertificates = setup.modules.x509.config.getTrustedCertificatesForVerification
+    const verify = (payload: Record<string, unknown>) =>
+      getTrustedCertificates?.({} as never, {
+        certificateChain: [{ toString: () => 'MIIB-peer-certificate' } as never],
+        verification: {
+          type: 'credential',
+          credential: { claimFormat: ClaimFormat.SdJwtDc, payload } as never,
+        },
+      })
+    const vct = 'https://agent.example/oid4vc/vct/employee'
+
+    expect(verify({ vct, exp: 1_784_638_800 })).toEqual(['MIIB-trusted-root'])
+    expect(() => verify({ vct })).toThrow("carries no numeric 'exp' claim")
+    expect(() => verify({ vct, exp: '1784638800' })).toThrow("carries no numeric 'exp' claim")
   })
 
   it('serves the SD-JWT VC issuer metadata that x5c-anchoring holders resolve', async () => {

@@ -51,8 +51,8 @@ location or validation fails. Keys are camelCase. Full reference: [[VSA-VTI-CFG-
 | `credentialConfigurations` | Array. Each entry: unique `id`, `format` `dc+sd-jwt`, `https://` `vct` and `vtjscId`, `name`, optional `description`, `claims`, `disclosureFrame` (subset of `claims`), `ttlSeconds` (60 to 31536000). `claims` is the allowed set for an offer: an offer may omit any of them and the credential then omits them too, an offered claim must be non-empty, and an offer must carry at least one configured claim. |
 | `verifierPolicies` | Array. Each entry: unique `id`, `credentialConfigurationId`, `requestedClaims` (subset of that configuration's claims). |
 
-A claim may not be named `vct`, `iat`, `exp`, `iss`, `cnf` or `status`: those belong to the
-credential envelope.
+A claim may not be named `vct`, `iat`, `exp`, `nbf`, `iss`, `cnf` or `status`: those belong to
+the credential envelope.
 
 ### Signing modes
 
@@ -161,8 +161,9 @@ Admin API and the metadata return; it never builds a path itself.
 A verifier accepts a presentation only after each step succeeds, in this order:
 
 1. credo verifies the OpenID4VP response, the nonce, the audience, the holder binding, the SD-JWT
-   disclosure, the signature and the X.509 chain against the configured roots or an exact
-   development fingerprint;
+   disclosure, the signature, the X.509 chain against the configured roots or an exact
+   development fingerprint, and the validity period: a credential without a numeric `exp`, past
+   its `exp`, or before its `nbf` fails here, and the session ends in `Error`;
 2. the issuer DID is read from a URI SAN of the validated certificate only;
 3. the DID is a well-formed `did:web` or `did:webvh` on `allowedDidWebHosts`, with no loopback,
    private or link-local target, and the resolved document id equals the DID;
