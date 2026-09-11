@@ -33,12 +33,15 @@ import {
 import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
+  AUTO_ACCEPT_PRESENTATION_METADATA,
   createInvitation,
   DerivedCredentialSchema,
   fetchJson,
   ParticipantRole,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+  toRequestedCredentialSchema,
   type BaseAgentModules,
+  type RequestedCredentialSchemas,
   type VsAgent,
 } from '@verana-labs/vs-agent-sdk'
 
@@ -141,7 +144,7 @@ export class V2DidcommPresentationsController {
     // One requested-attribute group per entry, so a request may span several credentials. Groups are
     // keyed by schema name, suffixed when two entries resolve to schemas that share a name.
     const requestedAttributes: Record<string, AnonCredsRequestedAttribute> = {}
-    const requestedCredentialSchemas: number[] = []
+    const requestedCredentialSchemas: RequestedCredentialSchemas = {}
     for (const entry of requestedCredentials) {
       const { schema, restrictions } = await this.resolve(entry)
       const attributes = entry.attributes ?? schema.attrNames
@@ -153,18 +156,20 @@ export class V2DidcommPresentationsController {
         )
       }
 
+      const group = uniqueKey(requestedAttributes, schema.name)
+
       try {
-        const { credentialSchemaId } = await deriveFromRestriction(agent, restrictions[0])
+        const derived = await deriveFromRestriction(agent, restrictions[0])
         await agent.anonCredsTrust.assertOwnAuthorization({
           role: ParticipantRole.Verifier,
-          credentialSchemaId,
+          credentialSchemaId: derived.credentialSchemaId,
         })
-        requestedCredentialSchemas.push(credentialSchemaId)
+        requestedCredentialSchemas[group] = toRequestedCredentialSchema(derived)
       } catch (error) {
         throw trustDecisionError(error, 'agent', AdminApiErrorCode.InvalidInput)
       }
 
-      requestedAttributes[uniqueKey(requestedAttributes, schema.name)] = { names: attributes, restrictions }
+      requestedAttributes[group] = { names: attributes, restrictions }
     }
 
     let nonRevoked: AnonCredsNonRevokedInterval | undefined
@@ -173,11 +178,11 @@ export class V2DidcommPresentationsController {
       nonRevoked = { from: now, to: now }
     }
 
-    // The specification makes the caller run the verifier steps, unless the caller sets
-    // `autoAccept`. The exchange carries the policy, which the module default does not override.
+    // Credo acknowledges a presentation before the trust decision runs. The agent sends the
+    // acknowledgement itself, per [VSA-VTI-FLOW-VERIFY-AC-7].
     const request = await agent.didcomm.proofs.createRequest({
       protocolVersion: 'v2',
-      autoAcceptProof: autoAccept ? DidCommAutoAcceptProof.ContentApproved : DidCommAutoAcceptProof.Never,
+      autoAcceptProof: DidCommAutoAcceptProof.Never,
       proofFormats: {
         anoncreds: {
           name: 'proof-request',
@@ -190,6 +195,7 @@ export class V2DidcommPresentationsController {
 
     request.proofRecord.metadata.set(REQUESTED_CREDENTIALS_METADATA, requestedCredentials)
     request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, requestedCredentialSchemas)
+    request.proofRecord.metadata.set(AUTO_ACCEPT_PRESENTATION_METADATA, { autoAccept })
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { invitation } = await createInvitation({
