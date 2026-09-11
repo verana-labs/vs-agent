@@ -100,6 +100,7 @@ describe('in-process OpenID4VC issuance and presentation', () => {
     expect(Number(storedCredential.prettyClaims.exp) - Number(storedCredential.prettyClaims.iat)).toBe(
       CONFIGURATION.ttlSeconds,
     )
+    expect(storedCredential.prettyClaims).not.toHaveProperty('status')
     const records = await agents.holder.agent.sdJwtVc.getAll()
     expect(records).toHaveLength(1)
     expect(records[0].firstCredential.claimFormat).toBe('dc+sd-jwt')

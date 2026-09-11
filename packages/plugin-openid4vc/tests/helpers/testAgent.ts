@@ -183,7 +183,6 @@ export async function startOpenId4VcTestAgents(input: {
   issuerDid: string
   verifierDid: string
   credentialConfiguration: OpenId4VcCredentialConfiguration
-  revocation?: OpenId4VcPluginOptions['revocation']
   failureHooks?: TestAgentFailureHooks
 }): Promise<OpenId4VcTestAgents> {
   const rootCertificate = input.certificates.root.toString('base64')
@@ -214,7 +213,6 @@ export async function startOpenId4VcTestAgents(input: {
         credentialIssuerCertificates: [rootCertificate],
       },
       credentialConfigurations: [input.credentialConfiguration],
-      ...(input.revocation ? { revocation: input.revocation } : {}),
       verifierPolicies: [],
     }),
     createService: (agent, options) => new IssuerService(agent, options),

@@ -1,14 +1,11 @@
 import type { OpenId4VcPluginOptions } from '../src/types'
 
-import { AgentContext, ClaimFormat, RecordNotFoundError, TokenStatusListApi } from '@credo-ts/core'
+import { AgentContext, ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import { OpenId4VcIssuanceSessionRepository } from '@credo-ts/openid4vc'
-import { createHeaderAndPayload, JWT_STATUS_LIST_TYPE, StatusList } from '@owf/token-status-list'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   IssuerService,
-  OpenId4VcIssuanceSessionStateError,
-  OpenId4VcRevocationDisabledError,
   UnknownCredentialConfigurationError,
   UnknownIssuanceSessionError,
 } from '../src/services/IssuerService'
@@ -117,10 +114,6 @@ function jwsService() {
   return { createJwsCompact: vi.fn().mockResolvedValue('re-signed.metadata.jwt') }
 }
 
-function statusListApi() {
-  return { createTokenStatusList: vi.fn().mockResolvedValue({ statusList: 'eyJ.status.list' }) }
-}
-
 function agent(api = issuerApi(), did: string | undefined = AGENT_DID, jws = jwsService()) {
   return {
     did,
@@ -132,7 +125,6 @@ function agent(api = issuerApi(), did: string | undefined = AGENT_DID, jws = jws
       resolve: (token: unknown) => {
         if (token === AgentContext) return AGENT_CONTEXT
         if (token === OpenId4VcIssuanceSessionRepository) return sessionRepository
-        if (token === TokenStatusListApi) return statusListApi()
         return jws
       },
     },
@@ -160,43 +152,10 @@ function signingHandle() {
   }
 }
 
-const STATUS_LIST_URI = 'https://agent.example/oid4vc/status-list/list-1'
-const STATUS_LIST_SIZE = 10
-
-function statusListToken(revoked: number[]) {
-  const list = new StatusList(
-    Array.from({ length: STATUS_LIST_SIZE }, (_, index) => (revoked.includes(index) ? 1 : 0)),
-    1,
-  )
-  const { header, payload } = createHeaderAndPayload(
-    list,
-    { sub: STATUS_LIST_URI, iat: 1_784_635_200 },
-    { alg: 'ES256', typ: JWT_STATUS_LIST_TYPE },
-  )
-  const encode = (value: unknown) => Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
-  return `${encode(header)}.${encode(payload)}.signature`
-}
-
-function statusListState(sessionIndices: Record<string, number[]>, revoked: number[]) {
-  return {
-    content: {
-      listId: 'list-1',
-      uri: STATUS_LIST_URI,
-      size: STATUS_LIST_SIZE,
-      nextIndex: Object.values(sessionIndices).flat().length,
-      token: statusListToken(revoked),
-      sessionIndices,
-      revoked,
-    },
-  }
-}
-
 async function initialized(
   overrides: {
-    revocation?: OpenId4VcPluginOptions['revocation']
     issuer?: Partial<NonNullable<OpenId4VcPluginOptions['issuer']>>
     issuerMissing?: boolean
-    statusList?: { sessionIndices: Record<string, number[]>; revoked: number[] }
   } = {},
 ) {
   const api = issuerApi()
@@ -207,17 +166,9 @@ async function initialized(
   }
 
   const configured = options()
-  if (overrides.revocation) configured.revocation = overrides.revocation
   if (overrides.issuer && configured.issuer) Object.assign(configured.issuer, overrides.issuer)
 
-  const issuerAgent = agent(api)
-  if (overrides.statusList) {
-    issuerAgent.genericRecords.findById.mockResolvedValue(
-      statusListState(overrides.statusList.sessionIndices, overrides.statusList.revoked),
-    )
-  }
-
-  const service = new IssuerService(issuerAgent as never, configured)
+  const service = new IssuerService(agent(api) as never, configured)
   await service.ensureInitialized()
   return { service, api }
 }
@@ -816,73 +767,6 @@ describe('IssuerService', () => {
     })
     expect(metadata).not.toHaveProperty('credentialSchema')
     expect(service.getVctMetadata('unknown')).toBeUndefined()
-  })
-
-  describe('revocation', () => {
-    it('refuses to revoke when revocation is not enabled', async () => {
-      const { service } = await initialized()
-      await expect(service.revokeIssuanceSession('session-1')).rejects.toBeInstanceOf(
-        OpenId4VcRevocationDisabledError,
-      )
-    })
-
-    it('refuses to revoke a session that issued nothing yet', async () => {
-      const { service, api } = await initialized({ revocation: { enabled: true } })
-      api.getIssuanceSessionById.mockResolvedValue(issuanceSession({ state: 'Completed' }))
-      await expect(service.revokeIssuanceSession('session-1')).rejects.toBeInstanceOf(
-        OpenId4VcIssuanceSessionStateError,
-      )
-    })
-
-    it('revokes a session that issued and then errored', async () => {
-      const { service, api } = await initialized({
-        revocation: { enabled: true },
-        statusList: { sessionIndices: { 'session-1': [0] }, revoked: [] },
-      })
-      api.getIssuanceSessionById.mockResolvedValue(issuanceSession({ state: 'Error' }))
-
-      await expect(service.revokeIssuanceSession('session-1')).resolves.toBeUndefined()
-    })
-
-    it('refuses to delete a session whose credential is not revoked', async () => {
-      const { service, api } = await initialized({
-        revocation: { enabled: true },
-        statusList: { sessionIndices: { 'session-1': [0] }, revoked: [] },
-      })
-      api.getIssuanceSessionById.mockResolvedValue(issuanceSession({ state: 'Completed' }))
-
-      await expect(service.deleteIssuanceSession('session-1')).rejects.toThrow(
-        "issuance session 'session-1' holds an unrevoked credential; revoke it first",
-      )
-      await expect(service.deleteIssuanceSession('session-1')).rejects.toBeInstanceOf(
-        OpenId4VcIssuanceSessionStateError,
-      )
-      expect(api.deleteIssuanceSessionById).not.toHaveBeenCalled()
-    })
-
-    it('deletes a session once every allocated index is revoked', async () => {
-      const { service, api } = await initialized({
-        revocation: { enabled: true },
-        statusList: { sessionIndices: { 'session-1': [0] }, revoked: [0] },
-      })
-      api.getIssuanceSessionById.mockResolvedValue(issuanceSession({ state: 'Completed' }))
-
-      await service.deleteIssuanceSession('session-1')
-
-      expect(api.deleteIssuanceSessionById).toHaveBeenCalledWith('session-1')
-    })
-
-    it('deletes a session that never reached the status list', async () => {
-      const { service, api } = await initialized({
-        revocation: { enabled: true },
-        statusList: { sessionIndices: { 'session-2': [0] }, revoked: [] },
-      })
-      api.getIssuanceSessionById.mockResolvedValue(issuanceSession())
-
-      await service.deleteIssuanceSession('session-1')
-
-      expect(api.deleteIssuanceSessionById).toHaveBeenCalledWith('session-1')
-    })
   })
 
   describe('DID metadata signer', () => {

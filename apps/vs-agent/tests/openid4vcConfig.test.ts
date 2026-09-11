@@ -63,14 +63,12 @@ describe('OpenID4VC configuration file', () => {
     })
   })
 
-  it('accepts the revocation block', async () => {
-    const withRevocation = { ...validConfig(), revocation: { enabled: true, size: 131072 } }
-    await writeFile(configPath, JSON.stringify(withRevocation))
+  it('refuses a file that still carries a revocation block', async () => {
+    await writeFile(configPath, JSON.stringify({ ...validConfig(), revocation: { enabled: true } }))
 
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).resolves.toEqual({
-      ...withRevocation,
-      publicApiBaseUrl,
-    })
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
+      "unknown top-level field 'revocation'",
+    )
   })
 
   it('rejects a public API base URL supplied by the file', async () => {

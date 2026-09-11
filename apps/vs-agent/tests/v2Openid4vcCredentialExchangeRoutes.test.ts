@@ -10,9 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import {
   IssuerService,
-  OpenId4VcIssuanceSessionStateError,
   OpenId4VcIssuerRequestError,
-  OpenId4VcRevocationDisabledError,
   UnknownCredentialConfigurationError,
   UnknownIssuanceSessionError,
 } from '@verana-labs/vs-agent-plugin-openid4vc'
@@ -48,7 +46,6 @@ const issuerService = {
   getIssuanceSession: vi.fn(),
   listIssuanceSessions: vi.fn(),
   deleteIssuanceSession: vi.fn(),
-  revokeIssuanceSession: vi.fn(),
 }
 
 async function createApp(withIssuer: boolean): Promise<INestApplication> {
@@ -86,7 +83,6 @@ describe('v2 openid4vc credential exchange routes', () => {
       issuanceSessionId: 'ce-new',
     })
     issuerService.deleteIssuanceSession.mockResolvedValue(undefined)
-    issuerService.revokeIssuanceSession.mockResolvedValue(undefined)
   })
 
   it('walks the credential exchanges with the keyset cursor and ends with a null cursor', async () => {
@@ -254,36 +250,6 @@ describe('v2 openid4vc credential exchange routes', () => {
     expect(missing.status).toBe(404)
     expect(missing.body.error.code).toBe('UNKNOWN_ID')
   })
-
-  it('revokes an issued credential with 204 and maps the preconditions', async () => {
-    const revoked = await request(app.getHttpServer()).post('/v2/openid4vc/credential-exchanges/ce-b/revoke')
-    expect(revoked.status).toBe(204)
-    expect(issuerService.revokeIssuanceSession).toHaveBeenCalledWith('ce-b')
-
-    issuerService.revokeIssuanceSession.mockRejectedValueOnce(
-      new OpenId4VcIssuanceSessionStateError(
-        "issuance session 'ce-a' has issued no credential yet (state OfferCreated)",
-      ),
-    )
-    const early = await request(app.getHttpServer()).post('/v2/openid4vc/credential-exchanges/ce-a/revoke')
-    expect(early.status).toBe(409)
-    expect(early.body.error.code).toBe('INVALID_STATE')
-
-    issuerService.revokeIssuanceSession.mockRejectedValueOnce(
-      new OpenId4VcRevocationDisabledError('revocation is not enabled'),
-    )
-    const disabled = await request(app.getHttpServer()).post('/v2/openid4vc/credential-exchanges/ce-b/revoke')
-    expect(disabled.status).toBe(409)
-    expect(disabled.body.error).toEqual({
-      code: 'CAPABILITY_NOT_CONFIGURED',
-      message: 'revocation is not enabled',
-    })
-
-    issuerService.revokeIssuanceSession.mockRejectedValueOnce(new UnknownIssuanceSessionError('unknown'))
-    const missing = await request(app.getHttpServer()).post('/v2/openid4vc/credential-exchanges/nope/revoke')
-    expect(missing.status).toBe(404)
-    expect(missing.body.error.code).toBe('UNKNOWN_ID')
-  })
 })
 
 describe('v2 openid4vc credential exchange routes without an issuer capability', () => {
@@ -306,7 +272,6 @@ describe('v2 openid4vc credential exchange routes without an issuer capability',
       () => request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges'),
       () => request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges/ce-a'),
       () => request(app.getHttpServer()).delete('/v2/openid4vc/credential-exchanges/ce-a'),
-      () => request(app.getHttpServer()).post('/v2/openid4vc/credential-exchanges/ce-a/revoke'),
     ]
 
     for (const send of requests) {

@@ -51,10 +51,6 @@ export interface OpenId4VcPluginOptions {
     credentialIssuerCertificates: string[]
     developmentCertificateFingerprints?: string[]
   }
-  revocation?: {
-    enabled: boolean
-    size?: number
-  }
   credentialConfigurations: OpenId4VcCredentialConfiguration[]
   verifierPolicies: OpenId4VcVerifierPolicy[]
 }

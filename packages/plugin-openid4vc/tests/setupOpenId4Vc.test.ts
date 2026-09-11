@@ -34,7 +34,6 @@ describe('setupOpenId4Vc', () => {
     const first = setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
-      getStatusListToken: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -43,7 +42,6 @@ describe('setupOpenId4Vc', () => {
     const second = setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
-      getStatusListToken: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -62,7 +60,6 @@ describe('setupOpenId4Vc', () => {
     const issuerSetup = setupOpenId4Vc(issuerOnly, () => ({
       getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
-      getStatusListToken: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -90,7 +87,6 @@ describe('setupOpenId4Vc', () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
-      getStatusListToken: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -117,7 +113,6 @@ describe('setupOpenId4Vc', () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
-      getStatusListToken: () => undefined,
       getJwtVcIssuerMetadata: () => ({
         issuer: 'https://issuer.example',
         jwks: { keys: [{ kty: 'EC', crv: 'P-256' }] },
@@ -140,7 +135,6 @@ describe('setupOpenId4Vc', () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
-      getStatusListToken: () => undefined,
       getJwtVcIssuerMetadata: () => ({ issuer: 'https://issuer.example', jwks: { keys: [] } }),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -157,7 +151,6 @@ describe('setupOpenId4Vc', () => {
     setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => signedMetadataJwt,
-      getStatusListToken: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -215,7 +208,6 @@ describe('setupOpenId4Vc', () => {
     const setup = setupOpenId4Vc(options, () => ({
       getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
-      getStatusListToken: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -244,7 +236,6 @@ describe('setupOpenId4Vc', () => {
     const setup = setupOpenId4Vc(options, () => ({
       getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
-      getStatusListToken: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -278,7 +269,6 @@ describe('setupOpenId4Vc', () => {
       setupOpenId4Vc(options, () => ({
         getVctMetadata: () => undefined,
         getSignedMetadataJwt: () => undefined,
-        getStatusListToken: () => undefined,
         getJwtVcIssuerMetadata: () => ({}),
         mapCredentialRequest: () => {
           throw new Error('not implemented')
@@ -299,7 +289,6 @@ describe('setupOpenId4Vc', () => {
             }
           : undefined,
       getSignedMetadataJwt: () => undefined,
-      getStatusListToken: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -322,7 +311,6 @@ describe('setupOpenId4Vc', () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
       getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
-      getStatusListToken: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -338,27 +326,5 @@ describe('setupOpenId4Vc', () => {
     expect(requestRoute.status).toBe(404)
     expect(resultRoute.status).toBe(404)
     expect(holderRoute.status).toBe(404)
-  })
-
-  it('serves the signed status list token and 404s an unknown list', async () => {
-    const plugin = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
-      getSignedMetadataJwt: () => undefined,
-      getStatusListToken: listId => (listId === 'list-1' ? 'eyJ.status.list' : undefined),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
-
-    const found = await request(plugin.publicMiddleware).get('/oid4vc/status-list/list-1')
-    expect(found.status).toBe(200)
-    expect(found.headers['content-type']).toBe('application/statuslist+jwt')
-    expect(found.headers['cache-control']).toBe('no-store')
-    expect(found.text).toBe('eyJ.status.list')
-
-    const missing = await request(plugin.publicMiddleware).get('/oid4vc/status-list/list-2')
-    expect(missing.status).toBe(404)
-    expect(missing.body).toEqual({ message: 'status list not found' })
   })
 })

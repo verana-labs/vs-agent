@@ -29,9 +29,8 @@ the service and under which governance, and only then connect.
     for ecosystem-driven flows - onboarding triggers issuance, on-chain
     revocation is pushed to holders and cleaned up automatically.
   - **OpenID4VCI / OpenID4VP**: `dc+sd-jwt` issuance and presentation with
-    DCQL and Presentation Exchange, IETF Token Status List revocation, and
-    Verana trust checks before any presentation is accepted. Enabled by
-    `OID4VC_CONFIG_FILE`; see the
+    DCQL and Presentation Exchange, and Verana trust checks before any
+    presentation is accepted. Enabled by `OID4VC_CONFIG_FILE`; see the
     [operator documentation](./packages/plugin-openid4vc/README.md).
 - **The right credential format for each use**: W3C credentials (VC Data
   Model 2.0, secured with Data Integrity proofs) for public credentials

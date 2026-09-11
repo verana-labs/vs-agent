@@ -32,7 +32,6 @@ import {
   type SigningCertificateHandle,
   type SigningCertificateInfo,
 } from './CertificateService'
-import { StatusListEntryNotFoundError, StatusListService } from './StatusListService'
 
 type IssuerApi = Pick<
   OpenId4VcIssuerApi,
@@ -80,13 +79,10 @@ export interface OpenId4VcIssuanceSessionSummary {
 export class OpenId4VcIssuerRequestError extends Error {}
 export class UnknownCredentialConfigurationError extends Error {}
 export class UnknownIssuanceSessionError extends Error {}
-export class OpenId4VcRevocationDisabledError extends Error {}
-export class OpenId4VcIssuanceSessionStateError extends Error {}
 
 export class IssuerService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
-  private statusListService?: StatusListService
   private signedMetadataJwt?: string
   private initialized = false
 
@@ -149,11 +145,6 @@ export class IssuerService {
   public async deleteIssuanceSession(id: string): Promise<void> {
     await this.ensureInitialized()
     await this.findOwnedSession(id)
-    if (this.statusListService?.hasUnrevokedEntries(id)) {
-      throw new OpenId4VcIssuanceSessionStateError(
-        `issuance session '${id}' holds an unrevoked credential; revoke it first`,
-      )
-    }
     await this.issuerApi().deleteIssuanceSessionById(id)
   }
 
@@ -222,13 +213,11 @@ export class IssuerService {
 
     const claims = parseOfferClaims(configuration, input.issuanceSession.issuanceMetadata)
     const issuedAt = Math.floor(Date.now() / 1_000)
-    const status = await this.statusListService?.allocate(input.issuanceSession.id)
     const payload = {
       ...claims,
       vct: configuration.vct,
       iat: issuedAt,
       exp: issuedAt + configuration.ttlSeconds,
-      ...(status ? { status } : {}),
     }
 
     return {
@@ -289,37 +278,8 @@ export class IssuerService {
     await this.createOrUpdateIssuer(signingCertificate)
     this.signedMetadataJwt = await this.buildCertificateBoundSignedMetadata(signingCertificate)
 
-    if (this.options.revocation?.enabled) {
-      this.statusListService = new StatusListService(
-        this.agent,
-        signingCertificate,
-        this.options.publicApiBaseUrl,
-        this.options.revocation.size,
-      )
-      await this.statusListService.initialize()
-    }
-
     this.signingCertificate = signingCertificate
     this.initialized = true
-  }
-
-  public getStatusListToken(listId: string): string | undefined {
-    return this.statusListService?.getToken(listId)
-  }
-
-  public async revokeIssuanceSession(id: string): Promise<void> {
-    await this.ensureInitialized()
-    if (!this.statusListService) throw new OpenId4VcRevocationDisabledError('revocation is not enabled')
-
-    await this.findOwnedSession(id)
-
-    try {
-      await this.statusListService.revoke(id)
-    } catch (error) {
-      if (error instanceof StatusListEntryNotFoundError)
-        throw new OpenId4VcIssuanceSessionStateError(error.message)
-      throw error
-    }
   }
 
   private async buildMetadataSigner(signingCertificate: SigningCertificateHandle) {

@@ -58,8 +58,6 @@ export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void 
     assertTrustOptions(options.trust, false)
   }
 
-  if (options.revocation) assertRevocationOptions(options.revocation)
-
   assertCredentialConfigurations(options.credentialConfigurations)
   assertVerifierPolicies(options.verifierPolicies, options.credentialConfigurations)
 }
@@ -221,16 +219,6 @@ function assertTrustOptions(trust: OpenId4VcPluginOptions['trust'], requiresAnch
 function assertSignerMode(value: unknown, field: string): void {
   if (value !== 'x5c' && value !== 'did') {
     throw new Error(`${field} must be 'x5c' or 'did'`)
-  }
-}
-
-function assertRevocationOptions(revocation: NonNullable<OpenId4VcPluginOptions['revocation']>): void {
-  if (typeof revocation.enabled !== 'boolean') {
-    throw new Error('revocation.enabled must be a boolean')
-  }
-
-  if (revocation.size !== undefined && (!Number.isInteger(revocation.size) || revocation.size <= 0)) {
-    throw new Error('revocation.size must be a positive integer')
   }
 }
 

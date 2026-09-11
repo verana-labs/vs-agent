@@ -29,9 +29,7 @@ import {
 } from '@nestjs/swagger'
 import {
   IssuerService,
-  OpenId4VcIssuanceSessionStateError,
   OpenId4VcIssuerRequestError,
-  OpenId4VcRevocationDisabledError,
   UnknownCredentialConfigurationError,
   UnknownIssuanceSessionError,
 } from '@verana-labs/vs-agent-plugin-openid4vc'
@@ -141,42 +139,17 @@ export class V2Openid4vcCredentialExchangesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Delete a credential exchange',
-    description:
-      'Deletes an issuance session record. It revokes nothing, and it is refused while the credential it issued sits unrevoked on the status list.',
+    description: 'Deletes an issuance session record. It does not delete a credential that a wallet holds.',
   })
   @ApiParam(CREDENTIAL_EXCHANGE_ID)
   @ApiNoContentResponse({ description: 'The credential exchange record is deleted' })
   @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
-  @ApiConflictResponse({
-    description:
-      'The configuration defines no issuer capability, or the exchange holds a credential that is on the status list and not revoked (INVALID_STATE)',
-  })
+  @ApiConflictResponse({ description: 'The configuration defines no issuer capability' })
   public async deleteCredentialExchange(
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<void> {
     try {
       await this.issuer().deleteIssuanceSession(credentialExchangeId)
-    } catch (error) {
-      throw translate(error, credentialExchangeId)
-    }
-  }
-
-  @Post('credential-exchanges/:credentialExchangeId/revoke')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({
-    summary: 'Revoke the credential of an exchange',
-    description: 'Marks every credential issued for the session as revoked on the status list.',
-  })
-  @ApiParam(CREDENTIAL_EXCHANGE_ID)
-  @ApiNoContentResponse({ description: 'The credential is revoked' })
-  @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
-  @ApiConflictResponse({
-    description:
-      'The session issued nothing yet, or the configuration enables no issuer capability or no revocation',
-  })
-  public async revokeCredential(@Param('credentialExchangeId') credentialExchangeId: string): Promise<void> {
-    try {
-      await this.issuer().revokeIssuanceSession(credentialExchangeId)
     } catch (error) {
       throw translate(error, credentialExchangeId)
     }
@@ -213,12 +186,6 @@ function translate(error: unknown, credentialExchangeId?: string): unknown {
   }
   if (error instanceof OpenId4VcIssuerRequestError) {
     return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, error.message)
-  }
-  if (error instanceof OpenId4VcRevocationDisabledError) {
-    return new AdminApiError(AdminApiErrorCode.CapabilityNotConfigured, HttpStatus.CONFLICT, error.message)
-  }
-  if (error instanceof OpenId4VcIssuanceSessionStateError) {
-    return new AdminApiError(AdminApiErrorCode.InvalidState, HttpStatus.CONFLICT, error.message)
   }
   return error
 }

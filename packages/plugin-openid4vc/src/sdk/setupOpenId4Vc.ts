@@ -20,7 +20,6 @@ export interface OpenId4VcIssuerRequestMapper {
   getVctMetadata: (configurationId: string) => Record<string, unknown> | undefined
   getJwtVcIssuerMetadata: () => Record<string, unknown>
   getSignedMetadataJwt: () => string | undefined
-  getStatusListToken: (listId: string) => string | undefined
 }
 
 export interface OpenId4VcAgentModules {
@@ -72,22 +71,6 @@ export function setupOpenId4Vc(
           return
         }
         response.json(metadata)
-      } catch (error) {
-        next(error)
-      }
-    })
-
-    app.get('/oid4vc/status-list/:listId', (request, response, next) => {
-      try {
-        if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
-        const token = getIssuerService().getStatusListToken(request.params.listId)
-        if (!token) {
-          response.status(404).json({ message: 'status list not found' })
-          return
-        }
-        response.setHeader('Cache-Control', 'no-store')
-        response.setHeader('Content-Type', 'application/statuslist+jwt')
-        response.end(token)
       } catch (error) {
         next(error)
       }

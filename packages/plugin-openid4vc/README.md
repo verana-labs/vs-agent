@@ -6,12 +6,12 @@ operator sets `OID4VC_CONFIG_FILE`. Nothing else enables it.
 
 What it does:
 
-- pre-authorized OpenID4VCI issuance of `dc+sd-jwt` credentials, with an IETF Token Status List
-  for revocation when `revocation.enabled` is set;
+- pre-authorized OpenID4VCI issuance of `dc+sd-jwt` credentials, valid until they expire: v4
+  specifies no revocation for this format, so a credential carries no `status` claim;
 - OpenID4VP requests in DCQL (`direct_post.jwt`, `x509_hash` or DID client identifier) or, for a
   wallet that predates DCQL, Presentation Exchange (`direct_post`);
-- the `/v2/openid4vc` Administration API scope: create an offer or a request, then list, read,
-  delete and revoke;
+- the `/v2/openid4vc` Administration API scope: create an offer or a request, then list, read
+  and delete;
 - a fail-closed trust decision before a presentation is accepted: certificate chain, DID key
   binding, Verana resolver status and issuer authorization.
 
@@ -47,7 +47,6 @@ camelCase. Full reference: [[VSA-VTI-CFG-ENV-OID]](https://github.com/verana-lab
 | `verifier` | Defines the verifier capability: `id`, `displayName`, exactly one `signing` mode. Required when `issuer` is absent. |
 | `verifier.requestSigner` | `x5c` (default) or `did`. `did` names the agent DID as `client_id`. A caller can override it per request. |
 | `trust` | Required with `verifier`: `resolverUrl` (`https://` Verana resolver), `timeoutMs` (1 to 30000), `allowedDidWebHosts`, `credentialIssuerCertificates` (self-issued CA roots with `keyCertSign`), optional `developmentCertificateFingerprints`. |
-| `revocation` | Optional: `enabled`, and `size` (status list capacity, default 131072). |
 | `credentialConfigurations` | Array. Each entry: unique `id`, `format` `dc+sd-jwt`, `https://` `vct` and `vtjscId`, `name`, optional `description`, `claims`, `disclosureFrame` (subset of `claims`), `ttlSeconds` (60 to 31536000). `claims` is the allowed set for an offer: an offer may omit any of them and the credential then omits them too, an offered claim must be non-empty, and an offer must carry at least one configured claim. |
 | `verifierPolicies` | Array. Each entry: unique `id`, `credentialConfigurationId`, `requestedClaims` (subset of that configuration's claims). |
 
@@ -95,7 +94,6 @@ the agent's own DID is not needed on the list.
     "credentialIssuerCertificates": [],
     "developmentCertificateFingerprints": ["SHA256:0000000000000000000000000000000000000000000000000000000000000000"]
   },
-  "revocation": { "enabled": true },
   "credentialConfigurations": [
     {
       "id": "employee",
@@ -128,8 +126,7 @@ of an absent capability answers `409 CAPABILITY_NOT_CONFIGURED`.
 | `createCredentialOffer` | `POST /credential-offer` | `credentialConfigurationId`, `claims`. Returns `credentialExchangeId` and `url`. `400 UNKNOWN_CONFIGURATION`, `400 INVALID_INPUT`. |
 | `listCredentialExchanges` | `GET /credential-exchanges` | Filters `credentialConfigurationId`, `state`. Keyset pagination. |
 | `getCredentialExchange` | `GET /credential-exchanges/{credentialExchangeId}` | `credentialExchangeId`, `credentialConfigurationId`, `state`, `createdAt`, `updatedAt`, `expiresAt`, `errorMessage`. Never the claims, the offer URL or the pre-authorized code. |
-| `deleteCredentialExchange` | `DELETE /credential-exchanges/{credentialExchangeId}` | `204`. Revokes nothing, and is refused with `409 INVALID_STATE` while the credential is on the status list and not revoked. |
-| `revokeCredential` | `POST /credential-exchanges/{credentialExchangeId}/revoke` | `204`. `409 INVALID_STATE` before issuance, `409 CAPABILITY_NOT_CONFIGURED` when revocation is off. |
+| `deleteCredentialExchange` | `DELETE /credential-exchanges/{credentialExchangeId}` | `204`. Deletes the record only, never a credential that a wallet holds. |
 | `createPresentationRequest` | `POST /presentation-request` | `policyId`, optional `queryLanguage` (`dcql`, `presentation_exchange`), optional `requestSigner` (`x5c`, `did`). Returns `proofExchangeId` and `url`. `400 UNKNOWN_POLICY`. |
 | `listPresentations` | `GET /presentations` | Filters `policyId`, `state`. Keyset pagination. |
 | `getPresentation` | `GET /presentations/{proofExchangeId}` | Adds `cryptographicVerified`, `accepted`, `trust` and `credential` once the wallet answered. |
@@ -157,7 +154,6 @@ Admin API and the metadata return; it never builds a path itself.
 | `/oid4vci/{issuerId}/...` | Token and credential traffic of the issuer capability. |
 | `/oid4vp/{verifierId}/...` | Authorization request and response traffic of the verifier capability. |
 | `/oid4vc/vct/{credentialConfigurationId}` | SD-JWT VC type metadata, extended with `relatedJsonSchemaCredentialId` (the VTJSC). |
-| `/oid4vc/status-list/{listId}` | The signed Token Status List (`application/statuslist+jwt`) when revocation is enabled. |
 
 ## Trust decision
 
@@ -191,6 +187,6 @@ the code it changes, with a one-line note.
 
 `pnpm --filter @verana-labs/vs-agent-plugin-openid4vc exec vitest run` runs the unit tests and the
 in-process end-to-end tests, which start real credo agents for the issuer, the holder and the
-verifier and drive a pre-authorized issuance, a DCQL presentation, the four verdicts, response
-replay, and the status list round trip. No external wallet or conformance evidence is recorded
-here; see the Verana Playground for recorded wallet scenarios.
+verifier and drive a pre-authorized issuance, a DCQL presentation, the four verdicts and response
+replay. No external wallet or conformance evidence is recorded here; see the Verana Playground for
+recorded wallet scenarios.
