@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { readOpenId4VcOptions } from '../src/config/openid4vc'
 
@@ -138,5 +138,49 @@ describe('OpenID4VC configuration file', () => {
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
       'must contain a JSON object',
     )
+  })
+})
+
+describe('OpenID4VC configuration location', () => {
+  const location = 'https://config.example/openid4vc.json?token=query-secret-value'
+  const fetchMock = vi.fn()
+
+  beforeEach(() => {
+    fetchMock.mockReset()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('fetches an https location once without following a redirect, then validates it', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(validConfig()), { status: 200 }))
+
+    await expect(readOpenId4VcOptions(location, publicApiBaseUrl)).resolves.toEqual({
+      ...validConfig(),
+      publicApiBaseUrl,
+    })
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledWith(location, { redirect: 'manual', signal: expect.any(AbortSignal) })
+  })
+
+  it('refuses a redirect and names the location without its query string', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(null, { status: 302, headers: { location: 'https://elsewhere.example/openid4vc.json' } }),
+    )
+
+    const error = await readOpenId4VcOptions(location, publicApiBaseUrl).catch(value => value)
+
+    expect(error).toBeInstanceOf(Error)
+    expect(error.message).toContain("'https://config.example/openid4vc.json' answered with a redirect")
+    expect(error.message).not.toContain('query-secret-value')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    'http://config.example/openid4vc.json',
+    'file:///run/config/openid4vc.json',
+  ])('refuses %s without reading it', async value => {
+    await expect(readOpenId4VcOptions(value, publicApiBaseUrl)).rejects.toThrow('must use https')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

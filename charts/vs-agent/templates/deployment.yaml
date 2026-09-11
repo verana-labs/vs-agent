@@ -237,7 +237,7 @@ spec:
               value: {{ .Values.adminApiCorporationAllowedAccounts | quote }}
             {{- end }}
             {{- if or .Values.oid4vc.config .Values.oid4vc.existingSecret }}
-            - name: OID4VC_CONFIG_FILE
+            - name: OID4VC_CONFIG_FILE_LOCATION
               value: "/run/config/oid4vc/openid4vc.json"
             {{- if .Values.oid4vc.config }}
             - name: OID4VC_CONFIG_CHECKSUM

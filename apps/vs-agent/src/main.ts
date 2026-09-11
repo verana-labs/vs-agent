@@ -64,7 +64,7 @@ import {
   USE_CORS,
   USER_PROFILE_AUTODISCLOSE,
   MASTER_LIST_CSCA_LOCATION,
-  OID4VC_CONFIG_FILE,
+  OID4VC_CONFIG_FILE_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
   VERANA_INDEXER_BASE_URL,
   VERANA_ACCOUNT_MNEMONIC,
@@ -282,9 +282,9 @@ const run = async () => {
   const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE === 'corporation' ? ADMIN_API_PUBLIC_URL : undefined
 
   let openId4VcOptions: OpenId4VcPluginOptions | undefined
-  if (OID4VC_CONFIG_FILE) {
+  if (OID4VC_CONFIG_FILE_LOCATION) {
     try {
-      openId4VcOptions = await readOpenId4VcOptions(OID4VC_CONFIG_FILE, publicApiBaseUrl)
+      openId4VcOptions = await readOpenId4VcOptions(OID4VC_CONFIG_FILE_LOCATION, publicApiBaseUrl)
     } catch (error) {
       serverLogger.error(`Invalid configuration:\n- ${(error as Error).message}`)
       process.exit(1)

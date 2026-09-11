@@ -2,7 +2,7 @@
 
 `@verana-labs/vs-agent-plugin-openid4vc` gives VS Agent an OpenID4VCI issuer and an OpenID4VP
 verifier for `dc+sd-jwt` credentials. It ships in every `vs-agent` image and turns on when the
-operator sets `OID4VC_CONFIG_FILE`. Nothing else enables it.
+operator sets `OID4VC_CONFIG_FILE_LOCATION`. Nothing else enables it.
 
 What it does:
 
@@ -23,20 +23,21 @@ wallet-attestation trust-list distribution, production PKI onboarding, formal co
 ```bash
 docker run --rm \
   --env-file ./env-vars \
-  -e OID4VC_CONFIG_FILE=/run/config/openid4vc.json \
+  -e OID4VC_CONFIG_FILE_LOCATION=/run/config/openid4vc.json \
   -v "$PWD/openid4vc.json:/run/config/openid4vc.json:ro" \
   -p 3000:3000 -p 3001:3001 \
   veranalabs/vs-agent
 ```
 
 `env-vars` carries the normal VS Agent settings, with an `https://` `PUBLIC_API_BASE_URL`. The
-JSON file must not contain `publicApiBaseUrl`; the agent injects the trusted value. With Helm,
-put the JSON in `oid4vc.config`.
+JSON file must not contain `publicApiBaseUrl`; the agent injects the trusted value. The location
+can also be an `https://` URL, which the agent fetches once at startup without following a
+redirect. With Helm, put the JSON in `oid4vc.config`.
 
 ## Configuration file
 
-The agent validates the file at startup and refuses to start when validation fails. Keys are
-camelCase. Full reference: [[VSA-VTI-CFG-ENV-OID]](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-vti-cfg-env-oid-openid4vc).
+The agent reads and validates the file at startup, and refuses to start when it cannot read the
+location or validation fails. Keys are camelCase. Full reference: [[VSA-VTI-CFG-ENV-OID]](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-vti-cfg-env-oid-openid4vc).
 
 | Key | Requirement |
 | --- | --- |
@@ -118,7 +119,7 @@ The all-zero fingerprint trusts no one; replace it with the issuer's fingerprint
 ## Administration API
 
 Every method lives under `/v2/openid4vc`, behind the Admin API authentication of the agent, and
-answers in the v2 error envelope. Without `OID4VC_CONFIG_FILE`, every path answers `404`. A method
+answers in the v2 error envelope. Without `OID4VC_CONFIG_FILE_LOCATION`, every path answers `404`. A method
 of an absent capability answers `409 CAPABILITY_NOT_CONFIGURED`.
 
 | Method | Path | Notes |

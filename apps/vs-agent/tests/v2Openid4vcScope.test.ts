@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { ErrorEnvelopeFilter } from '../src/common'
 
-describe('v2 openid4vc scope without OID4VC_CONFIG_FILE', () => {
+describe('v2 openid4vc scope without OID4VC_CONFIG_FILE_LOCATION', () => {
   let app: INestApplication
 
   beforeAll(async () => {
