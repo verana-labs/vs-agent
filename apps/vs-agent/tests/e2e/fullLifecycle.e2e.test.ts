@@ -23,6 +23,7 @@ import {
   reconcileVtFlowRecordsOnCancel,
   reconcileVtjscPublications,
   removeSelfIssuedEcsCredentialsIfIssuerRevoked,
+  REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
   resolveJsonSchemaCredentialId,
   VeranaChainService,
   VeranaIndexerService,
@@ -1040,6 +1041,15 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
 
         for (const [body, restriction] of cases) {
           const { proofExchangeId } = await presentations.createPresentationRequest(body as never)
+
+          const record = await validator.didcomm.proofs.getById(proofExchangeId)
+          expect(record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA)).toEqual({
+            AnonCredsTrustCredential: {
+              credentialSchemaId: trustSchemaId,
+              ecosystemDid: validatorDid,
+              jsonSchemaCredentialId,
+            },
+          })
 
           const { request } = await validator.didcomm.proofs.getFormatData(proofExchangeId)
           const groups = Object.values(request?.anoncreds?.requested_attributes ?? {})

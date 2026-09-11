@@ -1,4 +1,5 @@
 import type { BaseAgentModules, VsAgent } from '../agent/VsAgent'
+import type { AnonCredsProof } from '@credo-ts/anoncreds'
 import type { DidCommConnectionRecord, DidCommProofExchangeRecord } from '@credo-ts/didcomm'
 
 import { DidCommPresentationV1Message, DidCommPresentationV1ProblemReportMessage } from '@credo-ts/anoncreds'
@@ -33,6 +34,7 @@ import {
   AnonCredsTrustErrorReason,
   AnonCredsTrustProblemCode,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+  type RequestedCredentialSchemas,
 } from '../blockchain/AnonCredsTrustService'
 import { ParticipantRole } from '../blockchain/types'
 import { getRecordId } from '../utils/agent'
@@ -235,10 +237,6 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
   )
 }
 
-interface PresentedAnonCredsProof {
-  identifiers?: Array<{ cred_def_id: string }>
-}
-
 function registerAnonCredsTrustDecision(agent: VsAgent<BaseAgentModules>, logger: BaseLogger): void {
   agent.didcomm.registerMessageHandlerMiddleware(async (messageContext, next) => {
     await next()
@@ -275,26 +273,16 @@ async function applyAnonCredsTrustDecision(
   agent: VsAgent<BaseAgentModules>,
   record: DidCommProofExchangeRecord,
   connection: DidCommConnectionRecord,
-  presentation: PresentedAnonCredsProof | undefined,
+  presentation: AnonCredsProof | undefined,
   logger: BaseLogger,
 ): Promise<boolean> {
   if (record.role !== DidCommProofRole.Verifier || !presentation) return false
 
   const identifiers = presentation.identifiers ?? []
-  if (identifiers.length === 0) {
-    await abandonPresentation(
-      agent,
-      record,
-      connection,
-      AnonCredsTrustProblemCode.TrustResolutionUnavailable,
-      'the agent cannot read the credential definitions of the presentation',
-      logger,
-    )
-    return true
-  }
 
-  const requestedCredentialSchemas =
-    (record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA) as number[] | null) ?? []
+  const requestedCredentialSchemas = Object.entries(
+    (record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA) as RequestedCredentialSchemas | null) ?? {},
+  )
 
   // A request whose creator recorded no CredentialSchema cannot be checked against what it asked
   // for, so it abandons rather than accepting any schema.
@@ -310,17 +298,33 @@ async function applyAnonCredsTrustDecision(
     return true
   }
 
+  const answered: Record<string, { sub_proof_index: number } | undefined> = {
+    ...presentation.requested_proof?.revealed_attrs,
+    ...presentation.requested_proof?.revealed_attr_groups,
+    ...presentation.requested_proof?.unrevealed_attrs,
+    ...presentation.requested_proof?.predicates,
+  }
+
   const issuersByCredentialSchema = new Map<number, string[]>()
   const unaccredited: string[] = []
   const unchecked: string[] = []
 
-  for (const { cred_def_id: credentialDefinitionId } of identifiers) {
+  for (const [group, requested] of requestedCredentialSchemas) {
+    const subProofIndex = answered[group]?.sub_proof_index
+    const credentialDefinitionId =
+      subProofIndex === undefined ? undefined : identifiers[subProofIndex]?.cred_def_id
+
+    if (!credentialDefinitionId) {
+      unchecked.push(`the presentation identifies no credential for the requested group "${group}"`)
+      continue
+    }
+
     try {
       const derived = await agent.anonCredsTrust.deriveCredentialSchema({ credentialDefinitionId })
 
-      if (!requestedCredentialSchemas.includes(derived.credentialSchemaId)) {
+      if (derived.credentialSchemaId !== requested.credentialSchemaId) {
         unaccredited.push(
-          `${credentialDefinitionId} presents the CredentialSchema ${derived.credentialSchemaId}, which the request does not ask for`,
+          `${credentialDefinitionId} presents the CredentialSchema ${derived.credentialSchemaId} for the group "${group}", which asks for the CredentialSchema ${requested.credentialSchemaId}`,
         )
         continue
       }

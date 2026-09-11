@@ -51,6 +51,21 @@ export interface DerivedCredentialSchema {
   issuerId?: string
 }
 
+export type RequestedCredentialSchema = Pick<
+  DerivedCredentialSchema,
+  'credentialSchemaId' | 'ecosystemDid' | 'jsonSchemaCredentialId'
+>
+
+export type RequestedCredentialSchemas = Record<string, RequestedCredentialSchema>
+
+export function toRequestedCredentialSchema({
+  credentialSchemaId,
+  ecosystemDid,
+  jsonSchemaCredentialId,
+}: DerivedCredentialSchema): RequestedCredentialSchema {
+  return { credentialSchemaId, ecosystemDid, jsonSchemaCredentialId }
+}
+
 export interface UnaccreditedDidsResult {
   unaccredited: string[]
   unchecked: string[]
