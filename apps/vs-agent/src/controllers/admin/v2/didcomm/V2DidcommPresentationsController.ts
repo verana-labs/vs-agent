@@ -182,7 +182,7 @@ export class V2DidcommPresentationsController {
     // acknowledgement itself, per [VSA-VTI-FLOW-VERIFY-AC-7].
     const request = await agent.didcomm.proofs.createRequest({
       protocolVersion: 'v2',
-      autoAcceptProof: DidCommAutoAcceptProof.Never,
+      autoAcceptProof: autoAccept ? DidCommAutoAcceptProof.ContentApproved : DidCommAutoAcceptProof.Never,
       proofFormats: {
         anoncreds: {
           name: 'proof-request',
