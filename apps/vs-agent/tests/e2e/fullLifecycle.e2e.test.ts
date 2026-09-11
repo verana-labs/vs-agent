@@ -1,6 +1,16 @@
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
+// The holder builds its credential request with the native AnonCreds binding, which registers
+// itself into the shared module on import.
+import '@hyperledger/anoncreds-nodejs'
+
 import { AnonCredsCredentialDefinitionRepository, AnonCredsSchemaRepository } from '@credo-ts/anoncreds'
+import {
+  DidCommCredentialState,
+  DidCommProofEventTypes,
+  DidCommProofState,
+  type DidCommProofStateChangedEvent,
+} from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { ConsoleLogger, DidRepository, LogLevel } from '@credo-ts/core'
 import { VtFlowApi, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
@@ -28,6 +38,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
   PARTICIPANT_ROLE_ISSUER,
+  PARTICIPANT_ROLE_VERIFIER,
   VeranaTestChain,
 } from '../../../../packages/agent-sdk/tests/e2e/VeranaTestChain'
 import {
@@ -39,8 +50,11 @@ import {
 import { mockResponses, startAgent } from '../__mocks__'
 import { FakeDidResolver } from '../__mocks__/fakeDidResolver'
 import { AdminApiError } from '../../src/common'
+import { CredentialTypesService } from '../../src/controllers/admin/credentials'
 import { V2DidcommCredentialExchangesController } from '../../src/controllers/admin/v2/didcomm/V2DidcommCredentialExchangesController'
+import { V2DidcommPresentationsController } from '../../src/controllers/admin/v2/didcomm/V2DidcommPresentationsController'
 import {
+  invitationUrl,
   isVtFlowStateChangedEvent,
   SubjectInboundTransport,
   SubjectOutboundTransport,
@@ -976,6 +990,334 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         expect(error).toBeInstanceOf(AdminApiError)
         expect(error.code).toBe('NOT_AUTHORIZED')
         expect(error.status).toBe(409)
+      },
+      SETUP_TIMEOUT_MS,
+    )
+  })
+  describe('the trust decision on a received presentation', () => {
+    const presentationClaims = [{ name: 'name', value: 'Presented Credential' }]
+
+    let validatorDid: string
+    let presentationSchemaId: number
+    let rootParticipantId: number
+    let issuerParticipantId: number
+    let credentialDefinitionId: string
+    let credentials: V2DidcommCredentialExchangesController
+    let presentations: V2DidcommPresentationsController
+    let holderCredentials: V2DidcommCredentialExchangesController
+    let holderPresentations: V2DidcommPresentationsController
+
+    const offerBody = () => ({ credentialDefinitionId, claims: presentationClaims })
+
+    const untilParticipantCount = (role: ParticipantRole, count: number) =>
+      until(async () => {
+        const participants = await indexer.listParticipants({
+          did: validatorDid,
+          role,
+          schemaId: presentationSchemaId,
+          participantState: ParticipantState.Active,
+        })
+        return participants.length === count ? true : undefined
+      })
+
+    const receiveOffer = async (invitation: unknown) => {
+      const known = new Set((await applicant.didcomm.credentials.getAll()).map(record => record.id))
+      await applicant.didcomm.oob.receiveInvitationFromUrl(
+        invitationUrl(invitation as Record<string, unknown>),
+        { label: applicant.label },
+      )
+      return until(async () =>
+        (await applicant.didcomm.credentials.getAll()).find(
+          record => !known.has(record.id) && record.state === DidCommCredentialState.OfferReceived,
+        ),
+      )
+    }
+
+    const receiveRequest = async (invitation: unknown) => {
+      const known = new Set((await applicant.didcomm.proofs.getAll()).map(record => record.id))
+      await applicant.didcomm.oob.receiveInvitationFromUrl(
+        invitationUrl(invitation as Record<string, unknown>),
+        { label: applicant.label },
+      )
+      return until(async () =>
+        (await applicant.didcomm.proofs.getAll()).find(
+          record => !known.has(record.id) && record.state === DidCommProofState.RequestReceived,
+        ),
+      )
+    }
+
+    const untilState = (id: string, state: DidCommCredentialState) =>
+      until(async () => ((await validator.didcomm.credentials.getById(id)).state === state ? id : undefined))
+
+    const untilProofState = (agent: VsAgent, id: string, state: DidCommProofState) =>
+      until(async () => ((await agent.didcomm.proofs.getById(id)).state === state ? id : undefined))
+
+    // The chain holds one validation process per schema, role, accreditor and corporation, and the
+    // sibling tests own the contexts of their schema. This block governs a CredentialSchema of its own.
+    beforeAll(async () => {
+      if (!validator.did) throw new Error('the validator agent has no public DID')
+      validatorDid = validator.did
+
+      credentials = new V2DidcommCredentialExchangesController(
+        { getAgent: async () => validator } as never,
+        { createShortUrl: async () => 'short-presented' } as never,
+        validator.publicApiBaseUrl,
+      )
+      presentations = new V2DidcommPresentationsController(
+        { getAgent: async () => validator } as never,
+        { createShortUrl: async () => 'short-presented' } as never,
+        new CredentialTypesService({ getAgent: async () => validator } as never),
+        validator.publicApiBaseUrl,
+      )
+      holderCredentials = new V2DidcommCredentialExchangesController(
+        { getAgent: async () => applicant } as never,
+        { createShortUrl: async () => 'short-holder' } as never,
+        applicant.publicApiBaseUrl,
+      )
+      holderPresentations = new V2DidcommPresentationsController(
+        { getAgent: async () => applicant } as never,
+        { createShortUrl: async () => 'short-holder' } as never,
+        new CredentialTypesService({ getAgent: async () => applicant } as never),
+        applicant.publicApiBaseUrl,
+      )
+
+      // The issuer of a VTJSC must be the DID of the Ecosystem that owns its CredentialSchema, per
+      // [VSA-VTI-FLOW-VERIFY-AC-1], so this block governs its schema with the Ecosystem of the validator.
+      const ecosystem = await until(async () =>
+        (await indexer.listEcosystems()).find(entry => entry.did === validatorDid),
+      )
+      const schema = await chainA.createCredentialSchema(corpPolicyAddress, {
+        ecosystemId: Number(ecosystem.id),
+        jsonSchema: ecsSchema('PresentedTrustCredential'),
+      })
+      presentationSchemaId = schema.schemaId
+
+      const root = await chainA.createRootParticipant(corpPolicyAddress, {
+        schemaId: presentationSchemaId,
+        did: `did:example:presented-root-${RUN_ID}`,
+      })
+      rootParticipantId = root.participantId
+
+      for (const [role, digest] of [
+        [PARTICIPANT_ROLE_ISSUER, 'sha384-presentedissuer'],
+        [PARTICIPANT_ROLE_VERIFIER, 'sha384-presentedverifier'],
+      ] as const) {
+        const participant = await chainA.startParticipantOp(corpPolicyAddress, {
+          role,
+          validatorParticipantId: rootParticipantId,
+          did: validatorDid,
+        })
+        if (role === PARTICIPANT_ROLE_ISSUER) issuerParticipantId = participant.participantId
+        await seederChain.setParticipantOPToValidated({
+          id: participant.participantId,
+          opSummaryDigest: digest,
+        })
+      }
+      await untilParticipantCount(ParticipantRole.Issuer, 1)
+      await untilParticipantCount(ParticipantRole.Verifier, 1)
+
+      const vtjsc = (await createJsc(
+        validator,
+        validator.publicApiBaseUrl,
+        getEcsSchemas(validator.publicApiBaseUrl),
+        {
+          schemaBaseId: String(presentationSchemaId),
+          jsonSchemaRef: `vpr:verana:${validatorChain.getChainId}:cs:${presentationSchemaId}`,
+          precomputedDigestSRI: await computeSchemaDigest(JSON.parse(ecsSchema('PresentedTrustCredential'))),
+        },
+      )) as { id: string }
+      mockResponses[vtjsc.id] = vtjsc
+
+      // The sibling spy serves its own objects only, so this one answers for these and delegates the rest.
+      const attested: Record<string, unknown> = {}
+      const registryPrototype = WebVhAnonCredsRegistry.prototype as unknown as Record<
+        string,
+        (...args: unknown[]) => Promise<unknown>
+      >
+      const delegate = registryPrototype._resolveAndValidateAttestedResource
+      registryPrototype._resolveAndValidateAttestedResource = async function (
+        this: unknown,
+        ...args: unknown[]
+      ) {
+        const resource = attested[args[1] as string]
+        if (!resource) return delegate.call(this, ...args)
+        return { resolutionResult: { content: resource }, resourceObject: resource }
+      }
+
+      const { schemaState, registrationMetadata: schemaRegistration } =
+        await validator.modules.anoncreds.registerSchema({
+          schema: {
+            attrNames: ['name'],
+            name: 'PresentedTrustCredential',
+            version: String(presentationSchemaId),
+            issuerId: validatorDid,
+          },
+          options: { extraMetadata: { relatedJsonSchemaCredentialId: vtjsc.id } },
+        })
+      if (!schemaState.schemaId) throw new Error(`the AnonCreds schema is absent: ${schemaState.state}`)
+      attested[schemaState.schemaId] = (
+        schemaRegistration as { attestedResource: Record<string, unknown> }
+      ).attestedResource
+
+      const schemaRepository = validator.dependencyManager.resolve(AnonCredsSchemaRepository)
+      const schemaRecord = await schemaRepository.getBySchemaId(validator.context, schemaState.schemaId)
+      schemaRecord.setTag('relatedJsonSchemaCredentialId', vtjsc.id)
+      await schemaRepository.update(validator.context, schemaRecord)
+
+      const { credentialDefinitionState, registrationMetadata: credentialDefinitionRegistration } =
+        await validator.modules.anoncreds.registerCredentialDefinition({
+          credentialDefinition: {
+            issuerId: validatorDid,
+            schemaId: schemaState.schemaId,
+            tag: `presented.${presentationSchemaId}`,
+          },
+          options: {
+            supportRevocation: false,
+            extraMetadata: { relatedJsonSchemaCredentialId: vtjsc.id },
+          },
+        })
+      if (!credentialDefinitionState.credentialDefinitionId) {
+        throw new Error(`the credential definition is absent: ${credentialDefinitionState.state}`)
+      }
+      credentialDefinitionId = credentialDefinitionState.credentialDefinitionId
+      attested[credentialDefinitionId] = (
+        credentialDefinitionRegistration as { attestedResource: Record<string, unknown> }
+      ).attestedResource
+
+      const credentialDefinitionRepository = validator.dependencyManager.resolve(
+        AnonCredsCredentialDefinitionRepository,
+      )
+      const credentialDefinitionRecord = await credentialDefinitionRepository.getByCredentialDefinitionId(
+        validator.context,
+        credentialDefinitionId,
+      )
+      credentialDefinitionRecord.setTag('relatedJsonSchemaCredentialId', vtjsc.id)
+      await credentialDefinitionRepository.update(validator.context, credentialDefinitionRecord)
+
+      // The holder needs the credential in its store before it can present it.
+      const offer = await credentials.createCredentialOffer(offerBody() as never)
+      const offered = await receiveOffer(offer.invitation)
+      await holderCredentials.acceptCredentialOffer(offered.id)
+      await untilState(offer.credentialExchangeId, DidCommCredentialState.RequestReceived)
+      await credentials.acceptCredentialRequest(offer.credentialExchangeId)
+      await until(async () =>
+        (await applicant.didcomm.credentials.getById(offered.id)).state ===
+        DidCommCredentialState.CredentialReceived
+          ? offered.id
+          : undefined,
+      )
+      await holderCredentials.acceptCredential(offered.id)
+    }, SETUP_TIMEOUT_MS)
+
+    it(
+      'acknowledges an autoAccept presentation itself, once the issuer passes the trust decision',
+      async () => {
+        const request = await presentations.createPresentationRequest({
+          requestedCredentials: [{ credentialDefinitionId }],
+          autoAccept: true,
+        } as never)
+        const received = await receiveRequest(request.invitation)
+
+        await holderPresentations.acceptPresentationRequest(received.id)
+
+        await untilProofState(validator, request.proofExchangeId, DidCommProofState.Done)
+        await untilProofState(applicant, received.id, DidCommProofState.Done)
+        expect((await validator.didcomm.proofs.getById(request.proofExchangeId)).isVerified).toBe(true)
+      },
+      SETUP_TIMEOUT_MS,
+    )
+
+    it(
+      'waits in presentation-received until the caller acknowledges, with no autoAccept',
+      async () => {
+        const request = await presentations.createPresentationRequest({
+          requestedCredentials: [{ credentialDefinitionId }],
+        } as never)
+        const received = await receiveRequest(request.invitation)
+
+        await holderPresentations.acceptPresentationRequest(received.id)
+
+        await untilProofState(validator, request.proofExchangeId, DidCommProofState.PresentationReceived)
+        const waiting = await presentations.getPresentation(request.proofExchangeId)
+        expect(waiting.verified).toBe(true)
+
+        const acknowledged = await presentations.acceptPresentation(request.proofExchangeId)
+        expect(acknowledged.state).toBe(DidCommProofState.Done)
+        expect(acknowledged.verified).toBe(true)
+      },
+      SETUP_TIMEOUT_MS,
+    )
+
+    it(
+      'abandons the presentation once the chain revokes the ISSUER Participant of the credential',
+      async () => {
+        const request = await presentations.createPresentationRequest({
+          requestedCredentials: [{ credentialDefinitionId }],
+          autoAccept: true,
+        } as never)
+
+        await chainA.revokeParticipant(corpPolicyAddress, issuerParticipantId)
+        await untilParticipantCount(ParticipantRole.Issuer, 0)
+
+        const changes: Array<{ previousState: string | null; state: string }> = []
+        validator.events.on<DidCommProofStateChangedEvent>(
+          DidCommProofEventTypes.ProofStateChanged,
+          ({ payload }) => {
+            if (payload.proofRecord.id !== request.proofExchangeId) return
+            changes.push({ previousState: payload.previousState, state: payload.proofRecord.state })
+          },
+        )
+
+        const received = await receiveRequest(request.invitation)
+        await holderPresentations.acceptPresentationRequest(received.id)
+
+        await untilProofState(validator, request.proofExchangeId, DidCommProofState.Abandoned)
+
+        const abandoned = await presentations.getPresentation(request.proofExchangeId)
+        expect(abandoned.verified).toBe(false)
+        expect(abandoned.errorMessage).toContain('e.p.issuer-not-authorized')
+
+        await untilProofState(applicant, received.id, DidCommProofState.Abandoned)
+        expect((await applicant.didcomm.proofs.getById(received.id)).errorMessage).toContain(
+          'e.p.issuer-not-authorized',
+        )
+
+        expect(changes.filter(change => change.state === DidCommProofState.Abandoned)).toEqual([
+          { previousState: DidCommProofState.PresentationReceived, state: DidCommProofState.Abandoned },
+        ])
+
+        const error = await presentations.acceptPresentation(request.proofExchangeId).catch(caught => caught)
+        expect(error).toBeInstanceOf(AdminApiError)
+        expect(error.code).toBe('INVALID_STATE')
+        expect(error.status).toBe(409)
+      },
+      SETUP_TIMEOUT_MS,
+    )
+
+    it(
+      'abandons the presentation while the indexer of the verifier is unreachable',
+      async () => {
+        const request = await presentations.createPresentationRequest({
+          requestedCredentials: [{ credentialDefinitionId }],
+          autoAccept: true,
+        } as never)
+        const received = await receiveRequest(request.invitation)
+
+        // Only the verifier loses the indexer: the prover still runs its own check before it presents.
+        const reachable = validator.indexer
+        validator.indexer = new VeranaIndexerService({ baseUrl: 'http://127.0.0.1:1', logger })
+
+        try {
+          await holderPresentations.acceptPresentationRequest(received.id)
+
+          await untilProofState(validator, request.proofExchangeId, DidCommProofState.Abandoned)
+
+          const abandoned = await presentations.getPresentation(request.proofExchangeId)
+          expect(abandoned.verified).toBe(false)
+          expect(abandoned.errorMessage).toContain('e.p.trust-resolution-unavailable')
+        } finally {
+          validator.indexer = reachable
+        }
       },
       SETUP_TIMEOUT_MS,
     )

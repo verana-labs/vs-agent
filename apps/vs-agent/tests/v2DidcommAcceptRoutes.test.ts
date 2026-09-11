@@ -10,6 +10,8 @@ import {
   DidCommMessageSender,
   DidCommPresentationV2AckMessage,
   DidCommPresentationV2ProblemReportMessage,
+  DidCommProofEventTypes,
+  type DidCommProofStateChangedEvent,
 } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { ValidationPipe, VersioningType } from '@nestjs/common'
@@ -20,6 +22,7 @@ import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
+  AUTO_ACCEPT_PRESENTATION_METADATA,
   createInvitation,
   createJsc,
   ParticipantRole,
@@ -86,8 +89,9 @@ const CREDENTIAL_SCHEMA_REFERENCE = `vpr:verana:${CHAIN_ID}:cs:${CREDENTIAL_SCHE
 const veranaChain = { getChainId: CHAIN_ID } as unknown as VeranaChainService
 
 let issuerParticipantIsActive = true
+let unreachableIndexerOwner: string | undefined
 
-function fakeIndexer(ecosystemDid: string): VeranaIndexerService {
+function fakeIndexer(ecosystemDid: string, owner: string): VeranaIndexerService {
   const indexer = new VeranaIndexerService({
     baseUrl: 'http://indexer.test',
     logger: new TsLogger(LogLevel.Off, 'VeranaIndexer'),
@@ -111,6 +115,7 @@ function fakeIndexer(ecosystemDid: string): VeranaIndexerService {
   })
 
   vi.spyOn(indexer, 'listParticipants').mockImplementation(async filter => {
+    if (owner === unreachableIndexerOwner) throw new Error('the indexer is unreachable')
     if (filter.did !== ecosystemDid || filter.schemaId !== CREDENTIAL_SCHEMA_ID || !filter.role) return []
     if (filter.role === ParticipantRole.Issuer && !issuerParticipantIsActive) return []
     return [
@@ -194,8 +199,8 @@ describe('v2 didcomm accept routes, over two agents', () => {
     JSON_SCHEMA_CREDENTIAL_ID = await publishVtjsc(faberAgent, 'https://faber')
     const ecosystemDid = faberAgent.did
     if (!ecosystemDid) throw new Error('Faber has no public DID')
-    faberAgent.indexer = fakeIndexer(ecosystemDid)
-    aliceAgent.indexer = fakeIndexer(ecosystemDid)
+    faberAgent.indexer = fakeIndexer(ecosystemDid, 'faber')
+    aliceAgent.indexer = fakeIndexer(ecosystemDid, 'alice')
 
     // Alice resolves the AnonCreds resources of Faber from the test server of Faber, because
     // neither agent publishes on a reachable host.
@@ -287,6 +292,43 @@ describe('v2 didcomm accept routes, over two agents', () => {
     throw new Error(`${collection} record "${id}" did not reach state "${state}"`)
   }
 
+  /** This function builds one entry of the CredentialSchema map that a request records per group. */
+  const requestedCredentialSchema = (credentialSchemaId: number) => ({
+    credentialSchemaId,
+    ecosystemDid: faberAgent.did as string,
+    jsonSchemaCredentialId: JSON_SCHEMA_CREDENTIAL_ID,
+  })
+
+  /** This function collects the state changes of one presentation of Faber. */
+  function recordProofStates(): Array<{ previousState: string | null; state: string; id: string }> {
+    const changes: Array<{ previousState: string | null; state: string; id: string }> = []
+    faberAgent.events.on<DidCommProofStateChangedEvent>(
+      DidCommProofEventTypes.ProofStateChanged,
+      ({ payload }) => {
+        changes.push({
+          previousState: payload.previousState,
+          state: payload.proofRecord.state,
+          id: payload.proofRecord.id,
+        })
+      },
+    )
+    return changes
+  }
+
+  /** This function drives one presentation up to the answer of Alice, and returns both records. */
+  async function presentTo(invitation: Record<string, unknown>): Promise<{ aliceProofId: string }> {
+    const known = await idsOf(aliceApp, 'presentations')
+    await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(invitation), {
+      label: aliceAgent.label,
+    })
+    const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
+
+    const accepted = await alice().post(`/v2/didcomm/presentations/${aliceProofId}/accept-request`)
+    expect(accepted.body.error ?? accepted.status).toBe(200)
+
+    return { aliceProofId }
+  }
+
   it('refuses a presentation request that the credential store cannot answer', async () => {
     const created = await faber()
       .post('/v2/didcomm/presentation-request')
@@ -360,6 +402,9 @@ describe('v2 didcomm accept routes, over two agents', () => {
     // The agent stops on `presentation-received`: the verifier acknowledges with a call.
     await untilRecordState(faberApp, 'presentations', faberProofId, 'presentation-received')
 
+    const waiting = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(waiting.body.verified).toBe(true)
+
     // Verifier: the exchange completes.
     const acknowledged = await faber().post(`/v2/didcomm/presentations/${faberProofId}/accept-presentation`)
     expect(acknowledged.body.error ?? acknowledged.status).toBe(200)
@@ -421,7 +466,9 @@ describe('v2 didcomm accept routes, over two agents', () => {
         },
       },
     })
-    requested.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, [CREDENTIAL_SCHEMA_ID])
+    requested.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, {
+      'gov-id': requestedCredentialSchema(CREDENTIAL_SCHEMA_ID),
+    })
     await faberAgent.didcomm.proofs.update(requested.proofRecord)
 
     const faberProofId = requested.proofRecord.id
@@ -486,5 +533,123 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
     expect(abandoned.body.verified).toBe(false)
     expect(abandoned.body.errorMessage).toContain('e.p.trust-resolution-unavailable')
+  }, 120_000)
+
+  it('completes an autoAccept exchange itself, with no accept-presentation call', async () => {
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }], autoAccept: true })
+    expect(created.status).toBe(201)
+    const faberProofId = created.body.proofExchangeId
+
+    const { aliceProofId } = await presentTo(created.body.invitation)
+
+    await untilRecordState(faberApp, 'presentations', faberProofId, 'done')
+    await untilRecordState(aliceApp, 'presentations', aliceProofId, 'done')
+
+    const acknowledged = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(acknowledged.body.verified).toBe(true)
+  }, 120_000)
+
+  it('abandons an autoAccept exchange whose issuer lost its ISSUER Participant', async () => {
+    const messageSender = faberAgent.dependencyManager.resolve(DidCommMessageSender)
+    const sendMessage = vi.spyOn(messageSender, 'sendMessage')
+    const changes = recordProofStates()
+
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }], autoAccept: true })
+    expect(created.status).toBe(201)
+    const faberProofId = created.body.proofExchangeId
+
+    issuerParticipantIsActive = false
+
+    try {
+      const { aliceProofId } = await presentTo(created.body.invitation)
+
+      await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+      const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+      expect(abandoned.body.verified).toBe(false)
+      expect(abandoned.body.errorMessage).toContain('e.p.issuer-not-authorized')
+
+      // The acknowledgement waits for the trust decision, so the peer gets the report instead.
+      const sentTypes = sendMessage.mock.calls.map(call => call[0].message.type)
+      expect(sentTypes).toContain(DidCommPresentationV2ProblemReportMessage.type.messageTypeUri)
+      expect(sentTypes).not.toContain(DidCommPresentationV2AckMessage.type.messageTypeUri)
+
+      await untilRecordState(aliceApp, 'presentations', aliceProofId, 'abandoned')
+      const prover = await alice().get(`/v2/didcomm/presentations/${aliceProofId}`)
+      expect(prover.body.errorMessage).toContain('e.p.issuer-not-authorized')
+
+      expect(changes.filter(change => change.id === faberProofId && change.state === 'abandoned')).toEqual([
+        { id: faberProofId, previousState: 'presentation-received', state: 'abandoned' },
+      ])
+
+      const acknowledged = await faber().post(`/v2/didcomm/presentations/${faberProofId}/accept-presentation`)
+      expect(acknowledged.status).toBe(409)
+      expect(acknowledged.body.error.code).toBe('INVALID_STATE')
+    } finally {
+      issuerParticipantIsActive = true
+      sendMessage.mockRestore()
+    }
+  }, 120_000)
+
+  it('abandons a presentation while the indexer answers no Participant read', async () => {
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }] })
+    expect(created.status).toBe(201)
+    const faberProofId = created.body.proofExchangeId
+
+    // Only the verifier loses the indexer: the prover still runs its own check before it presents.
+    unreachableIndexerOwner = 'faber'
+
+    try {
+      await presentTo(created.body.invitation)
+
+      await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+      const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+      expect(abandoned.body.verified).toBe(false)
+      expect(abandoned.body.errorMessage).toContain('e.p.trust-resolution-unavailable')
+    } finally {
+      unreachableIndexerOwner = undefined
+    }
+  }, 120_000)
+
+  it('abandons a presentation that answers a group with the CredentialSchema of another group', async () => {
+    const requested = await faberAgent.didcomm.proofs.createRequest({
+      protocolVersion: 'v2',
+      proofFormats: {
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: {
+            'gov-id': { names: ['name'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+            'other-id': { names: ['countryCode'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+          },
+        },
+      },
+    })
+    // The credential of Alice answers both groups, and it carries the CredentialSchema of one.
+    requested.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, {
+      'gov-id': requestedCredentialSchema(CREDENTIAL_SCHEMA_ID),
+      'other-id': requestedCredentialSchema(CREDENTIAL_SCHEMA_ID + 1),
+    })
+    requested.proofRecord.metadata.set(AUTO_ACCEPT_PRESENTATION_METADATA, { autoAccept: true })
+    await faberAgent.didcomm.proofs.update(requested.proofRecord)
+
+    const faberProofId = requested.proofRecord.id
+    const { invitation } = await createInvitation({ agent: faberAgent, messages: [requested.message] })
+
+    await presentTo(invitation)
+
+    await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+    const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(abandoned.body.verified).toBe(false)
+    expect(abandoned.body.errorMessage).toContain('e.p.issuer-not-authorized')
+    expect(abandoned.body.errorMessage).toContain('the group "other-id"')
   }, 120_000)
 })
