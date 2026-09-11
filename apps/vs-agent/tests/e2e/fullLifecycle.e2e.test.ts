@@ -1387,7 +1387,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
           expect(error).toBeInstanceOf(AdminApiError)
           expect(error.code).toBe('PEER_NOT_AUTHORIZED')
           expect(error.status).toBe(409)
-          expect(error.message).toContain('did:web or did:webvh')
+          expect(error.message).toContain('Supported methods: web, webvh')
           expect((await applicant.didcomm.proofs.getById(received.id)).state).toBe(
             DidCommProofState.RequestReceived,
           )

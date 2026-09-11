@@ -3,7 +3,7 @@ import type { DidCommProofExchangeRecord, DidCommProofStateChangedEvent } from '
 
 import { AnonCredsNonRevokedInterval, AnonCredsSchema, dateToTimestamp } from '@credo-ts/anoncreds'
 import { DidCommAutoAcceptProof, DidCommProofEventTypes, DidCommProofState } from '@credo-ts/didcomm'
-import { parseDid, RecordNotFoundError, W3cCredential } from '@credo-ts/core'
+import { RecordNotFoundError, W3cCredential } from '@credo-ts/core'
 import {
   Body,
   Controller,
@@ -37,7 +37,9 @@ import {
   createInvitation,
   DerivedCredentialSchema,
   fetchJson,
+  isSupportedPublicDid,
   ParticipantRole,
+  SUPPORTED_PUBLIC_DID_METHODS,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
   type BaseAgentModules,
   type VsAgent,
@@ -67,8 +69,6 @@ import {
   RequestedCredentialDto,
 } from './dto'
 import { REQUESTED_CREDENTIALS_METADATA, toPresentationDto } from './mappers'
-
-const PUBLIC_DID_METHODS = ['web', 'webvh']
 
 /**
  * Presentation flows this agent requested over DIDComm.
@@ -267,9 +267,9 @@ export class V2DidcommPresentationsController {
 
       // A service connects with its public DID, so another method cannot be checked, per
       // [VSA-VTI-FLOW-VERIFY-AC-6]
-      if (!PUBLIC_DID_METHODS.includes(parseDid(verifierDid).method)) {
+      if (!isSupportedPublicDid(verifierDid)) {
         throw peerNotAuthorized(
-          `Unable to check verifier Participant entry for presentation "${proofExchangeId}": "${verifierDid}" is not supported. Supported methods: ${SUPPORTED_DID_METHODS}`,
+          `Unable to check verifier Participant entry for presentation "${proofExchangeId}": "${verifierDid}" is not supported. Supported methods: ${SUPPORTED_PUBLIC_DID_METHODS.join(', ')}`,
         )
       }
 

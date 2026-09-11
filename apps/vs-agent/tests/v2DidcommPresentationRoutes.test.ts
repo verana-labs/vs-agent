@@ -762,7 +762,7 @@ describe('v2 didcomm presentation routes', () => {
 
         expect(response.status).toBe(409)
         expect(response.body.error.code).toBe('PEER_NOT_AUTHORIZED')
-        expect(response.body.error.message).toContain('did:web or did:webvh')
+        expect(response.body.error.message).toContain('Supported methods: web, webvh')
         expect(anonCredsTrust.assertAuthorized).not.toHaveBeenCalled()
         expect(proofs.acceptRequest).not.toHaveBeenCalled()
       })
