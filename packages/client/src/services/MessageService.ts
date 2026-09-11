@@ -47,7 +47,7 @@ export class MessageService {
       let jsonResponse
       try {
         jsonResponse = JSON.parse(responseText)
-      } catch (e) {
+      } catch (_e) {
         throw new Error('Invalid JSON response')
       }
 

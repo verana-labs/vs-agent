@@ -5,8 +5,8 @@ import {
   CredentialTypesService,
   DefaultResourcesController,
   DidWebController,
-  InvitationRoutesController,
   SelfTrController,
+  ShortUrlController,
   TrustService,
 } from './controllers'
 import { UrlShorteningService } from './services'
@@ -19,12 +19,7 @@ export class PublicModule {
     return {
       module: PublicModule,
       imports: [],
-      controllers: [
-        InvitationRoutesController,
-        SelfTrController,
-        DidWebController,
-        DefaultResourcesController,
-      ],
+      controllers: [ShortUrlController, SelfTrController, DidWebController, DefaultResourcesController],
       providers: [
         {
           provide: 'VSAGENT',

@@ -1,4 +1,4 @@
-import { DidCommProofState } from '@credo-ts/didcomm'
+import { DidCommProofRole, DidCommProofState } from '@credo-ts/didcomm'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
 import { Type } from 'class-transformer'
@@ -9,7 +9,6 @@ import {
   IsIn,
   IsOptional,
   IsString,
-  IsUrl,
   ValidateNested,
 } from 'class-validator'
 
@@ -64,22 +63,6 @@ export class CreatePresentationRequestBodyDto {
   requestedCredentials!: RequestedCredentialDto[]
 
   @ApiPropertyOptional({
-    description: 'URL the agent POSTs to when the presentation flow completes',
-    example: 'https://myhost.com/presentation_callback',
-  })
-  @IsOptional()
-  @IsUrl({ require_tld: false })
-  callbackUrl?: string
-
-  @ApiPropertyOptional({
-    description: 'Correlation identifier of the caller, echoed back in the callback',
-    example: '1234-5678',
-  })
-  @IsOptional()
-  @IsString()
-  ref?: string
-
-  @ApiPropertyOptional({
     description: 'Ask the holder for a non-revocation proof at verification time',
     default: false,
   })
@@ -120,11 +103,15 @@ export class CreatePresentationRequestResponseDto {
   @ApiProperty({ description: 'Flow identifier, for later tracking', example: 'proof-1234-5678' })
   proofExchangeId!: string
 
-  @ApiProperty({ description: 'Full DIDComm invitation URL', example: 'didcomm://example.com/...' })
-  url!: string
+  @ApiProperty({
+    description: 'The Out-of-Band invitation, in the envelope that didcommVersion selects',
+    type: 'object',
+    additionalProperties: true,
+  })
+  invitation!: Record<string, unknown>
 
   @ApiProperty({
-    description: 'Short form of the URL, for a QR code',
+    description: 'A URL under PUBLIC_API_BASE_URL that resolves to the same invitation, for a QR code',
     example: 'https://mydomain.com/s?id=abcd',
   })
   shortUrl!: string
@@ -145,6 +132,12 @@ export class PresentationRecordDto {
   @ApiProperty({ enum: DidCommProofState, description: 'Current state of the presentation flow' })
   state!: DidCommProofState
 
+  @ApiProperty({ enum: DidCommProofRole, description: 'Role of this agent in the flow' })
+  role!: DidCommProofRole
+
+  @ApiPropertyOptional({ description: 'Connection the flow runs on', example: 'conn-1234-5678' })
+  connectionId?: string
+
   @ApiProperty({
     type: [RequestedCredentialDto],
     description: 'The credentials, and attributes of them, that this flow asked for',
@@ -159,7 +152,8 @@ export class PresentationRecordDto {
   claims!: Claim[]
 
   @ApiProperty({
-    description: 'Whether the presentation verified. Only meaningful once `state` is `done`.',
+    description:
+      'Whether the presentation verified. Set when the presentation is received, false with an `errorMessage` when the flow is `abandoned`.',
     example: true,
   })
   verified!: boolean

@@ -62,7 +62,7 @@ export {
 } from './handlers'
 
 // Module surface
-export { VtFlowModuleConfig } from './VtFlowModuleConfig'
+export { DEFAULT_DATA_INTEGRITY_CRYPTOSUITE, VtFlowModuleConfig } from './VtFlowModuleConfig'
 export type {
   VtFlowAssertVerifiableServiceContext,
   VtFlowAssertVerifiableServiceHook,

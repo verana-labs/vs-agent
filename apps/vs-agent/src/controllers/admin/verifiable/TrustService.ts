@@ -1,11 +1,4 @@
-import {
-  DidRecord,
-  JsonObject,
-  JsonTransformer,
-  utils,
-  W3cCredential,
-  W3cJsonLdVerifiableCredential,
-} from '@credo-ts/core'
+import { DidRecord, JsonObject, utils } from '@credo-ts/core'
 import { Logger, Inject, Injectable, HttpException, HttpStatus } from '@nestjs/common'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 import {
@@ -24,12 +17,12 @@ import {
   getVerificationMethodId,
   removeTrustCredential,
   signerW3c,
+  type TrustCredential,
   validateSchema,
   VsAgent,
 } from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, paginate, PaginationQueryDto } from '../../../common'
-import { AGENT_INVITATION_BASE_URL } from '../../../config'
 import { UrlShorteningService } from '../../../services'
 import { VsAgentService } from '../../../services/VsAgentService'
 import { CredentialTypesService } from '../credentials'
@@ -124,7 +117,7 @@ export class TrustService {
     return await this.removeCredentialByType(schemaId, '_vt/jsc')
   }
 
-  public async createVtc(id: string, credential: W3cJsonLdVerifiableCredential) {
+  public async createVtc(id: string, credential: TrustCredential) {
     try {
       const { agent } = await this.getDidRecord()
       const verifiablePresentation = await createVtc(agent, this.publicApiBaseUrl, id, credential)
@@ -147,6 +140,7 @@ export class TrustService {
     }
   }
 
+  /** Issues a VC Data Model 2.0 credential secured with a Data Integrity proof (`eddsa-jcs-2022`) */
   private async issueW3cJsonLd(
     agent: VsAgent,
     didRecord: DidRecord,
@@ -158,22 +152,12 @@ export class TrustService {
       id: `${did}#${utils.uuid()}`,
       type: ['VerifiableCredential', 'VerifiableTrustCredential'],
       issuer: agent.did,
-      credentialSubject: {
-        id: did,
-        claims,
-      },
+      credentialSubject: { ...claims, id: did },
+      credentialSchema: { id: jsonSchemaCredentialId, type: 'JsonSchemaCredential' },
     })
-    unsignedCredential.credentialSchema = {
-      id: jsonSchemaCredentialId,
-      type: 'JsonSchemaCredential',
-    }
     const verificationMethodId = getVerificationMethodId(agent.config.logger, didRecord)
-    const credential = await signerW3c(
-      agent,
-      JsonTransformer.fromJSON(unsignedCredential, W3cCredential),
-      verificationMethodId,
-    )
-    return credential.jsonCredential
+    const credential = await signerW3c(agent, unsignedCredential, verificationMethodId)
+    return credential.securedCredential
   }
 
   private async anchorDigest(
@@ -195,21 +179,25 @@ export class TrustService {
 
     if (!agent.did)
       throw new HttpException('ANCHORING_FAILED: agent has no public DID', HttpStatus.BAD_GATEWAY)
-    const issuerParticipantId = await chain.findActiveIssuerParticipantId(agent.did, schemaId)
+    const issuerParticipantId = await agent.indexer.findActiveIssuerParticipantId(
+      agent.did,
+      schemaId,
+      chain.address,
+    )
     if (issuerParticipantId === undefined)
       throw new HttpException(
         `ANCHORING_FAILED: no active ISSUER participant for schema ${schemaId}`,
         HttpStatus.BAD_GATEWAY,
       )
 
-    const schema = await chain.getCredentialSchema(schemaId)
-    if (!schema?.digestAlgorithm)
+    const schema = await agent.indexer.getCredentialSchema(schemaId).catch(() => undefined)
+    if (!schema?.digest_algorithm)
       throw new HttpException(
         `ANCHORING_FAILED: credential schema ${schemaId} has no digest_algorithm`,
         HttpStatus.BAD_GATEWAY,
       )
 
-    const digestJCS = computeCredentialDigestJCS(credential as never, schema.digestAlgorithm)
+    const digestJCS = computeCredentialDigestJCS(credential as never, schema.digest_algorithm)
     try {
       await chain.createOrUpdateParticipantSession({
         id: session.participantSessionId,
@@ -296,14 +284,13 @@ export class TrustService {
               },
             },
           })
-          const { url: longUrl } = await createInvitation({
+          const { invitation } = await createInvitation({
             agent,
             messages: [request.message],
-            invitationBaseUrl: AGENT_INVITATION_BASE_URL,
           })
 
           const shortUrlId = await this.urlShortenerService.createShortUrl({
-            longUrl,
+            invitation,
             relatedFlowId: request.credentialExchangeRecord.id,
           })
           const didcommInvitationUrl = `${this.publicApiBaseUrl}/s?id=${shortUrlId}`

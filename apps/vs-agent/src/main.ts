@@ -57,7 +57,8 @@ import {
   ADMIN_API_TRUSTED_NETWORKS,
   validateAdminApiConfig,
   ENABLED_PLUGINS,
-  EVENTS_BASE_URL,
+  EVENTS_WEBHOOK_API_KEY,
+  EVENTS_WEBHOOK_URL,
   POSTGRES_HOST,
   PUBLIC_API_BASE_URL,
   USE_CORS,
@@ -350,6 +351,7 @@ const run = async () => {
 
     authorizationService = new AuthorizationService({
       chain: veranaChain,
+      indexer: indexerService,
       logger: serverLogger,
       corporationId: VERANA_CORPORATION_ID ? Number(VERANA_CORPORATION_ID) : undefined,
     })
@@ -445,8 +447,9 @@ const run = async () => {
 
   const ecsClaims = agent.ecsClaims ?? {}
 
-  // Deliver domain events emitted on the agent bus to the configured webhook endpoint
-  webhookEvent(agent, EVENTS_BASE_URL, serverLogger)
+  if (EVENTS_WEBHOOK_URL) {
+    webhookEvent(agent, { url: EVENTS_WEBHOOK_URL, apiKey: EVENTS_WEBHOOK_API_KEY }, serverLogger)
+  }
 
   // Register plugin events after agent is initialized
   for (const plugin of nestPlugins) {

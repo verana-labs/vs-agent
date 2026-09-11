@@ -334,12 +334,6 @@ expressHandler.connectionState(async (req, res) => {
   res.json({ message: 'ok' })
 })
 
-expressHandler.messageStateUpdated(async (req, res) => {
-  const obj = req.body
-  logger.info(`message state updated: ${JSON.stringify(obj)}`)
-  res.json({ message: 'ok' })
-})
-
 expressHandler.messageReceived(async (req, res) => {
   const obj = req.body.message
   logger.info(`received message: ${JSON.stringify(obj)}`)

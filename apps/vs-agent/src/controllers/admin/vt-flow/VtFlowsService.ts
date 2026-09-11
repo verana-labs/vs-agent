@@ -121,19 +121,6 @@ export class VtFlowsService {
     return flows
   }
 
-  /**
-   * Resolves the connection data of one flow. A mutation returns the record of the flow, and the
-   * record must carry the Connection State that [VSA-ADM-VT-FL-LIST] listFlows defines.
-   */
-  private async resolveFlow(agent: VsAgent, record: VtFlowRecord): Promise<ResolvedFlow> {
-    const connection = await agent.didcomm.connections.findById(record.connectionId)
-    return {
-      record,
-      peerDid: connection?.theirDid,
-      connectionState: connectionStateOf(record, connection),
-    }
-  }
-
   public editCredentialClaims(
     participantSessionId: string,
     claims: Record<string, unknown>,
@@ -210,13 +197,13 @@ export class VtFlowsService {
     records: VtFlowRecord[],
     validatorParticipantId: string,
   ): Promise<VtFlowRecord[]> {
-    const chain = this.requireChain(agent)
+    this.requireChain(agent)
     const validatorByApplicant = new Map<string, string | undefined>()
     const kept: VtFlowRecord[] = []
     for (const record of records) {
       if (!record.participantId) continue
       if (!validatorByApplicant.has(record.participantId)) {
-        const participant = await chain.getParticipant(Number(record.participantId)).catch(() => undefined)
+        const participant = await agent.indexer.findParticipant(record.participantId).catch(() => undefined)
         validatorByApplicant.set(
           record.participantId,
           participant?.validatorParticipantId ? String(participant.validatorParticipantId) : undefined,
@@ -235,7 +222,7 @@ export class VtFlowsService {
     const vtFlowApi = this.resolveVtFlowApi(agent)
     const record = await this.findRecordBySession(vtFlowApi, participantSessionId)
     try {
-      return toDto(await this.resolveFlow(agent, await action({ agent, vtFlowApi, record })))
+      return toDto(await resolveFlow(agent, await action({ agent, vtFlowApi, record })))
     } catch (error) {
       if (error instanceof CredoError) throw new ConflictException(error.message)
       throw error
@@ -298,7 +285,7 @@ export class VtFlowsService {
       // for the issuer itself fails on the required subject claims.
       if (participant.role !== HOLDER_PARTICIPANT_TYPE) {
         const completed = await orchestrator.completeOnboardingProcess(validated.id)
-        return toDto(await this.resolveFlow(agent, completed))
+        return toDto(await resolveFlow(agent, completed))
       }
 
       const offered = await orchestrator.offerOnboardingCredential({
@@ -307,7 +294,7 @@ export class VtFlowsService {
         participant,
         credential,
       })
-      return toDto(await this.resolveFlow(agent, offered))
+      return toDto(await resolveFlow(agent, offered))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       throw new HttpException(`validate failed: ${message}`, HttpStatus.INTERNAL_SERVER_ERROR)
@@ -379,6 +366,19 @@ function connectionStateOf(
  */
 export function toV2Dto({ state, ...rest }: VtFlowRecordDto): V2VtFlowRecordDto {
   return { ...rest, flowState: state }
+}
+
+export async function resolveV2FlowRecord(agent: VsAgent, record: VtFlowRecord): Promise<V2VtFlowRecordDto> {
+  return toV2Dto(toDto(await resolveFlow(agent, record)))
+}
+
+async function resolveFlow(agent: VsAgent, record: VtFlowRecord): Promise<ResolvedFlow> {
+  const connection = await agent.didcomm.connections.findById(record.connectionId)
+  return {
+    record,
+    peerDid: connection?.theirDid,
+    connectionState: connectionStateOf(record, connection),
+  }
 }
 
 function toDto({ record, peerDid, connectionState }: ResolvedFlow): VtFlowRecordDto {

@@ -21,7 +21,7 @@ import {
   CreateInvitationResult,
   ReceiveInvitationResult,
 } from '@verana-labs/vs-agent-model'
-import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
+import { createInvitation, fetchJson, REQUESTED_CREDENTIAL_SCHEMAS_METADATA } from '@verana-labs/vs-agent-sdk'
 
 import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../config'
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
@@ -64,12 +64,12 @@ export class V1InvitationController {
   })
   @ApiBody({ type: CreateInvitationDto, required: false })
   public async createInvitation(@Body() options?: CreateInvitationDto): Promise<CreateInvitationResult> {
-    return await createInvitation({
+    const { outOfBandInvitation } = await createInvitation({
       agent: await this.agentService.getAgent(),
       useLegacyDid: options?.useLegacyDid,
       didCommVersion: options?.didCommVersion,
-      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
     })
+    return { url: outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL }) }
   }
 
   @Get('/')
@@ -89,11 +89,11 @@ export class V1InvitationController {
   })
   @ApiQuery({ name: 'legacy', required: false, type: Boolean })
   public async getInvitation(@Query('legacy') useLegacyDid?: boolean): Promise<CreateInvitationResult> {
-    return await createInvitation({
+    const { outOfBandInvitation } = await createInvitation({
       agent: await this.agentService.getAgent(),
       useLegacyDid,
-      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
     })
+    return { url: outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL }) }
   }
 
   @Post('/receive')
@@ -290,6 +290,20 @@ export class V1InvitationController {
       restrictions,
     }
 
+    let requestedCredentialSchemaId: number | undefined
+    try {
+      const derived = await agent.anonCredsTrust.deriveCredentialSchema(
+        relatedJsonSchemaCredentialId
+          ? { schemaId: restrictions[0].schema_id! }
+          : { credentialDefinitionId: credentialDefinitionId! },
+      )
+      requestedCredentialSchemaId = derived.credentialSchemaId
+    } catch (error) {
+      agent.config.logger.warn(
+        `[V1Invitation] the requested credential binds to no CredentialSchema, so the presentation cannot be checked: ${error}`,
+      )
+    }
+
     let nonRevoked: AnonCredsNonRevokedInterval | undefined
     if (requireNonRevocation) {
       const now = dateToTimestamp(new Date())
@@ -310,19 +324,22 @@ export class V1InvitationController {
 
     request.proofRecord.metadata.set('_2060/requestedCredentials', requestedCredentials)
     request.proofRecord.metadata.set('_2060/callbackParameters', { ref, callbackUrl })
+    if (requestedCredentialSchemaId !== undefined) {
+      request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, [requestedCredentialSchemaId])
+    }
     await agent.didcomm.proofs.update(request.proofRecord)
 
-    const { url } = await createInvitation({
+    const { invitation, outOfBandInvitation } = await createInvitation({
       agent,
       messages: [request.message],
       useLegacyDid,
       didCommVersion,
-      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
       imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
+    const url = outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({
-      longUrl: url,
+      invitation,
       relatedFlowId: request.proofRecord.id,
     })
     const shortUrl = `${this.publicApiBaseUrl}/s?id=${shortUrlId}`
@@ -437,17 +454,17 @@ export class V1InvitationController {
         },
       })
 
-      const { url } = await createInvitation({
+      const { invitation, outOfBandInvitation } = await createInvitation({
         agent: await this.agentService.getAgent(),
         messages: [request.message],
         useLegacyDid,
         didCommVersion,
-        invitationBaseUrl: AGENT_INVITATION_BASE_URL,
         imageUrl: AGENT_INVITATION_IMAGE_URL,
       })
+      const url = outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL })
 
       const shortUrlId = await this.urlShortenerService.createShortUrl({
-        longUrl: url,
+        invitation,
         relatedFlowId: request.credentialExchangeRecord.id,
       })
       const shortUrl = `${this.publicApiBaseUrl}/s?id=${shortUrlId}`

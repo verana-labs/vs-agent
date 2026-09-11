@@ -31,11 +31,11 @@ export class V1QrController {
     @Query('fcolor') fcolor?: string,
     @Query('legacy') useLegacyDid?: boolean,
   ) {
-    const { url: invitationUrl } = await createInvitation({
+    const { outOfBandInvitation } = await createInvitation({
       agent: await this.agentService.getAgent(),
       useLegacyDid,
-      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
     })
+    const invitationUrl = outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL })
 
     function isQRCodeErrorCorrectionLevel(input?: string): input is QRCode.QRCodeErrorCorrectionLevel {
       return input ? ['low', 'medium', 'quartile', 'high', 'L', 'M', 'Q', 'H'].includes(input) : false

@@ -145,10 +145,11 @@ describe('verana: indexer notifications', () => {
 
     const notification = await notified
     expect(notification.payload.event).toMatchObject({
-      msg: MSG,
-      entityId: PARTICIPANT_ID,
+      eventType: MSG,
+      did: validator.did,
       blockHeight: 100,
       txHash: 'TXHASH',
+      payload: { module: 'perm', sender: 'verana1operator', entityId: PARTICIPANT_ID },
     })
     const validatedEvent = await validated
     expect(validatedEvent.payload.vtFlowRecordId).toBe(record.id)

@@ -246,7 +246,7 @@ async function startWebvhVerifier({ seedAlternativeDids }: { seedAlternativeDids
         },
       }),
       dids: new DidsModule({
-        resolvers: [new CachedWebDidResolver({ publicApiBaseUrl }), registry],
+        resolvers: [new CachedWebDidResolver(), registry],
         registrars: [registry],
       }),
       ...sdkPlugin.modules,

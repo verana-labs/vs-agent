@@ -163,3 +163,29 @@ export async function fetchJson<T>(
     if (timer) clearTimeout(timer)
   }
 }
+
+/** The AnonCreds schema that the JSON Schema of a `CredentialSchema` entry defines. */
+export interface AnonCredsSchemaShape {
+  name: string
+  attrNames: string[]
+}
+
+/**
+ * Maps `title` to the schema name and the `credentialSubject` properties to `attrNames`, per
+ * [VSA-PUB-AC-5]. The VTJSC issuer and every accredited issuer must derive the same values.
+ */
+export function anonCredsSchemaFromJsonSchema(jsonSchema: string | object): AnonCredsSchemaShape {
+  const parsed = (typeof jsonSchema === 'string' ? JSON.parse(jsonSchema) : jsonSchema) as {
+    title?: string
+    properties?: { credentialSubject?: { properties?: Record<string, unknown> } }
+  }
+
+  const name = parsed?.title
+  if (!name) throw new Error('The JSON Schema carries no title')
+
+  const attrNames = Object.keys(parsed?.properties?.credentialSubject?.properties ?? {}).map(String)
+  if (attrNames.length === 0)
+    throw new Error(`The JSON Schema "${name}" defines no credentialSubject property`)
+
+  return { name, attrNames }
+}

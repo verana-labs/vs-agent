@@ -1,6 +1,4 @@
-import type { AnonCredsCredentialMetadata } from '@credo-ts/anoncreds'
 import type { DidCommCredentialExchangeRecord, DidCommCredentialStateChangedEvent } from '@credo-ts/didcomm'
-import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
   Body,
@@ -16,7 +14,6 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common'
-import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import {
   DidCommAutoAcceptCredential,
   DidCommCredentialEventTypes,
@@ -32,11 +29,17 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { Claim } from '@verana-labs/vs-agent-model'
-import { createInvitation } from '@verana-labs/vs-agent-sdk'
+import { createInvitation, ParticipantRole } from '@verana-labs/vs-agent-sdk'
 
-import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
-import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
+import {
+  AdminApiError,
+  AdminApiErrorCode,
+  createdAtKey,
+  Page,
+  paginate,
+  trustDecisionError,
+} from '../../../../common'
+import { AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
@@ -48,6 +51,7 @@ import {
   DeclineExchangeBodyDto,
   ListCredentialExchangesQueryDto,
 } from './dto'
+import { toCredentialExchangeDto } from './mappers'
 
 /**
  * This controller has the credential exchanges of this agent on DIDComm.
@@ -158,6 +162,18 @@ export class V2DidcommCredentialExchangesController {
       )
     }
 
+    try {
+      const { credentialSchemaId } = await agent.anonCredsTrust.deriveCredentialSchema({
+        credentialDefinitionId,
+      })
+      await agent.anonCredsTrust.assertOwnAuthorization({
+        role: ParticipantRole.Issuer,
+        credentialSchemaId,
+      })
+    } catch (error) {
+      throw trustDecisionError(error, 'agent')
+    }
+
     // The specification makes the caller run the issuer steps, unless the caller sets
     // `autoAccept`. The exchange carries the policy, which the module default does not override.
     const offer = await agent.didcomm.credentials.createOffer({
@@ -179,23 +195,22 @@ export class V2DidcommCredentialExchangesController {
       },
     })
 
-    const { url } = await createInvitation({
+    const { invitation } = await createInvitation({
       agent,
       messages: [offer.message],
       useLegacyDid,
       didCommVersion: didcommVersion,
-      invitationBaseUrl: AGENT_INVITATION_BASE_URL,
       imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({
-      longUrl: url,
+      invitation,
       relatedFlowId: offer.credentialExchangeRecord.id,
     })
 
     return {
       credentialExchangeId: offer.credentialExchangeRecord.id,
-      url,
+      invitation,
       shortUrl: `${this.publicApiBaseUrl}/s?id=${shortUrlId}`,
     }
   }
@@ -248,7 +263,7 @@ export class V2DidcommCredentialExchangesController {
         sendProblemReport: true,
         problemReportDescription: description,
       })
-      return this.toRecordDto(agent, declined)
+      return toCredentialExchangeDto(agent, declined, this.logger)
     }
 
     // Credo sends no problem report when the exchange has no connection. An invitation makes
@@ -277,7 +292,7 @@ export class V2DidcommCredentialExchangesController {
       payload: { credentialExchangeRecord: record.clone(), previousState },
     })
 
-    return this.toRecordDto(agent, record)
+    return toCredentialExchangeDto(agent, record, this.logger)
   }
 
   @Post('credential-exchanges/:credentialExchangeId/accept-offer')
@@ -305,6 +320,36 @@ export class V2DidcommCredentialExchangesController {
 
     requireCredentialState(record, DidCommCredentialState.OfferReceived)
 
+    const formatData = await agent.didcomm.credentials.getFormatData(credentialExchangeId)
+    const anonCredsOffer = formatData.offer?.anoncreds ?? formatData.offer?.indy
+
+    if (anonCredsOffer) {
+      try {
+        if (!anonCredsOffer.cred_def_id) {
+          throw peerNotAuthorized(
+            `the AnonCreds offer of exchange "${credentialExchangeId}" names no credential definition`,
+          )
+        }
+
+        const { credentialSchemaId, issuerId } = await agent.anonCredsTrust.deriveCredentialSchema({
+          credentialDefinitionId: anonCredsOffer.cred_def_id,
+        })
+        if (!issuerId) {
+          throw peerNotAuthorized(
+            `the credential definition "${anonCredsOffer.cred_def_id}" of the offer names no issuer`,
+          )
+        }
+
+        await agent.anonCredsTrust.assertAuthorized({
+          did: issuerId,
+          role: ParticipantRole.Issuer,
+          credentialSchemaId,
+        })
+      } catch (error) {
+        throw trustDecisionError(error, 'peer')
+      }
+    }
+
     // The specification makes the caller store the credential with `acceptCredential`, so the
     // exchange stops here until that call arrives.
     const updated = await agent.didcomm.credentials.acceptOffer({
@@ -312,7 +357,7 @@ export class V2DidcommCredentialExchangesController {
       autoAcceptCredential: DidCommAutoAcceptCredential.Never,
     })
 
-    return this.toRecordDto(agent, updated)
+    return toCredentialExchangeDto(agent, updated, this.logger)
   }
 
   @Post('credential-exchanges/:credentialExchangeId/accept-request')
@@ -347,7 +392,7 @@ export class V2DidcommCredentialExchangesController {
       credentialExchangeRecordId: credentialExchangeId,
     })
 
-    return this.toRecordDto(agent, updated)
+    return toCredentialExchangeDto(agent, updated, this.logger)
   }
 
   @Post('credential-exchanges/:credentialExchangeId/accept-credential')
@@ -384,7 +429,7 @@ export class V2DidcommCredentialExchangesController {
       credentialExchangeRecordId: credentialExchangeId,
     })
 
-    return this.toRecordDto(agent, updated)
+    return toCredentialExchangeDto(agent, updated, this.logger)
   }
 
   @Get('credential-exchanges')
@@ -405,7 +450,9 @@ export class V2DidcommCredentialExchangesController {
 
     const page = paginate(records, query, { method: 'listCredentialExchanges' }, createdAtKey)
 
-    const results = await Promise.allSettled(page.items.map(record => this.toRecordDto(agent, record)))
+    const results = await Promise.allSettled(
+      page.items.map(record => toCredentialExchangeDto(agent, record, this.logger)),
+    )
 
     // The agent removes a record that it cannot read, which leaves the page short of the limit.
     // The cursor still anchors on the last record of the page, so the walk stays correct.
@@ -439,47 +486,16 @@ export class V2DidcommCredentialExchangesController {
     const record = await agent.didcomm.credentials.findById(credentialExchangeId)
     if (!record) throw unknownCredentialExchange(credentialExchangeId)
 
-    return this.toRecordDto(agent, record)
-  }
-
-  private async toRecordDto(
-    agent: VsAgent<BaseAgentModules>,
-    record: DidCommCredentialExchangeRecord,
-  ): Promise<CredentialExchangeRecordDto> {
-    const anonCredsMetadata = record.metadata.get(AnonCredsCredentialMetadataKey) as
-      | AnonCredsCredentialMetadata
-      | undefined
-
-    let claims: Claim[] = []
-    try {
-      const formatData = await agent.didcomm.credentials.getFormatData(record.id)
-      if (formatData.offerAttributes?.length) {
-        claims = formatData.offerAttributes.map(
-          attribute =>
-            new Claim({ name: attribute.name, value: attribute.value, mimeType: attribute.mimeType }),
-        )
-      }
-    } catch (error) {
-      this.logger.debug(`The agent cannot read the offer of ${record.id}: ${error}`)
-    }
-
-    return {
-      credentialExchangeId: record.id,
-      state: record.state,
-      threadId: record.threadId,
-      connectionId: record.connectionId,
-      credentialDefinitionId: anonCredsMetadata?.credentialDefinitionId,
-      schemaId: anonCredsMetadata?.schemaId,
-      claims,
-      errorMessage: record.errorMessage,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt ?? record.createdAt,
-    }
+    return toCredentialExchangeDto(agent, record, this.logger)
   }
 }
 
 function invalidInput(message: string): AdminApiError {
   return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, message)
+}
+
+function peerNotAuthorized(message: string): AdminApiError {
+  return new AdminApiError(AdminApiErrorCode.PeerNotAuthorized, HttpStatus.CONFLICT, message)
 }
 
 function unknownCredentialExchange(credentialExchangeId: string): AdminApiError {

@@ -1,7 +1,7 @@
 import type { VtFlowErrorCode } from './errors'
 import type { VtCredentialState } from './messages'
 import type { BaseEvent } from '@credo-ts/core'
-import type { DidCommJsonLdCredentialDetailFormat } from '@credo-ts/didcomm'
+import type { DidCommDataIntegrityOfferCredentialFormat } from '@credo-ts/didcomm'
 
 /** Role a party plays in a vt-flow session; perspective-only, never on the wire. */
 export enum VtFlowRole {
@@ -84,7 +84,8 @@ export interface SendIssuanceRequestOptions {
 
 export interface OfferCredentialForSessionOptions {
   vtFlowRecordId: string
-  credentialFormats: { jsonld: DidCommJsonLdCredentialDetailFormat }
+  /** W3C Data Integrity attachment format (Aries RFC 0809); the offered credential may use VC Data Model 1.1 or 2.0 */
+  credentialFormats: { dataIntegrity: DidCommDataIntegrityOfferCredentialFormat }
   credentialDigest?: string
   issuerParticipantId?: number
   comment?: string

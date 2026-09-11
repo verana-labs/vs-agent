@@ -28,13 +28,14 @@ the service and under which governance, and only then connect.
     and the [vt-flow protocol](https://github.com/verana-labs/verana-spec/blob/main/v4/vt-flow-protocol/spec.md)
     for ecosystem-driven flows - onboarding triggers issuance, on-chain
     revocation is pushed to holders and cleaned up automatically.
-  - **OpenID4VCI / OpenID4VP**: `dc+sd-jwt` issuance and presentation with DCQL
-    and Presentation Exchange, IETF Token Status List revocation, and Verana
-    trust checks before any presentation is accepted. Enabled by
+  - **OpenID4VCI / OpenID4VP**: `dc+sd-jwt` issuance and presentation with
+    DCQL and Presentation Exchange, IETF Token Status List revocation, and
+    Verana trust checks before any presentation is accepted. Enabled by
     `OID4VC_CONFIG_FILE`; see the
     [operator documentation](./packages/plugin-openid4vc/README.md).
-- **The right credential format for each use**: W3C JSON-LD credentials for
-  public credentials (digest-anchored on the Verana ledger), AnonCreds for
+- **The right credential format for each use**: W3C credentials (VC Data
+  Model 2.0, secured with Data Integrity proofs) for public credentials
+  (digest-anchored on the Verana ledger), AnonCreds for
   private credentials that must stay unlinkable (ZKP, selective disclosure),
   and IETF SD-JWT VC for OpenID4VC interoperability.
 - **Simple REST API and typed clients**: send messages, issue credentials

@@ -291,7 +291,7 @@ export class ServiceEndpointsService {
     const chain = agent.veranaChain
     if (!chain || !chain.autoTriggerResolverEnabled || !agent.did) return
     try {
-      const participantId = await chain.findActiveHolderParticipantIdByDid(agent.did)
+      const participantId = await agent.indexer.findActiveHolderParticipantIdByDid(agent.did)
       if (participantId === undefined) return
       await chain.triggerResolver(participantId)
     } catch (error) {

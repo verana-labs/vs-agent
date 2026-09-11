@@ -6,32 +6,16 @@ import { VtFlowStateUpdated } from '@verana-labs/vs-agent-model'
 
 import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 
-export const vtFlowEvents = async (agent: VsAgent, logger: BaseLogger) => {
-  agent.events.on(VtFlowEventTypes.VtFlowStateChanged, async ({ payload }: VtFlowStateChangedEvent) => {
+export const vtFlowEvents = (agent: VsAgent, logger: BaseLogger) => {
+  agent.events.on(VtFlowEventTypes.VtFlowStateChanged, ({ payload }: VtFlowStateChangedEvent) => {
     logger.debug(`Incoming vtFlow state change: ${payload.vtFlowRecordId}`)
-    const record = await agent.modules.vtFlow.findById(payload.vtFlowRecordId)
-    if (!record) return
     emitVsAgentEvent(
       agent,
       VsAgentEventTypes.VtFlowStateUpdated,
       new VtFlowStateUpdated({
         vtFlowRecordId: payload.vtFlowRecordId,
-        threadId: payload.threadId,
-        participantSessionId: payload.participantSessionId,
-        connectionId: record.connectionId,
-        role: record.role,
-        variant: record.variant,
         state: payload.state,
         previousState: payload.previousState,
-        participantId: record.participantId,
-        schemaId: record.schemaId,
-        claims: record.claims,
-        credentialExchangeRecordId: record.credentialExchangeRecordId,
-        errorMessage: record.errorMessage,
-        subprotocolThid: record.subprotocolThid,
-        agentParticipantId: record.agentParticipantId,
-        walletAgentParticipantId: record.walletAgentParticipantId,
-        timestamp: record.updatedAt,
       }),
     )
   })

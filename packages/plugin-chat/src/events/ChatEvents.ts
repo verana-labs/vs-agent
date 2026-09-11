@@ -1,5 +1,4 @@
 import type { ChatAgentModules } from '../types'
-import type { MessageReceiptsReceivedEvent, MessageState } from '@2060.io/credo-ts-didcomm-receipts'
 
 import {
   CallAcceptMessage,
@@ -17,7 +16,6 @@ import {
   DidCommReactionsEventTypes,
   DidCommMessageReactionsReceivedEvent,
 } from '@2060.io/credo-ts-didcomm-reactions'
-import { ReceiptsEventTypes } from '@2060.io/credo-ts-didcomm-receipts'
 import {
   DidCommConnectionProfileUpdatedEvent,
   DidCommProfileEventTypes,
@@ -43,7 +41,6 @@ import {
   ContextualMenuSelectMessage,
   MediaMessage,
   MenuSelectMessage,
-  MessageStateUpdated,
   ProfileMessage,
   ReactionMessage,
   TextMessage,
@@ -244,23 +241,6 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
     },
   )
 
-  // Receipts protocol events
-  agent.events.on(
-    ReceiptsEventTypes.MessageReceiptsReceived,
-    async ({ payload }: MessageReceiptsReceivedEvent) => {
-      const connectionId = payload.connectionId
-      logger.debug(
-        `MessageReceiptsReceivedEvent received. Connection id: ${connectionId}. Receipts: ${JSON.stringify(payload.receipts)}`,
-      )
-      const receipts = payload.receipts
-
-      receipts.forEach(receipt => {
-        const { messageId, timestamp, state } = receipt
-        sendMessageStateUpdatedEvent({ agent, messageId, connectionId, state, timestamp, logger })
-      })
-    },
-  )
-
   // Reactions protocol events
   agent.events.on(
     DidCommReactionsEventTypes.DidCommMessageReactionsReceived,
@@ -322,22 +302,4 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
       emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
     },
   )
-}
-
-const sendMessageStateUpdatedEvent = async (options: {
-  agent: VsAgent<ChatAgentModules>
-  messageId: string
-  connectionId: string
-  state: MessageState
-  timestamp: Date
-  logger: BaseLogger
-}) => {
-  const { agent, messageId, connectionId, state, timestamp } = options
-  const body = new MessageStateUpdated({
-    messageId: await getRecordId(agent, messageId),
-    state,
-    timestamp,
-    connectionId,
-  })
-  emitVsAgentEvent(agent, VsAgentEventTypes.MessageStateUpdated, body)
 }

@@ -16,7 +16,7 @@ services:
       - AGENT_PUBLIC_DID_METHOD=web
       - AGENT_ENDPOINT=wss://p2801.ovpndev.2060.io
       - PUBLIC_API_BASE_URL=https://p2801.ovpndev.2060.io
-      - EVENTS_BASE_URL=https://p2802.ovpndev.2060.io
+      - EVENTS_WEBHOOK_URL=https://p2802.ovpndev.2060.io/events
       - AGENT_INVITATION_IMAGE_URL=https://p2802.ovpndev.2060.io/avatar.png
       - AGENT_LABEL=NestJS Client Demo VS
       - USE_CORS=true

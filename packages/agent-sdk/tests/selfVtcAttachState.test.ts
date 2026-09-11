@@ -1,3 +1,9 @@
+import {
+  JsonTransformer,
+  W3cV2Credential,
+  W3cV2DataIntegrityVerifiableCredential,
+  W3cV2Presentation,
+} from '@credo-ts/core'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('axios', () => ({
@@ -73,15 +79,19 @@ function agentAfterRealCredential(integrityData: string) {
       did: DID,
       config: { logger },
       dids: { getCreatedDids: async () => [didRecord], update: vi.fn() },
-      w3cCredentials: {
-        signCredential: async (o: never) => ({ ...(o as { credential: object }).credential, proof: {} }),
-        signPresentation: async (o: never) => ({
-          ...(o as { presentation: object }).presentation,
-          id: VP_ID,
-          proof: {},
+      w3cV2Credentials: {
+        signCredential: async ({ credential }: { credential: W3cV2Credential }) =>
+          new W3cV2DataIntegrityVerifiableCredential({
+            securedCredential: {
+              ...JsonTransformer.toJSON(credential),
+              proof: { type: 'DataIntegrityProof', verificationMethod: vm },
+            },
+          }),
+        signPresentation: async ({ presentation }: { presentation: W3cV2Presentation }) => ({
+          securedPresentation: { ...presentation.toJSON(), id: VP_ID, proof: { type: 'DataIntegrityProof' } },
         }),
       },
-      context: { dependencyManager: { resolve: () => ({ update: vi.fn() }) } },
+      context: { dependencyManager: { isRegistered: () => false, resolve: () => ({ update: vi.fn() }) } },
     },
     didDocument,
   }

@@ -1,4 +1,11 @@
-import { DidDocument, VerificationMethod } from '@credo-ts/core'
+import {
+  DidDocument,
+  JsonTransformer,
+  VerificationMethod,
+  W3cV2Credential,
+  W3cV2DataIntegrityVerifiableCredential,
+  W3cV2Presentation,
+} from '@credo-ts/core'
 import { describe, expect, it, vi } from 'vitest'
 
 import { getEcsSchemas } from '../src/utils/data'
@@ -36,6 +43,14 @@ const ecsClaims: EcsClaims = {
   },
 }
 
+const dataIntegrityProof = {
+  type: 'DataIntegrityProof',
+  cryptosuite: 'eddsa-jcs-2022',
+  proofPurpose: 'assertionMethod',
+  verificationMethod: `${DID}#key-1`,
+  proofValue: 'z-stub',
+}
+
 function makeAgent() {
   const metadata = new Map<string, Record<string, unknown>>()
   const didRecord = {
@@ -63,13 +78,17 @@ function makeAgent() {
     did: DID,
     config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
     dids: { getCreatedDids: async () => [didRecord], update: didsUpdate },
-    context: { dependencyManager: { resolve: () => ({ update: repositoryUpdate }) } },
-    w3cCredentials: {
-      signCredential: async ({ credential }: { credential: object }) => ({
-        ...credential,
-        proof: { type: 'Ed25519Signature2020', verificationMethod: `${DID}#key-1` },
+    context: {
+      dependencyManager: { isRegistered: () => false, resolve: () => ({ update: repositoryUpdate }) },
+    },
+    w3cV2Credentials: {
+      signCredential: async ({ credential }: { credential: W3cV2Credential }) =>
+        new W3cV2DataIntegrityVerifiableCredential({
+          securedCredential: { ...JsonTransformer.toJSON(credential), proof: dataIntegrityProof },
+        }),
+      signPresentation: async ({ presentation }: { presentation: W3cV2Presentation }) => ({
+        securedPresentation: { ...presentation.toJSON(), proof: dataIntegrityProof },
       }),
-      signPresentation: async ({ presentation }: { presentation: unknown }) => presentation,
     },
   }
   return { agent, metadata, repositoryUpdate, didsUpdate }
@@ -171,6 +190,23 @@ describe('stored self-issued VTC revalidation', () => {
 
     expect(repositoryUpdate).toHaveBeenCalledTimes(2)
     expect(storedEntry(metadata, JSC_URL).credential.proof.verificationMethod).toBe(`${DID}#key-1`)
+  })
+
+  it('rebuilds a credential an older agent secured as data model 1.1 with a linked data proof', async () => {
+    const { agent, metadata, repositoryUpdate } = makeAgent()
+
+    await publish(agent, beforePublish)
+    const stored = storedEntry(metadata, JSC_URL)
+    stored.credential['@context'] = ['https://www.w3.org/2018/credentials/v1']
+    stored.credential.proof = { type: 'Ed25519Signature2020', verificationMethod: `${DID}#key-1` }
+
+    await publish(agent, beforePublish)
+
+    expect(repositoryUpdate).toHaveBeenCalledTimes(2)
+    expect(storedEntry(metadata, JSC_URL).credential['@context'][0]).toBe(
+      'https://www.w3.org/ns/credentials/v2',
+    )
+    expect(storedEntry(metadata, JSC_URL).credential.proof.type).toBe('DataIntegrityProof')
   })
 
   it('rebuilds when the stored credential is bound to another json schema credential', async () => {

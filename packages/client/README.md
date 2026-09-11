@@ -119,7 +119,6 @@ app.listen(3000, () => console.log('Server running on port 3000'))
 ```
 ### Available Event Handlers
 - `connectionStateUpdated` (`POST /connection-state-updated`)
-- `messageStateUpdated` (`POST /message-state-updated`)
 - `messageReceived` (`POST /message-received`)
 
 ## Contributing

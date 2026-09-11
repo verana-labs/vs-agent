@@ -227,20 +227,6 @@ export interface DigestDto {
   created: string
 }
 
-export interface RawParticipant {
-  id: number
-  schemaId: number
-  role: number
-  did: string
-  corporationId?: number
-  validatorParticipantId: number
-  opState?: number
-  opSummaryDigest?: string
-  revoked: Date | undefined
-  slashed: Date | undefined
-  vsOperator?: string
-}
-
 export interface Ecosystem {
   id: number
   did: string
@@ -258,11 +244,6 @@ export interface CredentialSchema {
   verifierOnboardingMode: number
   holderOnboardingMode: number
   archived: Date | undefined
-}
-
-export interface StoredDigest {
-  digest: string
-  created: Date | undefined
 }
 
 export interface OperatorAuthorization {
@@ -292,38 +273,6 @@ export interface VsOperatorAuthorization {
   corporationId: number
   vsOperator: string
   records: ParticipantAuthorizationRecord[]
-}
-
-export interface ParticipantQueryClient {
-  GetParticipant(req: { id: number }): Promise<{ participant?: RawParticipant }>
-  /** The `pp` module exposes no query by DID alone; filter through ListParticipants instead. */
-  ListParticipants(req: object): Promise<{ participants: RawParticipant[] }>
-  GetParticipantSession(req: { id: string }): Promise<{ session?: unknown }>
-}
-
-export interface EcosystemQueryClient {
-  GetEcosystem(req: { id: number }): Promise<{ ecosystem?: Ecosystem }>
-}
-
-export interface CredentialSchemaQueryClient {
-  GetCredentialSchema(req: { id: number }): Promise<{ schema?: CredentialSchema }>
-}
-
-export interface DigestQueryClient {
-  GetDigest(req: { digest: string }): Promise<{ digest?: StoredDigest }>
-}
-
-export interface DelegationQueryClient {
-  ListOperatorAuthorizations(req: {
-    corporationId: number
-    operator: string
-    responseMaxSize: number
-  }): Promise<{ operatorAuthorizations: OperatorAuthorization[] }>
-  ListVSOperatorAuthorizations(req: {
-    corporationId: number
-    vsOperator: string
-    responseMaxSize: number
-  }): Promise<{ vsOperatorAuthorizations: VsOperatorAuthorization[] }>
 }
 
 export interface VeranaChainConfig {

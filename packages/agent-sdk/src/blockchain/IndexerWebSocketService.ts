@@ -280,7 +280,7 @@ export class IndexerWebSocketService {
 
     const activity = await this.fetchActivity(event)
     if (this.stopped || generation !== this.generation) return
-    if (activity) await this.applyChanges(event, activity, state)
+    await this.applyChanges(event, activity, state)
 
     if (state.partialBlock === undefined || block > state.partialBlock) {
       state.partialBlock = block
@@ -295,41 +295,58 @@ export class IndexerWebSocketService {
 
   private async applyChanges(
     event: IndexerEventRecord,
-    activity: IndexerActivity,
+    activity: IndexerActivity | undefined,
     state?: VeranaSyncState,
   ): Promise<void> {
     const syncState = state ?? (await loadSyncState(this.options.agent))
     const block = event.block_height
 
-    applyStateMutation(syncState, activity)
+    if (activity) {
+      applyStateMutation(syncState, activity)
 
-    await this.handlerRegistry.dispatch(activity, {
-      agent: this.options.agent,
-      blockHeight: block,
-      operatorAddress: event.payload.sender,
-      agentCorporationId: this.options.agentCorporationId,
-      state: syncState,
-      txHash: event.tx_hash,
-    })
+      await this.handlerRegistry.dispatch(activity, {
+        agent: this.options.agent,
+        blockHeight: block,
+        operatorAddress: event.payload.sender,
+        agentCorporationId: this.options.agentCorporationId,
+        state: syncState,
+        txHash: event.tx_hash,
+      })
+    }
 
     if (!state) {
       syncState.lastBlockHeight = Math.max(syncState.lastBlockHeight, block)
       await saveSyncState(this.options.agent, syncState)
     }
 
+    this.emitNotification(event, activity?.changes)
+  }
+
+  private emitNotification(event: IndexerEventRecord, changes?: Record<string, unknown>): void {
+    const { payload } = event
+    const resolved = changes && Object.keys(changes).length > 0
     try {
       emitVsAgentEvent(
         this.options.agent,
         VsAgentEventTypes.IndexerNotification,
         new IndexerNotification({
-          msg: activity.msg,
-          entityType: String(activity.entity_type),
-          entityId: String(activity.entity_id),
-          changes: activity.changes,
-          blockHeight: block,
+          eventType: event.event_type,
+          did: event.did,
+          blockHeight: event.block_height,
           txHash: event.tx_hash,
-          operatorAddress: event.payload.sender,
           timestamp: new Date(event.timestamp),
+          payload: {
+            module: payload.module,
+            action: payload.action,
+            messageType: payload.message_type,
+            txIndex: payload.tx_index,
+            messageIndex: payload.message_index,
+            sender: payload.sender,
+            relatedDids: payload.related_dids,
+            entityType: payload.entity_type,
+            entityId: payload.entity_id,
+          },
+          ...(resolved ? { changes } : {}),
         }),
       )
     } catch (err) {

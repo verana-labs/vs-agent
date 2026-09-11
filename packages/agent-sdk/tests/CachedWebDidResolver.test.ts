@@ -26,7 +26,7 @@ describe('CachedWebDidResolver', () => {
           json: async () => ({ id: DID }),
         }) as unknown as Response,
     )
-    const resolver = new CachedWebDidResolver({ publicApiBaseUrl: 'https://agent.example' })
+    const resolver = new CachedWebDidResolver()
 
     const result = await resolver.resolve(resolverContext(fetchImplementation), DID, {
       did: DID,
@@ -43,7 +43,7 @@ describe('CachedWebDidResolver', () => {
     const fetchImplementation = vi.fn(
       async () => ({ status: 302, redirected: false, url: DID_URL }) as unknown as Response,
     )
-    const resolver = new CachedWebDidResolver({ publicApiBaseUrl: 'https://agent.example' })
+    const resolver = new CachedWebDidResolver()
 
     const result = await resolver.resolve(resolverContext(fetchImplementation), DID, {
       did: DID,

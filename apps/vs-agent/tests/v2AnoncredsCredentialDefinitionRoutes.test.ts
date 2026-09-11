@@ -7,7 +7,7 @@ import {
   AnonCredsRevocationRegistryDefinitionRepository,
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
-import { ValidationPipe, VersioningType } from '@nestjs/common'
+import { HttpStatus, ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
 import { plainToInstance } from 'class-transformer'
@@ -15,7 +15,7 @@ import { validate } from 'class-validator'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ErrorEnvelopeFilter } from '../src/common'
+import { AdminApiError, AdminApiErrorCode, ErrorEnvelopeFilter } from '../src/common'
 import { CredentialTypesService } from '../src/controllers/admin/credentials'
 import { CreateCredentialDefinitionDto } from '../src/controllers/admin/v2/anoncreds/dto'
 import { V2AnoncredsCredentialDefinitionsController } from '../src/controllers/admin/v2/anoncreds/V2AnoncredsCredentialDefinitionsController'
@@ -296,7 +296,9 @@ describe('v2 anoncreds credential definition routes', () => {
 
   it('answers UNKNOWN_ID when it cannot resolve relatedJsonSchemaCredentialId', async () => {
     credentialTypesService.findAnonCredsCredentialDefinition.mockResolvedValue(undefined)
-    credentialTypesService.parseJsonSchemaCredential.mockRejectedValue(new Error('fetch failed'))
+    credentialTypesService.getOrRegisterAnonCredsSchema.mockRejectedValue(
+      new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, 'no document'),
+    )
 
     const response = await request(app.getHttpServer())
       .post('/v2/anoncreds/credential-definitions')
@@ -304,6 +306,25 @@ describe('v2 anoncreds credential definition routes', () => {
 
     expect(response.status).toBe(404)
     expect(response.body.error.code).toBe('UNKNOWN_ID')
+    expect(credentialTypesService.registerAnonCredsCredentialDefinition).not.toHaveBeenCalled()
+  })
+
+  it('answers RESOLVER_UNAVAILABLE when the host of the VTJSC cannot be reached', async () => {
+    credentialTypesService.findAnonCredsCredentialDefinition.mockResolvedValue(undefined)
+    credentialTypesService.getOrRegisterAnonCredsSchema.mockRejectedValue(
+      new AdminApiError(
+        AdminApiErrorCode.ResolverUnavailable,
+        HttpStatus.SERVICE_UNAVAILABLE,
+        'cannot be reached',
+      ),
+    )
+
+    const response = await request(app.getHttpServer())
+      .post('/v2/anoncreds/credential-definitions')
+      .send({ relatedJsonSchemaCredentialId: 'https://down.test/jsc.json' })
+
+    expect(response.status).toBe(503)
+    expect(response.body.error.code).toBe('RESOLVER_UNAVAILABLE')
     expect(credentialTypesService.registerAnonCredsCredentialDefinition).not.toHaveBeenCalled()
   })
 
@@ -456,5 +477,157 @@ describe('v2 anoncreds credential definition routes', () => {
     expect(response.status).toBe(404)
     expect(response.body.error.code).toBe('UNKNOWN_ID')
     expect(credentialDefinitionRepository.delete).not.toHaveBeenCalled()
+  })
+})
+
+describe('the AnonCreds schema a credential definition builds on', () => {
+  const jsonSchemaCredentialId = 'https://eco.test/vt/schemas-5-jsc.json'
+  const ecosystemDid = 'did:webvh:QmAbC:eco.test'
+  const foreignSchemaId = `${ecosystemDid}/resources/zQmSchema`
+  const foreignSchema = { name: 'ServiceCredential', version: '1.0', attrNames: ['name'] }
+
+  const anoncreds = {
+    getCreatedSchemas: vi.fn().mockResolvedValue([]),
+    registerSchema: vi.fn(),
+  }
+  const ownSchemaRepository = { findByQuery: vi.fn(), findBySchemaId: vi.fn(), update: vi.fn() }
+  const serviceAgent = {
+    did: 'did:webvh:QmXyZ:issuer.test',
+    context: {},
+    modules: { anoncreds },
+    genericRecords: { save: vi.fn() },
+    dependencyManager: { resolve: () => ownSchemaRepository },
+  }
+
+  const service = new CredentialTypesService({
+    getAgent: vi.fn().mockResolvedValue(serviceAgent),
+  } as never)
+
+  const fetchMock = vi.fn()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    anoncreds.getCreatedSchemas.mockResolvedValue([])
+    ownSchemaRepository.findByQuery.mockResolvedValue([])
+    vi.stubGlobal('fetch', fetchMock)
+    vi.spyOn(service, 'parseJsonSchemaCredential').mockResolvedValue({
+      issuer: ecosystemDid,
+      attrNames: ['name'],
+      title: 'ServiceCredential',
+    } as never)
+  })
+
+  afterAll(() => vi.unstubAllGlobals())
+
+  const answerListing = (body: unknown, status = 200) =>
+    fetchMock.mockResolvedValue({ ok: status === 200, status, statusText: 'x', json: async () => body })
+
+  it('uses the schema the registry of the VTJSC issuer lists, and registers none of its own', async () => {
+    answerListing([{ id: foreignSchemaId, content: foreignSchema }])
+
+    await expect(
+      service.getOrRegisterAnonCredsSchema({ relatedJsonSchemaCredentialId: jsonSchemaCredentialId }),
+    ).resolves.toEqual({ schemaId: foreignSchemaId, schema: foreignSchema })
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `https://eco.test/resources?resourceType=anonCredsSchema&relatedJsonSchemaCredentialId=${encodeURIComponent(jsonSchemaCredentialId)}`,
+    )
+    expect(anoncreds.registerSchema).not.toHaveBeenCalled()
+  })
+
+  it('tells an absent VTJSC from one it cannot reach', async () => {
+    const realService = new CredentialTypesService({
+      getAgent: vi.fn().mockResolvedValue(serviceAgent),
+    } as never)
+
+    fetchMock.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' })
+    await expect(realService.parseJsonSchemaCredential(jsonSchemaCredentialId)).rejects.toMatchObject({
+      code: 'UNKNOWN_ID',
+      status: 404,
+    })
+
+    fetchMock.mockRejectedValue(new Error('getaddrinfo ENOTFOUND'))
+    await expect(realService.parseJsonSchemaCredential(jsonSchemaCredentialId)).rejects.toMatchObject({
+      code: 'RESOLVER_UNAVAILABLE',
+      status: 503,
+    })
+  })
+
+  it('ignores a name and a version the caller sends for a VTJSC it issued itself', async () => {
+    vi.spyOn(service, 'parseJsonSchemaCredential').mockResolvedValue({
+      issuer: serviceAgent.did,
+      attrNames: ['name'],
+      title: 'ServiceCredential',
+      subjectRef: 'vpr:verana:vna-1:cs:5',
+    } as never)
+    const ownSchemaId = `${serviceAgent.did}/resources/zQmOwn`
+    anoncreds.registerSchema.mockResolvedValue({
+      schemaState: { schemaId: ownSchemaId, schema: foreignSchema },
+      registrationMetadata: { attestedResource: { id: ownSchemaId } },
+    })
+    ownSchemaRepository.findBySchemaId.mockResolvedValue({ setTag: vi.fn() })
+
+    await service.getOrRegisterAnonCredsSchema({
+      relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+      name: 'CallerPicked',
+      version: '9.9',
+    })
+
+    // the lookup and the registration both follow the VTJSC, so the agent keeps one schema for it
+    expect(anoncreds.getCreatedSchemas).toHaveBeenCalledWith({
+      name: undefined,
+      version: undefined,
+      relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+    })
+    expect(anoncreds.registerSchema).toHaveBeenCalledWith({
+      schema: { attrNames: ['name'], name: 'ServiceCredential', version: '5', issuerId: serviceAgent.did },
+      options: { extraMetadata: { relatedJsonSchemaCredentialId: jsonSchemaCredentialId } },
+    })
+  })
+
+  it('answers INVALID_STATE when that registry lists no schema yet', async () => {
+    answerListing([])
+
+    await expect(
+      service.getOrRegisterAnonCredsSchema({ relatedJsonSchemaCredentialId: jsonSchemaCredentialId }),
+    ).rejects.toMatchObject({ code: 'INVALID_STATE', status: 409 })
+    expect(anoncreds.registerSchema).not.toHaveBeenCalled()
+  })
+
+  it('answers RESOLVER_UNAVAILABLE when that registry cannot be reached', async () => {
+    fetchMock.mockRejectedValue(new Error('connect ECONNREFUSED'))
+
+    await expect(
+      service.getOrRegisterAnonCredsSchema({ relatedJsonSchemaCredentialId: jsonSchemaCredentialId }),
+    ).rejects.toMatchObject({ code: 'RESOLVER_UNAVAILABLE', status: 503 })
+  })
+
+  it('registers its own schema when the agent itself issued the VTJSC', async () => {
+    vi.spyOn(service, 'parseJsonSchemaCredential').mockResolvedValue({
+      issuer: serviceAgent.did,
+      attrNames: ['name'],
+      title: 'ServiceCredential',
+    } as never)
+    const ownSchemaId = `${serviceAgent.did}/resources/zQmOwn`
+    anoncreds.registerSchema.mockResolvedValue({
+      schemaState: { schemaId: ownSchemaId, schema: foreignSchema },
+      registrationMetadata: { attestedResource: { id: ownSchemaId } },
+    })
+    ownSchemaRepository.findBySchemaId.mockResolvedValue({ setTag: vi.fn() })
+
+    await expect(
+      service.getOrRegisterAnonCredsSchema({ relatedJsonSchemaCredentialId: jsonSchemaCredentialId }),
+    ).resolves.toEqual({ schemaId: ownSchemaId, schema: foreignSchema })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(anoncreds.registerSchema).toHaveBeenCalledWith({
+      schema: {
+        attrNames: ['name'],
+        name: 'ServiceCredential',
+        version: '1.0',
+        issuerId: serviceAgent.did,
+      },
+      options: { extraMetadata: { relatedJsonSchemaCredentialId: jsonSchemaCredentialId } },
+    })
   })
 })

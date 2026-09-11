@@ -5,20 +5,20 @@ import { VsAgent } from '@verana-labs/vs-agent-sdk'
 export class UrlShorteningService {
   constructor(@Inject('VSAGENT') private agent: VsAgent) {}
 
-  async createShortUrl(options: { longUrl: string; relatedFlowId?: string }) {
-    const { longUrl, relatedFlowId } = options
+  async createShortUrl(options: { invitation: Record<string, unknown>; relatedFlowId?: string }) {
+    const { invitation, relatedFlowId } = options
 
     const record = await this.agent.genericRecords.save({
-      content: { longUrl },
+      content: { invitation },
       tags: { type: 'short-url', relatedFlowId },
     })
     return record.id
   }
 
-  async getLongUrl(id: string) {
+  async getInvitation(id: string) {
     const record = await this.agent.genericRecords.findById(id)
 
-    return record ? (record.content.longUrl as string) : undefined
+    return record?.content.invitation as Record<string, unknown> | undefined
   }
 
   // TODO: Delete short url records once flows are accomplished

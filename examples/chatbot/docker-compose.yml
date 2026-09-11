@@ -17,7 +17,7 @@ services:
       - AGENT_INVITATION_IMAGE_URL=https://did:webvh:ngrok-free.app/avatar.png
       - AGENT_LABEL=Chatbot Agent
       - USE_CORS=true
-      - EVENTS_BASE_URL=http://chatbot-backend:5000
+      - EVENTS_WEBHOOK_URL=http://chatbot-backend:5000/events
       - AGENT_INVITATION_BASE_URL=https://hologram.zone/
     volumes:
       - ./afj:/root/.afj

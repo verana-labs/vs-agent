@@ -10,7 +10,7 @@ vi.mock('axios', () => ({
     }),
   },
 }))
-const DID = 'did:web:agent.example'
+const _DID = 'did:web:agent.example'
 const log = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as never
 const sri = (u: string) =>
   'sha384-' +

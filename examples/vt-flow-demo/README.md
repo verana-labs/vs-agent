@@ -8,7 +8,7 @@ Two ways to exercise the full v4 flow against a real chain and indexer: an autom
 
 - ECS bootstrap and self-onboarding
 - onboarding over DIDComm, on-chain validation, and session anchoring
-- real JSON-LD issuance with digest verification on the indexer
+- real W3C Data Integrity (VC Data Model 2.0) issuance with digest verification on the indexer
 - revocation with holder-side credential cleanup
 - renewal reusing the same session
 - cancel restoring the flow to `COMPLETED`

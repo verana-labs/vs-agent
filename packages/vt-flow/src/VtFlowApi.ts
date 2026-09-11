@@ -9,8 +9,10 @@ import type {
 } from './types'
 import type { Query, QueryOptions } from '@credo-ts/core'
 import type {
+  DataIntegrityCredential,
   DidCommCredentialExchangeRecord,
   DidCommCredentialProtocol,
+  DidCommDataIntegrityAcceptRequestFormat,
   DidCommMessage,
 } from '@credo-ts/didcomm'
 
@@ -41,9 +43,7 @@ export class VtFlowApi {
     private readonly config: VtFlowModuleConfig,
     private readonly credentialsModuleConfig: DidCommCredentialsModuleConfig<DidCommCredentialProtocol[]>,
     private readonly credentialExchangeRepository: DidCommCredentialExchangeRepository,
-  ) {
-    void this.config
-  }
+  ) {}
 
   public async sendOnboardingRequest(options: SendOnboardingRequestOptions): Promise<VtFlowRecord> {
     const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
@@ -274,11 +274,18 @@ export class VtFlowApi {
     }
   }
 
-  /** The spec forbids delivering a credential whose digest is not anchored, so a throwing hook must abort. */
+  /**
+   * The spec forbids delivering a credential whose digest is not anchored, so a throwing hook must abort.
+   *
+   * RFC 0809 leaves the cryptosuite of a VC Data Model 2.0 credential to the issuer, so it is not
+   * negotiated with the applicant: the module `dataIntegrityCryptosuite` applies unless the caller
+   * passes its own `credentialFormats`.
+   */
   public async issueCredentialForSession(options: {
     vtFlowRecordId: string
     credentialExchangeRecordId: string
     comment?: string
+    credentialFormats?: { dataIntegrity: DidCommDataIntegrityAcceptRequestFormat }
   }): Promise<{ record: VtFlowRecord; credentialExchangeRecord: DidCommCredentialExchangeRecord }> {
     const record = await this.vtFlowService.getById(this.agentContext, options.vtFlowRecordId)
     record.assertRole(VtFlowRole.Validator)
@@ -305,16 +312,20 @@ export class VtFlowApi {
     const { message } = await protocol.acceptRequest(this.agentContext, {
       credentialExchangeRecord,
       comment: options.comment,
+      credentialFormats: options.credentialFormats ?? {
+        dataIntegrity: { cryptosuite: this.config.dataIntegrityCryptosuite },
+      },
     })
 
     const hook = this.config.onBeforeCredentialIssued
     if (hook) {
       const formatData = await protocol.getFormatData(this.agentContext, credentialExchangeRecord.id)
       // the attachment, which is the exact JSON the holder will digest
-      const credential = (formatData.credential as { jsonld?: Record<string, unknown> })?.jsonld
+      const credential = (formatData.credential as { dataIntegrity?: DataIntegrityCredential } | undefined)
+        ?.dataIntegrity?.credential
       if (!credential) {
         throw new CredoError(
-          `Issued credential for '${credentialExchangeRecord.id}' has no jsonld body to anchor`,
+          `Issued credential for '${credentialExchangeRecord.id}' has no data integrity credential body to anchor`,
         )
       }
       const result = await hook({

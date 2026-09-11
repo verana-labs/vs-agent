@@ -1,4 +1,4 @@
-import { DidCommCredentialState } from '@credo-ts/didcomm'
+import { DidCommCredentialRole, DidCommCredentialState } from '@credo-ts/didcomm'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Claim } from '@verana-labs/vs-agent-model'
 import { Type } from 'class-transformer'
@@ -112,11 +112,15 @@ export class CreateCredentialOfferResponseDto {
   @ApiProperty({ description: 'Flow identifier, for later tracking', example: 'cred-1234-5678' })
   credentialExchangeId!: string
 
-  @ApiProperty({ description: 'Full DIDComm invitation URL', example: 'didcomm://example.com/...' })
-  url!: string
+  @ApiProperty({
+    description: 'The Out-of-Band invitation, in the envelope that didcommVersion selects',
+    type: 'object',
+    additionalProperties: true,
+  })
+  invitation!: Record<string, unknown>
 
   @ApiProperty({
-    description: 'Short form of the URL, for a QR code',
+    description: 'A URL under PUBLIC_API_BASE_URL that resolves to the same invitation, for a QR code',
     example: 'https://mydomain.com/s?id=abcd',
   })
   shortUrl!: string
@@ -138,6 +142,9 @@ export class CredentialExchangeRecordDto {
 
   @ApiProperty({ enum: DidCommCredentialState, description: 'Current state of the issuance flow' })
   state!: DidCommCredentialState
+
+  @ApiProperty({ enum: DidCommCredentialRole, description: 'Role of this agent in the exchange' })
+  role!: DidCommCredentialRole
 
   @ApiProperty({ description: 'DIDComm thread identifier', example: 'thread-8765-4321' })
   threadId!: string

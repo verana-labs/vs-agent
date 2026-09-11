@@ -47,33 +47,6 @@ export class ExpressEventHandler {
   }
 
   /**
-   * Handles the event for updating the state of a message.
-   *
-   * Endpoint: POST `/message-state-updated`
-   * Expected Payload: an `Event` object containing the new message state details.
-   *
-   * @param {Event} event - The event object containing the message state update details.
-   * @throws {Error} Throws an error if not implemented by subclass.
-   * @example
-   * const event = {
-   * 	 type: "message-state-updated",
-   *   messageId: "12345",
-   *   state: "delivered",
-   *   timestamp: "2023-10-01T12:00:00Z",
-   *   connectionId: "conn123"
-   * }
-   */
-  public messageStateUpdated(handler: Handler) {
-    this.app.post(`/${EventType.MessageStateUpdated}`, async (req: Request, res: Response) => {
-      try {
-        await handler(req, res)
-      } catch (error) {
-        res.status(500).json({ message: 'Internal Server Error', error })
-      }
-    })
-  }
-
-  /**
    * Handles the event when a new message is received.
    *
    * Endpoint: POST `/message-received`

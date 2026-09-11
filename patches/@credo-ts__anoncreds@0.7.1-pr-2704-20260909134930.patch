@@ -1,0 +1,1095 @@
+diff --git a/build/AnonCredsModule.mjs b/build/AnonCredsModule.mjs
+index 4315bfd..10f5de7 100644
+--- a/build/AnonCredsModule.mjs
++++ b/build/AnonCredsModule.mjs
+@@ -20,7 +20,9 @@ import "./anoncreds-rs/index.mjs";
+ import { AnonCredsW3cCredentialService } from "./anoncreds-rs/AnonCredsW3cCredentialService.mjs";
+ import { updateAnonCredsModuleV0_3_1ToV0_4 } from "./updates/0.3.1-0.4/index.mjs";
+ import { updateAnonCredsModuleV0_4ToV0_5 } from "./updates/0.4-0.5/index.mjs";
++import { AnonCredsLinkSecretBindingProvider } from "./formats/AnonCredsLinkSecretBindingProvider.mjs";
+ import { AnonCredsW3cCredentialServiceSymbol } from "@credo-ts/core";
++import { DidCommDataIntegrityLinkSecretBindingProviderToken } from "@credo-ts/didcomm";
+ 
+ //#region src/AnonCredsModule.ts
+ /**
+@@ -54,6 +56,7 @@ var AnonCredsModule = class {
+ 		dependencyManager.registerSingleton(AnonCredsIssuerServiceSymbol, AnonCredsRsIssuerService);
+ 		dependencyManager.registerSingleton(AnonCredsVerifierServiceSymbol, AnonCredsRsVerifierService);
+ 		dependencyManager.registerSingleton(AnonCredsW3cCredentialServiceSymbol, AnonCredsW3cCredentialService);
++		dependencyManager.registerSingleton(DidCommDataIntegrityLinkSecretBindingProviderToken, AnonCredsLinkSecretBindingProvider);
+ 	}
+ };
+ 
+diff --git a/build/formats/AnonCredsLinkSecretBindingProvider.d.mts b/build/formats/AnonCredsLinkSecretBindingProvider.d.mts
+new file mode 100644
+index 0000000..0ea765f
+--- /dev/null
++++ b/build/formats/AnonCredsLinkSecretBindingProvider.d.mts
+@@ -0,0 +1,27 @@
++import { AgentContext, JsonObject, W3cCredentialRecord } from "@credo-ts/core";
++import { AnonCredsLinkSecretBindingMethod, AnonCredsLinkSecretDataIntegrityBindingProof, DidCommDataIntegrityLinkSecretBindingProvider, DidCommDataIntegrityLinkSecretCreateBindingProofOptions, DidCommDataIntegrityLinkSecretCreateOfferBindingMethodOptions, DidCommDataIntegrityLinkSecretIssueCredentialOptions, DidCommDataIntegrityLinkSecretStoreCredentialOptions } from "@credo-ts/didcomm";
++
++//#region src/formats/AnonCredsLinkSecretBindingProvider.d.ts
++/**
++ * Implements the `anoncreds_link_secret` binding method of the W3C Data Integrity credential
++ * attachment format (Aries RFC 0809), binding a credential to the holder's anoncreds link secret.
++ *
++ * Registered by the `AnonCredsModule`, which is what makes the binding method available to the
++ * data integrity credential format in `@credo-ts/didcomm`.
++ */
++declare class AnonCredsLinkSecretBindingProvider implements DidCommDataIntegrityLinkSecretBindingProvider {
++  createOfferBindingMethod(agentContext: AgentContext, options: DidCommDataIntegrityLinkSecretCreateOfferBindingMethodOptions): Promise<AnonCredsLinkSecretBindingMethod>;
++  createBindingProof(agentContext: AgentContext, options: DidCommDataIntegrityLinkSecretCreateBindingProofOptions): Promise<AnonCredsLinkSecretDataIntegrityBindingProof>;
++  issueBoundCredential(agentContext: AgentContext, options: DidCommDataIntegrityLinkSecretIssueCredentialOptions): Promise<JsonObject>;
++  storeBoundCredential(agentContext: AgentContext, options: DidCommDataIntegrityLinkSecretStoreCredentialOptions): Promise<string>;
++  /**
++   * The anoncreds holder service marks every credential it stores with the anoncreds metadata, so
++   * its presence is what tells a link secret bound credential apart from a plain w3c credential.
++   */
++  isBoundCredentialRecord(credentialRecord: W3cCredentialRecord): boolean;
++  deleteCredentialRecord(agentContext: AgentContext, credentialRecord: W3cCredentialRecord): Promise<void>;
++  private previewAttributesFromCredential;
++  private assertCredentialAttributesMatchSchemaAttributes;
++}
++//#endregion
++export { AnonCredsLinkSecretBindingProvider };
+diff --git a/build/formats/AnonCredsLinkSecretBindingProvider.mjs b/build/formats/AnonCredsLinkSecretBindingProvider.mjs
+new file mode 100644
+index 0000000..5e24234
+--- /dev/null
++++ b/build/formats/AnonCredsLinkSecretBindingProvider.mjs
+@@ -0,0 +1,215 @@
++import { AnonCredsCredentialDefinitionRepository } from "../repository/AnonCredsCredentialDefinitionRepository.mjs";
++import { AnonCredsRevocationRegistryState } from "../repository/AnonCredsRevocationRegistryDefinitionPrivateRecord.mjs";
++import { AnonCredsRevocationRegistryDefinitionPrivateRepository } from "../repository/AnonCredsRevocationRegistryDefinitionPrivateRepository.mjs";
++import "../repository/index.mjs";
++import { AnonCredsHolderServiceSymbol } from "../services/AnonCredsHolderService.mjs";
++import { AnonCredsIssuerServiceSymbol } from "../services/AnonCredsIssuerService.mjs";
++import "../services/index.mjs";
++import { __decorate } from "../_virtual/_@oxc-project_runtime@0.112.0/helpers/decorate.mjs";
++import { fetchCredentialDefinition, fetchRevocationRegistryDefinition, fetchRevocationStatusList, fetchSchema } from "../utils/anonCredsObjects.mjs";
++import { assertAttributesMatch, convertAttributesToCredentialValues } from "../utils/credential.mjs";
++import { dateToTimestamp } from "../utils/timestamp.mjs";
++import { AnonCredsCredentialMetadataKey, AnonCredsCredentialRequestMetadataKey, W3cAnonCredsCredentialMetadataKey } from "../utils/metadata.mjs";
++import { getAnonCredsTagsFromRecord } from "../utils/w3cAnonCredsUtils.mjs";
++import "../utils/index.mjs";
++import { CredoError, JsonTransformer, W3cCredential, W3cCredentialService, W3cJsonLdVerifiableCredential, injectable } from "@credo-ts/core";
++import { DidCommCredentialPreviewAttribute } from "@credo-ts/didcomm";
++
++//#region src/formats/AnonCredsLinkSecretBindingProvider.ts
++/**
++* Implements the `anoncreds_link_secret` binding method of the W3C Data Integrity credential
++* attachment format (Aries RFC 0809), binding a credential to the holder's anoncreds link secret.
++*
++* Registered by the `AnonCredsModule`, which is what makes the binding method available to the
++* data integrity credential format in `@credo-ts/didcomm`.
++*/
++let AnonCredsLinkSecretBindingProvider = class AnonCredsLinkSecretBindingProvider {
++	async createOfferBindingMethod(agentContext, options) {
++		const { credentialExchangeRecord, credentialDefinitionId, revocationRegistryDefinitionId, revocationRegistryIndex, offeredCredential } = options;
++		const anoncredsCredentialOffer = await agentContext.dependencyManager.resolve(AnonCredsIssuerServiceSymbol).createCredentialOffer(agentContext, { credentialDefinitionId });
++		const { credentialDefinition } = await agentContext.dependencyManager.resolve(AnonCredsCredentialDefinitionRepository).getByCredentialDefinitionId(agentContext, anoncredsCredentialOffer.cred_def_id);
++		if (credentialDefinition.value.revocation) {
++			if (!revocationRegistryDefinitionId || !revocationRegistryIndex) throw new CredoError("AnonCreds revocable credentials require revocationRegistryDefinitionId and revocationRegistryIndex");
++			credentialExchangeRecord.setTags({
++				anonCredsRevocationRegistryId: revocationRegistryDefinitionId,
++				anonCredsCredentialRevocationId: revocationRegistryIndex.toString()
++			});
++		}
++		await this.assertCredentialAttributesMatchSchemaAttributes(agentContext, JsonTransformer.fromJSON(offeredCredential, W3cCredential), credentialDefinition.schemaId, false);
++		credentialExchangeRecord.metadata.set(AnonCredsCredentialMetadataKey, {
++			schemaId: anoncredsCredentialOffer.schema_id,
++			credentialDefinitionId,
++			credentialRevocationId: revocationRegistryIndex?.toString(),
++			revocationRegistryId: revocationRegistryDefinitionId
++		});
++		return {
++			credentialDefinitionId: anoncredsCredentialOffer.cred_def_id,
++			keyCorrectnessProof: anoncredsCredentialOffer.key_correctness_proof,
++			nonce: anoncredsCredentialOffer.nonce
++		};
++	}
++	async createBindingProof(agentContext, options) {
++		const { credentialExchangeRecord, bindingMethod, linkSecretId } = options;
++		const anonCredsHolderService = agentContext.dependencyManager.resolve(AnonCredsHolderServiceSymbol);
++		const credentialDefinitionReturn = await fetchCredentialDefinition(agentContext, bindingMethod.credentialDefinitionId);
++		const { credentialRequest: anonCredsCredentialRequest, credentialRequestMetadata } = await anonCredsHolderService.createCredentialRequest(agentContext, {
++			credentialOffer: {
++				schema_id: credentialDefinitionReturn.credentialDefinition.schemaId,
++				cred_def_id: bindingMethod.credentialDefinitionId,
++				key_correctness_proof: bindingMethod.keyCorrectnessProof,
++				nonce: bindingMethod.nonce
++			},
++			credentialDefinition: credentialDefinitionReturn.credentialDefinition,
++			linkSecretId
++		});
++		if (!anonCredsCredentialRequest.entropy) throw new CredoError("Missing entropy for anonCredsCredentialRequest");
++		credentialExchangeRecord.metadata.set(AnonCredsCredentialMetadataKey, {
++			credentialDefinitionId: bindingMethod.credentialDefinitionId,
++			schemaId: credentialDefinitionReturn.credentialDefinition.schemaId
++		});
++		credentialExchangeRecord.metadata.set(AnonCredsCredentialRequestMetadataKey, credentialRequestMetadata);
++		return anonCredsCredentialRequest;
++	}
++	async issueBoundCredential(agentContext, options) {
++		const { credentialExchangeRecord, bindingMethod, bindingProof, credentialSubjectId } = options;
++		const linkSecretMetadata = credentialExchangeRecord.metadata.get(AnonCredsCredentialMetadataKey);
++		if (!linkSecretMetadata) throw new CredoError("Missing anoncreds link secret metadata");
++		const credentialAttributes = credentialExchangeRecord.credentialAttributes;
++		if (!credentialAttributes) throw new CredoError(`Missing required credential attribute values on credential record with id ${credentialExchangeRecord.id}`);
++		const credentialSubjectIdAttribute = credentialAttributes.find((ca) => ca.name === "id");
++		if (credentialSubjectId && credentialSubjectIdAttribute && credentialSubjectIdAttribute.value !== credentialSubjectId) throw new CredoError("Invalid credential subject id.");
++		if (!credentialSubjectIdAttribute && credentialSubjectId) credentialAttributes.push(new DidCommCredentialPreviewAttribute({
++			name: "id",
++			value: credentialSubjectId
++		}));
++		const anonCredsIssuerService = agentContext.dependencyManager.resolve(AnonCredsIssuerServiceSymbol);
++		const credentialDefinition = (await agentContext.dependencyManager.resolve(AnonCredsCredentialDefinitionRepository).getByCredentialDefinitionId(agentContext, linkSecretMetadata.credentialDefinitionId)).credentialDefinition.value;
++		let revocationRegistryDefinitionId;
++		let revocationRegistryIndex;
++		let revocationStatusList;
++		if (credentialDefinition.revocation) {
++			const { credentialRevocationId, revocationRegistryId } = linkSecretMetadata;
++			if (!credentialRevocationId || !revocationRegistryId) throw new CredoError("Revocation registry definition id and revocation index are mandatory to issue AnonCreds revocable credentials");
++			revocationRegistryDefinitionId = revocationRegistryId;
++			revocationRegistryIndex = Number(credentialRevocationId);
++			const revocationRegistryDefinitionPrivateRecord = await agentContext.dependencyManager.resolve(AnonCredsRevocationRegistryDefinitionPrivateRepository).getByRevocationRegistryDefinitionId(agentContext, revocationRegistryDefinitionId);
++			if (revocationRegistryDefinitionPrivateRecord.state !== AnonCredsRevocationRegistryState.Active) throw new CredoError(`Revocation registry ${revocationRegistryDefinitionId} is in ${revocationRegistryDefinitionPrivateRecord.state} state`);
++			const revocationStatusListResult = await fetchRevocationStatusList(agentContext, revocationRegistryDefinitionId, dateToTimestamp(/* @__PURE__ */ new Date()));
++			revocationStatusList = revocationStatusListResult.revocationStatusList;
++		}
++		const { credential } = await anonCredsIssuerService.createCredential(agentContext, {
++			credentialOffer: {
++				schema_id: linkSecretMetadata.schemaId,
++				cred_def_id: bindingMethod.credentialDefinitionId,
++				key_correctness_proof: bindingMethod.keyCorrectnessProof,
++				nonce: bindingMethod.nonce
++			},
++			credentialRequest: bindingProof,
++			credentialValues: convertAttributesToCredentialValues(credentialAttributes),
++			revocationRegistryDefinitionId,
++			revocationRegistryIndex,
++			revocationStatusList
++		});
++		const { credentialDefinition: anoncredsCredentialDefinition } = await fetchCredentialDefinition(agentContext, credential.cred_def_id);
++		const anonCredsHolderService = agentContext.dependencyManager.resolve(AnonCredsHolderServiceSymbol);
++		const w3cJsonLdVerifiableCredential = await anonCredsHolderService.legacyToW3cCredential(agentContext, {
++			credential,
++			issuerId: anoncredsCredentialDefinition.issuerId
++		});
++		return JsonTransformer.toJSON(w3cJsonLdVerifiableCredential);
++	}
++	async storeBoundCredential(agentContext, options) {
++		const { credentialExchangeRecord, credentialJson, offeredCredentialJson } = options;
++		const linkSecretRequestMetadata = credentialExchangeRecord.metadata.get(AnonCredsCredentialRequestMetadataKey);
++		if (!linkSecretRequestMetadata) throw new CredoError("Missing link secret request metadata");
++		const integrityProtectedFields = [
++			"@context",
++			"issuer",
++			"type",
++			"credentialSubject",
++			"validFrom",
++			"issuanceDate"
++		];
++		if (Object.keys(offeredCredentialJson).some((key) => !integrityProtectedFields.includes(key) && key !== "proof")) throw new CredoError("Credential offer contains non anoncreds integrity protected fields.");
++		if (!Array.isArray(offeredCredentialJson.type) || offeredCredentialJson?.type.length !== 1) throw new CredoError(`Invalid credential type. Only single credential type 'VerifiableCredential' is supported`);
++		if (!credentialExchangeRecord.credentialAttributes) throw new CredoError("Missing credential attributes on credential record. Unable to check credential attributes");
++		const anonCredsHolderService = agentContext.dependencyManager.resolve(AnonCredsHolderServiceSymbol);
++		const legacyAnonCredsCredential = await anonCredsHolderService.w3cToLegacyCredential(agentContext, { credential: JsonTransformer.fromJSON(credentialJson, W3cJsonLdVerifiableCredential) });
++		const { schema_id: schemaId, cred_def_id: credentialDefinitionId, rev_reg_id: revocationRegistryId } = legacyAnonCredsCredential;
++		const schemaReturn = await fetchSchema(agentContext, schemaId);
++		const credentialDefinitionReturn = await fetchCredentialDefinition(agentContext, credentialDefinitionId);
++		const revocationRegistryDefinitionReturn = revocationRegistryId ? await fetchRevocationRegistryDefinition(agentContext, revocationRegistryId) : void 0;
++		const w3cJsonLdVerifiableCredential = await anonCredsHolderService.legacyToW3cCredential(agentContext, {
++			credential: legacyAnonCredsCredential,
++			issuerId: credentialJson.issuer,
++			processOptions: {
++				credentialRequestMetadata: linkSecretRequestMetadata,
++				credentialDefinition: credentialDefinitionReturn.credentialDefinition,
++				revocationRegistryDefinition: revocationRegistryDefinitionReturn?.revocationRegistryDefinition
++			}
++		});
++		const w3cCredentialRecordId = await anonCredsHolderService.storeCredential(agentContext, {
++			credential: w3cJsonLdVerifiableCredential,
++			schema: schemaReturn.schema,
++			credentialDefinitionId,
++			credentialDefinition: credentialDefinitionReturn.credentialDefinition,
++			credentialRequestMetadata: linkSecretRequestMetadata,
++			revocationRegistry: revocationRegistryDefinitionReturn ? {
++				id: revocationRegistryId,
++				definition: revocationRegistryDefinitionReturn?.revocationRegistryDefinition
++			} : void 0
++		});
++		const w3cCredentialService = agentContext.dependencyManager.resolve(W3cCredentialService);
++		const w3cCredentialRecord = await w3cCredentialService.getCredentialRecordById(agentContext, w3cCredentialRecordId);
++		if (revocationRegistryId) {
++			const linkSecretMetadata = credentialExchangeRecord.metadata.get(AnonCredsCredentialMetadataKey);
++			if (!linkSecretMetadata) throw new CredoError("Missing link secret metadata");
++			const anonCredsTags = getAnonCredsTagsFromRecord(w3cCredentialRecord);
++			if (!anonCredsTags) throw new CredoError("Missing anoncreds tags on credential record.");
++			linkSecretMetadata.revocationRegistryId = revocationRegistryDefinitionReturn?.revocationRegistryDefinitionId;
++			linkSecretMetadata.credentialRevocationId = anonCredsTags.anonCredsCredentialRevocationId?.toString();
++			credentialExchangeRecord.metadata.set(AnonCredsCredentialMetadataKey, linkSecretMetadata);
++		}
++		await this.assertCredentialAttributesMatchSchemaAttributes(agentContext, w3cCredentialRecord.firstCredential, getAnonCredsTagsFromRecord(w3cCredentialRecord)?.anonCredsSchemaId, true);
++		return w3cCredentialRecord.id;
++	}
++	/**
++	* The anoncreds holder service marks every credential it stores with the anoncreds metadata, so
++	* its presence is what tells a link secret bound credential apart from a plain w3c credential.
++	*/
++	isBoundCredentialRecord(credentialRecord) {
++		return credentialRecord.metadata.get(W3cAnonCredsCredentialMetadataKey) !== void 0;
++	}
++	async deleteCredentialRecord(agentContext, credentialRecord) {
++		const anonCredsHolderService = agentContext.dependencyManager.resolve(AnonCredsHolderServiceSymbol);
++		await anonCredsHolderService.deleteCredential(agentContext, credentialRecord.id);
++	}
++	previewAttributesFromCredential(credential) {
++		if (Array.isArray(credential.credentialSubject)) throw new CredoError("Credential subject must be an object.");
++		const claims = {
++			...credential.credentialSubject.claims,
++			...credential.credentialSubject.id && { id: credential.credentialSubject.id }
++		};
++		return Object.entries(claims).map(([key, value]) => {
++			return {
++				name: key,
++				value: value.toString()
++			};
++		});
++	}
++	async assertCredentialAttributesMatchSchemaAttributes(agentContext, credential, schemaId, credentialSubjectIdMustBeSet) {
++		const attributes = this.previewAttributesFromCredential(credential);
++		const schemaReturn = await fetchSchema(agentContext, schemaId);
++		const enhancedAttributes = [...attributes];
++		if (!credentialSubjectIdMustBeSet && schemaReturn.schema.attrNames.includes("id") && attributes.find((attr) => attr.name === "id") === void 0) enhancedAttributes.push({
++			name: "id",
++			value: "mock"
++		});
++		assertAttributesMatch(schemaReturn.schema, enhancedAttributes);
++		return { attributes };
++	}
++};
++AnonCredsLinkSecretBindingProvider = __decorate([injectable()], AnonCredsLinkSecretBindingProvider);
++
++//#endregion
++export { AnonCredsLinkSecretBindingProvider };
+diff --git a/build/formats/DataIntegrityDidCommCredentialFormatService.d.mts b/build/formats/DataIntegrityDidCommCredentialFormatService.d.mts
+index 8d04c8c..88f0c37 100644
+--- a/build/formats/DataIntegrityDidCommCredentialFormatService.d.mts
++++ b/build/formats/DataIntegrityDidCommCredentialFormatService.d.mts
+@@ -1,118 +1,16 @@
+-import { AgentContext } from "@credo-ts/core";
+-import { DidCommAttachment, DidCommCredentialFormatAcceptOfferOptions, DidCommCredentialFormatAcceptProposalOptions, DidCommCredentialFormatAcceptRequestOptions, DidCommCredentialFormatAutoRespondCredentialOptions, DidCommCredentialFormatAutoRespondOfferOptions, DidCommCredentialFormatAutoRespondProposalOptions, DidCommCredentialFormatAutoRespondRequestOptions, DidCommCredentialFormatCreateOfferOptions, DidCommCredentialFormatCreateOfferReturn, DidCommCredentialFormatCreateProposalOptions, DidCommCredentialFormatCreateProposalReturn, DidCommCredentialFormatCreateReturn, DidCommCredentialFormatProcessCredentialOptions, DidCommCredentialFormatProcessOptions, DidCommCredentialFormatService, DidCommCredentialFormatSpec, DidCommDataIntegrityCredentialFormat } from "@credo-ts/didcomm";
++import { DidCommDataIntegrityCredentialFormatService } from "@credo-ts/didcomm";
+ 
+ //#region src/formats/DataIntegrityDidCommCredentialFormatService.d.ts
+-declare class DataIntegrityDidCommCredentialFormatService implements DidCommCredentialFormatService<DidCommDataIntegrityCredentialFormat> {
+-  /** formatKey is the key used when calling agent.credentials.xxx with credentialFormats.anoncreds */
+-  readonly formatKey: "dataIntegrity";
+-  /**
+-   * credentialRecordType is the type of record that stores the credential. It is stored in the credential
+-   * record binding in the credential exchange record.
+-   */
+-  readonly credentialRecordType: "w3c";
+-  /**
+-   * Create a {@link AttachmentFormats} object dependent on the message type.
+-   *
+-   * @param options The object containing all the options for the proposed credential
+-   * @returns object containing associated attachment, format and optionally the credential preview
+-   *
+-   */
+-  createProposal(_agentContext: AgentContext, options: DidCommCredentialFormatCreateProposalOptions<DidCommDataIntegrityCredentialFormat>): Promise<DidCommCredentialFormatCreateProposalReturn>;
+-  processProposal(_agentContext: AgentContext, options: DidCommCredentialFormatProcessOptions): Promise<void>;
+-  acceptProposal(_agentContext: AgentContext, _input: DidCommCredentialFormatAcceptProposalOptions<DidCommDataIntegrityCredentialFormat>): Promise<DidCommCredentialFormatCreateOfferReturn>;
+-  /**
+-   * Create a credential attachment format for a credential request.
+-   *
+-   * @param options The object containing all the options for the credential offer
+-   * @returns object containing associated attachment, formats and offersAttach elements
+-   *
+-   */
+-  createOffer(agentContext: AgentContext, {
+-    credentialFormats,
+-    credentialExchangeRecord,
+-    attachmentId
+-  }: DidCommCredentialFormatCreateOfferOptions<DidCommDataIntegrityCredentialFormat>): Promise<DidCommCredentialFormatCreateOfferReturn>;
+-  private getCredentialVersion;
+-  processOffer(agentContext: AgentContext, {
+-    attachment,
+-    credentialExchangeRecord
+-  }: DidCommCredentialFormatProcessOptions): Promise<void>;
+-  private createSignedAttachment;
+-  private getSignedAttachmentPayload;
+-  acceptOffer(agentContext: AgentContext, {
+-    credentialExchangeRecord,
+-    attachmentId,
+-    offerAttachment,
+-    credentialFormats
+-  }: DidCommCredentialFormatAcceptOfferOptions<DidCommDataIntegrityCredentialFormat>): Promise<DidCommCredentialFormatCreateReturn>;
+-  /**
+-   * Starting from a request is not supported for anoncreds credentials, this method only throws an error.
+-   */
+-  createRequest(): Promise<DidCommCredentialFormatCreateReturn>;
+-  /**
+-   * We don't have any models to validate an anoncreds request object, for now this method does nothing
+-   */
+-  processRequest(_agentContext: AgentContext, _options: DidCommCredentialFormatProcessOptions): Promise<void>;
+-  private createCredentialWithAnonCredsDataIntegrityProof;
+-  private getSignatureMetadata;
+-  private assertAndSetCredentialSubjectId;
+-  private signCredential;
+-  acceptRequest(agentContext: AgentContext, {
+-    credentialFormats,
+-    credentialExchangeRecord,
+-    attachmentId,
+-    offerAttachment,
+-    requestAttachment,
+-    requestAppendAttachments
+-  }: DidCommCredentialFormatAcceptRequestOptions<DidCommDataIntegrityCredentialFormat>): Promise<DidCommCredentialFormatCreateReturn>;
+-  private storeAnonCredsCredential;
+-  /**
+-   * Processes an incoming credential - retrieve metadata, retrieve payload and store it in wallet
+-   * @param options the issue credential message wrapped inside this object
+-   * @param credentialExchangeRecord the credential exchange record for this credential
+-   */
+-  processCredential(agentContext: AgentContext, {
+-    credentialExchangeRecord,
+-    attachment,
+-    requestAttachment,
+-    offerAttachment
+-  }: DidCommCredentialFormatProcessCredentialOptions): Promise<void>;
+-  supportsFormat(format: string): boolean;
+-  /**
+-   * Gets the attachment object for a given attachmentId. We need to get out the correct attachmentId for
+-   * anoncreds and then find the corresponding attachment (if there is one)
+-   * @param formats the formats object containing the attachmentId
+-   * @param messageAttachments the attachments containing the payload
+-   * @returns The DidCommAttachment if found or undefined
+-   *
+-   */
+-  getAttachment(formats: DidCommCredentialFormatSpec[], messageAttachments: DidCommAttachment[]): DidCommAttachment | undefined;
+-  deleteCredentialById(agentContext: AgentContext, credentialRecordId: string): Promise<void>;
+-  shouldAutoRespondToProposal(_agentContext: AgentContext, options: DidCommCredentialFormatAutoRespondProposalOptions): Promise<boolean>;
+-  shouldAutoRespondToOffer(_agentContext: AgentContext, {
+-    offerAttachment
+-  }: DidCommCredentialFormatAutoRespondOfferOptions): Promise<boolean>;
+-  shouldAutoRespondToRequest(_agentContext: AgentContext, {
+-    offerAttachment,
+-    requestAttachment
+-  }: DidCommCredentialFormatAutoRespondRequestOptions): Promise<boolean>;
+-  shouldAutoRespondToCredential(_agentContext: AgentContext, options: DidCommCredentialFormatAutoRespondCredentialOptions): Promise<boolean>;
+-  private createDataIntegrityCredentialOffer;
+-  private previewAttributesFromCredential;
+-  private assertCredentialAttributesMatchSchemaAttributes;
+-  /**
+-   * Returns an object of type {@link DidCommAttachment} for use in credential exchange messages.
+-   * It looks up the correct format identifier and encodes the data as a base64 attachment.
+-   *
+-   * @param data The data to include in the attach object
+-   * @param id the attach id from the formats component of the message
+-   */
+-  getFormatData(data: unknown, id: string): DidCommAttachment;
+-  /**
+-   * Returns the JWA Signature Algorithms that are supported by the agent.
+-   */
+-  private getSupportedJwaSignatureAlgorithms;
+-}
++/**
++ * @deprecated The data integrity credential format is no longer anoncreds specific and has moved to
++ * `@credo-ts/didcomm` as `DidCommDataIntegrityCredentialFormatService`. Binding a credential to an
++ * anoncreds link secret is provided by {@link AnonCredsLinkSecretBindingProvider}, which the
++ * `AnonCredsModule` registers for you.
++ *
++ * Import `DidCommDataIntegrityCredentialFormatService` from `@credo-ts/didcomm` instead. This alias
++ * will be removed in the next major version.
++ */
++declare const DataIntegrityDidCommCredentialFormatService: typeof DidCommDataIntegrityCredentialFormatService;
++type DataIntegrityDidCommCredentialFormatService = DidCommDataIntegrityCredentialFormatService;
+ //#endregion
+ export { DataIntegrityDidCommCredentialFormatService };
+-//# sourceMappingURL=DataIntegrityDidCommCredentialFormatService.d.mts.map
+\ No newline at end of file
+diff --git a/build/formats/DataIntegrityDidCommCredentialFormatService.d.mts.map b/build/formats/DataIntegrityDidCommCredentialFormatService.d.mts.map
+deleted file mode 100644
+index c9b9894..0000000
+--- a/build/formats/DataIntegrityDidCommCredentialFormatService.d.mts.map
++++ /dev/null
+@@ -1 +0,0 @@
+-{"version":3,"file":"DataIntegrityDidCommCredentialFormatService.d.mts","names":[],"sources":["../../src/formats/DataIntegrityDidCommCredentialFormatService.ts"],"mappings":";;;;cA0Fa,2CAAA,YACA,8BAAA,CAA+B,oCAAA;EAD/B;EAAA,SAIK,SAAA;;;;;WAMA,oBAAA;EAYL;;;;;;;EAHE,cAAA,CACX,aAAA,EAAe,YAAA,EACf,OAAA,EAAS,4CAAA,CAA6C,oCAAA,IACrD,OAAA,CAAQ,2CAAA;EAIE,eAAA,CACX,aAAA,EAAe,YAAA,EACf,OAAA,EAAS,qCAAA,GACR,OAAA;EAIU,cAAA,CACX,aAAA,EAAe,YAAA,EACf,MAAA,EAAQ,4CAAA,CAA6C,oCAAA,IACpD,OAAA,CAAQ,wCAAA;EAYK;;;;;;;EADH,WAAA,CACX,YAAA,EAAc,YAAA;IAEZ,iBAAA;IACA,wBAAA;IACA;EAAA,GACC,yCAAA,CAA0C,oCAAA,IAC5C,OAAA,CAAQ,wCAAA;EAAA,QAsBH,oBAAA;EAYK,YAAA,CACX,YAAA,EAAc,YAAA;IACZ,UAAA;IAAY;EAAA,GAA4B,qCAAA,GAAqC,OAAA;EAAA,QAoCnE,sBAAA;EAAA,QA4DA,0BAAA;EA0CD,WAAA,CACX,YAAA,EAAc,YAAA;IAEZ,wBAAA;IACA,YAAA;IACA,eAAA;IACA;EAAA,GACC,yCAAA,CAA0C,oCAAA,IAC5C,OAAA,CAAQ,mCAAA;EAPK;;;EA0GH,aAAA,CAAA,GAAiB,OAAA,CAAQ,mCAAA;EArGlC;;;EA4GS,cAAA,CACX,aAAA,EAAe,YAAA,EACf,QAAA,EAAU,qCAAA,GACT,OAAA;EAAA,QAIW,+CAAA;EAAA,QA8GA,oBAAA;EAAA,QAiCA,+BAAA;EAAA,QAiBA,cAAA;EAqCD,aAAA,CACX,YAAA,EAAc,YAAA;IAEZ,iBAAA;IACA,wBAAA;IACA,YAAA;IACA,eAAA;IACA,iBAAA;IACA;EAAA,GACC,2CAAA,CAA4C,oCAAA,IAC9C,OAAA,CAAQ,mCAAA;EAAA,QAsEG,wBAAA;EA/EE;;;;;EAiKH,iBAAA,CACX,YAAA,EAAc,YAAA;IAEZ,wBAAA;IACA,UAAA;IACA,iBAAA;IACA;EAAA,GACC,+CAAA,GACF,OAAA;EAmGI,cAAA,CAAe,MAAA;EApQ2B;;;;;;;;EAsR1C,aAAA,CACL,OAAA,EAAS,2BAAA,IACT,kBAAA,EAAoB,iBAAA,KACnB,iBAAA;EAOU,oBAAA,CAAqB,YAAA,EAAc,YAAA,EAAc,kBAAA,WAA6B,OAAA;EAO9E,2BAAA,CACX,aAAA,EAAe,YAAA,EACf,OAAA,EAAS,iDAAA,GACR,OAAA;EAIU,wBAAA,CACX,aAAA,EAAe,YAAA;IACb;EAAA,GAAmB,8CAAA,GAA8C,OAAA;EAOxD,0BAAA,CACX,aAAA,EAAe,YAAA;IACb,eAAA;IAAiB;EAAA,GAAqB,gDAAA,GAAgD,OAAA;EA4C7E,6BAAA,CACX,aAAA,EAAe,YAAA,EACf,OAAA,EAAS,mDAAA,GAAmD,OAAA;EAAA,QAKhD,kCAAA;EAAA,QA8GN,+BAAA;EAAA,QAeM,+CAAA;EAhMH;;;;;;;EA6NJ,aAAA,CAAc,IAAA,WAAe,EAAA,WAAa,iBAAA;EA7M5B;;;EAAA,QA4Nb,kCAAA;AAAA"}
+\ No newline at end of file
+diff --git a/build/formats/DataIntegrityDidCommCredentialFormatService.mjs b/build/formats/DataIntegrityDidCommCredentialFormatService.mjs
+index 33dc020..1a854d9 100644
+--- a/build/formats/DataIntegrityDidCommCredentialFormatService.mjs
++++ b/build/formats/DataIntegrityDidCommCredentialFormatService.mjs
+@@ -1,587 +1,16 @@
+-import { AnonCredsCredentialDefinitionRepository } from "../repository/AnonCredsCredentialDefinitionRepository.mjs";
+-import { AnonCredsRevocationRegistryState } from "../repository/AnonCredsRevocationRegistryDefinitionPrivateRecord.mjs";
+-import { AnonCredsRevocationRegistryDefinitionPrivateRepository } from "../repository/AnonCredsRevocationRegistryDefinitionPrivateRepository.mjs";
+-import "../repository/index.mjs";
+-import { AnonCredsHolderServiceSymbol } from "../services/AnonCredsHolderService.mjs";
+-import { AnonCredsIssuerServiceSymbol } from "../services/AnonCredsIssuerService.mjs";
+-import "../services/index.mjs";
+-import { fetchCredentialDefinition, fetchRevocationRegistryDefinition, fetchRevocationStatusList, fetchSchema } from "../utils/anonCredsObjects.mjs";
+-import { assertAttributesMatch, convertAttributesToCredentialValues } from "../utils/credential.mjs";
+-import { dateToTimestamp } from "../utils/timestamp.mjs";
+-import { AnonCredsCredentialMetadataKey, AnonCredsCredentialRequestMetadataKey } from "../utils/metadata.mjs";
+-import { getAnonCredsTagsFromRecord } from "../utils/w3cAnonCredsUtils.mjs";
+-import "../utils/index.mjs";
+-import { ClaimFormat, CredoError, DidsApi, JsonEncoder, JsonTransformer, JwsService, JwtPayload, Kms, SignatureSuiteRegistry, TypedArrayEncoder, W3cCredential, W3cCredentialRecord, W3cCredentialService, W3cCredentialSubject, W3cJsonLdVerifiableCredential, deepEquality, getPublicJwkFromVerificationMethod, parseDid } from "@credo-ts/core";
+-import { DataIntegrityCredentialOffer, DidCommAttachment, DidCommAttachmentData, DidCommCredentialFormatSpec, DidCommCredentialPreviewAttribute, DidCommCredentialProblemReportReason, DidCommProblemReportError } from "@credo-ts/didcomm";
++import { DidCommDataIntegrityCredentialFormatService } from "@credo-ts/didcomm";
+ 
+ //#region src/formats/DataIntegrityDidCommCredentialFormatService.ts
+-const W3C_DATA_INTEGRITY_CREDENTIAL_OFFER = "didcomm/w3c-di-vc-offer@v0.1";
+-const W3C_DATA_INTEGRITY_CREDENTIAL_REQUEST = "didcomm/w3c-di-vc-request@v0.1";
+-const W3C_DATA_INTEGRITY_CREDENTIAL = "didcomm/w3c-di-vc@v0.1";
+-var DataIntegrityDidCommCredentialFormatService = class {
+-	constructor() {
+-		this.formatKey = "dataIntegrity";
+-		this.credentialRecordType = "w3c";
+-	}
+-	/**
+-	* Create a {@link AttachmentFormats} object dependent on the message type.
+-	*
+-	* @param options The object containing all the options for the proposed credential
+-	* @returns object containing associated attachment, format and optionally the credential preview
+-	*
+-	*/
+-	async createProposal(_agentContext, options) {
+-		throw new CredoError("Not defined");
+-	}
+-	async processProposal(_agentContext, options) {
+-		throw new CredoError("Not defined");
+-	}
+-	async acceptProposal(_agentContext, _input) {
+-		throw new CredoError("Not defined");
+-	}
+-	/**
+-	* Create a credential attachment format for a credential request.
+-	*
+-	* @param options The object containing all the options for the credential offer
+-	* @returns object containing associated attachment, formats and offersAttach elements
+-	*
+-	*/
+-	async createOffer(agentContext, { credentialFormats, credentialExchangeRecord, attachmentId }) {
+-		const dataIntegrityFormat = credentialFormats.dataIntegrity;
+-		if (!dataIntegrityFormat) throw new CredoError("Missing data integrity credential format data");
+-		const format = new DidCommCredentialFormatSpec({
+-			attachmentId,
+-			format: W3C_DATA_INTEGRITY_CREDENTIAL_OFFER
+-		});
+-		if ("proof" in dataIntegrityFormat.credential) throw new CredoError("The offered credential MUST NOT contain any proofs.");
+-		const { dataIntegrityCredentialOffer, previewAttributes } = await this.createDataIntegrityCredentialOffer(agentContext, credentialExchangeRecord, dataIntegrityFormat);
+-		return {
+-			format,
+-			attachment: this.getFormatData(JsonTransformer.toJSON(dataIntegrityCredentialOffer), format.attachmentId),
+-			previewAttributes
+-		};
+-	}
+-	getCredentialVersion(credentialJson) {
+-		const context = credentialJson["@context"];
+-		if (!context || !Array.isArray(context)) throw new CredoError("Invalid @context in credential offer");
+-		const isV1Credential = context.find((c) => c === "https://www.w3.org/2018/credentials/v1");
+-		const isV2Credential = context.find((c) => c === "https://www.w3.org/ns/credentials/v2");
+-		if (isV1Credential) return "1.1";
+-		if (isV2Credential) throw new CredoError("Received w3c credential with unsupported version 2.0.");
+-		throw new CredoError("Cannot determine credential version from @context");
+-	}
+-	async processOffer(agentContext, { attachment, credentialExchangeRecord }) {
+-		agentContext.config.logger.debug(`Processing data integrity credential offer for credential record ${credentialExchangeRecord.id}`);
+-		const dataIntegrityCredentialOffer = JsonTransformer.fromJSON(attachment.getDataAsJson(), DataIntegrityCredentialOffer);
+-		const credentialJson = dataIntegrityCredentialOffer.credential;
+-		const credentialVersion = this.getCredentialVersion(credentialJson);
+-		const credentialToBeValidated = {
+-			...credentialJson,
+-			issuer: credentialJson.issuer ?? "https://example.com",
+-			...credentialVersion === "1.1" ? { issuanceDate: (/* @__PURE__ */ new Date()).toISOString() } : { validFrom: (/* @__PURE__ */ new Date()).toISOString() }
+-		};
+-		JsonTransformer.fromJSON(credentialToBeValidated, W3cCredential);
+-		if (dataIntegrityCredentialOffer.bindingRequired && !dataIntegrityCredentialOffer.bindingMethod?.anoncredsLinkSecret && !dataIntegrityCredentialOffer.bindingMethod?.didcommSignedAttachment) throw new DidCommProblemReportError("Invalid credential offer. Missing binding method.", { problemCode: DidCommCredentialProblemReportReason.IssuanceAbandoned });
+-	}
+-	async createSignedAttachment(agentContext, data, options, issuerSupportedAlgs) {
+-		const { alg, kid } = options;
+-		if (!kid.startsWith("did:")) throw new CredoError(`kid '${kid}' is not a DID. Only dids are supported for kid`);
+-		if (!kid.includes("#")) throw new CredoError(`kid '${kid}' does not contain a fragment. kid MUST point to a specific key in the did document.`);
+-		const parsedDid = parseDid(kid);
+-		const { didDocument, keys } = await agentContext.dependencyManager.resolve(DidsApi).resolveCreatedDidDocumentWithKeys(parsedDid.did);
+-		const publicJwk = getPublicJwkFromVerificationMethod(didDocument.dereferenceKey(kid));
+-		const keyId = keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === `#${parsedDid.fragment}`)?.kmsKeyId ?? publicJwk.legacyKeyId;
+-		if (alg && !publicJwk.supportedSignatureAlgorithms.includes(alg)) throw new CredoError(`jwk ${publicJwk.jwkTypeHumanDescription}, does not support the JWS signature alg '${alg}'`);
+-		const signingAlg = issuerSupportedAlgs.find((supportedAlg) => publicJwk.supportedSignatureAlgorithms.includes(supportedAlg) && (alg === void 0 || alg === supportedAlg));
+-		if (!signingAlg) throw new CredoError("No signing algorithm supported by the issuer found");
+-		const jws = await agentContext.dependencyManager.resolve(JwsService).createJws(agentContext, {
+-			keyId,
+-			header: {},
+-			payload: new JwtPayload({ additionalClaims: { nonce: data.nonce } }),
+-			protectedHeaderOptions: {
+-				alg: signingAlg,
+-				kid
+-			}
+-		});
+-		const signedAttach = new DidCommAttachment({
+-			mimeType: "application/json",
+-			data: new DidCommAttachmentData({ base64: TypedArrayEncoder.toBase64(TypedArrayEncoder.fromBase64Url(jws.payload)) })
+-		});
+-		signedAttach.addJws(jws);
+-		return signedAttach;
+-	}
+-	async getSignedAttachmentPayload(agentContext, signedAttachment) {
+-		const jws = signedAttachment.data.jws;
+-		if (!jws) throw new CredoError("Missing jws in signed attachment");
+-		if (!jws.protected) throw new CredoError("Missing protected header in signed attachment");
+-		if (!signedAttachment.data.base64) throw new CredoError("Missing payload in signed attachment");
+-		const { isValid } = await agentContext.dependencyManager.resolve(JwsService).verifyJws(agentContext, {
+-			jws: {
+-				header: jws.header,
+-				protected: jws.protected,
+-				signature: jws.signature,
+-				payload: TypedArrayEncoder.toBase64Url(TypedArrayEncoder.fromBase64(signedAttachment.data.base64))
+-			},
+-			allowedJwsSignerMethods: ["did"],
+-			resolveJwsSigner: async ({ protectedHeader: { kid, alg } }) => {
+-				if (!kid || typeof kid !== "string") throw new CredoError("Missing kid in protected header.");
+-				if (!kid.startsWith("did:")) throw new CredoError("Only did is supported for kid identifier");
+-				return {
+-					alg,
+-					method: "did",
+-					didUrl: kid,
+-					jwk: getPublicJwkFromVerificationMethod((await agentContext.dependencyManager.resolve(DidsApi).resolveDidDocument(kid)).dereferenceKey(kid))
+-				};
+-			}
+-		});
+-		if (!isValid) throw new CredoError("Failed to validate signature of signed attachment");
+-		const payload = JsonEncoder.fromBase64(signedAttachment.data.base64);
+-		if (!payload.nonce || typeof payload.nonce !== "string") throw new CredoError("Invalid payload in signed attachment");
+-		return payload;
+-	}
+-	async acceptOffer(agentContext, { credentialExchangeRecord, attachmentId, offerAttachment, credentialFormats }) {
+-		const dataIntegrityFormat = credentialFormats?.dataIntegrity;
+-		const credentialOffer = JsonTransformer.fromJSON(offerAttachment.getDataAsJson(), DataIntegrityCredentialOffer);
+-		let anonCredsLinkSecretDataIntegrityBindingProof;
+-		const autoAcceptOfferWithAnonCredsLinkSecretMethod = credentialOffer.bindingRequired && !dataIntegrityFormat?.didCommSignedAttachment && credentialOffer.bindingMethod?.anoncredsLinkSecret;
+-		if (dataIntegrityFormat?.anonCredsLinkSecret || autoAcceptOfferWithAnonCredsLinkSecretMethod) {
+-			if (!credentialOffer.bindingMethod?.anoncredsLinkSecret) throw new CredoError("Cannot request credential with a binding method that was not offered.");
+-			const anonCredsHolderService = agentContext.dependencyManager.resolve(AnonCredsHolderServiceSymbol);
+-			const credentialDefinitionId = credentialOffer.bindingMethod.anoncredsLinkSecret.credentialDefinitionId;
+-			const credentialDefinitionReturn = await fetchCredentialDefinition(agentContext, credentialDefinitionId);
+-			const { credentialRequest: anonCredsCredentialRequest, credentialRequestMetadata: anonCredsCredentialRequestMetadata } = await anonCredsHolderService.createCredentialRequest(agentContext, {
+-				credentialOffer: {
+-					schema_id: credentialDefinitionReturn.credentialDefinition.schemaId,
+-					cred_def_id: credentialOffer.bindingMethod.anoncredsLinkSecret.credentialDefinitionId,
+-					key_correctness_proof: credentialOffer.bindingMethod.anoncredsLinkSecret.keyCorrectnessProof,
+-					nonce: credentialOffer.bindingMethod.anoncredsLinkSecret.nonce
+-				},
+-				credentialDefinition: credentialDefinitionReturn.credentialDefinition,
+-				linkSecretId: dataIntegrityFormat?.anonCredsLinkSecret?.linkSecretId
+-			});
+-			if (!anonCredsCredentialRequest.entropy) throw new CredoError("Missing entropy for anonCredsCredentialRequest");
+-			anonCredsLinkSecretDataIntegrityBindingProof = anonCredsCredentialRequest;
+-			credentialExchangeRecord.metadata.set(AnonCredsCredentialMetadataKey, {
+-				credentialDefinitionId: credentialOffer.bindingMethod.anoncredsLinkSecret.credentialDefinitionId,
+-				schemaId: credentialDefinitionReturn.credentialDefinition.schemaId
+-			});
+-			credentialExchangeRecord.metadata.set(AnonCredsCredentialRequestMetadataKey, anonCredsCredentialRequestMetadata);
+-		}
+-		let didCommSignedAttachmentBindingProof;
+-		let didCommSignedAttachment;
+-		if (dataIntegrityFormat?.didCommSignedAttachment) {
+-			if (!credentialOffer.bindingMethod?.didcommSignedAttachment) throw new CredoError("Cannot request credential with a binding method that was not offered.");
+-			didCommSignedAttachment = await this.createSignedAttachment(agentContext, { nonce: credentialOffer.bindingMethod.didcommSignedAttachment.nonce }, dataIntegrityFormat.didCommSignedAttachment, credentialOffer.bindingMethod.didcommSignedAttachment.algsSupported);
+-			didCommSignedAttachmentBindingProof = { attachment_id: didCommSignedAttachment.id };
+-		}
+-		const bindingProof = !anonCredsLinkSecretDataIntegrityBindingProof && !didCommSignedAttachmentBindingProof ? void 0 : {
+-			anoncreds_link_secret: anonCredsLinkSecretDataIntegrityBindingProof,
+-			didcomm_signed_attachment: didCommSignedAttachmentBindingProof
+-		};
+-		if (credentialOffer.bindingRequired && !bindingProof) throw new CredoError("Missing required binding proof");
+-		const dataModelVersion = dataIntegrityFormat?.dataModelVersion ?? credentialOffer.dataModelVersionsSupported[0];
+-		if (!credentialOffer.dataModelVersionsSupported.includes(dataModelVersion)) throw new CredoError("Cannot request credential with a data model version that was not offered.");
+-		const credentialRequest = {
+-			data_model_version: dataModelVersion,
+-			binding_proof: bindingProof
+-		};
+-		const format = new DidCommCredentialFormatSpec({
+-			attachmentId,
+-			format: W3C_DATA_INTEGRITY_CREDENTIAL_REQUEST
+-		});
+-		return {
+-			format,
+-			attachment: this.getFormatData(credentialRequest, format.attachmentId),
+-			appendAttachments: didCommSignedAttachment ? [didCommSignedAttachment] : void 0
+-		};
+-	}
+-	/**
+-	* Starting from a request is not supported for anoncreds credentials, this method only throws an error.
+-	*/
+-	async createRequest() {
+-		throw new CredoError("Starting from a request is not supported for w3c credentials");
+-	}
+-	/**
+-	* We don't have any models to validate an anoncreds request object, for now this method does nothing
+-	*/
+-	async processRequest(_agentContext, _options) {}
+-	async createCredentialWithAnonCredsDataIntegrityProof(agentContext, input) {
+-		const { credentialExchangeRecord, anonCredsLinkSecretBindingMethod, anonCredsLinkSecretBindingProof, linkSecretMetadata, credentialSubjectId } = input;
+-		const credentialAttributes = credentialExchangeRecord.credentialAttributes;
+-		if (!credentialAttributes) throw new CredoError(`Missing required credential attribute values on credential record with id ${credentialExchangeRecord.id}`);
+-		const credentialSubjectIdAttribute = credentialAttributes.find((ca) => ca.name === "id");
+-		if (credentialSubjectId && credentialSubjectIdAttribute && credentialSubjectIdAttribute.value !== credentialSubjectId) throw new CredoError("Invalid credential subject id.");
+-		if (!credentialSubjectIdAttribute && credentialSubjectId) credentialAttributes.push(new DidCommCredentialPreviewAttribute({
+-			name: "id",
+-			value: credentialSubjectId
+-		}));
+-		const anonCredsIssuerService = agentContext.dependencyManager.resolve(AnonCredsIssuerServiceSymbol);
+-		const credentialDefinition = (await agentContext.dependencyManager.resolve(AnonCredsCredentialDefinitionRepository).getByCredentialDefinitionId(agentContext, linkSecretMetadata.credentialDefinitionId)).credentialDefinition.value;
+-		let revocationRegistryDefinitionId;
+-		let revocationRegistryIndex;
+-		let revocationStatusList;
+-		if (credentialDefinition.revocation) {
+-			const { credentialRevocationId, revocationRegistryId } = linkSecretMetadata;
+-			if (!credentialRevocationId || !revocationRegistryId) throw new CredoError("Revocation registry definition id and revocation index are mandatory to issue AnonCreds revocable credentials");
+-			revocationRegistryDefinitionId = revocationRegistryId;
+-			revocationRegistryIndex = Number(credentialRevocationId);
+-			const revocationRegistryDefinitionPrivateRecord = await agentContext.dependencyManager.resolve(AnonCredsRevocationRegistryDefinitionPrivateRepository).getByRevocationRegistryDefinitionId(agentContext, revocationRegistryDefinitionId);
+-			if (revocationRegistryDefinitionPrivateRecord.state !== AnonCredsRevocationRegistryState.Active) throw new CredoError(`Revocation registry ${revocationRegistryDefinitionId} is in ${revocationRegistryDefinitionPrivateRecord.state} state`);
+-			revocationStatusList = (await fetchRevocationStatusList(agentContext, revocationRegistryDefinitionId, dateToTimestamp(/* @__PURE__ */ new Date()))).revocationStatusList;
+-		}
+-		const { credential } = await anonCredsIssuerService.createCredential(agentContext, {
+-			credentialOffer: {
+-				schema_id: linkSecretMetadata.schemaId,
+-				cred_def_id: anonCredsLinkSecretBindingMethod.credentialDefinitionId,
+-				key_correctness_proof: anonCredsLinkSecretBindingMethod.keyCorrectnessProof,
+-				nonce: anonCredsLinkSecretBindingMethod.nonce
+-			},
+-			credentialRequest: anonCredsLinkSecretBindingProof,
+-			credentialValues: convertAttributesToCredentialValues(credentialAttributes),
+-			revocationRegistryDefinitionId,
+-			revocationRegistryIndex,
+-			revocationStatusList
+-		});
+-		const { credentialDefinition: anoncredsCredentialDefinition } = await fetchCredentialDefinition(agentContext, credential.cred_def_id);
+-		return await agentContext.dependencyManager.resolve(AnonCredsHolderServiceSymbol).legacyToW3cCredential(agentContext, {
+-			credential,
+-			issuerId: anoncredsCredentialDefinition.issuerId
+-		});
+-	}
+-	async getSignatureMetadata(agentContext, offeredCredential, issuerVerificationMethod) {
+-		const didDocument = await agentContext.dependencyManager.resolve(DidsApi).resolveDidDocument(offeredCredential.issuerId);
+-		let verificationMethod;
+-		if (issuerVerificationMethod) verificationMethod = didDocument.dereferenceKey(issuerVerificationMethod, ["authentication", "assertionMethod"]);
+-		else {
+-			const vms = didDocument.authentication ?? didDocument.assertionMethod ?? didDocument.verificationMethod;
+-			if (!vms || vms.length === 0) throw new CredoError("Missing authenticationMethod, assertionMethod, and verificationMethods in did document");
+-			if (typeof vms[0] === "string") verificationMethod = didDocument.dereferenceVerificationMethod(vms[0]);
+-			else verificationMethod = vms[0];
+-		}
+-		const signatureSuite = agentContext.dependencyManager.resolve(SignatureSuiteRegistry).getByVerificationMethodType(verificationMethod.type);
+-		if (!signatureSuite) throw new CredoError(`Could not find signature suite for verification method type ${verificationMethod.type}`);
+-		return {
+-			verificationMethod,
+-			signatureSuite,
+-			offeredCredential
+-		};
+-	}
+-	async assertAndSetCredentialSubjectId(credential, credentialSubjectId) {
+-		if (!credentialSubjectId) return credential;
+-		if (Array.isArray(credential.credentialSubject)) throw new CredoError("Invalid credential subject relation. Cannot determine the subject to be updated.");
+-		const subjectId = credential.credentialSubject.id;
+-		if (subjectId && credentialSubjectId !== subjectId) throw new CredoError("Invalid credential subject id.");
+-		if (!subjectId) credential.credentialSubject.id = credentialSubjectId;
+-		return credential;
+-	}
+-	async signCredential(agentContext, credential, issuerVerificationMethod) {
+-		const { signatureSuite, verificationMethod } = await this.getSignatureMetadata(agentContext, credential, issuerVerificationMethod);
+-		const w3cCredentialService = agentContext.dependencyManager.resolve(W3cCredentialService);
+-		let credentialToBeSigned = credential;
+-		if (credential instanceof W3cJsonLdVerifiableCredential) {
+-			const { proof, ..._credentialToBeSigned } = credential;
+-			credentialToBeSigned = _credentialToBeSigned;
+-		}
+-		const w3cJsonLdVerifiableCredential = await w3cCredentialService.signCredential(agentContext, {
+-			format: ClaimFormat.LdpVc,
+-			credential: credentialToBeSigned,
+-			proofType: signatureSuite.proofType,
+-			verificationMethod: verificationMethod.id
+-		});
+-		if (Array.isArray(w3cJsonLdVerifiableCredential.proof)) throw new CredoError("A newly signed credential can not have multiple proofs");
+-		if (credential instanceof W3cJsonLdVerifiableCredential) {
+-			const combinedProofs = Array.isArray(credential.proof) ? credential.proof : [credential.proof];
+-			combinedProofs.push(w3cJsonLdVerifiableCredential.proof);
+-			w3cJsonLdVerifiableCredential.proof = combinedProofs;
+-		}
+-		return w3cJsonLdVerifiableCredential;
+-	}
+-	async acceptRequest(agentContext, { credentialFormats, credentialExchangeRecord, attachmentId, offerAttachment, requestAttachment, requestAppendAttachments }) {
+-		const dataIntegrityFormat = credentialFormats?.dataIntegrity;
+-		const credentialOffer = JsonTransformer.fromJSON(offerAttachment?.getDataAsJson(), DataIntegrityCredentialOffer);
+-		const assertedCredential = await this.assertAndSetCredentialSubjectId(JsonTransformer.fromJSON(credentialOffer.credential, W3cCredential), dataIntegrityFormat?.credentialSubjectId);
+-		const credentialRequest = requestAttachment.getDataAsJson();
+-		if (!credentialRequest) throw new CredoError("Missing data integrity credential request in createCredential");
+-		let signedCredential;
+-		if (credentialRequest.binding_proof?.anoncreds_link_secret) {
+-			if (!credentialOffer.bindingMethod?.anoncredsLinkSecret) throw new CredoError("Cannot issue credential with a binding method that was not offered");
+-			const linkSecretMetadata = credentialExchangeRecord.metadata.get(AnonCredsCredentialMetadataKey);
+-			if (!linkSecretMetadata) throw new CredoError("Missing anoncreds link secret metadata");
+-			signedCredential = await this.createCredentialWithAnonCredsDataIntegrityProof(agentContext, {
+-				credentialExchangeRecord,
+-				anonCredsLinkSecretBindingMethod: credentialOffer.bindingMethod.anoncredsLinkSecret,
+-				linkSecretMetadata,
+-				anonCredsLinkSecretBindingProof: credentialRequest.binding_proof.anoncreds_link_secret,
+-				credentialSubjectId: dataIntegrityFormat?.credentialSubjectId
+-			});
+-		}
+-		if (credentialRequest.binding_proof?.didcomm_signed_attachment) {
+-			if (!credentialOffer.bindingMethod?.didcommSignedAttachment) throw new CredoError("Cannot issue credential with a binding method that was not offered");
+-			const bindingProofAttachment = requestAppendAttachments?.find((attachments) => attachments.id === credentialRequest.binding_proof?.didcomm_signed_attachment?.attachment_id);
+-			if (!bindingProofAttachment) throw new CredoError("Missing binding proof attachment");
+-			const { nonce } = await this.getSignedAttachmentPayload(agentContext, bindingProofAttachment);
+-			if (nonce !== credentialOffer.bindingMethod.didcommSignedAttachment.nonce) throw new CredoError("Invalid nonce in signed attachment");
+-			signedCredential = await this.signCredential(agentContext, signedCredential ?? assertedCredential, dataIntegrityFormat?.issuerVerificationMethod);
+-		}
+-		if (!credentialRequest.binding_proof?.anoncreds_link_secret && !credentialRequest.binding_proof?.didcomm_signed_attachment) signedCredential = await this.signCredential(agentContext, assertedCredential);
+-		const format = new DidCommCredentialFormatSpec({
+-			attachmentId,
+-			format: W3C_DATA_INTEGRITY_CREDENTIAL
+-		});
+-		return {
+-			format,
+-			attachment: this.getFormatData({ credential: JsonTransformer.toJSON(signedCredential) }, format.attachmentId)
+-		};
+-	}
+-	async storeAnonCredsCredential(agentContext, credentialJson, credentialExchangeRecord, linkSecretRequestMetadata) {
+-		if (!credentialExchangeRecord.credentialAttributes) throw new CredoError("Missing credential attributes on credential record. Unable to check credential attributes");
+-		const anonCredsHolderService = agentContext.dependencyManager.resolve(AnonCredsHolderServiceSymbol);
+-		const legacyAnonCredsCredential = await anonCredsHolderService.w3cToLegacyCredential(agentContext, { credential: JsonTransformer.fromJSON(credentialJson, W3cJsonLdVerifiableCredential) });
+-		const { schema_id: schemaId, cred_def_id: credentialDefinitionId, rev_reg_id: revocationRegistryId } = legacyAnonCredsCredential;
+-		const schemaReturn = await fetchSchema(agentContext, schemaId);
+-		const credentialDefinitionReturn = await fetchCredentialDefinition(agentContext, credentialDefinitionId);
+-		const revocationRegistryDefinitionReturn = revocationRegistryId ? await fetchRevocationRegistryDefinition(agentContext, revocationRegistryId) : void 0;
+-		const w3cJsonLdVerifiableCredential = await anonCredsHolderService.legacyToW3cCredential(agentContext, {
+-			credential: legacyAnonCredsCredential,
+-			issuerId: credentialJson.issuer,
+-			processOptions: {
+-				credentialRequestMetadata: linkSecretRequestMetadata,
+-				credentialDefinition: credentialDefinitionReturn.credentialDefinition,
+-				revocationRegistryDefinition: revocationRegistryDefinitionReturn?.revocationRegistryDefinition
+-			}
+-		});
+-		const w3cCredentialRecordId = await anonCredsHolderService.storeCredential(agentContext, {
+-			credential: w3cJsonLdVerifiableCredential,
+-			schema: schemaReturn.schema,
+-			credentialDefinitionId,
+-			credentialDefinition: credentialDefinitionReturn.credentialDefinition,
+-			credentialRequestMetadata: linkSecretRequestMetadata,
+-			revocationRegistry: revocationRegistryDefinitionReturn ? {
+-				id: revocationRegistryId,
+-				definition: revocationRegistryDefinitionReturn?.revocationRegistryDefinition
+-			} : void 0
+-		});
+-		const w3cCredentialRecord = await agentContext.dependencyManager.resolve(W3cCredentialService).getCredentialRecordById(agentContext, w3cCredentialRecordId);
+-		if (revocationRegistryId) {
+-			const linkSecretMetadata = credentialExchangeRecord.metadata.get(AnonCredsCredentialMetadataKey);
+-			if (!linkSecretMetadata) throw new CredoError("Missing link secret metadata");
+-			const anonCredsTags = await getAnonCredsTagsFromRecord(w3cCredentialRecord);
+-			if (!anonCredsTags) throw new CredoError("Missing anoncreds tags on credential record.");
+-			linkSecretMetadata.revocationRegistryId = revocationRegistryDefinitionReturn?.revocationRegistryDefinitionId;
+-			linkSecretMetadata.credentialRevocationId = anonCredsTags.anonCredsCredentialRevocationId?.toString();
+-			credentialExchangeRecord.metadata.set(AnonCredsCredentialMetadataKey, linkSecretMetadata);
+-		}
+-		return w3cCredentialRecord;
+-	}
+-	/**
+-	* Processes an incoming credential - retrieve metadata, retrieve payload and store it in wallet
+-	* @param options the issue credential message wrapped inside this object
+-	* @param credentialExchangeRecord the credential exchange record for this credential
+-	*/
+-	async processCredential(agentContext, { credentialExchangeRecord, attachment, requestAttachment, offerAttachment }) {
+-		const offeredCredentialJson = JsonTransformer.fromJSON(offerAttachment.getDataAsJson(), DataIntegrityCredentialOffer).credential;
+-		const credentialRequest = requestAttachment.getDataAsJson();
+-		if (!credentialRequest) throw new CredoError("Missing data integrity credential request in createCredential");
+-		if (!credentialExchangeRecord.credentialAttributes) throw new CredoError("Missing credential attributes on credential record.");
+-		const { credential: credentialJson } = attachment.getDataAsJson();
+-		if (Array.isArray(offeredCredentialJson.credentialSubject)) throw new CredoError("Invalid credential subject. Multiple credential subjects are not yet supported.");
+-		if (!Object.entries(offeredCredentialJson.credentialSubject).every(([key, offeredValue]) => {
+-			const receivedValue = credentialJson.credentialSubject[key];
+-			if (!offeredValue || !receivedValue) return false;
+-			if (typeof offeredValue === "number" || typeof receivedValue === "number") return offeredValue.toString() === receivedValue.toString();
+-			return deepEquality(offeredValue, receivedValue);
+-		})) throw new CredoError("Received invalid credential. Received credential subject does not match the offered credential subject.");
+-		const credentialVersion = this.getCredentialVersion(credentialJson);
+-		if (!deepEquality(credentialJson, {
+-			...offeredCredentialJson,
+-			"@context": credentialJson["@context"],
+-			issuer: offeredCredentialJson.issuer ?? credentialJson.issuer,
+-			credentialSubject: credentialJson.credentialSubject,
+-			...credentialVersion === "1.1" && { issuanceDate: credentialJson.issuanceDate },
+-			...credentialVersion === "2.0" && { validFrom: credentialJson.validFrom },
+-			...offeredCredentialJson.credentialStatus && { credentialStatus: credentialJson.credentialStatus },
+-			proof: credentialJson.proof
+-		})) throw new CredoError("Received invalid credential. Received credential does not match the offered credential");
+-		let w3cCredentialRecord;
+-		if (credentialRequest.binding_proof?.anoncreds_link_secret) {
+-			const linkSecretRequestMetadata = credentialExchangeRecord.metadata.get(AnonCredsCredentialRequestMetadataKey);
+-			if (!linkSecretRequestMetadata) throw new CredoError("Missing link secret request metadata");
+-			const integrityProtectedFields = [
+-				"@context",
+-				"issuer",
+-				"type",
+-				"credentialSubject",
+-				"validFrom",
+-				"issuanceDate"
+-			];
+-			if (Object.keys(offeredCredentialJson).some((key) => !integrityProtectedFields.includes(key) && key !== "proof")) throw new CredoError("Credential offer contains non anoncreds integrity protected fields.");
+-			if (!Array.isArray(offeredCredentialJson.type) || offeredCredentialJson?.type.length !== 1) throw new CredoError(`Invalid credential type. Only single credential type 'VerifiableCredential' is supported`);
+-			w3cCredentialRecord = await this.storeAnonCredsCredential(agentContext, credentialJson, credentialExchangeRecord, linkSecretRequestMetadata);
+-			await this.assertCredentialAttributesMatchSchemaAttributes(agentContext, w3cCredentialRecord.firstCredential, getAnonCredsTagsFromRecord(w3cCredentialRecord)?.anonCredsSchemaId, true);
+-		} else {
+-			const w3cCredentialService = agentContext.dependencyManager.resolve(W3cCredentialService);
+-			const w3cJsonLdVerifiableCredential = JsonTransformer.fromJSON(credentialJson, W3cJsonLdVerifiableCredential);
+-			w3cCredentialRecord = await w3cCredentialService.storeCredential(agentContext, { record: W3cCredentialRecord.fromCredential(w3cJsonLdVerifiableCredential) });
+-		}
+-		credentialExchangeRecord.credentials.push({
+-			credentialRecordType: this.credentialRecordType,
+-			credentialRecordId: w3cCredentialRecord.id
+-		});
+-	}
+-	supportsFormat(format) {
+-		return [
+-			W3C_DATA_INTEGRITY_CREDENTIAL_REQUEST,
+-			W3C_DATA_INTEGRITY_CREDENTIAL_OFFER,
+-			W3C_DATA_INTEGRITY_CREDENTIAL
+-		].includes(format);
+-	}
+-	/**
+-	* Gets the attachment object for a given attachmentId. We need to get out the correct attachmentId for
+-	* anoncreds and then find the corresponding attachment (if there is one)
+-	* @param formats the formats object containing the attachmentId
+-	* @param messageAttachments the attachments containing the payload
+-	* @returns The DidCommAttachment if found or undefined
+-	*
+-	*/
+-	getAttachment(formats, messageAttachments) {
+-		const supportedAttachmentIds = formats.filter((f) => this.supportsFormat(f.format)).map((f) => f.attachmentId);
+-		return messageAttachments.find((attachment) => supportedAttachmentIds.includes(attachment.id));
+-	}
+-	async deleteCredentialById(agentContext, credentialRecordId) {
+-		await agentContext.dependencyManager.resolve(AnonCredsHolderServiceSymbol).deleteCredential(agentContext, credentialRecordId);
+-	}
+-	async shouldAutoRespondToProposal(_agentContext, options) {
+-		throw new CredoError("Not implemented");
+-	}
+-	async shouldAutoRespondToOffer(_agentContext, { offerAttachment }) {
+-		if (!JsonTransformer.fromJSON(offerAttachment.getDataAsJson(), DataIntegrityCredentialOffer).bindingRequired) return true;
+-		return false;
+-	}
+-	async shouldAutoRespondToRequest(_agentContext, { offerAttachment, requestAttachment }) {
+-		const credentialOffer = JsonTransformer.fromJSON(offerAttachment?.getDataAsJson(), DataIntegrityCredentialOffer);
+-		const credentialRequest = requestAttachment.getDataAsJson();
+-		if (!credentialOffer.bindingRequired && !credentialRequest.binding_proof?.anoncreds_link_secret && !credentialRequest.binding_proof?.didcomm_signed_attachment) return true;
+-		if (credentialOffer.bindingRequired && !credentialRequest.binding_proof?.anoncreds_link_secret && !credentialRequest.binding_proof?.didcomm_signed_attachment) return false;
+-		if (credentialRequest.binding_proof?.didcomm_signed_attachment) try {
+-			const subjectJson = credentialOffer.credential.credentialSubject;
+-			if (JsonTransformer.fromJSON(subjectJson, W3cCredentialSubject).id === void 0) return false;
+-		} catch (_e) {
+-			return false;
+-		}
+-		const validLinkSecretRequest = !credentialRequest.binding_proof?.anoncreds_link_secret || credentialRequest.binding_proof?.anoncreds_link_secret && credentialOffer.bindingMethod?.anoncredsLinkSecret;
+-		const validDidCommSignedAttachmetRequest = !credentialRequest.binding_proof?.didcomm_signed_attachment || credentialRequest.binding_proof?.didcomm_signed_attachment && credentialOffer.bindingMethod?.didcommSignedAttachment;
+-		return Boolean(validLinkSecretRequest && validDidCommSignedAttachmetRequest);
+-	}
+-	async shouldAutoRespondToCredential(_agentContext, options) {
+-		return true;
+-	}
+-	async createDataIntegrityCredentialOffer(agentContext, credentialExchangeRecord, options) {
+-		const { bindingRequired, credential, anonCredsLinkSecretBinding: anonCredsLinkSecretBindingMethodOptions, didCommSignedAttachmentBinding: didCommSignedAttachmentBindingMethodOptions } = options;
+-		const dataModelVersionsSupported = ["1.1"];
+-		const credentialJson = credential instanceof W3cCredential ? JsonTransformer.toJSON(credential) : credential;
+-		const validW3cCredential = JsonTransformer.fromJSON(credentialJson, W3cCredential);
+-		const previewAttributes = this.previewAttributesFromCredential(validW3cCredential);
+-		let anonCredsLinkSecretBindingMethod;
+-		if (anonCredsLinkSecretBindingMethodOptions) {
+-			const { credentialDefinitionId, revocationRegistryDefinitionId, revocationRegistryIndex } = anonCredsLinkSecretBindingMethodOptions;
+-			const anoncredsCredentialOffer = await agentContext.dependencyManager.resolve(AnonCredsIssuerServiceSymbol).createCredentialOffer(agentContext, { credentialDefinitionId });
+-			const { credentialDefinition } = await agentContext.dependencyManager.resolve(AnonCredsCredentialDefinitionRepository).getByCredentialDefinitionId(agentContext, anoncredsCredentialOffer.cred_def_id);
+-			if (credentialDefinition.value.revocation) {
+-				if (!revocationRegistryDefinitionId || !revocationRegistryIndex) throw new CredoError("AnonCreds revocable credentials require revocationRegistryDefinitionId and revocationRegistryIndex");
+-				credentialExchangeRecord.setTags({
+-					anonCredsRevocationRegistryId: revocationRegistryDefinitionId,
+-					anonCredsCredentialRevocationId: revocationRegistryIndex.toString()
+-				});
+-			}
+-			await this.assertCredentialAttributesMatchSchemaAttributes(agentContext, validW3cCredential, credentialDefinition.schemaId, false);
+-			anonCredsLinkSecretBindingMethod = {
+-				credentialDefinitionId: anoncredsCredentialOffer.cred_def_id,
+-				keyCorrectnessProof: anoncredsCredentialOffer.key_correctness_proof,
+-				nonce: anoncredsCredentialOffer.nonce
+-			};
+-			credentialExchangeRecord.metadata.set(AnonCredsCredentialMetadataKey, {
+-				schemaId: anoncredsCredentialOffer.schema_id,
+-				credentialDefinitionId,
+-				credentialRevocationId: revocationRegistryIndex?.toString(),
+-				revocationRegistryId: revocationRegistryDefinitionId
+-			});
+-		}
+-		let didCommSignedAttachmentBindingMethod;
+-		if (didCommSignedAttachmentBindingMethodOptions) {
+-			const kms = agentContext.dependencyManager.resolve(Kms.KeyManagementApi);
+-			const { didMethodsSupported, algsSupported } = didCommSignedAttachmentBindingMethodOptions;
+-			didCommSignedAttachmentBindingMethod = {
+-				didMethodsSupported: didMethodsSupported ?? agentContext.dependencyManager.resolve(DidsApi).supportedResolverMethods,
+-				algsSupported: algsSupported ?? this.getSupportedJwaSignatureAlgorithms(agentContext),
+-				nonce: TypedArrayEncoder.toBase64Url(kms.randomBytes({ length: 32 }))
+-			};
+-			if (didCommSignedAttachmentBindingMethod.algsSupported.length === 0) throw new CredoError("No supported JWA signature algorithms found.");
+-			if (didCommSignedAttachmentBindingMethod.didMethodsSupported.length === 0) throw new CredoError("No supported DID methods found.");
+-		}
+-		if (bindingRequired && !anonCredsLinkSecretBindingMethod && !didCommSignedAttachmentBindingMethod) throw new CredoError("Missing required binding method.");
+-		return {
+-			dataIntegrityCredentialOffer: new DataIntegrityCredentialOffer({
+-				dataModelVersionsSupported,
+-				bindingRequired,
+-				bindingMethod: {
+-					anoncredsLinkSecret: anonCredsLinkSecretBindingMethod,
+-					didcommSignedAttachment: didCommSignedAttachmentBindingMethod
+-				},
+-				credential: credentialJson
+-			}),
+-			previewAttributes
+-		};
+-	}
+-	previewAttributesFromCredential(credential) {
+-		if (Array.isArray(credential.credentialSubject)) throw new CredoError("Credential subject must be an object.");
+-		const claims = {
+-			...credential.credentialSubject.claims,
+-			...credential.credentialSubject.id && { id: credential.credentialSubject.id }
+-		};
+-		return Object.entries(claims).map(([key, value]) => {
+-			return {
+-				name: key,
+-				value: value.toString()
+-			};
+-		});
+-	}
+-	async assertCredentialAttributesMatchSchemaAttributes(agentContext, credential, schemaId, credentialSubjectIdMustBeSet) {
+-		const attributes = this.previewAttributesFromCredential(credential);
+-		const schemaReturn = await fetchSchema(agentContext, schemaId);
+-		const enhancedAttributes = [...attributes];
+-		if (!credentialSubjectIdMustBeSet && schemaReturn.schema.attrNames.includes("id") && attributes.find((attr) => attr.name === "id") === void 0) enhancedAttributes.push({
+-			name: "id",
+-			value: "mock"
+-		});
+-		assertAttributesMatch(schemaReturn.schema, enhancedAttributes);
+-		return { attributes };
+-	}
+-	/**
+-	* Returns an object of type {@link DidCommAttachment} for use in credential exchange messages.
+-	* It looks up the correct format identifier and encodes the data as a base64 attachment.
+-	*
+-	* @param data The data to include in the attach object
+-	* @param id the attach id from the formats component of the message
+-	*/
+-	getFormatData(data, id) {
+-		return new DidCommAttachment({
+-			id,
+-			mimeType: "application/json",
+-			data: { base64: JsonEncoder.toBase64(data) }
+-		});
+-	}
+-	/**
+-	* Returns the JWA Signature Algorithms that are supported by the agent.
+-	*/
+-	getSupportedJwaSignatureAlgorithms(agentContext) {
+-		const kms = agentContext.dependencyManager.resolve(Kms.KeyManagementApi);
+-		return Object.values(Kms.KnownJwaSignatureAlgorithms).filter((algorithm) => kms.supportedBackendsForOperation({
+-			operation: "sign",
+-			algorithm
+-		}).length > 0);
+-	}
+-};
++/**
++* @deprecated The data integrity credential format is no longer anoncreds specific and has moved to
++* `@credo-ts/didcomm` as `DidCommDataIntegrityCredentialFormatService`. Binding a credential to an
++* anoncreds link secret is provided by {@link AnonCredsLinkSecretBindingProvider}, which the
++* `AnonCredsModule` registers for you.
++*
++* Import `DidCommDataIntegrityCredentialFormatService` from `@credo-ts/didcomm` instead. This alias
++* will be removed in the next major version.
++*/
++const DataIntegrityDidCommCredentialFormatService = DidCommDataIntegrityCredentialFormatService;
+ 
+ //#endregion
+ export { DataIntegrityDidCommCredentialFormatService };
+-//# sourceMappingURL=DataIntegrityDidCommCredentialFormatService.mjs.map
+\ No newline at end of file
+diff --git a/build/formats/DataIntegrityDidCommCredentialFormatService.mjs.map b/build/formats/DataIntegrityDidCommCredentialFormatService.mjs.map
+deleted file mode 100644
+index e96240b..0000000
+--- a/build/formats/DataIntegrityDidCommCredentialFormatService.mjs.map
++++ /dev/null
+@@ -1 +0,0 @@
+-{"version":3,"file":"DataIntegrityDidCommCredentialFormatService.mjs","names":[],"sources":["../../src/formats/DataIntegrityDidCommCredentialFormatService.ts"],"sourcesContent":["import {\n  type AgentContext,\n  ClaimFormat,\n  CredoError,\n  DidsApi,\n  deepEquality,\n  getPublicJwkFromVerificationMethod,\n  JsonEncoder,\n  type JsonObject,\n  JsonTransformer,\n  type JwsDetachedFormat,\n  JwsService,\n  JwtPayload,\n  Kms,\n  parseDid,\n  SignatureSuiteRegistry,\n  TypedArrayEncoder,\n  type VerificationMethod,\n  W3cCredential,\n  W3cCredentialRecord,\n  W3cCredentialService,\n  W3cCredentialSubject,\n  W3cJsonLdVerifiableCredential,\n} from '@credo-ts/core'\nimport type {\n  AnonCredsLinkSecretBindingMethod,\n  AnonCredsLinkSecretDataIntegrityBindingProof,\n  DataIntegrityCredential,\n  DataIntegrityCredentialRequest,\n  DataIntegrityCredentialRequestBindingProof,\n  DidCommCredentialExchangeRecord,\n  DidCommCredentialFormatAcceptOfferOptions,\n  DidCommCredentialFormatAcceptProposalOptions,\n  DidCommCredentialFormatAcceptRequestOptions,\n  DidCommCredentialFormatAutoRespondCredentialOptions,\n  DidCommCredentialFormatAutoRespondOfferOptions,\n  DidCommCredentialFormatAutoRespondProposalOptions,\n  DidCommCredentialFormatAutoRespondRequestOptions,\n  DidCommCredentialFormatCreateOfferOptions,\n  DidCommCredentialFormatCreateOfferReturn,\n  DidCommCredentialFormatCreateProposalOptions,\n  DidCommCredentialFormatCreateProposalReturn,\n  DidCommCredentialFormatCreateReturn,\n  DidCommCredentialFormatProcessCredentialOptions,\n  DidCommCredentialFormatProcessOptions,\n  DidCommCredentialFormatService,\n  DidCommCredentialPreviewAttributeOptions,\n  DidCommDataIntegrityCredentialFormat,\n  DidCommDataIntegrityOfferCredentialFormat,\n  DidCommSignedAttachmentBindingMethod,\n  DidCommSignedAttachmentDataIntegrityBindingProof,\n  W3C_VC_DATA_MODEL_VERSION,\n} from '@credo-ts/didcomm'\nimport {\n  DataIntegrityCredentialOffer,\n  DidCommAttachment,\n  DidCommAttachmentData,\n  DidCommCredentialFormatSpec,\n  DidCommCredentialPreviewAttribute,\n  DidCommCredentialProblemReportReason,\n  DidCommProblemReportError,\n} from '@credo-ts/didcomm'\nimport type { AnonCredsRevocationStatusList } from '../models'\nimport {\n  AnonCredsCredentialDefinitionRepository,\n  AnonCredsRevocationRegistryDefinitionPrivateRepository,\n  AnonCredsRevocationRegistryState,\n} from '../repository'\nimport type { AnonCredsHolderService, AnonCredsIssuerService } from '../services'\nimport { AnonCredsHolderServiceSymbol, AnonCredsIssuerServiceSymbol } from '../services'\nimport {\n  dateToTimestamp,\n  fetchCredentialDefinition,\n  fetchRevocationRegistryDefinition,\n  fetchRevocationStatusList,\n  fetchSchema,\n} from '../utils'\nimport type { AnonCredsClaimRecord } from '../utils/credential'\nimport {\n  assertAttributesMatch as assertAttributesMatchSchema,\n  convertAttributesToCredentialValues,\n} from '../utils/credential'\nimport type { AnonCredsCredentialMetadata, AnonCredsCredentialRequestMetadata } from '../utils/metadata'\nimport { AnonCredsCredentialMetadataKey, AnonCredsCredentialRequestMetadataKey } from '../utils/metadata'\nimport { getAnonCredsTagsFromRecord } from '../utils/w3cAnonCredsUtils'\n\nconst W3C_DATA_INTEGRITY_CREDENTIAL_OFFER = 'didcomm/w3c-di-vc-offer@v0.1'\nconst W3C_DATA_INTEGRITY_CREDENTIAL_REQUEST = 'didcomm/w3c-di-vc-request@v0.1'\nconst W3C_DATA_INTEGRITY_CREDENTIAL = 'didcomm/w3c-di-vc@v0.1'\n\nexport class DataIntegrityDidCommCredentialFormatService\n  implements DidCommCredentialFormatService<DidCommDataIntegrityCredentialFormat>\n{\n  /** formatKey is the key used when calling agent.credentials.xxx with credentialFormats.anoncreds */\n  public readonly formatKey = 'dataIntegrity' as const\n\n  /**\n   * credentialRecordType is the type of record that stores the credential. It is stored in the credential\n   * record binding in the credential exchange record.\n   */\n  public readonly credentialRecordType = 'w3c' as const\n\n  /**\n   * Create a {@link AttachmentFormats} object dependent on the message type.\n   *\n   * @param options The object containing all the options for the proposed credential\n   * @returns object containing associated attachment, format and optionally the credential preview\n   *\n   */\n  public async createProposal(\n    _agentContext: AgentContext,\n    options: DidCommCredentialFormatCreateProposalOptions<DidCommDataIntegrityCredentialFormat>\n  ): Promise<DidCommCredentialFormatCreateProposalReturn> {\n    throw new CredoError('Not defined')\n  }\n\n  public async processProposal(\n    _agentContext: AgentContext,\n    options: DidCommCredentialFormatProcessOptions\n  ): Promise<void> {\n    throw new CredoError('Not defined')\n  }\n\n  public async acceptProposal(\n    _agentContext: AgentContext,\n    _input: DidCommCredentialFormatAcceptProposalOptions<DidCommDataIntegrityCredentialFormat>\n  ): Promise<DidCommCredentialFormatCreateOfferReturn> {\n    throw new CredoError('Not defined')\n  }\n\n  /**\n   * Create a credential attachment format for a credential request.\n   *\n   * @param options The object containing all the options for the credential offer\n   * @returns object containing associated attachment, formats and offersAttach elements\n   *\n   */\n  public async createOffer(\n    agentContext: AgentContext,\n    {\n      credentialFormats,\n      credentialExchangeRecord,\n      attachmentId,\n    }: DidCommCredentialFormatCreateOfferOptions<DidCommDataIntegrityCredentialFormat>\n  ): Promise<DidCommCredentialFormatCreateOfferReturn> {\n    const dataIntegrityFormat = credentialFormats.dataIntegrity\n    if (!dataIntegrityFormat) throw new CredoError('Missing data integrity credential format data')\n\n    const format = new DidCommCredentialFormatSpec({\n      attachmentId: attachmentId,\n      format: W3C_DATA_INTEGRITY_CREDENTIAL_OFFER,\n    })\n\n    const credential = dataIntegrityFormat.credential\n    if ('proof' in credential) throw new CredoError('The offered credential MUST NOT contain any proofs.')\n\n    const { dataIntegrityCredentialOffer, previewAttributes } = await this.createDataIntegrityCredentialOffer(\n      agentContext,\n      credentialExchangeRecord,\n      dataIntegrityFormat\n    )\n\n    const attachment = this.getFormatData(JsonTransformer.toJSON(dataIntegrityCredentialOffer), format.attachmentId)\n    return { format, attachment, previewAttributes }\n  }\n\n  private getCredentialVersion(credentialJson: JsonObject): W3C_VC_DATA_MODEL_VERSION {\n    const context = credentialJson['@context']\n    if (!context || !Array.isArray(context)) throw new CredoError('Invalid @context in credential offer')\n\n    const isV1Credential = context.find((c) => c === 'https://www.w3.org/2018/credentials/v1')\n    const isV2Credential = context.find((c) => c === 'https://www.w3.org/ns/credentials/v2')\n\n    if (isV1Credential) return '1.1'\n    if (isV2Credential) throw new CredoError('Received w3c credential with unsupported version 2.0.')\n    throw new CredoError('Cannot determine credential version from @context')\n  }\n\n  public async processOffer(\n    agentContext: AgentContext,\n    { attachment, credentialExchangeRecord }: DidCommCredentialFormatProcessOptions\n  ) {\n    agentContext.config.logger.debug(\n      `Processing data integrity credential offer for credential record ${credentialExchangeRecord.id}`\n    )\n\n    const dataIntegrityCredentialOffer = JsonTransformer.fromJSON(\n      attachment.getDataAsJson(),\n      DataIntegrityCredentialOffer\n    )\n\n    const credentialJson = dataIntegrityCredentialOffer.credential\n    const credentialVersion = this.getCredentialVersion(credentialJson)\n\n    const credentialToBeValidated = {\n      ...credentialJson,\n      issuer: credentialJson.issuer ?? 'https://example.com',\n      ...(credentialVersion === '1.1'\n        ? { issuanceDate: new Date().toISOString() }\n        : { validFrom: new Date().toISOString() }),\n    }\n\n    JsonTransformer.fromJSON(credentialToBeValidated, W3cCredential)\n\n    const missingBindingMethod =\n      dataIntegrityCredentialOffer.bindingRequired &&\n      !dataIntegrityCredentialOffer.bindingMethod?.anoncredsLinkSecret &&\n      !dataIntegrityCredentialOffer.bindingMethod?.didcommSignedAttachment\n\n    if (missingBindingMethod) {\n      throw new DidCommProblemReportError('Invalid credential offer. Missing binding method.', {\n        problemCode: DidCommCredentialProblemReportReason.IssuanceAbandoned,\n      })\n    }\n  }\n\n  private async createSignedAttachment(\n    agentContext: AgentContext,\n    data: { nonce: string },\n    options: { alg?: string; kid: string },\n    issuerSupportedAlgs: string[]\n  ) {\n    const { alg, kid } = options\n\n    if (!kid.startsWith('did:')) {\n      throw new CredoError(`kid '${kid}' is not a DID. Only dids are supported for kid`)\n    }\n    if (!kid.includes('#')) {\n      throw new CredoError(\n        `kid '${kid}' does not contain a fragment. kid MUST point to a specific key in the did document.`\n      )\n    }\n\n    const parsedDid = parseDid(kid)\n\n    const didsApi = agentContext.dependencyManager.resolve(DidsApi)\n    const { didDocument, keys } = await didsApi.resolveCreatedDidDocumentWithKeys(parsedDid.did)\n    const verificationMethod = didDocument.dereferenceKey(kid)\n\n    // TODO: we need an util 'getPublicJwkWithSigningKeyIdFromVerificationMethodId'\n    const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)\n    const keyId =\n      keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === `#${parsedDid.fragment}`)?.kmsKeyId ??\n      publicJwk.legacyKeyId\n\n    if (alg && !publicJwk.supportedSignatureAlgorithms.includes(alg as Kms.KnownJwaSignatureAlgorithm)) {\n      throw new CredoError(`jwk ${publicJwk.jwkTypeHumanDescription}, does not support the JWS signature alg '${alg}'`)\n    }\n\n    const signingAlg = issuerSupportedAlgs.find(\n      (supportedAlg) =>\n        publicJwk.supportedSignatureAlgorithms.includes(supportedAlg as Kms.KnownJwaSignatureAlgorithm) &&\n        (alg === undefined || alg === supportedAlg)\n    )\n    if (!signingAlg) throw new CredoError('No signing algorithm supported by the issuer found')\n\n    const jwsService = agentContext.dependencyManager.resolve(JwsService)\n    const jws = await jwsService.createJws(agentContext, {\n      keyId,\n      header: {},\n      payload: new JwtPayload({ additionalClaims: { nonce: data.nonce } }),\n      protectedHeaderOptions: { alg: signingAlg as Kms.KnownJwaSignatureAlgorithm, kid },\n    })\n\n    const signedAttach = new DidCommAttachment({\n      mimeType: 'application/json',\n      data: new DidCommAttachmentData({\n        base64: TypedArrayEncoder.toBase64(TypedArrayEncoder.fromBase64Url(jws.payload)),\n      }),\n    })\n\n    signedAttach.addJws(jws)\n\n    return signedAttach\n  }\n\n  private async getSignedAttachmentPayload(agentContext: AgentContext, signedAttachment: DidCommAttachment) {\n    const jws = signedAttachment.data.jws as JwsDetachedFormat\n    if (!jws) throw new CredoError('Missing jws in signed attachment')\n    if (!jws.protected) throw new CredoError('Missing protected header in signed attachment')\n    if (!signedAttachment.data.base64) throw new CredoError('Missing payload in signed attachment')\n\n    const jwsService = agentContext.dependencyManager.resolve(JwsService)\n    const { isValid } = await jwsService.verifyJws(agentContext, {\n      jws: {\n        header: jws.header,\n        protected: jws.protected,\n        signature: jws.signature,\n        payload: TypedArrayEncoder.toBase64Url(TypedArrayEncoder.fromBase64(signedAttachment.data.base64)),\n      },\n      allowedJwsSignerMethods: ['did'],\n      resolveJwsSigner: async ({ protectedHeader: { kid, alg } }) => {\n        if (!kid || typeof kid !== 'string') throw new CredoError('Missing kid in protected header.')\n        if (!kid.startsWith('did:')) throw new CredoError('Only did is supported for kid identifier')\n\n        const didsApi = agentContext.dependencyManager.resolve(DidsApi)\n        const didDocument = await didsApi.resolveDidDocument(kid)\n        const verificationMethod = didDocument.dereferenceKey(kid)\n        const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)\n\n        return {\n          alg,\n          method: 'did',\n          didUrl: kid,\n          jwk: publicJwk,\n        }\n      },\n    })\n\n    if (!isValid) throw new CredoError('Failed to validate signature of signed attachment')\n    const payload = JsonEncoder.fromBase64(signedAttachment.data.base64) as { nonce: string }\n    if (!payload.nonce || typeof payload.nonce !== 'string') {\n      throw new CredoError('Invalid payload in signed attachment')\n    }\n\n    return payload\n  }\n\n  public async acceptOffer(\n    agentContext: AgentContext,\n    {\n      credentialExchangeRecord,\n      attachmentId,\n      offerAttachment,\n      credentialFormats,\n    }: DidCommCredentialFormatAcceptOfferOptions<DidCommDataIntegrityCredentialFormat>\n  ): Promise<DidCommCredentialFormatCreateReturn> {\n    const dataIntegrityFormat = credentialFormats?.dataIntegrity\n\n    const credentialOffer = JsonTransformer.fromJSON(offerAttachment.getDataAsJson(), DataIntegrityCredentialOffer)\n\n    let anonCredsLinkSecretDataIntegrityBindingProof: AnonCredsLinkSecretDataIntegrityBindingProof | undefined\n    const autoAcceptOfferWithAnonCredsLinkSecretMethod =\n      credentialOffer.bindingRequired &&\n      !dataIntegrityFormat?.didCommSignedAttachment &&\n      credentialOffer.bindingMethod?.anoncredsLinkSecret\n\n    if (dataIntegrityFormat?.anonCredsLinkSecret || autoAcceptOfferWithAnonCredsLinkSecretMethod) {\n      if (!credentialOffer.bindingMethod?.anoncredsLinkSecret) {\n        throw new CredoError('Cannot request credential with a binding method that was not offered.')\n      }\n\n      const anonCredsHolderService =\n        agentContext.dependencyManager.resolve<AnonCredsHolderService>(AnonCredsHolderServiceSymbol)\n\n      const credentialDefinitionId = credentialOffer.bindingMethod.anoncredsLinkSecret.credentialDefinitionId\n      const credentialDefinitionReturn = await fetchCredentialDefinition(agentContext, credentialDefinitionId)\n\n      const {\n        credentialRequest: anonCredsCredentialRequest,\n        credentialRequestMetadata: anonCredsCredentialRequestMetadata,\n      } = await anonCredsHolderService.createCredentialRequest(agentContext, {\n        credentialOffer: {\n          schema_id: credentialDefinitionReturn.credentialDefinition.schemaId,\n          cred_def_id: credentialOffer.bindingMethod.anoncredsLinkSecret.credentialDefinitionId,\n          key_correctness_proof: credentialOffer.bindingMethod.anoncredsLinkSecret.keyCorrectnessProof,\n          nonce: credentialOffer.bindingMethod.anoncredsLinkSecret.nonce,\n        },\n        credentialDefinition: credentialDefinitionReturn.credentialDefinition,\n        linkSecretId: dataIntegrityFormat?.anonCredsLinkSecret?.linkSecretId,\n      })\n\n      if (!anonCredsCredentialRequest.entropy) throw new CredoError('Missing entropy for anonCredsCredentialRequest')\n      anonCredsLinkSecretDataIntegrityBindingProof =\n        anonCredsCredentialRequest as AnonCredsLinkSecretDataIntegrityBindingProof\n\n      credentialExchangeRecord.metadata.set<AnonCredsCredentialMetadata>(AnonCredsCredentialMetadataKey, {\n        credentialDefinitionId: credentialOffer.bindingMethod.anoncredsLinkSecret.credentialDefinitionId,\n        schemaId: credentialDefinitionReturn.credentialDefinition.schemaId,\n      })\n      credentialExchangeRecord.metadata.set<AnonCredsCredentialRequestMetadata>(\n        AnonCredsCredentialRequestMetadataKey,\n        anonCredsCredentialRequestMetadata\n      )\n    }\n\n    let didCommSignedAttachmentBindingProof: DidCommSignedAttachmentDataIntegrityBindingProof | undefined\n    let didCommSignedAttachment: DidCommAttachment | undefined\n    if (dataIntegrityFormat?.didCommSignedAttachment) {\n      if (!credentialOffer.bindingMethod?.didcommSignedAttachment) {\n        throw new CredoError('Cannot request credential with a binding method that was not offered.')\n      }\n\n      didCommSignedAttachment = await this.createSignedAttachment(\n        agentContext,\n        { nonce: credentialOffer.bindingMethod.didcommSignedAttachment.nonce },\n        dataIntegrityFormat.didCommSignedAttachment,\n        credentialOffer.bindingMethod.didcommSignedAttachment.algsSupported\n      )\n\n      didCommSignedAttachmentBindingProof = { attachment_id: didCommSignedAttachment.id }\n    }\n\n    const bindingProof: DataIntegrityCredentialRequestBindingProof | undefined =\n      !anonCredsLinkSecretDataIntegrityBindingProof && !didCommSignedAttachmentBindingProof\n        ? undefined\n        : {\n            anoncreds_link_secret: anonCredsLinkSecretDataIntegrityBindingProof,\n            didcomm_signed_attachment: didCommSignedAttachmentBindingProof,\n          }\n\n    if (credentialOffer.bindingRequired && !bindingProof) throw new CredoError('Missing required binding proof')\n\n    const dataModelVersion = dataIntegrityFormat?.dataModelVersion ?? credentialOffer.dataModelVersionsSupported[0]\n    if (!credentialOffer.dataModelVersionsSupported.includes(dataModelVersion)) {\n      throw new CredoError('Cannot request credential with a data model version that was not offered.')\n    }\n\n    const credentialRequest: DataIntegrityCredentialRequest = {\n      data_model_version: dataModelVersion,\n      binding_proof: bindingProof,\n    }\n\n    const format = new DidCommCredentialFormatSpec({\n      attachmentId,\n      format: W3C_DATA_INTEGRITY_CREDENTIAL_REQUEST,\n    })\n\n    const attachment = this.getFormatData(credentialRequest, format.attachmentId)\n    return { format, attachment, appendAttachments: didCommSignedAttachment ? [didCommSignedAttachment] : undefined }\n  }\n\n  /**\n   * Starting from a request is not supported for anoncreds credentials, this method only throws an error.\n   */\n  public async createRequest(): Promise<DidCommCredentialFormatCreateReturn> {\n    throw new CredoError('Starting from a request is not supported for w3c credentials')\n  }\n\n  /**\n   * We don't have any models to validate an anoncreds request object, for now this method does nothing\n   */\n  public async processRequest(\n    _agentContext: AgentContext,\n    _options: DidCommCredentialFormatProcessOptions\n  ): Promise<void> {\n    // not needed for dataIntegrity\n  }\n\n  private async createCredentialWithAnonCredsDataIntegrityProof(\n    agentContext: AgentContext,\n    input: {\n      credentialExchangeRecord: DidCommCredentialExchangeRecord\n      anonCredsLinkSecretBindingMethod: AnonCredsLinkSecretBindingMethod\n      anonCredsLinkSecretBindingProof: AnonCredsLinkSecretDataIntegrityBindingProof\n      linkSecretMetadata: AnonCredsCredentialMetadata\n      credentialSubjectId?: string\n    }\n  ): Promise<W3cJsonLdVerifiableCredential> {\n    const {\n      credentialExchangeRecord,\n      anonCredsLinkSecretBindingMethod,\n      anonCredsLinkSecretBindingProof,\n      linkSecretMetadata,\n      credentialSubjectId,\n    } = input\n\n    const credentialAttributes = credentialExchangeRecord.credentialAttributes\n    if (!credentialAttributes) {\n      throw new CredoError(\n        `Missing required credential attribute values on credential record with id ${credentialExchangeRecord.id}`\n      )\n    }\n\n    const credentialSubjectIdAttribute = credentialAttributes.find((ca) => ca.name === 'id')\n    if (\n      credentialSubjectId &&\n      credentialSubjectIdAttribute &&\n      credentialSubjectIdAttribute.value !== credentialSubjectId\n    ) {\n      throw new CredoError('Invalid credential subject id.')\n    }\n    if (!credentialSubjectIdAttribute && credentialSubjectId) {\n      credentialAttributes.push(new DidCommCredentialPreviewAttribute({ name: 'id', value: credentialSubjectId }))\n    }\n\n    const anonCredsIssuerService =\n      agentContext.dependencyManager.resolve<AnonCredsIssuerService>(AnonCredsIssuerServiceSymbol)\n\n    const credentialDefinition = (\n      await agentContext.dependencyManager\n        .resolve(AnonCredsCredentialDefinitionRepository)\n        .getByCredentialDefinitionId(agentContext, linkSecretMetadata.credentialDefinitionId as string)\n    ).credentialDefinition.value\n\n    // We check locally for credential definition info. If it supports revocation, we need to search locally for\n    // an active revocation registry\n    let revocationRegistryDefinitionId: string | undefined\n    let revocationRegistryIndex: number | undefined\n    let revocationStatusList: AnonCredsRevocationStatusList | undefined\n\n    if (credentialDefinition.revocation) {\n      const { credentialRevocationId, revocationRegistryId } = linkSecretMetadata\n\n      if (!credentialRevocationId || !revocationRegistryId) {\n        throw new CredoError(\n          'Revocation registry definition id and revocation index are mandatory to issue AnonCreds revocable credentials'\n        )\n      }\n\n      revocationRegistryDefinitionId = revocationRegistryId\n      revocationRegistryIndex = Number(credentialRevocationId)\n\n      const revocationRegistryDefinitionPrivateRecord = await agentContext.dependencyManager\n        .resolve(AnonCredsRevocationRegistryDefinitionPrivateRepository)\n        .getByRevocationRegistryDefinitionId(agentContext, revocationRegistryDefinitionId)\n\n      if (revocationRegistryDefinitionPrivateRecord.state !== AnonCredsRevocationRegistryState.Active) {\n        throw new CredoError(\n          `Revocation registry ${revocationRegistryDefinitionId} is in ${revocationRegistryDefinitionPrivateRecord.state} state`\n        )\n      }\n\n      const revocationStatusListResult = await fetchRevocationStatusList(\n        agentContext,\n        revocationRegistryDefinitionId,\n        dateToTimestamp(new Date())\n      )\n\n      revocationStatusList = revocationStatusListResult.revocationStatusList\n    }\n\n    const { credential } = await anonCredsIssuerService.createCredential(agentContext, {\n      credentialOffer: {\n        schema_id: linkSecretMetadata.schemaId as string,\n        cred_def_id: anonCredsLinkSecretBindingMethod.credentialDefinitionId,\n        key_correctness_proof: anonCredsLinkSecretBindingMethod.keyCorrectnessProof,\n        nonce: anonCredsLinkSecretBindingMethod.nonce,\n      },\n      credentialRequest: anonCredsLinkSecretBindingProof,\n      credentialValues: convertAttributesToCredentialValues(credentialAttributes),\n      revocationRegistryDefinitionId,\n      revocationRegistryIndex,\n      revocationStatusList,\n    })\n\n    const { credentialDefinition: anoncredsCredentialDefinition } = await fetchCredentialDefinition(\n      agentContext,\n      credential.cred_def_id\n    )\n\n    const anonCredsHolderService =\n      agentContext.dependencyManager.resolve<AnonCredsHolderService>(AnonCredsHolderServiceSymbol)\n    return await anonCredsHolderService.legacyToW3cCredential(agentContext, {\n      credential,\n      issuerId: anoncredsCredentialDefinition.issuerId,\n    })\n  }\n\n  private async getSignatureMetadata(\n    agentContext: AgentContext,\n    offeredCredential: W3cCredential,\n    issuerVerificationMethod?: string\n  ) {\n    const didsApi = agentContext.dependencyManager.resolve(DidsApi)\n    const didDocument = await didsApi.resolveDidDocument(offeredCredential.issuerId)\n\n    let verificationMethod: VerificationMethod\n    if (issuerVerificationMethod) {\n      verificationMethod = didDocument.dereferenceKey(issuerVerificationMethod, ['authentication', 'assertionMethod'])\n    } else {\n      const vms = didDocument.authentication ?? didDocument.assertionMethod ?? didDocument.verificationMethod\n      if (!vms || vms.length === 0) {\n        throw new CredoError('Missing authenticationMethod, assertionMethod, and verificationMethods in did document')\n      }\n\n      if (typeof vms[0] === 'string') {\n        verificationMethod = didDocument.dereferenceVerificationMethod(vms[0])\n      } else {\n        verificationMethod = vms[0]\n      }\n    }\n\n    const signatureSuiteRegistry = agentContext.dependencyManager.resolve(SignatureSuiteRegistry)\n    const signatureSuite = signatureSuiteRegistry.getByVerificationMethodType(verificationMethod.type)\n    if (!signatureSuite) {\n      throw new CredoError(`Could not find signature suite for verification method type ${verificationMethod.type}`)\n    }\n\n    return { verificationMethod, signatureSuite, offeredCredential }\n  }\n\n  private async assertAndSetCredentialSubjectId(credential: W3cCredential, credentialSubjectId: string | undefined) {\n    if (!credentialSubjectId) return credential\n\n    if (Array.isArray(credential.credentialSubject)) {\n      throw new CredoError('Invalid credential subject relation. Cannot determine the subject to be updated.')\n    }\n\n    const subjectId = credential.credentialSubject.id\n    if (subjectId && credentialSubjectId !== subjectId) {\n      throw new CredoError('Invalid credential subject id.')\n    }\n\n    if (!subjectId) credential.credentialSubject.id = credentialSubjectId\n\n    return credential\n  }\n\n  private async signCredential(\n    agentContext: AgentContext,\n    credential: W3cCredential | W3cJsonLdVerifiableCredential,\n    issuerVerificationMethod?: string\n  ) {\n    const { signatureSuite, verificationMethod } = await this.getSignatureMetadata(\n      agentContext,\n      credential,\n      issuerVerificationMethod\n    )\n    const w3cCredentialService = agentContext.dependencyManager.resolve(W3cCredentialService)\n\n    let credentialToBeSigned = credential\n    if (credential instanceof W3cJsonLdVerifiableCredential) {\n      const { proof, ..._credentialToBeSigned } = credential\n      credentialToBeSigned = _credentialToBeSigned as W3cCredential\n    }\n\n    const w3cJsonLdVerifiableCredential = (await w3cCredentialService.signCredential(agentContext, {\n      format: ClaimFormat.LdpVc,\n      credential: credentialToBeSigned as W3cCredential,\n      proofType: signatureSuite.proofType,\n      verificationMethod: verificationMethod.id,\n    })) as W3cJsonLdVerifiableCredential\n\n    if (Array.isArray(w3cJsonLdVerifiableCredential.proof)) {\n      throw new CredoError('A newly signed credential can not have multiple proofs')\n    }\n\n    if (credential instanceof W3cJsonLdVerifiableCredential) {\n      const combinedProofs = Array.isArray(credential.proof) ? credential.proof : [credential.proof]\n      combinedProofs.push(w3cJsonLdVerifiableCredential.proof)\n      w3cJsonLdVerifiableCredential.proof = combinedProofs\n    }\n    return w3cJsonLdVerifiableCredential\n  }\n\n  public async acceptRequest(\n    agentContext: AgentContext,\n    {\n      credentialFormats,\n      credentialExchangeRecord,\n      attachmentId,\n      offerAttachment,\n      requestAttachment,\n      requestAppendAttachments,\n    }: DidCommCredentialFormatAcceptRequestOptions<DidCommDataIntegrityCredentialFormat>\n  ): Promise<DidCommCredentialFormatCreateReturn> {\n    const dataIntegrityFormat = credentialFormats?.dataIntegrity\n\n    const credentialOffer = JsonTransformer.fromJSON(offerAttachment?.getDataAsJson(), DataIntegrityCredentialOffer)\n\n    const assertedCredential = await this.assertAndSetCredentialSubjectId(\n      JsonTransformer.fromJSON(credentialOffer.credential, W3cCredential),\n      dataIntegrityFormat?.credentialSubjectId\n    )\n\n    const credentialRequest = requestAttachment.getDataAsJson<DataIntegrityCredentialRequest>()\n    if (!credentialRequest) throw new CredoError('Missing data integrity credential request in createCredential')\n\n    let signedCredential: W3cJsonLdVerifiableCredential | undefined\n    if (credentialRequest.binding_proof?.anoncreds_link_secret) {\n      if (!credentialOffer.bindingMethod?.anoncredsLinkSecret) {\n        throw new CredoError('Cannot issue credential with a binding method that was not offered')\n      }\n\n      const linkSecretMetadata =\n        credentialExchangeRecord.metadata.get<AnonCredsCredentialMetadata>(AnonCredsCredentialMetadataKey)\n      if (!linkSecretMetadata) throw new CredoError('Missing anoncreds link secret metadata')\n\n      signedCredential = await this.createCredentialWithAnonCredsDataIntegrityProof(agentContext, {\n        credentialExchangeRecord,\n        anonCredsLinkSecretBindingMethod: credentialOffer.bindingMethod.anoncredsLinkSecret,\n        linkSecretMetadata,\n        anonCredsLinkSecretBindingProof: credentialRequest.binding_proof.anoncreds_link_secret,\n        credentialSubjectId: dataIntegrityFormat?.credentialSubjectId,\n      })\n    }\n\n    if (credentialRequest.binding_proof?.didcomm_signed_attachment) {\n      if (!credentialOffer.bindingMethod?.didcommSignedAttachment) {\n        throw new CredoError('Cannot issue credential with a binding method that was not offered')\n      }\n\n      const bindingProofAttachment = requestAppendAttachments?.find(\n        (attachments) => attachments.id === credentialRequest.binding_proof?.didcomm_signed_attachment?.attachment_id\n      )\n      if (!bindingProofAttachment) throw new CredoError('Missing binding proof attachment')\n\n      const { nonce } = await this.getSignedAttachmentPayload(agentContext, bindingProofAttachment)\n      if (nonce !== credentialOffer.bindingMethod.didcommSignedAttachment.nonce) {\n        throw new CredoError('Invalid nonce in signed attachment')\n      }\n\n      signedCredential = await this.signCredential(\n        agentContext,\n        signedCredential ?? assertedCredential,\n        dataIntegrityFormat?.issuerVerificationMethod\n      )\n    }\n\n    if (\n      !credentialRequest.binding_proof?.anoncreds_link_secret &&\n      !credentialRequest.binding_proof?.didcomm_signed_attachment\n    ) {\n      signedCredential = await this.signCredential(agentContext, assertedCredential)\n    }\n\n    const format = new DidCommCredentialFormatSpec({\n      attachmentId,\n      format: W3C_DATA_INTEGRITY_CREDENTIAL,\n    })\n\n    const attachment = this.getFormatData({ credential: JsonTransformer.toJSON(signedCredential) }, format.attachmentId)\n    return { format, attachment }\n  }\n\n  private async storeAnonCredsCredential(\n    agentContext: AgentContext,\n    credentialJson: JsonObject,\n    credentialExchangeRecord: DidCommCredentialExchangeRecord,\n    linkSecretRequestMetadata: AnonCredsCredentialRequestMetadata\n  ) {\n    if (!credentialExchangeRecord.credentialAttributes) {\n      throw new CredoError('Missing credential attributes on credential record. Unable to check credential attributes')\n    }\n\n    const anonCredsHolderService =\n      agentContext.dependencyManager.resolve<AnonCredsHolderService>(AnonCredsHolderServiceSymbol)\n\n    const legacyAnonCredsCredential = await anonCredsHolderService.w3cToLegacyCredential(agentContext, {\n      credential: JsonTransformer.fromJSON(credentialJson, W3cJsonLdVerifiableCredential),\n    })\n\n    const {\n      schema_id: schemaId,\n      cred_def_id: credentialDefinitionId,\n      rev_reg_id: revocationRegistryId,\n    } = legacyAnonCredsCredential\n\n    const schemaReturn = await fetchSchema(agentContext, schemaId)\n    const credentialDefinitionReturn = await fetchCredentialDefinition(agentContext, credentialDefinitionId)\n    const revocationRegistryDefinitionReturn = revocationRegistryId\n      ? await fetchRevocationRegistryDefinition(agentContext, revocationRegistryId)\n      : undefined\n\n    // This is required to process the credential\n    const w3cJsonLdVerifiableCredential = await anonCredsHolderService.legacyToW3cCredential(agentContext, {\n      credential: legacyAnonCredsCredential,\n      issuerId: credentialJson.issuer as string,\n      processOptions: {\n        credentialRequestMetadata: linkSecretRequestMetadata,\n        credentialDefinition: credentialDefinitionReturn.credentialDefinition,\n        revocationRegistryDefinition: revocationRegistryDefinitionReturn?.revocationRegistryDefinition,\n      },\n    })\n\n    const w3cCredentialRecordId = await anonCredsHolderService.storeCredential(agentContext, {\n      credential: w3cJsonLdVerifiableCredential,\n      schema: schemaReturn.schema,\n      credentialDefinitionId,\n      credentialDefinition: credentialDefinitionReturn.credentialDefinition,\n      credentialRequestMetadata: linkSecretRequestMetadata,\n      revocationRegistry: revocationRegistryDefinitionReturn\n        ? {\n            id: revocationRegistryId as string,\n            definition: revocationRegistryDefinitionReturn?.revocationRegistryDefinition,\n          }\n        : undefined,\n    })\n\n    const w3cCredentialService = agentContext.dependencyManager.resolve(W3cCredentialService)\n    const w3cCredentialRecord = await w3cCredentialService.getCredentialRecordById(agentContext, w3cCredentialRecordId)\n\n    // If the credential is revocable, store the revocation identifiers in the credential record\n    if (revocationRegistryId) {\n      const linkSecretMetadata =\n        credentialExchangeRecord.metadata.get<AnonCredsCredentialMetadata>(AnonCredsCredentialMetadataKey)\n      if (!linkSecretMetadata) throw new CredoError('Missing link secret metadata')\n\n      const anonCredsTags = await getAnonCredsTagsFromRecord(w3cCredentialRecord)\n      if (!anonCredsTags) throw new CredoError('Missing anoncreds tags on credential record.')\n\n      linkSecretMetadata.revocationRegistryId = revocationRegistryDefinitionReturn?.revocationRegistryDefinitionId\n      linkSecretMetadata.credentialRevocationId = anonCredsTags.anonCredsCredentialRevocationId?.toString()\n      credentialExchangeRecord.metadata.set<AnonCredsCredentialMetadata>(\n        AnonCredsCredentialMetadataKey,\n        linkSecretMetadata\n      )\n    }\n\n    return w3cCredentialRecord\n  }\n\n  /**\n   * Processes an incoming credential - retrieve metadata, retrieve payload and store it in wallet\n   * @param options the issue credential message wrapped inside this object\n   * @param credentialExchangeRecord the credential exchange record for this credential\n   */\n  public async processCredential(\n    agentContext: AgentContext,\n    {\n      credentialExchangeRecord,\n      attachment,\n      requestAttachment,\n      offerAttachment,\n    }: DidCommCredentialFormatProcessCredentialOptions\n  ): Promise<void> {\n    const credentialOffer = JsonTransformer.fromJSON(offerAttachment.getDataAsJson(), DataIntegrityCredentialOffer)\n    const offeredCredentialJson = credentialOffer.credential\n\n    const credentialRequest = requestAttachment.getDataAsJson<DataIntegrityCredentialRequest>()\n    if (!credentialRequest) throw new CredoError('Missing data integrity credential request in createCredential')\n\n    if (!credentialExchangeRecord.credentialAttributes) {\n      throw new CredoError('Missing credential attributes on credential record.')\n    }\n\n    const { credential: credentialJson } = attachment.getDataAsJson<DataIntegrityCredential>()\n\n    if (Array.isArray(offeredCredentialJson.credentialSubject)) {\n      throw new CredoError('Invalid credential subject. Multiple credential subjects are not yet supported.')\n    }\n\n    const credentialSubjectMatches = Object.entries(offeredCredentialJson.credentialSubject as JsonObject).every(\n      ([key, offeredValue]) => {\n        const receivedValue = (credentialJson.credentialSubject as JsonObject)[key]\n        if (!offeredValue || !receivedValue) return false\n\n        if (typeof offeredValue === 'number' || typeof receivedValue === 'number') {\n          return offeredValue.toString() === receivedValue.toString()\n        }\n\n        return deepEquality(offeredValue, receivedValue)\n      }\n    )\n\n    if (!credentialSubjectMatches) {\n      throw new CredoError(\n        'Received invalid credential. Received credential subject does not match the offered credential subject.'\n      )\n    }\n\n    const credentialVersion = this.getCredentialVersion(credentialJson)\n    const expectedReceivedCredential = {\n      ...offeredCredentialJson,\n      '@context': credentialJson['@context'],\n      issuer: offeredCredentialJson.issuer ?? credentialJson.issuer,\n      credentialSubject: credentialJson.credentialSubject,\n      ...(credentialVersion === '1.1' && { issuanceDate: credentialJson.issuanceDate }),\n      ...(credentialVersion === '2.0' && { validFrom: credentialJson.validFrom }),\n      ...(offeredCredentialJson.credentialStatus && { credentialStatus: credentialJson.credentialStatus }),\n      proof: credentialJson.proof,\n    }\n\n    if (!deepEquality(credentialJson, expectedReceivedCredential)) {\n      throw new CredoError('Received invalid credential. Received credential does not match the offered credential')\n    }\n\n    let w3cCredentialRecord: W3cCredentialRecord\n    if (credentialRequest.binding_proof?.anoncreds_link_secret) {\n      const linkSecretRequestMetadata = credentialExchangeRecord.metadata.get<AnonCredsCredentialRequestMetadata>(\n        AnonCredsCredentialRequestMetadataKey\n      )\n      if (!linkSecretRequestMetadata) {\n        throw new CredoError('Missing link secret request metadata')\n      }\n\n      const integrityProtectedFields = ['@context', 'issuer', 'type', 'credentialSubject', 'validFrom', 'issuanceDate']\n      if (\n        Object.keys(offeredCredentialJson).some((key) => !integrityProtectedFields.includes(key) && key !== 'proof')\n      ) {\n        throw new CredoError('Credential offer contains non anoncreds integrity protected fields.')\n      }\n\n      if (!Array.isArray(offeredCredentialJson.type) || offeredCredentialJson?.type.length !== 1) {\n        throw new CredoError(`Invalid credential type. Only single credential type 'VerifiableCredential' is supported`)\n      }\n\n      w3cCredentialRecord = await this.storeAnonCredsCredential(\n        agentContext,\n        credentialJson,\n        credentialExchangeRecord,\n        linkSecretRequestMetadata\n      )\n\n      await this.assertCredentialAttributesMatchSchemaAttributes(\n        agentContext,\n        w3cCredentialRecord.firstCredential,\n        getAnonCredsTagsFromRecord(w3cCredentialRecord)?.anonCredsSchemaId as string,\n        true\n      )\n    } else {\n      const w3cCredentialService = agentContext.dependencyManager.resolve(W3cCredentialService)\n      const w3cJsonLdVerifiableCredential = JsonTransformer.fromJSON(credentialJson, W3cJsonLdVerifiableCredential)\n      w3cCredentialRecord = await w3cCredentialService.storeCredential(agentContext, {\n        record: W3cCredentialRecord.fromCredential(w3cJsonLdVerifiableCredential),\n      })\n    }\n\n    credentialExchangeRecord.credentials.push({\n      credentialRecordType: this.credentialRecordType,\n      credentialRecordId: w3cCredentialRecord.id,\n    })\n  }\n\n  public supportsFormat(format: string): boolean {\n    const supportedFormats = [\n      W3C_DATA_INTEGRITY_CREDENTIAL_REQUEST,\n      W3C_DATA_INTEGRITY_CREDENTIAL_OFFER,\n      W3C_DATA_INTEGRITY_CREDENTIAL,\n    ]\n\n    return supportedFormats.includes(format)\n  }\n\n  /**\n   * Gets the attachment object for a given attachmentId. We need to get out the correct attachmentId for\n   * anoncreds and then find the corresponding attachment (if there is one)\n   * @param formats the formats object containing the attachmentId\n   * @param messageAttachments the attachments containing the payload\n   * @returns The DidCommAttachment if found or undefined\n   *\n   */\n  public getAttachment(\n    formats: DidCommCredentialFormatSpec[],\n    messageAttachments: DidCommAttachment[]\n  ): DidCommAttachment | undefined {\n    const supportedAttachmentIds = formats.filter((f) => this.supportsFormat(f.format)).map((f) => f.attachmentId)\n    const supportedAttachment = messageAttachments.find((attachment) => supportedAttachmentIds.includes(attachment.id))\n\n    return supportedAttachment\n  }\n\n  public async deleteCredentialById(agentContext: AgentContext, credentialRecordId: string): Promise<void> {\n    const anonCredsHolderService =\n      agentContext.dependencyManager.resolve<AnonCredsHolderService>(AnonCredsHolderServiceSymbol)\n\n    await anonCredsHolderService.deleteCredential(agentContext, credentialRecordId)\n  }\n\n  public async shouldAutoRespondToProposal(\n    _agentContext: AgentContext,\n    options: DidCommCredentialFormatAutoRespondProposalOptions\n  ): Promise<boolean> {\n    throw new CredoError('Not implemented')\n  }\n\n  public async shouldAutoRespondToOffer(\n    _agentContext: AgentContext,\n    { offerAttachment }: DidCommCredentialFormatAutoRespondOfferOptions\n  ) {\n    const credentialOffer = JsonTransformer.fromJSON(offerAttachment.getDataAsJson(), DataIntegrityCredentialOffer)\n    if (!credentialOffer.bindingRequired) return true\n    return false\n  }\n\n  public async shouldAutoRespondToRequest(\n    _agentContext: AgentContext,\n    { offerAttachment, requestAttachment }: DidCommCredentialFormatAutoRespondRequestOptions\n  ) {\n    const credentialOffer = JsonTransformer.fromJSON(offerAttachment?.getDataAsJson(), DataIntegrityCredentialOffer)\n    const credentialRequest = requestAttachment.getDataAsJson<DataIntegrityCredentialRequest>()\n\n    if (\n      !credentialOffer.bindingRequired &&\n      !credentialRequest.binding_proof?.anoncreds_link_secret &&\n      !credentialRequest.binding_proof?.didcomm_signed_attachment\n    ) {\n      return true\n    }\n\n    if (\n      credentialOffer.bindingRequired &&\n      !credentialRequest.binding_proof?.anoncreds_link_secret &&\n      !credentialRequest.binding_proof?.didcomm_signed_attachment\n    ) {\n      return false\n    }\n\n    // cannot auto response credential subject id must be set manually\n    if (credentialRequest.binding_proof?.didcomm_signed_attachment) {\n      try {\n        const subjectJson = credentialOffer.credential.credentialSubject\n        const credentialSubject = JsonTransformer.fromJSON(subjectJson, W3cCredentialSubject)\n        if (credentialSubject.id === undefined) return false\n      } catch (_e) {\n        return false\n      }\n    }\n\n    const validLinkSecretRequest =\n      !credentialRequest.binding_proof?.anoncreds_link_secret ||\n      (credentialRequest.binding_proof?.anoncreds_link_secret && credentialOffer.bindingMethod?.anoncredsLinkSecret)\n\n    const validDidCommSignedAttachmetRequest =\n      !credentialRequest.binding_proof?.didcomm_signed_attachment ||\n      (credentialRequest.binding_proof?.didcomm_signed_attachment &&\n        credentialOffer.bindingMethod?.didcommSignedAttachment)\n\n    return Boolean(validLinkSecretRequest && validDidCommSignedAttachmetRequest)\n  }\n\n  public async shouldAutoRespondToCredential(\n    _agentContext: AgentContext,\n    options: DidCommCredentialFormatAutoRespondCredentialOptions\n  ) {\n    return true\n  }\n\n  private async createDataIntegrityCredentialOffer(\n    agentContext: AgentContext,\n    credentialExchangeRecord: DidCommCredentialExchangeRecord,\n    options: DidCommDataIntegrityOfferCredentialFormat\n  ): Promise<{\n    dataIntegrityCredentialOffer: DataIntegrityCredentialOffer\n    previewAttributes: DidCommCredentialPreviewAttributeOptions[]\n  }> {\n    const {\n      bindingRequired,\n      credential,\n      anonCredsLinkSecretBinding: anonCredsLinkSecretBindingMethodOptions,\n      didCommSignedAttachmentBinding: didCommSignedAttachmentBindingMethodOptions,\n    } = options\n\n    const dataModelVersionsSupported: W3C_VC_DATA_MODEL_VERSION[] = ['1.1']\n\n    // validate the credential and get the preview attributes\n    const credentialJson = credential instanceof W3cCredential ? JsonTransformer.toJSON(credential) : credential\n    const validW3cCredential = JsonTransformer.fromJSON(credentialJson, W3cCredential)\n    const previewAttributes = this.previewAttributesFromCredential(validW3cCredential)\n\n    let anonCredsLinkSecretBindingMethod: AnonCredsLinkSecretBindingMethod | undefined\n    if (anonCredsLinkSecretBindingMethodOptions) {\n      const { credentialDefinitionId, revocationRegistryDefinitionId, revocationRegistryIndex } =\n        anonCredsLinkSecretBindingMethodOptions\n\n      const anoncredsCredentialOffer = await agentContext.dependencyManager\n        .resolve<AnonCredsIssuerService>(AnonCredsIssuerServiceSymbol)\n        .createCredentialOffer(agentContext, { credentialDefinitionId })\n\n      // We check locally for credential definition info. If it supports revocation, revocationRegistryIndex\n      // and revocationRegistryDefinitionId are mandatory\n      const { credentialDefinition } = await agentContext.dependencyManager\n        .resolve(AnonCredsCredentialDefinitionRepository)\n        .getByCredentialDefinitionId(agentContext, anoncredsCredentialOffer.cred_def_id)\n\n      if (credentialDefinition.value.revocation) {\n        if (!revocationRegistryDefinitionId || !revocationRegistryIndex) {\n          throw new CredoError(\n            'AnonCreds revocable credentials require revocationRegistryDefinitionId and revocationRegistryIndex'\n          )\n        }\n\n        // Set revocation tags\n        credentialExchangeRecord.setTags({\n          anonCredsRevocationRegistryId: revocationRegistryDefinitionId,\n          anonCredsCredentialRevocationId: revocationRegistryIndex.toString(),\n        })\n      }\n\n      await this.assertCredentialAttributesMatchSchemaAttributes(\n        agentContext,\n        validW3cCredential,\n        credentialDefinition.schemaId,\n        false\n      )\n\n      anonCredsLinkSecretBindingMethod = {\n        credentialDefinitionId: anoncredsCredentialOffer.cred_def_id,\n        keyCorrectnessProof: anoncredsCredentialOffer.key_correctness_proof,\n        nonce: anoncredsCredentialOffer.nonce,\n      }\n\n      credentialExchangeRecord.metadata.set<AnonCredsCredentialMetadata>(AnonCredsCredentialMetadataKey, {\n        schemaId: anoncredsCredentialOffer.schema_id,\n        credentialDefinitionId: credentialDefinitionId,\n        credentialRevocationId: revocationRegistryIndex?.toString(),\n        revocationRegistryId: revocationRegistryDefinitionId,\n      })\n    }\n\n    let didCommSignedAttachmentBindingMethod: DidCommSignedAttachmentBindingMethod | undefined\n    if (didCommSignedAttachmentBindingMethodOptions) {\n      const kms = agentContext.dependencyManager.resolve(Kms.KeyManagementApi)\n\n      const { didMethodsSupported, algsSupported } = didCommSignedAttachmentBindingMethodOptions\n      didCommSignedAttachmentBindingMethod = {\n        didMethodsSupported:\n          didMethodsSupported ?? agentContext.dependencyManager.resolve(DidsApi).supportedResolverMethods,\n        algsSupported: algsSupported ?? this.getSupportedJwaSignatureAlgorithms(agentContext),\n        nonce: TypedArrayEncoder.toBase64Url(kms.randomBytes({ length: 32 })),\n      }\n\n      if (didCommSignedAttachmentBindingMethod.algsSupported.length === 0) {\n        throw new CredoError('No supported JWA signature algorithms found.')\n      }\n\n      if (didCommSignedAttachmentBindingMethod.didMethodsSupported.length === 0) {\n        throw new CredoError('No supported DID methods found.')\n      }\n    }\n\n    if (bindingRequired && !anonCredsLinkSecretBindingMethod && !didCommSignedAttachmentBindingMethod) {\n      throw new CredoError('Missing required binding method.')\n    }\n\n    const dataIntegrityCredentialOffer = new DataIntegrityCredentialOffer({\n      dataModelVersionsSupported,\n      bindingRequired: bindingRequired,\n      bindingMethod: {\n        anoncredsLinkSecret: anonCredsLinkSecretBindingMethod,\n        didcommSignedAttachment: didCommSignedAttachmentBindingMethod,\n      },\n      credential: credentialJson,\n    })\n\n    return { dataIntegrityCredentialOffer, previewAttributes }\n  }\n\n  private previewAttributesFromCredential(credential: W3cCredential): DidCommCredentialPreviewAttributeOptions[] {\n    if (Array.isArray(credential.credentialSubject)) {\n      throw new CredoError('Credential subject must be an object.')\n    }\n\n    const claims = {\n      ...credential.credentialSubject.claims,\n      ...(credential.credentialSubject.id && { id: credential.credentialSubject.id }),\n    } as AnonCredsClaimRecord\n    const attributes = Object.entries(claims).map(([key, value]): DidCommCredentialPreviewAttributeOptions => {\n      return { name: key, value: value.toString() }\n    })\n    return attributes\n  }\n\n  private async assertCredentialAttributesMatchSchemaAttributes(\n    agentContext: AgentContext,\n    credential: W3cCredential,\n    schemaId: string,\n    credentialSubjectIdMustBeSet: boolean\n  ) {\n    const attributes = this.previewAttributesFromCredential(credential)\n\n    const schemaReturn = await fetchSchema(agentContext, schemaId)\n\n    const enhancedAttributes = [...attributes]\n    if (\n      !credentialSubjectIdMustBeSet &&\n      schemaReturn.schema.attrNames.includes('id') &&\n      attributes.find((attr) => attr.name === 'id') === undefined\n    )\n      enhancedAttributes.push({ name: 'id', value: 'mock' })\n    assertAttributesMatchSchema(schemaReturn.schema, enhancedAttributes)\n\n    return { attributes }\n  }\n\n  /**\n   * Returns an object of type {@link DidCommAttachment} for use in credential exchange messages.\n   * It looks up the correct format identifier and encodes the data as a base64 attachment.\n   *\n   * @param data The data to include in the attach object\n   * @param id the attach id from the formats component of the message\n   */\n  public getFormatData(data: unknown, id: string): DidCommAttachment {\n    const attachment = new DidCommAttachment({\n      id,\n      mimeType: 'application/json',\n      data: {\n        base64: JsonEncoder.toBase64(data),\n      },\n    })\n\n    return attachment\n  }\n\n  /**\n   * Returns the JWA Signature Algorithms that are supported by the agent.\n   */\n  private getSupportedJwaSignatureAlgorithms(agentContext: AgentContext): Kms.KnownJwaSignatureAlgorithm[] {\n    const kms = agentContext.dependencyManager.resolve(Kms.KeyManagementApi)\n\n    const supportedSignatureAlgorithms = Object.values(Kms.KnownJwaSignatureAlgorithms).filter(\n      (algorithm) =>\n        kms.supportedBackendsForOperation({\n          operation: 'sign',\n          algorithm,\n        }).length > 0\n    )\n\n    return supportedSignatureAlgorithms\n  }\n}\n"],"mappings":"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"}
+\ No newline at end of file
+diff --git a/build/formats/index.d.mts b/build/formats/index.d.mts
+index 105ca65..3ab165b 100644
+--- a/build/formats/index.d.mts
++++ b/build/formats/index.d.mts
+@@ -2,6 +2,7 @@ import { AnonCredsDidCommAcceptOfferFormat, AnonCredsDidCommAcceptProposalFormat
+ import { AnonCredsDidCommCredentialFormatService } from "./AnonCredsDidCommCredentialFormatService.mjs";
+ import { AnonCredsCredentialsForProofRequest, AnonCredsDidCommProofFormat, AnonCredsGetCredentialsForProofRequestOptions, AnonCredsPresentationPreviewAttribute, AnonCredsPresentationPreviewPredicate, AnonCredsProposeProofFormat, AnonCredsRequestProofFormat } from "./AnonCredsDidCommProofFormat.mjs";
+ import { AnonCredsDidCommProofFormatService } from "./AnonCredsDidCommProofFormatService.mjs";
++import { AnonCredsLinkSecretBindingProvider } from "./AnonCredsLinkSecretBindingProvider.mjs";
+ import { DataIntegrityDidCommCredentialFormatService } from "./DataIntegrityDidCommCredentialFormatService.mjs";
+ import { LegacyIndyCredentialFormat, LegacyIndyCredentialRequest, LegacyIndyDidCommCredentialProposalFormat, LegacyIndyDidCommProposeCredentialFormat } from "./LegacyIndyDidCommCredentialFormat.mjs";
+ import { LegacyIndyDidCommCredentialFormatService } from "./LegacyIndyDidCommCredentialFormatService.mjs";
+diff --git a/build/formats/index.mjs b/build/formats/index.mjs
+index 291962b..439e980 100644
+--- a/build/formats/index.mjs
++++ b/build/formats/index.mjs
+@@ -1,5 +1,6 @@
+ import { AnonCredsDidCommCredentialFormatService } from "./AnonCredsDidCommCredentialFormatService.mjs";
+ import { AnonCredsDidCommProofFormatService } from "./AnonCredsDidCommProofFormatService.mjs";
++import { AnonCredsLinkSecretBindingProvider } from "./AnonCredsLinkSecretBindingProvider.mjs";
+ import { DataIntegrityDidCommCredentialFormatService } from "./DataIntegrityDidCommCredentialFormatService.mjs";
+ import { LegacyIndyDidCommCredentialFormatService } from "./LegacyIndyDidCommCredentialFormatService.mjs";
+ import { LegacyIndyDidCommProofFormatService } from "./LegacyIndyDidCommProofFormatService.mjs";
+diff --git a/build/index.d.mts b/build/index.d.mts
+index 8334e44..ccb59ad 100644
+--- a/build/index.d.mts
++++ b/build/index.d.mts
+@@ -53,6 +53,7 @@ import { AnonCredsDidCommCredentialFormatService } from "./formats/AnonCredsDidC
+ import { AnonCredsCredentialsForProofRequest, AnonCredsDidCommProofFormat, AnonCredsGetCredentialsForProofRequestOptions, AnonCredsPresentationPreviewAttribute, AnonCredsPresentationPreviewPredicate, AnonCredsProposeProofFormat, AnonCredsRequestProofFormat } from "./formats/AnonCredsDidCommProofFormat.mjs";
+ import { AnonCredsDidCommProofFormatService } from "./formats/AnonCredsDidCommProofFormatService.mjs";
+ import { DataIntegrityDidCommCredentialFormatService } from "./formats/DataIntegrityDidCommCredentialFormatService.mjs";
++import { AnonCredsLinkSecretBindingProvider } from "./formats/AnonCredsLinkSecretBindingProvider.mjs";
+ import { LegacyIndyCredentialFormat, LegacyIndyCredentialRequest, LegacyIndyDidCommCredentialProposalFormat, LegacyIndyDidCommProposeCredentialFormat } from "./formats/LegacyIndyDidCommCredentialFormat.mjs";
+ import { LegacyIndyDidCommCredentialFormatService } from "./formats/LegacyIndyDidCommCredentialFormatService.mjs";
+ import { LegacyIndyDidCommProofFormat, LegacyIndyProofRequest } from "./formats/LegacyIndyDidCommProofFormat.mjs";
+@@ -85,4 +86,4 @@ import { AnonCredsCredentialTags, getAnonCredsTagsFromRecord } from "./utils/w3c
+ import "./utils/index.mjs";
+ import { generateLegacyProverDidLikeString } from "./utils/proverDid.mjs";
+ import "reflect-metadata";
+-export { AnonCredsApi, AnonCredsAttributeInfo, AnonCredsCreateLinkSecretOptions, AnonCredsCredential, AnonCredsCredentialDefinition, AnonCredsCredentialDefinitionPrivateRecord, AnonCredsCredentialDefinitionPrivateRecordProps, AnonCredsCredentialDefinitionPrivateRepository, AnonCredsCredentialDefinitionRecord, AnonCredsCredentialDefinitionRecordMetadata, AnonCredsCredentialDefinitionRecordMetadataKeys, AnonCredsCredentialDefinitionRecordProps, AnonCredsCredentialDefinitionRepository, AnonCredsCredentialInfo, type AnonCredsCredentialMetadata, AnonCredsCredentialMetadataKey, AnonCredsCredentialOffer, AnonCredsCredentialProve, AnonCredsCredentialRecord, AnonCredsCredentialRecordProps, AnonCredsCredentialRepository, AnonCredsCredentialRequest, type AnonCredsCredentialTags, type AnonCredsCredentialValue, AnonCredsCredentialValues, AnonCredsCredentialsForProofRequest, AnonCredsDidCommAcceptOfferFormat, AnonCredsDidCommAcceptProposalFormat, AnonCredsDidCommAcceptRequestFormat, AnonCredsDidCommCredentialFormat, AnonCredsDidCommCredentialFormatService, AnonCredsDidCommCredentialProposalFormat, AnonCredsDidCommOfferCredentialFormat, AnonCredsDidCommProofFormat, AnonCredsDidCommProofFormatService, AnonCredsDidCommProposeCredentialFormat, AnonCredsError, AnonCredsGetCredentialsForProofRequestOptions, AnonCredsHolderService, AnonCredsHolderServiceSymbol, AnonCredsIssuerService, AnonCredsIssuerServiceSymbol, AnonCredsKeyCorrectnessProofRecord, AnonCredsKeyCorrectnessProofRecordProps, AnonCredsKeyCorrectnessProofRepository, AnonCredsLinkSecretBlindingData, AnonCredsLinkSecretRecord, AnonCredsLinkSecretRecordProps, AnonCredsLinkSecretRepository, AnonCredsModule, AnonCredsModuleConfig, type AnonCredsModuleConfigOptions, AnonCredsNonRevokedInterval, AnonCredsPredicateType, AnonCredsPresentationPreviewAttribute, AnonCredsPresentationPreviewPredicate, AnonCredsProof, AnonCredsProofRequest, AnonCredsProofRequestRestriction, AnonCredsProposeProofFormat, AnonCredsRegisterCredentialDefinitionOptions, AnonCredsRegisterRevocationRegistryDefinitionOptions, AnonCredsRegisterRevocationStatusListOptions, AnonCredsRegistry, AnonCredsRegistryService, AnonCredsRequestProofFormat, AnonCredsRequestedAttribute, AnonCredsRequestedAttributeMatch, AnonCredsRequestedPredicate, AnonCredsRequestedPredicateMatch, AnonCredsResolutionMetadata, AnonCredsRestrictionWrapper, AnonCredsRevocationRegistryDefinition, AnonCredsRevocationRegistryDefinitionPrivateRecord, AnonCredsRevocationRegistryDefinitionPrivateRecordProps, AnonCredsRevocationRegistryDefinitionPrivateRepository, AnonCredsRevocationRegistryDefinitionRecord, AnonCredsRevocationRegistryDefinitionRecordMetadata, AnonCredsRevocationRegistryDefinitionRecordMetadataKeys, AnonCredsRevocationRegistryDefinitionRecordProps, AnonCredsRevocationRegistryDefinitionRepository, AnonCredsRevocationRegistryDefinitionValue, AnonCredsRevocationRegistryState, AnonCredsRevocationStatusList, AnonCredsRevocationStatusListWithOptionalTimestamp, AnonCredsRevocationStatusListWithoutTimestamp, AnonCredsRsError, AnonCredsSchema, AnonCredsSchemaRecord, AnonCredsSchemaRecordProps, AnonCredsSchemaRepository, AnonCredsSelectedCredentials, AnonCredsStoreRecordError, AnonCredsUpdateRevocationStatusListOptions, AnonCredsVerifierService, AnonCredsVerifierServiceSymbol, BasicTailsFileService, CreateCredentialDefinitionOptions, CreateCredentialDefinitionReturn, CreateCredentialOfferOptions, CreateCredentialOptions, CreateCredentialRequestOptions, CreateCredentialRequestReturn, CreateCredentialReturn, CreateLinkSecretOptions, CreateLinkSecretReturn, CreateProofOptions, CreateRevocationRegistryDefinitionOptions, CreateRevocationRegistryDefinitionReturn, CreateRevocationStatusListOptions, CreateSchemaOptions, CreateW3cPresentationOptions, CustomAnonCredsCredentialTags, CustomAnonCredsLinkSecretTags, DataIntegrityDidCommCredentialFormatService, DefaultAnonCredsCredentialDefinitionPrivateTags, DefaultAnonCredsCredentialDefinitionTags, DefaultAnonCredsCredentialTags, DefaultAnonCredsKeyCorrectnessProofPrivateTags, DefaultAnonCredsLinkSecretTags, DefaultAnonCredsRevocationRegistryDefinitionTags, DefaultAnonCredsRevocationRegistryPrivateTags, DefaultAnonCredsSchemaTags, DidCommCredentialV1AckMessage, DidCommCredentialV1Preview, DidCommCredentialV1ProblemReportMessage, DidCommCredentialV1Protocol, DidCommCredentialV1ProtocolConfig, DidCommIssueCredentialV1Message, DidCommOfferCredentialV1Message, DidCommPresentationV1AckMessage, DidCommPresentationV1Message, DidCommPresentationV1MessageOptions, DidCommPresentationV1Preview, DidCommPresentationV1PreviewAttribute, DidCommPresentationV1PreviewAttributeOptions, DidCommPresentationV1PreviewPredicate, DidCommPresentationV1PreviewPredicateOptions, DidCommPresentationV1ProblemReportError, DidCommPresentationV1ProblemReportMessage, DidCommPresentationV1ProblemReportMessageOptions, DidCommProofV1Protocol, DidCommProofV1ProtocolConfig, DidCommProposeCredentialV1Message, DidCommProposeCredentialV1MessageOptions, DidCommProposePresentationV1Message, DidCommProposePresentationV1MessageOptions, DidCommRequestCredentialV1Message, DidCommRequestCredentialV1MessageOptions, DidCommRequestPresentationV1Message, DidCommRequestPresentationV1MessageOptions, GetCredentialDefinitionReturn, GetCredentialOptions, GetCredentialsForProofRequestOptions, GetCredentialsForProofRequestReturn, GetCredentialsOptions, GetRevocationRegistryDefinitionReturn, GetRevocationStatusListReturn, GetSchemaReturn, INDY_CREDENTIAL_ATTACHMENT_ID, INDY_CREDENTIAL_OFFER_ATTACHMENT_ID, INDY_CREDENTIAL_REQUEST_ATTACHMENT_ID, INDY_PROOF_ATTACHMENT_ID, INDY_PROOF_REQUEST_ATTACHMENT_ID, LegacyIndyCredentialFormat, LegacyIndyCredentialRequest, LegacyIndyDidCommCredentialFormatService, LegacyIndyDidCommCredentialProposalFormat, LegacyIndyDidCommProofFormat, LegacyIndyDidCommProofFormatService, LegacyIndyDidCommProposeCredentialFormat, LegacyIndyProofRequest, LegacyToW3cCredentialOptions, ReferentWalletQuery, RegisterCredentialDefinitionOptions, RegisterCredentialDefinitionReturn, RegisterCredentialDefinitionReturnStateAction, RegisterCredentialDefinitionReturnStateFailed, RegisterCredentialDefinitionReturnStateFinished, RegisterCredentialDefinitionReturnStateWait, RegisterRevocationRegistryDefinitionOptions, RegisterRevocationRegistryDefinitionReturn, RegisterRevocationRegistryDefinitionReturnStateAction, RegisterRevocationRegistryDefinitionReturnStateFailed, RegisterRevocationRegistryDefinitionReturnStateFinished, RegisterRevocationRegistryDefinitionReturnStateWait, RegisterRevocationStatusListOptions, RegisterRevocationStatusListReturn, RegisterRevocationStatusListReturnStateAction, RegisterRevocationStatusListReturnStateFailed, RegisterRevocationStatusListReturnStateFinished, RegisterRevocationStatusListReturnStateWait, RegisterSchemaOptions, RegisterSchemaReturn, RegisterSchemaReturnStateAction, RegisterSchemaReturnStateFailed, RegisterSchemaReturnStateFinished, RegisterSchemaReturnStateWait, StoreCredentialOptions, TailsFileService, UpdateRevocationStatusListOptions, V1CredentialAckMessageOptions, V1CredentialProblemReportMessageOptions, V1IssueCredentialMessageOptions, V1OfferCredentialMessage, V1PresentationPreviewOptions, VerifyProofOptions, VerifyW3cPresentationOptions, W3cAnonCredsCredentialMetadataKey, W3cToLegacyCredentialOptions, WalletQuery, anonCredsPredicateType, assertBestPracticeRevocationInterval, dateToTimestamp, didIndyCredentialDefinitionIdRegex, didIndyRegex, didIndyRevocationRegistryIdRegex, didIndySchemaIdRegex, fetchCredentialDefinition, fetchRevocationRegistryDefinition, fetchRevocationStatusList, fetchSchema, generateLegacyProverDidLikeString, getAnonCredsTagsFromRecord, getCredentialsForAnonCredsProofRequest, getIndyNamespaceFromIndyDid, getQualifiedDidIndyCredentialDefinition, getQualifiedDidIndyDid, getQualifiedDidIndyRevocationRegistryDefinition, getQualifiedDidIndySchema, getUnQualifiedDidIndyDid, getUnqualifiedCredentialDefinitionId, getUnqualifiedDidIndyCredentialDefinition, getUnqualifiedDidIndyRevocationRegistryDefinition, getUnqualifiedDidIndySchema, getUnqualifiedRevocationRegistryDefinitionId, getUnqualifiedSchemaId, isDidIndyCredentialDefinitionId, isDidIndyRevocationRegistryId, isDidIndySchemaId, isIndyDid, isQualifiedDidIndyCredentialDefinition, isQualifiedDidIndySchema, isQualifiedRevocationRegistryDefinition, isUnqualifiedCredentialDefinitionId, isUnqualifiedDidIndyCredentialDefinition, isUnqualifiedDidIndyRevocationRegistryDefinition, isUnqualifiedDidIndySchema, isUnqualifiedIndyDid, isUnqualifiedRevocationRegistryId, isUnqualifiedSchemaId, parseIndyCredentialDefinitionId, parseIndyDid, parseIndyRevocationRegistryId, parseIndySchemaId, storeLinkSecret, unqualifiedCredentialDefinitionIdRegex, unqualifiedIndyDidRegex, unqualifiedRevocationRegistryIdRegex, unqualifiedSchemaIdRegex, unqualifiedSchemaVersionRegex };
+\ No newline at end of file
++export { AnonCredsApi, AnonCredsAttributeInfo, AnonCredsCreateLinkSecretOptions, AnonCredsCredential, AnonCredsCredentialDefinition, AnonCredsCredentialDefinitionPrivateRecord, AnonCredsCredentialDefinitionPrivateRecordProps, AnonCredsCredentialDefinitionPrivateRepository, AnonCredsCredentialDefinitionRecord, AnonCredsCredentialDefinitionRecordMetadata, AnonCredsCredentialDefinitionRecordMetadataKeys, AnonCredsCredentialDefinitionRecordProps, AnonCredsCredentialDefinitionRepository, AnonCredsCredentialInfo, AnonCredsCredentialMetadataKey, AnonCredsCredentialOffer, AnonCredsCredentialProve, AnonCredsCredentialRecord, AnonCredsCredentialRecordProps, AnonCredsCredentialRepository, AnonCredsCredentialRequest, AnonCredsCredentialValues, AnonCredsCredentialsForProofRequest, AnonCredsDidCommAcceptOfferFormat, AnonCredsDidCommAcceptProposalFormat, AnonCredsDidCommAcceptRequestFormat, AnonCredsDidCommCredentialFormat, AnonCredsDidCommCredentialFormatService, AnonCredsDidCommCredentialProposalFormat, AnonCredsDidCommOfferCredentialFormat, AnonCredsDidCommProofFormat, AnonCredsDidCommProofFormatService, AnonCredsDidCommProposeCredentialFormat, AnonCredsError, AnonCredsGetCredentialsForProofRequestOptions, AnonCredsHolderService, AnonCredsHolderServiceSymbol, AnonCredsIssuerService, AnonCredsIssuerServiceSymbol, AnonCredsKeyCorrectnessProofRecord, AnonCredsKeyCorrectnessProofRecordProps, AnonCredsKeyCorrectnessProofRepository, AnonCredsLinkSecretBindingProvider, AnonCredsLinkSecretBlindingData, AnonCredsLinkSecretRecord, AnonCredsLinkSecretRecordProps, AnonCredsLinkSecretRepository, AnonCredsModule, AnonCredsModuleConfig, AnonCredsNonRevokedInterval, AnonCredsPredicateType, AnonCredsPresentationPreviewAttribute, AnonCredsPresentationPreviewPredicate, AnonCredsProof, AnonCredsProofRequest, AnonCredsProofRequestRestriction, AnonCredsProposeProofFormat, AnonCredsRegisterCredentialDefinitionOptions, AnonCredsRegisterRevocationRegistryDefinitionOptions, AnonCredsRegisterRevocationStatusListOptions, AnonCredsRegistry, AnonCredsRegistryService, AnonCredsRequestProofFormat, AnonCredsRequestedAttribute, AnonCredsRequestedAttributeMatch, AnonCredsRequestedPredicate, AnonCredsRequestedPredicateMatch, AnonCredsResolutionMetadata, AnonCredsRestrictionWrapper, AnonCredsRevocationRegistryDefinition, AnonCredsRevocationRegistryDefinitionPrivateRecord, AnonCredsRevocationRegistryDefinitionPrivateRecordProps, AnonCredsRevocationRegistryDefinitionPrivateRepository, AnonCredsRevocationRegistryDefinitionRecord, AnonCredsRevocationRegistryDefinitionRecordMetadata, AnonCredsRevocationRegistryDefinitionRecordMetadataKeys, AnonCredsRevocationRegistryDefinitionRecordProps, AnonCredsRevocationRegistryDefinitionRepository, AnonCredsRevocationRegistryDefinitionValue, AnonCredsRevocationRegistryState, AnonCredsRevocationStatusList, AnonCredsRevocationStatusListWithOptionalTimestamp, AnonCredsRevocationStatusListWithoutTimestamp, AnonCredsRsError, AnonCredsSchema, AnonCredsSchemaRecord, AnonCredsSchemaRecordProps, AnonCredsSchemaRepository, AnonCredsSelectedCredentials, AnonCredsStoreRecordError, AnonCredsUpdateRevocationStatusListOptions, AnonCredsVerifierService, AnonCredsVerifierServiceSymbol, BasicTailsFileService, CreateCredentialDefinitionOptions, CreateCredentialDefinitionReturn, CreateCredentialOfferOptions, CreateCredentialOptions, CreateCredentialRequestOptions, CreateCredentialRequestReturn, CreateCredentialReturn, CreateLinkSecretOptions, CreateLinkSecretReturn, CreateProofOptions, CreateRevocationRegistryDefinitionOptions, CreateRevocationRegistryDefinitionReturn, CreateRevocationStatusListOptions, CreateSchemaOptions, CreateW3cPresentationOptions, CustomAnonCredsCredentialTags, CustomAnonCredsLinkSecretTags, DataIntegrityDidCommCredentialFormatService, DefaultAnonCredsCredentialDefinitionPrivateTags, DefaultAnonCredsCredentialDefinitionTags, DefaultAnonCredsCredentialTags, DefaultAnonCredsKeyCorrectnessProofPrivateTags, DefaultAnonCredsLinkSecretTags, DefaultAnonCredsRevocationRegistryDefinitionTags, DefaultAnonCredsRevocationRegistryPrivateTags, DefaultAnonCredsSchemaTags, DidCommCredentialV1AckMessage, DidCommCredentialV1Preview, DidCommCredentialV1ProblemReportMessage, DidCommCredentialV1Protocol, DidCommCredentialV1ProtocolConfig, DidCommIssueCredentialV1Message, DidCommOfferCredentialV1Message, DidCommPresentationV1AckMessage, DidCommPresentationV1Message, DidCommPresentationV1MessageOptions, DidCommPresentationV1Preview, DidCommPresentationV1PreviewAttribute, DidCommPresentationV1PreviewAttributeOptions, DidCommPresentationV1PreviewPredicate, DidCommPresentationV1PreviewPredicateOptions, DidCommPresentationV1ProblemReportError, DidCommPresentationV1ProblemReportMessage, DidCommPresentationV1ProblemReportMessageOptions, DidCommProofV1Protocol, DidCommProofV1ProtocolConfig, DidCommProposeCredentialV1Message, DidCommProposeCredentialV1MessageOptions, DidCommProposePresentationV1Message, DidCommProposePresentationV1MessageOptions, DidCommRequestCredentialV1Message, DidCommRequestCredentialV1MessageOptions, DidCommRequestPresentationV1Message, DidCommRequestPresentationV1MessageOptions, GetCredentialDefinitionReturn, GetCredentialOptions, GetCredentialsForProofRequestOptions, GetCredentialsForProofRequestReturn, GetCredentialsOptions, GetRevocationRegistryDefinitionReturn, GetRevocationStatusListReturn, GetSchemaReturn, INDY_CREDENTIAL_ATTACHMENT_ID, INDY_CREDENTIAL_OFFER_ATTACHMENT_ID, INDY_CREDENTIAL_REQUEST_ATTACHMENT_ID, INDY_PROOF_ATTACHMENT_ID, INDY_PROOF_REQUEST_ATTACHMENT_ID, LegacyIndyCredentialFormat, LegacyIndyCredentialRequest, LegacyIndyDidCommCredentialFormatService, LegacyIndyDidCommCredentialProposalFormat, LegacyIndyDidCommProofFormat, LegacyIndyDidCommProofFormatService, LegacyIndyDidCommProposeCredentialFormat, LegacyIndyProofRequest, LegacyToW3cCredentialOptions, ReferentWalletQuery, RegisterCredentialDefinitionOptions, RegisterCredentialDefinitionReturn, RegisterCredentialDefinitionReturnStateAction, RegisterCredentialDefinitionReturnStateFailed, RegisterCredentialDefinitionReturnStateFinished, RegisterCredentialDefinitionReturnStateWait, RegisterRevocationRegistryDefinitionOptions, RegisterRevocationRegistryDefinitionReturn, RegisterRevocationRegistryDefinitionReturnStateAction, RegisterRevocationRegistryDefinitionReturnStateFailed, RegisterRevocationRegistryDefinitionReturnStateFinished, RegisterRevocationRegistryDefinitionReturnStateWait, RegisterRevocationStatusListOptions, RegisterRevocationStatusListReturn, RegisterRevocationStatusListReturnStateAction, RegisterRevocationStatusListReturnStateFailed, RegisterRevocationStatusListReturnStateFinished, RegisterRevocationStatusListReturnStateWait, RegisterSchemaOptions, RegisterSchemaReturn, RegisterSchemaReturnStateAction, RegisterSchemaReturnStateFailed, RegisterSchemaReturnStateFinished, RegisterSchemaReturnStateWait, StoreCredentialOptions, TailsFileService, UpdateRevocationStatusListOptions, V1CredentialAckMessageOptions, V1CredentialProblemReportMessageOptions, V1IssueCredentialMessageOptions, V1OfferCredentialMessage, V1PresentationPreviewOptions, VerifyProofOptions, VerifyW3cPresentationOptions, W3cAnonCredsCredentialMetadataKey, W3cToLegacyCredentialOptions, WalletQuery, anonCredsPredicateType, assertBestPracticeRevocationInterval, dateToTimestamp, didIndyCredentialDefinitionIdRegex, didIndyRegex, didIndyRevocationRegistryIdRegex, didIndySchemaIdRegex, fetchCredentialDefinition, fetchRevocationRegistryDefinition, fetchRevocationStatusList, fetchSchema, generateLegacyProverDidLikeString, getAnonCredsTagsFromRecord, getCredentialsForAnonCredsProofRequest, getIndyNamespaceFromIndyDid, getQualifiedDidIndyCredentialDefinition, getQualifiedDidIndyDid, getQualifiedDidIndyRevocationRegistryDefinition, getQualifiedDidIndySchema, getUnQualifiedDidIndyDid, getUnqualifiedCredentialDefinitionId, getUnqualifiedDidIndyCredentialDefinition, getUnqualifiedDidIndyRevocationRegistryDefinition, getUnqualifiedDidIndySchema, getUnqualifiedRevocationRegistryDefinitionId, getUnqualifiedSchemaId, isDidIndyCredentialDefinitionId, isDidIndyRevocationRegistryId, isDidIndySchemaId, isIndyDid, isQualifiedDidIndyCredentialDefinition, isQualifiedDidIndySchema, isQualifiedRevocationRegistryDefinition, isUnqualifiedCredentialDefinitionId, isUnqualifiedDidIndyCredentialDefinition, isUnqualifiedDidIndyRevocationRegistryDefinition, isUnqualifiedDidIndySchema, isUnqualifiedIndyDid, isUnqualifiedRevocationRegistryId, isUnqualifiedSchemaId, parseIndyCredentialDefinitionId, parseIndyDid, parseIndyRevocationRegistryId, parseIndySchemaId, storeLinkSecret, type AnonCredsCredentialMetadata, type AnonCredsCredentialTags, type AnonCredsCredentialValue, type AnonCredsModuleConfigOptions, unqualifiedCredentialDefinitionIdRegex, unqualifiedIndyDidRegex, unqualifiedRevocationRegistryIdRegex, unqualifiedSchemaIdRegex, unqualifiedSchemaVersionRegex };
+\ No newline at end of file
+diff --git a/build/index.mjs b/build/index.mjs
+index 420d4f3..b4f4e99 100644
+--- a/build/index.mjs
++++ b/build/index.mjs
+@@ -45,6 +45,7 @@ import { AnonCredsModule } from "./AnonCredsModule.mjs";
+ import { AnonCredsDidCommCredentialFormatService } from "./formats/AnonCredsDidCommCredentialFormatService.mjs";
+ import { AnonCredsDidCommProofFormatService } from "./formats/AnonCredsDidCommProofFormatService.mjs";
+ import { DataIntegrityDidCommCredentialFormatService } from "./formats/DataIntegrityDidCommCredentialFormatService.mjs";
++import { AnonCredsLinkSecretBindingProvider } from "./formats/AnonCredsLinkSecretBindingProvider.mjs";
+ import { generateLegacyProverDidLikeString } from "./utils/proverDid.mjs";
+ import { LegacyIndyDidCommCredentialFormatService } from "./formats/LegacyIndyDidCommCredentialFormatService.mjs";
+ import { LegacyIndyDidCommProofFormatService } from "./formats/LegacyIndyDidCommProofFormatService.mjs";
+@@ -68,4 +69,4 @@ import { DidCommProofV1Protocol } from "./protocols/proofs/v1/DidCommProofV1Prot
+ import "./protocols/index.mjs";
+ import "reflect-metadata";
+ 
+-export { AnonCredsApi, AnonCredsCredentialDefinitionPrivateRecord, AnonCredsCredentialDefinitionPrivateRepository, AnonCredsCredentialDefinitionRecord, AnonCredsCredentialDefinitionRecordMetadataKeys, AnonCredsCredentialDefinitionRepository, AnonCredsCredentialMetadataKey, AnonCredsCredentialRecord, AnonCredsCredentialRepository, AnonCredsDidCommCredentialFormatService, AnonCredsDidCommProofFormatService, AnonCredsError, AnonCredsHolderServiceSymbol, AnonCredsIssuerServiceSymbol, AnonCredsKeyCorrectnessProofRecord, AnonCredsKeyCorrectnessProofRepository, AnonCredsLinkSecretRecord, AnonCredsLinkSecretRepository, AnonCredsModule, AnonCredsModuleConfig, AnonCredsRegistryService, AnonCredsRestrictionWrapper, AnonCredsRevocationRegistryDefinitionPrivateRecord, AnonCredsRevocationRegistryDefinitionPrivateRepository, AnonCredsRevocationRegistryDefinitionRecord, AnonCredsRevocationRegistryDefinitionRecordMetadataKeys, AnonCredsRevocationRegistryDefinitionRepository, AnonCredsRevocationRegistryState, AnonCredsRsError, AnonCredsSchemaRecord, AnonCredsSchemaRepository, AnonCredsStoreRecordError, AnonCredsVerifierServiceSymbol, BasicTailsFileService, DataIntegrityDidCommCredentialFormatService, DidCommCredentialV1AckMessage, DidCommCredentialV1Preview, DidCommCredentialV1ProblemReportMessage, DidCommCredentialV1Protocol, DidCommIssueCredentialV1Message, DidCommPresentationV1AckMessage, DidCommPresentationV1Message, DidCommPresentationV1Preview, DidCommPresentationV1PreviewAttribute, DidCommPresentationV1PreviewPredicate, DidCommPresentationV1ProblemReportError, DidCommPresentationV1ProblemReportMessage, DidCommProofV1Protocol, DidCommProposeCredentialV1Message, DidCommProposePresentationV1Message, DidCommRequestCredentialV1Message, DidCommRequestPresentationV1Message, INDY_CREDENTIAL_ATTACHMENT_ID, INDY_CREDENTIAL_OFFER_ATTACHMENT_ID, INDY_CREDENTIAL_REQUEST_ATTACHMENT_ID, INDY_PROOF_ATTACHMENT_ID, INDY_PROOF_REQUEST_ATTACHMENT_ID, LegacyIndyDidCommCredentialFormatService, LegacyIndyDidCommProofFormatService, V1OfferCredentialMessage, W3cAnonCredsCredentialMetadataKey, anonCredsPredicateType, assertBestPracticeRevocationInterval, dateToTimestamp, didIndyCredentialDefinitionIdRegex, didIndyRegex, didIndyRevocationRegistryIdRegex, didIndySchemaIdRegex, fetchCredentialDefinition, fetchRevocationRegistryDefinition, fetchRevocationStatusList, fetchSchema, generateLegacyProverDidLikeString, getAnonCredsTagsFromRecord, getCredentialsForAnonCredsProofRequest, getIndyNamespaceFromIndyDid, getQualifiedDidIndyCredentialDefinition, getQualifiedDidIndyDid, getQualifiedDidIndyRevocationRegistryDefinition, getQualifiedDidIndySchema, getUnQualifiedDidIndyDid, getUnqualifiedCredentialDefinitionId, getUnqualifiedDidIndyCredentialDefinition, getUnqualifiedDidIndyRevocationRegistryDefinition, getUnqualifiedDidIndySchema, getUnqualifiedRevocationRegistryDefinitionId, getUnqualifiedSchemaId, isDidIndyCredentialDefinitionId, isDidIndyRevocationRegistryId, isDidIndySchemaId, isIndyDid, isQualifiedDidIndyCredentialDefinition, isQualifiedDidIndySchema, isQualifiedRevocationRegistryDefinition, isUnqualifiedCredentialDefinitionId, isUnqualifiedDidIndyCredentialDefinition, isUnqualifiedDidIndyRevocationRegistryDefinition, isUnqualifiedDidIndySchema, isUnqualifiedIndyDid, isUnqualifiedRevocationRegistryId, isUnqualifiedSchemaId, parseIndyCredentialDefinitionId, parseIndyDid, parseIndyRevocationRegistryId, parseIndySchemaId, storeLinkSecret, unqualifiedCredentialDefinitionIdRegex, unqualifiedIndyDidRegex, unqualifiedRevocationRegistryIdRegex, unqualifiedSchemaIdRegex, unqualifiedSchemaVersionRegex };
+\ No newline at end of file
++export { AnonCredsApi, AnonCredsCredentialDefinitionPrivateRecord, AnonCredsCredentialDefinitionPrivateRepository, AnonCredsCredentialDefinitionRecord, AnonCredsCredentialDefinitionRecordMetadataKeys, AnonCredsCredentialDefinitionRepository, AnonCredsCredentialMetadataKey, AnonCredsCredentialRecord, AnonCredsCredentialRepository, AnonCredsDidCommCredentialFormatService, AnonCredsDidCommProofFormatService, AnonCredsError, AnonCredsHolderServiceSymbol, AnonCredsIssuerServiceSymbol, AnonCredsKeyCorrectnessProofRecord, AnonCredsKeyCorrectnessProofRepository, AnonCredsLinkSecretBindingProvider, AnonCredsLinkSecretRecord, AnonCredsLinkSecretRepository, AnonCredsModule, AnonCredsModuleConfig, AnonCredsRegistryService, AnonCredsRestrictionWrapper, AnonCredsRevocationRegistryDefinitionPrivateRecord, AnonCredsRevocationRegistryDefinitionPrivateRepository, AnonCredsRevocationRegistryDefinitionRecord, AnonCredsRevocationRegistryDefinitionRecordMetadataKeys, AnonCredsRevocationRegistryDefinitionRepository, AnonCredsRevocationRegistryState, AnonCredsRsError, AnonCredsSchemaRecord, AnonCredsSchemaRepository, AnonCredsStoreRecordError, AnonCredsVerifierServiceSymbol, BasicTailsFileService, DataIntegrityDidCommCredentialFormatService, DidCommCredentialV1AckMessage, DidCommCredentialV1Preview, DidCommCredentialV1ProblemReportMessage, DidCommCredentialV1Protocol, DidCommIssueCredentialV1Message, DidCommPresentationV1AckMessage, DidCommPresentationV1Message, DidCommPresentationV1Preview, DidCommPresentationV1PreviewAttribute, DidCommPresentationV1PreviewPredicate, DidCommPresentationV1ProblemReportError, DidCommPresentationV1ProblemReportMessage, DidCommProofV1Protocol, DidCommProposeCredentialV1Message, DidCommProposePresentationV1Message, DidCommRequestCredentialV1Message, DidCommRequestPresentationV1Message, INDY_CREDENTIAL_ATTACHMENT_ID, INDY_CREDENTIAL_OFFER_ATTACHMENT_ID, INDY_CREDENTIAL_REQUEST_ATTACHMENT_ID, INDY_PROOF_ATTACHMENT_ID, INDY_PROOF_REQUEST_ATTACHMENT_ID, LegacyIndyDidCommCredentialFormatService, LegacyIndyDidCommProofFormatService, V1OfferCredentialMessage, W3cAnonCredsCredentialMetadataKey, anonCredsPredicateType, assertBestPracticeRevocationInterval, dateToTimestamp, didIndyCredentialDefinitionIdRegex, didIndyRegex, didIndyRevocationRegistryIdRegex, didIndySchemaIdRegex, fetchCredentialDefinition, fetchRevocationRegistryDefinition, fetchRevocationStatusList, fetchSchema, generateLegacyProverDidLikeString, getAnonCredsTagsFromRecord, getCredentialsForAnonCredsProofRequest, getIndyNamespaceFromIndyDid, getQualifiedDidIndyCredentialDefinition, getQualifiedDidIndyDid, getQualifiedDidIndyRevocationRegistryDefinition, getQualifiedDidIndySchema, getUnQualifiedDidIndyDid, getUnqualifiedCredentialDefinitionId, getUnqualifiedDidIndyCredentialDefinition, getUnqualifiedDidIndyRevocationRegistryDefinition, getUnqualifiedDidIndySchema, getUnqualifiedRevocationRegistryDefinitionId, getUnqualifiedSchemaId, isDidIndyCredentialDefinitionId, isDidIndyRevocationRegistryId, isDidIndySchemaId, isIndyDid, isQualifiedDidIndyCredentialDefinition, isQualifiedDidIndySchema, isQualifiedRevocationRegistryDefinition, isUnqualifiedCredentialDefinitionId, isUnqualifiedDidIndyCredentialDefinition, isUnqualifiedDidIndyRevocationRegistryDefinition, isUnqualifiedDidIndySchema, isUnqualifiedIndyDid, isUnqualifiedRevocationRegistryId, isUnqualifiedSchemaId, parseIndyCredentialDefinitionId, parseIndyDid, parseIndyRevocationRegistryId, parseIndySchemaId, storeLinkSecret, unqualifiedCredentialDefinitionIdRegex, unqualifiedIndyDidRegex, unqualifiedRevocationRegistryIdRegex, unqualifiedSchemaIdRegex, unqualifiedSchemaVersionRegex };
+\ No newline at end of file

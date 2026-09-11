@@ -16,6 +16,12 @@ export { CachedWebDidResolver } from './did/CachedWebDidResolver'
 export { SafeWebVhDidResolver } from './did/SafeWebVhDidResolver'
 export { WebDidRegistrar } from './did/WebDidRegistrar'
 export { getLegacyDidDocument } from './did/legacyDidWeb'
+export {
+  applyArtifactServices,
+  artifactServicesMatch,
+  removeArtifactServices,
+} from './did/artifactServices'
+export type { ArtifactServiceMethod, ArtifactServiceOptions } from './did/artifactServices'
 export { applyAdminApiServiceEntry } from './did/adminApiService'
 
 // Transports

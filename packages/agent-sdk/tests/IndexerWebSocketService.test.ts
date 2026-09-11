@@ -5,6 +5,7 @@ import { IndexerWebSocketService } from '../src/blockchain/IndexerWebSocketServi
 import { loadSyncState, saveSyncState } from '../src/blockchain/VeranaHelpers'
 import { IndexerHandlerRegistry } from '../src/blockchain/handlers/IndexerHandlerRegistry'
 import { IndexerActivity, IndexerEventRecord } from '../src/blockchain/types'
+import { VsAgentEventTypes } from '../src/events'
 import { fetchJson } from '../src/utils/util'
 
 const { FakeWebSocket } = vi.hoisted(() => {
@@ -66,6 +67,8 @@ vi.mock('../src/utils/util', async importOriginal => {
 
 const fetchJsonMock = vi.mocked(fetchJson)
 
+const emitted: { type: string; payload: { event: any } }[] = []
+
 function makeAgent(): VsAgent {
   const store = new Map<string, { id: string; content: unknown }>()
   const logger = {
@@ -80,6 +83,10 @@ function makeAgent(): VsAgent {
   return {
     did: 'did:web:agent.test',
     config: { logger },
+    context: {},
+    events: {
+      emit: (_context: unknown, event: { type: string; payload: { event: any } }) => emitted.push(event),
+    },
     genericRecords: {
       findById: async (id: string) => store.get(id) ?? null,
       update: async (record: { id: string; content: unknown }) => {
@@ -137,6 +144,7 @@ describe('IndexerWebSocketService', () => {
 
   beforeEach(() => {
     FakeWebSocket.reset()
+    emitted.length = 0
     agent = makeAgent()
     registry = new IndexerHandlerRegistry()
     fetchJsonMock.mockReset()
@@ -403,6 +411,33 @@ describe('IndexerWebSocketService', () => {
     await new Promise(r => setTimeout(r, 30))
     expect(dispatched).toEqual([])
     expect((await loadSyncState(agent)).lastBlockHeight).toBe(100)
+  })
+
+  it('notifies for an event the agent cannot resolve, without changes', async () => {
+    await startWith(async () => undefined)
+    const ws = lastWs()
+    ws.emit('message', readyFrame())
+    const event = mkEvent({ block_height: 10, tx_hash: 'aa' })
+    event.payload.entity_id = undefined
+    ws.emit('message', blockFrame(11, [event]))
+
+    await new Promise(r => setTimeout(r, 30))
+    const notifications = emitted.filter(e => e.type === VsAgentEventTypes.IndexerNotification)
+    expect(notifications).toHaveLength(1)
+    expect(notifications[0].payload.event).toMatchObject({
+      type: 'vpr.notification',
+      eventType: 'TestMsg',
+      did: 'did:web:agent.test',
+      blockHeight: 10,
+      txHash: 'aa',
+      payload: {
+        module: 'participant',
+        messageType: '/verana.pp.v1.Test',
+        sender: 'verana1sender',
+        entityId: undefined,
+      },
+    })
+    expect(notifications[0].payload.event.changes).toBeUndefined()
   })
 
   it('reconnects when an entity fetch fails so a hung request cannot wedge the queue', async () => {

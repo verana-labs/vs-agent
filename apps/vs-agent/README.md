@@ -22,7 +22,8 @@ These variables are usually important for every deployment, since they define ho
 | AGENT_PUBLIC_DID_METHOD    | DID method for the agent's public DID: `webvh` or `web`           | webvh                   |
 | AGENT_INVITATION_IMAGE_URL | Public URL for image to be shown in invitations                   | none                    |
 | AGENT_LABEL                | Label to show to other DIDComm agents                             | Test VS Agent           |
-| EVENTS_BASE_URL            | Base URL for sending events                                       | <http://localhost:5000> |
+| EVENTS_WEBHOOK_URL         | URL the agent posts every event to. No event is delivered when unset | (none)               |
+| EVENTS_WEBHOOK_API_KEY     | Secret sent as `Authorization: Bearer` with every event delivery  | (none)                  |
 
 VS Agent includes a public and an administration interface, each running in ports 3001 and 3000 respectively (which could be overriden by setting `AGENT_PORT` and `ADMIN_PORT` in case you are running the application locally and these ports are used by other apps).
 
@@ -38,7 +39,7 @@ In order to make your agent reachable by other VS agents and user agents like Ho
 
 You'll also need to set up an `AGENT_LABEL` and (optionally) an `AGENT_INVITATION_IMAGE_URL` so when DIDComm agents scan an invitation to your service they can identify it easily.
 
-Besides these parameters, you are likely to use your VS Agent alongside a **controller** app that will be sending messages and also receiving events from it (such as new messages arrived, new connections, etc.). For that purpose, you'll need to set up an `EVENTS_BASE_URL` for your VS Agent to be able to send WebHooks to it. See the [VS Agent API document](../../doc//vs-agent-api.md#events) for more information about the API your backend needs to implement (if you are not using the handy [JS](../../packages/client) or [NestJS](../../packages/nestjs-client) client packages).
+Besides these parameters, you are likely to use your VS Agent alongside a **controller** app that will be sending messages and also receiving events from it (such as new messages arrived, new connections, etc.). For that purpose, you'll need to set up an `EVENTS_WEBHOOK_URL` for your VS Agent to be able to send WebHooks to it. See the [VS Agent API document](../../doc//vs-agent-api.md#events) for the events your backend receives.
 
 #### Database access settings
 
@@ -126,7 +127,7 @@ These variables connect the agent to the Verana network (permission management, 
 | `VERANA_ACCOUNT_MNEMONIC`                  | REQUIRED    | BIP-39 mnemonic for the agent's Verana account. This account is the agent's `vs_operator`: it holds only the `VSOperatorAuthorization` records granted on the agent's own Participant entries. |
 | `VERANA_CHAIN_ID`                          | OPTIONAL    | Chain ID (the chain client defaults to the network's chain ID if not set). Required for the VS-CONN-VS trust gate.                                                                                                                      |
 | `VERANA_INDEXER_BASE_URL`                  | REQUIRED    | Verana indexer URL (e.g. `https://...`). Used to establish a WebSocket connection for subscribing to real-time ledger notifications related to the agent DID.                                                                           |
-| `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` | OPTIONAL    | Comma-separated indexer `msg` names whose default handler is disabled (or `*` for all), so a backend behind the container can override them and react via the `indexer-notification` webhook. State-sync bookkeeping is never affected. |
+| `VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE` | OPTIONAL    | Comma-separated indexer event types whose default handler is disabled (or `*` for all), so a backend behind the container can override them and react via the `vpr.notification` webhook event. The event is delivered either way. State-sync bookkeeping is never affected. |
 | `VERANA_INDEXER_SUBSCRIPTION_SCOPE`        | OPTIONAL    | Scope of the indexer subscription and REST catch-up: `did` (default, only the agent's own DID) or `corporation` (all events for `VERANA_CORPORATION_ID`).                                                                               |
 | `VERANA_CORPORATION_ID`                    | REQUIRED    | The VPR `Corporation.id` the agent belongs to. Also scopes the indexer subscription when `VERANA_INDEXER_SUBSCRIPTION_SCOPE` is `corporation`.                                                                                          |
 | `AGENT_MODE`                               | OPTIONAL    | `standalone` (default) or `delegated`. Selects how the agent obtains its ECS credentials at startup.                                                                                                                                    |
@@ -339,7 +340,7 @@ Add the two OpenID4VC lines only when the agent issues or verifies over OpenID4V
 ```bash
 docker run \
   -e PUBLIC_API_BASE_URL=https://myagent.example.com \
-  -e EVENTS_BASE_URL=http://my-backend:5000 \
+  -e EVENTS_WEBHOOK_URL=http://my-backend:5000/events \
   -e OID4VC_CONFIG_FILE=/run/config/openid4vc.json \
   -v "$PWD/openid4vc.json:/run/config/openid4vc.json:ro" \
   -p 3000:3000 -p 3001:3001 \
@@ -359,7 +360,7 @@ services:
       target: vs-agent                        # choose the appropriate target (vs-agent or vs-agent-mrtd)
     environment:
       - PUBLIC_API_BASE_URL=https://myagent.example.com
-      - EVENTS_BASE_URL=http://my-backend:5000
+      - EVENTS_WEBHOOK_URL=http://my-backend:5000/events
     ports:
       - 3000:3000
       - 3001:3001

@@ -2,7 +2,6 @@ import {
   ApiClient,
   ApiVersion,
   BaseMessage,
-  Claim,
   ContextualMenuItem,
   ContextualMenuSelectMessage,
   ContextualMenuUpdateMessage,

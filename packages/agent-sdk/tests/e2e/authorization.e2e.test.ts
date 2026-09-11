@@ -9,6 +9,7 @@ import {
   IndexerHandlerRegistry,
   registerAuthorizationHandlers,
   VeranaChainService,
+  VeranaIndexerService,
 } from '../../src/blockchain'
 
 import { PARTICIPANT_ROLE_ISSUER, VeranaTestChain } from './VeranaTestChain'
@@ -93,6 +94,10 @@ describe('authorization cache (V4): indexer events drive grant -> activate -> re
 
       const authz = new AuthorizationService({
         chain: authzChain,
+        indexer: new VeranaIndexerService({
+          baseUrl: stack.indexerWsUrl.replace(/^ws/, 'http'),
+          logger: new ConsoleLogger(LogLevel.Warn),
+        }),
         logger: new ConsoleLogger(LogLevel.Warn),
         minRefreshIntervalMs: 0,
       })

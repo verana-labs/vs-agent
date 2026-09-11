@@ -3,16 +3,26 @@ import type { INestApplication } from '@nestjs/common'
 import { RecordNotFoundError } from '@credo-ts/core'
 import { ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
+import { plainToInstance } from 'class-transformer'
+import { validate } from 'class-validator'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // vi.mock is hoisted above these imports, so the controller and this file share the mocked pair.
-import { createInvitation, fetchJson } from '@verana-labs/vs-agent-sdk'
+import {
+  AnonCredsTrustError,
+  AnonCredsTrustErrorReason,
+  createInvitation,
+  fetchJson,
+  ParticipantRole,
+  REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+} from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
 import { CredentialTypesService } from '../src/controllers/admin/credentials'
 import { V2DidcommPresentationsController } from '../src/controllers/admin/v2/didcomm/V2DidcommPresentationsController'
+import { CreatePresentationRequestBodyDto } from '../src/controllers/admin/v2/didcomm/dto'
 import { UrlShorteningService } from '../src/services/UrlShorteningService'
 import { VsAgentService } from '../src/services/VsAgentService'
 
@@ -35,6 +45,7 @@ const proofRecord = (id: string, createdAt: string, extra: Record<string, unknow
   const record = {
     id,
     state: 'request-sent',
+    role: 'verifier',
     connectionId: `conn-${id}`,
     errorMessage: undefined,
     threadId: `thread-${id}`,
@@ -71,8 +82,25 @@ const anoncreds = { getCredentialDefinition: vi.fn(), getSchema: vi.fn() }
 
 const events = { emit: vi.fn() }
 
+const VERIFIER_DID = 'did:webvh:QmVerifier:verifier.example'
+const CREDENTIAL_SCHEMA_ID = 7
+
+const connections = { findById: vi.fn() }
+
+const anonCredsTrust = {
+  deriveCredentialSchema: vi.fn(),
+  assertOwnAuthorization: vi.fn(),
+  assertAuthorized: vi.fn(),
+}
+
 const vsAgentService = {
-  getAgent: vi.fn().mockResolvedValue({ didcomm: { proofs }, modules: { anoncreds }, events, context: {} }),
+  getAgent: vi.fn().mockResolvedValue({
+    didcomm: { proofs, connections },
+    modules: { anoncreds },
+    anonCredsTrust,
+    events,
+    context: {},
+  }),
 }
 const urlShortenerService = { createShortUrl: vi.fn() }
 const credentialTypesService = { findAnonCredsSchema: vi.fn() }
@@ -113,9 +141,20 @@ describe('v2 didcomm presentation routes', () => {
       message: { id: 'msg-1' },
     })
     proofs.getFormatData.mockResolvedValue({})
+    connections.findById.mockResolvedValue({ id: 'conn-proof-1', theirDid: VERIFIER_DID })
+    anonCredsTrust.deriveCredentialSchema.mockResolvedValue({
+      credentialSchemaId: CREDENTIAL_SCHEMA_ID,
+      ecosystemDid: 'did:webvh:QmEcosystem:ecosystem.example',
+      jsonSchemaCredentialId: 'https://ecosystem.example/vt/schemas-org-jsc.json',
+      anonCredsSchemaId: 'schema-1',
+    })
+    anonCredsTrust.assertOwnAuthorization.mockResolvedValue(undefined)
+    anonCredsTrust.assertAuthorized.mockResolvedValue(undefined)
     anoncreds.getCredentialDefinition.mockResolvedValue({ credentialDefinition: { schemaId: 'schema-1' } })
     anoncreds.getSchema.mockResolvedValue({ schema: govId })
-    vi.mocked(createInvitation).mockResolvedValue({ url: 'didcomm://agent.test/inv' })
+    vi.mocked(createInvitation).mockResolvedValue({
+      invitation: { '@type': 'https://didcomm.org/out-of-band/2.0/invitation', '@id': 'inv-1' },
+    } as never)
     urlShortenerService.createShortUrl.mockResolvedValue('abcd')
   })
 
@@ -201,33 +240,40 @@ describe('v2 didcomm presentation routes', () => {
       expect(response.body.error.code).toBe('INVALID_INPUT')
     })
 
-    it('carries the callback parameters onto the record and the envelope choice onto the invitation', async () => {
+    it('refuses the removed callbackUrl and ref fields', async () => {
+      const errors = await validate(
+        plainToInstance(CreatePresentationRequestBodyDto, {
+          requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }],
+          callbackUrl: 'https://cb.test/done',
+          ref: '1234',
+        }),
+        { whitelist: true, forbidNonWhitelisted: true },
+      )
+
+      expect(errors.map(error => error.property).sort()).toEqual(['callbackUrl', 'ref'])
+    })
+
+    it('carries the requested credentials onto the record and the envelope choice onto the invitation', async () => {
       const proofRecordSpy = { id: 'proof-1', metadata: metadata() }
       proofs.createRequest.mockResolvedValue({ proofRecord: proofRecordSpy, message: { id: 'msg-1' } })
 
       const requestedCredentials = [{ credentialDefinitionId: 'cred-def-1', attributes: ['firstName'] }]
       const response = await request(app.getHttpServer()).post('/v2/didcomm/presentation-request').send({
         requestedCredentials,
-        ref: '1234',
-        callbackUrl: 'https://cb.test/done',
         didcommVersion: 'v1',
       })
 
       expect(response.body).toEqual({
         proofExchangeId: 'proof-1',
-        url: 'didcomm://agent.test/inv',
+        invitation: { '@type': 'https://didcomm.org/out-of-band/2.0/invitation', '@id': 'inv-1' },
         shortUrl: 'https://agent.test/s?id=abcd',
       })
       expect(proofRecordSpy.metadata.get('_2060/requestedCredentials')).toEqual(requestedCredentials)
-      expect(proofRecordSpy.metadata.get('_2060/callbackParameters')).toEqual({
-        ref: '1234',
-        callbackUrl: 'https://cb.test/done',
-      })
       expect(proofs.update).toHaveBeenCalledWith(proofRecordSpy)
       // The spec spells the field `didcommVersion`; the SDK takes `didCommVersion`.
       expect(vi.mocked(createInvitation).mock.calls[0][0]).toMatchObject({ didCommVersion: 'v1' })
       expect(urlShortenerService.createShortUrl).toHaveBeenCalledWith({
-        longUrl: 'didcomm://agent.test/inv',
+        invitation: { '@type': 'https://didcomm.org/out-of-band/2.0/invitation', '@id': 'inv-1' },
         relatedFlowId: 'proof-1',
       })
     })
@@ -302,6 +348,8 @@ describe('v2 didcomm presentation routes', () => {
       expect(response.body).toMatchObject({
         proofExchangeId: 'p-1',
         state: 'done',
+        role: 'verifier',
+        connectionId: 'conn-p-1',
         verified: true,
         threadId: 'thread-p-1',
         requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }],
@@ -572,6 +620,174 @@ describe('v2 didcomm presentation routes', () => {
 
       expect(response.status).toBe(404)
       expect(response.body.error.code).toBe('UNKNOWN_ID')
+    })
+  })
+  describe('the AnonCreds trust decision', () => {
+    const anonCredsRequest = {
+      request: {
+        anoncreds: {
+          requested_attributes: {
+            'gov-id': { names: ['firstName'], restrictions: [{ cred_def_id: 'cred-def-1' }] },
+            'gov-id-2': { names: ['lastName'], restrictions: [{ cred_def_id: 'cred-def-2' }] },
+          },
+          requested_predicates: {},
+        },
+      },
+    }
+
+    describe('createPresentationRequest', () => {
+      it('holds an active VERIFIER Participant, and records the CredentialSchema of each entry', async () => {
+        const record = { id: 'proof-1', metadata: metadata() }
+        proofs.createRequest.mockResolvedValue({ proofRecord: record, message: { id: 'msg-1' } })
+
+        const response = await request(app.getHttpServer())
+          .post('/v2/didcomm/presentation-request')
+          .send({ requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }] })
+
+        expect(response.status).toBe(201)
+        expect(anonCredsTrust.deriveCredentialSchema).toHaveBeenCalledWith({
+          credentialDefinitionId: 'cred-def-1',
+        })
+        expect(anonCredsTrust.assertOwnAuthorization).toHaveBeenCalledWith({
+          role: ParticipantRole.Verifier,
+          credentialSchemaId: CREDENTIAL_SCHEMA_ID,
+        })
+        expect(record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA)).toEqual([CREDENTIAL_SCHEMA_ID])
+      })
+
+      it('answers NOT_AUTHORIZED when the agent holds no VERIFIER Participant', async () => {
+        anonCredsTrust.assertOwnAuthorization.mockRejectedValue(
+          new AnonCredsTrustError(AnonCredsTrustErrorReason.NotAuthorized, 'no verifier participant'),
+        )
+
+        const response = await request(app.getHttpServer())
+          .post('/v2/didcomm/presentation-request')
+          .send({ requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }] })
+
+        expect(response.status).toBe(409)
+        expect(response.body.error.code).toBe('NOT_AUTHORIZED')
+        expect(proofs.createRequest).not.toHaveBeenCalled()
+      })
+
+      it('answers INVALID_INPUT when an entry binds to no CredentialSchema', async () => {
+        anonCredsTrust.deriveCredentialSchema.mockRejectedValue(
+          new AnonCredsTrustError(AnonCredsTrustErrorReason.NotDerivable, 'no relatedJsonSchemaCredentialId'),
+        )
+
+        const response = await request(app.getHttpServer())
+          .post('/v2/didcomm/presentation-request')
+          .send({ requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }] })
+
+        expect(response.status).toBe(400)
+        expect(response.body.error.code).toBe('INVALID_INPUT')
+        expect(proofs.createRequest).not.toHaveBeenCalled()
+      })
+
+      it('answers RESOLVER_UNAVAILABLE when it cannot complete the check', async () => {
+        anonCredsTrust.deriveCredentialSchema.mockRejectedValue(
+          new AnonCredsTrustError(AnonCredsTrustErrorReason.Unavailable, 'the indexer is unreachable'),
+        )
+
+        const response = await request(app.getHttpServer())
+          .post('/v2/didcomm/presentation-request')
+          .send({ requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }] })
+
+        expect(response.status).toBe(503)
+        expect(response.body.error.code).toBe('RESOLVER_UNAVAILABLE')
+        expect(proofs.createRequest).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('acceptPresentationRequest', () => {
+      beforeEach(() => {
+        proofs.findById.mockResolvedValue(
+          proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'request-received' }),
+        )
+        proofs.getCredentialsForRequest.mockResolvedValue({
+          proofFormats: { anoncreds: matchingCredentials },
+        })
+        proofs.acceptRequest.mockResolvedValue(
+          proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'presentation-sent' }),
+        )
+        proofs.getFormatData.mockResolvedValue(anonCredsRequest)
+      })
+
+      it('checks the VERIFIER Participant of the verifier once per CredentialSchema', async () => {
+        const response = await request(app.getHttpServer()).post(
+          '/v2/didcomm/presentations/p-1/accept-request',
+        )
+
+        expect(response.status).toBe(200)
+        expect(anonCredsTrust.deriveCredentialSchema).toHaveBeenCalledTimes(2)
+        expect(anonCredsTrust.assertAuthorized).toHaveBeenCalledTimes(1)
+        expect(anonCredsTrust.assertAuthorized).toHaveBeenCalledWith({
+          did: VERIFIER_DID,
+          role: ParticipantRole.Verifier,
+          credentialSchemaId: CREDENTIAL_SCHEMA_ID,
+        })
+      })
+
+      it('answers PEER_NOT_AUTHORIZED when the verifier holds no VERIFIER Participant', async () => {
+        anonCredsTrust.assertAuthorized.mockRejectedValue(
+          new AnonCredsTrustError(AnonCredsTrustErrorReason.NotAuthorized, 'no verifier participant'),
+        )
+
+        const response = await request(app.getHttpServer()).post(
+          '/v2/didcomm/presentations/p-1/accept-request',
+        )
+
+        expect(response.status).toBe(409)
+        expect(response.body.error.code).toBe('PEER_NOT_AUTHORIZED')
+        expect(proofs.acceptRequest).not.toHaveBeenCalled()
+      })
+
+      it('answers PEER_NOT_AUTHORIZED when the verifier established no DID', async () => {
+        connections.findById.mockResolvedValue({ id: 'conn-p-1', theirDid: undefined })
+
+        const response = await request(app.getHttpServer()).post(
+          '/v2/didcomm/presentations/p-1/accept-request',
+        )
+
+        expect(response.status).toBe(409)
+        expect(response.body.error.code).toBe('PEER_NOT_AUTHORIZED')
+        expect(proofs.acceptRequest).not.toHaveBeenCalled()
+      })
+
+      it('answers PEER_NOT_AUTHORIZED when one group of the AnonCreds request carries no restriction', async () => {
+        proofs.getFormatData.mockResolvedValue({
+          request: {
+            anoncreds: {
+              requested_attributes: {
+                'gov-id': { names: ['firstName'], restrictions: [{ cred_def_id: 'cred-def-1' }] },
+                'gov-id-2': { names: ['lastName'] },
+              },
+              requested_predicates: {},
+            },
+          },
+        })
+
+        const response = await request(app.getHttpServer()).post(
+          '/v2/didcomm/presentations/p-1/accept-request',
+        )
+
+        expect(response.status).toBe(409)
+        expect(response.body.error.code).toBe('PEER_NOT_AUTHORIZED')
+        expect(proofs.acceptRequest).not.toHaveBeenCalled()
+      })
+
+      it('answers PEER_NOT_AUTHORIZED when the AnonCreds request restricts no group', async () => {
+        proofs.getFormatData.mockResolvedValue({
+          request: { anoncreds: { requested_attributes: { 'gov-id': { names: ['firstName'] } } } },
+        })
+
+        const response = await request(app.getHttpServer()).post(
+          '/v2/didcomm/presentations/p-1/accept-request',
+        )
+
+        expect(response.status).toBe(409)
+        expect(response.body.error.code).toBe('PEER_NOT_AUTHORIZED')
+        expect(proofs.acceptRequest).not.toHaveBeenCalled()
+      })
     })
   })
 })

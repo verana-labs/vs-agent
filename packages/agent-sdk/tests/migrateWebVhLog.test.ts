@@ -14,7 +14,7 @@ import {
 } from 'didwebvh-ts'
 import { describe, expect, it } from 'vitest'
 
-import { rebuildWebVhLog } from '../src/did/migrateWebVhLog'
+import { rebuildWebVhLog } from '../src/did/migrations/migrateWebVhLog'
 
 class InMemorySigner implements Signer {
   public constructor(

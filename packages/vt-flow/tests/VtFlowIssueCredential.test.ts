@@ -16,7 +16,7 @@ const buildApi = (options: VtFlowModuleConfigOptions) => {
   const protocol = {
     version: 'v2',
     acceptRequest: vi.fn(async () => ({ message: { setThread: () => undefined } })),
-    getFormatData: vi.fn(async () => ({ credential: { jsonld: SIGNED_CREDENTIAL } })),
+    getFormatData: vi.fn(async () => ({ credential: { dataIntegrity: { credential: SIGNED_CREDENTIAL } } })),
   }
 
   const api = new VtFlowApi(
@@ -46,6 +46,19 @@ describe('issueCredentialForSession', () => {
     await expect(issue(api)).rejects.toThrow('chain tx failed')
     expect(protocol.acceptRequest).toHaveBeenCalled()
     expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('signs with the module cryptosuite, which RFC 0809 leaves to the issuer', async () => {
+    const { api, protocol } = buildApi({})
+
+    await issue(api).catch(() => undefined)
+
+    expect(protocol.acceptRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        credentialFormats: { dataIntegrity: { cryptosuite: 'eddsa-jcs-2022' } },
+      }),
+    )
   })
 
   it('hands the hook the signed credential and persists the digest before any delivery', async () => {

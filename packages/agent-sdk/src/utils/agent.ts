@@ -1,12 +1,14 @@
 import type { VsAgent } from '../agent/VsAgent'
 
-import { parseDid } from '@credo-ts/core'
+import { GenericRecord, TagsBase, utils } from '@credo-ts/core'
 import {
   DidCommConnectionRepository,
   DidCommHandshakeProtocol,
   DidCommMessage,
   type DidCommVersion,
 } from '@credo-ts/didcomm'
+
+import { getLegacyDidWeb } from '../did/legacyDidWeb'
 
 /**
  * Creates an out of band invitation that will equal to the public DID in case the agent has one defined,
@@ -19,17 +21,12 @@ export async function createInvitation(options: {
   agent: VsAgent
   messages?: DidCommMessage[]
   useLegacyDid?: boolean
-  invitationBaseUrl: string
   imageUrl?: string
   didCommVersion?: DidCommVersion
 }) {
-  const { agent, messages, useLegacyDid, invitationBaseUrl, imageUrl, didCommVersion } = options
+  const { agent, messages, useLegacyDid, imageUrl, didCommVersion } = options
 
-  // Use legacy did:web in case agent's did is webvh and using legacy did
-  const ourDid =
-    agent.did && parseDid(agent.did).method === 'webvh' && useLegacyDid
-      ? `did:web:${parseDid(agent.did).id.split(':').slice(1).join(':')}`
-      : agent.did
+  const ourDid = (useLegacyDid && agent.did ? getLegacyDidWeb(agent.did) : undefined) ?? agent.did
 
   const effectiveVersion: DidCommVersion = didCommVersion ?? 'v2'
   const isV2 = effectiveVersion === 'v2'
@@ -58,9 +55,8 @@ export async function createInvitation(options: {
     })
   ).outOfBandInvitation
   return {
-    url: outOfBandInvitation.toUrl({
-      domain: invitationBaseUrl,
-    }),
+    invitation: outOfBandInvitation.v2Invitation?.toJSON() ?? outOfBandInvitation.toJSON(),
+    outOfBandInvitation,
   }
 }
 
@@ -118,11 +114,39 @@ export async function getRecordId(agent: VsAgent, id: string): Promise<string> {
   return (record?.getTag('messageId') as string) ?? id
 }
 
-export async function getWebDid(agent: VsAgent) {
-  if (agent.did) {
-    const parsedDid = parseDid(agent.did)
+/** The record type of every attested resource of the AnonCreds registry, per [VSA-PUB-AC]. */
+export const ATTESTED_RESOURCE_TYPE = 'AttestedResource'
 
-    if (parsedDid.method === 'web') return agent.did
-    if (parsedDid.method === 'webvh') return `did:web:${parsedDid.id.split(':').slice(1).join(':')}`
-  }
+export type AttestedResourceTags = TagsBase & {
+  type?: never
+  attestedResourceId?: never
+}
+
+export async function saveAttestedResource(
+  agent: VsAgent,
+  resource: Record<string, unknown>,
+  tags?: AttestedResourceTags,
+): Promise<GenericRecord | undefined> {
+  if (!resource) return undefined
+  return await agent.genericRecords.save({
+    id: utils.uuid(),
+    content: resource,
+    tags: {
+      attestedResourceId: resource.id as string,
+      type: ATTESTED_RESOURCE_TYPE,
+      ...tags,
+    },
+  })
+}
+
+export async function findAttestedResources(agent: VsAgent, query: TagsBase): Promise<GenericRecord[]> {
+  return await agent.genericRecords.findAllByQuery({ ...query, type: ATTESTED_RESOURCE_TYPE })
+}
+
+export async function findAttestedResource(
+  agent: VsAgent,
+  query: TagsBase,
+): Promise<GenericRecord | undefined> {
+  const [record] = await findAttestedResources(agent, query)
+  return record
 }
