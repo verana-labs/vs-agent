@@ -1,11 +1,5 @@
 import type { OpenId4VcPluginOptions } from '../types'
-import type {
-  BaseAgent,
-  JwsProtectedHeaderOptions,
-  Kms,
-  SdJwtVcTypeMetadata,
-  X509Certificate,
-} from '@credo-ts/core'
+import type { BaseAgent, JwsProtectedHeaderOptions, Kms, SdJwtVcTypeMetadata } from '@credo-ts/core'
 import type {
   OpenId4VcIssuanceSessionRecord,
   OpenId4VcIssuanceSessionState,
@@ -31,6 +25,7 @@ import {
   signingCertificateInfo,
   type SigningCertificateHandle,
   type SigningCertificateInfo,
+  x5cCertificateChain,
 } from './CertificateService'
 
 type IssuerApi = Pick<
@@ -231,7 +226,7 @@ export class IssuerService {
             : { method: 'jwk' as const, jwk: holderKey.jwk },
         issuer: {
           method: 'x5c' as const,
-          x5c: signingCertificate.chain,
+          x5c: x5cCertificateChain(signingCertificate),
           issuer: this.options.publicApiBaseUrl,
         },
         disclosureFrame: { _sd: configuration.disclosureFrame },
@@ -300,7 +295,7 @@ export class IssuerService {
       return { method: 'did' as const, didUrl }
     }
 
-    return { method: 'x5c' as const, x5c: metadataCertificateChain(signingCertificate) }
+    return { method: 'x5c' as const, x5c: x5cCertificateChain(signingCertificate) }
   }
 
   private async buildCertificateBoundSignedMetadata(
@@ -317,7 +312,7 @@ export class IssuerService {
       keyId: signingCertificate.keyId,
       protectedHeaderOptions: {
         ...parseProtectedHeader(encodedHeader),
-        x5c: metadataCertificateChain(signingCertificate).map(certificate => certificate.toString('base64')),
+        x5c: x5cCertificateChain(signingCertificate).map(certificate => certificate.toString('base64')),
       },
     })
   }
@@ -413,15 +408,6 @@ function summarizeIssuanceSession(session: OpenId4VcIssuanceSessionRecord): Open
     ...(session.expiresAt ? { expiresAt: session.expiresAt } : {}),
     ...(session.errorMessage ? { errorMessage: session.errorMessage } : {}),
   }
-}
-
-// HAIP forbids the trust anchor inside `x5c`, and NL Wallet enforces it, so a configured chain drops its self-signed root.
-function metadataCertificateChain(signingCertificate: SigningCertificateHandle): X509Certificate[] {
-  if (signingCertificate.development) return signingCertificate.chain
-
-  return signingCertificate.chain.filter(
-    (certificate, index, chain) => index !== chain.length - 1 || certificate.subject !== certificate.issuer,
-  )
 }
 
 function parseProtectedHeader(encoded: string): JwsProtectedHeaderOptions {

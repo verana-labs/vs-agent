@@ -567,7 +567,7 @@ describe('IssuerService', () => {
           holder: { method: 'jwk', jwk: HOLDER_JWK },
           issuer: {
             method: 'x5c',
-            x5c: [leafCertificate, rootCertificate],
+            x5c: [leafCertificate],
             issuer: 'https://agent.example',
           },
           disclosureFrame: { _sd: ['name', 'role'] },

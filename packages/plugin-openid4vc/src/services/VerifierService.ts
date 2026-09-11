@@ -29,6 +29,7 @@ import {
   signingCertificateInfo,
   type SigningCertificateHandle,
   type SigningCertificateInfo,
+  x5cCertificateChain,
 } from './CertificateService'
 import { presentationQueryFor, type OpenId4VcQueryLanguage } from './presentationRequest'
 import { decidePresentation, type PresentationDecision } from './presentationVerification'
@@ -363,7 +364,11 @@ export class VerifierService {
   private async buildRequestSigner(queryLanguage: OpenId4VcQueryLanguage, override?: 'x5c' | 'did') {
     const certificate = this.signingCertificateHandle()
     if ((override ?? this.verifierOptions().requestSigner) !== 'did') {
-      return { method: 'x5c' as const, x5c: certificate.chain, clientIdPrefix: 'x509_hash' as const }
+      return {
+        method: 'x5c' as const,
+        x5c: x5cCertificateChain(certificate),
+        clientIdPrefix: 'x509_hash' as const,
+      }
     }
 
     const did = this.agent.did ?? null
