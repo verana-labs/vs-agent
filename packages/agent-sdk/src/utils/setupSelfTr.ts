@@ -63,7 +63,7 @@ export const sortKeysDeep = (value: unknown): unknown => {
 }
 
 /**
- * Builds an unsigned self trust registry credential: a VC Data Model 2.0 credential, as
+ * Builds an unsigned credential: a VC Data Model 2.0 credential, as
  * [VT-CRED-W3C] and [VT-JSON-SCHEMA-CRED-W3C] require the `https://www.w3.org/ns/credentials/v2`
  * context, valid from now for ten years unless told otherwise.
  */
@@ -73,7 +73,7 @@ export function createCredential(options: Partial<W3cV2CredentialOptions>): W3cV
 
 /**
  * The Data Integrity cryptosuite this agent is configured with, read from the registered
- * `VtFlowModuleConfig` so the self trust registry secures its credentials and linked VPs with the
+ * `VtFlowModuleConfig` so the self issued credentials are secured and linked VPs with the
  * same suite `VtFlowApi.issueCredentialForSession` applies to the credentials it issues. Falls back
  * to the module default when the vt-flow module is not registered on the agent.
  */

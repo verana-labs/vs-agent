@@ -70,8 +70,6 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
               credentialFormats: [
                 new LegacyIndyDidCommCredentialFormatService(),
                 new AnonCredsDidCommCredentialFormatService(),
-                // W3C Data Integrity attachment format (Aries RFC 0809): carries the VC Data Model 2.0
-                // credentials that vt-flow issues, secured with a DataIntegrityProof
                 new DidCommDataIntegrityCredentialFormatService(),
               ],
             }),
