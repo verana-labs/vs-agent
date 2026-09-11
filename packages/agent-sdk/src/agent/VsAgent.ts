@@ -452,7 +452,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         controller: publicDid,
         id: verificationMethodId,
         publicKeyMultibase,
-        type: 'Ed25519VerificationKey2020',
+        type: 'Multikey',
       },
       {
         controller: publicDid,
