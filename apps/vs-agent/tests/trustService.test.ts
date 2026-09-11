@@ -10,7 +10,7 @@ import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 
 import { MessageService, TrustService } from '../src/controllers'
 
-import { computeCredentialDigestJCS } from '@verana-labs/verre'
+import { computeCredentialDigestJCS, verifySignature } from '@verana-labs/verre'
 
 import { isCredentialStateChangedEvent, startAgent, startServersTesting } from './__mocks__'
 import { issueVtjscFrom } from './__mocks__'
@@ -21,6 +21,20 @@ import {
   waitForEvent,
   type SubjectMessage,
 } from './helpers'
+
+/** verre, as a third-party resolver would run it, against the agent's own DID Document */
+async function verreVerifies(agent: VsAgent<BaseAgentModules>, document: unknown) {
+  const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
+  const resolver = {
+    resolve: async () => ({
+      didResolutionMetadata: {},
+      didDocumentMetadata: {},
+      didDocument: didRecord.didDocument!.toJSON(),
+    }),
+  }
+  const silent = { debug() {}, info() {}, warn() {}, error() {} }
+  return await verifySignature(document as never, resolver as never, silent)
+}
 
 describe('TrustService', () => {
   let faberApp: INestApplication
@@ -69,6 +83,41 @@ describe('TrustService', () => {
       const serviceId = `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`
 
       expect(services.some(s => s.id === serviceId)).toBe(true)
+    })
+
+    it('publishes the JSC as a VC Data Model 2.0 credential secured with Data Integrity proofs', async () => {
+      await jscFaberService.createJsc(
+        'org-schema',
+        'https://dm.chatbot.demos.dev.2060.io/vt/cs/v1/js/ecs-org',
+      )
+
+      const [didRecord] = await jscFaberAgent.dids.getCreatedDids({ did: jscFaberAgent.did })
+      const entries = Object.values(didRecord.metadata.get('_vt/jsc')!) as Array<Record<string, any>>
+      const entry = entries.find(
+        e => e.didDocumentServiceId === `${jscFaberAgent.did}#vpr-schemas-org-schema-vtjsc-vp`,
+      )!
+
+      // [VT-JSON-SCHEMA-CRED-W3C]: the v2 context, validity via validFrom, no issuanceDate
+      expect(entry.credential['@context']).toContain('https://www.w3.org/ns/credentials/v2')
+      expect(entry.credential.validFrom).toEqual(expect.any(String))
+      expect(entry.credential).not.toHaveProperty('issuanceDate')
+      expect(entry.credential.credentialSubject).toEqual(
+        expect.objectContaining({ type: 'JsonSchema', digestSRI: expect.stringMatching(/^sha384-/) }),
+      )
+      expect(entry.credential.proof).toEqual(
+        expect.objectContaining({
+          type: 'DataIntegrityProof',
+          cryptosuite: 'eddsa-jcs-2022',
+          proofPurpose: 'assertionMethod',
+        }),
+      )
+      // the linked VP wraps the secured credential and authenticates the holder
+      expect(entry.verifiablePresentation['@context']).toEqual(['https://www.w3.org/ns/credentials/v2'])
+      expect(entry.verifiablePresentation.verifiableCredential).toEqual([entry.credential])
+      expect(entry.verifiablePresentation.proof).toEqual(
+        expect.objectContaining({ type: 'DataIntegrityProof', proofPurpose: 'authentication' }),
+      )
+      expect(await verreVerifies(jscFaberAgent, entry.verifiablePresentation)).toEqual({ result: true })
     })
 
     it('renames pre-vtjsc service ids on migration without re-signing', async () => {
@@ -180,7 +229,7 @@ describe('TrustService', () => {
       vi.restoreAllMocks()
     })
 
-    it('should issue a JSON-LD credential with a valid Ed25519 proof', async () => {
+    it('should issue a VC Data Model 2.0 credential secured with a Data Integrity proof', async () => {
       const credentialResponse = await faberService.issueCredential({
         format: 'jsonld',
         did: 'did:web:example.com',
@@ -198,11 +247,14 @@ describe('TrustService', () => {
           countryCode: 'US',
         },
       })
+      expect(credentialResponse.credential!['@context']).toContain('https://www.w3.org/ns/credentials/v2')
+      expect(credentialResponse.credential!.validFrom).toEqual(expect.any(String))
+      expect(credentialResponse.credential).not.toHaveProperty('issuanceDate')
       expect(credentialResponse.credential!.proof).toEqual(
         expect.objectContaining({
-          type: 'Ed25519Signature2020',
+          type: 'DataIntegrityProof',
+          cryptosuite: 'eddsa-jcs-2022',
           verificationMethod: expect.any(String),
-          created: expect.any(String),
           proofPurpose: 'assertionMethod',
           proofValue: expect.any(String),
         }),
@@ -210,6 +262,7 @@ describe('TrustService', () => {
       expect(credentialResponse.digestJCS).toBe(
         computeCredentialDigestJCS(credentialResponse.credential as never, 'sha384'),
       )
+      expect(await verreVerifies(faberAgent, credentialResponse.credential)).toEqual({ result: true })
       expect(sessionMock).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',

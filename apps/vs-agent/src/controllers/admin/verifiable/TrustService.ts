@@ -1,11 +1,4 @@
-import {
-  DidRecord,
-  JsonObject,
-  JsonTransformer,
-  utils,
-  W3cCredential,
-  W3cJsonLdVerifiableCredential,
-} from '@credo-ts/core'
+import { DidRecord, JsonObject, utils } from '@credo-ts/core'
 import { Logger, Inject, Injectable, HttpException, HttpStatus } from '@nestjs/common'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 import {
@@ -24,6 +17,7 @@ import {
   getVerificationMethodId,
   removeTrustCredential,
   signerW3c,
+  type TrustCredential,
   validateSchema,
   VsAgent,
 } from '@verana-labs/vs-agent-sdk'
@@ -123,7 +117,7 @@ export class TrustService {
     return await this.removeCredentialByType(schemaId, '_vt/jsc')
   }
 
-  public async createVtc(id: string, credential: W3cJsonLdVerifiableCredential) {
+  public async createVtc(id: string, credential: TrustCredential) {
     try {
       const { agent } = await this.getDidRecord()
       const verifiablePresentation = await createVtc(agent, this.publicApiBaseUrl, id, credential)
@@ -146,6 +140,7 @@ export class TrustService {
     }
   }
 
+  /** Issues a VC Data Model 2.0 credential secured with a Data Integrity proof (`eddsa-jcs-2022`) */
   private async issueW3cJsonLd(
     agent: VsAgent,
     didRecord: DidRecord,
@@ -157,22 +152,12 @@ export class TrustService {
       id: `${did}#${utils.uuid()}`,
       type: ['VerifiableCredential', 'VerifiableTrustCredential'],
       issuer: agent.did,
-      credentialSubject: {
-        id: did,
-        claims,
-      },
+      credentialSubject: { ...claims, id: did },
+      credentialSchema: { id: jsonSchemaCredentialId, type: 'JsonSchemaCredential' },
     })
-    unsignedCredential.credentialSchema = {
-      id: jsonSchemaCredentialId,
-      type: 'JsonSchemaCredential',
-    }
     const verificationMethodId = getVerificationMethodId(agent.config.logger, didRecord)
-    const credential = await signerW3c(
-      agent,
-      JsonTransformer.fromJSON(unsignedCredential, W3cCredential),
-      verificationMethodId,
-    )
-    return credential.jsonCredential
+    const credential = await signerW3c(agent, unsignedCredential, verificationMethodId)
+    return credential.securedCredential
   }
 
   private async anchorDigest(

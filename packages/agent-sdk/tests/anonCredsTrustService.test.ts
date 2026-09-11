@@ -40,6 +40,27 @@ function vtjscDocument(overrides: Record<string, unknown> = {}) {
   }
 }
 
+/** The VTJSC as this agent publishes it: data model 2.0, secured with a DataIntegrityProof */
+function vtjscDocumentV2(overrides: Record<string, unknown> = {}) {
+  return {
+    '@context': ['https://www.w3.org/ns/credentials/v2'],
+    id: JSON_SCHEMA_CREDENTIAL_ID,
+    type: ['VerifiableCredential', 'JsonSchemaCredential'],
+    issuer: ECOSYSTEM_DID,
+    validFrom: '2026-01-01T00:00:00Z',
+    credentialSubject: { id: SCHEMA_REFERENCE, jsonSchema: { $ref: SCHEMA_REFERENCE } },
+    proof: {
+      type: 'DataIntegrityProof',
+      cryptosuite: 'eddsa-jcs-2022',
+      created: '2026-01-01T00:00:00Z',
+      verificationMethod: `${ECOSYSTEM_DID}#key-1`,
+      proofPurpose: 'assertionMethod',
+      proofValue: 'zProofValue',
+    },
+    ...overrides,
+  }
+}
+
 interface AgentOptions {
   vtjsc?: Record<string, unknown>
   proofIsValid?: boolean
@@ -96,6 +117,9 @@ function makeAgent(options: AgentOptions = {}) {
       },
     },
     w3cCredentials: {
+      verifyCredential: vi.fn(async () => ({ isValid: options.proofIsValid ?? true })),
+    },
+    w3cV2Credentials: {
       verifyCredential: vi.fn(async () => ({ isValid: options.proofIsValid ?? true })),
     },
   }
@@ -197,6 +221,26 @@ describe('deriveCredentialSchema', () => {
 
   it('fails when the proof of the VTJSC is invalid', async () => {
     const { service } = makeAgent({ proofIsValid: false })
+
+    const reason = await reasonOf(
+      service.deriveCredentialSchema({ credentialDefinitionId: CREDENTIAL_DEFINITION_ID }),
+    )
+
+    expect(reason).toBe(AnonCredsTrustErrorReason.NotDerivable)
+  })
+
+  it('verifies a data model 2.0 VTJSC through the Data Integrity API', async () => {
+    const { agent, service } = makeAgent({ vtjsc: vtjscDocumentV2() })
+
+    const derived = await service.deriveCredentialSchema({ credentialDefinitionId: CREDENTIAL_DEFINITION_ID })
+
+    expect(derived.jsonSchemaCredentialId).toBe(JSON_SCHEMA_CREDENTIAL_ID)
+    expect(agent.w3cV2Credentials.verifyCredential).toHaveBeenCalledTimes(1)
+    expect(agent.w3cCredentials.verifyCredential).not.toHaveBeenCalled()
+  })
+
+  it('fails when the proof of a data model 2.0 VTJSC is invalid', async () => {
+    const { service } = makeAgent({ vtjsc: vtjscDocumentV2(), proofIsValid: false })
 
     const reason = await reasonOf(
       service.deriveCredentialSchema({ credentialDefinitionId: CREDENTIAL_DEFINITION_ID }),
