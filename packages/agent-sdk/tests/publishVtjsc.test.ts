@@ -15,12 +15,21 @@ const jsonSchema = (title: string) =>
 const createJsc = vi.fn()
 const detachVtjscPublications = vi.fn(async (_agent: unknown, refs: readonly string[]) => [...refs])
 const reattachVtjscPublication = vi.fn(async () => false)
+const rebindEcsCredentialSchema = vi.fn()
 
 vi.mock('../src/utils/trustCredentialStore', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/utils/trustCredentialStore')>()),
   createJsc: (...args: unknown[]) => createJsc(...args),
   detachVtjscPublications: (...args: unknown[]) => detachVtjscPublications(args[0], args[1] as string[]),
   reattachVtjscPublication: (...args: unknown[]) => reattachVtjscPublication(...(args as [])),
+  rebindEcsCredentialSchema: (...args: unknown[]) => rebindEcsCredentialSchema(...args),
+}))
+
+vi.mock('../src/utils/vtjscResolver', async importOriginal => ({
+  ...(await importOriginal<typeof import('../src/utils/vtjscResolver')>()),
+  resolveJsonSchemaCredentialId: vi.fn(async (_a: unknown, _i: unknown, schemaId: number | string) =>
+    jscId(schemaId),
+  ),
 }))
 
 function makeLogger() {
@@ -343,5 +352,85 @@ describe('reconcileVtjscPublications', () => {
     await reconcileVtjscPublications(agent as never, indexer as never, 7)
 
     expect(detachVtjscPublications).not.toHaveBeenCalled()
+  })
+})
+
+describe('self-issued ECS credentials', () => {
+  const OPERATOR = 'verana1operator'
+  const ecsClaims = { org: { name: 'Test Org' }, service: { name: 'Test Service' } }
+
+  /** An agent holding one active ISSUER entry per ECS schema listed. */
+  function indexerWithIssuerOn(schemas: { id: number; title: string }[]) {
+    const byId = Object.fromEntries(
+      schemas.map(s => [String(s.id), { id: s.id, ecosystem_id: 1, json_schema: jsonSchema(s.title) }]),
+    )
+    return makeIndexer({
+      getCredentialSchema: vi.fn(async (id: string) => byId[String(id)]),
+      listParticipants: vi.fn(async ({ participantState }: { participantState: string }) =>
+        participantState === 'ACTIVE'
+          ? schemas.map(s => ({ id: s.id * 10, schema_id: s.id, vs_operator: OPERATOR }))
+          : [],
+      ),
+    })
+  }
+
+  function chainAgent(entries: string[]) {
+    const agent = agentPublishing(entries) as Record<string, unknown>
+    agent.veranaChain = { getChainId: CHAIN_ID, address: OPERATOR }
+    return agent
+  }
+
+  beforeEach(() => {
+    createJsc.mockReset()
+    createJsc.mockResolvedValue({ id: jscId(5) })
+    rebindEcsCredentialSchema.mockReset()
+    rebindEcsCredentialSchema.mockResolvedValue(undefined)
+  })
+
+  // The chain of Organization credentials has to terminate: the service holding the ISSUER entry
+  // on an Ecosystem's Organization schema is the only party that can issue against it. Narrowing
+  // this to the Service schema left it without a serviceProvider credential, so it failed
+  // VS-CONN-VS and no applicant could onboard against it.
+  it('self-issues against every ECS schema it holds an ISSUER entry on', async () => {
+    const agent = chainAgent([])
+    const indexer = indexerWithIssuerOn([
+      { id: 5, title: 'ServiceCredential' },
+      { id: 6, title: 'OrganizationCredential' },
+    ])
+
+    await reconcileVtjscPublications(agent as never, indexer as never, 7, ecsClaims as never)
+
+    const keys = rebindEcsCredentialSchema.mock.calls.map(call => call[3])
+    expect(keys).toContain('ecs-service')
+    expect(keys).toContain('ecs-org')
+  })
+
+  it('skips a schema that is not an ECS schema', async () => {
+    const agent = chainAgent([])
+    const indexer = indexerWithIssuerOn([{ id: 7, title: 'ExampleCredential' }])
+
+    await reconcileVtjscPublications(agent as never, indexer as never, 7, ecsClaims as never)
+
+    expect(rebindEcsCredentialSchema).not.toHaveBeenCalled()
+  })
+
+  it('skips an entry whose vs_operator is not the agent account', async () => {
+    const agent = chainAgent([])
+    const indexer = makeIndexer({
+      getCredentialSchema: vi.fn(async () => ({
+        id: 6,
+        ecosystem_id: 1,
+        json_schema: jsonSchema('OrganizationCredential'),
+      })),
+      listParticipants: vi.fn(async ({ participantState }: { participantState: string }) =>
+        participantState === 'ACTIVE'
+          ? [{ id: 60, schema_id: 6, vs_operator: 'verana1someone-else' }]
+          : [],
+      ),
+    })
+
+    await reconcileVtjscPublications(agent as never, indexer as never, 7, ecsClaims as never)
+
+    expect(rebindEcsCredentialSchema).not.toHaveBeenCalled()
   })
 })

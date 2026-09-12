@@ -561,6 +561,13 @@ async function detachUncontrolledVtjscPublications(
  * Ecosystem controller may hold no ISSUER entry at all. An entry is usable only when it names
  * this agent's account as its vs_operator, because the chain accepts the anchoring
  * CreateOrUpdateParticipantSession from no other signer.
+ *
+ * Every ECS schema qualifies, not only the Service one. A service normally receives its
+ * Organization or Persona credential from a third party, but the chain of those credentials has
+ * to terminate: the service that holds the ISSUER entry on an Ecosystem's Organization schema is
+ * the only party that can issue against it, so it issues its own. Restricting this loop to the
+ * Service schema leaves that service without a serviceProvider credential, which makes it fail
+ * VS-CONN-VS, and every applicant that must onboard against it then refuses to open the flow.
  */
 async function reconcileSelfIssuedEcsCredentials(
   agent: VsAgent,
@@ -607,7 +614,7 @@ async function reconcileSelfIssuedEcsCredentials(
     try {
       const schema = await indexer.getCredentialSchema(issuer.schema_id)
       const ecsKey = await classifyEcsSchema(schema.json_schema)
-      if (ecsKey !== 'ecs-service') continue
+      if (!ecsKey) continue
       const jsonSchemaCredentialId = await resolveJsonSchemaCredentialId(agent, indexer, schema.id, chainId)
       await rebindEcsCredentialSchema(
         agent,
