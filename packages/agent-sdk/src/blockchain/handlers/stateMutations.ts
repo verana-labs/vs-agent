@@ -28,6 +28,7 @@ import {
   withdrawSelfIssuedEcsCredentials,
 } from '../../utils/trustCredentialStore'
 import { anonCredsSchemaFromJsonSchema } from '../../utils/util'
+import { isDataIntegrityVcdm2Credential } from '../../utils/vcdm2'
 import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
 import { VtFlowOrchestrator } from '../../vtFlow'
 import { VeranaIndexerService } from '../VeranaIndexerService'
@@ -443,7 +444,12 @@ export async function reconcileVtjscPublications(
       )?.digestSRI
       let jsonSchemaCredentialId = existingJsc?.credential?.id
       try {
-        if (!existingJsc || existingDigest !== expectedDigest) {
+        // a VTJSC an older agent published as data model 1.1 is rebuilt as well
+        if (
+          !existingJsc ||
+          existingDigest !== expectedDigest ||
+          !isDataIntegrityVcdm2Credential(existingJsc.credential)
+        ) {
           const credential = await createJsc(
             agent,
             agent.publicApiBaseUrl,

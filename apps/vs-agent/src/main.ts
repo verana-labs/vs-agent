@@ -21,6 +21,8 @@ import {
   ECS_CLAIMS_VARIABLES,
   readEcsClaimsFromEnv,
   reconcileVtjscPublications,
+  SUPPORTED_PUBLIC_DID_METHODS,
+  isSupportedPublicDidMethod,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -186,8 +188,10 @@ const run = async () => {
       configErrors.push((error as Error).message)
     }
   }
-  if (!['webvh', 'web'].includes(AGENT_PUBLIC_DID_METHOD)) {
-    configErrors.push(`AGENT_PUBLIC_DID_METHOD must be 'webvh' or 'web' (got '${AGENT_PUBLIC_DID_METHOD}')`)
+  if (!isSupportedPublicDidMethod(AGENT_PUBLIC_DID_METHOD)) {
+    configErrors.push(
+      `AGENT_PUBLIC_DID_METHOD must be one of [${SUPPORTED_PUBLIC_DID_METHODS.join(', ')}] (got '${AGENT_PUBLIC_DID_METHOD}')`,
+    )
   }
   if (!VERANA_CORPORATION_ID) {
     configErrors.push('VERANA_CORPORATION_ID is required')

@@ -27,6 +27,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
 import { createInvitation, ParticipantRole } from '@verana-labs/vs-agent-sdk'
@@ -309,7 +310,14 @@ export class V2DidcommCredentialExchangesController {
   })
   @ApiOkResponse({ description: 'The updated credential exchange record', type: CredentialExchangeRecordDto })
   @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
-  @ApiConflictResponse({ description: 'The exchange is not in state `offer-received`' })
+  @ApiConflictResponse({
+    description:
+      'The exchange is not in state `offer-received`, or `PEER_NOT_AUTHORIZED`: the issuer of the ' +
+      'offered credential definition holds no active ISSUER `Participant` for its `CredentialSchema`',
+  })
+  @ApiServiceUnavailableResponse({
+    description: '`RESOLVER_UNAVAILABLE`: the agent cannot complete the check',
+  })
   public async acceptCredentialOffer(
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<CredentialExchangeRecordDto> {
