@@ -29,6 +29,14 @@ export class AdminApiError extends Error {
   }
 }
 
+export function unknownConnection(connectionId: string): AdminApiError {
+  return new AdminApiError(
+    AdminApiErrorCode.UnknownId,
+    HttpStatus.NOT_FOUND,
+    `no connection with id "${connectionId}"`,
+  )
+}
+
 export type TrustDecisionSubject = 'agent' | 'peer'
 
 export function trustDecisionError(
