@@ -29,6 +29,7 @@ import {
 import { resolveV2FlowRecord } from '../controllers/admin/vt-flow/VtFlowsService'
 
 import {
+  toBasicMessageDto,
   toConnectionDto,
   toCredentialExchangeDto,
   toPresentationDto,
@@ -105,7 +106,7 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
   }): void => {
     const record = payload.basicMessageRecord
     if (record.role !== DidCommBasicMessageRole.Receiver) return
-    deliver(EventType.MessageReceived, toBasicMessageRecord(record))
+    deliver(EventType.MessageReceived, toBasicMessageDto(record))
   }
   agent.events.on<DidCommBasicMessageStateChangedEvent>(
     DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged,
@@ -145,12 +146,3 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
 }
 
 const dataOf = ({ type: _type, ...data }: Event): Record<string, unknown> => data
-
-const toBasicMessageRecord = (record: DidCommBasicMessageRecord) => ({
-  id: record.id,
-  connectionId: record.connectionId,
-  role: record.role,
-  content: record.content,
-  sentTime: record.sentTime,
-  createdAt: record.createdAt,
-})
