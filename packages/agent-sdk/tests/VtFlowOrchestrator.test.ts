@@ -13,9 +13,11 @@ const record = {
 
 const activeIssuer = { id: 10, role: 'ISSUER', participant_state: 'ACTIVE', schema_id: 5 }
 
-function verify(indexer: Record<string, unknown>) {
+const SERVICE_SCHEMA = JSON.stringify({ title: 'ServiceCredential' })
+
+function verify(indexer: Record<string, unknown>, setEcsSchemaKey = vi.fn(async () => undefined)) {
   const agent: Record<string, unknown> = {
-    dependencyManager: { resolve: () => ({ findById: async () => record }) },
+    dependencyManager: { resolve: () => ({ findById: async () => record, setEcsSchemaKey }) },
     didcomm: {
       credentials: {
         // verre only digests JSON-LD, so the received credential must at least carry its context
@@ -70,6 +72,27 @@ describe('VtFlowOrchestrator.verifyOfferedCredential', () => {
     )
   })
 
+  it('stores the ECS key of the schema, so publication needs no indexer', async () => {
+    const setEcsSchemaKey = vi.fn(async () => undefined)
+
+    await verify(
+      {
+        getCredentialSchema: async () => ({ id: 5, digest_algorithm: 'sha384', json_schema: SERVICE_SCHEMA }),
+      },
+      setEcsSchemaKey,
+    )
+
+    expect(setEcsSchemaKey).toHaveBeenCalledWith('rec-1', 'ecs-service')
+  })
+
+  it('stores no ECS key for a schema that is not an ECS one', async () => {
+    const setEcsSchemaKey = vi.fn(async () => undefined)
+
+    await verify({}, setEcsSchemaKey)
+
+    expect(setEcsSchemaKey).not.toHaveBeenCalled()
+  })
+
   it('digests the credential without an algorithm prefix', async () => {
     let looked: string | undefined
     await verify({
@@ -101,7 +124,8 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
     }
     const agent = {
       did: 'did:web:agent',
-      label: 'Agent',
+      publicApiBaseUrl: 'https://agent.example',
+      dids: { getCreatedDids: vi.fn(async () => []) },
       config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
       indexer: { findParticipant: vi.fn(async (id: number) => (Number(id) === 5 ? holder : validator)) },
       veranaChain: {

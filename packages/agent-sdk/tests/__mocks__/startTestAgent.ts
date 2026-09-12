@@ -51,7 +51,6 @@ export const startAgent = async ({
     did: `did:webvh:${domain}`,
     dependencies: agentDependencies,
     publicApiBaseUrl: `https://${domain}`,
-    label,
     veranaChain,
     // These agents never reach the VPR: the URL is unroutable on purpose, so a test that does
     // hit it fails loudly instead of silently talking to a real indexer.

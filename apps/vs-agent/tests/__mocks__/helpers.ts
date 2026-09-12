@@ -70,7 +70,7 @@ export const startServersTesting = async (
 
   const conf: ServerConfig = {
     port: 3000,
-    logger: new TsLogger(LogLevel.Off, agent.label),
+    logger: new TsLogger(LogLevel.Off, new URL(agent.publicApiBaseUrl).host),
     publicApiBaseUrl: 'http://localhost:3001',
     endpoints: agent.didcomm.config.endpoints,
   }

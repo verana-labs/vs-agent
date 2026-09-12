@@ -33,6 +33,8 @@ cd vs-agent/examples/verifier
 3. Obtain connection via:
    - Web: `http://localhost:3001/invitation`
    - QR: `http://localhost:3001/invitation/qr`
+
+   Set `PUBLIC_API_BASE_URL` in `docker-compose.yml` to the public `https` URL that fronts port 3001. The agent derives its DID and its `wss://` DIDComm endpoint from it, so a wallet cannot reach an agent published under a plain `http` URL.
 4. Scan QR in your wallet and accept.
 
 ## Flow Diagram

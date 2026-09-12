@@ -4,7 +4,6 @@ import { createInvitation } from '@verana-labs/vs-agent-sdk'
 import { Response } from 'express'
 import QRCode from 'qrcode'
 
-import { AGENT_INVITATION_BASE_URL } from '../../../config'
 import { VsAgentService } from '../../../services/VsAgentService'
 
 @ApiTags('qr')
@@ -31,11 +30,8 @@ export class V1QrController {
     @Query('fcolor') fcolor?: string,
     @Query('legacy') useLegacyDid?: boolean,
   ) {
-    const { outOfBandInvitation } = await createInvitation({
-      agent: await this.agentService.getAgent(),
-      useLegacyDid,
-    })
-    const invitationUrl = outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL })
+    const agent = await this.agentService.getAgent()
+    const { url: invitationUrl } = await createInvitation({ agent, useLegacyDid })
 
     function isQRCodeErrorCorrectionLevel(input?: string): input is QRCode.QRCodeErrorCorrectionLevel {
       return input ? ['low', 'medium', 'quartile', 'high', 'L', 'M', 'Q', 'H'].includes(input) : false
