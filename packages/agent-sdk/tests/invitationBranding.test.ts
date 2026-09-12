@@ -20,7 +20,11 @@ function makeAgent(serviceClaims?: Record<string, unknown>) {
       config: { didcommVersions: ['v1', 'v2'] },
       oob: {
         createInvitation: vi.fn(async (_config: Record<string, unknown>) => ({
-          outOfBandInvitation: { toJSON: () => ({ id: 'inv' }), v2Invitation: undefined },
+          outOfBandInvitation: {
+            toJSON: () => ({ id: 'inv' }),
+            toUrl: () => 'https://agent.example?_oob=inv',
+            v2Invitation: undefined,
+          },
         })),
       },
     },

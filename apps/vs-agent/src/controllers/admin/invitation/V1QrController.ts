@@ -31,8 +31,7 @@ export class V1QrController {
     @Query('legacy') useLegacyDid?: boolean,
   ) {
     const agent = await this.agentService.getAgent()
-    const { outOfBandInvitation } = await createInvitation({ agent, useLegacyDid })
-    const invitationUrl = outOfBandInvitation.toUrl({ domain: agent.publicApiBaseUrl })
+    const { url: invitationUrl } = await createInvitation({ agent, useLegacyDid })
 
     function isQRCodeErrorCorrectionLevel(input?: string): input is QRCode.QRCodeErrorCorrectionLevel {
       return input ? ['low', 'medium', 'quartile', 'high', 'L', 'M', 'Q', 'H'].includes(input) : false

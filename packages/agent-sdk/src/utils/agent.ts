@@ -59,6 +59,7 @@ export async function createInvitation(options: {
   return {
     invitation: outOfBandInvitation.v2Invitation?.toJSON() ?? outOfBandInvitation.toJSON(),
     outOfBandInvitation,
+    url: outOfBandInvitation.toUrl({ domain: agent.publicApiBaseUrl }),
   }
 }
 

@@ -69,12 +69,12 @@ export class V1InvitationController {
   @ApiBody({ type: CreateInvitationDto, required: false })
   public async createInvitation(@Body() options?: CreateInvitationDto): Promise<CreateInvitationResult> {
     const agent = await this.agentService.getAgent()
-    const { outOfBandInvitation } = await createInvitation({
+    const { url } = await createInvitation({
       agent,
       useLegacyDid: options?.useLegacyDid,
       didCommVersion: options?.didCommVersion,
     })
-    return { url: outOfBandInvitation.toUrl({ domain: agent.publicApiBaseUrl }) }
+    return { url }
   }
 
   @Get('/')
@@ -95,8 +95,8 @@ export class V1InvitationController {
   @ApiQuery({ name: 'legacy', required: false, type: Boolean })
   public async getInvitation(@Query('legacy') useLegacyDid?: boolean): Promise<CreateInvitationResult> {
     const agent = await this.agentService.getAgent()
-    const { outOfBandInvitation } = await createInvitation({ agent, useLegacyDid })
-    return { url: outOfBandInvitation.toUrl({ domain: agent.publicApiBaseUrl }) }
+    const { url } = await createInvitation({ agent, useLegacyDid })
+    return { url }
   }
 
   @Post('/receive')
@@ -332,13 +332,12 @@ export class V1InvitationController {
     }
     await agent.didcomm.proofs.update(request.proofRecord)
 
-    const { invitation, outOfBandInvitation } = await createInvitation({
+    const { invitation, url } = await createInvitation({
       agent,
       messages: [request.message],
       useLegacyDid,
       didCommVersion,
     })
-    const url = outOfBandInvitation.toUrl({ domain: agent.publicApiBaseUrl })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({
       invitation,
@@ -456,13 +455,12 @@ export class V1InvitationController {
         },
       })
 
-      const { invitation, outOfBandInvitation } = await createInvitation({
+      const { invitation, url } = await createInvitation({
         agent,
         messages: [request.message],
         useLegacyDid,
         didCommVersion,
       })
-      const url = outOfBandInvitation.toUrl({ domain: agent.publicApiBaseUrl })
 
       const shortUrlId = await this.urlShortenerService.createShortUrl({
         invitation,
