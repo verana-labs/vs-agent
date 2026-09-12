@@ -27,6 +27,7 @@
     "clean": "rimraf -rf ./build",
     "compile": "tsc -p tsconfig.build.json",
     "prepublishOnly": "pnpm run build",
+    "test": "vitest",
     "version": "pnpm version --allow-same-version"
   },
   "dependencies": {
@@ -40,8 +41,11 @@
     "@credo-ts/didcomm": "catalog:",
     "@credo-ts/question-answer": "catalog:",
     "@nestjs/common": "^10.0.0",
+    "@nestjs/swagger": "^8.0.7",
     "@verana-labs/vs-agent-model": "workspace:*",
-    "@verana-labs/vs-agent-sdk": "workspace:*"
+    "@verana-labs/vs-agent-sdk": "workspace:*",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.14.1"
   },
   "peerDependencies": {
     "@credo-ts/core": "catalog:"

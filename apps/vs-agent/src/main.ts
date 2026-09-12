@@ -89,6 +89,7 @@ import {
   setupAgent,
   toNestLogLevels,
   TsLogger,
+  ecsServiceProfile,
   webhookEvent,
 } from './utils'
 
@@ -298,7 +299,7 @@ const run = async () => {
   // Build the list of active NestJS plugins
   const nestPlugins: VsAgentNestPlugin[] = [
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
-    ...(chatModule ? [chatModule.ChatPlugin] : []),
+    ...(chatModule ? [chatModule.ChatPlugin({ defaultProfile: ecsServiceProfile })] : []),
     ...(mrtdModule ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })] : []),
     VtFlowNestPlugin,
   ]

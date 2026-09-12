@@ -10,10 +10,9 @@ import {
   DidCommConnectionProfileUpdatedEvent,
   DidCommProfileEventTypes,
 } from '@2060.io/credo-ts-didcomm-user-profile'
+import { emitModuleMessageEvent } from '@verana-labs/vs-agent-sdk'
 
 type Message = Record<string, any>
-
-type Deliver = (type: string, data: unknown) => void
 
 const MODULES: Record<string, string> = {
   'https://didcomm.org/receipts/1.0': 'receipts',
@@ -89,7 +88,7 @@ const FROM_MODULE_EVENT = new Set([
   'https://didcomm.org/user-profile/1.0/profile',
 ])
 
-export function registerDidcommModuleEvents(agent: VsAgent, deliver: Deliver): void {
+export function registerDidcommModuleEvents(agent: VsAgent): void {
   agent.didcomm.registerMessageHandlerMiddleware(async (context, next) => {
     await next()
     const { message, connection } = context
@@ -103,13 +102,13 @@ export function registerDidcommModuleEvents(agent: VsAgent, deliver: Deliver): v
       threadId: message.threadId,
       message: message.toJSON(),
     }
-    deliver(`didcomm.${module}.${messageNameOf(message.type)}-received`, data)
+    emitModuleMessageEvent(agent, `didcomm.${module}.${messageNameOf(message.type)}-received`, data)
   })
 
   agent.events.on<DidCommConnectionProfileUpdatedEvent>(
     DidCommProfileEventTypes.ConnectionProfileUpdated,
     ({ payload }) => {
-      deliver('didcomm.user-profile.profile-received', {
+      emitModuleMessageEvent(agent, 'didcomm.user-profile.profile-received', {
         connectionId: payload.connection.id,
         threadId: payload.threadId,
         profile: payload.profile,
@@ -124,7 +123,7 @@ export function registerDidcommModuleEvents(agent: VsAgent, deliver: Deliver): v
       if (record.role !== DidCommMediaSharingRole.Receiver) return
       if (record.state !== DidCommMediaSharingState.MediaShared) return
 
-      deliver('didcomm.media-sharing.share-media-received', {
+      emitModuleMessageEvent(agent, 'didcomm.media-sharing.share-media-received', {
         connectionId: record.connectionId,
         threadId: record.threadId,
         description: record.description,
