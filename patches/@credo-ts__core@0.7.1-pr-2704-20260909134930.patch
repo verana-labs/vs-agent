@@ -1,0 +1,49 @@
+diff --git a/build/modules/w3c-di/W3cDataIntegrityApi.d.mts b/build/modules/w3c-di/W3cDataIntegrityApi.d.mts
+index bc45bef..47bb6e3 100644
+--- a/build/modules/w3c-di/W3cDataIntegrityApi.d.mts
++++ b/build/modules/w3c-di/W3cDataIntegrityApi.d.mts
+@@ -1,6 +1,7 @@
+ import { W3cDataIntegrityProofSetSecuredDocument, W3cDataIntegritySecuredDocument, W3cDataIntegritySingleProofSecuredDocument } from "./W3cDataIntegrityProof.mjs";
+ import { W3cDataIntegrityCreateFailure, W3cDataIntegrityCreateSuccess, W3cDataIntegrityVerifyFailure, W3cDataIntegrityVerifySuccess } from "./W3cDataIntegrityError.mjs";
+ import { W3cDataIntegrityCryptosuiteRegistry } from "./W3cDataIntegrityCryptosuiteRegistry.mjs";
++import { PublicJwk, SupportedPublicJwkClass } from "../kms/jwk/PublicJwk.mjs";
+ import { W3cDataIntegrityCreateProofOptions, W3cDataIntegrityProofService, W3cDataIntegrityVerifyProofDocumentOptions, W3cDataIntegrityVerifyProofOptions } from "./W3cDataIntegrityProofService.mjs";
+ import { AgentContext } from "../../agent/context/AgentContext.mjs";
+ import "../../agent/index.mjs";
+@@ -18,7 +19,13 @@ declare class W3cDataIntegrityApi {
+   verifySecuredDocument(securedDocument: W3cDataIntegritySecuredDocument, options?: W3cDataIntegrityVerifyProofOptions): Promise<W3cDataIntegrityVerifySuccess | W3cDataIntegrityVerifyFailure>;
+   verifySecuredDocumentOrThrow(securedDocument: W3cDataIntegritySecuredDocument, options?: W3cDataIntegrityVerifyProofOptions): Promise<W3cDataIntegrityVerifySuccess>;
+   verifyProofDocument(options: W3cDataIntegrityVerifyProofDocumentOptions): Promise<W3cDataIntegrityVerifySuccess | W3cDataIntegrityVerifyFailure>;
+-  getSupportedCryptosuites(): string[];
++  /**
++   * The identifiers of the registered Data Integrity cryptosuites, in registration order.
++   *
++   * @param publicJwkType when provided, only the cryptosuites that can create and verify proofs
++   * with this key type are returned.
++   */
++  getSupportedCryptosuites(publicJwkType?: SupportedPublicJwkClass | PublicJwk): string[];
+ }
+ //#endregion
+ export { W3cDataIntegrityApi };
+diff --git a/build/modules/w3c-di/W3cDataIntegrityApi.mjs b/build/modules/w3c-di/W3cDataIntegrityApi.mjs
+index 13b9df9..e2c1c4e 100644
+--- a/build/modules/w3c-di/W3cDataIntegrityApi.mjs
++++ b/build/modules/w3c-di/W3cDataIntegrityApi.mjs
+@@ -48,8 +48,15 @@ let W3cDataIntegrityApi = class W3cDataIntegrityApi {
+ 	async verifyProofDocument(options) {
+ 		return await this.dataIntegrityProofService.verifyProofDocument(this.agentContext, options);
+ 	}
+-	getSupportedCryptosuites() {
+-		return this.dataIntegrityCryptosuiteRegistry.supportedCryptosuites;
++	/**
++	* The identifiers of the registered Data Integrity cryptosuites, in registration order.
++	*
++	* @param publicJwkType when provided, only the cryptosuites that can create and verify proofs
++	* with this key type are returned.
++	*/
++	getSupportedCryptosuites(publicJwkType) {
++		if (!publicJwkType) return this.dataIntegrityCryptosuiteRegistry.supportedCryptosuites;
++		return this.dataIntegrityCryptosuiteRegistry.getAllByPublicJwkType(publicJwkType).map((cryptosuiteInfo) => cryptosuiteInfo.cryptosuite);
+ 	}
+ };
+ W3cDataIntegrityApi = __decorate([injectable(), __decorateMetadata("design:paramtypes", [

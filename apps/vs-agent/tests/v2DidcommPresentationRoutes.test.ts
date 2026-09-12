@@ -753,6 +753,34 @@ describe('v2 didcomm presentation routes', () => {
         expect(proofs.acceptRequest).not.toHaveBeenCalled()
       })
 
+      it('answers PEER_NOT_AUTHORIZED when the verifier connected with a DID that is not public', async () => {
+        connections.findById.mockResolvedValue({ id: 'conn-p-1', theirDid: 'did:peer:2.Ez6Mk.Vz6Mk' })
+
+        const response = await request(app.getHttpServer()).post(
+          '/v2/didcomm/presentations/p-1/accept-request',
+        )
+
+        expect(response.status).toBe(409)
+        expect(response.body.error.code).toBe('PEER_NOT_AUTHORIZED')
+        expect(response.body.error.message).toContain('Supported methods: web, webvh')
+        expect(anonCredsTrust.assertAuthorized).not.toHaveBeenCalled()
+        expect(proofs.acceptRequest).not.toHaveBeenCalled()
+      })
+
+      it('answers RESOLVER_UNAVAILABLE when it cannot complete the check', async () => {
+        anonCredsTrust.assertAuthorized.mockRejectedValue(
+          new AnonCredsTrustError(AnonCredsTrustErrorReason.Unavailable, 'the indexer is unreachable'),
+        )
+
+        const response = await request(app.getHttpServer()).post(
+          '/v2/didcomm/presentations/p-1/accept-request',
+        )
+
+        expect(response.status).toBe(503)
+        expect(response.body.error.code).toBe('RESOLVER_UNAVAILABLE')
+        expect(proofs.acceptRequest).not.toHaveBeenCalled()
+      })
+
       it('answers PEER_NOT_AUTHORIZED when one group of the AnonCreds request carries no restriction', async () => {
         proofs.getFormatData.mockResolvedValue({
           request: {

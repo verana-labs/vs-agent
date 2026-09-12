@@ -1,13 +1,23 @@
 import {
+  ClaimFormat,
   DidDocumentService,
   DidRecord,
   DidRepository,
-  JsonTransformer,
-  W3cCredential,
   W3cJsonLdVerifiableCredential,
   W3cJsonLdVerifiablePresentation,
+  W3cPresentation,
+  type W3cV2DataIntegritySecuredCredential,
+  W3cV2DataIntegrityVerifiableCredential,
+  W3cV2DataIntegrityVerifiablePresentation,
+  W3cV2DiSignPresentationOptions,
+  W3cV2Presentation,
   utils,
 } from '@credo-ts/core'
+// No type definitions available for this library
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+//@ts-expect-error
+import { purposes } from '@digitalcredentials/jsonld-signatures'
+import type { DataIntegrityCredential } from '@credo-ts/didcomm'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { VsAgent } from '../agent/VsAgent'
@@ -18,7 +28,7 @@ import {
   createCredential,
   createJsonSchema,
   createJsonSubjectRef,
-  createPresentation,
+  getDataIntegrityCryptosuite,
   getVerificationMethodId,
   linkedVpFragment,
   signerW3c,
@@ -30,6 +40,102 @@ import { getEcsSchemas } from './data'
 async function getDidRecord(agent: VsAgent) {
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
   return didRecord
+}
+
+/**
+ * A trust credential the agent publishes from its DID Document: a VC Data Model 2.0 credential
+ * secured with a DataIntegrityProof, which is what the agent issues itself and receives over the
+ * RFC 0809 credential format, or a data model 1.1 credential carrying a linked data proof that an
+ * older issuer handed over.
+ */
+export type TrustCredential = W3cJsonLdVerifiableCredential | W3cV2DataIntegrityVerifiableCredential
+export type TrustPresentation = W3cJsonLdVerifiablePresentation | W3cV2DataIntegrityVerifiablePresentation
+
+/** The credential fields shared by both data models: id, credentialSchema and credentialSubject */
+function trustCredentialFields(credential: TrustCredential) {
+  return credential instanceof W3cV2DataIntegrityVerifiableCredential
+    ? credential.resolvedCredential
+    : credential
+}
+
+/**
+ * What the metadata entry stores and the DID Document service endpoint serves. A data model 1.1
+ * presentation is kept as its class instance, which serializes to JSON-LD when the DID record is
+ * saved; a Data Integrity one wraps the secured JSON, so that is what gets stored.
+ */
+function trustCredentialEntry(credential: TrustCredential) {
+  return credential instanceof W3cV2DataIntegrityVerifiableCredential
+    ? credential.securedCredential
+    : credential.jsonCredential
+}
+
+function trustPresentationEntry(presentation: TrustPresentation) {
+  return presentation instanceof W3cV2DataIntegrityVerifiablePresentation
+    ? presentation.securedPresentation
+    : presentation
+}
+
+function trustPresentationId(presentation: TrustPresentation): string | undefined {
+  return presentation instanceof W3cV2DataIntegrityVerifiablePresentation
+    ? (presentation.securedPresentation.id as string | undefined)
+    : presentation.id
+}
+
+/**
+ * Wraps a VC Data Model 2.0 credential in a data model 2.0 presentation secured with a
+ * DataIntegrityProof under the cryptosuite the agent is configured with, the counterpart of the
+ * linked data proof a data model 1.1 linked VP carries. The presentation is published from the DID
+ * Document rather than presented to a verifier, so there is no challenge to bind; its proof purpose
+ * is `authentication`, as Data Integrity defines for presentations.
+ */
+export async function signLinkedDataIntegrityPresentation(
+  agent: Pick<VsAgent, 'w3cV2Credentials' | 'context'>,
+  options: {
+    id: string
+    holder: string
+    credential: W3cV2DataIntegrityVerifiableCredential
+    verificationMethodId: string
+  },
+): Promise<W3cV2DataIntegrityVerifiablePresentation> {
+  const presentation = new W3cV2Presentation({
+    id: options.id,
+    holder: options.holder,
+    verifiableCredential: [options.credential],
+  })
+  // The options type requires a challenge for every presentation format, while a Data Integrity
+  // proof only carries one when it is given
+  return await agent.w3cV2Credentials.signPresentation<ClaimFormat.DiVp>({
+    format: ClaimFormat.DiVp,
+    presentation,
+    cryptosuite: getDataIntegrityCryptosuite(agent),
+    verificationMethod: options.verificationMethodId,
+  } as W3cV2DiSignPresentationOptions)
+}
+
+/**
+ * Wraps a VC Data Model 1.1 credential in a data model 1.1 presentation carrying an
+ * Ed25519Signature2020 linked data proof, for credentials received from issuers that still use it.
+ */
+async function signLinkedDataProofPresentation(
+  agent: VsAgent,
+  options: {
+    id: string
+    holder: string
+    credential: W3cJsonLdVerifiableCredential
+    verificationMethodId: string
+  },
+): Promise<W3cJsonLdVerifiablePresentation> {
+  return await agent.w3cCredentials.signPresentation<ClaimFormat.LdpVp>({
+    format: ClaimFormat.LdpVp,
+    presentation: new W3cPresentation({
+      id: options.id,
+      holder: options.holder,
+      verifiableCredential: [options.credential],
+    }),
+    proofType: 'Ed25519Signature2020',
+    verificationMethod: options.verificationMethodId,
+    proofPurpose: new purposes.AssertionProofPurpose(),
+  })
 }
 
 async function updateDidRecord(agent: VsAgent, didRecord: DidRecord) {
@@ -70,12 +176,13 @@ export function findMetadataEntry(
 export async function saveMetadataEntry(
   agent: VsAgent,
   didRecord: DidRecord,
-  credential: W3cJsonLdVerifiableCredential,
-  verifiablePresentation: W3cJsonLdVerifiablePresentation,
+  credential: TrustCredential,
+  verifiablePresentation: TrustPresentation,
   didDocumentServiceId: string,
   key: '_vt/vtc' | '_vt/jsc',
 ) {
-  const schema = key === '_vt/vtc' ? credential.credentialSchema : credential.credentialSubject
+  const fields = trustCredentialFields(credential)
+  const schema = key === '_vt/vtc' ? fields.credentialSchema : fields.credentialSubject
   const ref = Array.isArray(schema) ? schema[0]?.id : schema?.id
 
   if (!ref) {
@@ -84,7 +191,7 @@ export async function saveMetadataEntry(
 
   const record = didRecord.metadata.get(key) ?? {}
   // Remove previous entry for this credential ID (if exists)
-  const found = findMetadataEntry(didRecord, key, credential.id, ref)
+  const found = findMetadataEntry(didRecord, key, fields.id, ref)
   if (found) {
     if (didRecord.didDocument?.service) {
       didRecord.didDocument.service = didRecord.didDocument.service.filter(
@@ -94,14 +201,14 @@ export async function saveMetadataEntry(
     delete record[found.schemaId]
   }
   record[ref] = {
-    credential: credential.jsonCredential,
-    verifiablePresentation,
+    credential: trustCredentialEntry(credential),
+    verifiablePresentation: trustPresentationEntry(verifiablePresentation),
     didDocumentServiceId,
   }
   didRecord.didDocument?.service?.push(
     new DidDocumentService({
       id: didDocumentServiceId,
-      serviceEndpoint: verifiablePresentation.id!,
+      serviceEndpoint: trustPresentationId(verifiablePresentation)!,
       type: 'LinkedVerifiablePresentation',
     }),
   )
@@ -131,23 +238,21 @@ export async function createVtc(
   agent: VsAgent,
   publicApiBaseUrl: string,
   id: string,
-  credential: W3cJsonLdVerifiableCredential,
+  credential: TrustCredential,
 ) {
   const didRecord = await getDidRecord(agent)
   const schemaId = `schemas-${id}-vtc-vp.json`
   const didDocumentServiceId = `${agent.did}#vpr-${schemaId.replace('.json', '')}`
   const serviceEndpoint = `${publicApiBaseUrl}/vt/${schemaId}`
-  const unsignedPresentation = createPresentation({
-    id: serviceEndpoint,
-    holder: agent.did,
-    verifiableCredential: [credential],
-  })
+  const verificationMethodId = getVerificationMethodId(agent.config.logger, didRecord)
 
-  const verifiablePresentation = await signerW3c(
-    agent,
-    unsignedPresentation,
-    getVerificationMethodId(agent.config.logger, didRecord),
-  )
+  // The linked VP takes the data model of the credential it carries: a Data Integrity credential
+  // cannot be embedded in a data model 1.1 presentation, nor the other way round
+  const linkedVp = { id: serviceEndpoint, holder: agent.did!, verificationMethodId }
+  const verifiablePresentation: TrustPresentation =
+    credential instanceof W3cV2DataIntegrityVerifiableCredential
+      ? await signLinkedDataIntegrityPresentation(agent, { ...linkedVp, credential })
+      : await signLinkedDataProofPresentation(agent, { ...linkedVp, credential })
 
   await saveMetadataEntry(
     agent,
@@ -171,7 +276,7 @@ export async function createJsc(
   publicApiBaseUrl: string,
   ecsSchemas: Record<string, string>,
   options: CreateJscOptions,
-) {
+): Promise<W3cV2DataIntegritySecuredCredential & { id: string }> {
   const { schemaBaseId, jsonSchemaRef, precomputedDigestSRI } = options
   const didRecord = await getDidRecord(agent)
   const { id: subjectId, claims } = createJsonSubjectRef(jsonSchemaRef)
@@ -180,36 +285,33 @@ export async function createJsc(
     ? { ...claims, digestSRI: precomputedDigestSRI }
     : await addDigestSRI(subjectId, claims, ecsSchemas)
 
-  const credentialSubject = {
-    id: subjectId,
-    claims: subjectClaims,
-  }
+  const credentialSubject = { ...subjectClaims, id: subjectId }
   const schemaPresentation = `schemas-${schemaBaseId}-vtjsc-vp.json`
   const schemaCredential = `schemas-${schemaBaseId}-jsc.json`
   const serviceEndpoint = `${publicApiBaseUrl}/vt/${schemaPresentation}`
   const didDocumentServiceId = `${agent.did}#vpr-schemas-${schemaBaseId}-vtjsc-vp`
+  const credentialId = `${publicApiBaseUrl}/vt/${schemaCredential}`
 
   const unsignedCredential = createCredential({
-    id: `${publicApiBaseUrl}/vt/${schemaCredential}`,
+    id: credentialId,
     type: ['VerifiableCredential', 'JsonSchemaCredential'],
     issuer: agent.did,
     credentialSubject,
+    credentialSchema: await addDigestSRI(
+      createJsonSchema.id,
+      { id: createJsonSchema.id, type: createJsonSchema.type },
+      ecsSchemas,
+    ),
   })
-  unsignedCredential.credentialSchema = await addDigestSRI(createJsonSchema.id, createJsonSchema, ecsSchemas)
 
   const verificationMethodId = getVerificationMethodId(agent.config.logger, didRecord)
-  const credential = await signerW3c(
-    agent,
-    JsonTransformer.fromJSON(unsignedCredential, W3cCredential),
-    verificationMethodId,
-  )
-
-  const unsignedPresentation = createPresentation({
+  const credential = await signerW3c(agent, unsignedCredential, verificationMethodId)
+  const verifiablePresentation = await signLinkedDataIntegrityPresentation(agent, {
     id: serviceEndpoint,
-    holder: agent.did,
-    verifiableCredential: [credential],
+    holder: agent.did!,
+    credential,
+    verificationMethodId,
   })
-  const verifiablePresentation = await signerW3c(agent, unsignedPresentation, verificationMethodId)
 
   await saveMetadataEntry(
     agent,
@@ -219,7 +321,8 @@ export async function createJsc(
     didDocumentServiceId,
     '_vt/jsc',
   )
-  return credential.jsonCredential
+  // the credential as published; its id is the one assigned above
+  return credential.securedCredential as W3cV2DataIntegritySecuredCredential & { id: string }
 }
 
 export async function removeTrustCredential(agent: VsAgent, schemaId: string, key: '_vt/jsc' | '_vt/vtc') {
@@ -238,18 +341,37 @@ export async function removeTrustCredential(agent: VsAgent, schemaId: string, ke
   return await deleteMetadataEntry(agent, schemaId, didRecord, key)
 }
 
+/**
+ * Removes the linked VP and the stored credential an exchange delivered, as
+ * [VSA-VTI-FLOW-OP-REVOKE] requires of the applicant. The credential is read from the RFC 0809
+ * format data of the exchange; exchanges earlier versions completed over other formats are not
+ * migrated. Returns the credential id, or `undefined` when none is found, in which case nothing is
+ * removed.
+ */
 export async function removeStoredTrustCredential(
   agent: VsAgent,
   credentialExchangeRecordId: string,
 ): Promise<string | undefined> {
   const formatData = await agent.didcomm.credentials.getFormatData(credentialExchangeRecordId)
-  const credentialId = (formatData.credential as { jsonld?: { id?: string } } | undefined)?.jsonld?.id
-  if (!credentialId) return undefined
+  const credentialId = (formatData.credential as { dataIntegrity?: DataIntegrityCredential } | undefined)
+    ?.dataIntegrity?.credential?.id
+  if (typeof credentialId !== 'string') {
+    agent.config.logger.warn(
+      `[trust-credential] Credential exchange ${credentialExchangeRecordId} carries no RFC 0809 credential id; its linked VP and stored credential are left in place`,
+    )
+    return undefined
+  }
 
   await removeTrustCredential(agent, credentialId, '_vt/vtc')
 
-  const stored = await agent.w3cCredentials.getAll()
-  for (const storedRecord of stored) {
+  // The RFC 0809 format holds a data model 2.0 credential in a W3cV2CredentialRecord and a data
+  // model 1.1 one in a W3cCredentialRecord; the credential id is tagged on both
+  for (const storedRecord of await agent.w3cV2Credentials.getAll()) {
+    if (storedRecord.getTags().givenId === credentialId) {
+      await agent.w3cV2Credentials.deleteById(storedRecord.id)
+    }
+  }
+  for (const storedRecord of await agent.w3cCredentials.getAll()) {
     if (storedRecord.getTags().givenId === credentialId) {
       await agent.w3cCredentials.deleteById(storedRecord.id)
     }
@@ -353,7 +475,7 @@ export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc
 async function anchorCredentialDigest(
   agent: VsAgent,
   schemaId: number,
-  credential: W3cJsonLdVerifiableCredential | undefined,
+  credential: Record<string, unknown> | undefined,
   issuerParticipantId: number,
 ): Promise<void> {
   const chain = agent.veranaChain
@@ -364,10 +486,8 @@ async function anchorCredentialDigest(
   const schema = await agent.indexer.getCredentialSchema(schemaId).catch(() => undefined)
   if (!schema) throw new Error(`[DigestAnchor] Credential schema ${schemaId} is not on chain`)
 
-  const digest = computeCredentialDigestJCS(
-    JsonTransformer.toJSON(credential) as unknown as W3cJsonLdVerifiableCredential,
-    schema.digest_algorithm,
-  )
+  // the credential as published, which is what a verifier digests
+  const digest = computeCredentialDigestJCS(credential, schema.digest_algorithm)
   // the same credential gives the same digest on each run, so an anchored digest needs no second transaction
   if (await agent.indexer.getDigest(digest)) return
 
@@ -448,7 +568,7 @@ export async function rebindEcsCredentialSchema(
       await anchorCredentialDigest(
         agent,
         Number(schemaId),
-        verifiablePresentation?.verifiableCredential?.[0] as W3cJsonLdVerifiableCredential | undefined,
+        verifiablePresentation.verifiableCredential[0],
         issuerParticipantId,
       ),
   )
