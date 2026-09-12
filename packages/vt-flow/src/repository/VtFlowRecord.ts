@@ -45,6 +45,8 @@ export interface VtFlowStorageProps {
   credentialExchangeRecordId?: string
   subprotocolThid?: string
 
+  ecsSchemaKey?: string
+
   oobLinkUrl?: string
   proofsAttach?: DidCommAttachment[]
   credentialDigest?: string
@@ -77,6 +79,9 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
   public credentialExchangeRecordId?: string
   public subprotocolThid?: string
 
+  /** ECS key of the credential schema, resolved while verifying the offer so publication needs no indexer */
+  public ecsSchemaKey?: string
+
   public oobLinkUrl?: string
   public proofsAttach?: DidCommAttachment[]
   public credentialDigest?: string
@@ -107,6 +112,7 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
 
       this.credentialExchangeRecordId = props.credentialExchangeRecordId
       this.subprotocolThid = props.subprotocolThid
+      this.ecsSchemaKey = props.ecsSchemaKey
 
       this.oobLinkUrl = props.oobLinkUrl
       this.proofsAttach = props.proofsAttach
