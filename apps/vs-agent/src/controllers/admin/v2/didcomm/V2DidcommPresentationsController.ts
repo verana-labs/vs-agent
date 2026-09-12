@@ -28,6 +28,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
 import {
@@ -36,7 +37,9 @@ import {
   createInvitation,
   DerivedCredentialSchema,
   fetchJson,
+  isSupportedPublicDid,
   ParticipantRole,
+  SUPPORTED_PUBLIC_DID_METHODS,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
   type BaseAgentModules,
   type VsAgent,
@@ -230,7 +233,12 @@ export class V2DidcommPresentationsController {
   @ApiNotFoundResponse({ description: 'No presentation with the given id' })
   @ApiConflictResponse({
     description:
-      'The exchange is not in state `request-received`, or no credential set satisfies the request',
+      'The exchange is not in state `request-received`, no credential set satisfies the request, or ' +
+      '`PEER_NOT_AUTHORIZED`: the verifier holds no active VERIFIER `Participant` for the ' +
+      '`CredentialSchema` of a requested credential',
+  })
+  @ApiServiceUnavailableResponse({
+    description: '`RESOLVER_UNAVAILABLE`: the agent cannot complete the check',
   })
   public async acceptPresentationRequest(
     @Param('proofExchangeId') proofExchangeId: string,
@@ -247,16 +255,24 @@ export class V2DidcommPresentationsController {
       : undefined
     const verifierDid = connection?.theirDid
 
-    if (!verifierDid) {
-      throw peerNotAuthorized(
-        `the verifier of presentation "${proofExchangeId}" established no DID, so the agent cannot check its Participant entry`,
-      )
-    }
-
     const requestFormatData = await agent.didcomm.proofs.getFormatData(proofExchangeId)
     const anonCredsRequest = requestFormatData.request?.anoncreds ?? requestFormatData.request?.indy
 
     if (anonCredsRequest) {
+      if (!verifierDid) {
+        throw peerNotAuthorized(
+          `the verifier of presentation "${proofExchangeId}" established no DID, so the agent cannot check its Participant entry`,
+        )
+      }
+
+      // A service connects with its public DID, so another method cannot be checked, per
+      // [VSA-VTI-FLOW-VERIFY-AC-6]
+      if (!isSupportedPublicDid(verifierDid)) {
+        throw peerNotAuthorized(
+          `Unable to check verifier Participant entry for presentation "${proofExchangeId}": "${verifierDid}" is not supported. Supported methods: ${SUPPORTED_PUBLIC_DID_METHODS.join(', ')}`,
+        )
+      }
+
       const requestedGroups = [
         ...Object.values(anonCredsRequest.requested_attributes ?? {}),
         ...Object.values(anonCredsRequest.requested_predicates ?? {}),

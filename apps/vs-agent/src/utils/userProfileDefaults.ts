@@ -1,7 +1,11 @@
-import type { DidCommUserProfileData } from '@2060.io/credo-ts-didcomm-user-profile'
-
 import { ECS } from '@verana-labs/vs-agent-model'
 import { linkedVpFragment, VsAgent } from '@verana-labs/vs-agent-sdk'
+
+export interface EcsServiceProfile {
+  displayName?: string
+  description?: string
+  displayPicture?: { links: string[] }
+}
 
 interface VtcEntry {
   credential?: { credentialSubject?: Record<string, unknown> }
@@ -9,7 +13,7 @@ interface VtcEntry {
 }
 
 // Read at call time, not at startup: the credential is published asynchronously after boot
-export async function ecsServiceProfile(agent: VsAgent): Promise<DidCommUserProfileData | undefined> {
+export async function ecsServiceProfile(agent: VsAgent): Promise<EcsServiceProfile | undefined> {
   if (!agent.did) return undefined
 
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
@@ -21,7 +25,7 @@ export async function ecsServiceProfile(agent: VsAgent): Promise<DidCommUserProf
     ?.credentialSubject as { name?: string; description?: string; logoUri?: string } | undefined
   if (!claims) return undefined
 
-  const profile: DidCommUserProfileData = {
+  const profile: EcsServiceProfile = {
     ...(claims.name ? { displayName: claims.name } : {}),
     ...(claims.description ? { description: claims.description } : {}),
     ...(claims.logoUri ? { displayPicture: { links: [claims.logoUri] } } : {}),

@@ -2,7 +2,7 @@ import { plainToInstance } from 'class-transformer'
 import { validateSync } from 'class-validator'
 import { describe, expect, it } from 'vitest'
 
-import { SendReceiptsBodyDto } from '../src/controllers/admin/v2/didcomm/dto'
+import { SendReceiptsBodyDto } from '../src/nestjs/dto'
 
 const check = (body: unknown) =>
   validateSync(plainToInstance(SendReceiptsBodyDto, body), {

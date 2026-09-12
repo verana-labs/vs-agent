@@ -13,8 +13,8 @@ import {
   DidCommAutoAcceptCredential,
   DidCommAutoAcceptProof,
   DidCommCredentialV2Protocol,
+  DidCommDataIntegrityCredentialFormatService,
   DidCommHttpOutboundTransport,
-  DidCommJsonLdCredentialFormatService,
   DidCommModule,
   DidCommProofV2Protocol,
 } from '@credo-ts/didcomm'
@@ -70,7 +70,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
               credentialFormats: [
                 new LegacyIndyDidCommCredentialFormatService(),
                 new AnonCredsDidCommCredentialFormatService(),
-                new DidCommJsonLdCredentialFormatService(),
+                new DidCommDataIntegrityCredentialFormatService(),
               ],
             }),
           ],

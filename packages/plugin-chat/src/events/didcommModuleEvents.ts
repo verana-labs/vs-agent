@@ -10,22 +10,11 @@ import {
   DidCommConnectionProfileUpdatedEvent,
   DidCommProfileEventTypes,
 } from '@2060.io/credo-ts-didcomm-user-profile'
+import { emitModuleMessageEvent, moduleOf } from '@verana-labs/vs-agent-sdk'
 
-import { moduleOf } from './didcommModules'
+import { CHAT_DIDCOMM_MODULES } from '../nestjs/didcommModules'
 
 type Message = Record<string, any>
-
-type Deliver = (type: string, data: unknown) => void
-
-const MIDDLEWARE_MODULES = new Set([
-  'receipts',
-  'reactions',
-  'user-profile',
-  'media-sharing',
-  'calls',
-  'action-menu',
-  'question-answer',
-])
 
 const CATALOG: Record<string, (message: Message, connectionId: string) => Record<string, unknown>> = {
   'https://didcomm.org/receipts/1.0/message-receipts': (message, connectionId) => ({
@@ -91,27 +80,27 @@ const FROM_MODULE_EVENT = new Set([
   'https://didcomm.org/user-profile/1.0/profile',
 ])
 
-export function registerDidcommModuleEvents(agent: VsAgent, deliver: Deliver): void {
+export function registerDidcommModuleEvents(agent: VsAgent): void {
   agent.didcomm.registerMessageHandlerMiddleware(async (context, next) => {
     await next()
     const { message, connection } = context
     if (!connection) return
 
-    const module = moduleOf(protocolOf(message.type))
-    if (!module || !MIDDLEWARE_MODULES.has(module) || FROM_MODULE_EVENT.has(message.type)) return
+    const module = moduleOf(CHAT_DIDCOMM_MODULES, message.type)
+    if (!module || FROM_MODULE_EVENT.has(message.type)) return
 
     const data = CATALOG[message.type]?.(message as Message, connection.id) ?? {
       connectionId: connection.id,
       threadId: message.threadId,
       message: message.toJSON(),
     }
-    deliver(`didcomm.${module}.${messageNameOf(message.type)}-received`, data)
+    emitModuleMessageEvent(agent, `didcomm.${module}.${messageNameOf(message.type)}-received`, data)
   })
 
   agent.events.on<DidCommConnectionProfileUpdatedEvent>(
     DidCommProfileEventTypes.ConnectionProfileUpdated,
     ({ payload }) => {
-      deliver('didcomm.user-profile.profile-received', {
+      emitModuleMessageEvent(agent, 'didcomm.user-profile.profile-received', {
         connectionId: payload.connection.id,
         threadId: payload.threadId,
         profile: payload.profile,
@@ -126,7 +115,7 @@ export function registerDidcommModuleEvents(agent: VsAgent, deliver: Deliver): v
       if (record.role !== DidCommMediaSharingRole.Receiver) return
       if (record.state !== DidCommMediaSharingState.MediaShared) return
 
-      deliver('didcomm.media-sharing.share-media-received', {
+      emitModuleMessageEvent(agent, 'didcomm.media-sharing.share-media-received', {
         connectionId: record.connectionId,
         threadId: record.threadId,
         description: record.description,
@@ -139,7 +128,5 @@ export function registerDidcommModuleEvents(agent: VsAgent, deliver: Deliver): v
 function threadOnly(message: Message, connectionId: string): Record<string, unknown> {
   return { connectionId, threadId: message.threadId }
 }
-
-const protocolOf = (messageType: string): string => messageType.slice(0, messageType.lastIndexOf('/'))
 
 const messageNameOf = (messageType: string): string => messageType.slice(messageType.lastIndexOf('/') + 1)

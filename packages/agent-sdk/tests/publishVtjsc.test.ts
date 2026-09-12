@@ -159,13 +159,29 @@ describe('publishVtjscIfOwner', () => {
   })
 })
 
-/** Holds the given `_vt/jsc` keys. A key listed in `digests` reads as current, not to rebuild. */
-function agentPublishing(jscKeys: string[], digests: Record<string, string> = {}) {
+/**
+ * Holds the given `_vt/jsc` keys as createJsc writes them today (data model 2.0, Data Integrity
+ * proof). A key listed in `digests` reads as current, not to rebuild; a key in `legacy` is still
+ * the data model 1.1 credential an older agent published.
+ */
+function agentPublishing(jscKeys: string[], digests: Record<string, string> = {}, legacy: string[] = []) {
   const metadata = Object.fromEntries(
     jscKeys.map(key => [
       key,
       {
-        credential: { id: jscId(key.split(':').pop()!), credentialSubject: { digestSRI: digests[key] } },
+        credential: legacy.includes(key)
+          ? {
+              id: jscId(key.split(':').pop()!),
+              '@context': ['https://www.w3.org/2018/credentials/v1'],
+              credentialSubject: { digestSRI: digests[key] },
+              proof: { type: 'Ed25519Signature2020' },
+            }
+          : {
+              id: jscId(key.split(':').pop()!),
+              '@context': ['https://www.w3.org/ns/credentials/v2'],
+              credentialSubject: { digestSRI: digests[key] },
+              proof: { type: 'DataIntegrityProof', cryptosuite: 'eddsa-jcs-2022' },
+            },
         didDocumentServiceId: `#${key}`,
       },
     ]),
@@ -264,6 +280,21 @@ describe('reconcileVtjscPublications', () => {
       expect.anything(),
       expect.objectContaining({ schemaBaseId: '5' }),
     )
+  })
+
+  it('rebuilds a VTJSC an older agent published as a data model 1.1 credential', async () => {
+    // the digest matches, so only the data model check can trigger the rebuild
+    const digest = generateDigestSRI(jsonSchema('kept'))
+    const agent = agentPublishing([schemaRef(5)], { [schemaRef(5)]: digest }, [schemaRef(5)])
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+
+    expect(createJsc).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ schemaBaseId: '5', precomputedDigestSRI: digest }),
+    )
+    expect(reattachVtjscPublication).not.toHaveBeenCalled()
   })
 
   it('publishes the AnonCreds schema of a VTJSC that was published without one', async () => {

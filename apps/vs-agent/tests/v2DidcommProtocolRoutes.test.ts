@@ -3,6 +3,7 @@ import type { INestApplication } from '@nestjs/common'
 import { VersioningType } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
+import { ChatPlugin } from '@verana-labs/vs-agent-plugin-chat'
 import { MrtdPlugin } from '@verana-labs/vs-agent-plugin-mrtd'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -60,7 +61,11 @@ describe('v2 didcomm protocol routes', () => {
         { provide: VsAgentService, useValue: vsAgentService },
         {
           provide: 'DIDCOMM_MODULES',
-          useValue: [...DIDCOMM_MODULES, ...(MrtdPlugin().didcommModules ?? [])],
+          useValue: [
+            ...DIDCOMM_MODULES,
+            ...(ChatPlugin().didcommModules ?? []),
+            ...(MrtdPlugin().didcommModules ?? []),
+          ],
         },
       ],
     }).compile()

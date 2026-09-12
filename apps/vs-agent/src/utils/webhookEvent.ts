@@ -35,8 +35,6 @@ import {
   toPresentationDto,
 } from '../controllers/admin/v2/didcomm/mappers'
 
-import { registerDidcommModuleEvents } from './didcommModuleEvents'
-
 export interface WebhookOptions {
   url: string
   apiKey?: string
@@ -118,8 +116,6 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
     DidCommBasicMessageEventTypes.DidCommBasicMessageV2StateChanged,
     basicMessageReceived,
   )
-
-  registerDidcommModuleEvents(agent, deliver)
 
   agent.events.on<VsAgentVtFlowStateUpdatedEvent>(
     VsAgentEventTypes.VtFlowStateUpdated,

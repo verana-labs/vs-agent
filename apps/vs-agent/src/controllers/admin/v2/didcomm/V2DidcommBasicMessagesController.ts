@@ -18,7 +18,7 @@ import {
   SentMessageDto,
 } from './dto'
 import { toBasicMessageDto } from './mappers'
-import { connectionOf } from './moduleEndpoint'
+import { connectionOf } from '@verana-labs/vs-agent-sdk'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/basic-messages', version: '2' })
