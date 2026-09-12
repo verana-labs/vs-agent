@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 
-import { LogLevel, parseDid, utils } from '@credo-ts/core'
+import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import { configureChainIndexers } from '@verana-labs/vs-agent-model'
@@ -50,7 +50,10 @@ import {
   ADMIN_API_PUBLIC_URL,
   ADMIN_API_TRUSTED_NETWORKS,
   validateAdminApiConfig,
-  parseLogLevel,
+  DEFAULT_ADMIN_API_LOG_LEVEL,
+  DEFAULT_AGENT_LOG_LEVEL,
+  resolveLogLevel,
+  SUPERSEDED_VAR_WARNINGS,
   validateRuntimeConfig,
   ENABLED_PLUGINS,
   EVENTS_WEBHOOK_API_KEY,
@@ -89,8 +92,8 @@ import {
   webhookEvent,
 } from './utils'
 
-const AGENT_LOG_LEVEL = parseLogLevel(AGENT_LOG_LEVEL_NAME) ?? LogLevel.Warn
-const ADMIN_API_LOG_LEVEL = parseLogLevel(ADMIN_API_LOG_LEVEL_NAME) ?? LogLevel.Info
+const AGENT_LOG_LEVEL = resolveLogLevel(AGENT_LOG_LEVEL_NAME, DEFAULT_AGENT_LOG_LEVEL)
+const ADMIN_API_LOG_LEVEL = resolveLogLevel(ADMIN_API_LOG_LEVEL_NAME, DEFAULT_ADMIN_API_LOG_LEVEL)
 
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, publicApiBaseUrl, nestPlugins = [], bootstrapState } = serverConfig
@@ -152,9 +155,11 @@ const VTJSC_MIGRATION_MAX_ATTEMPTS = 5
 const run = async () => {
   const serverLogger = new TsLogger(ADMIN_API_LOG_LEVEL, 'Server')
 
+  for (const warning of SUPERSEDED_VAR_WARNINGS) serverLogger.warn(warning)
+
   const configErrors: string[] = validateRuntimeConfig({
-    publicApiPort: PUBLIC_API_PORT,
-    adminApiPort: ADMIN_API_PORT,
+    publicApiPort: process.env.PUBLIC_API_PORT,
+    adminApiPort: process.env.ADMIN_API_PORT,
     agentLogLevel: AGENT_LOG_LEVEL_NAME,
     adminApiLogLevel: ADMIN_API_LOG_LEVEL_NAME,
   })

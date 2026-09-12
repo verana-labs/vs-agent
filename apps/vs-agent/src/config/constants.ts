@@ -6,14 +6,27 @@ import dotenv from 'dotenv'
 import packageJson from '../../package.json'
 import { DEFAULT_ADMIN_API_TRUSTED_NETWORKS } from '../security/trustedNetworks'
 
+import {
+  DEFAULT_ADMIN_API_LOG_LEVEL,
+  DEFAULT_ADMIN_API_PORT,
+  DEFAULT_AGENT_LOG_LEVEL,
+  DEFAULT_PUBLIC_API_PORT,
+  logLevelName,
+  parsePort,
+} from './runtimeConfig'
+import { applySupersededVars } from './supersededVars'
+
 dotenv.config()
+
+// Read before anything below resolves a variable, so a carried-over value is in place.
+export const SUPERSEDED_VAR_WARNINGS = applySupersededVars(process.env)
 
 export const AGENT_VERSION: string = packageJson.version
 
 // Basic parameters
 
-export const PUBLIC_API_PORT = Number(process.env.PUBLIC_API_PORT || 3001)
-export const ADMIN_API_PORT = Number(process.env.ADMIN_API_PORT || 3000)
+export const PUBLIC_API_PORT = parsePort(process.env.PUBLIC_API_PORT, DEFAULT_PUBLIC_API_PORT)
+export const ADMIN_API_PORT = parsePort(process.env.ADMIN_API_PORT, DEFAULT_ADMIN_API_PORT)
 
 export const AGENT_PUBLIC_DID_METHOD = (process.env.AGENT_PUBLIC_DID_METHOD ?? 'webvh').trim().toLowerCase()
 export const PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL
@@ -65,10 +78,13 @@ export const REDIS_HOST = process.env.REDIS_HOST
 export const REDIS_PASSWORD = process.env.REDIS_PASSWORD
 
 // Dev/debugging settings
-export const AGENT_LOG_LEVEL_NAME = (process.env.AGENT_LOG_LEVEL ?? 'warn').trim().toLowerCase()
-export const ADMIN_API_LOG_LEVEL_NAME = (process.env.ADMIN_API_LOG_LEVEL ?? 'info').trim().toLowerCase()
+export const AGENT_LOG_LEVEL_NAME = logLevelName(process.env.AGENT_LOG_LEVEL, DEFAULT_AGENT_LOG_LEVEL)
+export const ADMIN_API_LOG_LEVEL_NAME = logLevelName(
+  process.env.ADMIN_API_LOG_LEVEL,
+  DEFAULT_ADMIN_API_LOG_LEVEL,
+)
 
-export const USE_CORS = Boolean(process.env.USE_CORS || false)
+export const USE_CORS = process.env.USE_CORS === 'true'
 export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER === 'false')
 
 // Placeholder resources the agent serves under /vt/default, so an operator can point an
