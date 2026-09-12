@@ -1,20 +1,18 @@
 import {
-  W3cCredential,
-  W3cPresentation,
-  W3cCredentialSchema,
   ClaimFormat,
-  W3cCredentialSubject,
-  W3cJsonLdVerifiableCredential,
-  W3cJsonLdVerifiablePresentation,
-  W3cCredentialOptions,
   DidRecord,
-  W3cPresentationOptions,
   Logger,
+  W3cCredentialSchema,
+  W3cCredentialSubject,
+  W3cV2Credential,
+  W3cV2CredentialOptions,
+  W3cV2DataIntegrityVerifiableCredential,
+  W3cV2DataIntegrityVerifiablePresentation,
+  W3cV2DiSignPresentationOptions,
+  W3cV2Presentation,
+  W3cV2PresentationOptions,
 } from '@credo-ts/core'
-// No type definitions available for this library
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-//@ts-expect-error
-import { purposes } from '@digitalcredentials/jsonld-signatures'
+import { DEFAULT_DATA_INTEGRITY_CRYPTOSUITE, VtFlowModuleConfig } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
@@ -22,6 +20,7 @@ import { createHash } from 'crypto'
 
 import type { VsAgent } from '../agent/VsAgent'
 import { composeEcsClaims, EcsClaims } from './ecsClaims'
+import { createW3cV2Credential } from './vcdm2'
 
 const ajv = new Ajv({ strict: false, allErrors: true })
 addFormats(ajv)
@@ -63,75 +62,83 @@ export const sortKeysDeep = (value: unknown): unknown => {
   }
   return value
 }
-export function createCredential(options: Partial<W3cCredentialOptions>) {
-  options.context ??= [
-    'https://www.w3.org/2018/credentials/v1',
-    'https://www.w3.org/ns/credentials/examples/v2',
-  ]
 
-  options.issuanceDate ??= new Date().toISOString()
-  options.expirationDate ??= new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toISOString()
-
-  return new W3cCredential(options as W3cCredentialOptions)
+/**
+ * Builds an unsigned credential: a VC Data Model 2.0 credential, as
+ * [VT-CRED-W3C] and [VT-JSON-SCHEMA-CRED-W3C] require the `https://www.w3.org/ns/credentials/v2`
+ * context, valid from now for ten years unless told otherwise.
+ */
+export function createCredential(options: Partial<W3cV2CredentialOptions>): W3cV2Credential {
+  return createW3cV2Credential(options as W3cV2CredentialOptions)
 }
 
 /**
- * Signs a W3C Verifiable Credential or Presentation using the provided agent and verification method.
+ * The Data Integrity cryptosuite this agent is configured with, read from the registered
+ * `VtFlowModuleConfig` so the self issued credentials are secured and linked VPs with the
+ * same suite `VtFlowApi.issueCredentialForSession` applies to the credentials it issues. Falls back
+ * to the module default when the vt-flow module is not registered on the agent.
+ */
+export function getDataIntegrityCryptosuite(agent: Pick<VsAgent, 'context'>): string {
+  const { dependencyManager } = agent.context
+  return dependencyManager.isRegistered(VtFlowModuleConfig)
+    ? dependencyManager.resolve(VtFlowModuleConfig).dataIntegrityCryptosuite
+    : DEFAULT_DATA_INTEGRITY_CRYPTOSUITE
+}
+
+/**
+ * Secures a W3C credential or presentation with a Data Integrity proof under the cryptosuite the
+ * agent is configured with, using the provided verification method.
  *
- * The function determines whether the input object is a `W3cCredential` or a `W3cPresentation`,
- * and applies the appropriate signing operation using Linked Data Proofs (`Ed25519Signature2020`).
+ * A credential is secured for `assertionMethod` and a presentation for `authentication`, the proof
+ * purposes VC Data Integrity defines for each; the presentation is published from the DID Document
+ * rather than presented to a verifier, so it carries no challenge.
  *
  * @param agent - The agent instance.
  * @param obj - The credential or presentation object to be signed.
  * @param verificationMethod - The DID verification method used to generate the proof.
- * @returns A signed W3C Verifiable Credential or Presentation in JSON-LD format.
+ * @returns The secured credential or presentation, wrapping the JSON that gets published.
  */
 export async function signerW3c(
   agent: VsAgent,
-  obj: W3cCredential,
+  obj: W3cV2Credential,
   verificationMethod: string,
-): Promise<W3cJsonLdVerifiableCredential>
+): Promise<W3cV2DataIntegrityVerifiableCredential>
 
 export async function signerW3c(
   agent: VsAgent,
-  obj: W3cPresentation,
+  obj: W3cV2Presentation,
   verificationMethod: string,
-): Promise<W3cJsonLdVerifiablePresentation>
+): Promise<W3cV2DataIntegrityVerifiablePresentation>
 
 export async function signerW3c(
   agent: VsAgent,
-  obj: W3cCredential | W3cPresentation,
+  obj: W3cV2Credential | W3cV2Presentation,
   verificationMethod: string,
 ) {
-  const proofPurpose = new purposes.AssertionProofPurpose()
+  const cryptosuite = getDataIntegrityCryptosuite(agent)
 
-  if (obj instanceof W3cCredential) {
-    return await agent.w3cCredentials.signCredential({
-      format: ClaimFormat.LdpVc,
+  if (obj instanceof W3cV2Credential) {
+    return await agent.w3cV2Credentials.signCredential<ClaimFormat.DiVc>({
+      format: ClaimFormat.DiVc,
       credential: obj,
-      proofType: 'Ed25519Signature2020',
+      cryptosuite,
       verificationMethod,
-      proofPurpose,
     })
   }
 
-  if (obj instanceof W3cPresentation) {
-    return await agent.w3cCredentials.signPresentation({
-      format: ClaimFormat.LdpVp,
-      presentation: obj,
-      proofType: 'Ed25519Signature2020',
-      verificationMethod,
-      proofPurpose,
-    })
-  }
+  // The options type requires a challenge for every presentation format, while a Data Integrity
+  // proof only carries one when it is given
+  return await agent.w3cV2Credentials.signPresentation<ClaimFormat.DiVp>({
+    format: ClaimFormat.DiVp,
+    presentation: obj,
+    cryptosuite,
+    verificationMethod,
+  } as W3cV2DiSignPresentationOptions)
 }
-export function createPresentation(options: Partial<W3cPresentationOptions>) {
-  options.context ??= [
-    'https://www.w3.org/2018/credentials/v1',
-    'https://www.w3.org/ns/credentials/examples/v2',
-  ]
-  options.type ??= ['VerifiablePresentation']
-  return new W3cPresentation(options as W3cPresentationOptions)
+
+/** Builds an unsigned VC Data Model 2.0 presentation; the class supplies the v2 context. */
+export function createPresentation(options: Partial<W3cV2PresentationOptions>): W3cV2Presentation {
+  return new W3cV2Presentation({ type: ['VerifiablePresentation'], ...options })
 }
 
 /**
@@ -269,7 +276,7 @@ export function getVerificationMethodId(logger: Logger, didRecord: DidRecord): s
         method.id === didRecord.didDocument?.assertionMethod?.[0],
     )
     if (!verificationMethod) {
-      throw new Error('Cannot find a suitable Ed25519Signature2020 verification method in DID Document')
+      throw new Error('Cannot find a suitable Ed25519 verification method in DID Document')
     }
     return verificationMethod.id
   } catch (error) {

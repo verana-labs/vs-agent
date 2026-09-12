@@ -29,8 +29,8 @@ import {
 import {
   DidCommCredentialsModuleConfigOptions,
   DidCommCredentialV2Protocol,
+  DidCommDataIntegrityCredentialFormatService,
   DidCommFeatureQueryOptions,
-  DidCommJsonLdCredentialFormatService,
   DidCommModule,
   DidCommModuleConfigOptions,
   DidCommProofsModuleConfigOptions,
@@ -66,7 +66,7 @@ type VsAgentDidCommModule = DidCommModule<
           [
             LegacyIndyDidCommCredentialFormatService,
             AnonCredsDidCommCredentialFormatService,
-            DidCommJsonLdCredentialFormatService,
+            DidCommDataIntegrityCredentialFormatService,
           ]
         >,
       ]

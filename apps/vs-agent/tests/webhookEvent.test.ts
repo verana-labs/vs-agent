@@ -9,7 +9,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { webhookEvent } from '../src/utils/webhookEvent'
 
 type Handler = (event: { payload: unknown }) => unknown
-type Middleware = (context: unknown, next: () => Promise<void>) => Promise<void>
 
 const URL = 'https://backend.example/events'
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
@@ -17,11 +16,9 @@ const fetchMock = vi.fn()
 
 function fakeAgent() {
   const handlers = new Map<string, Handler>()
-  const middlewares: Middleware[] = []
   const agent = {
     events: { on: (type: string, handler: Handler) => handlers.set(type, handler) },
     didcomm: {
-      registerMessageHandlerMiddleware: (middleware: Middleware) => middlewares.push(middleware),
       proofs: {
         getFormatData: vi.fn().mockResolvedValue({
           presentation: { anoncreds: { requested_proof: { revealed_attrs: { name: { raw: 'Alice' } } } } },
@@ -35,7 +32,6 @@ function fakeAgent() {
   return {
     agent,
     emit: (type: string, payload: unknown) => handlers.get(type)?.({ payload }),
-    process: (context: unknown) => middlewares[0](context, async () => {}),
   }
 }
 
@@ -112,150 +108,20 @@ describe('Events API delivery', () => {
     })
   })
 
-  it('delivers receipts and extension module messages once the handler processed them', async () => {
-    const { agent, process } = fakeAgent()
-    webhookEvent(agent as never, { url: URL }, logger as never)
-    const connection = { id: 'conn-1' }
-
-    await process({
-      connection,
-      message: {
-        type: 'https://didcomm.org/receipts/1.0/message-receipts',
-        threadId: 't-1',
-        receipts: [{ messageId: 'm-1', state: 'viewed', timestamp: new Date('2026-09-01T00:00:00Z') }],
-      },
-    })
-    const receipts = (await delivered()).body
-    expect(receipts.type).toBe('didcomm.receipts.message-receipts-received')
-    expect(receipts.data).toEqual({
-      connectionId: 'conn-1',
-      receipts: [{ messageId: 'm-1', state: 'viewed', timestamp: '2026-09-01T00:00:00.000Z' }],
-    })
-
-    fetchMock.mockClear()
-    await process({
-      connection,
-      message: {
-        type: 'https://didcomm.org/reactions/1.0/message-reactions',
-        threadId: 't-2',
-        reactions: [{ messageId: 'm-1', emoji: '\u{1F44D}', action: 'react', timestamp: new Date(0) }],
-      },
-    })
-    const reactions = (await delivered()).body
-    expect(reactions.type).toBe('didcomm.reactions.message-reactions-received')
-    expect(reactions.data).toEqual({
-      connectionId: 'conn-1',
-      reactions: [
-        { messageId: 'm-1', emoji: '\u{1F44D}', action: 'react', timestamp: '1970-01-01T00:00:00.000Z' },
-      ],
-    })
-
-    fetchMock.mockClear()
-    await process({
-      connection,
-      message: {
-        type: 'https://didcomm.org/calls/1.0/call-offer',
-        threadId: 't-3',
-        callType: 'video',
-        parameters: { wsUrl: 'wss://calls.example' },
-      },
-    })
-    const call = (await delivered()).body
-    expect(call.type).toBe('didcomm.calls.call-offer-received')
-    expect(call.data).toEqual({
-      connectionId: 'conn-1',
-      threadId: 't-3',
-      callType: 'video',
-      parameters: { wsUrl: 'wss://calls.example' },
-    })
-
-    fetchMock.mockClear()
-    await process({
-      connection,
-      message: { type: 'https://didcomm.org/trust-ping/1.0/ping', threadId: 't-4', toJSON: () => ({}) },
-    })
-    await process({
-      message: { type: 'https://didcomm.org/reactions/1.0/message-reactions', threadId: 't-5' },
-    })
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('delivers a received profile from the module event, with the picture resolved', async () => {
+  it('delivers a module message event as its own envelope', async () => {
     const { agent, emit } = fakeAgent()
     webhookEvent(agent as never, { url: URL }, logger as never)
 
-    emit('DidCommConnectionProfileUpdated', {
-      connection: { id: 'conn-1' },
-      threadId: 't-9',
-      sendBackYoursRequested: true,
-      profile: {
-        displayName: 'Alice',
-        displayPicture: { mimeType: 'image/png', links: ['https://pics.example/a.png'] },
-      },
+    emit('vs-agent-module-message-received', {
+      type: 'didcomm.receipts.message-receipts-received',
+      data: { connectionId: 'conn-1', receipts: [{ messageId: 'm-1', state: 'viewed' }] },
     })
 
     const { body } = await delivered()
-    expect(body.type).toBe('didcomm.user-profile.profile-received')
+    expect(body.type).toBe('didcomm.receipts.message-receipts-received')
     expect(body.data).toEqual({
       connectionId: 'conn-1',
-      threadId: 't-9',
-      sendBackYours: true,
-      profile: {
-        displayName: 'Alice',
-        displayPicture: { mimeType: 'image/png', links: ['https://pics.example/a.png'] },
-      },
-    })
-  })
-
-  it('leaves profile and share-media to their module events, so the middleware sends nothing', async () => {
-    const { agent, process } = fakeAgent()
-    webhookEvent(agent as never, { url: URL }, logger as never)
-    const connection = { id: 'conn-1' }
-
-    await process({
-      connection,
-      message: {
-        type: 'https://didcomm.org/user-profile/1.0/profile',
-        threadId: 't-9',
-        profile: { displayName: 'Alice', displayPicture: '#displayPicture' },
-        toJSON: () => ({}),
-      },
-    })
-    await process({
-      connection,
-      message: {
-        type: 'https://didcomm.org/media-sharing/1.0/share-media',
-        threadId: 't-10',
-        toJSON: () => ({}),
-      },
-    })
-
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('delivers a shared media record with the thread id of an unsolicited share', async () => {
-    const { agent, emit } = fakeAgent()
-    webhookEvent(agent as never, { url: URL }, logger as never)
-
-    emit('DidCommMediaSharingStateChangedEvent', {
-      mediaSharingRecord: {
-        connectionId: 'conn-1',
-        role: 'receiver',
-        state: 'media-shared',
-        threadId: 'share-thread-1',
-        parentThreadId: undefined,
-        description: 'a photo',
-        items: [{ id: 'i-1', uri: 'https://media.example/1', mimeType: 'image/png' }],
-      },
-    })
-
-    const { body } = await delivered()
-    expect(body.type).toBe('didcomm.media-sharing.share-media-received')
-    expect(body.data).toEqual({
-      connectionId: 'conn-1',
-      threadId: 'share-thread-1',
-      description: 'a photo',
-      items: [{ id: 'i-1', uri: 'https://media.example/1', mimeType: 'image/png' }],
+      receipts: [{ messageId: 'm-1', state: 'viewed' }],
     })
   })
 

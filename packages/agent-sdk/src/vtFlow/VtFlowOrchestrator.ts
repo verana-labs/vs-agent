@@ -1,11 +1,12 @@
 import type { JsonObject, W3cVerifiableCredential } from '@credo-ts/core'
 
-import { JsonTransformer, W3cJsonLdVerifiableCredential, utils } from '@credo-ts/core'
 import {
-  type DidCommJsonLdCredentialDetailFormat,
-  type JsonCredential,
-  type JsonLdFormatDataVerifiableCredential,
-} from '@credo-ts/didcomm'
+  JsonTransformer,
+  W3cJsonLdVerifiableCredential,
+  W3cV2DataIntegrityVerifiableCredential,
+  utils,
+} from '@credo-ts/core'
+import type { DataIntegrityCredential, DidCommDataIntegrityOfferCredentialFormat } from '@credo-ts/didcomm'
 import {
   VtFlowApi,
   VtFlowRecord,
@@ -30,11 +31,13 @@ import {
 } from '../types'
 import {
   connectToPublicDid,
-  createCredential,
   createVtc,
+  createW3cV2Credential,
+  isVcdm2Credential,
   linkedVpSchemaId,
   removeStoredTrustCredential,
   resolveJsonSchemaCredentialId,
+  toOfferedCredentialJson,
   validateSchema,
 } from '../utils'
 
@@ -61,7 +64,7 @@ export interface ValidateOnboardingProcessInput {
 export interface OfferOnboardingCredentialInput {
   vtFlowRecordId: string
   /** The credential validateOnboardingProcess built. Without it the method builds one. */
-  credential?: JsonCredential
+  credential?: JsonObject
   /** It defaults to the schema of the applicant participant. */
   credentialSchemaId?: string
   /** The participant validateOnboardingProcess returned; saves a second chain read. */
@@ -169,7 +172,7 @@ export class VtFlowOrchestrator {
    */
   async validateOnboardingProcess(
     input: ValidateOnboardingProcessInput,
-  ): Promise<{ record: VtFlowRecord; participant: Participant; credential?: JsonCredential }> {
+  ): Promise<{ record: VtFlowRecord; participant: Participant; credential?: JsonObject }> {
     const chain = this.requireChain()
     if (!this.agent.did) throw new Error('Agent has no public DID')
 
@@ -241,14 +244,14 @@ export class VtFlowOrchestrator {
         credentialContext: input.credentialContext,
       }))
 
+    // W3C Data Integrity attachment format (RFC 0809). The applicant DID is the credential subject
+    // and the exchange runs over its authenticated connection, so no extra binding is required. The
+    // cryptosuite is the issuer's choice and is applied when the credential is issued.
     const { record: offered } = await vtFlowApi.offerCredentialForSession({
       vtFlowRecordId: record.id,
       issuerParticipantId: Number(participant.validatorParticipantId),
       credentialFormats: {
-        jsonld: {
-          credential: unsignedCredentialJson,
-          options: { proofType: 'Ed25519Signature2020', proofPurpose: 'assertionMethod' },
-        },
+        dataIntegrity: { credential: unsignedCredentialJson, bindingRequired: false },
       },
     })
     return offered
@@ -275,7 +278,7 @@ export class VtFlowOrchestrator {
   }
 
   async buildDirectIssuanceOffer(vtFlowRecordId: string): Promise<{
-    credentialFormats: { jsonld: DidCommJsonLdCredentialDetailFormat }
+    credentialFormats: { dataIntegrity: DidCommDataIntegrityOfferCredentialFormat }
     issuerParticipantId: number
   } | null> {
     const chain = this.requireChain()
@@ -315,22 +318,24 @@ export class VtFlowOrchestrator {
 
     return {
       credentialFormats: {
-        jsonld: {
-          credential: unsignedCredentialJson,
-          options: { proofType: 'Ed25519Signature2020', proofPurpose: 'assertionMethod' },
-        },
+        dataIntegrity: { credential: unsignedCredentialJson, bindingRequired: false },
       },
       issuerParticipantId: issuer.id,
     }
   }
 
+  /**
+   * Builds the unsigned VC Data Model 2.0 credential that goes into the offer. RFC 0809 derives the
+   * advertised data model version from its context, and the issuer secures it with a
+   * DataIntegrityProof once the applicant requests it.
+   */
   private async buildCredential(input: {
     credentialSchemaId: string
     subjectDid: string
     claims: JsonObject
     credentialType?: string[]
     credentialContext?: string[]
-  }): Promise<JsonCredential> {
+  }): Promise<JsonObject> {
     const jsonSchemaCredentialId = await this.resolveJsonSchemaCredentialId(input.credentialSchemaId)
 
     // A credential whose claims don't satisfy the schema's required fields is not a valid
@@ -338,19 +343,18 @@ export class VtFlowOrchestrator {
     const schema = await this.agent.indexer.getCredentialSchema(input.credentialSchemaId)
     validateSchema(JSON.parse(schema.json_schema), { id: input.subjectDid, ...input.claims })
 
-    const unsignedCredential = createCredential({
+    // Data model 2.0 holds the claims on the credential subject itself; the applicant DID wins over
+    // any `id` claim so the credential can never name a different subject
+    const unsignedCredential = createW3cV2Credential({
       id: `${this.agent.did}#${utils.uuid()}`,
       type: input.credentialType ?? ['VerifiableCredential', 'VerifiableTrustCredential'],
       issuer: this.agent.did!,
-      credentialSubject: { id: input.subjectDid, claims: input.claims },
+      context: input.credentialContext,
+      credentialSubject: { ...input.claims, id: input.subjectDid },
+      credentialSchema: { id: jsonSchemaCredentialId, type: 'JsonSchemaCredential' },
     })
-    if (input.credentialContext) unsignedCredential.context = input.credentialContext
-    unsignedCredential.credentialSchema = {
-      id: jsonSchemaCredentialId,
-      type: 'JsonSchemaCredential',
-    }
 
-    return JsonTransformer.toJSON(unsignedCredential) as JsonCredential
+    return toOfferedCredentialJson(unsignedCredential)
   }
 
   private async resolveJsonSchemaCredentialId(credentialSchemaId: string): Promise<string> {
@@ -372,7 +376,10 @@ export class VtFlowOrchestrator {
   }
 
   /** Fired after signing and before delivery, so a failure here must abort the issuance. */
-  async onCredentialIssued(vtFlowRecordId: string, signedCredential: JsonCredential): Promise<string> {
+  async onCredentialIssued(
+    vtFlowRecordId: string,
+    signedCredential: Record<string, unknown>,
+  ): Promise<string> {
     const chain = this.requireChain()
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(vtFlowRecordId)
@@ -434,7 +441,7 @@ export class VtFlowOrchestrator {
       )
     }
 
-    const credentialJson = await this.getOfferedCredentialJson(record.credentialExchangeRecordId)
+    const credentialJson = await this.getReceivedCredentialJson(record.credentialExchangeRecordId)
     const algorithm = await this.digestAlgorithmForSchema(issuer.schema_id)
     const digest = computeCredentialDigestJCS(credentialJson as unknown as W3cVerifiableCredential, algorithm)
     const anchored = await indexer.getDigest(digest)
@@ -475,14 +482,12 @@ export class VtFlowOrchestrator {
     await chain.triggerResolver(Number(record.participantId))
   }
 
-  private async getOfferedCredentialJson(
-    credentialExchangeRecordId: string,
-  ): Promise<JsonLdFormatDataVerifiableCredential> {
+  /** The signed credential as the issuer attached it, which is the exact JSON its digest covers. */
+  private async getReceivedCredentialJson(credentialExchangeRecordId: string): Promise<JsonObject> {
     const formatData = await this.agent.didcomm.credentials.getFormatData(credentialExchangeRecordId)
-    const credentialJson = (
-      formatData.credential as { jsonld?: JsonLdFormatDataVerifiableCredential } | undefined
-    )?.jsonld
-    if (!credentialJson) throw new Error('Offered credential has no JSON-LD body to verify')
+    const credentialJson = (formatData.credential as { dataIntegrity?: DataIntegrityCredential } | undefined)
+      ?.dataIntegrity?.credential
+    if (!credentialJson) throw new Error('Received credential has no data integrity credential body')
     return credentialJson
   }
 
@@ -510,25 +515,27 @@ export class VtFlowOrchestrator {
       throw new Error(`vt-flow record ${vtFlowRecordId} has no credentialExchangeRecordId`)
     }
 
-    const formatData = await this.agent.didcomm.credentials.getFormatData(record.credentialExchangeRecordId)
-    const jsonld = (formatData.credential as { jsonld?: unknown } | undefined)?.jsonld
-    if (!jsonld) {
-      throw new Error(`No jsonld credential in exchange ${record.credentialExchangeRecordId}`)
-    }
-    const schemaRef = (jsonld as { credentialSchema?: { id?: string } }).credentialSchema?.id
+    const credentialJson = await this.getReceivedCredentialJson(record.credentialExchangeRecordId)
+    const schemaRef = (credentialJson as { credentialSchema?: { id?: string } }).credentialSchema?.id
     const schemaBaseId = schemaRef ? this.extractSchemaBaseId(schemaRef) : undefined
     if (!schemaBaseId) {
       throw new Error(
         `Cannot publish Linked VP: credential has no extractable schema base id (credentialSchema.id=${schemaRef ?? 'undefined'})`,
       )
     }
-    const w3cCredential = JsonTransformer.fromJSON(jsonld, W3cJsonLdVerifiableCredential)
+    // A data model 2.0 credential arrives secured with a DataIntegrityProof; a validator still on
+    // data model 1.1 sends a linked data proof, and both are published the same way
+    const credential = isVcdm2Credential(credentialJson)
+      ? W3cV2DataIntegrityVerifiableCredential.fromObject(
+          credentialJson as Parameters<typeof W3cV2DataIntegrityVerifiableCredential.fromObject>[0],
+        )
+      : JsonTransformer.fromJSON(credentialJson, W3cJsonLdVerifiableCredential)
     const ecsKey = /^\d+$/.test(schemaBaseId) ? await this.ecsSchemaKey(schemaBaseId) : null
     await createVtc(
       this.agent,
       this.options.publicApiBaseUrl,
       ecsKey ? linkedVpSchemaId(ecsKey) : schemaBaseId,
-      w3cCredential,
+      credential,
     )
   }
 

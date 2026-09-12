@@ -1,5 +1,6 @@
 // Agent
 export * from './agent'
+export * from './adminApi'
 export * from './auth'
 export * from './bootstrap'
 export * from './types'
@@ -21,6 +22,12 @@ export {
   removeArtifactServices,
 } from './did/artifactServices'
 export type { ArtifactServiceMethod, ArtifactServiceOptions } from './did/artifactServices'
+export {
+  SUPPORTED_PUBLIC_DID_METHODS,
+  isSupportedPublicDid,
+  isSupportedPublicDidMethod,
+} from './did/publicDid'
+export type { SupportedPublicDidMethod } from './did/publicDid'
 export { applyAdminApiServiceEntry } from './did/adminApiService'
 
 // Transports

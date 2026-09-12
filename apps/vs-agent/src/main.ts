@@ -21,6 +21,8 @@ import {
   ECS_CLAIMS_VARIABLES,
   readEcsClaimsFromEnv,
   reconcileVtjscPublications,
+  SUPPORTED_PUBLIC_DID_METHODS,
+  isSupportedPublicDidMethod,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -83,6 +85,7 @@ import {
   setupAgent,
   toNestLogLevels,
   TsLogger,
+  ecsServiceProfile,
   webhookEvent,
 } from './utils'
 
@@ -165,8 +168,10 @@ const run = async () => {
       configErrors.push((error as Error).message)
     }
   }
-  if (!['webvh', 'web'].includes(AGENT_PUBLIC_DID_METHOD)) {
-    configErrors.push(`AGENT_PUBLIC_DID_METHOD must be 'webvh' or 'web' (got '${AGENT_PUBLIC_DID_METHOD}')`)
+  if (!isSupportedPublicDidMethod(AGENT_PUBLIC_DID_METHOD)) {
+    configErrors.push(
+      `AGENT_PUBLIC_DID_METHOD must be one of [${SUPPORTED_PUBLIC_DID_METHODS.join(', ')}] (got '${AGENT_PUBLIC_DID_METHOD}')`,
+    )
   }
   if (!VERANA_CORPORATION_ID) {
     configErrors.push('VERANA_CORPORATION_ID is required')
@@ -270,7 +275,7 @@ const run = async () => {
   // Build the list of active NestJS plugins
   const nestPlugins: VsAgentNestPlugin[] = [
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
-    ...(chatModule ? [chatModule.ChatPlugin] : []),
+    ...(chatModule ? [chatModule.ChatPlugin({ defaultProfile: ecsServiceProfile })] : []),
     ...(mrtdModule
       ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MRTD_MASTER_LIST_CSCA_LOCATION })]
       : []),

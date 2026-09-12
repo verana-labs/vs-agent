@@ -16,7 +16,16 @@ const activeIssuer = { id: 10, role: 'ISSUER', participant_state: 'ACTIVE', sche
 function verify(indexer: Record<string, unknown>) {
   const agent: Record<string, unknown> = {
     dependencyManager: { resolve: () => ({ findById: async () => record }) },
-    didcomm: { credentials: { getFormatData: async () => ({ credential: { jsonld: {} } }) } },
+    didcomm: {
+      credentials: {
+        // verre only digests JSON-LD, so the received credential must at least carry its context
+        getFormatData: async () => ({
+          credential: {
+            dataIntegrity: { credential: { '@context': ['https://www.w3.org/ns/credentials/v2'] } },
+          },
+        }),
+      },
+    },
   }
   const defaults = {
     getParticipantSession: async () => ({ session_records: [{ issuer_participant_id: 10 }] }),
@@ -335,7 +344,10 @@ describe('VtFlowOrchestrator onboarding validation', () => {
     expect(vtFlowApi.offerCredentialForSession).toHaveBeenCalledWith(
       expect.objectContaining({
         credentialFormats: expect.objectContaining({
-          jsonld: expect.objectContaining({ credential: { id: 'urn:prebuilt' } }),
+          dataIntegrity: expect.objectContaining({
+            credential: { id: 'urn:prebuilt' },
+            bindingRequired: false,
+          }),
         }),
       }),
     )

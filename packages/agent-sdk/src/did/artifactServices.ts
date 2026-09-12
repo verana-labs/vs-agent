@@ -1,11 +1,13 @@
 import { DidDocument, DidDocumentService } from '@credo-ts/core'
 
+import type { SupportedPublicDidMethod } from './publicDid'
+
 const ANONCREDS_REGISTRY_SERVICE_TYPE = 'AnonCredsRegistry'
 const RELATIVE_REF_SERVICE_TYPE = 'relativeRef'
 
 const ARTIFACT_SERVICE_TYPES: readonly string[] = [ANONCREDS_REGISTRY_SERVICE_TYPE, RELATIVE_REF_SERVICE_TYPE]
 
-export type ArtifactServiceMethod = 'web' | 'webvh'
+export type ArtifactServiceMethod = SupportedPublicDidMethod
 
 export interface ArtifactServiceOptions {
   method: ArtifactServiceMethod

@@ -37,7 +37,11 @@ function makeOrchestrator(options: { jsonSchema?: Record<string, unknown>; jscUr
     did: 'did:web:child.example',
     config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
     dependencyManager: { resolve: () => ({ findById: vi.fn(async () => record) }) },
-    didcomm: { credentials: { getFormatData: vi.fn(async () => ({ credential: { jsonld } })) } },
+    didcomm: {
+      credentials: {
+        getFormatData: vi.fn(async () => ({ credential: { dataIntegrity: { credential: jsonld } } })),
+      },
+    },
     indexer: { getCredentialSchema },
   }
   return {

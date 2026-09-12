@@ -1,15 +1,16 @@
+import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
-import { VsAgentService } from '../../../../services/VsAgentService'
-
 import { SendQuestionBodyDto, SentMessageDto } from './dto'
-import { chatModuleApi, connectionOf } from './moduleEndpoint'
+import { connectionOf } from '@verana-labs/vs-agent-sdk'
+import { chatModuleApi } from './chatModuleApi'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/question-answer', version: '2' })
 export class V2DidcommQuestionAnswerController {
-  public constructor(@Inject(VsAgentService) private readonly vsAgentService: VsAgentService) {}
+  public constructor(@Inject('VSAGENT') private readonly vsAgent: VsAgent<BaseAgentModules>) {}
 
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
@@ -20,7 +21,7 @@ export class V2DidcommQuestionAnswerController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async sendQuestion(@Body() body: SendQuestionBodyDto): Promise<SentMessageDto> {
-    const agent = await this.vsAgentService.getAgent()
+    const agent = await this.agent()
     const api = chatModuleApi(agent, 'questionAnswer', 'question-answer')
     await connectionOf(agent, body.connectionId)
 
@@ -31,5 +32,10 @@ export class V2DidcommQuestionAnswerController {
     })
 
     return { id: record.threadId }
+  }
+
+  private async agent(): Promise<VsAgent<BaseAgentModules>> {
+    if (!this.vsAgent.isInitialized) await this.vsAgent.initialize()
+    return this.vsAgent
   }
 }

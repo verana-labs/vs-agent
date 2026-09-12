@@ -1,17 +1,18 @@
+import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+
 import type { DidCommCallType } from '@2060.io/credo-ts-didcomm-calls'
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
-import { VsAgentService } from '../../../../services/VsAgentService'
-
 import { AcceptCallBodyDto, CallThreadBodyDto, OfferCallBodyDto, SentMessageDto } from './dto'
-import { chatModuleApi, connectionOf } from './moduleEndpoint'
+import { connectionOf } from '@verana-labs/vs-agent-sdk'
+import { chatModuleApi } from './chatModuleApi'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/calls', version: '2' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class V2DidcommCallsController {
-  public constructor(@Inject(VsAgentService) private readonly vsAgentService: VsAgentService) {}
+  public constructor(@Inject('VSAGENT') private readonly vsAgent: VsAgent<BaseAgentModules>) {}
 
   @Post()
   @ApiOperation({ summary: 'Offer a call', description: 'Offers a call on an established connection.' })
@@ -69,10 +70,15 @@ export class V2DidcommCallsController {
   }
 
   private async callsApi(connectionId: string) {
-    const agent = await this.vsAgentService.getAgent()
+    const agent = await this.agent()
     const api = chatModuleApi(agent, 'calls', 'calls')
     await connectionOf(agent, connectionId)
 
     return api
+  }
+
+  private async agent(): Promise<VsAgent<BaseAgentModules>> {
+    if (!this.vsAgent.isInitialized) await this.vsAgent.initialize()
+    return this.vsAgent
   }
 }

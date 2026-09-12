@@ -1,6 +1,6 @@
 import { HttpStatus } from '@nestjs/common'
 
-import { AdminApiError, AdminApiErrorCode } from '../AdminApiError'
+import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
 import { decodeCursor, encodeCursor, hashScope, PageScope } from './cursor'
 import { PAGE_LIMIT_DEFAULT, PAGE_LIMIT_MAX, PAGE_LIMIT_MIN, PaginationQueryDto } from './PaginationQueryDto'
