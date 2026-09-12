@@ -9,7 +9,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { webhookEvent } from '../src/utils/webhookEvent'
 
 type Handler = (event: { payload: unknown }) => unknown
-type Middleware = (context: unknown, next: () => Promise<void>) => Promise<void>
 
 const URL = 'https://backend.example/events'
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
@@ -17,11 +16,9 @@ const fetchMock = vi.fn()
 
 function fakeAgent() {
   const handlers = new Map<string, Handler>()
-  const middlewares: Middleware[] = []
   const agent = {
     events: { on: (type: string, handler: Handler) => handlers.set(type, handler) },
     didcomm: {
-      registerMessageHandlerMiddleware: (middleware: Middleware) => middlewares.push(middleware),
       proofs: {
         getFormatData: vi.fn().mockResolvedValue({
           presentation: { anoncreds: { requested_proof: { revealed_attrs: { name: { raw: 'Alice' } } } } },
@@ -35,7 +32,6 @@ function fakeAgent() {
   return {
     agent,
     emit: (type: string, payload: unknown) => handlers.get(type)?.({ payload }),
-    process: (context: unknown) => middlewares[0](context, async () => {}),
   }
 }
 
@@ -112,45 +108,21 @@ describe('Events API delivery', () => {
     })
   })
 
-  it('delivers receipts and extension module messages once the handler processed them', async () => {
-    const { agent, process } = fakeAgent()
+  it('delivers a module message event as its own envelope', async () => {
+    const { agent, emit } = fakeAgent()
     webhookEvent(agent as never, { url: URL }, logger as never)
-    const connection = { id: 'conn-1' }
 
-    await process({
-      connection,
-      message: {
-        type: 'https://didcomm.org/receipts/1.0/message-receipts',
-        threadId: 't-1',
-        receipts: [{ messageId: 'm-1', state: 'viewed', timestamp: new Date('2026-09-01T00:00:00Z') }],
-      },
+    emit('vs-agent-module-message-received', {
+      type: 'didcomm.receipts.message-receipts-received',
+      data: { connectionId: 'conn-1', receipts: [{ messageId: 'm-1', state: 'viewed' }] },
     })
-    const receipts = (await delivered()).body
-    expect(receipts.type).toBe('didcomm.receipts.message-receipts-received')
-    expect(receipts.data).toEqual({
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.receipts.message-receipts-received')
+    expect(body.data).toEqual({
       connectionId: 'conn-1',
-      receipts: [{ messageId: 'm-1', state: 'viewed', timestamp: '2026-09-01T00:00:00.000Z' }],
+      receipts: [{ messageId: 'm-1', state: 'viewed' }],
     })
-
-    fetchMock.mockClear()
-    const plaintext = { '@type': 'https://didcomm.org/reactions/1.0/message-reactions', reactions: [] }
-    await process({
-      connection,
-      message: { type: plaintext['@type'], threadId: 't-2', toJSON: () => plaintext },
-    })
-    const reactions = (await delivered()).body
-    expect(reactions.type).toBe('didcomm.reactions.message-reactions-received')
-    expect(reactions.data).toEqual({ connectionId: 'conn-1', threadId: 't-2', message: plaintext })
-
-    fetchMock.mockClear()
-    await process({
-      connection,
-      message: { type: 'https://didcomm.org/trust-ping/1.0/ping', threadId: 't-3', toJSON: () => ({}) },
-    })
-    await process({
-      message: { type: plaintext['@type'], threadId: 't-4', toJSON: () => plaintext },
-    })
-    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('delivers an abandoned presentation with its reason in the record', async () => {

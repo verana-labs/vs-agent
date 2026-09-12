@@ -1,5 +1,9 @@
-import { HttpStatus } from '@nestjs/common'
-import { AnonCredsTrustError, AnonCredsTrustErrorReason } from '@verana-labs/vs-agent-sdk'
+import { AnonCredsTrustError, AnonCredsTrustErrorReason } from '../blockchain'
+
+const BAD_REQUEST = 400
+const NOT_FOUND = 404
+const CONFLICT = 409
+const SERVICE_UNAVAILABLE = 503
 
 export enum AdminApiErrorCode {
   InvalidInput = 'INVALID_INPUT',
@@ -29,12 +33,16 @@ export class AdminApiError extends Error {
   }
 }
 
-export function unknownConnection(connectionId: string): AdminApiError {
+export function moduleNotServed(module: string): AdminApiError {
   return new AdminApiError(
     AdminApiErrorCode.UnknownId,
-    HttpStatus.NOT_FOUND,
-    `no connection with id "${connectionId}"`,
+    NOT_FOUND,
+    `this deployment does not serve the ${module} module`,
   )
+}
+
+export function unknownConnection(connectionId: string): AdminApiError {
+  return new AdminApiError(AdminApiErrorCode.UnknownId, NOT_FOUND, `no connection with id "${connectionId}"`)
 }
 
 export type TrustDecisionSubject = 'agent' | 'peer'
@@ -47,25 +55,21 @@ export function trustDecisionError(
   if (!(error instanceof AnonCredsTrustError)) return error
 
   if (error.reason === AnonCredsTrustErrorReason.Unavailable) {
-    return new AdminApiError(
-      AdminApiErrorCode.ResolverUnavailable,
-      HttpStatus.SERVICE_UNAVAILABLE,
-      error.message,
-    )
+    return new AdminApiError(AdminApiErrorCode.ResolverUnavailable, SERVICE_UNAVAILABLE, error.message)
   }
 
   const unauthorizedCode =
     subject === 'peer' ? AdminApiErrorCode.PeerNotAuthorized : AdminApiErrorCode.NotAuthorized
 
   if (error.reason === AnonCredsTrustErrorReason.NotAuthorized) {
-    return new AdminApiError(unauthorizedCode, HttpStatus.CONFLICT, error.message)
+    return new AdminApiError(unauthorizedCode, CONFLICT, error.message)
   }
 
   const code = notDerivableCode ?? unauthorizedCode
 
   return new AdminApiError(
     code,
-    code === AdminApiErrorCode.InvalidInput ? HttpStatus.BAD_REQUEST : HttpStatus.CONFLICT,
+    code === AdminApiErrorCode.InvalidInput ? BAD_REQUEST : CONFLICT,
     error.message,
   )
 }

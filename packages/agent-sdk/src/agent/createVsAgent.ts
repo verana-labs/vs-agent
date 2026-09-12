@@ -31,7 +31,6 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
   publicApiBaseUrl: string
   adminApiServiceEndpoint?: string
   displayPictureUrl?: string
-  autoDiscloseUserProfile?: boolean
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
   dependencies: AgentDependencies
@@ -85,7 +84,6 @@ export function createVsAgent<T extends Plugin[]>(
     modules: mergedModules,
     dependencies: options.dependencies,
     did: options.did,
-    autoDiscloseUserProfile: options.autoDiscloseUserProfile,
     publicApiBaseUrl: options.publicApiBaseUrl,
     adminApiServiceEndpoint: options.adminApiServiceEndpoint,
     displayPictureUrl: options.displayPictureUrl,

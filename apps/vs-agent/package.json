@@ -90,6 +90,7 @@
     "@verana-labs/vs-agent-plugin-mrtd": "workspace:*"
   },
   "devDependencies": {
+    "@2060.io/credo-ts-didcomm-user-profile": "0.1.0",
     "@nestjs/cli": "^10.0.0",
     "@nestjs/schematics": "^10.0.0",
     "@nestjs/testing": "^10.0.0",
