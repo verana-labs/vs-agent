@@ -77,7 +77,7 @@ Here is a couple of variables that you may want to take care in case of troubles
 | --------------- | -------------------------------------------------------------------- | ------------- |
 | AGENT_LOG_LEVEL | Agent log level: trace, debug, info, warn, error or off              | warn          |
 | ADMIN_API_LOG_LEVEL | Administration API log level, same values                        | info          |
-| USE_CORS        | Enable Cross-Origin Resource Sharing (only for development purposes) | false         |
+| USE_CORS        | Enable Cross-Origin Resource Sharing, set it to `true` (only for development purposes) | false         |
 | ENABLE_PUBLIC_API_SWAGGER  | Enable Swagger documentation for public API (recommended only for development environments) | false |
 
 
@@ -96,6 +96,21 @@ These are variables that are updated only on specific use cases.
 > **Note about Key derivation method**: By default, we use the strongest ARGON2I_MOD, but since this is the slowest one as well, depending on the security infrastructure you have, you might want to not derive the key at all (use RAW). However, in versions of VS Agent we are going to deprecate this setting, so we recommend to keep the default setting to make migration process easier.
 
 > **Note about storage update and backup**: When migrating a wallet from SQLite to Postgres and restoring it in VS Agent with a new (sanitized) profile name, the agent may attempt to run a storage migration and create a backup of the Postgres wallet. Askar currently does not support exporting non‑SQLite wallets, so the default backup behaviour will cause a fatal error. To avoid this, set AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP=false and/or AGENT_BACKUP_BEFORE_STORAGE_UPDATE=false in your environment. This disables the automatic update and backup features and allows the agent to start successfully with the migrated wallet.
+
+#### Upgrading from 1.2.x
+
+These variables were renamed. Until 3.0.0 the agent still reads the old name, copies it to the new one when the new one is unset, and warns at startup.
+
+| Old name | New name |
+| -------- | -------- |
+| AGENT_PORT | PUBLIC_API_PORT |
+| ADMIN_PORT | ADMIN_API_PORT |
+| ADMIN_LOG_LEVEL | ADMIN_API_LOG_LEVEL |
+| MASTER_LIST_CSCA_LOCATION | MRTD_MASTER_LIST_CSCA_LOCATION |
+
+These variables are gone. The agent warns at startup when it still finds one: `AGENT_NAME`, `AGENT_LABEL`, `AGENT_ENDPOINT`, `AGENT_ENDPOINTS`, `AGENT_INVITATION_BASE_URL`, `AGENT_INVITATION_IMAGE_URL`, `REDIRECT_DEFAULT_URL_TO_INVITATION_URL`, `USER_PROFILE_AUTODISCLOSE` and `UI_WELCOME_MESSAGE`. The invitation `label` and `imageUrl` now come from the ECS-Service credential, and the DIDComm endpoint is always derived from `PUBLIC_API_BASE_URL`, so the deployment needs a public `https` host in front of the public port.
+
+Both log levels are read as names now (`trace`, `debug`, `info`, `warn`, `error`, `off`). A numeric value, as earlier versions accepted, stops the agent at startup with the accepted values in the message.
 
 ### Verana network integration
 
