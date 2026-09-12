@@ -13,9 +13,11 @@ const record = {
 
 const activeIssuer = { id: 10, role: 'ISSUER', participant_state: 'ACTIVE', schema_id: 5 }
 
-function verify(indexer: Record<string, unknown>) {
+const SERVICE_SCHEMA = JSON.stringify({ title: 'ServiceCredential' })
+
+function verify(indexer: Record<string, unknown>, setEcsSchemaKey = vi.fn(async () => undefined)) {
   const agent: Record<string, unknown> = {
-    dependencyManager: { resolve: () => ({ findById: async () => record }) },
+    dependencyManager: { resolve: () => ({ findById: async () => record, setEcsSchemaKey }) },
     didcomm: {
       credentials: {
         // verre only digests JSON-LD, so the received credential must at least carry its context
@@ -68,6 +70,27 @@ describe('VtFlowOrchestrator.verifyOfferedCredential', () => {
     await expect(verify({ getCredentialSchema: async () => ({ id: 5 }) })).rejects.toThrow(
       /has no digest_algorithm/,
     )
+  })
+
+  it('stores the ECS key of the schema, so publication needs no indexer', async () => {
+    const setEcsSchemaKey = vi.fn(async () => undefined)
+
+    await verify(
+      {
+        getCredentialSchema: async () => ({ id: 5, digest_algorithm: 'sha384', json_schema: SERVICE_SCHEMA }),
+      },
+      setEcsSchemaKey,
+    )
+
+    expect(setEcsSchemaKey).toHaveBeenCalledWith('rec-1', 'ecs-service')
+  })
+
+  it('stores no ECS key for a schema that is not an ECS one', async () => {
+    const setEcsSchemaKey = vi.fn(async () => undefined)
+
+    await verify({}, setEcsSchemaKey)
+
+    expect(setEcsSchemaKey).not.toHaveBeenCalled()
   })
 
   it('digests the credential without an algorithm prefix', async () => {
