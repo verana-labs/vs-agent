@@ -201,6 +201,41 @@ describe('setupOpenId4Vc', () => {
     expect(noAccept.status).toBe(404)
   })
 
+  it('serves the bare openid-credential-issuer path as the configured issuer', async () => {
+    const options = validOptions()
+    options.issuer!.id = 'demo-did'
+    const setup = setupOpenId4Vc(options, () => ({
+      getVctMetadata: () => undefined,
+      getJwtVcIssuerMetadata: () => ({}),
+      getSignedMetadataJwt: () => undefined,
+      mapCredentialRequest: () => {
+        throw new Error('not implemented')
+      },
+    }))
+    // Credo's host-prefixed route, registered on the same application after setup.
+    setup.publicMiddleware.get(
+      '/.well-known/openid-credential-issuer/oid4vci/demo-did',
+      (request, response) =>
+        response.json({
+          credential_issuer: 'https://agent.example/oid4vci/demo-did',
+          query: request.query,
+        }),
+    )
+
+    const bare = await request(setup.publicMiddleware).get('/.well-known/openid-credential-issuer')
+    expect(bare.status).toBe(200)
+    expect(bare.body.credential_issuer).toBe('https://agent.example/oid4vci/demo-did')
+
+    const withQuery = await request(setup.publicMiddleware).get('/.well-known/openid-credential-issuer/?v=1')
+    expect(withQuery.status).toBe(200)
+    expect(withQuery.body.query).toEqual({ v: '1' })
+
+    const other = await request(setup.publicMiddleware).get(
+      '/.well-known/openid-credential-issuer/oid4vci/other',
+    )
+    expect(other.status).toBe(404)
+  })
+
   it('does not advertise wallet attestation metadata by default', async () => {
     const options = validOptions()
     options.issuer!.walletAttestationCertificates = ['unused-while-attestation-is-not-required']
