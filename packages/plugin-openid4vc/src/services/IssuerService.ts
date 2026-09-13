@@ -1,4 +1,4 @@
-import type { OpenId4VcPluginOptions } from '../types'
+import type { OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../types'
 import type { BaseAgent, SdJwtVcTypeMetadata } from '@credo-ts/core'
 import type {
   OpenId4VcIssuanceSessionRecord,
@@ -47,9 +47,21 @@ export type OpenId4VcIssuerAgent = Pick<
   }
 }
 
-export type VtSdJwtVcTypeMetadata = Omit<SdJwtVcTypeMetadata, 'display'> & {
+type CredentialMetadataClaims = NonNullable<
+  NonNullable<OpenId4VciCredentialConfigurationsSupportedWithFormats[string]['credential_metadata']>['claims']
+>
+
+export type VtSdJwtVcClaimDisplay = {
+  lang: string
+  locale: string
+  label: string
+  description?: string
+}
+
+export type VtSdJwtVcTypeMetadata = Omit<SdJwtVcTypeMetadata, 'display' | 'claims'> & {
   relatedJsonSchemaCredentialId: string
   display?: (NonNullable<SdJwtVcTypeMetadata['display']>[number] & { lang?: string })[]
+  claims: Array<{ path: string[]; display?: VtSdJwtVcClaimDisplay[] }>
 }
 
 export interface OpenId4VcOfferResult {
@@ -179,8 +191,42 @@ export class IssuerService {
           ...(configuration.description ? { description: configuration.description } : {}),
         },
       ],
-      claims: configuration.claims.map(claim => ({ path: [claim] })),
+      claims: this.vctClaims(configuration),
     }
+  }
+
+  /** Claim entries of the type metadata. Each display entry carries both `lang` and `locale`:
+   *  Procivis One requires `lang`, wwWallet, the EUDI wallets and NL Wallet require `locale`, and
+   *  every consumer checked ignores the key it does not use. */
+  private vctClaims(configuration: OpenId4VcCredentialConfiguration): VtSdJwtVcTypeMetadata['claims'] {
+    return configuration.claims.map(claim => {
+      const display = configuration.claimDisplay?.[claim]
+      if (!display) return { path: [claim] }
+      return {
+        path: [claim],
+        display: display.map(entry => ({
+          lang: entry.locale,
+          locale: entry.locale,
+          label: entry.label,
+          ...(entry.description ? { description: entry.description } : {}),
+        })),
+      }
+    })
+  }
+
+  /** The same labels in the OpenID4VCI shape (`name`, not `label`), for wallets that read the
+   *  issuer metadata rather than the type metadata. */
+  private credentialMetadataClaims(
+    configuration: OpenId4VcCredentialConfiguration,
+  ): CredentialMetadataClaims {
+    return configuration.claims.map(claim => {
+      const display = configuration.claimDisplay?.[claim]
+      if (!display) return { path: [claim] }
+      return {
+        path: [claim],
+        display: display.map(entry => ({ name: entry.label, locale: entry.locale })),
+      }
+    })
   }
 
   public mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper = async input => {
@@ -362,7 +408,7 @@ export class IssuerService {
                 locale: 'en',
               },
             ],
-            claims: configuration.claims.map(claim => ({ path: [claim] })),
+            claims: this.credentialMetadataClaims(configuration),
           },
         },
       ]),
