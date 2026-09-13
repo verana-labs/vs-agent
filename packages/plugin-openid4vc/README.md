@@ -80,6 +80,11 @@ This complete `openid4vc.json` shape passes the current configuration validator.
       "description": "Development employee credential",
       "vtjscId": "https://trust.example/vtjsc/employee",
       "claims": ["given_name", "family_name", "role"],
+      "claimDisplay": {
+        "given_name": [{ "locale": "en", "label": "Given name" }],
+        "family_name": [{ "locale": "en", "label": "Family name" }],
+        "role": [{ "locale": "en", "label": "Role", "description": "Position held" }]
+      },
       "disclosureFrame": ["given_name", "family_name", "role"],
       "ttlSeconds": 3600
     }
@@ -148,10 +153,12 @@ Apply the `signing` object under `issuer`, `verifier`, or both. Each leaf must c
 | `issuer.requireWalletAttestation` | Optional. When `true`, `walletAttestationCertificates` must contain locally configured X.509 roots. Trust-list distribution is not implemented.                                                                                              |
 | `verifier`                        | Optional when `issuer` is present. Defines `id`, `displayName`, and exactly one signing mode.                                                                                                                                                |
 | `trust`                           | Required by the verifier. Defines the HTTPS Verana resolver, a 1–30000 ms resolver timeout, exact allowed issuer DID web hosts, valid issuer CA roots, and optional development leaf fingerprints in `SHA256:` plus 64 lowercase hex format. |
-| `credentialConfigurations`        | Array of stable IDs, `dc+sd-jwt` format, VCT and VTJSC URLs, display fields, allowed claims, disclosure frame, and a 60–31,536,000 second lifetime.                                                                                          |
+| `credentialConfigurations`        | Array of stable IDs, `dc+sd-jwt` format, VCT and VTJSC URLs, display fields, allowed claims, optional per-claim labels (`claimDisplay`), disclosure frame, and a 60–31,536,000 second lifetime.                                             |
 | `verifierPolicies`                | Array mapping a policy ID to one credential configuration and a subset of its claims.                                                                                                                                                        |
 
 Claims named `vct`, `iat`, `exp`, `iss`, or `cnf` are reserved for the credential envelope and cannot be configured.
+
+`claimDisplay` is optional and keyed by claim name: for each claim, one `{ "locale", "label", "description"? }` per language (locales unique per claim, every key a configured claim). The labels are published twice, as `claims[].display[]` in the SD-JWT VC type metadata and as `credential_metadata.claims[].display[]` in the OpenID4VCI issuer metadata, so wallets pick them up whichever document they read. In the type metadata each entry carries both `lang` and `locale`: Procivis One requires the former, wwWallet, the EUDI wallets and NL Wallet the latter. A claim without an entry is published with its path only, which the label-rendering wallets show as the raw claim name or leave out of the credential details.
 
 ## Route ownership
 

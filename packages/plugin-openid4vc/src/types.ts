@@ -9,6 +9,19 @@ export type OpenId4VcSigningOptions =
   | { configured: OpenId4VcConfiguredSigningMaterial; development?: never }
   | { configured?: never; development: { enabled: true; commonName: string } }
 
+/**
+ * How one claim is presented to the holder, per language. Published as `claims[].display[]` in
+ * the SD-JWT VC type metadata and as `credential_metadata.claims[].display[]` in the OpenID4VCI
+ * issuer metadata; the wallets that render claim labels (wwWallet, the EUDI family, Paradym,
+ * Procivis One, NL Wallet) read one or the other.
+ */
+export interface OpenId4VcClaimDisplay {
+  /** BCP 47 language tag (`es`, `en-US`). One entry per locale for a given claim. */
+  locale: string
+  label: string
+  description?: string
+}
+
 export interface OpenId4VcCredentialConfiguration {
   id: string
   format: 'dc+sd-jwt'
@@ -17,6 +30,12 @@ export interface OpenId4VcCredentialConfiguration {
   description?: string
   vtjscId: string
   claims: string[]
+  /**
+   * Labels for configured claims, keyed by claim name. Optional, and optional per claim: a claim
+   * without an entry is published with its path only, which label-rendering wallets show as the
+   * raw claim name or leave out of the credential details.
+   */
+  claimDisplay?: Record<string, OpenId4VcClaimDisplay[]>
   disclosureFrame: string[]
   ttlSeconds: number
 }
