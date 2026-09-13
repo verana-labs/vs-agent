@@ -229,6 +229,18 @@ export class IssuerService {
     })
   }
 
+  /** The same labels keyed by claim name. Wallets built on OpenID4VCI draft 11-13, which is what
+   *  the published store builds still ship, read this shape and ignore `credential_metadata`. */
+  private legacyClaims(configuration: OpenId4VcCredentialConfiguration): Record<string, { display?: Array<{ name: string; locale: string }> }> {
+    return Object.fromEntries(
+      configuration.claims.map(claim => {
+        const display = configuration.claimDisplay?.[claim]
+        if (!display) return [claim, {}]
+        return [claim, { display: display.map(entry => ({ name: entry.label, locale: entry.locale })) }]
+      }),
+    )
+  }
+
   public mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper = async input => {
     this.assertInitialized()
     const signingCertificate = this.signingCertificateHandle()
@@ -400,6 +412,16 @@ export class IssuerService {
           proof_types_supported: {
             jwt: { proof_signing_alg_values_supported: ['ES256'] },
           },
+          display: [
+            {
+              name: configuration.name,
+              ...(configuration.description ? { description: configuration.description } : {}),
+              locale: 'en',
+            },
+          ],
+          ...(Object.keys(this.legacyClaims(configuration)).length
+            ? { claims: this.legacyClaims(configuration) }
+            : {}),
           credential_metadata: {
             display: [
               {
