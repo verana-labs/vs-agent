@@ -423,9 +423,7 @@ describe('self-issued ECS credentials', () => {
         json_schema: jsonSchema('OrganizationCredential'),
       })),
       listParticipants: vi.fn(async ({ participantState }: { participantState: string }) =>
-        participantState === 'ACTIVE'
-          ? [{ id: 60, schema_id: 6, vs_operator: 'verana1someone-else' }]
-          : [],
+        participantState === 'ACTIVE' ? [{ id: 60, schema_id: 6, vs_operator: 'verana1someone-else' }] : [],
       ),
     })
 
