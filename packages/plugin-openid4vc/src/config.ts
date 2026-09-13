@@ -122,6 +122,7 @@ function assertCredentialConfigurations(configurations: OpenId4VcCredentialConfi
     if (reservedClaim) {
       throw new Error(`${prefix}.claims contains reserved claim '${reservedClaim}'`)
     }
+    assertClaimDisplay(configuration.claimDisplay, configuration.claims, `${prefix}.claimDisplay`)
     assertSubset(configuration.disclosureFrame, configuration.claims, `${prefix}.disclosureFrame`)
 
     if (
@@ -133,6 +134,44 @@ function assertCredentialConfigurations(configurations: OpenId4VcCredentialConfi
         `${prefix}.ttlSeconds must be an integer between ${MIN_TTL_SECONDS} and ${MAX_TTL_SECONDS}`,
       )
     }
+  }
+}
+
+function assertClaimDisplay(
+  claimDisplay: OpenId4VcCredentialConfiguration['claimDisplay'],
+  claims: string[],
+  field: string,
+): void {
+  if (claimDisplay === undefined) return
+  if (!isRecord(claimDisplay)) {
+    throw new Error(`${field} must be an object keyed by claim name`)
+  }
+
+  for (const [claim, entries] of Object.entries(claimDisplay)) {
+    if (!claims.includes(claim)) {
+      throw new Error(`${field} names unknown claim '${claim}'`)
+    }
+    const entriesField = `${field}.${claim}`
+    if (!Array.isArray(entries) || entries.length === 0) {
+      throw new Error(`${entriesField} must be a non-empty array`)
+    }
+
+    const locales = new Set<string>()
+    entries.forEach((entry, index) => {
+      const entryField = `${entriesField}[${index}]`
+      if (!isRecord(entry)) {
+        throw new Error(`${entryField} must be an object`)
+      }
+      assertNonEmptyString(entry.locale, `${entryField}.locale`)
+      assertNonEmptyString(entry.label, `${entryField}.label`)
+      if (entry.description !== undefined) {
+        assertNonEmptyString(entry.description, `${entryField}.description`)
+      }
+      if (locales.has(entry.locale)) {
+        throw new Error(`${entriesField} must not repeat locale '${entry.locale}'`)
+      }
+      locales.add(entry.locale)
+    })
   }
 }
 
