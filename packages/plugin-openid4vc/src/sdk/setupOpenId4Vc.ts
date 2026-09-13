@@ -63,6 +63,28 @@ export function setupOpenId4Vc(
       }
     })
 
+    // Credentials carry `iss: publicApiBaseUrl`, and a holder that derives the OpenID4VCI issuer
+    // metadata URL from that claim the RFC 8615 way (wwWallet does) asks for
+    // `/.well-known/openid-credential-issuer` at the issuer's path, which for a root base URL is
+    // the bare path. Credo only serves the issuer-scoped forms, so that request 404s and every
+    // issuance is flagged with a metadata-fetch failure. One issuer per agent, so the bare path
+    // can only mean that one: forward it to Credo's host-prefixed route.
+    const issuerMetadataAlias = withoutTrailingSlash(
+      `/.well-known/openid-credential-issuer${new URL(options.publicApiBaseUrl).pathname}`,
+    )
+    const issuerMetadataPath = `/.well-known/openid-credential-issuer${withoutTrailingSlash(
+      new URL(`${options.publicApiBaseUrl}/oid4vci`).pathname,
+    )}/${encodeURIComponent(options.issuer.id)}`
+    app.get(
+      ['/.well-known/openid-credential-issuer', '/.well-known/openid-credential-issuer/*'],
+      (request, _response, next) => {
+        if (withoutTrailingSlash(request.path) === issuerMetadataAlias) {
+          request.url = `${issuerMetadataPath}${request.url.slice(request.path.length)}`
+        }
+        next()
+      },
+    )
+
     app.get('/oid4vc/vct/:configurationId', (request, response, next) => {
       try {
         if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
@@ -112,6 +134,10 @@ export function setupOpenId4Vc(
     },
     publicMiddleware: app,
   }
+}
+
+function withoutTrailingSlash(path: string): string {
+  return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path
 }
 
 function assertValidWalletAttestationCertificates(certificates: string[]): void {
