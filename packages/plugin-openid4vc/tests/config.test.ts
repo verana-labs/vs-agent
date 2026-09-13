@@ -142,6 +142,60 @@ describe('validateOpenId4VcOptions', () => {
     expect(() => validateOpenId4VcOptions(options)).toThrow(`reserved claim '${claim}'`)
   })
 
+  it('accepts claim labels for configured claims', () => {
+    const options = validOptions()
+    options.credentialConfigurations[0].claimDisplay = {
+      name: [
+        { locale: 'en', label: 'Name' },
+        { locale: 'es', label: 'Nombre', description: 'Nombre completo' },
+      ],
+    }
+
+    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
+  })
+
+  it('rejects claim labels for an unknown claim', () => {
+    const options = validOptions()
+    options.credentialConfigurations[0].claimDisplay = { admin: [{ locale: 'en', label: 'Admin' }] }
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow("claimDisplay names unknown claim 'admin'")
+  })
+
+  it('rejects an empty claim label', () => {
+    const options = validOptions()
+    options.credentialConfigurations[0].claimDisplay = { name: [{ locale: 'en', label: ' ' }] }
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('claimDisplay.name[0].label')
+  })
+
+  it('rejects a claim label without a locale', () => {
+    const options = validOptions()
+    options.credentialConfigurations[0].claimDisplay = {
+      name: [{ label: 'Name' } as unknown as { locale: string; label: string }],
+    }
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('claimDisplay.name[0].locale')
+  })
+
+  it('rejects a repeated locale for one claim', () => {
+    const options = validOptions()
+    options.credentialConfigurations[0].claimDisplay = {
+      name: [
+        { locale: 'en', label: 'Name' },
+        { locale: 'en', label: 'Full name' },
+      ],
+    }
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow("must not repeat locale 'en'")
+  })
+
+  it('rejects an empty claim label list', () => {
+    const options = validOptions()
+    options.credentialConfigurations[0].claimDisplay = { name: [] }
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('claimDisplay.name must be a non-empty array')
+  })
+
   it('rejects a disclosure outside the claim allowlist', () => {
     const options = validOptions()
     options.credentialConfigurations[0].disclosureFrame = ['name', 'admin']
@@ -221,17 +275,16 @@ describe('validateOpenId4VcOptions', () => {
     expect(() => validateOpenId4VcOptions(options)).toThrow('duplicate credential issuer certificate')
   })
 
-  it.each([
-    'SHA256:example',
-    `sha256:${'0'.repeat(64)}`,
-    `SHA256:${'A'.repeat(64)}`,
-  ])('rejects malformed development certificate fingerprint %s', fingerprint => {
-    const options = validOptions()
-    options.trust!.credentialIssuerCertificates = []
-    options.trust!.developmentCertificateFingerprints = [fingerprint]
+  it.each(['SHA256:example', `sha256:${'0'.repeat(64)}`, `SHA256:${'A'.repeat(64)}`])(
+    'rejects malformed development certificate fingerprint %s',
+    fingerprint => {
+      const options = validOptions()
+      options.trust!.credentialIssuerCertificates = []
+      options.trust!.developmentCertificateFingerprints = [fingerprint]
 
-    expect(() => validateOpenId4VcOptions(options)).toThrow('SHA256')
-  })
+      expect(() => validateOpenId4VcOptions(options)).toThrow('SHA256')
+    },
+  )
 
   it('rejects duplicate development certificate fingerprints', () => {
     const fingerprint = `SHA256:${'0'.repeat(64)}`

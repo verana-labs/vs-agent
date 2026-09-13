@@ -533,4 +533,48 @@ describe('IssuerService', () => {
     expect(metadata).not.toHaveProperty('credentialSchema')
     expect(service.getVctMetadata('unknown')).toBeUndefined()
   })
+
+  it('publishes configured claim labels in the VCT metadata with both lang and locale', () => {
+    const configured = options()
+    configured.credentialConfigurations[0].claimDisplay = {
+      name: [
+        { locale: 'en', label: 'Name' },
+        { locale: 'es', label: 'Nombre', description: 'Nombre completo' },
+      ],
+    }
+    const service = new IssuerService(agent() as never, configured)
+
+    expect(service.getVctMetadata('employee')?.claims).toEqual([
+      {
+        path: ['name'],
+        display: [
+          { lang: 'en', locale: 'en', label: 'Name' },
+          { lang: 'es', locale: 'es', label: 'Nombre', description: 'Nombre completo' },
+        ],
+      },
+      { path: ['role'] },
+    ])
+  })
+
+  it('publishes configured claim labels in the issuer metadata in OpenID4VCI shape', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockRejectedValue(
+      new RecordNotFoundError('issuer not found', { recordType: 'OpenId4VcIssuerRecord' }),
+    )
+    const configured = options()
+    configured.credentialConfigurations[0].claimDisplay = {
+      role: [{ locale: 'en', label: 'Role', description: 'Position held' }],
+    }
+    const service = new IssuerService(agent(api) as never, configured)
+
+    await service.ensureInitialized()
+
+    const created = api.createIssuer.mock.calls[0][0] as {
+      credentialConfigurationsSupported: Record<string, { credential_metadata: { claims: unknown } }>
+    }
+    expect(created.credentialConfigurationsSupported.employee.credential_metadata.claims).toEqual([
+      { path: ['name'] },
+      { path: ['role'], display: [{ name: 'Role', locale: 'en' }] },
+    ])
+  })
 })
