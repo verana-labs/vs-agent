@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/verana-labs/vs-agent/compare/v1.12.0...v1.13.0) (2026-09-14)
+
+
+### Features
+
+* **v1:** update UI ([#719](https://github.com/verana-labs/vs-agent/issues/719)) ([4422ec9](https://github.com/verana-labs/vs-agent/commit/4422ec917f1e8b558a739b75aa2fee134f754387))
+
 ## [1.12.0](https://github.com/verana-labs/vs-agent/compare/v1.11.0...v1.12.0) (2026-07-26)
 
 
