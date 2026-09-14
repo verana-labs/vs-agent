@@ -1476,7 +1476,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       const known = new Set((await applicant.didcomm.credentials.getAll()).map(record => record.id))
       await applicant.didcomm.oob.receiveInvitationFromUrl(
         invitationUrl(invitation as Record<string, unknown>),
-        { label: applicant.label },
+        { label: await agentDisplayName(applicant) },
       )
       return until(async () =>
         (await applicant.didcomm.credentials.getAll()).find(
@@ -1489,7 +1489,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       const known = new Set((await applicant.didcomm.proofs.getAll()).map(record => record.id))
       await applicant.didcomm.oob.receiveInvitationFromUrl(
         invitationUrl(invitation as Record<string, unknown>),
-        { label: applicant.label },
+        { label: await agentDisplayName(applicant) },
       )
       return until(async () =>
         (await applicant.didcomm.proofs.getAll()).find(
