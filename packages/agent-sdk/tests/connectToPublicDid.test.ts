@@ -9,7 +9,8 @@ function makeAgent(records: { id: string }[]) {
   const repository = { update: vi.fn(async () => undefined) }
   return {
     did: AGENT_DID,
-    label: 'Agent',
+    publicApiBaseUrl: 'https://agent.example',
+    dids: { getCreatedDids: vi.fn(async () => []) },
     config: {
       logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     },
@@ -52,7 +53,7 @@ describe('connectToPublicDid', () => {
     expect(agent.didcomm.oob.receiveImplicitInvitation).toHaveBeenCalledWith({
       did: PEER_DID,
       ourDid: AGENT_DID,
-      label: 'Agent',
+      label: 'agent.example',
       didCommVersion: 'v2',
     })
   })

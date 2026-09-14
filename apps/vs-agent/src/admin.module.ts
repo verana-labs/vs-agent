@@ -81,6 +81,7 @@ export class VsAgentModule {
       V2DidcommConnectionsController,
       V2DidcommCredentialExchangesController,
       V2DidcommInvitationsController,
+      V2DidcommReceiptsController,
       V2Openid4vcController,
       V2AnoncredsController,
       V2AnoncredsCredentialDefinitionsController,

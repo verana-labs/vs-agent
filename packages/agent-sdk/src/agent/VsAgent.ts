@@ -98,8 +98,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
   public did?: string
   public publicApiBaseUrl: string
   public adminApiServiceEndpoint?: string
-  public displayPictureUrl?: string
-  public label: string
   public veranaChain?: VeranaChainService
   public indexer: VeranaIndexerService
   public trustedEcosystemDids?: string[]
@@ -113,8 +111,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       did?: string
       publicApiBaseUrl: string
       adminApiServiceEndpoint?: string
-      displayPictureUrl?: string
-      label: string
       veranaChain?: VeranaChainService
       indexer: VeranaIndexerService
       trustedEcosystemDids?: string[]
@@ -127,8 +123,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.did = options.did
     this.publicApiBaseUrl = options.publicApiBaseUrl
     this.adminApiServiceEndpoint = options.adminApiServiceEndpoint
-    this.displayPictureUrl = options.displayPictureUrl
-    this.label = options.label
     this.veranaChain = options.veranaChain
     this.indexer = options.indexer
     this.trustedEcosystemDids = options.trustedEcosystemDids
@@ -505,6 +499,4 @@ export interface VsAgentOptions {
   masterListCscaLocation?: string
   endpoints: string[]
   walletConfig: AskarModuleConfigStoreOptions
-  displayPictureUrl?: string
-  label: string
 }
