@@ -14,8 +14,7 @@ import { getEcsSchemas } from '../src/utils/data'
 import { publishSelfIssuedEcsPresentation } from '../src/utils/selfIssuedEcsCredential'
 import { EcsClaims } from '../src/utils/ecsClaims'
 
-// A host whose name contains an ECS schema key. The rename used to test whether the service
-// endpoint merely contained the key, so every service of this agent matched "ecs-org".
+// A host whose name contains an ECS schema key, so a `contains` test matches every service.
 const PUBLIC_URL = 'https://ecs-org-issuer.example'
 const DID = 'did:web:ecs-org-issuer.example'
 const TYPE = ['VerifiableCredential', 'VerifiableTrustCredential']

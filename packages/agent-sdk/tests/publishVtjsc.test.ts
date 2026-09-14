@@ -387,10 +387,6 @@ describe('self-issued ECS credentials', () => {
     rebindEcsCredentialSchema.mockResolvedValue(undefined)
   })
 
-  // The chain of Organization credentials has to terminate: the service holding the ISSUER entry
-  // on an Ecosystem's Organization schema is the only party that can issue against it. Narrowing
-  // this to the Service schema left it without a serviceProvider credential, so it failed
-  // VS-CONN-VS and no applicant could onboard against it.
   it('self-issues against every ECS schema it holds an ISSUER entry on', async () => {
     const agent = chainAgent([])
     const indexer = indexerWithIssuerOn([

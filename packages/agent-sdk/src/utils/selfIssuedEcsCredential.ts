@@ -137,12 +137,9 @@ export async function publishSelfIssuedEcsPresentation(
   )
   // nothing is persisted yet, so a failure here leaves no public presentation behind
   if (attached) await beforePublish?.(verifiablePresentation)
-  // Update linked VP when the presentation has changed.
-  //
-  // Match the linked VP of this ECS schema by its own fragment, or by the file its endpoint ends
-  // with. Testing whether the endpoint merely contains the schema key matches the host as well,
-  // so an agent published at a host such as ecs-org-issuer.example rewrote its DIDComm endpoint
-  // and every other ECS linked VP onto this one fragment.
+  // Update linked VP when the presentation has changed. Match by fragment or by the file the
+  // endpoint ends with: a `contains` test also matches the host, so an agent at a host such as
+  // ecs-org-issuer.example rewrote its DIDComm endpoint and every other ECS linked VP onto this one.
   const linkedVpFile = `/${schemaKey}-vtc-vp.json`
   if (attached)
     didDocument.service = didDocument.service?.map(s => {

@@ -110,8 +110,6 @@ describe('ECS credential digest anchoring', () => {
     )
   })
 
-  // The service that holds the ISSUER entry on an Ecosystem's Organization schema issues its own
-  // Organization credential, because nobody else can issue against that entry.
   it.each(['ecs-org', 'ecs-persona', 'ecs-user-agent'])('rebinds the %s credential too', async key => {
     const chain = makeChain()
     const { agent } = makeAgent(chain)
