@@ -42,8 +42,6 @@ import { TsLogger } from './logger'
 export const setupAgent = async ({
   port,
   walletConfig,
-  label,
-  displayPictureUrl,
   endpoints,
   logLevel,
   publicApiBaseUrl,
@@ -58,8 +56,6 @@ export const setupAgent = async ({
 }: {
   port: number
   walletConfig: AskarModuleConfigStoreOptions
-  label: string
-  displayPictureUrl?: string
   endpoints: string[]
   logLevel?: LogLevel
   publicApiBaseUrl: string
@@ -186,8 +182,6 @@ export const setupAgent = async ({
     dependencies: agentDependencies,
     publicApiBaseUrl,
     masterListCscaLocation,
-    displayPictureUrl,
-    label,
     veranaChain,
     indexer,
     trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS,

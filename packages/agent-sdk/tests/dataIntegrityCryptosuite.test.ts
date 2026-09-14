@@ -103,7 +103,6 @@ describe('on a VsAgent built with setupBaseDidComm', () => {
       did: DID,
       dependencies: agentDependencies,
       publicApiBaseUrl,
-      label: 'Data Integrity cryptosuite test',
       indexer: new VeranaIndexerService({
         baseUrl: 'https://indexer.invalid',
         logger: new ConsoleLogger(LogLevel.Off),

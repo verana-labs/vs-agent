@@ -12,15 +12,6 @@ vs-agent-ui provides a lightweight read-only web interface to monitor a vs-agent
 
 Click any credential card to see the full JSON.
 
-## Environment variables
-
-Configured in vs-agent, injected into the UI at runtime.
-
-| Variable | Default |
-|---|---|
-| `AGENT_LABEL` | `Test VS Agent` |
-| `AGENT_WELCOME_MESSAGE` | `Welcome to VS Agent` |
-
 ## Development
 
 ```bash

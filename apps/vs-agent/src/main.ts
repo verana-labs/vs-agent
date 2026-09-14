@@ -35,16 +35,10 @@ import packageJson from '../package.json'
 import { VsAgentModule } from './admin.module'
 import { BootstrapState } from './common'
 import {
-  ADMIN_LOG_LEVEL,
-  ADMIN_PORT,
-  AGENT_ENDPOINT,
-  AGENT_ENDPOINTS,
-  AGENT_INVITATION_IMAGE_URL,
-  AGENT_LABEL,
-  UI_WELCOME_MESSAGE,
-  AGENT_LOG_LEVEL,
-  AGENT_NAME,
-  AGENT_PORT,
+  ADMIN_API_LOG_LEVEL_NAME,
+  ADMIN_API_PORT,
+  AGENT_LOG_LEVEL_NAME,
+  PUBLIC_API_PORT,
   AGENT_PUBLIC_DID_METHOD,
   AGENT_WALLET_ID,
   AGENT_WALLET_KEY,
@@ -56,13 +50,18 @@ import {
   ADMIN_API_PUBLIC_URL,
   ADMIN_API_TRUSTED_NETWORKS,
   validateAdminApiConfig,
+  DEFAULT_ADMIN_API_LOG_LEVEL,
+  DEFAULT_AGENT_LOG_LEVEL,
+  resolveLogLevel,
+  SUPERSEDED_VAR_WARNINGS,
+  validateRuntimeConfig,
   ENABLED_PLUGINS,
   EVENTS_WEBHOOK_API_KEY,
   EVENTS_WEBHOOK_URL,
   POSTGRES_HOST,
   PUBLIC_API_BASE_URL,
   USE_CORS,
-  MASTER_LIST_CSCA_LOCATION,
+  MRTD_MASTER_LIST_CSCA_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
   VERANA_INDEXER_BASE_URL,
   VERANA_ACCOUNT_MNEMONIC,
@@ -93,11 +92,14 @@ import {
   webhookEvent,
 } from './utils'
 
+const AGENT_LOG_LEVEL = resolveLogLevel(AGENT_LOG_LEVEL_NAME, DEFAULT_AGENT_LOG_LEVEL)
+const ADMIN_API_LOG_LEVEL = resolveLogLevel(ADMIN_API_LOG_LEVEL_NAME, DEFAULT_ADMIN_API_LOG_LEVEL)
+
 export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) => {
   const { port, cors, publicApiBaseUrl, nestPlugins = [], bootstrapState } = serverConfig
 
   // Nest's global level governs the plain @nestjs/common loggers (the credo agent uses AGENT_LOG_LEVEL).
-  const nestLogLevels = toNestLogLevels(ADMIN_LOG_LEVEL)
+  const nestLogLevels = toNestLogLevels(ADMIN_API_LOG_LEVEL)
 
   const trustedNetworks = parseTrustedNetworks(ADMIN_API_TRUSTED_NETWORKS)
   const adminApp = await NestFactory.create(
@@ -119,19 +121,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   })
   commonAppConfig(publicApp, cors, true)
 
-  // Send environment to UI
-  const publicDir = path.join(__dirname, '../../public')
-  const indexPath = path.join(publicDir, 'index.html')
-  publicApp
-    .getHttpAdapter()
-    .getInstance()
-    .get(['/', '/index.html'], (_req: express.Request, res: express.Response) => {
-      const config = { label: AGENT_LABEL, welcomeMessage: UI_WELCOME_MESSAGE }
-      const script = `<script>window.__VS_AGENT__=${JSON.stringify(config)};</script>`
-      const html = fs.readFileSync(indexPath, 'utf-8').replace('</head>', `${script}</head>`)
-      res.type('html').send(html)
-    })
-  publicApp.use(express.static(publicDir))
+  publicApp.use(express.static(path.join(__dirname, '../../public')))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
   const webSocketServer = agent.didcomm.inboundTransports
@@ -146,7 +136,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
     await publicApp.init()
     httpInboundTransport.setApp(publicApp.getHttpAdapter().getInstance())
   } else {
-    publicAppServer = await publicApp.listen(AGENT_PORT)
+    publicAppServer = await publicApp.listen(PUBLIC_API_PORT)
   }
 
   for (const transport of agent.didcomm.inboundTransports) {
@@ -163,22 +153,16 @@ const VTJSC_MIGRATION_RETRY_MS = 30_000
 const VTJSC_MIGRATION_MAX_ATTEMPTS = 5
 
 const run = async () => {
-  const serverLogger = new TsLogger(ADMIN_LOG_LEVEL, 'Server')
+  const serverLogger = new TsLogger(ADMIN_API_LOG_LEVEL, 'Server')
 
-  if (AGENT_NAME) {
-    serverLogger.error(
-      'AGENT_NAME variable is defined and it is not supported anymore. Please use AGENT_WALLET_ID and AGENT_WALLET_KEY instead',
-    )
-    process.exit(1)
-  }
+  for (const warning of SUPERSEDED_VAR_WARNINGS) serverLogger.warn(warning)
 
-  if (AGENT_ENDPOINT) {
-    serverLogger.warn(
-      'AGENT_ENDPOINT variable is defined and it is deprecated. Please use AGENT_ENDPOINTS instead.',
-    )
-  }
-
-  const configErrors: string[] = []
+  const configErrors: string[] = validateRuntimeConfig({
+    publicApiPort: process.env.PUBLIC_API_PORT,
+    adminApiPort: process.env.ADMIN_API_PORT,
+    agentLogLevel: AGENT_LOG_LEVEL_NAME,
+    adminApiLogLevel: ADMIN_API_LOG_LEVEL_NAME,
+  })
   let didLocation: PublicDidLocation | undefined
   if (!PUBLIC_API_BASE_URL) {
     configErrors.push('PUBLIC_API_BASE_URL is required')
@@ -255,12 +239,9 @@ const run = async () => {
 
   const parsedDid = parseDid(`did:${AGENT_PUBLIC_DID_METHOD}:${didLocation.location}`)
 
-  let endpoints = AGENT_ENDPOINTS
-  if (!endpoints) {
-    const port = didLocation.port ? `:${didLocation.port}` : ''
-    const path = didLocation.path ? `/${didLocation.path}` : ''
-    endpoints = [`wss://${didLocation.host}${port}${path}`]
-  }
+  const endpointPort = didLocation.port ? `:${didLocation.port}` : ''
+  const endpointPath = didLocation.path ? `/${didLocation.path}` : ''
+  const endpoints = [`wss://${didLocation.host}${endpointPort}${endpointPath}`]
 
   const publicApiBaseUrl = didLocation.normalizedBaseUrl
 
@@ -291,16 +272,18 @@ const run = async () => {
   ) {
     serverLogger.warn('Some enabled plugins could not be loaded. Check installation.')
   }
-  if (MASTER_LIST_CSCA_LOCATION && !mrtdModule)
+  if (MRTD_MASTER_LIST_CSCA_LOCATION && !mrtdModule)
     serverLogger.warn(
-      'MASTER_LIST_CSCA_LOCATION is set but the MRTD plugin could not be loaded, eMRTD verification is disabled. Use the vs-agent-mrtd Docker image to enable it.',
+      'MRTD_MASTER_LIST_CSCA_LOCATION is set but the MRTD plugin could not be loaded, eMRTD verification is disabled. Use the vs-agent-mrtd Docker image to enable it.',
     )
 
   // Build the list of active NestJS plugins
   const nestPlugins: VsAgentNestPlugin[] = [
     ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
     ...(chatModule ? [chatModule.ChatPlugin({ defaultProfile: ecsServiceProfile })] : []),
-    ...(mrtdModule ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MASTER_LIST_CSCA_LOCATION })] : []),
+    ...(mrtdModule
+      ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MRTD_MASTER_LIST_CSCA_LOCATION })]
+      : []),
     VtFlowNestPlugin,
   ]
 
@@ -378,19 +361,17 @@ const run = async () => {
     indexer: indexerService,
     endpoints,
     discoveryOptions,
-    port: AGENT_PORT,
+    port: PUBLIC_API_PORT,
     walletConfig: {
       id: AGENT_WALLET_ID || 'test-vs-agent',
       key: AGENT_WALLET_KEY || 'test-vs-agent',
       keyDerivationMethod: keyDerivationMethodMap[AGENT_WALLET_KEY_DERIVATION_METHOD ?? KdfMethod.Argon2IMod],
       database: POSTGRES_HOST ? askarPostgresConfig : undefined,
     },
-    label: AGENT_LABEL || 'Test VS Agent',
-    displayPictureUrl: AGENT_INVITATION_IMAGE_URL,
     parsedDid,
     logLevel: AGENT_LOG_LEVEL,
     publicApiBaseUrl,
-    masterListCscaLocation: MASTER_LIST_CSCA_LOCATION,
+    masterListCscaLocation: MRTD_MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
     veranaChain,
     authorizationService,
@@ -404,7 +385,7 @@ const run = async () => {
   bootstrapState.require('indexer-subscription')
 
   const conf: ServerConfig = {
-    port: ADMIN_PORT,
+    port: ADMIN_API_PORT,
     cors: USE_CORS,
     logger: serverLogger,
     publicApiBaseUrl,
@@ -527,11 +508,11 @@ const run = async () => {
   }
 
   agent.config.logger.info(
-    `VS Agent v${packageJson['version']} running in port ${AGENT_PORT}. Admin interface at port ${conf.port}`,
+    `VS Agent v${packageJson['version']} running in port ${PUBLIC_API_PORT}. Admin interface at port ${conf.port}`,
   )
 }
 
 run().catch((error: Error) => {
-  new TsLogger(ADMIN_LOG_LEVEL, 'Server').error(`Failed to start VS Agent: ${error.message}`)
+  new TsLogger(ADMIN_API_LOG_LEVEL, 'Server').error(`Failed to start VS Agent: ${error.message}`)
   process.exit(1)
 })
