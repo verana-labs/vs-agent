@@ -136,10 +136,19 @@ describe('accommodateOpenId4VciKt', () => {
     expect(proofTypesOf(swiyu.sent)).toEqual(jwtOnly)
   })
 
-  // swiyu asks for application/jwt and its ktor ContentNegotiation appends application/json as a
-  // second range: that comma spelling is swiyu on the wire, and it must never see `attestation`.
-  it('treats a comma-separated jwt-then-json accept as swiyu and serves plain JSON without attestation', () => {
-    const swiyu = run('application/jwt, application/json', metadata(withAttestation))
+  // Captured on the phone: both ktor wallets send `application/jwt,application/json`; only swiyu
+  // adds Accept-Language to this request, and it must never see `attestation`.
+  it('recognises the comma-joined jwt-then-json accept as openid4vci-kt', () => {
+    const { sent, accept } = run('application/jwt,application/json', metadata(jwtOnly))
+
+    expect(accept).toBe('application/json')
+    expect(proofTypesOf(sent)).toEqual({ jwt: attested, attestation: attested })
+  })
+
+  it('treats the same accept with an Accept-Language as swiyu and serves plain JSON without attestation', () => {
+    const swiyu = run('application/jwt,application/json', metadata(withAttestation), {
+      headers: { accept: 'application/jwt,application/json', 'accept-language': 'de-CH, en, fr-CH, it-CH, rm' },
+    } as Partial<Request>)
 
     expect(swiyu.accept).toBe('application/json')
     expect(proofTypesOf(swiyu.sent)).toEqual(jwtOnly)

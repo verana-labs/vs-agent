@@ -188,9 +188,9 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
  * openid4vci-kt - the OID4VCI library inside the EUDI reference wallet - reads issuer metadata
  * more strictly than the spec requires, in two ways that no other client shares:
  *
- *   - it asks with `Accept: application/jwt; application/json`, a semicolon where a comma belongs,
- *     which parses as `application/jwt` alone and draws the signed metadata JWT it then cannot
- *     verify, since Credo signs that with a DID kid and no x5c chain;
+ *   - it asks with `Accept: application/jwt,application/json` (ktor joins its two accept values
+ *     with a bare comma; its logger prints them with `; `), which draws the signed metadata JWT
+ *     it then cannot verify, since Credo signs that with a DID kid and no x5c chain;
  *   - it refuses a configuration that does not advertise both `jwt` and `attestation`, each with
  *     `key_attestations_required`, treating OID4VCI 1.0 optional members as mandatory.
  *
@@ -217,12 +217,15 @@ export function accommodateOpenId4VciKt(signIssuerMetadata?: IssuerMetadataSigne
     const accept = request.headers.accept
     const ranges = typeof accept === 'string' ? accept.split(',').map(range => range.trim()) : []
     const offersJson = ranges.some(range => range.includes('application/json'))
-    // Only the semicolon spelling is openid4vci-kt. swiyu asks for jwt and its ktor client appends
-    // json as a second range, so a comma-separated jwt-then-json accept is swiyu, not the EUDI wallet.
+    // Both ktor wallets send `application/jwt,application/json` (the semicolon only ever existed in
+    // ktor's log output). swiyu alone localises this request with Accept-Language; openid4vci-kt never does.
+    const localised = typeof request.headers['accept-language'] === 'string'
     const jwtIndex = ranges.findIndex(range => range.includes('application/jwt'))
-    const isOpenId4VciKt = ranges.some(
-      range => range.includes('application/jwt') && range.includes('application/json'),
-    )
+    const jsonIndex = ranges.findIndex(range => range.includes('application/json'))
+    const isOpenId4VciKt =
+      !localised &&
+      (ranges.some(range => range.includes('application/jwt') && range.includes('application/json')) ||
+        (jwtIndex >= 0 && jsonIndex > jwtIndex))
     const prefersPlainMetadata = isOpenId4VciKt || (jwtIndex >= 0 && offersJson)
     const prefersSignedMetadata = jwtIndex >= 0 && !prefersPlainMetadata
 
