@@ -280,9 +280,11 @@ async function applyAnonCredsTrustDecision(
 
   const identifiers = presentation.identifiers ?? []
 
-  const requestedCredentialSchemas = Object.entries(
-    (record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA) as RequestedCredentialSchemas | null) ?? {},
-  )
+  const stored = record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA) as
+    | RequestedCredentialSchemas
+    | number[]
+    | null
+  const requestedCredentialSchemas = Object.entries(Array.isArray(stored) ? {} : (stored ?? {}))
 
   // A request whose creator recorded no CredentialSchema cannot be checked against what it asked
   // for, so it abandons rather than accepting any schema.
@@ -315,7 +317,7 @@ async function applyAnonCredsTrustDecision(
       subProofIndex === undefined ? undefined : identifiers[subProofIndex]?.cred_def_id
 
     if (!credentialDefinitionId) {
-      unchecked.push(`the presentation identifies no credential for the requested group "${group}"`)
+      unaccredited.push(`no sub-proof answers the requested group "${group}"`)
       continue
     }
 
