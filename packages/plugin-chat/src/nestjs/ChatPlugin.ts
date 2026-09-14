@@ -6,6 +6,7 @@ import { registerDidcommModuleEvents } from '../events/didcommModuleEvents'
 import { ChatMessageHandler } from '../handlers/ChatMessageHandler'
 import { setupChatProtocols } from '../sdk/setupChatProtocols'
 
+import { CHAT_DIDCOMM_MODULES } from './didcommModules'
 import { DEFAULT_PROFILE, type DefaultProfile } from './defaultProfile'
 import { V2DidcommActionMenuController } from './V2DidcommActionMenuController'
 import { V2DidcommCallsController } from './V2DidcommCallsController'
@@ -31,6 +32,7 @@ export const ChatPlugin = (options?: ChatPluginOptions): VsAgentNestPlugin => ({
     V2DidcommActionMenuController,
     V2DidcommQuestionAnswerController,
   ],
+  didcommModules: [...CHAT_DIDCOMM_MODULES],
   providers: [ChatMessageHandler, { provide: DEFAULT_PROFILE, useValue: options?.defaultProfile }],
   messageHandlers: [ChatMessageHandler],
   registerEvents: (agent, config) => {

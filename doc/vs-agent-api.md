@@ -87,6 +87,8 @@ Response from VS-A will generally result in a 200 HTTP response code and include
 
 Basic messages from other agents arrive as `didcomm.basic-messages.message-received` events, messages of an extension protocol module as `didcomm.{module}.{message-type}-received`, and credential and presentation flows as the corresponding `state-updated` events.
 
+The v2 API serves the same protocol through `POST /v2/didcomm/basic-messages` and `GET /v2/didcomm/basic-messages`, and `GET /v2/didcomm/protocols` lists every protocol module that a deployment serves.
+
 ### Message types
 
 Currently, the following messages can be submitted and received:
