@@ -218,12 +218,15 @@ export function accommodateOpenId4VciKt(signIssuerMetadata?: IssuerMetadataSigne
     const ranges = typeof accept === 'string' ? accept.split(',').map(range => range.trim()) : []
     const offersJson = ranges.some(range => range.includes('application/json'))
     // openid4vci-kt asks jwt then json: one malformed range up to wallet-core 0.28, two ranges from
-    // 0.29. swiyu asks jwt alone and Credo holders json first, so neither matches.
+    // 0.29. swiyu asks jwt and its ktor client appends json, so only its user agent tells them apart.
+    const userAgent = request.headers['user-agent']
+    const isSwiyu = typeof userAgent === 'string' && userAgent.startsWith('swiyuWallet')
     const jwtIndex = ranges.findIndex(range => range.includes('application/jwt'))
     const jsonIndex = ranges.findIndex(range => range.includes('application/json'))
     const isOpenId4VciKt =
-      ranges.some(range => range.includes('application/jwt') && range.includes('application/json')) ||
-      (jwtIndex >= 0 && jsonIndex > jwtIndex)
+      !isSwiyu &&
+      (ranges.some(range => range.includes('application/jwt') && range.includes('application/json')) ||
+        (jwtIndex >= 0 && jsonIndex > jwtIndex))
     const prefersPlainMetadata = isOpenId4VciKt || (jwtIndex >= 0 && offersJson)
     const prefersSignedMetadata = jwtIndex >= 0 && !prefersPlainMetadata
 
