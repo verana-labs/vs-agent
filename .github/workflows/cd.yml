@@ -302,8 +302,9 @@ jobs:
             # Default branch: unchanged behaviour (stable -> 'latest', dev -> 'latest').
             pnpm -r publish --no-git-checks --access public
           elif [ "$RELEASE_TYPE" = "stable" ]; then
-            # Maintenance branch stable release: track the line pointer, never move 'latest'.
-            pnpm -r publish --no-git-checks --access public --tag "v${RELEASE_MAJOR}.${RELEASE_MINOR}"
+            # Maintenance branch stable release: track the line pointer, never move 'latest'. The
+            # suffix keeps npm from rejecting the tag as a SemVer range (v1.13 parses as a range).
+            pnpm -r publish --no-git-checks --access public --tag "v${RELEASE_MAJOR}.${RELEASE_MINOR}-stable"
           else
             # Maintenance branch dev release: separate pointer so it doesn't move the line's
             # stable tag, and never 'latest'.
