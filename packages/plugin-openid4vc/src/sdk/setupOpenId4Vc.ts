@@ -199,17 +199,13 @@ export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
     const accept = request.headers.accept
     const ranges = typeof accept === 'string' ? accept.split(',').map(range => range.trim()) : []
     const offersJson = ranges.some(range => range.includes('application/json'))
-    // openid4vci-kt puts the signed metadata first and JSON after it: as one malformed range up to
-    // eudi-lib-android-wallet-core 0.28, as two correct ranges from 0.29, which is why matching the
-    // malformed spelling alone stopped recognising the EUDI wallet. swiyu asks JSON first, so the
-    // order is what separates the two clients.
-    // Only the malformed `application/jwt; application/json` identifies openid4vci-kt uniquely.
-    // swiyu sends the corrected comma spelling that eudi-lib-android-wallet-core 0.29 also adopted,
-    // and any client told `key_attestations_required` stops binding a plain JWK: swiyu then asks its
-    // federal attestation service for a key attestation it cannot get, and the offer dies.
-    const isOpenId4VciKt = ranges.some(
-      range => range.includes('application/jwt') && range.includes('application/json'),
-    )
+    // openid4vci-kt asks jwt then json: one malformed range up to wallet-core 0.28, two ranges from
+    // 0.29. swiyu asks jwt alone and Credo holders json first, so neither matches.
+    const jwtIndex = ranges.findIndex(range => range.includes('application/jwt'))
+    const jsonIndex = ranges.findIndex(range => range.includes('application/json'))
+    const isOpenId4VciKt =
+      ranges.some(range => range.includes('application/jwt') && range.includes('application/json')) ||
+      (jwtIndex >= 0 && jsonIndex > jwtIndex)
     const prefersPlainMetadata =
       isOpenId4VciKt || (ranges.some(range => range.includes('application/jwt')) && offersJson)
 
