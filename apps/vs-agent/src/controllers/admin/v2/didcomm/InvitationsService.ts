@@ -11,7 +11,7 @@ import {
   DidCommOutOfBandRepository,
 } from '@credo-ts/didcomm'
 import { Inject, Injectable } from '@nestjs/common'
-import { findMetadataEntry } from '@verana-labs/vs-agent-sdk'
+import { findMetadataEntry, PARENT_CONNECTION_TAG } from '@verana-labs/vs-agent-sdk'
 
 import { unknownConnection } from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
@@ -73,7 +73,7 @@ export class InvitationsService {
             handshakeProtocols: [DidCommHandshakeProtocol.DidExchange, DidCommHandshakeProtocol.Connections],
           }),
     })
-    outOfBandRecord.setTag('parentConnectionId', connection.id)
+    outOfBandRecord.setTag(PARENT_CONNECTION_TAG, connection.id)
     await agent.dependencyManager.resolve(DidCommOutOfBandRepository).update(agent.context, outOfBandRecord)
 
     const invitation = outOfBandRecord.outOfBandInvitation.v2Invitation ?? outOfBandRecord.outOfBandInvitation

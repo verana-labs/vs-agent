@@ -30,6 +30,13 @@ export {
 export type { SupportedPublicDidMethod } from './did/publicDid'
 export { applyAdminApiServiceEntry } from './did/adminApiService'
 
+// Connections
+export {
+  PARENT_CONNECTION_TAG,
+  ParentConnectionModule,
+  ParentConnectionRepository,
+} from './connections/ParentConnectionModule'
+
 // Transports
 export { HttpInboundTransport, HttpTransportSession } from './transports/HttpInboundTransport'
 export { VsAgentWsInboundTransport, WebSocketTransportSession } from './transports/VsAgentWsInboundTransport'

@@ -52,6 +52,7 @@ import {
   migrateLegacyDidRecord,
 } from '../did/migrations'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
+import { ParentConnectionModule } from '../connections/ParentConnectionModule'
 import { connectionEvents } from '../events/ConnectionEvents'
 import { vtFlowEvents } from '../events/VtFlowEvents'
 import { EcsClaims } from '../utils/ecsClaims'
@@ -83,6 +84,7 @@ export type BaseAgentModules = {
   dids: DidsModule
   w3cCredentials: W3cCredentialsModule
   didcomm: VsAgentDidCommModule
+  parentConnection: ParentConnectionModule
   vtFlow: VtFlowModule
 }
 

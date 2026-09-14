@@ -38,6 +38,7 @@ export class V2DidcommConnectionsController {
 
     const filters = {
       outOfBandId: query.outOfBandId,
+      parentConnectionId: query.parentConnectionId,
       state: query.state,
       role: query.role,
       did: query.did,
@@ -93,7 +94,8 @@ export class V2DidcommConnectionsController {
   @ApiOperation({
     summary: 'Delete a connection',
     description:
-      'Deletes a connection record, and drops the routing it held on its mediator when it had one.',
+      'Deletes a connection record, and drops the routing it held on its mediator when it had one. ' +
+      'The connections opened from invitations sent on it stay, each with its `parentConnectionId`.',
   })
   @ApiParam({
     name: 'connectionId',
