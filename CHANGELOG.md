@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.1](https://github.com/verana-labs/vs-agent/compare/v1.13.0...v1.13.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* **vs-agent:** report the released version instead of 1.12.0 ([509dd5d](https://github.com/verana-labs/vs-agent/commit/509dd5df4eade76e2925e1cedbebc6f8276f0271))
+
 ## [1.13.0](https://github.com/verana-labs/vs-agent/compare/v1.12.0...v1.13.0) (2026-09-14)
 
 
