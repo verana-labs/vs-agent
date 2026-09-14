@@ -9,7 +9,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 
-import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
+import { createdAtKey, mapPage, Page, paginate, unknownConnection } from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
 import { ConnectionRecordDto, ConnectionRecordPageDto, ListConnectionsQueryDto } from './dto'
@@ -113,12 +113,4 @@ export class V2DidcommConnectionsController {
       throw error
     }
   }
-}
-
-function unknownConnection(connectionId: string): AdminApiError {
-  return new AdminApiError(
-    AdminApiErrorCode.UnknownId,
-    HttpStatus.NOT_FOUND,
-    `no connection with id "${connectionId}"`,
-  )
 }

@@ -735,6 +735,21 @@ describe('v2 didcomm credential exchange routes', () => {
       expect(agent.didcomm.credentials.acceptOffer).not.toHaveBeenCalled()
     })
 
+    it('answers RESOLVER_UNAVAILABLE when it cannot complete the check of an accepted offer', async () => {
+      agent.didcomm.credentials.getFormatData.mockResolvedValue(anonCredsOffer)
+      anonCredsTrust.assertAuthorized.mockRejectedValue(
+        new AnonCredsTrustError(AnonCredsTrustErrorReason.Unavailable, 'the indexer is unreachable'),
+      )
+
+      const response = await request(app.getHttpServer()).post(
+        '/v2/didcomm/credential-exchanges/ce-a/accept-offer',
+      )
+
+      expect(response.status).toBe(503)
+      expect(response.body.error.code).toBe('RESOLVER_UNAVAILABLE')
+      expect(agent.didcomm.credentials.acceptOffer).not.toHaveBeenCalled()
+    })
+
     it('refuses an AnonCreds offer that names no credential definition', async () => {
       agent.didcomm.credentials.getFormatData.mockResolvedValue({ offer: { anoncreds: {} } })
 
