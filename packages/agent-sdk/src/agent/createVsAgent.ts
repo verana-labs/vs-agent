@@ -27,11 +27,8 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
   walletConfig?: AskarModuleConfigStoreOptions
   endpoints?: string[]
   did?: string
-  label: string
   publicApiBaseUrl: string
   adminApiServiceEndpoint?: string
-  displayPictureUrl?: string
-  autoDiscloseUserProfile?: boolean
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
   dependencies: AgentDependencies
@@ -51,7 +48,6 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
  * // Base DIDComm agent
  * const agent = createVsAgent({
  *   plugins: [setupBaseDidComm({ walletConfig, publicApiBaseUrl, endpoints })],
- *   label: 'My Agent',
  *   publicApiBaseUrl,
  *   dependencies: agentDependencies,
  * })
@@ -64,7 +60,6 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
  *     setupChatProtocols(),   // from @verana-labs/vs-agent-plugin-chat
  *     setupMrtdProtocol(),    // from @verana-labs/vs-agent-plugin-mrtd
  *   ],
- *   label: 'My Agent',
  *   publicApiBaseUrl,
  *   dependencies: agentDependencies,
  * })
@@ -85,11 +80,8 @@ export function createVsAgent<T extends Plugin[]>(
     modules: mergedModules,
     dependencies: options.dependencies,
     did: options.did,
-    autoDiscloseUserProfile: options.autoDiscloseUserProfile,
     publicApiBaseUrl: options.publicApiBaseUrl,
     adminApiServiceEndpoint: options.adminApiServiceEndpoint,
-    displayPictureUrl: options.displayPictureUrl,
-    label: options.label,
     veranaChain: options.veranaChain,
     indexer: options.indexer,
     trustedEcosystemDids: options.trustedEcosystemDids,

@@ -21,7 +21,7 @@ export class FakeDidResolver implements DidResolver {
     const repo = agent.context.dependencyManager.resolve(DidRepository)
     const record = await repo.findCreatedDid(agent.context, agent.did)
     if (!record?.didDocument) {
-      throw new Error(`FakeDidResolver: agent ${agent.label} has no DID document for ${agent.did}`)
+      throw new Error(`FakeDidResolver: agent ${agent.did} has no DID document`)
     }
     this.didDocuments.set(agent.did, record.didDocument)
     const altDids = (record.getTag('alternativeDids') as string[] | undefined) ?? []

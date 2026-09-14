@@ -17,6 +17,7 @@ export enum VsAgentEventTypes {
   PresentationStateUpdated = 'vs-agent-presentation-state-updated',
   VtFlowStateUpdated = 'vs-agent-vt-flow-state-updated',
   IndexerNotification = 'vs-agent-indexer-notification',
+  ModuleMessageReceived = 'vs-agent-module-message-received',
 }
 
 export interface VsAgentConnectionStateEvent extends BaseEvent {
@@ -50,6 +51,14 @@ export interface VsAgentIndexerNotificationEvent extends BaseEvent {
   }
 }
 
+export interface VsAgentModuleMessageReceivedEvent extends BaseEvent {
+  type: typeof VsAgentEventTypes.ModuleMessageReceived
+  payload: {
+    type: string
+    data: Record<string, unknown>
+  }
+}
+
 export function msgToEvent(message: BaseMessage): MessageReceived {
   return new MessageReceived({
     timestamp: message.timestamp,
@@ -59,4 +68,15 @@ export function msgToEvent(message: BaseMessage): MessageReceived {
 
 export function emitVsAgentEvent(agent: VsAgent, type: VsAgentEventTypes, event: Event): void {
   agent.events.emit(agent.context, { type, payload: { event } })
+}
+
+export function emitModuleMessageEvent(
+  agent: VsAgent<any>,
+  type: string,
+  data: Record<string, unknown>,
+): void {
+  agent.events.emit(agent.context, {
+    type: VsAgentEventTypes.ModuleMessageReceived,
+    payload: { type, data },
+  })
 }

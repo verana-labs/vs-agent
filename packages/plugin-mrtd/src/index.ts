@@ -2,6 +2,7 @@ export { setupMrtdProtocol } from './sdk/setupMrtdProtocol'
 export type { MrtdSdkPlugin, MrtdPluginOptions } from './sdk/setupMrtdProtocol'
 
 export { MrtdPlugin } from './nestjs/MrtdPlugin'
+export { V2DidcommMrtdController } from './nestjs/V2DidcommMrtdController'
 
 export { MrtdMessageHandler } from './handlers/MrtdMessageHandler'
 

@@ -16,7 +16,7 @@ import { IsString } from 'class-validator'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
-import { AdminApiError, AdminApiErrorCode } from '../src/common/AdminApiError'
+import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 import { BOOTSTRAP_STATE, BootstrapState } from '../src/common/BootstrapState'
 import { V2AgentController } from '../src/controllers/admin/v2/agent/V2AgentController'
 import { ServiceEndpointExceptionFilter } from '../src/controllers/admin/service-endpoints/ServiceEndpointExceptionFilter'
