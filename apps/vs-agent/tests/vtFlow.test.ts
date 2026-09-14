@@ -71,7 +71,7 @@ describe('vt-flow: two-agent integration', () => {
 
     const { connectionRecord } = await applicant.didcomm.oob.receiveImplicitInvitation({
       did: validator.did,
-      label: applicant.label,
+      label: 'Applicant',
       didCommVersion: 'v2',
       ourDid: applicant.did,
     })
@@ -247,7 +247,7 @@ describe('vt-flow: two-agent integration', () => {
     vi.stubGlobal('fetch', fetchSpy)
 
     try {
-      webhookEvent(validator, { url: webhookUrl }, new TsLogger(LogLevel.Off, validator.label))
+      webhookEvent(validator, { url: webhookUrl }, new TsLogger(LogLevel.Off, 'Validator'))
 
       await applicant.modules.vtFlow.sendIssuanceRequest({
         connectionId: applicantConnection.id,
@@ -420,7 +420,7 @@ describe('vt-flow: VS-CONN-VS trust gate', () => {
 
     const { connectionRecord } = await applicant.didcomm.oob.receiveImplicitInvitation({
       did: validator.did,
-      label: applicant.label,
+      label: 'Applicant',
       didCommVersion: 'v2',
       ourDid: applicant.did,
     })

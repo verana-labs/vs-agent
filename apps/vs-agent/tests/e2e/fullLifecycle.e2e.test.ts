@@ -13,6 +13,7 @@ import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
 
 import {
+  agentDisplayName,
   createJsc,
   EcsBootstrapService,
   findAttestedResources,
@@ -1118,7 +1119,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         const known = new Set((await applicant.didcomm.credentials.getAll()).map(record => record.id))
         await applicant.didcomm.oob.receiveInvitationFromUrl(
           invitationUrl(invitation as Record<string, unknown>),
-          { label: applicant.label },
+          { label: await agentDisplayName(applicant) },
         )
         return until(async () =>
           (await applicant.didcomm.credentials.getAll()).find(
@@ -1131,7 +1132,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         const known = new Set((await applicant.didcomm.proofs.getAll()).map(record => record.id))
         await applicant.didcomm.oob.receiveInvitationFromUrl(
           invitationUrl(invitation as Record<string, unknown>),
-          { label: applicant.label },
+          { label: await agentDisplayName(applicant) },
         )
         return until(async () =>
           (await applicant.didcomm.proofs.getAll()).find(
@@ -1369,7 +1370,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
           })
           // No `ourDid`, so the invitation carries a did:peer instead of the public DID.
           const { outOfBandInvitation } = await validator.didcomm.oob.createInvitation({
-            label: validator.label,
+            label: await agentDisplayName(validator),
             messages: [message],
             didCommVersion: 'v2',
           })

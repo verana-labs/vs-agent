@@ -25,7 +25,6 @@ import {
   V2DidcommCredentialExchangesController,
   V2DidcommInvitationsController,
   V2DidcommPresentationsController,
-  V2DidcommReceiptsController,
   V2Openid4vcController,
   V2VtServiceEndpointsController,
   V1VsAgentController,
