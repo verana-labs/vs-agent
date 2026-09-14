@@ -35,7 +35,7 @@ import {
 import { VsAgentModule } from '../src/admin.module'
 import { ErrorEnvelopeFilter } from '../src/common'
 import { PublicModule } from '../src/public.module'
-import { TsLogger } from '../src/utils'
+import { TsLogger, webhookEvent } from '../src/utils'
 
 import { issueVtjscFrom, mockResponses, startAgent } from './__mocks__'
 import { FakeDidResolver } from './__mocks__/fakeDidResolver'
@@ -505,6 +505,21 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
     let v2Parent: { id: string }
 
+    const webhookUrl = 'http://webhook.test/events'
+    const webhookFetch = vi.fn()
+
+    const firstConnectionEvent = (outOfBandId: string) =>
+      vi.waitFor(() => {
+        const event = webhookFetch.mock.calls
+          .map(([, init]) => JSON.parse((init as RequestInit).body as string))
+          .find(
+            body =>
+              body.type === 'didcomm.connections.state-updated' && body.data.outOfBandId === outOfBandId,
+          )
+        expect(event).toBeDefined()
+        return event.data
+      })
+
     const aliceReceives = async (invitation: DidCommOutOfBandInvitation) => {
       const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitation(invitation, {
         label: aliceAgent.label,
@@ -514,6 +529,16 @@ describe('v2 didcomm accept routes, over two agents', () => {
     }
 
     beforeAll(async () => {
+      const baseFetch = global.fetch
+      vi.stubGlobal('fetch', (...args: Parameters<typeof fetch>) => {
+        if (String(args[0]).startsWith(webhookUrl)) {
+          webhookFetch(...args)
+          return Promise.resolve(new Response(null, { status: 200 }))
+        }
+        return baseFetch(...args)
+      })
+      webhookEvent(faberAgent, { url: webhookUrl }, new TsLogger(LogLevel.Off, faberAgent.label))
+
       const record = await faberAgent.didcomm.oob.createInvitation({
         didCommVersion: 'v2',
         ourDid: faberDid(),
@@ -522,6 +547,8 @@ describe('v2 didcomm accept routes, over two agents', () => {
       await aliceAgent.didcomm.basicMessages.sendMessage(aliceConnection.id, 'hello')
       v2Parent = await untilFaberConnection({ outOfBandId: record.id })
     }, 60_000)
+
+    afterAll(() => vi.unstubAllGlobals())
 
     const sentBy = async (app: () => request.SuperTest<request.Test>, body: Record<string, unknown>) => {
       const sendMessage = vi.spyOn(faberAgent.dependencyManager.resolve(DidCommMessageSender), 'sendMessage')
@@ -568,6 +595,15 @@ describe('v2 didcomm accept routes, over two agents', () => {
       expect(child.id).not.toBe(parent.id)
       expect(child.getTag('parentConnectionId')).toBe(parent.id)
 
+      const fetched = await faber().get(`/v2/didcomm/connections/${child.id}`)
+      expect(fetched.body).toMatchObject({
+        outOfBandId: response.body.outOfBandId,
+        parentConnectionId: parent.id,
+      })
+
+      const firstEvent = await firstConnectionEvent(response.body.outOfBandId)
+      expect(firstEvent).toMatchObject({ parentConnectionId: parent.id, previousState: null })
+
       const listed = await faber().get(`/v2/didcomm/connections?outOfBandId=${response.body.outOfBandId}`)
       expect(listed.body.items.map((item: { id: string }) => item.id)).toEqual([child.id])
     }, 120_000)
@@ -602,6 +638,17 @@ describe('v2 didcomm accept routes, over two agents', () => {
       const child = await untilFaberConnection({ outOfBandId: response.body.outOfBandId, state: 'completed' })
       expect(child.id).not.toBe(parent.id)
       expect(child.getTag('parentConnectionId')).toBe(parent.id)
+
+      const firstEvent = await firstConnectionEvent(response.body.outOfBandId)
+      expect(firstEvent).toMatchObject({ id: child.id, parentConnectionId: parent.id })
+
+      const deleted = await faber().delete(`/v2/didcomm/connections/${parent.id}`)
+      expect(deleted.status).toBe(204)
+      expect((await faber().get(`/v2/didcomm/connections/${parent.id}`)).status).toBe(404)
+
+      const children = await faber().get(`/v2/didcomm/connections?parentConnectionId=${parent.id}`)
+      expect(children.body.items).toHaveLength(1)
+      expect(children.body.items[0]).toMatchObject({ id: child.id, parentConnectionId: parent.id })
     }, 120_000)
 
     it('refers the peer to another DID without creating a record', async () => {
