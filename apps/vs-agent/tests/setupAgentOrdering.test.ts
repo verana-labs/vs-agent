@@ -13,7 +13,6 @@ describe('setupAgent transport ordering', () => {
     const { agent } = await setupAgent({
       port: 3999,
       walletConfig: getAskarStoreConfig('setupAgent ordering'),
-      label: 'Ordering Test',
       endpoints: ['wss://ordering.example'],
       publicApiBaseUrl: 'https://ordering.example',
       indexer: new VeranaIndexerService({

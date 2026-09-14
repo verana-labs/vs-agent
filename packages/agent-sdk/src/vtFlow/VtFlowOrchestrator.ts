@@ -17,6 +17,7 @@ import {
   type VtFlowEcsIssuanceExemptionContext,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
+import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
 import { BaseAgentModules, VsAgent } from '../agent'
 import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
@@ -33,6 +34,7 @@ import {
   createVtc,
   createW3cV2Credential,
   isVcdm2Credential,
+  linkedVpSchemaId,
   removeStoredTrustCredential,
   resolveJsonSchemaCredentialId,
   toOfferedCredentialJson,
@@ -366,11 +368,15 @@ export class VtFlowOrchestrator {
 
   /** Per the spec the algorithm comes from the schema, never from the digest value. */
   private async digestAlgorithmForSchema(schemaId: number): Promise<string> {
+    return (await this.credentialSchema(schemaId)).digestAlgorithm
+  }
+
+  private async credentialSchema(schemaId: number): Promise<{ digestAlgorithm: string; ecsKey: ECS | null }> {
     const schema = await this.agent.indexer.getCredentialSchema(schemaId)
     if (!schema.digest_algorithm) {
       throw new Error(`Credential schema ${schemaId} has no digest_algorithm`)
     }
-    return schema.digest_algorithm
+    return { digestAlgorithm: schema.digest_algorithm, ecsKey: await classifyEcsSchema(schema.json_schema) }
   }
 
   /** Fired after signing and before delivery, so a failure here must abort the issuance. */
@@ -440,12 +446,16 @@ export class VtFlowOrchestrator {
     }
 
     const credentialJson = await this.getReceivedCredentialJson(record.credentialExchangeRecordId)
-    const algorithm = await this.digestAlgorithmForSchema(issuer.schema_id)
-    const digest = computeCredentialDigestJCS(credentialJson as unknown as W3cVerifiableCredential, algorithm)
+    const { digestAlgorithm, ecsKey } = await this.credentialSchema(issuer.schema_id)
+    const digest = computeCredentialDigestJCS(
+      credentialJson as unknown as W3cVerifiableCredential,
+      digestAlgorithm,
+    )
     const anchored = await indexer.getDigest(digest)
     if (!anchored) {
       throw new Error(`Credential digest ${digest} is not anchored on-chain`)
     }
+    if (ecsKey) await vtFlowApi.setEcsSchemaKey(record.id, ecsKey)
   }
 
   async onCredentialRevoked(vtFlowRecordId: string): Promise<void> {
@@ -528,7 +538,12 @@ export class VtFlowOrchestrator {
           credentialJson as Parameters<typeof W3cV2DataIntegrityVerifiableCredential.fromObject>[0],
         )
       : JsonTransformer.fromJSON(credentialJson, W3cJsonLdVerifiableCredential)
-    await createVtc(this.agent, this.options.publicApiBaseUrl, schemaBaseId, credential)
+    await createVtc(
+      this.agent,
+      this.options.publicApiBaseUrl,
+      record.ecsSchemaKey ? linkedVpSchemaId(record.ecsSchemaKey) : schemaBaseId,
+      credential,
+    )
   }
 
   private extractSchemaBaseId(jscUrl: string): string | undefined {

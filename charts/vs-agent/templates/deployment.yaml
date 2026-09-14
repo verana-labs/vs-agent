@@ -153,7 +153,7 @@ spec:
 # This StatefulSet manages the deployment of the VS Agent service
 # It includes the agent container, PostgreSQL database (if enabled), and Redis (if enabled)
 # The StatefulSet ensures that the agent service is deployed with a stable identity and persistent storage
-# The agent service is configured with environment variables for the agent endpoint, label, invitation image URL, and public DID
+# The agent service is configured with environment variables for the public base URL, the public DID method, the Verana network and the Admin API
 # The PostgreSQL database is configured with environment variables for the user and password
 # The Redis service is configured with its own container and persistent storage
 apiVersion: apps/v1
@@ -177,10 +177,6 @@ spec:
             image: {{ .Values.image.repository | default "veranalabs/vs-agent" }}:{{ .Values.image.tag | default .Chart.Version }}
             imagePullPolicy: Always
             env:
-            - name: AGENT_LABEL
-              value: {{ .Values.didcommLabel | quote }}
-            - name: AGENT_INVITATION_IMAGE_URL
-              value: {{ tpl .Values.didcommInvitationImageUrl . | quote }}
             {{- if .Values.eventsWebhookUrl }}
             - name: EVENTS_WEBHOOK_URL
               value: {{ tpl .Values.eventsWebhookUrl . | quote }}

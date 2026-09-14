@@ -22,7 +22,6 @@ const agent = createVsAgent({
       endpoints: ['https://agent.example.com/didcomm'],
     }),
   ],
-  label: 'My Agent',
   publicApiBaseUrl: 'https://api.example.com',
   dependencies: getNodeHttpServer(),
 })
@@ -138,7 +137,6 @@ const chain = new VeranaChainService({
 const agent = createVsAgent({
   plugins: [...],
   veranaChain: chain,
-  label: 'My Agent',
   publicApiBaseUrl: 'https://api.example.com',
   dependencies: getNodeHttpServer(),
 })

@@ -56,7 +56,7 @@ import {
   paginate,
   trustDecisionError,
 } from '../../../../common'
-import { AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
+import { TERMINAL_STATES } from '../../../../config'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 import { CredentialTypesService } from '../../credentials'
@@ -204,7 +204,6 @@ export class V2DidcommPresentationsController {
       messages: [request.message],
       useLegacyDid,
       didCommVersion: didcommVersion,
-      imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({

@@ -8,7 +8,7 @@ import {
   ServiceEndpointErrorCode,
 } from '../controllers/admin/service-endpoints/ServiceEndpointsService'
 
-import { AdminApiError, AdminApiErrorCode } from './AdminApiError'
+import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
 interface ErrorEnvelope {
   status: number
