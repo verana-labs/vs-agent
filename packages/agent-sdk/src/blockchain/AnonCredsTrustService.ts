@@ -58,7 +58,6 @@ export type RequestedCredentialSchema = Pick<
   'credentialSchemaId' | 'ecosystemDid' | 'jsonSchemaCredentialId'
 >
 
-/** The `CredentialSchema` that each requested-attribute group of a presentation request asks for. */
 export type RequestedCredentialSchemas = Record<string, RequestedCredentialSchema>
 
 export function toRequestedCredentialSchema({
