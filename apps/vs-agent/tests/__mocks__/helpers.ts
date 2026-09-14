@@ -14,7 +14,7 @@ import { type BaseAgentModules, type VsAgent } from '@verana-labs/vs-agent-sdk'
 import { VsAgentModule } from '../../src/admin.module'
 import { MessagingPlugin } from '../../src/plugins/MessagingPlugin'
 import { PublicModule } from '../../src/public.module'
-import { ServerConfig, TsLogger } from '../../src/utils'
+import { ecsServiceProfile, ServerConfig, TsLogger } from '../../src/utils'
 
 export function isCredentialStateChangedEvent(arg: unknown): arg is DidCommCredentialStateChangedEvent {
   const { type, payload } = arg as any
@@ -60,7 +60,7 @@ export const startServersTesting = async (
       VsAgentModule.register(
         agent,
         'http://localhost:3001',
-        chat ? [MessagingPlugin, ChatPlugin] : [MessagingPlugin],
+        chat ? [MessagingPlugin, ChatPlugin({ defaultProfile: ecsServiceProfile })] : [MessagingPlugin],
       ),
       PublicModule.register(agent, 'http://localhost:3001'),
     ],
@@ -70,7 +70,7 @@ export const startServersTesting = async (
 
   const conf: ServerConfig = {
     port: 3000,
-    logger: new TsLogger(LogLevel.Off, agent.label),
+    logger: new TsLogger(LogLevel.Off, new URL(agent.publicApiBaseUrl).host),
     publicApiBaseUrl: 'http://localhost:3001',
     endpoints: agent.didcomm.config.endpoints,
   }

@@ -45,8 +45,16 @@ jobs:
       release-minor: ${{ steps.resolve.outputs.release-minor }}
       release-patch: ${{ steps.resolve.outputs.release-patch }}
       is-main: ${{ steps.resolve.outputs.is-main }}
+      is-latest: ${{ steps.resolve.outputs.is-latest }}
+      is-latest-major: ${{ steps.resolve.outputs.is-latest-major }}
       npm-dist-tag: ${{ steps.resolve.outputs.npm-dist-tag }}
     steps:
+      # Tags decide who owns the floating pointers (see below); history is not needed.
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-tags: true
+
       - name: Resolve version
         id: resolve
         env:
@@ -65,6 +73,28 @@ jobs:
           if [ "$EVENT_NAME" = "push" ]; then
             IS_MAIN=false
             [ "$REF_NAME" = "main" ] && IS_MAIN=true
+
+            # Floating stable pointers ('latest', v1) follow the highest stable version, not the
+            # branch: a maintenance branch legitimately owns them while main is still on an
+            # unreleased major, and can never move them backwards once a higher version has
+            # shipped from anywhere. Release Please has already pushed this release's tag, and
+            # the version is echoed in explicitly in case the checkout raced it.
+            IS_LATEST=false
+            IS_LATEST_MAJOR=false
+            if [ "$RELEASE_TYPE" = "stable" ]; then
+              stable_tags() {
+                { git tag -l 'v[0-9]*'; echo "$RELEASE_VERSION"; } \
+                  | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -uV
+              }
+              if [ "$(stable_tags | tail -1)" = "$RELEASE_VERSION" ]; then
+                IS_LATEST=true
+              fi
+              if [ "$(stable_tags | grep -E "^v${RELEASE_MAJOR}\." | tail -1)" = "$RELEASE_VERSION" ]; then
+                IS_LATEST_MAJOR=true
+              fi
+              echo "Highest stable tag: $(stable_tags | tail -1); this release: ${RELEASE_VERSION} (latest=${IS_LATEST}, latest-in-major=${IS_LATEST_MAJOR})"
+            fi
+
             {
               echo "publish=${NEW_RELEASE_PUBLISHED}"
               echo "release-type=${RELEASE_TYPE}"
@@ -73,6 +103,8 @@ jobs:
               echo "release-minor=${RELEASE_MINOR}"
               echo "release-patch=${RELEASE_PATCH}"
               echo "is-main=${IS_MAIN}"
+              echo "is-latest=${IS_LATEST}"
+              echo "is-latest-major=${IS_LATEST_MAJOR}"
               echo "npm-dist-tag="
             } >> "$GITHUB_OUTPUT"
             exit 0
@@ -107,6 +139,8 @@ jobs:
             echo "release-minor=$(printf '%s' "$BASE" | cut -d. -f2)"
             echo "release-patch=$(printf '%s' "$BASE" | cut -d. -f3)"
             echo "is-main=false"
+            echo "is-latest=false"
+            echo "is-latest-major=false"
             echo "npm-dist-tag=${DIST_TAG}"
           } >> "$GITHUB_OUTPUT"
 
@@ -143,6 +177,8 @@ jobs:
         id: tags
         env:
           IS_MAIN: ${{ needs.version.outputs.is-main }}
+          IS_LATEST: ${{ needs.version.outputs.is-latest }}
+          IS_LATEST_MAJOR: ${{ needs.version.outputs.is-latest-major }}
         run: |
           HUB="${{ secrets.DOCKER_HUB_LOGIN }}/${{ matrix.image }}"
           # The fully-qualified, immutable version tag is always published.
@@ -155,12 +191,16 @@ jobs:
             # Minor-line pointer (e.g. v1.11): owned by whichever branch maintains that line.
             TAGS="${TAGS}
           ${HUB}:v${RELEASE_MAJOR}.${RELEASE_MINOR}"
-            # Cross-line floating pointers only from the default branch (main). A maintenance
-            # branch (e.g. v1.11) must never move 'latest' or the major (v1) pointer backwards.
-            if [ "$IS_MAIN" = "true" ]; then
+            # Cross-line floating pointers follow the highest stable version, not the branch
+            # (resolved in the version job): a maintenance branch owns them while main is still
+            # on an unreleased major, and can never move them backwards.
+            if [ "$IS_LATEST_MAJOR" = "true" ]; then
               TAGS="${TAGS}
-          ${HUB}:latest
           ${HUB}:v${RELEASE_MAJOR}"
+            fi
+            if [ "$IS_LATEST" = "true" ]; then
+              TAGS="${TAGS}
+          ${HUB}:latest"
             fi
           else
             P="${RELEASE_PATCH:0:1}"
@@ -262,6 +302,7 @@ jobs:
       RELEASE_MAJOR: ${{ needs.version.outputs.release-major }}
       RELEASE_MINOR: ${{ needs.version.outputs.release-minor }}
       NPM_DIST_TAG: ${{ needs.version.outputs.npm-dist-tag }}
+      IS_LATEST: ${{ needs.version.outputs.is-latest }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -294,12 +335,18 @@ jobs:
             # Off-release build from an arbitrary branch: park it on its own dist-tag so it is
             # installable by name but never resolves for anyone doing a plain install.
             pnpm -r publish --no-git-checks --access public --tag "$NPM_DIST_TAG"
-          elif [ "${{ github.ref_name }}" = "main" ]; then
-            # Default branch: unchanged behaviour (stable -> 'latest', dev -> 'latest').
+          elif [ "$RELEASE_TYPE" = "stable" ] && [ "$IS_LATEST" = "true" ]; then
+            # Highest stable version in the repo, from whichever branch shipped it: 'latest'.
             pnpm -r publish --no-git-checks --access public
           elif [ "$RELEASE_TYPE" = "stable" ]; then
-            # Maintenance branch stable release: track the line pointer, never move 'latest'.
-            pnpm -r publish --no-git-checks --access public --tag "v${RELEASE_MAJOR}.${RELEASE_MINOR}"
+            # Stable release behind a newer one (e.g. a 1.x patch after 2.0.0 shipped): track the
+            # line pointer only, never move 'latest'. A publish sets a single dist-tag, and the
+            # suffix keeps npm from rejecting it as a SemVer range (v1.13 parses as a range).
+            pnpm -r publish --no-git-checks --access public --tag "v${RELEASE_MAJOR}.${RELEASE_MINOR}-stable"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            # Default branch dev release: 'dev', mirroring the Docker pointer, so 'latest' always
+            # resolves to the newest stable release for a plain install.
+            pnpm -r publish --no-git-checks --access public --tag dev
           else
             # Maintenance branch dev release: separate pointer so it doesn't move the line's
             # stable tag, and never 'latest'.

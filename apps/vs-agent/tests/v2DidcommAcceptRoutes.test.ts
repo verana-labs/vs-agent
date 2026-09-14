@@ -337,7 +337,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
     const known = await idsOf(aliceApp, 'presentations')
     await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(created.body.invitation), {
-      label: aliceAgent.label,
+      label: 'Alice',
     })
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
@@ -354,7 +354,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
     const known = await idsOf(aliceApp, 'credential-exchanges')
     await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(offer.body.invitation), {
-      label: aliceAgent.label,
+      label: 'Alice',
     })
     const aliceId = await untilNewRecord(aliceApp, 'credential-exchanges', 'offer-received', known)
 
@@ -391,7 +391,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
     const known = await idsOf(aliceApp, 'presentations')
     await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(created.body.invitation), {
-      label: aliceAgent.label,
+      label: 'Alice',
     })
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
@@ -429,7 +429,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     try {
       const known = await idsOf(aliceApp, 'presentations')
       await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(created.body.invitation), {
-        label: aliceAgent.label,
+        label: 'Alice',
       })
       const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
@@ -479,7 +479,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     try {
       const known = await idsOf(aliceApp, 'presentations')
       await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(invitation), {
-        label: aliceAgent.label,
+        label: 'Alice',
       })
       const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
@@ -521,7 +521,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
     const known = await idsOf(aliceApp, 'presentations')
     await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(invitation), {
-      label: aliceAgent.label,
+      label: 'Alice',
     })
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
@@ -815,6 +815,118 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const known = await idsOf(aliceApp, 'presentations')
     await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(invitation), {
       label: aliceAgent.label,
+    })
+    const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
+
+    const accepted = await alice().post(`/v2/didcomm/presentations/${aliceProofId}/accept-request`)
+    expect(accepted.body.error ?? accepted.status).toBe(200)
+
+    await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+    const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(abandoned.body.verified).toBe(false)
+    expect(abandoned.body.errorMessage).toContain('e.p.trust-resolution-unavailable')
+    expect(abandoned.body.errorMessage).toContain('records no CredentialSchema')
+  }, 120_000)
+  it('abandons a presentation that answers a group with another CredentialSchema than the group asked for', async () => {
+    const requested = await faberAgent.didcomm.proofs.createRequest({
+      protocolVersion: 'v2',
+      proofFormats: {
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: {
+            'gov-id': { names: ['name'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+            'other-id': { names: ['countryCode'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+          },
+        },
+      },
+    })
+    requested.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, {
+      'gov-id': requestedCredentialSchema(CREDENTIAL_SCHEMA_ID),
+      'other-id': requestedCredentialSchema(999),
+    })
+    await faberAgent.didcomm.proofs.update(requested.proofRecord)
+
+    const faberProofId = requested.proofRecord.id
+    const { invitation } = await createInvitation({ agent: faberAgent, messages: [requested.message] })
+
+    const known = await idsOf(aliceApp, 'presentations')
+    await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(invitation), {
+      label: 'Alice',
+    })
+    const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
+
+    const accepted = await alice().post(`/v2/didcomm/presentations/${aliceProofId}/accept-request`)
+    expect(accepted.body.error ?? accepted.status).toBe(200)
+
+    await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+    const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(abandoned.body.verified).toBe(false)
+    expect(abandoned.body.errorMessage).toContain('e.p.issuer-not-authorized')
+    expect(abandoned.body.errorMessage).toContain('the group "other-id"')
+  }, 120_000)
+  it('abandons a presentation that answers none of the sub-proofs of a requested group', async () => {
+    const requested = await faberAgent.didcomm.proofs.createRequest({
+      protocolVersion: 'v2',
+      proofFormats: {
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: {
+            'gov-id': { names: ['name'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+          },
+        },
+      },
+    })
+    requested.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, {
+      'gov-id': requestedCredentialSchema(CREDENTIAL_SCHEMA_ID),
+      passport: requestedCredentialSchema(CREDENTIAL_SCHEMA_ID),
+    })
+    await faberAgent.didcomm.proofs.update(requested.proofRecord)
+
+    const faberProofId = requested.proofRecord.id
+    const { invitation } = await createInvitation({ agent: faberAgent, messages: [requested.message] })
+
+    const known = await idsOf(aliceApp, 'presentations')
+    await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(invitation), {
+      label: 'Alice',
+    })
+    const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
+
+    const accepted = await alice().post(`/v2/didcomm/presentations/${aliceProofId}/accept-request`)
+    expect(accepted.body.error ?? accepted.status).toBe(200)
+
+    await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+    const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(abandoned.body.verified).toBe(false)
+    expect(abandoned.body.errorMessage).toContain('e.p.issuer-not-authorized')
+    expect(abandoned.body.errorMessage).toContain('the requested group "passport"')
+  }, 120_000)
+  it('treats the array shape of an earlier build as no recorded CredentialSchema', async () => {
+    const requested = await faberAgent.didcomm.proofs.createRequest({
+      protocolVersion: 'v2',
+      proofFormats: {
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: {
+            'gov-id': { names: ['name'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+          },
+        },
+      },
+    })
+    requested.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, [CREDENTIAL_SCHEMA_ID])
+    await faberAgent.didcomm.proofs.update(requested.proofRecord)
+
+    const faberProofId = requested.proofRecord.id
+    const { invitation } = await createInvitation({ agent: faberAgent, messages: [requested.message] })
+
+    const known = await idsOf(aliceApp, 'presentations')
+    await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(invitation), {
+      label: 'Alice',
     })
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
