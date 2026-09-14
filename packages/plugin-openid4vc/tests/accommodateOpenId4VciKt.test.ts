@@ -136,19 +136,10 @@ describe('accommodateOpenId4VciKt', () => {
     expect(proofTypesOf(swiyu.sent)).toEqual(jwtOnly)
   })
 
-  // eudi-lib-android-wallet-core 0.29 corrected the spelling to two ranges, jwt first, which is
-  // exactly what swiyu's ktor client sends once ContentNegotiation appends json to its jwt accept.
-  it('recognises the corrected jwt-first spelling of wallet-core 0.29 as openid4vci-kt', () => {
-    const { sent, accept } = run('application/jwt, application/json', metadata(jwtOnly))
-
-    expect(accept).toBe('application/json')
-    expect(proofTypesOf(sent)).toEqual({ jwt: attested, attestation: attested })
-  })
-
-  it('tells swiyu apart by its user agent and serves it plain JSON without attestation', () => {
-    const swiyu = run('application/jwt, application/json', metadata(withAttestation), {
-      headers: { accept: 'application/jwt, application/json', 'user-agent': 'swiyuWallet' },
-    } as Partial<Request>)
+  // swiyu asks for application/jwt and its ktor ContentNegotiation appends application/json as a
+  // second range: that comma spelling is swiyu on the wire, and it must never see `attestation`.
+  it('treats a comma-separated jwt-then-json accept as swiyu and serves plain JSON without attestation', () => {
+    const swiyu = run('application/jwt, application/json', metadata(withAttestation))
 
     expect(swiyu.accept).toBe('application/json')
     expect(proofTypesOf(swiyu.sent)).toEqual(jwtOnly)
