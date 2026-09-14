@@ -5,7 +5,7 @@ export async function getDidDocument() {
 }
 
 export function getAgentConfig() {
-  return window.__VS_AGENT__ ?? { label: 'VS Agent', welcomeMessage: null }
+  return window.__VS_AGENT__ ?? { label: 'VS Agent', welcomeMessage: null, network: null, showPlaceholderMessage: true }
 }
 
 export const qrUrl = '/qr'

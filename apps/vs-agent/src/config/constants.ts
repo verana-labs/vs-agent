@@ -8,6 +8,8 @@ import packageJson from '../../package.json'
 dotenv.config()
 
 export const AGENT_VERSION: string = packageJson.version
+// Container build variant (set by the Docker image stage, e.g. vs-agent-mrtd)
+export const VS_AGENT_BUILD = process.env.VS_AGENT_BUILD || 'vs-agent'
 
 // Basic parameters
 
@@ -17,6 +19,17 @@ export const ADMIN_PORT = Number(process.env.ADMIN_PORT || 3000)
 export const AGENT_NAME = process.env.AGENT_NAME // This one is deprecated. Only used to throw error if it is defined
 export const AGENT_LABEL = process.env.AGENT_LABEL || 'Test VS Agent'
 export const UI_WELCOME_MESSAGE = process.env.UI_WELCOME_MESSAGE || 'Welcome to VS Agent'
+// Text of the network badge shown in the public UI header (e.g. "Testnet").
+// When unset, no badge is shown.
+export const UI_NETWORK_BADGE = process.env.UI_NETWORK_BADGE
+// Declared Verana network for the public UI only (accreditations, deep
+// links). Unlike VERANA_INDEXER_BASE_URL, these do NOT enable the backend
+// indexer integration or the VPR-managed linked-credential lifecycle; they
+// fall back to the VERANA_* values when unset.
+export const UI_VERANA_CHAIN_ID = process.env.UI_VERANA_CHAIN_ID
+export const UI_VERANA_INDEXER_BASE_URL = process.env.UI_VERANA_INDEXER_BASE_URL
+// Show the business wallet placeholder banner on the public UI (default true).
+export const UI_SHOW_PLACEHOLDER_MESSAGE = process.env.UI_SHOW_PLACEHOLDER_MESSAGE !== 'false'
 export const AGENT_INVITATION_IMAGE_URL = process.env.AGENT_INVITATION_IMAGE_URL
 export const AGENT_ENDPOINT = process.env.AGENT_ENDPOINT
 export const AGENT_ENDPOINTS = process.env.AGENT_ENDPOINT
