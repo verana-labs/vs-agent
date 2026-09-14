@@ -26,7 +26,6 @@ import {
   createInvitation,
   fetchJson,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
-  type RequestedCredentialSchemas,
 } from '@verana-labs/vs-agent-sdk'
 
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
