@@ -1,0 +1,21 @@
+--- a/build/index.mjs
++++ b/build/index.mjs
+@@ -120,6 +120,7 @@
+ 			agentContext: this.agentContext,
+ 			connection
+ 		}));
++		return { messageId: message.id };
+ 	}
+ };
+ DidCommReactionsApi = __decorate([injectable(), __decorateMetadata("design:paramtypes", [
+--- a/build/index.d.mts
++++ b/build/index.d.mts
+@@ -48,7 +48,7 @@
+   send(options: {
+     connectionId: string;
+     reactions: DidCommMessageReactionOptions[];
+-  }): Promise<void>;
++  }): Promise<{ messageId: string; }>;
+ }
+ //#endregion
+ //#region src/DidCommReactionsModule.d.ts
