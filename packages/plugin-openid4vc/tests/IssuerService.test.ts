@@ -107,7 +107,7 @@ describe('IssuerService', () => {
     verifyKeyBoundToDid.mockResolvedValue('bound')
   })
 
-  it('keeps attestation off the record even where a key-attestation root is configured', async () => {
+  it('accepts attestation proofs on the record where a key-attestation root is configured', async () => {
     const withRoot = issuerApi()
     withRoot.getIssuerByIssuerId.mockRejectedValue(
       new RecordNotFoundError('issuer not found', { recordType: 'OpenId4VcIssuerRecord' }),
@@ -120,9 +120,23 @@ describe('IssuerService', () => {
 
     const proofTypes =
       withRoot.createIssuer.mock.calls[0][0].credentialConfigurationsSupported.employee.proof_types_supported
-    // The record is what every wallet reads. `attestation` is added per-request for openid4vci-kt
-    // only; on the record it makes swiyu's closed ProofType enum throw and kills the offer.
-    expect(Object.keys(proofTypes).sort()).toEqual(['jwt'])
+    expect(proofTypes).toEqual({
+      jwt: { proof_signing_alg_values_supported: ['ES256'] },
+      attestation: { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} },
+    })
+  })
+
+  it('keeps attestation off the record when no key-attestation root anchors it', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockRejectedValue(
+      new RecordNotFoundError('issuer not found', { recordType: 'OpenId4VcIssuerRecord' }),
+    )
+
+    await new IssuerService(agent(api) as never, options()).ensureInitialized()
+
+    const proofTypes =
+      api.createIssuer.mock.calls[0][0].credentialConfigurationsSupported.employee.proof_types_supported
+    expect(Object.keys(proofTypes)).toEqual(['jwt'])
     expect(proofTypes.attestation).toBeUndefined()
   })
 

@@ -65,7 +65,7 @@ export interface OpenId4VcPluginOptions {
      * Trust anchors for OpenID4VCI key attestations. A wallet that can only prove possession
      * through an attested key - the EUDI reference wallet is one - sends a `key-attestation+jwt`
      * signed by its wallet provider, and this is what that attestation must chain to. Absent, the
-     * `attestation` proof type is neither advertised nor accepted.
+     * `attestation` proof type stays off the issuer record and no attestation proof is accepted.
      */
     keyAttestationCertificates?: string[]
   }

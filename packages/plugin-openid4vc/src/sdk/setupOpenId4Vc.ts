@@ -45,8 +45,7 @@ export function setupOpenId4Vc(
   const app = express()
   if (options.issuer) app.use(advertiseDpopSupport)
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
-  if (options.issuer)
-    app.use(accommodateOpenId4VciKt())
+  if (options.issuer) app.use(accommodateOpenId4VciKt())
   if (options.issuer) app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
   if (options.issuer) {
     // Credo serves no SD-JWT VC issuer metadata, and a wallet that anchors an x5c-signed
@@ -181,14 +180,16 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
  *   - it asks with `Accept: application/jwt; application/json`, a semicolon where a comma belongs,
  *     which parses as `application/jwt` alone and draws the signed metadata JWT it then cannot
  *     verify, since Credo signs that with a DID kid and no x5c chain;
- *   - it refuses any proof type that omits `key_attestations_required`, treating the OID4VCI 1.0
- *     optional member as mandatory.
+ *   - it refuses a configuration that does not advertise both `jwt` and `attestation`, each with
+ *     `key_attestations_required`, treating OID4VCI 1.0 optional members as mandatory.
  *
- * The payload accommodation is scoped to that client, recognised by the malformed accept header it
- * sends. Advertising it to everyone is not an option: a Credo holder that sees
- * `key_attestations_required` stops binding a plain JWK and demands a key attestation, and swiyu
- * models `proof_types_supported` as a closed enum, so an `attestation` member makes it throw while
- * parsing the metadata and the offer dies before the wallet renders anything.
+ * The payload accommodation is scoped to that client, recognised by the accept header it sends.
+ * Advertising it to everyone is not an option: a Credo holder that sees `key_attestations_required`
+ * stops binding a plain JWK and demands a key attestation, and swiyu models `proof_types_supported`
+ * as a closed enum, so an `attestation` member makes it throw while parsing the metadata and the
+ * offer dies before the wallet renders anything. Every other client therefore gets `attestation`
+ * stripped, including when the issuer record carries it because a key-attestation anchor is
+ * configured.
  *
  * The accept rewrite is wider: any client that offers both types can read JSON, and swiyu must be
  * served JSON because its resolver rejects our did:webvh SCID and so can never verify the signed
@@ -196,6 +197,11 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
  */
 export function accommodateOpenId4VciKt() {
   return (request: Request, response: Response, next: NextFunction): void => {
+    if (request.method !== 'GET' || !request.path.includes('/.well-known/openid-credential-issuer')) {
+      next()
+      return
+    }
+
     const accept = request.headers.accept
     const ranges = typeof accept === 'string' ? accept.split(',').map(range => range.trim()) : []
     const offersJson = ranges.some(range => range.includes('application/json'))
@@ -209,51 +215,49 @@ export function accommodateOpenId4VciKt() {
     const prefersPlainMetadata =
       isOpenId4VciKt || (ranges.some(range => range.includes('application/jwt')) && offersJson)
 
-    if (
-      request.method !== 'GET' ||
-      !request.path.includes('/.well-known/openid-credential-issuer') ||
-      !prefersPlainMetadata
-    ) {
-      next()
-      return
-    }
+    if (prefersPlainMetadata) request.headers.accept = 'application/json'
 
-    request.headers.accept = 'application/json'
-    if (!isOpenId4VciKt) {
-      next()
-      return
-    }
-
+    const rewriteProofTypes = isOpenId4VciKt ? withKeyAttestationRequirement : withoutAttestationProofType
     const send = response.send.bind(response)
     response.send = ((body?: unknown) =>
-      send(
-        typeof body === 'string'
-          ? withKeyAttestationRequirement(body)
-          : body,
-      )) as Response['send']
+      send(typeof body === 'string' ? rewriteProofTypes(body) : body)) as Response['send']
     next()
   }
 }
 
 function withKeyAttestationRequirement(body: string): string {
+  return withProofTypes(body, proofTypes => {
+    const attested = Object.fromEntries(
+      Object.entries(proofTypes).map(([type, meta]) =>
+        isRecord(meta) && (type === 'jwt' || type === 'attestation') && !('key_attestations_required' in meta)
+          ? [type, { ...meta, key_attestations_required: {} }]
+          : [type, meta],
+      ),
+    )
+    return attested.jwt && !attested.attestation ? { ...attested, attestation: attested.jwt } : attested
+  })
+}
+
+function withoutAttestationProofType(body: string): string {
+  return withProofTypes(body, proofTypes =>
+    Object.fromEntries(Object.entries(proofTypes).filter(([type]) => type !== 'attestation')),
+  )
+}
+
+function withProofTypes(
+  body: string,
+  rewrite: (proofTypes: Record<string, unknown>) => Record<string, unknown>,
+): string {
   try {
     const metadata: unknown = JSON.parse(body)
     if (!isRecord(metadata) || !isRecord(metadata.credential_configurations_supported)) return body
 
     const configurations = Object.fromEntries(
-      Object.entries(metadata.credential_configurations_supported).map(([id, configuration]) => {
-        if (!isRecord(configuration) || !isRecord(configuration.proof_types_supported)) {
-          return [id, configuration]
-        }
-        const proofTypes = Object.fromEntries(
-          Object.entries(configuration.proof_types_supported).map(([type, meta]) =>
-            isRecord(meta) && !('key_attestations_required' in meta) && type === 'jwt'
-              ? [type, { ...meta, key_attestations_required: {} }]
-              : [type, meta],
-          ),
-        )
-        return [id, { ...configuration, proof_types_supported: proofTypes }]
-      }),
+      Object.entries(metadata.credential_configurations_supported).map(([id, configuration]) =>
+        isRecord(configuration) && isRecord(configuration.proof_types_supported)
+          ? [id, { ...configuration, proof_types_supported: rewrite(configuration.proof_types_supported) }]
+          : [id, configuration],
+      ),
     )
     return JSON.stringify({ ...metadata, credential_configurations_supported: configurations })
   } catch {

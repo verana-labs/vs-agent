@@ -395,6 +395,18 @@ export class IssuerService {
   }
 
   private credentialConfigurationsSupported(): OpenId4VciCredentialConfigurationsSupportedWithFormats {
+    const proofTypesSupported = {
+      jwt: { proof_signing_alg_values_supported: ['ES256'] },
+      ...(this.issuerOptions().keyAttestationCertificates?.length
+        ? {
+            attestation: {
+              proof_signing_alg_values_supported: ['ES256'],
+              key_attestations_required: {},
+            },
+          }
+        : {}),
+    }
+
     return Object.fromEntries(
       this.options.credentialConfigurations.map(configuration => [
         configuration.id,
@@ -406,12 +418,7 @@ export class IssuerService {
           scope: configuration.id,
           cryptographic_binding_methods_supported: ['jwk'],
           credential_signing_alg_values_supported: ['ES256'],
-          // Only `jwt` goes on the record. `attestation` is added per-request for the one client
-          // that needs it: swiyu's ProofType is a closed enum and any other member makes it throw
-          // while parsing the metadata, killing the offer before the wallet ever sees it.
-          proof_types_supported: {
-            jwt: { proof_signing_alg_values_supported: ['ES256'] },
-          },
+          proof_types_supported: proofTypesSupported,
           display: [
             {
               name: configuration.name,
