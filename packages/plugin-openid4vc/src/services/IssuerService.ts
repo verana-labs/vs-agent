@@ -7,7 +7,7 @@ import type {
   OpenId4VciCredentialRequestToCredentialMapper,
 } from '@credo-ts/openid4vc'
 
-import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
+import { AgentContext, ClaimFormat, JsonEncoder, JwsService, RecordNotFoundError } from '@credo-ts/core'
 
 import { findCredentialConfiguration, parseOfferClaims } from '../config'
 import {
@@ -167,6 +167,24 @@ export class IssuerService {
     }
   }
 
+  public async signIssuerMetadata(
+    header: Record<string, unknown>,
+    payload: Record<string, unknown>,
+  ): Promise<string> {
+    this.assertInitialized()
+    const signingCertificate = this.signingCertificateHandle()
+    const agentContext = this.agent.dependencyManager.resolve(AgentContext)
+
+    return this.agent.dependencyManager.resolve(JwsService).createJwsCompact(agentContext, {
+      payload: JsonEncoder.toUint8Array(payload),
+      keyId: signingCertificate.keyId,
+      protectedHeaderOptions: {
+        ...header,
+        alg: signingCertificate.certificate.publicJwk.signatureAlgorithm,
+      },
+    })
+  }
+
   /** SD-JWT VC type metadata, extended with the Verifiable Trust link: the
    *  ecosystem's VTJSC (relatedJsonSchemaCredentialId) is THE schema anchor -
    *  wallets verify the VTJSC signature and resolve the schema through their
@@ -231,7 +249,9 @@ export class IssuerService {
 
   /** The same labels keyed by claim name. Wallets built on OpenID4VCI draft 11-13, which is what
    *  the published store builds still ship, read this shape and ignore `credential_metadata`. */
-  private legacyClaims(configuration: OpenId4VcCredentialConfiguration): Record<string, { display?: Array<{ name: string; locale: string }> }> {
+  private legacyClaims(
+    configuration: OpenId4VcCredentialConfiguration,
+  ): Record<string, { display?: Array<{ name: string; locale: string }> }> {
     return Object.fromEntries(
       configuration.claims.map(claim => {
         const display = configuration.claimDisplay?.[claim]

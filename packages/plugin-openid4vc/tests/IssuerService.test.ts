@@ -1,6 +1,6 @@
 import type { OpenId4VcPluginOptions } from '../src/types'
 
-import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
+import { ClaimFormat, JwsService, RecordNotFoundError } from '@credo-ts/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { IssuerService } from '../src/services/IssuerService'
@@ -68,6 +68,8 @@ function issuerApi() {
   }
 }
 
+const createJwsCompact = vi.fn()
+
 function agent(api = issuerApi(), did: string | undefined = AGENT_DID) {
   return {
     did,
@@ -75,13 +77,16 @@ function agent(api = issuerApi(), did: string | undefined = AGENT_DID) {
     genericRecords: {},
     kms: {},
     x509: {},
+    dependencyManager: {
+      resolve: (token: unknown) => (token === JwsService ? { createJwsCompact } : 'agent-context'),
+    },
     modules: { openId4Vc: { issuer: api } },
   }
 }
 
 const leafCertificate = {
   sanUriNames: [AGENT_DID],
-  publicJwk: { toJson: () => PUBLIC_JWK },
+  publicJwk: { toJson: () => PUBLIC_JWK, signatureAlgorithm: 'ES256' },
   toString: () => 'leaf-certificate',
 }
 const rootCertificate = {
@@ -123,6 +128,24 @@ describe('IssuerService', () => {
     expect(proofTypes).toEqual({
       jwt: { proof_signing_alg_values_supported: ['ES256'] },
       attestation: { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} },
+    })
+  })
+
+  it('re-signs issuer metadata with the record signing key under the header it is given', async () => {
+    const service = new IssuerService(agent() as never, options())
+    await service.ensureInitialized()
+    createJwsCompact.mockResolvedValue('re-signed.metadata.jwt')
+    const header = { alg: 'ES256', kid: `${AGENT_DID}#key-1`, typ: 'openidvci-issuer-metadata+jwt' }
+
+    const jwt = await service.signIssuerMetadata(header, { credential_issuer: 'https://agent.example' })
+
+    expect(jwt).toBe('re-signed.metadata.jwt')
+    const [context, signOptions] = createJwsCompact.mock.calls[0]
+    expect(context).toBe('agent-context')
+    expect(signOptions.keyId).toBe('issuer-key')
+    expect(signOptions.protectedHeaderOptions).toEqual(header)
+    expect(JSON.parse(Buffer.from(signOptions.payload).toString('utf8'))).toEqual({
+      credential_issuer: 'https://agent.example',
     })
   })
 

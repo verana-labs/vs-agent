@@ -13,11 +13,18 @@ import { trustedCertificatesForVerification } from '../trust/CertificateTrust'
 const ATTESTATION_AUTH_METHOD = 'attest_jwt_client_auth'
 const ATTESTATION_ALGORITHMS = ['ES256']
 const DPOP_ALGORITHMS = ['ES256']
+const COMPACT_JWS = /^[\w-]+\.[\w-]+\.[\w-]+$/
+
+export type IssuerMetadataSigner = (
+  header: Record<string, unknown>,
+  payload: Record<string, unknown>,
+) => Promise<string>
 
 export interface OpenId4VcIssuerRequestMapper {
   mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper
   getVctMetadata: (configurationId: string) => Record<string, unknown> | undefined
   getJwtVcIssuerMetadata: () => Record<string, unknown>
+  signIssuerMetadata: IssuerMetadataSigner
 }
 
 export interface OpenId4VcAgentModules {
@@ -42,10 +49,14 @@ export function setupOpenId4Vc(
     assertValidWalletAttestationCertificates(walletAttestationCertificates)
   }
 
+  const signIssuerMetadata: IssuerMetadataSigner | undefined = getIssuerService
+    ? (header, payload) => getIssuerService().signIssuerMetadata(header, payload)
+    : undefined
+
   const app = express()
   if (options.issuer) app.use(advertiseDpopSupport)
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
-  if (options.issuer) app.use(accommodateOpenId4VciKt())
+  if (options.issuer) app.use(accommodateOpenId4VciKt(signIssuerMetadata))
   if (options.issuer) app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
   if (options.issuer) {
     // Credo serves no SD-JWT VC issuer metadata, and a wallet that anchors an x5c-signed
@@ -191,11 +202,12 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
  * stripped, including when the issuer record carries it because a key-attestation anchor is
  * configured.
  *
- * The accept rewrite is wider: any client that offers both types can read JSON, and swiyu must be
- * served JSON because its resolver rejects our did:webvh SCID and so can never verify the signed
- * JWT. A client asking for `application/jwt` alone still receives it.
+ * The accept rewrite is wider: any client that offers both types can read JSON. A client asking for
+ * `application/jwt` alone still receives Credo's signed metadata JWT, whose payload is the issuer
+ * record itself - so the same `attestation` member has to be stripped there too, which means
+ * decoding that JWT and signing the filtered payload again under an identical header.
  */
-export function accommodateOpenId4VciKt() {
+export function accommodateOpenId4VciKt(signIssuerMetadata?: IssuerMetadataSigner) {
   return (request: Request, response: Response, next: NextFunction): void => {
     if (request.method !== 'GET' || !request.path.includes('/.well-known/openid-credential-issuer')) {
       next()
@@ -212,21 +224,52 @@ export function accommodateOpenId4VciKt() {
     const isOpenId4VciKt =
       ranges.some(range => range.includes('application/jwt') && range.includes('application/json')) ||
       (jwtIndex >= 0 && jsonIndex > jwtIndex)
-    const prefersPlainMetadata =
-      isOpenId4VciKt || (ranges.some(range => range.includes('application/jwt')) && offersJson)
+    const prefersPlainMetadata = isOpenId4VciKt || (jwtIndex >= 0 && offersJson)
+    const prefersSignedMetadata = jwtIndex >= 0 && !prefersPlainMetadata
 
     if (prefersPlainMetadata) request.headers.accept = 'application/json'
 
     const rewriteProofTypes = isOpenId4VciKt ? withKeyAttestationRequirement : withoutAttestationProofType
     const send = response.send.bind(response)
-    response.send = ((body?: unknown) =>
-      send(typeof body === 'string' ? rewriteProofTypes(body) : body)) as Response['send']
+    response.send = ((body?: unknown) => {
+      if (typeof body !== 'string') return send(body)
+      if (!prefersSignedMetadata || !signIssuerMetadata || !COMPACT_JWS.test(body)) {
+        return send(rewriteProofTypes(body))
+      }
+      void signedWithoutAttestationProofType(body, signIssuerMetadata).then(send, next)
+      return response
+    }) as Response['send']
     next()
   }
 }
 
+async function signedWithoutAttestationProofType(body: string, sign: IssuerMetadataSigner): Promise<string> {
+  const [header, payload] = body.split('.').map(decodeJwtSegment)
+  if (!header || !payload || !advertisesAttestationProofType(payload)) return body
+  return sign(header, withProofTypes(payload, withoutAttestation))
+}
+
+function decodeJwtSegment(segment: string): Record<string, unknown> | undefined {
+  try {
+    const decoded: unknown = JSON.parse(Buffer.from(segment, 'base64url').toString('utf8'))
+    return isRecord(decoded) ? decoded : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function advertisesAttestationProofType(metadata: Record<string, unknown>): boolean {
+  if (!isRecord(metadata.credential_configurations_supported)) return false
+  return Object.values(metadata.credential_configurations_supported).some(
+    configuration =>
+      isRecord(configuration) &&
+      isRecord(configuration.proof_types_supported) &&
+      'attestation' in configuration.proof_types_supported,
+  )
+}
+
 function withKeyAttestationRequirement(body: string): string {
-  return withProofTypes(body, proofTypes => {
+  return rewriteProofTypesJson(body, proofTypes => {
     const attested = Object.fromEntries(
       Object.entries(proofTypes).map(([type, meta]) =>
         isRecord(meta) && (type === 'jwt' || type === 'attestation') && !('key_attestations_required' in meta)
@@ -239,30 +282,40 @@ function withKeyAttestationRequirement(body: string): string {
 }
 
 function withoutAttestationProofType(body: string): string {
-  return withProofTypes(body, proofTypes =>
-    Object.fromEntries(Object.entries(proofTypes).filter(([type]) => type !== 'attestation')),
-  )
+  return rewriteProofTypesJson(body, withoutAttestation)
 }
 
-function withProofTypes(
+function withoutAttestation(proofTypes: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(proofTypes).filter(([type]) => type !== 'attestation'))
+}
+
+function rewriteProofTypesJson(
   body: string,
   rewrite: (proofTypes: Record<string, unknown>) => Record<string, unknown>,
 ): string {
   try {
     const metadata: unknown = JSON.parse(body)
     if (!isRecord(metadata) || !isRecord(metadata.credential_configurations_supported)) return body
-
-    const configurations = Object.fromEntries(
-      Object.entries(metadata.credential_configurations_supported).map(([id, configuration]) =>
-        isRecord(configuration) && isRecord(configuration.proof_types_supported)
-          ? [id, { ...configuration, proof_types_supported: rewrite(configuration.proof_types_supported) }]
-          : [id, configuration],
-      ),
-    )
-    return JSON.stringify({ ...metadata, credential_configurations_supported: configurations })
+    return JSON.stringify(withProofTypes(metadata, rewrite))
   } catch {
     return body
   }
+}
+
+function withProofTypes(
+  metadata: Record<string, unknown>,
+  rewrite: (proofTypes: Record<string, unknown>) => Record<string, unknown>,
+): Record<string, unknown> {
+  if (!isRecord(metadata.credential_configurations_supported)) return metadata
+
+  const configurations = Object.fromEntries(
+    Object.entries(metadata.credential_configurations_supported).map(([id, configuration]) =>
+      isRecord(configuration) && isRecord(configuration.proof_types_supported)
+        ? [id, { ...configuration, proof_types_supported: rewrite(configuration.proof_types_supported) }]
+        : [id, configuration],
+    ),
+  )
+  return { ...metadata, credential_configurations_supported: configurations }
 }
 
 /** Credo omits `dpop_signing_alg_values_supported`. wwWallet reads the absent member and then

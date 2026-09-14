@@ -1,3 +1,4 @@
+import type { OpenId4VcIssuerRequestMapper } from '../src/sdk/setupOpenId4Vc'
 import type { OpenId4VcPluginOptions } from '../src/types'
 
 import request from 'supertest'
@@ -29,22 +30,22 @@ const validOptions = (): OpenId4VcPluginOptions => ({
   verifierPolicies: [],
 })
 
+const issuerService = (
+  overrides: Partial<OpenId4VcIssuerRequestMapper> = {},
+): OpenId4VcIssuerRequestMapper => ({
+  getVctMetadata: () => undefined,
+  getJwtVcIssuerMetadata: () => ({}),
+  mapCredentialRequest: () => {
+    throw new Error('not implemented')
+  },
+  signIssuerMetadata: () => Promise.reject(new Error('not implemented')),
+  ...overrides,
+})
+
 describe('setupOpenId4Vc', () => {
   it('creates a fresh non-global Express application for every setup', () => {
-    const first = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
-    const second = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
+    const first = setupOpenId4Vc(validOptions(), issuerService)
+    const second = setupOpenId4Vc(validOptions(), issuerService)
 
     expect(first.publicMiddleware).not.toBe(second.publicMiddleware)
     expect(first.modules.openId4Vc.config.app).toBe(first.publicMiddleware)
@@ -55,13 +56,7 @@ describe('setupOpenId4Vc', () => {
     const issuerOnly = validOptions()
     delete issuerOnly.verifier
     delete issuerOnly.trust
-    const issuerSetup = setupOpenId4Vc(issuerOnly, () => ({
-      getVctMetadata: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
+    const issuerSetup = setupOpenId4Vc(issuerOnly, issuerService)
 
     expect(issuerSetup.modules.openId4Vc.config).toHaveProperty(
       'issuer.baseUrl',
@@ -81,13 +76,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('delegates X.509 trust only to configured trust anchors', async () => {
-    const setup = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
+    const setup = setupOpenId4Vc(validOptions(), issuerService)
     const peerCertificate = {
       toString: () => 'MIIB-peer-certificate',
     }
@@ -106,16 +95,14 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('serves the SD-JWT VC issuer metadata that x5c-anchoring holders resolve', async () => {
-    const setup = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
-      getJwtVcIssuerMetadata: () => ({
-        issuer: 'https://issuer.example',
-        jwks: { keys: [{ kty: 'EC', crv: 'P-256' }] },
+    const setup = setupOpenId4Vc(validOptions(), () =>
+      issuerService({
+        getJwtVcIssuerMetadata: () => ({
+          issuer: 'https://issuer.example',
+          jwks: { keys: [{ kty: 'EC', crv: 'P-256' }] },
+        }),
       }),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
+    )
 
     const response = await request(setup.publicMiddleware).get('/.well-known/jwt-vc-issuer')
 
@@ -127,13 +114,11 @@ describe('setupOpenId4Vc', () => {
   // RFC 8615 inserts the issuer path after the well-known segment; answering only the bare
   // form made every wwWallet issuance show a metadata-fetch failure above the trust card.
   it('serves the SD-JWT VC issuer metadata at the path-inserted well-known form', async () => {
-    const setup = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
-      getJwtVcIssuerMetadata: () => ({ issuer: 'https://issuer.example', jwks: { keys: [] } }),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
+    const setup = setupOpenId4Vc(validOptions(), () =>
+      issuerService({
+        getJwtVcIssuerMetadata: () => ({ issuer: 'https://issuer.example', jwks: { keys: [] } }),
+      }),
+    )
 
     const response = await request(setup.publicMiddleware).get('/.well-known/jwt-vc-issuer/oid4vci/demo-did')
 
@@ -144,13 +129,7 @@ describe('setupOpenId4Vc', () => {
   it('serves the bare openid-credential-issuer path as the configured issuer', async () => {
     const options = validOptions()
     options.issuer!.id = 'demo-did'
-    const setup = setupOpenId4Vc(options, () => ({
-      getVctMetadata: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
+    const setup = setupOpenId4Vc(options, issuerService)
     // Credo's host-prefixed route, registered on the same application after setup.
     setup.publicMiddleware.get(
       '/.well-known/openid-credential-issuer/oid4vci/demo-did',
@@ -178,13 +157,7 @@ describe('setupOpenId4Vc', () => {
   it('does not advertise wallet attestation metadata by default', async () => {
     const options = validOptions()
     options.issuer!.walletAttestationCertificates = ['unused-while-attestation-is-not-required']
-    const setup = setupOpenId4Vc(options, () => ({
-      getVctMetadata: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
+    const setup = setupOpenId4Vc(options, issuerService)
     setup.publicMiddleware.get(
       '/.well-known/oauth-authorization-server/oid4vci/issuer',
       (_request, response) => response.json({ token_endpoint_auth_methods_supported: ['none'] }),
@@ -205,13 +178,7 @@ describe('setupOpenId4Vc', () => {
     const options = validOptions()
     options.issuer!.requireWalletAttestation = true
     options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]
-    const setup = setupOpenId4Vc(options, () => ({
-      getVctMetadata: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
+    const setup = setupOpenId4Vc(options, issuerService)
     setup.publicMiddleware.get(
       '/.well-known/oauth-authorization-server/oid4vci/issuer',
       (_request, response) => response.json({ token_endpoint_auth_methods_supported: ['none'] }),
@@ -236,14 +203,8 @@ describe('setupOpenId4Vc', () => {
       'MIIB-private-attestation-material',
     ]
 
-    expect(() =>
-      setupOpenId4Vc(options, () => ({
-        getVctMetadata: () => undefined,
-        getJwtVcIssuerMetadata: () => ({}),
-        mapCredentialRequest: () => {
-          throw new Error('not implemented')
-        },
-      })),
-    ).toThrowError(/^issuer\.walletAttestationCertificates\[1\] must be a valid X\.509 certificate$/)
+    expect(() => setupOpenId4Vc(options, issuerService)).toThrowError(
+      /^issuer\.walletAttestationCertificates\[1\] must be a valid X\.509 certificate$/,
+    )
   })
 })

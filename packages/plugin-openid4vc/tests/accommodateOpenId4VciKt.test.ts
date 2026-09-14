@@ -34,6 +34,50 @@ const run = (accept: string | undefined, body: string, overrides: Partial<Reques
   return { sent: sent as string, accept: request.headers.accept, next }
 }
 
+const encode = (value: Record<string, unknown>) => Buffer.from(JSON.stringify(value)).toString('base64url')
+
+const compactJws = (header: Record<string, unknown>, payload: Record<string, unknown>) =>
+  `${encode(header)}.${encode(payload)}.credo-signature`
+
+const runSigned = async (accept: string, body: string) => {
+  const request = {
+    method: 'GET',
+    path: '/oid4vci/demo-did/.well-known/openid-credential-issuer',
+    headers: { accept },
+  } as unknown as Request
+  let sent: unknown
+  const response = {
+    send: (payload?: unknown) => {
+      sent = payload
+      return response
+    },
+  } as unknown as Response
+  const next = vi.fn() as unknown as NextFunction
+  const sign = vi.fn(
+    async (header: Record<string, unknown>, payload: Record<string, unknown>) =>
+      `${encode(header)}.${encode(payload)}.our-signature`,
+  )
+
+  accommodateOpenId4VciKt(sign)(request, response, next)
+  response.send(body)
+  await vi.waitFor(() => expect(sent).toBeDefined())
+  return { sent: sent as string, sign, next }
+}
+
+const decode = (segment: string) =>
+  JSON.parse(Buffer.from(segment, 'base64url').toString('utf8')) as Record<string, unknown>
+
+const SIGNED_HEADER = {
+  alg: 'ES256',
+  kid: 'did:webvh:issuer.example#key-1',
+  typ: 'openidvci-issuer-metadata+jwt',
+}
+const signedPayload = (proofTypes: Record<string, unknown>) => ({
+  ...JSON.parse(metadata(proofTypes)),
+  sub: 'https://issuer.example/oid4vci/demo-did',
+  iat: 1_757_000_000,
+})
+
 const proofTypesOf = (sent: string) =>
   JSON.parse(sent).credential_configurations_supported['demo-credential'].proof_types_supported
 
@@ -105,6 +149,58 @@ describe('accommodateOpenId4VciKt', () => {
     expect(run('application/jwt', metadata(jwtOnly)).accept).toBe('application/jwt')
   })
 
+  // swiyu asks for application/jwt alone and gets Credo's DID-signed metadata JWT, whose payload is
+  // the issuer record: the attestation member has to come out of there too, under the same header.
+  it('re-signs the metadata JWT without the attestation proof type', async () => {
+    const { sent, sign } = await runSigned(
+      'application/jwt',
+      compactJws(SIGNED_HEADER, signedPayload(withAttestation)),
+    )
+    const [header, payload, signature] = sent.split('.')
+
+    expect(decode(header)).toEqual(SIGNED_HEADER)
+    expect(decode(payload)).toEqual(signedPayload(jwtOnly))
+    expect(signature).toBe('our-signature')
+    expect(sign).toHaveBeenCalledOnce()
+  })
+
+  it('leaves a metadata JWT that carries no attestation proof type untouched', async () => {
+    const body = compactJws(SIGNED_HEADER, signedPayload(jwtOnly))
+    const { sent, sign } = await runSigned('application/jwt', body)
+
+    expect(sent).toBe(body)
+    expect(sign).not.toHaveBeenCalled()
+  })
+
+  it('never re-signs for a client that reads the plain metadata', async () => {
+    const body = compactJws(SIGNED_HEADER, signedPayload(withAttestation))
+    const kt = await runSigned(OPENID4VCI_KT_ACCEPT, body)
+    const json = await runSigned('application/json', body)
+
+    expect(kt.sent).toBe(body)
+    expect(json.sent).toBe(body)
+    expect(kt.sign).not.toHaveBeenCalled()
+    expect(json.sign).not.toHaveBeenCalled()
+  })
+
+  it('forwards a signing failure to the error handler instead of serving the attestation member', async () => {
+    const request = {
+      method: 'GET',
+      path: '/oid4vci/demo-did/.well-known/openid-credential-issuer',
+      headers: { accept: 'application/jwt' },
+    } as unknown as Request
+    const send = vi.fn()
+    const response = { send } as unknown as Response
+    const next = vi.fn() as unknown as NextFunction
+    const failure = new Error('issuer service is not initialized')
+
+    accommodateOpenId4VciKt(() => Promise.reject(failure))(request, response, next)
+    response.send(compactJws(SIGNED_HEADER, signedPayload(withAttestation)))
+    await vi.waitFor(() => expect(next).toHaveBeenCalledWith(failure))
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it('leaves other paths, unknown proof types and non-JSON bodies alone', () => {
     expect(run(OPENID4VCI_KT_ACCEPT, '{"plain":true}', { path: '/oid4vci/demo-did/credential' }).sent).toBe(
       '{"plain":true}',
@@ -112,7 +208,9 @@ describe('accommodateOpenId4VciKt', () => {
     expect(proofTypesOf(run(OPENID4VCI_KT_ACCEPT, metadata({ ldp_vp: {} })).sent)).toEqual({
       ldp_vp: {},
     })
-    expect(run(OPENID4VCI_KT_ACCEPT, 'eyJhbGciOiJFUzI1NiJ9.e30.sig').sent).toBe('eyJhbGciOiJFUzI1NiJ9.e30.sig')
+    expect(run(OPENID4VCI_KT_ACCEPT, 'eyJhbGciOiJFUzI1NiJ9.e30.sig').sent).toBe(
+      'eyJhbGciOiJFUzI1NiJ9.e30.sig',
+    )
     expect(run('application/json', 'eyJhbGciOiJFUzI1NiJ9.e30.sig').sent).toBe('eyJhbGciOiJFUzI1NiJ9.e30.sig')
   })
 })
