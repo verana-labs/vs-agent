@@ -46,7 +46,7 @@ export function setupOpenId4Vc(
   if (options.issuer) app.use(advertiseDpopSupport)
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
   if (options.issuer)
-    app.use(accommodateOpenId4VciKt(Boolean(options.issuer.keyAttestationCertificates?.length)))
+    app.use(accommodateOpenId4VciKt())
   if (options.issuer) app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
   if (options.issuer) {
     // Credo serves no SD-JWT VC issuer metadata, and a wallet that anchors an x5c-signed
@@ -194,7 +194,7 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
  * served JSON because its resolver rejects our did:webvh SCID and so can never verify the signed
  * JWT. A client asking for `application/jwt` alone still receives it.
  */
-export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
+export function accommodateOpenId4VciKt() {
   return (request: Request, response: Response, next: NextFunction): void => {
     const accept = request.headers.accept
     const ranges = typeof accept === 'string' ? accept.split(',').map(range => range.trim()) : []
@@ -228,14 +228,14 @@ export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
     response.send = ((body?: unknown) =>
       send(
         typeof body === 'string'
-          ? withKeyAttestationRequirement(body, hasKeyAttestationAnchor)
+          ? withKeyAttestationRequirement(body)
           : body,
       )) as Response['send']
     next()
   }
 }
 
-function withKeyAttestationRequirement(body: string, hasKeyAttestationAnchor: boolean): string {
+function withKeyAttestationRequirement(body: string): string {
   try {
     const metadata: unknown = JSON.parse(body)
     if (!isRecord(metadata) || !isRecord(metadata.credential_configurations_supported)) return body
@@ -245,15 +245,9 @@ function withKeyAttestationRequirement(body: string, hasKeyAttestationAnchor: bo
         if (!isRecord(configuration) || !isRecord(configuration.proof_types_supported)) {
           return [id, configuration]
         }
-        const advertised = hasKeyAttestationAnchor
-          ? {
-              ...configuration.proof_types_supported,
-              attestation: { proof_signing_alg_values_supported: ['ES256'] },
-            }
-          : configuration.proof_types_supported
         const proofTypes = Object.fromEntries(
-          Object.entries(advertised).map(([type, meta]) =>
-            isRecord(meta) && !('key_attestations_required' in meta) && (type === 'jwt' || type === 'attestation')
+          Object.entries(configuration.proof_types_supported).map(([type, meta]) =>
+            isRecord(meta) && !('key_attestations_required' in meta) && type === 'jwt'
               ? [type, { ...meta, key_attestations_required: {} }]
               : [type, meta],
           ),

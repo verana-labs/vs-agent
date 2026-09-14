@@ -18,7 +18,6 @@ const run = (
   accept: string | undefined,
   body: string,
   overrides: Partial<Request> = {},
-  hasAnchor = true,
 ) => {
   const request = {
     method: 'GET',
@@ -34,7 +33,7 @@ const run = (
     },
   } as unknown as Response
   const next = vi.fn() as unknown as NextFunction
-  accommodateOpenId4VciKt(hasAnchor)(request, response, next)
+  accommodateOpenId4VciKt()(request, response, next)
   response.send(body)
   return { sent: sent as string, accept: request.headers.accept, next }
 }
@@ -50,7 +49,7 @@ describe('accommodateOpenId4VciKt', () => {
 
     const expected = { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} }
     expect(accept).toBe('application/json')
-    expect(proofTypesOf(sent)).toEqual({ jwt: expected, attestation: expected })
+    expect(proofTypesOf(sent)).toEqual({ jwt: expected })
     expect(next).toHaveBeenCalledOnce()
   })
 
@@ -66,7 +65,7 @@ describe('accommodateOpenId4VciKt', () => {
   })
 
   it('never invents a proof type the issuer does not accept', () => {
-    const { sent } = run(OPENID4VCI_KT_ACCEPT, metadata(jwtOnly), {}, false)
+    const { sent } = run(OPENID4VCI_KT_ACCEPT, metadata(jwtOnly))
 
     expect(Object.keys(proofTypesOf(sent))).toEqual(['jwt'])
   })
@@ -95,7 +94,7 @@ describe('accommodateOpenId4VciKt', () => {
 
     const expected = { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} }
     expect(accept).toBe('application/json')
-    expect(proofTypesOf(sent)).toEqual({ jwt: expected, attestation: expected })
+    expect(proofTypesOf(sent)).toEqual({ jwt: expected })
   })
 
   it('leaves a jwt-only accept alone', () => {
