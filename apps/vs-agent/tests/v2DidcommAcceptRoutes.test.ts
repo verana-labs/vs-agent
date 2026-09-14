@@ -652,4 +652,68 @@ describe('v2 didcomm accept routes, over two agents', () => {
     expect(abandoned.body.errorMessage).toContain('e.p.issuer-not-authorized')
     expect(abandoned.body.errorMessage).toContain('the group "other-id"')
   }, 120_000)
+
+  it('abandons a presentation that answers no sub proof for a requested group', async () => {
+    const requested = await faberAgent.didcomm.proofs.createRequest({
+      protocolVersion: 'v2',
+      proofFormats: {
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: {
+            'gov-id': { names: ['name'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+          },
+        },
+      },
+    })
+    // The exchange records one group more than the request asks, so no sub proof answers it.
+    requested.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, {
+      'gov-id': requestedCredentialSchema(CREDENTIAL_SCHEMA_ID),
+      'proof-of-address': requestedCredentialSchema(CREDENTIAL_SCHEMA_ID),
+    })
+    requested.proofRecord.metadata.set(AUTO_ACCEPT_PRESENTATION_METADATA, { autoAccept: true })
+    await faberAgent.didcomm.proofs.update(requested.proofRecord)
+
+    const faberProofId = requested.proofRecord.id
+    const { invitation } = await createInvitation({ agent: faberAgent, messages: [requested.message] })
+
+    await presentTo(invitation)
+
+    await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+    const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(abandoned.body.verified).toBe(false)
+    expect(abandoned.body.errorMessage).toContain('e.p.issuer-not-authorized')
+    expect(abandoned.body.errorMessage).toContain('the requested group "proof-of-address"')
+  }, 120_000)
+
+  it('abandons a presentation whose exchange records the CredentialSchema in the legacy array shape', async () => {
+    const requested = await faberAgent.didcomm.proofs.createRequest({
+      protocolVersion: 'v2',
+      proofFormats: {
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: {
+            'gov-id': { names: ['name'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+          },
+        },
+      },
+    })
+    requested.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, [CREDENTIAL_SCHEMA_ID])
+    requested.proofRecord.metadata.set(AUTO_ACCEPT_PRESENTATION_METADATA, { autoAccept: true })
+    await faberAgent.didcomm.proofs.update(requested.proofRecord)
+
+    const faberProofId = requested.proofRecord.id
+    const { invitation } = await createInvitation({ agent: faberAgent, messages: [requested.message] })
+
+    await presentTo(invitation)
+
+    await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+    const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(abandoned.body.verified).toBe(false)
+    expect(abandoned.body.errorMessage).toContain('e.p.trust-resolution-unavailable')
+    expect(abandoned.body.errorMessage).toContain('records no CredentialSchema')
+  }, 120_000)
 })
