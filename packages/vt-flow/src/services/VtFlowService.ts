@@ -559,6 +559,18 @@ export class VtFlowService {
     return record
   }
 
+  public async setEcsSchemaKey(
+    agentContext: AgentContext,
+    recordId: string,
+    ecsSchemaKey: string,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Applicant)
+    record.ecsSchemaKey = ecsSchemaKey
+    await this.repository.update(agentContext, record)
+    return record
+  }
+
   public async setCredentialDigest(
     agentContext: AgentContext,
     recordId: string,

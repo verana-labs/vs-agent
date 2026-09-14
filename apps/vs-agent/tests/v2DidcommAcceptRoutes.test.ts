@@ -295,7 +295,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
     const known = await idsOf(aliceApp, 'presentations')
     await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(created.body.invitation), {
-      label: aliceAgent.label,
+      label: 'Alice',
     })
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
@@ -312,7 +312,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
     const known = await idsOf(aliceApp, 'credential-exchanges')
     await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(offer.body.invitation), {
-      label: aliceAgent.label,
+      label: 'Alice',
     })
     const aliceId = await untilNewRecord(aliceApp, 'credential-exchanges', 'offer-received', known)
 
@@ -349,7 +349,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
     const known = await idsOf(aliceApp, 'presentations')
     await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(created.body.invitation), {
-      label: aliceAgent.label,
+      label: 'Alice',
     })
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
@@ -384,7 +384,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     try {
       const known = await idsOf(aliceApp, 'presentations')
       await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(created.body.invitation), {
-        label: aliceAgent.label,
+        label: 'Alice',
       })
       const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
@@ -432,7 +432,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     try {
       const known = await idsOf(aliceApp, 'presentations')
       await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(invitation), {
-        label: aliceAgent.label,
+        label: 'Alice',
       })
       const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
@@ -474,7 +474,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
     const known = await idsOf(aliceApp, 'presentations')
     await aliceAgent.didcomm.oob.receiveInvitationFromUrl(invitationUrl(invitation), {
-      label: aliceAgent.label,
+      label: 'Alice',
     })
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
 
