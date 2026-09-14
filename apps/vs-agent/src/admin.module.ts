@@ -23,11 +23,13 @@ import {
   V2DidcommConnectionsController,
   V2DidcommController,
   V2DidcommCredentialExchangesController,
+  V2DidcommInvitationsController,
   V2DidcommPresentationsController,
   V2DidcommReceiptsController,
   V2Openid4vcController,
   V2VtServiceEndpointsController,
   V1VsAgentController,
+  InvitationsService,
   MESSAGE_HANDLERS,
 } from './controllers'
 import { BOOTSTRAP_STATE, BootstrapState } from './common'
@@ -79,6 +81,7 @@ export class VsAgentModule {
       V2DidcommPresentationsController,
       V2DidcommConnectionsController,
       V2DidcommCredentialExchangesController,
+      V2DidcommInvitationsController,
       V2DidcommReceiptsController,
       V2Openid4vcController,
       V2AnoncredsController,
@@ -105,6 +108,7 @@ export class VsAgentModule {
       TrustService,
       CredentialTypesService,
       ServiceEndpointsService,
+      InvitationsService,
     ]
 
     // Collect all handler classes declared by plugins and create ONE aggregate provider.
