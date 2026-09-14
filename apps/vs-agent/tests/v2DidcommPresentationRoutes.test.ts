@@ -652,7 +652,62 @@ describe('v2 didcomm presentation routes', () => {
           role: ParticipantRole.Verifier,
           credentialSchemaId: CREDENTIAL_SCHEMA_ID,
         })
-        expect(record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA)).toEqual([CREDENTIAL_SCHEMA_ID])
+        expect(record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA)).toEqual({
+          'gov-id': {
+            credentialSchemaId: CREDENTIAL_SCHEMA_ID,
+            ecosystemDid: 'did:webvh:QmEcosystem:ecosystem.example',
+            jsonSchemaCredentialId: 'https://ecosystem.example/vt/schemas-org-jsc.json',
+          },
+        })
+      })
+
+      it('keys the recorded CredentialSchema by the group that carries its requested attributes', async () => {
+        anoncreds.getCredentialDefinition
+          .mockResolvedValueOnce({ credentialDefinition: { schemaId: 'schema-1' } })
+          .mockResolvedValueOnce({ credentialDefinition: { schemaId: 'schema-2' } })
+        anoncreds.getSchema
+          .mockResolvedValueOnce({ schema: govId })
+          .mockResolvedValueOnce({ schema: { name: 'gov-id', attrNames: ['documentNumber'] } })
+        anonCredsTrust.deriveCredentialSchema
+          .mockResolvedValueOnce({
+            credentialSchemaId: CREDENTIAL_SCHEMA_ID,
+            ecosystemDid: 'did:web:ecosystem-a.test',
+            jsonSchemaCredentialId: 'https://ecosystem-a.test/jsc.json',
+            anonCredsSchemaId: 'schema-1',
+          })
+          .mockResolvedValueOnce({
+            credentialSchemaId: 8,
+            ecosystemDid: 'did:web:ecosystem-b.test',
+            jsonSchemaCredentialId: 'https://ecosystem-b.test/jsc.json',
+            anonCredsSchemaId: 'schema-2',
+          })
+
+        const record = { id: 'proof-1', metadata: metadata() }
+        proofs.createRequest.mockResolvedValue({ proofRecord: record, message: { id: 'msg-1' } })
+
+        const response = await request(app.getHttpServer())
+          .post('/v2/didcomm/presentation-request')
+          .send({
+            requestedCredentials: [
+              { credentialDefinitionId: 'cred-def-1', attributes: ['firstName'] },
+              { credentialDefinitionId: 'cred-def-2', attributes: ['documentNumber'] },
+            ],
+          })
+
+        expect(response.status).toBe(201)
+        expect(record.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA)).toEqual({
+          'gov-id': {
+            credentialSchemaId: CREDENTIAL_SCHEMA_ID,
+            ecosystemDid: 'did:web:ecosystem-a.test',
+            jsonSchemaCredentialId: 'https://ecosystem-a.test/jsc.json',
+          },
+          'gov-id-2': {
+            credentialSchemaId: 8,
+            ecosystemDid: 'did:web:ecosystem-b.test',
+            jsonSchemaCredentialId: 'https://ecosystem-b.test/jsc.json',
+          },
+        })
+        expect(Object.keys(requestedAttributesOf().requested_attributes)).toEqual(['gov-id', 'gov-id-2'])
       })
 
       it('answers NOT_AUTHORIZED when the agent holds no VERIFIER Participant', async () => {

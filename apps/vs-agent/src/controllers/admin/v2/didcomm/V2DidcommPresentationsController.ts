@@ -41,7 +41,9 @@ import {
   ParticipantRole,
   SUPPORTED_PUBLIC_DID_METHODS,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+  toRequestedCredentialSchema,
   type BaseAgentModules,
+  type RequestedCredentialSchemas,
   type VsAgent,
 } from '@verana-labs/vs-agent-sdk'
 
@@ -144,7 +146,7 @@ export class V2DidcommPresentationsController {
     // One requested-attribute group per entry, so a request may span several credentials. Groups are
     // keyed by schema name, suffixed when two entries resolve to schemas that share a name.
     const requestedAttributes: Record<string, AnonCredsRequestedAttribute> = {}
-    const requestedCredentialSchemas: number[] = []
+    const requestedCredentialSchemas: RequestedCredentialSchemas = {}
     for (const entry of requestedCredentials) {
       const { schema, restrictions } = await this.resolve(entry)
       const attributes = entry.attributes ?? schema.attrNames
@@ -156,18 +158,20 @@ export class V2DidcommPresentationsController {
         )
       }
 
+      const group = uniqueKey(requestedAttributes, schema.name)
+
       try {
-        const { credentialSchemaId } = await deriveFromRestriction(agent, restrictions[0])
+        const derived = await deriveFromRestriction(agent, restrictions[0])
         await agent.anonCredsTrust.assertOwnAuthorization({
           role: ParticipantRole.Verifier,
-          credentialSchemaId,
+          credentialSchemaId: derived.credentialSchemaId,
         })
-        requestedCredentialSchemas.push(credentialSchemaId)
+        requestedCredentialSchemas[group] = toRequestedCredentialSchema(derived)
       } catch (error) {
         throw trustDecisionError(error, 'agent', AdminApiErrorCode.InvalidInput)
       }
 
-      requestedAttributes[uniqueKey(requestedAttributes, schema.name)] = { names: attributes, restrictions }
+      requestedAttributes[group] = { names: attributes, restrictions }
     }
 
     let nonRevoked: AnonCredsNonRevokedInterval | undefined
