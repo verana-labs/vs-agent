@@ -25,6 +25,7 @@ import { VtFlowModule, type VtFlowModuleConfigOptions } from '@verana-labs/credo
 import { DidWebAnonCredsRegistry } from 'credo-ts-didweb-anoncreds'
 
 import { BaseAgentModules } from '../agent/VsAgent'
+import { ParentConnectionModule } from '../connections/ParentConnectionModule'
 import { FullTailsFileService } from '../credentials/FullTailsFileService'
 import { defaultDocumentLoader } from '../did/CachedDocumentLoader'
 import { CachedWebDidResolver } from '../did/CachedWebDidResolver'
@@ -87,6 +88,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
           ],
         },
       }),
+      parentConnection: new ParentConnectionModule(),
       askar: new AskarModule({
         askar,
         store: options.walletConfig,

@@ -13,6 +13,13 @@ export class ListConnectionsQueryDto extends PaginationQueryDto {
   @IsString()
   outOfBandId?: string
 
+  @ApiPropertyOptional({
+    description: 'Filter by the connection that carried the invitation which produced this one',
+  })
+  @IsOptional()
+  @IsString()
+  parentConnectionId?: string
+
   @ApiPropertyOptional({ description: 'Filter by connection state', enum: DidCommDidExchangeState })
   @IsOptional()
   @IsEnum(DidCommDidExchangeState)
@@ -99,8 +106,21 @@ export class ConnectionRecordDto {
   @ApiPropertyOptional({ description: 'Avatar URL advertised by the peer' })
   imageUrl?: string
 
-  @ApiPropertyOptional({ description: 'Out-of-Band identifier this connection started from' })
-  outOfBandId?: string
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Out-of-Band identifier this connection started from, or null when it has none',
+  })
+  outOfBandId!: string | null
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Connection on which the agent sent the invitation that produced this connection, or null ' +
+      'for every other connection',
+  })
+  parentConnectionId!: string | null
 
   @ApiPropertyOptional({ description: 'DID of the invitation this connection started from' })
   invitationDid?: string

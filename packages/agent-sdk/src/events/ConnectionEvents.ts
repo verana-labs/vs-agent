@@ -37,19 +37,6 @@ export const connectionEvents = async (
       try {
         const record = payload.connectionRecord
 
-        if (record.outOfBandId && !record.getTag('parentConnectionId')) {
-          const outOfBandRecord = await agent.didcomm.oob.findById(record.outOfBandId)
-          const parentConnectionId = outOfBandRecord?.getTag('parentConnectionId') as string
-
-          // Tag connection with its parent
-          if (parentConnectionId) {
-            record.setTag('parentConnectionId', parentConnectionId)
-            await agent.context.dependencyManager
-              .resolve(DidCommConnectionRepository)
-              .update(agent.context, record)
-          }
-        }
-
         if (record.state === DidCommDidExchangeState.Completed) {
           if (config.discoveryOptions)
             await agent.didcomm.discovery.queryFeatures({
