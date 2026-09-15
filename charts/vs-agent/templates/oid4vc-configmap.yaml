@@ -1,0 +1,10 @@
+{{- if .Values.oid4vc.config }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.name }}-oid4vc-config
+  namespace: {{ .Release.Namespace }}
+data:
+  openid4vc.json: |-
+{{ tpl .Values.oid4vc.config . | indent 4 }}
+{{- end }}
