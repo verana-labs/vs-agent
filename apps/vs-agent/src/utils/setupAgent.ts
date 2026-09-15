@@ -16,6 +16,7 @@ import {
   VeranaIndexerService,
   VsAgentWsInboundTransport,
   VtFlowOrchestrator,
+  type VsAgentNestPlugin,
 } from '@verana-labs/vs-agent-sdk'
 import express from 'express'
 import WebSocket from 'ws'
@@ -23,13 +24,13 @@ import WebSocket from 'ws'
 import {
   AGENT_DIDCOMM_VERSIONS,
   ENABLE_PUBLIC_API_SWAGGER,
-  ENABLED_PLUGINS,
   VERANA_CHAIN_ID,
   VERANA_INDEXER_BASE_URL,
 } from '../config'
 import { MessageService } from '../controllers/admin/message/MessageService'
 
 import { TsLogger } from './logger'
+import { credoPluginsFromNestPlugins } from './pluginLifecycle'
 
 export const setupAgent = async ({
   port,
@@ -47,6 +48,7 @@ export const setupAgent = async ({
   authorizationService,
   discoveryOptions,
   adminApiServiceEndpoint,
+  nestPlugins,
 }: {
   port: number
   walletConfig: AskarModuleConfigStoreOptions
@@ -63,6 +65,7 @@ export const setupAgent = async ({
   authorizationService?: AuthorizationService
   discoveryOptions?: DidCommFeatureQueryOptions[]
   adminApiServiceEndpoint?: string
+  nestPlugins: VsAgentNestPlugin[]
 }) => {
   const logger = new TsLogger(logLevel ?? LogLevel.Warn, 'Agent')
   const publicDid = parsedDid?.did
@@ -84,16 +87,6 @@ export const setupAgent = async ({
     throw new Error('AGENT_DIDCOMM_VERSIONS must contain at least one of: v1, v2')
   }
   const didcommVersions = AGENT_DIDCOMM_VERSIONS as DidCommVersion[]
-
-  const optImport = (name: string): Promise<any> => import(name).catch(() => null)
-  const [chatSetup, mrtdSetup] = await Promise.all([
-    ENABLED_PLUGINS.includes('chat')
-      ? optImport('@verana-labs/vs-agent-plugin-chat').catch(() => null)
-      : null,
-    ENABLED_PLUGINS.includes('mrtd')
-      ? optImport('@verana-labs/vs-agent-plugin-mrtd').catch(() => null)
-      : null,
-  ])
 
   const verifiablePublicRegistries =
     VERANA_INDEXER_BASE_URL && VERANA_CHAIN_ID
@@ -173,8 +166,7 @@ export const setupAgent = async ({
           },
         },
       }),
-      ...(chatSetup ? [chatSetup.setupChatProtocols()] : []),
-      ...(mrtdSetup ? [mrtdSetup.setupMrtdProtocol({ masterListCscaLocation })] : []),
+      ...credoPluginsFromNestPlugins(nestPlugins),
     ],
     config: {
       logger,

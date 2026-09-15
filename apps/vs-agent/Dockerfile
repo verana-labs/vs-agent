@@ -2,7 +2,7 @@ FROM node:22.19-slim AS base
 ENV COREPACK_INTEGRITY_KEYS=0
 RUN corepack enable && corepack prepare pnpm@9.15.3 --activate
 
-# Build: vs-agent (messaging + chat)
+# Build: vs-agent (messaging + chat, openid4vc available but disabled by default)
 FROM base AS build-vs-agent
 WORKDIR /www
 ENV RUN_MODE="docker"
@@ -12,12 +12,13 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json tsconf
 COPY packages/model/package.json packages/model/package.json
 COPY packages/agent-sdk/package.json packages/agent-sdk/package.json
 COPY packages/plugin-chat/package.json packages/plugin-chat/package.json
+COPY packages/plugin-openid4vc/package.json packages/plugin-openid4vc/package.json
 COPY packages/vt-flow/package.json packages/vt-flow/package.json
 COPY apps/vs-agent/package.json apps/vs-agent/package.json
 COPY apps/vs-agent-ui/package.json apps/vs-agent-ui/package.json
 
 # plugin-mrtd package.json intentionally absent — its deps won't be installed
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 COPY packages/model/src packages/model/src
 COPY packages/model/tsconfig.json packages/model/tsconfig.build.json packages/model/
@@ -25,6 +26,8 @@ COPY packages/agent-sdk/src packages/agent-sdk/src
 COPY packages/agent-sdk/tsconfig.json packages/agent-sdk/tsconfig.build.json packages/agent-sdk/
 COPY packages/plugin-chat/src packages/plugin-chat/src
 COPY packages/plugin-chat/tsconfig.build.json packages/plugin-chat/
+COPY packages/plugin-openid4vc/src packages/plugin-openid4vc/src
+COPY packages/plugin-openid4vc/tsconfig.json packages/plugin-openid4vc/tsconfig.build.json packages/plugin-openid4vc/
 COPY packages/vt-flow/src packages/vt-flow/src
 COPY packages/vt-flow/tsconfig.json packages/vt-flow/tsconfig.build.json packages/vt-flow/
 COPY apps/vs-agent/src apps/vs-agent/src
@@ -36,6 +39,7 @@ RUN pnpm --filter @verana-labs/vs-agent-model build && \
     pnpm --filter @verana-labs/credo-ts-didcomm-vt-flow build && \
     pnpm --filter @verana-labs/vs-agent-sdk build && \
     pnpm --filter @verana-labs/vs-agent-plugin-chat build && \
+    pnpm --filter @verana-labs/vs-agent-plugin-openid4vc build && \
     pnpm --filter @verana-labs/vs-agent-ui build && \
     pnpm --filter @verana-labs/vs-agent build
 
@@ -83,7 +87,8 @@ RUN pnpm --filter @verana-labs/vs-agent-model build && \
 
 RUN --mount=type=bind,source=scripts/docker-cleanup.sh,target=/tmp/cleanup.sh sh /tmp/cleanup.sh
 
-# Final: vs-agent (messaging + chat)
+# Final: vs-agent (messaging + chat; the openid4vc plugin ships in the image
+# but stays disabled unless added to VS_AGENT_PLUGINS at runtime)
 FROM node:22.19-slim AS vs-agent
 WORKDIR /www
 ENV RUN_MODE="docker"
@@ -99,6 +104,9 @@ COPY --from=build-vs-agent /www/packages/agent-sdk/node_modules ./packages/agent
 COPY --from=build-vs-agent /www/packages/plugin-chat/package.json ./packages/plugin-chat/package.json
 COPY --from=build-vs-agent /www/packages/plugin-chat/build ./packages/plugin-chat/build
 COPY --from=build-vs-agent /www/packages/plugin-chat/node_modules ./packages/plugin-chat/node_modules
+COPY --from=build-vs-agent /www/packages/plugin-openid4vc/package.json ./packages/plugin-openid4vc/package.json
+COPY --from=build-vs-agent /www/packages/plugin-openid4vc/build ./packages/plugin-openid4vc/build
+COPY --from=build-vs-agent /www/packages/plugin-openid4vc/node_modules ./packages/plugin-openid4vc/node_modules
 COPY --from=build-vs-agent /www/packages/vt-flow/package.json ./packages/vt-flow/package.json
 COPY --from=build-vs-agent /www/packages/vt-flow/build ./packages/vt-flow/build
 COPY --from=build-vs-agent /www/apps/vs-agent/node_modules ./apps/vs-agent/node_modules

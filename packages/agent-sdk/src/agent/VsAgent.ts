@@ -38,13 +38,14 @@ import {
   DidCommProofV2Protocol,
 } from '@credo-ts/didcomm'
 import { VtFlowModule } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
+import { DIDLog, multibaseEncode, MultibaseEncoding } from 'didwebvh-ts'
 
 import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
-import { migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
+import { KmsVerifier, migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
 import { migrateWebVhVersionTimeIfBroken } from '../did/migrateWebVhVersionTime'
+import { restoreShadowedWebVhDidDocument } from '../did/restoreShadowedWebVhDidDocument'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { connectionEvents } from '../events/ConnectionEvents'
 import { vtFlowEvents } from '../events/VtFlowEvents'
@@ -152,6 +153,21 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       // TODO: Make DIDComm version, keys, etc. configurable. Keys can also be imported
       const domain = parsedDid.id.includes(':') ? parsedDid.id.split(':')[1] : parsedDid.id
 
+      // A webvh agent carries its did:web form as an `alternativeDids` tag, never as a record of
+      // its own; a record whose own did IS the did:web form double-matches every alternativeDids
+      // lookup. Matched via the `did` tag: DidRecords carry no `domain` tag, and their `method`
+      // tag derives from record.did, so a {method: 'web', domain} query can never hit one.
+      if (parsedDid.method === 'webvh') {
+        const didRepository = this.dependencyManager.resolve(DidRepository)
+        const strays = await didRepository.findByQuery(this.context, { did: `did:web:${domain}` })
+        for (const stray of strays) {
+          this.logger.warn(
+            `Removing did:web record shadowing the agent DID: ${stray.did} (role ${stray.role})`,
+          )
+          await didRepository.delete(this.context, stray)
+        }
+      }
+
       const existingRecord = await this.findCreatedDid(parsedDid)
 
       // DID has not been created yet. Let's do it
@@ -244,17 +260,48 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         }
       }
 
-      // Make sure did:webvh record has the did:web form as an alternative, in order to support
-      // implicit invitations
-      if (
-        parsedDid.method === 'webvh' &&
-        !(existingRecord?.getTag('alternativeDids') as string[])?.includes(`did:web:${domain}`)
-      ) {
-        this.logger?.debug('Adding did:web form as an alternative DID')
+      // A dids.import of the agent's parallel did:web finds the webvh record itself through its
+      // alternativeDids tag and overwrites its document in place, leaving record.did pointing at
+      // a document with a different id. The webvh log in the record metadata is the one piece
+      // such an import never touches, so the document is rebuilt from it.
+      if (parsedDid.method === 'webvh') {
+        const shadowedBy = existingRecord.didDocument?.id
+        const restored = await restoreShadowedWebVhDidDocument({
+          did: existingRecord.did,
+          didDocument: existingRecord.didDocument,
+          log: existingRecord.metadata.get('log') as DIDLog | undefined,
+          verifier: new KmsVerifier(this.agentContext),
+        })
+        if (restored) {
+          existingRecord.didDocument = restored
+          const didRepository = this.dependencyManager.resolve(DidRepository)
+          await didRepository.update(this.context, existingRecord)
+          this.logger.warn(
+            `Restored the did document of ${existingRecord.did} from its webvh log; it was shadowed by ${shadowedBy}`,
+          )
+        }
+      }
 
-        existingRecord.setTag('alternativeDids', [`did:web:${domain}`])
+      // Make sure did:webvh record has the did:web form as an alternative, in order to support
+      // implicit invitations. Checked by querying the stored tag rows, not getTag: only the rows
+      // are visible to findCreatedDid/getCreatedDids, and a record whose value carries the tag
+      // while its rows lost it (an overwrite-import clears them) passes a getTag check forever
+      // while every did:web lookup keeps failing.
+      if (parsedDid.method === 'webvh') {
         const didRepository = this.dependencyManager.resolve(DidRepository)
-        await didRepository.update(this.agentContext, existingRecord)
+        const webDid = `did:web:${domain}`
+        const [taggedRow] = await didRepository.findByQuery(this.context, { alternativeDids: [webDid] })
+        if (!taggedRow) {
+          this.logger.warn(`Restoring the alternativeDids tag rows of ${existingRecord.did}`)
+          existingRecord.setTag('alternativeDids', [webDid])
+          await didRepository.update(this.context, existingRecord)
+          const [verifiedRow] = await didRepository.findByQuery(this.context, {
+            alternativeDids: [webDid],
+          })
+          if (!verifiedRow) {
+            this.logger.error(`alternativeDids tag rows of ${existingRecord.did} did not persist`)
+          }
+        }
       }
       // Fix a legacy webvh update-key mapping before the self-heal update below relies on it.
       if (parsedDid.method === 'webvh') await this.repairWebvhUpdateKeyMapping(existingRecord)
@@ -338,19 +385,24 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     return await didRepository.findCreatedDid(this.context, parsedDid.did)
   }
 
-  // Prefer Ed25519VerificationKey2020 over Multikey: webvh's update Multikey is not ours to use.
+  // The DIDComm key is the one the document itself nominates for authentication; webvh's
+  // update Multikey looks identical by type and must never be picked.
   private findEd25519VerificationMethodId(didDocument: DidDocument): string | undefined {
     const vms = didDocument.verificationMethod ?? []
-    const preferred = vms.find(vm => vm.type === 'Ed25519VerificationKey2020')
-    if (preferred) return preferred.id
-    const fallback = vms.find(
-      vm =>
-        vm.type === 'Ed25519VerificationKey2018' ||
-        (vm.type === 'Multikey' &&
-          typeof vm.publicKeyMultibase === 'string' &&
-          vm.publicKeyMultibase.startsWith('z6Mk')),
-    )
-    return fallback?.id
+    const isEd25519 = (vm: (typeof vms)[number]) =>
+      vm.type === 'Ed25519VerificationKey2020' ||
+      vm.type === 'Ed25519VerificationKey2018' ||
+      (vm.type === 'Multikey' &&
+        typeof vm.publicKeyMultibase === 'string' &&
+        vm.publicKeyMultibase.startsWith('z6Mk'))
+
+    const nominated = [didDocument.authentication, didDocument.assertionMethod]
+      .flat()
+      .find((entry): entry is string => typeof entry === 'string')
+    const nominatedMethod = vms.find(vm => vm.id === nominated && isEd25519(vm))
+    if (nominatedMethod) return nominatedMethod.id
+
+    return vms.find(vm => vm.type === 'Ed25519VerificationKey2020')?.id ?? vms.find(isEd25519)?.id
   }
 
   private getDidCommServices(publicDid: string, ed25519VerificationMethodId: string) {
@@ -476,7 +528,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         controller: publicDid,
         id: verificationMethodId,
         publicKeyMultibase,
-        type: 'Ed25519VerificationKey2020',
+        type: 'Multikey',
       },
       {
         controller: publicDid,
