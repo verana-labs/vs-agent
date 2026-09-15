@@ -50,6 +50,7 @@ const connections = {
 }
 
 const oob = { createInvitation: vi.fn() }
+const basicMessages = { sendMessage: vi.fn().mockResolvedValue({ id: 'bm-1' }) }
 const outOfBandRepository = { update: vi.fn() }
 const messageSender = { sendMessage: vi.fn() }
 const dids = { getCreatedDids: vi.fn().mockResolvedValue([]) }
@@ -60,7 +61,7 @@ const agent = {
   context: { dependencyManager: { resolve: () => messageSender } },
   dependencyManager: { resolve: () => outOfBandRepository },
   dids,
-  didcomm: { connections, oob },
+  didcomm: { connections, oob, basicMessages },
 }
 
 const vsAgentService = { getAgent: vi.fn().mockResolvedValue(agent) }
@@ -304,6 +305,13 @@ describe('v2 didcomm invitation routes', () => {
 
   const sentMessage = () => messageSender.sendMessage.mock.calls[0][0].message
 
+  const sentInvitationUrl = () => {
+    const [connectionId, url] = basicMessages.sendMessage.mock.calls[0]
+    expect(connectionId).toBe('parent')
+    expect(url).toMatch(/^https:\/\/agent\.test\?_oob=/)
+    return DidCommOutOfBandInvitationV2.fromUrl(url)
+  }
+
   const send = (body: Record<string, unknown>) =>
     request(app.getHttpServer()).post('/v2/didcomm/invitations').send(body)
 
@@ -374,7 +382,7 @@ describe('v2 didcomm invitation routes', () => {
     )
   })
 
-  it('sends an OOB 2.0 sub-connection invitation on a v2 connection, without label or imageUrl', async () => {
+  it('sends an OOB 2.0 sub-connection invitation on a v2 connection as a basic message URL, without label or imageUrl', async () => {
     connections.findById.mockResolvedValue(parentConnection('v2'))
 
     const response = await send({
@@ -385,7 +393,7 @@ describe('v2 didcomm invitation routes', () => {
     })
 
     expect(response.status).toBe(201)
-    expect(response.body.outOfBandId).toBe('oob-1')
+    expect(response.body).toEqual({ id: 'bm-1', outOfBandId: 'oob-1' })
 
     const [config] = oob.createInvitation.mock.calls[0]
     expect(config).toMatchObject({ didCommVersion: 'v2', multiUseInvitation: false, goal: 'chat' })
@@ -393,8 +401,8 @@ describe('v2 didcomm invitation routes', () => {
     expect(config).not.toHaveProperty('imageUrl')
     expect(config).not.toHaveProperty('ourDid')
 
-    expect(sentMessage()).toBeInstanceOf(DidCommOutOfBandInvitationV2)
-    expect(response.body.id).toBe(sentMessage().id)
+    expect(messageSender.sendMessage).not.toHaveBeenCalled()
+    expect(sentInvitationUrl().from).toBe('did:peer:4zQmFresh')
   })
 
   it('sends an OOB 1.1 referral whose only service is the did and creates no record', async () => {
@@ -419,7 +427,7 @@ describe('v2 didcomm invitation routes', () => {
     expect(json['~thread'].pthid).toBe('did:webvh:verifier.test')
   })
 
-  it('sends an OOB 2.0 referral with the did as from and no label, imageUrl or thread', async () => {
+  it('sends an OOB 2.0 referral as a basic message URL with the did as from and no label, imageUrl or thread', async () => {
     connections.findById.mockResolvedValue(parentConnection('v2'))
 
     const response = await send({
@@ -432,11 +440,11 @@ describe('v2 didcomm invitation routes', () => {
     })
 
     expect(response.status).toBe(201)
-    expect(response.body).toEqual({ id: sentMessage().id })
+    expect(response.body).toEqual({ id: 'bm-1' })
     expect(oob.createInvitation).not.toHaveBeenCalled()
+    expect(messageSender.sendMessage).not.toHaveBeenCalled()
 
-    expect(sentMessage()).toBeInstanceOf(DidCommOutOfBandInvitationV2)
-    const json = sentMessage().toV2Plaintext()
+    const json = sentInvitationUrl().toV2Plaintext()
     expect(json.from).toBe('did:webvh:verifier.test')
     expect(json.body).toEqual({ goal: 'verify you', goal_code: 'verify', accept: ['didcomm/v2'] })
     expect(JSON.stringify(json)).not.toMatch(/label|imageUrl|pthid/)
@@ -473,6 +481,7 @@ describe('v2 didcomm invitation routes', () => {
     expect(response.status).toBe(404)
     expect(response.body.error.code).toBe('UNKNOWN_ID')
     expect(messageSender.sendMessage).not.toHaveBeenCalled()
+    expect(basicMessages.sendMessage).not.toHaveBeenCalled()
   })
 
   it('refuses a referral target that is not a DID', async () => {

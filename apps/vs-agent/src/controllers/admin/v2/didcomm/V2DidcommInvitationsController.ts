@@ -21,11 +21,11 @@ export class V2DidcommInvitationsController {
   @ApiOperation({
     summary: 'Send an invitation',
     description:
-      'Sends an Out-of-Band invitation on an established connection, in the envelope of that ' +
-      'connection (Out-of-Band 1.1 on a DIDComm v1 connection, Out-of-Band 2.0 on a DIDComm v2 ' +
-      'connection). Without `did`, the invitation opens a single-use sub-connection to this agent, ' +
-      'correlated to `connectionId` through `parentConnectionId`. With `did`, it refers the peer ' +
-      'to that service and creates no record.',
+      'Sends an Out-of-Band invitation on an established connection. A v1 connection carries the ' +
+      'Out-of-Band 1.1 message. A v2 connection carries the Out-of-Band 2.0 invitation as an `_oob` ' +
+      'URL in a basic message. Without `did`, the invitation opens a single-use sub-connection to ' +
+      'this agent, correlated through `parentConnectionId`. With `did`, it refers the peer to that ' +
+      'service and creates no record.',
   })
   @ApiBody({
     type: SendInvitationBodyDto,

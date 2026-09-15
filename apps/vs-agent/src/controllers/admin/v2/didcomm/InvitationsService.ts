@@ -3,7 +3,6 @@ import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 import {
   DidCommConnectionRecord,
   DidCommHandshakeProtocol,
-  DidCommMessage,
   DidCommMessageSender,
   DidCommOutboundMessageContext,
   DidCommOutOfBandInvitation,
@@ -56,8 +55,7 @@ export class InvitationsService {
           })
       if (!isV2) invitation.setThread({ parentThreadId: did })
 
-      await this.send(agent, connection, invitation)
-      return { id: invitation.id }
+      return { id: await this.send(agent, connection, invitation) }
     }
 
     const outOfBandRecord = await agent.didcomm.oob.createInvitation({
@@ -77,18 +75,26 @@ export class InvitationsService {
     await agent.dependencyManager.resolve(DidCommOutOfBandRepository).update(agent.context, outOfBandRecord)
 
     const invitation = outOfBandRecord.outOfBandInvitation.v2Invitation ?? outOfBandRecord.outOfBandInvitation
-    await this.send(agent, connection, invitation)
-    return { id: invitation.id, outOfBandId: outOfBandRecord.id }
+    return { id: await this.send(agent, connection, invitation), outOfBandId: outOfBandRecord.id }
   }
 
   private async send(
     agent: VsAgent<BaseAgentModules>,
     connection: DidCommConnectionRecord,
-    message: DidCommMessage,
-  ) {
+    invitation: DidCommOutOfBandInvitation | DidCommOutOfBandInvitationV2,
+  ): Promise<string> {
+    if (invitation instanceof DidCommOutOfBandInvitationV2) {
+      const record = await agent.didcomm.basicMessages.sendMessage(
+        connection.id,
+        invitation.toUrl({ domain: agent.publicApiBaseUrl }),
+      )
+      return record.id
+    }
+
     await agent.context.dependencyManager
       .resolve(DidCommMessageSender)
-      .sendMessage(new DidCommOutboundMessageContext(message, { agentContext: agent.context, connection }))
+      .sendMessage(new DidCommOutboundMessageContext(invitation, { agentContext: agent.context, connection }))
+    return invitation.id
   }
 
   private async ecsServiceName(agent: VsAgent<BaseAgentModules>): Promise<string | undefined> {

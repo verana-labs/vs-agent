@@ -7,6 +7,7 @@ import '@hyperledger/anoncreds-nodejs'
 
 import { LogLevel } from '@credo-ts/core'
 import {
+  DidCommBasicMessageRole,
   DidCommHandshakeProtocol,
   DidCommMessageSender,
   DidCommOutOfBandInvitation,
@@ -782,6 +783,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     }
 
     let v2Parent: { id: string }
+    let aliceV2Parent: { id: string }
 
     const webhookUrl = 'http://webhook.test/events'
     const webhookFetch = vi.fn()
@@ -821,12 +823,32 @@ describe('v2 didcomm accept routes, over two agents', () => {
         didCommVersion: 'v2',
         ourDid: faberDid(),
       })
-      const aliceConnection = await aliceReceives(record.outOfBandInvitation)
-      await aliceAgent.didcomm.basicMessages.sendMessage(aliceConnection.id, 'hello')
+      aliceV2Parent = await aliceReceives(record.outOfBandInvitation)
+      await aliceAgent.didcomm.basicMessages.sendMessage(aliceV2Parent.id, 'hello')
       v2Parent = await untilFaberConnection({ outOfBandId: record.id })
     }, 60_000)
 
     afterAll(() => vi.unstubAllGlobals())
+
+    const untilAliceReceivesInvitationUrl = async (known: Set<string>) => {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const records = await aliceAgent.didcomm.basicMessages.findAllByQuery({
+          connectionId: aliceV2Parent.id,
+          role: DidCommBasicMessageRole.Receiver,
+        })
+        const match = records.find(record => !known.has(record.id))
+        if (match) return match.content
+        await new Promise(resolve => setTimeout(resolve, 250))
+      }
+      throw new Error('Alice received no invitation on the v2 connection')
+    }
+
+    const aliceKnownMessages = async () =>
+      new Set(
+        (await aliceAgent.didcomm.basicMessages.findAllByQuery({ connectionId: aliceV2Parent.id })).map(
+          r => r.id,
+        ),
+      )
 
     const sentBy = async (app: () => request.SuperTest<request.Test>, body: Record<string, unknown>) => {
       const sendMessage = vi.spyOn(faberAgent.dependencyManager.resolve(DidCommMessageSender), 'sendMessage')
@@ -838,11 +860,12 @@ describe('v2 didcomm accept routes, over two agents', () => {
       }
     }
 
-    it.skip('opens a sub-connection over a v2 connection with a fresh peer DID, tagged with its parent', async () => {
+    it('opens a sub-connection over a v2 connection from a basic message that carries the OOB 2.0 URL', async () => {
       const parent = v2Parent
       const oobCount = (await faberAgent.didcomm.oob.getAll()).length
+      const known = await aliceKnownMessages()
 
-      const { response, message } = await sentBy(faber, {
+      const response = await faber().post('/v2/didcomm/invitations').send({
         connectionId: parent.id,
         label: 'Support',
         imageUrl: 'https://faber.example/support.png',
@@ -851,21 +874,22 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       expect(response.status).toBe(201)
       expect(response.body.outOfBandId).toBeDefined()
-      expect(response.body.id).not.toBe(response.body.outOfBandId)
       expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount + 1)
 
-      expect(message).toBeInstanceOf(DidCommOutOfBandInvitationV2)
-      const invitation = message as DidCommOutOfBandInvitationV2
-      expect(invitation.id).toBe(response.body.id)
+      const sent = await faber().get(`/v2/didcomm/basic-messages?connectionId=${parent.id}&role=sender`)
+      expect(sent.body.items.map((item: { id: string }) => item.id)).toContain(response.body.id)
+
+      const url = await untilAliceReceivesInvitationUrl(known)
+      expect(url).toMatch(/^https:\/\/faber\?_oob=/)
+      const invitation = DidCommOutOfBandInvitationV2.fromUrl(url)
       expect(invitation.from).toMatch(/^did:peer:/)
       expect(invitation.from).not.toBe(faberDid())
       expect(invitation.body).toEqual({ goal: 'Open a support chat', accept: ['didcomm/v2'] })
       expect(JSON.stringify(invitation.toJSON())).not.toMatch(/Support|support\.png/)
 
-      const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitationFromUrl(
-        invitationUrl(invitation.toJSON()),
-        { label: 'Alice' },
-      )
+      const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitationFromUrl(url, {
+        label: 'Alice',
+      })
       if (!connectionRecord) throw new Error('Alice did not open a connection from the invitation')
       await aliceAgent.didcomm.basicMessages.sendMessage(connectionRecord.id, 'hello over the sub-connection')
 
@@ -932,18 +956,21 @@ describe('v2 didcomm accept routes, over two agents', () => {
     it('refers the peer to another DID without creating a record', async () => {
       const parent = v2Parent
       const oobCount = (await faberAgent.didcomm.oob.getAll()).length
+      const known = await aliceKnownMessages()
 
-      const { response, message } = await sentBy(faber, {
+      const response = await faber().post('/v2/didcomm/invitations').send({
         connectionId: parent.id,
         did: 'did:webvh:verifier',
         goalCode: 'verify',
       })
 
       expect(response.status).toBe(201)
-      expect(response.body).toEqual({ id: (message as DidCommOutOfBandInvitationV2).id })
+      expect(response.body).toEqual({ id: expect.any(String) })
       expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount)
-      expect(message).toBeInstanceOf(DidCommOutOfBandInvitationV2)
-      expect((message as DidCommOutOfBandInvitationV2).from).toBe('did:webvh:verifier')
+
+      const invitation = DidCommOutOfBandInvitationV2.fromUrl(await untilAliceReceivesInvitationUrl(known))
+      expect(invitation.from).toBe('did:webvh:verifier')
+      expect(invitation.toV2Plaintext().body).toEqual({ goal_code: 'verify', accept: ['didcomm/v2'] })
     }, 120_000)
 
     it('reports an unknown connection as UNKNOWN_ID', async () => {
