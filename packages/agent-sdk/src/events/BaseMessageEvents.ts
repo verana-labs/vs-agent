@@ -124,13 +124,10 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
           )
           const formatData = await agent.didcomm.proofs.getFormatData(record.id)
 
-          const revealedAttributes =
-            formatData.presentation?.anoncreds?.requested_proof.revealed_attrs ??
-            formatData.presentation?.indy?.requested_proof.revealed_attrs
+          const revealedAttributes = formatData.presentation?.anoncreds?.requested_proof.revealed_attrs
 
           const revealedAttributeGroups =
-            formatData.presentation?.anoncreds?.requested_proof?.revealed_attr_groups ??
-            formatData.presentation?.indy?.requested_proof.revealed_attr_groups
+            formatData.presentation?.anoncreds?.requested_proof.revealed_attr_groups
 
           const claims: Claim[] = []
           if (revealedAttributes) {
@@ -254,7 +251,7 @@ function registerAnonCredsTrustDecision(agent: VsAgent<BaseAgentModules>, logger
     try {
       record = await agent.didcomm.proofs.getByThreadAndConnectionId(message.threadId, connection.id)
       const formatData = await agent.didcomm.proofs.getFormatData(record.id)
-      presentation = formatData.presentation?.anoncreds ?? formatData.presentation?.indy
+      presentation = formatData.presentation?.anoncreds
     } catch (error) {
       logger.error(`The agent cannot read the presentation of ${message.threadId}: ${error}`)
       messageContext.responseMessage = undefined

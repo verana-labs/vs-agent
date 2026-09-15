@@ -58,7 +58,7 @@ export async function toPresentationDto(
 ): Promise<PresentationRecordDto> {
   const formatData = await agent.didcomm.proofs.getFormatData(record.id)
 
-  const proof = formatData.presentation?.anoncreds ?? formatData.presentation?.indy
+  const proof = formatData.presentation?.anoncreds
   const claims: Claim[] = []
 
   for (const [name, value] of Object.entries(proof?.requested_proof.revealed_attrs ?? {})) {

@@ -3,8 +3,6 @@ import type { DidCommVersion } from '@credo-ts/didcomm'
 import {
   AnonCredsDidCommCredentialFormatService,
   AnonCredsDidCommProofFormatService,
-  LegacyIndyDidCommCredentialFormatService,
-  LegacyIndyDidCommProofFormatService,
   AnonCredsModule,
 } from '@credo-ts/anoncreds'
 import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
@@ -68,7 +66,6 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
           credentialProtocols: [
             new DidCommCredentialV2Protocol({
               credentialFormats: [
-                new LegacyIndyDidCommCredentialFormatService(),
                 new AnonCredsDidCommCredentialFormatService(),
                 new DidCommDataIntegrityCredentialFormatService(),
               ],
@@ -79,10 +76,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
           autoAcceptProofs: DidCommAutoAcceptProof.ContentApproved,
           proofProtocols: [
             new DidCommProofV2Protocol({
-              proofFormats: [
-                new LegacyIndyDidCommProofFormatService(),
-                new AnonCredsDidCommProofFormatService(),
-              ],
+              proofFormats: [new AnonCredsDidCommProofFormatService()],
             }),
           ],
         },
