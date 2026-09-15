@@ -1,0 +1,34 @@
+--- a/build/index.mjs
++++ b/build/index.mjs
+@@ -177,6 +177,7 @@
+ 			agentContext: this.agentContext,
+ 			connection
+ 		}));
++		return { messageId: message.id };
+ 	}
+ 	async request(options) {
+ 		const connection = await this.connectionService.findById(this.agentContext, options.connectionId);
+@@ -186,6 +187,7 @@
+ 			agentContext: this.agentContext,
+ 			connection
+ 		}));
++		return { messageId: message.id };
+ 	}
+ };
+ DidCommReceiptsApi = __decorate([injectable(), __decorateMetadata("design:paramtypes", [
+--- a/build/index.d.mts
++++ b/build/index.d.mts
+@@ -94,11 +94,11 @@
+   send(options: {
+     connectionId: string;
+     receipts: DidCommMessageReceiptOptions[];
+-  }): Promise<void>;
++  }): Promise<{ messageId: string; }>;
+   request(options: {
+     connectionId: string;
+     requestedReceipts: DidCommRequestedReceiptOptions[];
+-  }): Promise<void>;
++  }): Promise<{ messageId: string; }>;
+ }
+ //#endregion
+ //#region src/DidCommReceiptsModule.d.ts

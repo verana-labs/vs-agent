@@ -27,6 +27,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
 import { createInvitation, ParticipantRole } from '@verana-labs/vs-agent-sdk'
@@ -39,7 +40,7 @@ import {
   paginate,
   trustDecisionError,
 } from '../../../../common'
-import { AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
+import { TERMINAL_STATES } from '../../../../config'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
@@ -171,7 +172,7 @@ export class V2DidcommCredentialExchangesController {
         credentialSchemaId,
       })
     } catch (error) {
-      throw trustDecisionError(error, 'agent')
+      throw trustDecisionError(error, 'agent', AdminApiErrorCode.InvalidInput)
     }
 
     // The specification makes the caller run the issuer steps, unless the caller sets
@@ -200,7 +201,6 @@ export class V2DidcommCredentialExchangesController {
       messages: [offer.message],
       useLegacyDid,
       didCommVersion: didcommVersion,
-      imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({
@@ -309,7 +309,14 @@ export class V2DidcommCredentialExchangesController {
   })
   @ApiOkResponse({ description: 'The updated credential exchange record', type: CredentialExchangeRecordDto })
   @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
-  @ApiConflictResponse({ description: 'The exchange is not in state `offer-received`' })
+  @ApiConflictResponse({
+    description:
+      'The exchange is not in state `offer-received`, or `PEER_NOT_AUTHORIZED`: the issuer of the ' +
+      'offered credential definition holds no active ISSUER `Participant` for its `CredentialSchema`',
+  })
+  @ApiServiceUnavailableResponse({
+    description: '`RESOLVER_UNAVAILABLE`: the agent cannot complete the check',
+  })
   public async acceptCredentialOffer(
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<CredentialExchangeRecordDto> {

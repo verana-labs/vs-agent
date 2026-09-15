@@ -28,17 +28,23 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
 import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
+  AUTO_ACCEPT_PRESENTATION_METADATA,
   createInvitation,
   DerivedCredentialSchema,
   fetchJson,
+  isSupportedPublicDid,
   ParticipantRole,
+  SUPPORTED_PUBLIC_DID_METHODS,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+  toRequestedCredentialSchema,
   type BaseAgentModules,
+  type RequestedCredentialSchemas,
   type VsAgent,
 } from '@verana-labs/vs-agent-sdk'
 
@@ -51,7 +57,7 @@ import {
   paginate,
   trustDecisionError,
 } from '../../../../common'
-import { AGENT_INVITATION_IMAGE_URL, TERMINAL_STATES } from '../../../../config'
+import { TERMINAL_STATES } from '../../../../config'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 import { CredentialTypesService } from '../../credentials'
@@ -141,7 +147,7 @@ export class V2DidcommPresentationsController {
     // One requested-attribute group per entry, so a request may span several credentials. Groups are
     // keyed by schema name, suffixed when two entries resolve to schemas that share a name.
     const requestedAttributes: Record<string, AnonCredsRequestedAttribute> = {}
-    const requestedCredentialSchemas: number[] = []
+    const requestedCredentialSchemas: RequestedCredentialSchemas = {}
     for (const entry of requestedCredentials) {
       const { schema, restrictions } = await this.resolve(entry)
       const attributes = entry.attributes ?? schema.attrNames
@@ -153,18 +159,20 @@ export class V2DidcommPresentationsController {
         )
       }
 
+      const group = uniqueKey(requestedAttributes, schema.name)
+
       try {
-        const { credentialSchemaId } = await deriveFromRestriction(agent, restrictions[0])
+        const derived = await deriveFromRestriction(agent, restrictions[0])
         await agent.anonCredsTrust.assertOwnAuthorization({
           role: ParticipantRole.Verifier,
-          credentialSchemaId,
+          credentialSchemaId: derived.credentialSchemaId,
         })
-        requestedCredentialSchemas.push(credentialSchemaId)
+        requestedCredentialSchemas[group] = toRequestedCredentialSchema(derived)
       } catch (error) {
         throw trustDecisionError(error, 'agent', AdminApiErrorCode.InvalidInput)
       }
 
-      requestedAttributes[uniqueKey(requestedAttributes, schema.name)] = { names: attributes, restrictions }
+      requestedAttributes[group] = { names: attributes, restrictions }
     }
 
     let nonRevoked: AnonCredsNonRevokedInterval | undefined
@@ -173,11 +181,11 @@ export class V2DidcommPresentationsController {
       nonRevoked = { from: now, to: now }
     }
 
-    // The specification makes the caller run the verifier steps, unless the caller sets
-    // `autoAccept`. The exchange carries the policy, which the module default does not override.
+    // Credo acknowledges a presentation before the trust decision runs. The agent sends the
+    // acknowledgement itself, per [VSA-VTI-FLOW-VERIFY-AC-7].
     const request = await agent.didcomm.proofs.createRequest({
       protocolVersion: 'v2',
-      autoAcceptProof: autoAccept ? DidCommAutoAcceptProof.ContentApproved : DidCommAutoAcceptProof.Never,
+      autoAcceptProof: DidCommAutoAcceptProof.Never,
       proofFormats: {
         anoncreds: {
           name: 'proof-request',
@@ -190,6 +198,7 @@ export class V2DidcommPresentationsController {
 
     request.proofRecord.metadata.set(REQUESTED_CREDENTIALS_METADATA, requestedCredentials)
     request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, requestedCredentialSchemas)
+    request.proofRecord.metadata.set(AUTO_ACCEPT_PRESENTATION_METADATA, { autoAccept })
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { invitation } = await createInvitation({
@@ -197,7 +206,6 @@ export class V2DidcommPresentationsController {
       messages: [request.message],
       useLegacyDid,
       didCommVersion: didcommVersion,
-      imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({
@@ -230,7 +238,12 @@ export class V2DidcommPresentationsController {
   @ApiNotFoundResponse({ description: 'No presentation with the given id' })
   @ApiConflictResponse({
     description:
-      'The exchange is not in state `request-received`, or no credential set satisfies the request',
+      'The exchange is not in state `request-received`, no credential set satisfies the request, or ' +
+      '`PEER_NOT_AUTHORIZED`: the verifier holds no active VERIFIER `Participant` for the ' +
+      '`CredentialSchema` of a requested credential',
+  })
+  @ApiServiceUnavailableResponse({
+    description: '`RESOLVER_UNAVAILABLE`: the agent cannot complete the check',
   })
   public async acceptPresentationRequest(
     @Param('proofExchangeId') proofExchangeId: string,
@@ -247,16 +260,24 @@ export class V2DidcommPresentationsController {
       : undefined
     const verifierDid = connection?.theirDid
 
-    if (!verifierDid) {
-      throw peerNotAuthorized(
-        `the verifier of presentation "${proofExchangeId}" established no DID, so the agent cannot check its Participant entry`,
-      )
-    }
-
     const requestFormatData = await agent.didcomm.proofs.getFormatData(proofExchangeId)
     const anonCredsRequest = requestFormatData.request?.anoncreds ?? requestFormatData.request?.indy
 
     if (anonCredsRequest) {
+      if (!verifierDid) {
+        throw peerNotAuthorized(
+          `the verifier of presentation "${proofExchangeId}" established no DID, so the agent cannot check its Participant entry`,
+        )
+      }
+
+      // A service connects with its public DID, so another method cannot be checked, per
+      // [VSA-VTI-FLOW-VERIFY-AC-6]
+      if (!isSupportedPublicDid(verifierDid)) {
+        throw peerNotAuthorized(
+          `Unable to check verifier Participant entry for presentation "${proofExchangeId}": "${verifierDid}" is not supported. Supported methods: ${SUPPORTED_PUBLIC_DID_METHODS.join(', ')}`,
+        )
+      }
+
       const requestedGroups = [
         ...Object.values(anonCredsRequest.requested_attributes ?? {}),
         ...Object.values(anonCredsRequest.requested_predicates ?? {}),

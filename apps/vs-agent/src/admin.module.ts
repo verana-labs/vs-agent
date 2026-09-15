@@ -20,6 +20,7 @@ import {
   V2AnoncredsCredentialDefinitionsController,
   V2AnoncredsRevocationRegistriesController,
   V2AuthController,
+  V2DidcommBasicMessagesController,
   V2DidcommConnectionsController,
   V2DidcommController,
   V2DidcommCredentialExchangesController,
@@ -38,6 +39,7 @@ import {
 } from './security'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
+import { DIDCOMM_MODULES } from './utils/didcommModules'
 
 @Module({})
 export class VsAgentModule {
@@ -74,6 +76,7 @@ export class VsAgentModule {
       V2AuthController,
       V2AgentController,
       V2DidcommController,
+      V2DidcommBasicMessagesController,
       V2DidcommPresentationsController,
       V2DidcommConnectionsController,
       V2DidcommCredentialExchangesController,
@@ -95,6 +98,10 @@ export class VsAgentModule {
       {
         provide: BOOTSTRAP_STATE,
         useFactory: () => bootstrapState,
+      },
+      {
+        provide: 'DIDCOMM_MODULES',
+        useValue: [...DIDCOMM_MODULES, ...nestPlugins.flatMap(p => p.didcommModules ?? [])],
       },
       VsAgentService,
       UrlShorteningService,

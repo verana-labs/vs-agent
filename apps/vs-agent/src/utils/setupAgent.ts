@@ -43,13 +43,10 @@ import { credoPluginsFromNestPlugins } from './pluginLifecycle'
 export const setupAgent = async ({
   port,
   walletConfig,
-  label,
-  displayPictureUrl,
   endpoints,
   logLevel,
   publicApiBaseUrl,
   parsedDid,
-  autoDiscloseUserProfile,
   masterListCscaLocation,
   autoUpdateStorageOnStartup,
   veranaChain,
@@ -61,12 +58,9 @@ export const setupAgent = async ({
 }: {
   port: number
   walletConfig: AskarModuleConfigStoreOptions
-  label: string
-  displayPictureUrl?: string
   endpoints: string[]
   logLevel?: LogLevel
   publicApiBaseUrl: string
-  autoDiscloseUserProfile?: boolean
   parsedDid?: ParsedDid
   masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
@@ -177,12 +171,9 @@ export const setupAgent = async ({
     },
     walletConfig,
     did: publicDid,
-    autoDiscloseUserProfile,
     dependencies: agentDependencies,
     publicApiBaseUrl,
     masterListCscaLocation,
-    displayPictureUrl,
-    label,
     veranaChain,
     indexer,
     trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS,

@@ -44,6 +44,7 @@ const PP_SESSION = '/verana.pp.v1.MsgCreateOrUpdateParticipantSession'
 export const PP_TRIGGER_RESOLVER = '/verana.pp.v1.MsgTriggerResolver'
 
 export const PARTICIPANT_ROLE_ISSUER = 1
+export const PARTICIPANT_ROLE_VERIFIER = 2
 export const PARTICIPANT_ROLE_HOLDER = 6
 
 const OPERATOR_GRANT_MSG_TYPES = [

@@ -19,6 +19,11 @@ export interface MessageHandler {
 
 export type Plugin = { modules: Record<string, unknown> }
 
+export interface DidcommModule {
+  module: string
+  prefixes: string[]
+}
+
 export interface VsAgentNestPlugin {
   name: string
   credoPlugin?: Plugin
@@ -31,6 +36,7 @@ export interface VsAgentNestPlugin {
   controllers?: (new (...args: any[]) => any)[]
   providers?: any[]
   messageHandlers?: (new (...args: any[]) => MessageHandler)[]
+  didcommModules?: DidcommModule[]
   imports?: any[]
   registerEvents?: (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => void
 }

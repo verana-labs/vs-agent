@@ -22,12 +22,14 @@ import {
   VsAgent,
   VsAgentEventTypes,
   VsAgentIndexerNotificationEvent,
+  VsAgentModuleMessageReceivedEvent,
   VsAgentVtFlowStateUpdatedEvent,
 } from '@verana-labs/vs-agent-sdk'
 
 import { resolveV2FlowRecord } from '../controllers/admin/vt-flow/VtFlowsService'
 
 import {
+  toBasicMessageDto,
   toConnectionDto,
   toCredentialExchangeDto,
   toPresentationDto,
@@ -36,22 +38,6 @@ import {
 export interface WebhookOptions {
   url: string
   apiKey?: string
-}
-
-const EXTENSION_MODULES: Record<string, string> = {
-  'https://didcomm.org/reactions/1.0': 'reactions',
-  'https://didcomm.org/user-profile/1.0': 'user-profile',
-  'https://didcomm.org/media-sharing/1.0': 'media-sharing',
-  'https://didcomm.org/calls/1.0': 'calls',
-  'https://didcomm.org/action-menu/1.0': 'action-menu',
-  'https://didcomm.org/questionanswer/1.0': 'question-answer',
-  'https://didcomm.org/mrtd/1.0': 'mrtd',
-}
-
-const RECEIPTS_MESSAGE_TYPE = 'https://didcomm.org/receipts/1.0/message-receipts'
-
-interface ReceiptsMessage {
-  receipts: { messageId: string; state: string; timestamp?: Date }[]
 }
 
 export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: BaseLogger) => {
@@ -120,7 +106,7 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
   }): void => {
     const record = payload.basicMessageRecord
     if (record.role !== DidCommBasicMessageRole.Receiver) return
-    deliver(EventType.MessageReceived, toBasicMessageRecord(record))
+    deliver(EventType.MessageReceived, toBasicMessageDto(record))
   }
   agent.events.on<DidCommBasicMessageStateChangedEvent>(
     DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged,
@@ -130,34 +116,6 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
     DidCommBasicMessageEventTypes.DidCommBasicMessageV2StateChanged,
     basicMessageReceived,
   )
-
-  // after the handler, before any reply is sent
-  agent.didcomm.registerMessageHandlerMiddleware(async (context, next) => {
-    await next()
-    const { message, connection } = context
-    if (!connection) return
-
-    if (message.type === RECEIPTS_MESSAGE_TYPE) {
-      const receipts = (message as unknown as ReceiptsMessage).receipts.map(
-        ({ messageId, state, timestamp }) => ({
-          messageId,
-          state,
-          timestamp,
-        }),
-      )
-      deliver(EventType.ReceiptsMessageReceived, { connectionId: connection.id, receipts })
-      return
-    }
-
-    const module = EXTENSION_MODULES[protocolOf(message.type)]
-    if (!module) return
-    // [VSA-ADM-DC-EXT-4]: one event type per message kind
-    deliver(`didcomm.${module}.${messageNameOf(message.type)}-received`, {
-      connectionId: connection.id,
-      threadId: message.threadId,
-      message: message.toJSON(),
-    })
-  })
 
   agent.events.on<VsAgentVtFlowStateUpdatedEvent>(
     VsAgentEventTypes.VtFlowStateUpdated,
@@ -182,19 +140,9 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
   agent.events.on<VsAgentIndexerNotificationEvent>(VsAgentEventTypes.IndexerNotification, ({ payload }) =>
     deliver(EventType.IndexerNotification, dataOf(payload.event)),
   )
+  agent.events.on<VsAgentModuleMessageReceivedEvent>(VsAgentEventTypes.ModuleMessageReceived, ({ payload }) =>
+    deliver(payload.type, payload.data),
+  )
 }
 
 const dataOf = ({ type: _type, ...data }: Event): Record<string, unknown> => data
-
-const protocolOf = (messageType: string): string => messageType.slice(0, messageType.lastIndexOf('/'))
-
-const messageNameOf = (messageType: string): string => messageType.slice(messageType.lastIndexOf('/') + 1)
-
-const toBasicMessageRecord = (record: DidCommBasicMessageRecord) => ({
-  id: record.id,
-  connectionId: record.connectionId,
-  role: record.role,
-  content: record.content,
-  sentTime: record.sentTime,
-  createdAt: record.createdAt,
-})

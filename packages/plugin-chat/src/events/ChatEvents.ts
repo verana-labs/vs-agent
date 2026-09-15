@@ -19,7 +19,6 @@ import {
 import {
   DidCommConnectionProfileUpdatedEvent,
   DidCommProfileEventTypes,
-  DidCommUserProfileRequestedEvent,
 } from '@2060.io/credo-ts-didcomm-user-profile'
 import { MenuRequestMessage, PerformMessage } from '@credo-ts/action-menu'
 import { BaseLogger } from '@credo-ts/core'
@@ -261,24 +260,6 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
       })
 
       emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
-    },
-  )
-
-  // User profile events
-  agent.events.on(
-    DidCommProfileEventTypes.UserProfileRequested,
-    async ({ payload }: DidCommUserProfileRequestedEvent) => {
-      logger.debug(
-        `UserProfileRequestedEvent received. Connection id: ${payload.connection.id} Query: ${JSON.stringify(payload.query)}`,
-      )
-
-      const outOfBandRecordId = payload.connection.outOfBandId
-      if (outOfBandRecordId) {
-        const outOfBandRecord = await agent.didcomm.oob.findById(outOfBandRecordId)
-        const parentConnectionId = outOfBandRecord?.getTag('parentConnectionId') as string | undefined
-        if (!parentConnectionId && agent.autoDiscloseUserProfile)
-          await agent.modules.userProfile.sendUserProfile({ connectionId: payload.connection.id })
-      }
     },
   )
 

@@ -21,9 +21,15 @@ import {
   CreateInvitationResult,
   ReceiveInvitationResult,
 } from '@verana-labs/vs-agent-model'
-import { createInvitation, fetchJson, REQUESTED_CREDENTIAL_SCHEMAS_METADATA } from '@verana-labs/vs-agent-sdk'
+import {
+  agentDisplayName,
+  createInvitation,
+  fetchJson,
+  REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+  toRequestedCredentialSchema,
+  type RequestedCredentialSchemas,
+} from '@verana-labs/vs-agent-sdk'
 
-import { AGENT_INVITATION_BASE_URL, AGENT_INVITATION_IMAGE_URL } from '../../../config'
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../services/VsAgentService'
 import { CredentialTypesService } from '../credentials'
@@ -58,18 +64,19 @@ export class V1InvitationController {
     description: 'Out-of-band invitation payload',
     schema: {
       example: {
-        url: 'https://hologram.zone/?oob=eyJ0eXAiOiJKV1QiLCJhbGci...',
+        url: 'https://agent.example.com?_oob=eyJ0eXAiOiJKV1QiLCJhbGci...',
       },
     },
   })
   @ApiBody({ type: CreateInvitationDto, required: false })
   public async createInvitation(@Body() options?: CreateInvitationDto): Promise<CreateInvitationResult> {
-    const { outOfBandInvitation } = await createInvitation({
-      agent: await this.agentService.getAgent(),
+    const agent = await this.agentService.getAgent()
+    const { url } = await createInvitation({
+      agent,
       useLegacyDid: options?.useLegacyDid,
       didCommVersion: options?.didCommVersion,
     })
-    return { url: outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL }) }
+    return { url }
   }
 
   @Get('/')
@@ -83,17 +90,15 @@ export class V1InvitationController {
     description: 'Out-of-band invitation payload',
     schema: {
       example: {
-        url: 'https://hologram.zone/?oob=eyJ0eXAiOiJKV1QiLCJhbGci...',
+        url: 'https://agent.example.com?_oob=eyJ0eXAiOiJKV1QiLCJhbGci...',
       },
     },
   })
   @ApiQuery({ name: 'legacy', required: false, type: Boolean })
   public async getInvitation(@Query('legacy') useLegacyDid?: boolean): Promise<CreateInvitationResult> {
-    const { outOfBandInvitation } = await createInvitation({
-      agent: await this.agentService.getAgent(),
-      useLegacyDid,
-    })
-    return { url: outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL }) }
+    const agent = await this.agentService.getAgent()
+    const { url } = await createInvitation({ agent, useLegacyDid })
+    return { url }
   }
 
   @Post('/receive')
@@ -128,7 +133,7 @@ export class V1InvitationController {
   public async receiveInvitation(@Body() options: ReceiveInvitationDto): Promise<ReceiveInvitationResult> {
     const agent = await this.agentService.getAgent()
     const { url } = options
-    const config = { label: agent.label }
+    const config = { label: await agentDisplayName(agent) }
 
     try {
       const { outOfBandRecord, connectionRecord } = url.startsWith('did:')
@@ -285,19 +290,20 @@ export class V1InvitationController {
 
     const requestedAttributes: Record<string, AnonCredsRequestedAttribute> = {}
 
-    requestedAttributes[schema.name] = {
+    const group = schema.name
+    requestedAttributes[group] = {
       names: attributes,
       restrictions,
     }
 
-    let requestedCredentialSchemaId: number | undefined
+    let requestedCredentialSchemas: RequestedCredentialSchemas | undefined
     try {
       const derived = await agent.anonCredsTrust.deriveCredentialSchema(
         relatedJsonSchemaCredentialId
           ? { schemaId: restrictions[0].schema_id! }
           : { credentialDefinitionId: credentialDefinitionId! },
       )
-      requestedCredentialSchemaId = derived.credentialSchemaId
+      requestedCredentialSchemas = { [group]: toRequestedCredentialSchema(derived) }
     } catch (error) {
       agent.config.logger.warn(
         `[V1Invitation] the requested credential binds to no CredentialSchema, so the presentation cannot be checked: ${error}`,
@@ -324,19 +330,17 @@ export class V1InvitationController {
 
     request.proofRecord.metadata.set('_2060/requestedCredentials', requestedCredentials)
     request.proofRecord.metadata.set('_2060/callbackParameters', { ref, callbackUrl })
-    if (requestedCredentialSchemaId !== undefined) {
-      request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, [requestedCredentialSchemaId])
+    if (requestedCredentialSchemas) {
+      request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, requestedCredentialSchemas)
     }
     await agent.didcomm.proofs.update(request.proofRecord)
 
-    const { invitation, outOfBandInvitation } = await createInvitation({
+    const { invitation, url } = await createInvitation({
       agent,
       messages: [request.message],
       useLegacyDid,
       didCommVersion,
-      imageUrl: AGENT_INVITATION_IMAGE_URL,
     })
-    const url = outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL })
 
     const shortUrlId = await this.urlShortenerService.createShortUrl({
       invitation,
@@ -454,14 +458,12 @@ export class V1InvitationController {
         },
       })
 
-      const { invitation, outOfBandInvitation } = await createInvitation({
-        agent: await this.agentService.getAgent(),
+      const { invitation, url } = await createInvitation({
+        agent,
         messages: [request.message],
         useLegacyDid,
         didCommVersion,
-        imageUrl: AGENT_INVITATION_IMAGE_URL,
       })
-      const url = outOfBandInvitation.toUrl({ domain: AGENT_INVITATION_BASE_URL })
 
       const shortUrlId = await this.urlShortenerService.createShortUrl({
         invitation,

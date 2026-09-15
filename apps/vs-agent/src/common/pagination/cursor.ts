@@ -2,7 +2,7 @@ import { createHash } from 'crypto'
 
 import { HttpStatus } from '@nestjs/common'
 
-import { AdminApiError, AdminApiErrorCode } from '../AdminApiError'
+import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
 /**
  * Increase it when the encoded fields change. The agent then refuses each cursor of an
