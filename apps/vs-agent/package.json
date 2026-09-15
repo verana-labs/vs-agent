@@ -85,7 +85,8 @@
   },
   "optionalDependencies": {
     "@verana-labs/vs-agent-plugin-chat": "workspace:*",
-    "@verana-labs/vs-agent-plugin-mrtd": "workspace:*"
+    "@verana-labs/vs-agent-plugin-mrtd": "workspace:*",
+    "@verana-labs/vs-agent-plugin-openid4vc": "workspace:*"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
