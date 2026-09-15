@@ -73,14 +73,14 @@ function makeChain(overrides: Record<string, unknown> = {}) {
 const JSC_ID = 'https://ecosystem.example/vt/schemas-5-jsc.json'
 const ISSUER_PARTICIPANT_ID = 42
 
-async function rebind(agent: unknown) {
+async function rebind(agent: unknown, schemaKey = 'ecs-service') {
   // The VTJSC comes from the Ecosystem, which may be another party entirely, and the caller
   // supplies the ISSUER participant that anchors the digest.
   await rebindEcsCredentialSchema(
     agent as never,
     'https://agent.example',
     '5',
-    'ecs-service',
+    schemaKey,
     ecsClaims,
     JSC_ID,
     ISSUER_PARTICIPANT_ID,
@@ -108,6 +108,20 @@ describe('ECS credential digest anchoring', () => {
     expect(chain.createOrUpdateParticipantSession).toHaveBeenCalledWith(
       expect.objectContaining({ digest: DIGEST, issuerParticipantId: ISSUER_PARTICIPANT_ID }),
     )
+  })
+
+  it.each(['ecs-org', 'ecs-persona', 'ecs-user-agent'])('rebinds the %s credential too', async key => {
+    const chain = makeChain()
+    const { agent } = makeAgent(chain)
+
+    await rebind(agent, key)
+
+    expect(publishSelfIssuedEcsPresentation).toHaveBeenCalledWith(
+      expect.anything(),
+      `https://agent.example/vt/${key}-vtc-vp.json`,
+      ...Array(6).fill(expect.anything()),
+    )
+    expect(chain.createOrUpdateParticipantSession).toHaveBeenCalledTimes(1)
   })
 
   it('names only the issuer, because a self-issued credential has no counterparty', async () => {
