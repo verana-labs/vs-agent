@@ -26,6 +26,8 @@ import {
   createInvitation,
   fetchJson,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+  toRequestedCredentialSchema,
+  type RequestedCredentialSchemas,
 } from '@verana-labs/vs-agent-sdk'
 
 import { UrlShorteningService } from '../../../services/UrlShorteningService'
@@ -288,19 +290,20 @@ export class V1InvitationController {
 
     const requestedAttributes: Record<string, AnonCredsRequestedAttribute> = {}
 
-    requestedAttributes[schema.name] = {
+    const group = schema.name
+    requestedAttributes[group] = {
       names: attributes,
       restrictions,
     }
 
-    let requestedCredentialSchemaId: number | undefined
+    let requestedCredentialSchemas: RequestedCredentialSchemas | undefined
     try {
       const derived = await agent.anonCredsTrust.deriveCredentialSchema(
         relatedJsonSchemaCredentialId
           ? { schemaId: restrictions[0].schema_id! }
           : { credentialDefinitionId: credentialDefinitionId! },
       )
-      requestedCredentialSchemaId = derived.credentialSchemaId
+      requestedCredentialSchemas = { [group]: toRequestedCredentialSchema(derived) }
     } catch (error) {
       agent.config.logger.warn(
         `[V1Invitation] the requested credential binds to no CredentialSchema, so the presentation cannot be checked: ${error}`,
@@ -327,8 +330,8 @@ export class V1InvitationController {
 
     request.proofRecord.metadata.set('_2060/requestedCredentials', requestedCredentials)
     request.proofRecord.metadata.set('_2060/callbackParameters', { ref, callbackUrl })
-    if (requestedCredentialSchemaId !== undefined) {
-      request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, [requestedCredentialSchemaId])
+    if (requestedCredentialSchemas) {
+      request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, requestedCredentialSchemas)
     }
     await agent.didcomm.proofs.update(request.proofRecord)
 

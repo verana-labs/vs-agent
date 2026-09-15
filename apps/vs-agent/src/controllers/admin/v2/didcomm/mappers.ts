@@ -1,5 +1,6 @@
 import type { AnonCredsCredentialMetadata } from '@credo-ts/anoncreds'
 import type {
+  DidCommBasicMessageRecord,
   DidCommConnectionRecord,
   DidCommCredentialExchangeRecord,
   DidCommProofExchangeRecord,
@@ -10,9 +11,25 @@ import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
 import { PARENT_CONNECTION_TAG } from '@verana-labs/vs-agent-sdk'
 
-import { ConnectionRecordDto, CredentialExchangeRecordDto, PresentationRecordDto } from './dto'
+import {
+  BasicMessageRecordDto,
+  ConnectionRecordDto,
+  CredentialExchangeRecordDto,
+  PresentationRecordDto,
+} from './dto'
 
 export const REQUESTED_CREDENTIALS_METADATA = '_2060/requestedCredentials'
+
+export function toBasicMessageDto(record: DidCommBasicMessageRecord): BasicMessageRecordDto {
+  return {
+    id: record.id,
+    connectionId: record.connectionId,
+    role: record.role,
+    content: record.content,
+    sentTime: record.sentTime,
+    createdAt: record.createdAt,
+  }
+}
 
 export function toConnectionDto(record: DidCommConnectionRecord): ConnectionRecordDto {
   return {
