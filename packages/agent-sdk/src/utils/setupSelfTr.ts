@@ -555,7 +555,11 @@ export function getVerificationMethodId(logger: Logger, didRecord: DidRecord): s
   try {
     const verificationMethod = didRecord.didDocument?.verificationMethod?.find(
       method =>
-        (method.type === 'Ed25519VerificationKey2020' || method.type === 'Ed25519VerificationKey2018') &&
+        (method.type === 'Ed25519VerificationKey2020' ||
+          method.type === 'Ed25519VerificationKey2018' ||
+          (method.type === 'Multikey' &&
+            typeof method.publicKeyMultibase === 'string' &&
+            method.publicKeyMultibase.startsWith('z6Mk'))) &&
         method.id === didRecord.didDocument?.assertionMethod?.[0],
     )
     if (!verificationMethod) {

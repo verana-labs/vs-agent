@@ -8,7 +8,7 @@ import {
   AnonCredsModule,
 } from '@credo-ts/anoncreds'
 import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
-import { DidsModule, W3cCredentialsModule } from '@credo-ts/core'
+import { DidsModule, JwkDidResolver, KeyDidResolver, W3cCredentialsModule } from '@credo-ts/core'
 import {
   DidCommAutoAcceptCredential,
   DidCommAutoAcceptProof,
@@ -18,7 +18,7 @@ import {
   DidCommModule,
   DidCommProofV2Protocol,
 } from '@credo-ts/didcomm'
-import { WebVhAnonCredsRegistry, WebVhDidRegistrar, WebVhDidResolver } from '@credo-ts/webvh'
+import { WebVhAnonCredsRegistry, WebVhDidRegistrar } from '@credo-ts/webvh'
 import { anoncreds } from '@hyperledger/anoncreds-nodejs'
 import { askar } from '@openwallet-foundation/askar-nodejs'
 import { VtFlowModule, type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'
@@ -28,6 +28,7 @@ import { BaseAgentModules } from '../agent/VsAgent'
 import { FullTailsFileService } from '../credentials/FullTailsFileService'
 import { defaultDocumentLoader } from '../did/CachedDocumentLoader'
 import { CachedWebDidResolver } from '../did/CachedWebDidResolver'
+import { SafeWebVhDidResolver } from '../did/SafeWebVhDidResolver'
 import { WebDidRegistrar } from '../did/WebDidRegistrar'
 import { VsAgentWsOutboundTransport } from '../transports/VsAgentWsOutboundTransport'
 
@@ -105,7 +106,11 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
       dids: new DidsModule({
         resolvers: [
           new CachedWebDidResolver({ publicApiBaseUrl: options.publicApiBaseUrl }),
-          new WebVhDidResolver(),
+          new SafeWebVhDidResolver(),
+          // Wallets bind a credential-request proof with did:jwk or did:key, which carry
+          // their own key material and resolve without touching the network.
+          new JwkDidResolver(),
+          new KeyDidResolver(),
         ],
         registrars: [new WebDidRegistrar(), new WebVhDidRegistrar()],
       }),
