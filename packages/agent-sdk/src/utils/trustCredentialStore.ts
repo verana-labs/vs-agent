@@ -512,6 +512,8 @@ async function anchorCredentialDigest(
  * resolve it there — see resolveJsonSchemaCredentialId.
  * @param issuerParticipantId this agent's ISSUER participant for the schema, which anchors the
  * credential digest.
+ * @param schemaKey the ECS schema this agent issues against. Every ECS key is accepted; the caller
+ * reaches this function only for a schema the agent holds an active ISSUER entry on.
  */
 export async function rebindEcsCredentialSchema(
   agent: VsAgent,
@@ -523,7 +525,7 @@ export async function rebindEcsCredentialSchema(
   issuerParticipantId: number,
   onChainJsonSchema?: string,
 ): Promise<void> {
-  if (schemaKey !== 'ecs-service' || !agent.did) return
+  if (!agent.did) return
   const vpUrl = `${publicApiBaseUrl}/vt/${schemaKey}-vtc-vp.json`
   const jscUrl = jsonSchemaCredentialId
 
