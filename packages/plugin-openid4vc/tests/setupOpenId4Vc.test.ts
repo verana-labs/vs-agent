@@ -1,0 +1,210 @@
+import type { OpenId4VcIssuerRequestMapper } from '../src/sdk/setupOpenId4Vc'
+import type { OpenId4VcPluginOptions } from '../src/types'
+
+import request from 'supertest'
+import { describe, expect, it } from 'vitest'
+
+import { setupOpenId4Vc } from '../src/sdk/setupOpenId4Vc'
+
+import { createCertificateFixtures } from './helpers/certificates'
+
+const validOptions = (): OpenId4VcPluginOptions => ({
+  publicApiBaseUrl: 'https://agent.example',
+  issuer: {
+    id: 'issuer',
+    displayName: 'Example Issuer',
+    signing: { development: { enabled: true, commonName: 'Example Issuer' } },
+  },
+  verifier: {
+    id: 'verifier',
+    displayName: 'Example Verifier',
+    signing: { development: { enabled: true, commonName: 'Example Verifier' } },
+  },
+  trust: {
+    resolverUrl: 'https://resolver.example/v1/trust',
+    timeoutMs: 5_000,
+    allowedDidWebHosts: ['issuer.example'],
+    credentialIssuerCertificates: ['MIIB-trusted-root'],
+  },
+  credentialConfigurations: [],
+  verifierPolicies: [],
+})
+
+const issuerService = (
+  overrides: Partial<OpenId4VcIssuerRequestMapper> = {},
+): OpenId4VcIssuerRequestMapper => ({
+  getVctMetadata: () => undefined,
+  getJwtVcIssuerMetadata: () => ({}),
+  mapCredentialRequest: () => {
+    throw new Error('not implemented')
+  },
+  signIssuerMetadata: () => Promise.reject(new Error('not implemented')),
+  ...overrides,
+})
+
+describe('setupOpenId4Vc', () => {
+  it('creates a fresh non-global Express application for every setup', () => {
+    const first = setupOpenId4Vc(validOptions(), issuerService)
+    const second = setupOpenId4Vc(validOptions(), issuerService)
+
+    expect(first.publicMiddleware).not.toBe(second.publicMiddleware)
+    expect(first.modules.openId4Vc.config.app).toBe(first.publicMiddleware)
+    expect(second.modules.openId4Vc.config.app).toBe(second.publicMiddleware)
+  })
+
+  it('configures only enabled role bases', () => {
+    const issuerOnly = validOptions()
+    delete issuerOnly.verifier
+    delete issuerOnly.trust
+    const issuerSetup = setupOpenId4Vc(issuerOnly, issuerService)
+
+    expect(issuerSetup.modules.openId4Vc.config).toHaveProperty(
+      'issuer.baseUrl',
+      'https://agent.example/oid4vci',
+    )
+    expect(issuerSetup.modules.openId4Vc.config.verifier).toBeUndefined()
+
+    const verifierOnly = validOptions()
+    delete verifierOnly.issuer
+    const verifierSetup = setupOpenId4Vc(verifierOnly)
+
+    expect(verifierSetup.modules.openId4Vc.config.issuer).toBeUndefined()
+    expect(verifierSetup.modules.openId4Vc.config).toHaveProperty(
+      'verifier.baseUrl',
+      'https://agent.example/oid4vp',
+    )
+  })
+
+  it('delegates X.509 trust only to configured trust anchors', async () => {
+    const setup = setupOpenId4Vc(validOptions(), issuerService)
+    const peerCertificate = {
+      toString: () => 'MIIB-peer-certificate',
+    }
+    const getTrustedCertificates = setup.modules.x509.config.getTrustedCertificatesForVerification
+
+    const anchors = await getTrustedCertificates?.({} as never, {
+      certificateChain: [peerCertificate as never],
+      verification: {
+        type: 'credential',
+        credential: {} as never,
+      },
+    })
+
+    expect(anchors).toEqual(['MIIB-trusted-root'])
+    expect(anchors).not.toEqual(['MIIB-peer-certificate'])
+  })
+
+  it('serves the SD-JWT VC issuer metadata that x5c-anchoring holders resolve', async () => {
+    const setup = setupOpenId4Vc(validOptions(), () =>
+      issuerService({
+        getJwtVcIssuerMetadata: () => ({
+          issuer: 'https://issuer.example',
+          jwks: { keys: [{ kty: 'EC', crv: 'P-256' }] },
+        }),
+      }),
+    )
+
+    const response = await request(setup.publicMiddleware).get('/.well-known/jwt-vc-issuer')
+
+    expect(response.status).toBe(200)
+    expect(response.body.issuer).toBe('https://issuer.example')
+    expect(response.body.jwks.keys).toHaveLength(1)
+  })
+
+  // RFC 8615 inserts the issuer path after the well-known segment; answering only the bare
+  // form made every wwWallet issuance show a metadata-fetch failure above the trust card.
+  it('serves the SD-JWT VC issuer metadata at the path-inserted well-known form', async () => {
+    const setup = setupOpenId4Vc(validOptions(), () =>
+      issuerService({
+        getJwtVcIssuerMetadata: () => ({ issuer: 'https://issuer.example', jwks: { keys: [] } }),
+      }),
+    )
+
+    const response = await request(setup.publicMiddleware).get('/.well-known/jwt-vc-issuer/oid4vci/demo-did')
+
+    expect(response.status).toBe(200)
+    expect(response.body.issuer).toBe('https://issuer.example')
+  })
+
+  it('serves the bare openid-credential-issuer path as the configured issuer', async () => {
+    const options = validOptions()
+    options.issuer!.id = 'demo-did'
+    const setup = setupOpenId4Vc(options, issuerService)
+    // Credo's host-prefixed route, registered on the same application after setup.
+    setup.publicMiddleware.get(
+      '/.well-known/openid-credential-issuer/oid4vci/demo-did',
+      (request, response) =>
+        response.json({
+          credential_issuer: 'https://agent.example/oid4vci/demo-did',
+          query: request.query,
+        }),
+    )
+
+    const bare = await request(setup.publicMiddleware).get('/.well-known/openid-credential-issuer')
+    expect(bare.status).toBe(200)
+    expect(bare.body.credential_issuer).toBe('https://agent.example/oid4vci/demo-did')
+
+    const withQuery = await request(setup.publicMiddleware).get('/.well-known/openid-credential-issuer/?v=1')
+    expect(withQuery.status).toBe(200)
+    expect(withQuery.body.query).toEqual({ v: '1' })
+
+    const other = await request(setup.publicMiddleware).get(
+      '/.well-known/openid-credential-issuer/oid4vci/other',
+    )
+    expect(other.status).toBe(404)
+  })
+
+  it('does not advertise wallet attestation metadata by default', async () => {
+    const options = validOptions()
+    options.issuer!.walletAttestationCertificates = ['unused-while-attestation-is-not-required']
+    const setup = setupOpenId4Vc(options, issuerService)
+    setup.publicMiddleware.get(
+      '/.well-known/oauth-authorization-server/oid4vci/issuer',
+      (_request, response) => response.json({ token_endpoint_auth_methods_supported: ['none'] }),
+    )
+
+    const response = await request(setup.publicMiddleware).get(
+      '/.well-known/oauth-authorization-server/oid4vci/issuer',
+    )
+
+    expect(response.body.token_endpoint_auth_methods_supported).toEqual(['none'])
+    expect(response.body.client_attestation_signing_alg_values_supported).toBeUndefined()
+    expect(response.body.client_attestation_pop_signing_alg_values_supported).toBeUndefined()
+    expect(setup.modules.openId4Vc.config).toHaveProperty('issuer.walletAttestationsRequired', false)
+  })
+
+  it('advertises wallet attestation only when it is required and has trusted roots', async () => {
+    const fixtures = await createCertificateFixtures()
+    const options = validOptions()
+    options.issuer!.requireWalletAttestation = true
+    options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]
+    const setup = setupOpenId4Vc(options, issuerService)
+    setup.publicMiddleware.get(
+      '/.well-known/oauth-authorization-server/oid4vci/issuer',
+      (_request, response) => response.json({ token_endpoint_auth_methods_supported: ['none'] }),
+    )
+
+    const response = await request(setup.publicMiddleware).get(
+      '/.well-known/oauth-authorization-server/oid4vci/issuer',
+    )
+
+    expect(response.body.token_endpoint_auth_methods_supported).toEqual(['none', 'attest_jwt_client_auth'])
+    expect(response.body.client_attestation_signing_alg_values_supported).toEqual(['ES256'])
+    expect(response.body.client_attestation_pop_signing_alg_values_supported).toEqual(['ES256'])
+    expect(setup.modules.openId4Vc.config).toHaveProperty('issuer.walletAttestationsRequired', true)
+  })
+
+  it('rejects a malformed required wallet-attestation root synchronously', async () => {
+    const fixtures = await createCertificateFixtures()
+    const options = validOptions()
+    options.issuer!.requireWalletAttestation = true
+    options.issuer!.walletAttestationCertificates = [
+      fixtures.root.toString('base64'),
+      'MIIB-private-attestation-material',
+    ]
+
+    expect(() => setupOpenId4Vc(options, issuerService)).toThrowError(
+      /^issuer\.walletAttestationCertificates\[1\] must be a valid X\.509 certificate$/,
+    )
+  })
+})
