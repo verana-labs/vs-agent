@@ -50,7 +50,9 @@ export class SendInvitationBodyDto {
 
 export class SendInvitationResponseDto {
   @ApiProperty({
-    description: 'Identifier of the sent invitation message',
+    description:
+      'Identifier of the sent message: the Out-of-Band 1.1 message on a v1 connection, the basic ' +
+      'message record that carries the invitation URL on a v2 connection.',
     example: 'b6a2f0d4-7c1e-4f6a-9d2b-0f3c5e8a1b7d',
   })
   id!: string
