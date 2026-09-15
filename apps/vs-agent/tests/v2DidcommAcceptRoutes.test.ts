@@ -815,7 +815,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
         }
         return baseFetch(...args)
       })
-      webhookEvent(faberAgent, { url: webhookUrl }, new TsLogger(LogLevel.Off, faberAgent.label))
+      webhookEvent(faberAgent, { url: webhookUrl }, new TsLogger(LogLevel.Off, 'Faber'))
 
       const record = await faberAgent.didcomm.oob.createInvitation({
         didCommVersion: 'v2',
