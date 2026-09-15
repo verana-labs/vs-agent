@@ -2,8 +2,6 @@ import {
   AnonCredsDidCommCredentialFormatService,
   AnonCredsModule,
   AnonCredsDidCommProofFormatService,
-  LegacyIndyDidCommCredentialFormatService,
-  LegacyIndyDidCommProofFormatService,
 } from '@credo-ts/anoncreds'
 import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import {
@@ -63,17 +61,11 @@ type VsAgentDidCommModule = DidCommModule<
     credentials: DidCommCredentialsModuleConfigOptions<
       [
         DidCommCredentialV2Protocol<
-          [
-            LegacyIndyDidCommCredentialFormatService,
-            AnonCredsDidCommCredentialFormatService,
-            DidCommDataIntegrityCredentialFormatService,
-          ]
+          [AnonCredsDidCommCredentialFormatService, DidCommDataIntegrityCredentialFormatService]
         >,
       ]
     >
-    proofs: DidCommProofsModuleConfigOptions<
-      [DidCommProofV2Protocol<[LegacyIndyDidCommProofFormatService, AnonCredsDidCommProofFormatService]>]
-    >
+    proofs: DidCommProofsModuleConfigOptions<[DidCommProofV2Protocol<[AnonCredsDidCommProofFormatService]>]>
   }
 >
 
