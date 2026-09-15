@@ -147,7 +147,10 @@ describe('accommodateOpenId4VciKt', () => {
 
   it('treats the same accept with an Accept-Language as swiyu and serves plain JSON without attestation', () => {
     const swiyu = run('application/jwt,application/json', metadata(withAttestation), {
-      headers: { accept: 'application/jwt,application/json', 'accept-language': 'de-CH, en, fr-CH, it-CH, rm' },
+      headers: {
+        accept: 'application/jwt,application/json',
+        'accept-language': 'de-CH, en, fr-CH, it-CH, rm',
+      },
     } as Partial<Request>)
 
     expect(swiyu.accept).toBe('application/json')
