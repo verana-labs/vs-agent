@@ -1,6 +1,7 @@
 import { AgentContext, DidDocument, DidRecord, DidRepository, Logger } from '@credo-ts/core'
 
 import { getLegacyDidWeb } from '../legacyDidWeb'
+import { needsAuthenticationMigration } from '../webvhAuthentication'
 
 import { migrateWebVhLogIfBroken } from './migrateWebVhLog'
 import { migrateWebVhVersionTimeIfBroken } from './migrateWebVhVersionTime'
@@ -66,10 +67,7 @@ export function authenticationHasUpdateKey(
 ): boolean {
   if (method !== 'webvh' || !ed25519VerificationMethodId) return false
 
-  return (didDocument.authentication ?? []).some(entry => {
-    const id = typeof entry === 'string' ? entry : entry.id
-    return id !== ed25519VerificationMethodId
-  })
+  return needsAuthenticationMigration(didDocument.authentication ?? [], ed25519VerificationMethodId)
 }
 
 /** The did:web form as an alternative DID, so implicit invitations resolve to the same record. */

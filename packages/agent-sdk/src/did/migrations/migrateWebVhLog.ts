@@ -51,7 +51,7 @@ class KmsSigner implements Signer {
   ) {}
 
   public getVerificationMethodId(): string {
-    return `did:key:${this.publicKeyMultibase}`
+    return `did:key:${this.publicKeyMultibase}#${this.publicKeyMultibase}`
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
