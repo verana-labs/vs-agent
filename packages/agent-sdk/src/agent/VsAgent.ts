@@ -44,11 +44,6 @@ import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
 import { applyArtifactServices, artifactServicesMatch } from '../did/artifactServices'
 import { getLegacyDidWeb } from '../did/legacyDidWeb'
-import {
-  authenticationHasUpdateKey,
-  hasLegacyVerificationMethods,
-  migrateLegacyDidRecord,
-} from '../did/migrations'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { connectionEvents } from '../events/ConnectionEvents'
 import { vtFlowEvents } from '../events/VtFlowEvents'
@@ -212,7 +207,13 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
           // The webvh registrar doesn't merge new keys into the DidRecord on update,
           // so persist the DIDComm key mapping directly on the existing record.
-          await this.persistDidDocumentKey(publicDid, didCommKey)
+          const didRepository = this.agentContext.resolve(DidRepository)
+          const [record] = await didRepository.findByQuery(this.agentContext, { did: publicDid })
+          if (record) {
+            record.keys = [...(record.keys ?? []), didCommKey]
+            if (legacyDidWeb) record.setTag('alternativeDids', [legacyDidWeb])
+            await didRepository.update(this.agentContext, record)
+          }
 
           this.applyAdminApiService(didDocument)
 
@@ -231,25 +232,14 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         return
       }
 
-      await migrateLegacyDidRecord(this.agentContext, existingRecord, {
-        method: parsedDid.method,
-        logger: this.logger,
-      })
-
       // DID already exists: reconcile the stored document with the current agent parameters,
       // updating it only if one of the checks below finds a difference
       const didDocument = existingRecord.didDocument!
-      const hasLegacyMethods = hasLegacyVerificationMethods(didDocument)
       const ed25519VerificationMethodId = this.findEd25519VerificationMethodId(didDocument)
       const servicesChanged =
         !ed25519VerificationMethodId ||
         JSON.stringify(didDocument.didCommServices) !==
           JSON.stringify(this.getDidCommServices(didDocument.id, ed25519VerificationMethodId))
-      const authHasUpdateKey = authenticationHasUpdateKey(
-        didDocument,
-        parsedDid.method,
-        ed25519VerificationMethodId,
-      )
       const currentAdminEntry = (didDocument.service ?? []).find(s => s.type === 'VsAgentAdminAPI')
       const adminEntryChanged = currentAdminEntry?.serviceEndpoint !== this.adminApiServiceEndpoint
       // A record from an earlier version may still carry the service of the other method.
@@ -258,13 +248,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         method: artifactMethod,
         publicApiBaseUrl: this.publicApiBaseUrl,
       })
-      if (
-        hasLegacyMethods ||
-        servicesChanged ||
-        authHasUpdateKey ||
-        adminEntryChanged ||
-        artifactServicesChanged
-      ) {
+      if (servicesChanged || adminEntryChanged || artifactServicesChanged) {
         if (servicesChanged && ed25519VerificationMethodId) {
           didDocument.service = [
             ...(didDocument.service
@@ -278,25 +262,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           publicApiBaseUrl: this.publicApiBaseUrl,
         })
         this.applyAdminApiService(didDocument)
-        const newKeys: DidDocumentKey[] = []
-        if (hasLegacyMethods) {
-          newKeys.push(await this.createAndAddDidCommKeysAndServices(didDocument))
-        }
-
-        if (authHasUpdateKey) didDocument.authentication = [ed25519VerificationMethodId!]
-
-        if (newKeys.length && parsedDid.method === 'webvh') {
-          // webvh registrar doesn't accept keys in update options; persist directly
-          for (const key of newKeys) await this.persistDidDocumentKey(didDocument.id, key)
-        }
-
         // The webvh registrar returns state:"failed" WITHOUT throwing, so an unchecked update
         // silently no-ops. Check the result and surface the reason instead of assuming success.
-        const updateResult = await this.dids.update({
-          did: didDocument.id,
-          didDocument,
-          ...(newKeys.length && parsedDid.method === 'web' ? { keys: newKeys } : {}),
-        })
+        const updateResult = await this.dids.update({ did: didDocument.id, didDocument })
         if (updateResult.didState.state !== 'finished') {
           this.logger?.error('Public did record update failed to persist', {
             did: didDocument.id,
@@ -372,16 +340,6 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     })
 
     return services
-  }
-
-  private async persistDidDocumentKey(did: string, key: DidDocumentKey) {
-    const didRepository = this.agentContext.resolve(DidRepository)
-    const [record] = await didRepository.findByQuery(this.agentContext, { did })
-    if (!record) return
-    const existing = record.keys ?? []
-    if (existing.some(k => k.didDocumentRelativeKeyId === key.didDocumentRelativeKeyId)) return
-    record.keys = [...existing, key]
-    await didRepository.update(this.agentContext, record)
   }
 
   private async createAndAddDidCommKeysAndServices(didDocument: DidDocument): Promise<DidDocumentKey> {
