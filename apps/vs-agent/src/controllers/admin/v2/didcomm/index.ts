@@ -1,6 +1,5 @@
 export * from './dto'
 export * from './V2DidcommBasicMessagesController'
-export * from './InvitationsService'
 export * from './V2DidcommConnectionsController'
 export * from './V2DidcommController'
 export * from './V2DidcommCredentialExchangesController'
