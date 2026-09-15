@@ -197,6 +197,14 @@ describe('IssuerService', () => {
             ],
             claims: [{ path: ['name'] }, { path: ['role'] }],
           },
+          display: [
+            {
+              name: 'Employee credential',
+              description: 'Proof of employment',
+              locale: 'en',
+            },
+          ],
+          claims: { name: {}, role: {} },
         },
       },
     })
