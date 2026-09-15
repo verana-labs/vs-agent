@@ -20,6 +20,8 @@ const RELATED_JSON_SCHEMA_CREDENTIAL_ID_TAG = 'relatedJsonSchemaCredentialId'
 
 export const REQUESTED_CREDENTIAL_SCHEMAS_METADATA = '_2060/requestedCredentialSchemas'
 
+export const AUTO_ACCEPT_PRESENTATION_METADATA = '_2060/autoAcceptPresentation'
+
 export enum AnonCredsTrustProblemCode {
   IssuerNotAuthorized = 'e.p.issuer-not-authorized',
   TrustResolutionUnavailable = 'e.p.trust-resolution-unavailable',
