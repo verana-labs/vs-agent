@@ -1,6 +1,5 @@
 import type {
   OpenId4VcCredentialConfiguration,
-  OpenId4VcOfferIssuanceMetadata,
   OpenId4VcPluginOptions,
   OpenId4VcSigningOptions,
   OpenId4VcVerifierPolicy,
@@ -137,7 +136,7 @@ export function parseOfferTtlSeconds(input: unknown): number {
 export function parseOfferIssuanceMetadata(
   configuration: OpenId4VcCredentialConfiguration,
   input: unknown,
-): OpenId4VcOfferIssuanceMetadata {
+): { claims: Record<string, unknown>; ttlSeconds: number } {
   if (!isRecord(input)) {
     throw new Error('issuance metadata must be an object')
   }

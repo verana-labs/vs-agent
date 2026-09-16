@@ -1,4 +1,4 @@
-import type { OpenId4VcOfferIssuanceMetadata, OpenId4VcPluginOptions } from '../types'
+import type { OpenId4VcPluginOptions } from '../types'
 import type { BaseAgent, JwsProtectedHeaderOptions, Kms, SdJwtVcTypeMetadata } from '@credo-ts/core'
 import type {
   OpenId4VcIssuanceSessionRecord,
@@ -120,7 +120,7 @@ export class IssuerService {
       )
     }
 
-    let issuanceMetadata: OpenId4VcOfferIssuanceMetadata
+    let issuanceMetadata: { claims: Record<string, unknown>; ttlSeconds: number }
     try {
       issuanceMetadata = {
         claims: parseOfferClaims(configuration, claims),

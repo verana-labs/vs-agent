@@ -20,12 +20,6 @@ export interface OpenId4VcCredentialConfiguration {
   disclosureFrame: string[]
 }
 
-// A type alias, not an interface: only an alias gets the implicit index signature that Credo's `Record<string, unknown>` issuance metadata requires.
-export type OpenId4VcOfferIssuanceMetadata = {
-  claims: Record<string, unknown>
-  ttlSeconds: number
-}
-
 export interface OpenId4VcVerifierPolicy {
   id: string
   credentialConfigurationId: string
