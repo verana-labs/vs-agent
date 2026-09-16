@@ -328,7 +328,7 @@ export class V2DidcommCredentialExchangesController {
     requireCredentialState(record, DidCommCredentialState.OfferReceived)
 
     const formatData = await agent.didcomm.credentials.getFormatData(credentialExchangeId)
-    const anonCredsOffer = formatData.offer?.anoncreds ?? formatData.offer?.indy
+    const anonCredsOffer = formatData.offer?.anoncreds
 
     if (anonCredsOffer) {
       try {

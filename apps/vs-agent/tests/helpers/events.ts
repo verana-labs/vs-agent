@@ -15,7 +15,7 @@ import { vi } from 'vitest'
 
 export async function makeConnection(agentA: VsAgent<BaseAgentModules>, agentB: VsAgent<BaseAgentModules>) {
   const agentAOutOfBand = await agentA.didcomm.oob.createInvitation({
-    handshakeProtocols: [DidCommHandshakeProtocol.Connections],
+    handshakeProtocols: [DidCommHandshakeProtocol.DidExchange],
   })
 
   let { connectionRecord: agentBConnection } = await agentB.didcomm.oob.receiveInvitation(

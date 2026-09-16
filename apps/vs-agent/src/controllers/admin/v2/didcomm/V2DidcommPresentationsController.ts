@@ -261,7 +261,7 @@ export class V2DidcommPresentationsController {
     const verifierDid = connection?.theirDid
 
     const requestFormatData = await agent.didcomm.proofs.getFormatData(proofExchangeId)
-    const anonCredsRequest = requestFormatData.request?.anoncreds ?? requestFormatData.request?.indy
+    const anonCredsRequest = requestFormatData.request?.anoncreds
 
     if (anonCredsRequest) {
       if (!verifierDid) {
@@ -323,7 +323,7 @@ export class V2DidcommPresentationsController {
     const { proofFormats } = await agent.didcomm.proofs.getCredentialsForRequest({
       proofExchangeRecordId: proofExchangeId,
     })
-    const candidates = proofFormats.anoncreds ?? proofFormats.indy
+    const candidates = proofFormats.anoncreds
 
     if (!candidates) {
       throw noCompatibleCredentials('the request asks for a format that this agent cannot present')
