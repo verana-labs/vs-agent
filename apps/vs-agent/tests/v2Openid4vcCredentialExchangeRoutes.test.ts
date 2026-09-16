@@ -188,17 +188,22 @@ describe('v2 openid4vc credential exchange routes', () => {
   it('creates a credential offer and returns the exchange id and the offer URL', async () => {
     const response = await request(app.getHttpServer())
       .post('/v2/openid4vc/credential-offer')
-      .send({ credentialConfigurationId: 'employee', claims: { name: 'Ada Lovelace', role: 'engineer' } })
+      .send({
+        credentialConfigurationId: 'employee',
+        claims: { name: 'Ada Lovelace', role: 'engineer' },
+        ttlSeconds: 3600,
+      })
 
     expect(response.status).toBe(201)
     expect(response.body).toEqual({
       credentialExchangeId: 'ce-new',
       url: 'openid-credential-offer://?credential_offer_uri=https%3A%2F%2Fagent.test%2Foffers%2F1',
     })
-    expect(issuerService.createOffer).toHaveBeenCalledWith('employee', {
-      name: 'Ada Lovelace',
-      role: 'engineer',
-    })
+    expect(issuerService.createOffer).toHaveBeenCalledWith(
+      'employee',
+      { name: 'Ada Lovelace', role: 'engineer' },
+      3600,
+    )
   })
 
   it('maps an unknown configuration to UNKNOWN_CONFIGURATION and a claim error to INVALID_INPUT', async () => {
@@ -207,7 +212,7 @@ describe('v2 openid4vc credential exchange routes', () => {
     )
     const unknown = await request(app.getHttpServer())
       .post('/v2/openid4vc/credential-offer')
-      .send({ credentialConfigurationId: 'x', claims: { name: 'Ada' } })
+      .send({ credentialConfigurationId: 'x', claims: { name: 'Ada' }, ttlSeconds: 3600 })
     expect(unknown.status).toBe(400)
     expect(unknown.body.error).toEqual({
       code: 'UNKNOWN_CONFIGURATION',
@@ -217,7 +222,7 @@ describe('v2 openid4vc credential exchange routes', () => {
     issuerService.createOffer.mockRejectedValueOnce(new OpenId4VcIssuerRequestError("unknown claim 'age'"))
     const badClaims = await request(app.getHttpServer())
       .post('/v2/openid4vc/credential-offer')
-      .send({ credentialConfigurationId: 'employee', claims: { age: 3 } })
+      .send({ credentialConfigurationId: 'employee', claims: { age: 3 }, ttlSeconds: 3600 })
     expect(badClaims.status).toBe(400)
     expect(badClaims.body.error).toEqual({ code: 'INVALID_INPUT', message: "unknown claim 'age'" })
   })
@@ -226,17 +231,27 @@ describe('v2 openid4vc credential exchange routes', () => {
     const missing = await validate(
       plainToInstance(Openid4vcCredentialOfferBodyDto, { credentialConfigurationId: 'employee' }),
     )
-    expect(missing.map(error => error.property)).toEqual(['claims'])
+    expect(missing.map(error => error.property)).toEqual(['claims', 'ttlSeconds'])
 
-    const extra = await validate(
+    const outOfRange = await validate(
       plainToInstance(Openid4vcCredentialOfferBodyDto, {
         credentialConfigurationId: 'employee',
         claims: { name: 'Ada' },
         ttlSeconds: 5,
       }),
+    )
+    expect(outOfRange.map(error => error.property)).toEqual(['ttlSeconds'])
+
+    const extra = await validate(
+      plainToInstance(Openid4vcCredentialOfferBodyDto, {
+        credentialConfigurationId: 'employee',
+        claims: { name: 'Ada' },
+        ttlSeconds: 3600,
+        statusListId: 'list-1',
+      }),
       { whitelist: true, forbidNonWhitelisted: true },
     )
-    expect(extra.map(error => error.property)).toEqual(['ttlSeconds'])
+    expect(extra.map(error => error.property)).toEqual(['statusListId'])
   })
 
   it('deletes a credential exchange with 204 and answers UNKNOWN_ID otherwise', async () => {
@@ -268,7 +283,7 @@ describe('v2 openid4vc credential exchange routes without an issuer capability',
       () =>
         request(app.getHttpServer())
           .post('/v2/openid4vc/credential-offer')
-          .send({ credentialConfigurationId: 'employee', claims: { name: 'Ada' } }),
+          .send({ credentialConfigurationId: 'employee', claims: { name: 'Ada' }, ttlSeconds: 3600 }),
       () => request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges'),
       () => request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges/ce-a'),
       () => request(app.getHttpServer()).delete('/v2/openid4vc/credential-exchanges/ce-a'),

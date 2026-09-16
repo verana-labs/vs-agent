@@ -18,6 +18,11 @@ export interface OpenId4VcCredentialConfiguration {
   vtjscId: string
   claims: string[]
   disclosureFrame: string[]
+}
+
+// A type alias, not an interface: only an alias gets the implicit index signature that Credo's `Record<string, unknown>` issuance metadata requires.
+export type OpenId4VcOfferIssuanceMetadata = {
+  claims: Record<string, unknown>
   ttlSeconds: number
 }
 

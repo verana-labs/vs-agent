@@ -30,8 +30,8 @@ const CONFIGURATION: OpenId4VcCredentialConfiguration = {
   vtjscId: 'https://credentials.example/vt/employee.json',
   claims: ['name', 'role'],
   disclosureFrame: ['name', 'role'],
-  ttlSeconds: 3_600,
 }
+const TTL_SECONDS = 3_600
 
 describe('in-process OpenID4VC issuance and presentation', () => {
   let didDocuments: Map<string, DidDocument>
@@ -73,10 +73,11 @@ describe('in-process OpenID4VC issuance and presentation', () => {
         verifierDid: VERIFIER_DID,
         credentialConfiguration: CONFIGURATION,
       })
-      const offer = await agents.issuer.service.createOffer(CONFIGURATION.id, {
-        name: 'Ada Lovelace',
-        role: 'engineer',
-      })
+      const offer = await agents.issuer.service.createOffer(
+        CONFIGURATION.id,
+        { name: 'Ada Lovelace', role: 'engineer' },
+        TTL_SECONDS,
+      )
       storedCredential = await agents.holder.acceptCredentialOffer(offer.credentialOffer)
     } catch (error) {
       await rethrowAfterFixtureCleanup(error, [agents?.stop(), resolver?.stop()])
@@ -98,7 +99,7 @@ describe('in-process OpenID4VC issuance and presentation', () => {
       role: 'engineer',
     })
     expect(Number(storedCredential.prettyClaims.exp) - Number(storedCredential.prettyClaims.iat)).toBe(
-      CONFIGURATION.ttlSeconds,
+      TTL_SECONDS,
     )
     expect(storedCredential.prettyClaims).not.toHaveProperty('status')
     const records = await agents.holder.agent.sdJwtVc.getAll()
@@ -107,10 +108,11 @@ describe('in-process OpenID4VC issuance and presentation', () => {
   }, 60_000)
 
   it('lists, reads and deletes the issuance sessions of this issuer', async () => {
-    const offer = await agents.issuer.service.createOffer(CONFIGURATION.id, {
-      name: 'Grace Hopper',
-      role: 'admiral',
-    })
+    const offer = await agents.issuer.service.createOffer(
+      CONFIGURATION.id,
+      { name: 'Grace Hopper', role: 'admiral' },
+      TTL_SECONDS,
+    )
 
     const listed = await agents.issuer.service.listIssuanceSessions()
     expect(listed.map(session => session.id)).toContain(offer.issuanceSessionId)

@@ -7,7 +7,8 @@ operator sets `OID4VC_CONFIG_FILE_LOCATION`. Nothing else enables it.
 What it does:
 
 - pre-authorized OpenID4VCI issuance of `dc+sd-jwt` credentials, valid until they expire: v4
-  specifies no revocation for this format, so a credential carries no `status` claim;
+  specifies no revocation for this format, so a credential carries no `status` claim and the
+  `ttlSeconds` of its offer is its only bound;
 - OpenID4VP requests in DCQL (`direct_post.jwt`, `x509_hash` or DID client identifier) or, for a
   wallet that predates DCQL, Presentation Exchange (`direct_post`);
 - the `/v2/openid4vc` Administration API scope: create an offer or a request, then list, read
@@ -48,7 +49,7 @@ location or validation fails. Keys are camelCase. Full reference: [[VSA-VTI-CFG-
 | `verifier` | Defines the verifier capability: `displayName`, exactly one `signing` mode. Required when `issuer` is absent. |
 | `verifier.requestSigner` | `x5c` (default) or `did`. `did` names the agent DID as `client_id`. A caller can override it per request. |
 | `trust` | Required with `verifier`: `resolverUrl` (`https://` Verana resolver), `timeoutMs` (1 to 30000), `allowedDidWebHosts`, `credentialIssuerCertificates` (self-issued CA roots with `keyCertSign`), optional `developmentCertificateFingerprints`. |
-| `credentialConfigurations` | Array. Each entry: unique `id`, `format` `dc+sd-jwt`, `https://` `vct` and `vtjscId`, `name`, optional `description`, `claims`, `disclosureFrame` (subset of `claims`), `ttlSeconds` (60 to 31536000). `claims` is the allowed set for an offer: an offer may omit any of them and the credential then omits them too, an offered claim must be non-empty, and an offer must carry at least one configured claim. |
+| `credentialConfigurations` | Array. Each entry: unique `id`, `format` `dc+sd-jwt`, `https://` `vct` and `vtjscId`, `name`, optional `description`, `claims`, `disclosureFrame` (subset of `claims`). `claims` is the allowed set for an offer: an offer may omit any of them and the credential then omits them too, an offered claim must be non-empty, and an offer must carry at least one configured claim. |
 | `verifierPolicies` | Array. Each entry: unique `id`, `credentialConfigurationId`, `requestedClaims` (subset of that configuration's claims). |
 
 The identifier segment of each capability is fixed: `issuer` and `verifier`, so the public paths
@@ -105,8 +106,7 @@ the agent's own DID is not needed on the list.
       "name": "Employee credential",
       "vtjscId": "https://trust.example/vtjsc/employee",
       "claims": ["given_name", "family_name", "role"],
-      "disclosureFrame": ["given_name", "family_name", "role"],
-      "ttlSeconds": 3600
+      "disclosureFrame": ["given_name", "family_name", "role"]
     }
   ],
   "verifierPolicies": [
@@ -126,7 +126,7 @@ of an absent capability answers `409 CAPABILITY_NOT_CONFIGURED`.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `createCredentialOffer` | `POST /credential-offer` | `credentialConfigurationId`, `claims`. Returns `credentialExchangeId` and `url`. `400 UNKNOWN_CONFIGURATION`, `400 INVALID_INPUT`. |
+| `createCredentialOffer` | `POST /credential-offer` | `credentialConfigurationId`, `claims`, `ttlSeconds` (60 to 7776000). Returns `credentialExchangeId` and `url`. `400 UNKNOWN_CONFIGURATION`, `400 INVALID_INPUT`. |
 | `listCredentialExchanges` | `GET /credential-exchanges` | Filters `credentialConfigurationId`, `state`. Keyset pagination. |
 | `getCredentialExchange` | `GET /credential-exchanges/{credentialExchangeId}` | `credentialExchangeId`, `credentialConfigurationId`, `state`, `createdAt`, `updatedAt`, `expiresAt`, `errorMessage`. Never the claims, the offer URL or the pre-authorized code. |
 | `deleteCredentialExchange` | `DELETE /credential-exchanges/{credentialExchangeId}` | `204`. Deletes the record only, never a credential that a wallet holds. |

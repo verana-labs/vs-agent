@@ -67,7 +67,6 @@ const options = (): OpenId4VcPluginOptions => ({
       vtjscId: VTJSC_ID,
       claims: ['name', 'role'],
       disclosureFrame: ['name', 'role'],
-      ttlSeconds: 3_600,
     },
   ],
   verifierPolicies: [

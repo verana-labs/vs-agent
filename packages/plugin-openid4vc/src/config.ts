@@ -1,5 +1,6 @@
 import type {
   OpenId4VcCredentialConfiguration,
+  OpenId4VcOfferIssuanceMetadata,
   OpenId4VcPluginOptions,
   OpenId4VcSigningOptions,
   OpenId4VcVerifierPolicy,
@@ -15,8 +16,9 @@ import { isRecord } from './utils/isRecord'
 export const ISSUER_CAPABILITY_ID = 'issuer'
 export const VERIFIER_CAPABILITY_ID = 'verifier'
 
-const MAX_TTL_SECONDS = 31_536_000
-const MIN_TTL_SECONDS = 60
+export const OFFER_TTL_SECONDS_MIN = 60
+export const OFFER_TTL_SECONDS_MAX = 7_776_000
+
 const RESERVED_CREDENTIAL_CLAIMS = new Set(['vct', 'iat', 'exp', 'nbf', 'iss', 'cnf', 'status'])
 
 /** [VSA-VTI-CFG-ENV-OID] Validation of the OpenID4VC configuration file. */
@@ -108,6 +110,35 @@ export function parseOfferClaims(
   return claims
 }
 
+export function parseOfferTtlSeconds(input: unknown): number {
+  if (
+    typeof input !== 'number' ||
+    !Number.isInteger(input) ||
+    input < OFFER_TTL_SECONDS_MIN ||
+    input > OFFER_TTL_SECONDS_MAX
+  ) {
+    throw new Error(
+      `ttlSeconds must be an integer between ${OFFER_TTL_SECONDS_MIN} and ${OFFER_TTL_SECONDS_MAX}`,
+    )
+  }
+
+  return input
+}
+
+export function parseOfferIssuanceMetadata(
+  configuration: OpenId4VcCredentialConfiguration,
+  input: unknown,
+): OpenId4VcOfferIssuanceMetadata {
+  if (!isRecord(input)) {
+    throw new Error('issuance metadata must be an object')
+  }
+
+  return {
+    claims: parseOfferClaims(configuration, input.claims),
+    ttlSeconds: parseOfferTtlSeconds(input.ttlSeconds),
+  }
+}
+
 function assertCredentialConfigurations(configurations: OpenId4VcCredentialConfiguration[]): void {
   if (!Array.isArray(configurations)) {
     throw new Error('credentialConfigurations must be an array')
@@ -129,16 +160,6 @@ function assertCredentialConfigurations(configurations: OpenId4VcCredentialConfi
       throw new Error(`${prefix}.claims contains reserved claim '${reservedClaim}'`)
     }
     assertSubset(configuration.disclosureFrame, configuration.claims, `${prefix}.disclosureFrame`)
-
-    if (
-      !Number.isInteger(configuration.ttlSeconds) ||
-      configuration.ttlSeconds < MIN_TTL_SECONDS ||
-      configuration.ttlSeconds > MAX_TTL_SECONDS
-    ) {
-      throw new Error(
-        `${prefix}.ttlSeconds must be an integer between ${MIN_TTL_SECONDS} and ${MAX_TTL_SECONDS}`,
-      )
-    }
   }
 }
 

@@ -62,17 +62,24 @@ export class V2Openid4vcCredentialExchangesController {
   @Post('credential-offer')
   @ApiOperation({
     summary: 'Create a credential offer',
-    description: 'Creates a pre-authorized OpenID4VCI credential offer for one credential configuration.',
+    description:
+      'Creates a pre-authorized OpenID4VCI credential offer for one credential configuration. The credential expires after ttlSeconds.',
   })
   @ApiBody({ type: Openid4vcCredentialOfferBodyDto })
   @ApiCreatedResponse({ description: 'The credential offer', type: Openid4vcCredentialOfferResponseDto })
-  @ApiBadRequestResponse({ description: 'Unknown credential configuration, or claims that do not match it' })
+  @ApiBadRequestResponse({
+    description: 'Claims that do not match the configuration, or a ttlSeconds outside its range',
+  })
   @ApiConflictResponse({ description: 'The configuration defines no issuer capability' })
   public async createCredentialOffer(
     @Body() body: Openid4vcCredentialOfferBodyDto,
   ): Promise<Openid4vcCredentialOfferResponseDto> {
     try {
-      const offer = await this.issuer().createOffer(body.credentialConfigurationId, body.claims)
+      const offer = await this.issuer().createOffer(
+        body.credentialConfigurationId,
+        body.claims,
+        body.ttlSeconds,
+      )
       return { credentialExchangeId: offer.issuanceSessionId, url: offer.credentialOffer }
     } catch (error) {
       throw translate(error)

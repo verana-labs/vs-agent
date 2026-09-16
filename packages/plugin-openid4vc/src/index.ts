@@ -4,7 +4,11 @@ export {
   findCredentialConfiguration,
   findVerifierPolicy,
   ISSUER_CAPABILITY_ID,
+  OFFER_TTL_SECONDS_MAX,
+  OFFER_TTL_SECONDS_MIN,
   parseOfferClaims,
+  parseOfferIssuanceMetadata,
+  parseOfferTtlSeconds,
   validateOpenId4VcOptions,
   VERIFIER_CAPABILITY_ID,
 } from './config'
@@ -44,6 +48,7 @@ export type { TrustEvidence, TrustVerdict, TrustVerdictName, VeranaTrustStatus }
 export type {
   OpenId4VcConfiguredSigningMaterial,
   OpenId4VcCredentialConfiguration,
+  OpenId4VcOfferIssuanceMetadata,
   OpenId4VcPluginOptions,
   OpenId4VcSigningOptions,
   OpenId4VcVerifierPolicy,

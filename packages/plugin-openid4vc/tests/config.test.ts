@@ -6,6 +6,8 @@ import {
   findCredentialConfiguration,
   findVerifierPolicy,
   parseOfferClaims,
+  parseOfferIssuanceMetadata,
+  parseOfferTtlSeconds,
   validateOpenId4VcOptions,
 } from '../src/config'
 
@@ -42,7 +44,6 @@ const validOptions = (): OpenId4VcPluginOptions => ({
       vtjscId: 'https://agent.example/vt/employee.json',
       claims: ['name', 'role'],
       disclosureFrame: ['name', 'role'],
-      ttlSeconds: 3_600,
     },
   ],
   verifierPolicies: [
@@ -153,13 +154,6 @@ describe('validateOpenId4VcOptions', () => {
     options.credentialConfigurations[0].disclosureFrame = ['name', 'admin']
 
     expect(() => validateOpenId4VcOptions(options)).toThrow('disclosureFrame')
-  })
-
-  it('rejects an invalid credential TTL', () => {
-    const options = validOptions()
-    options.credentialConfigurations[0].ttlSeconds = 59
-
-    expect(() => validateOpenId4VcOptions(options)).toThrow('ttlSeconds')
   })
 
   it('rejects a verifier policy for an unknown credential configuration', () => {
@@ -363,5 +357,36 @@ describe('parseOfferClaims', () => {
     const config = validOptions().credentialConfigurations[0]
 
     expect(() => parseOfferClaims(config, {})).toThrow('at least one')
+  })
+})
+
+describe('parseOfferTtlSeconds', () => {
+  it.each([60, 3_600, 7_776_000])('accepts %d seconds', value => {
+    expect(parseOfferTtlSeconds(value)).toBe(value)
+  })
+
+  it.each([59, 7_776_001, 3_600.5, '3600', null, undefined])('rejects %s', value => {
+    expect(() => parseOfferTtlSeconds(value)).toThrow('ttlSeconds must be an integer between 60 and 7776000')
+  })
+})
+
+describe('parseOfferIssuanceMetadata', () => {
+  it('returns the stored claims and lifetime of the offer', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(parseOfferIssuanceMetadata(config, { claims: { name: 'Ada' }, ttlSeconds: 3_600 })).toEqual({
+      claims: { name: 'Ada' },
+      ttlSeconds: 3_600,
+    })
+  })
+
+  it.each([
+    [{ claims: { name: 'Ada' } }, 'ttlSeconds'],
+    [{ claims: { admin: true }, ttlSeconds: 3_600 }, "unknown claim 'admin'"],
+    [null, 'issuance metadata must be an object'],
+  ])('rejects invalid stored metadata %#', (metadata, message) => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferIssuanceMetadata(config, metadata)).toThrow(message)
   })
 })

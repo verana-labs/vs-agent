@@ -32,7 +32,6 @@ const validConfig = () => ({
       vtjscId: 'https://agent.example/vt/employee.json',
       claims: ['name', 'role'],
       disclosureFrame: ['name', 'role'],
-      ttlSeconds: 3_600,
     },
   ],
   verifierPolicies: [

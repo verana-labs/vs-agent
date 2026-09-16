@@ -63,7 +63,6 @@ const options = (): OpenId4VcPluginOptions => ({
       vtjscId: 'https://agent.example/vt/employee.json',
       claims: ['name', 'role'],
       disclosureFrame: ['name', 'role'],
-      ttlSeconds: 3_600,
     },
   ],
   verifierPolicies: [],
@@ -466,7 +465,7 @@ describe('IssuerService', () => {
     loadSigningCertificate.mockRejectedValueOnce(new Error('storage not ready'))
 
     await expect(service.ensureInitialized()).rejects.toThrow('storage not ready')
-    await expect(service.createOffer('employee', { name: 'Ada', role: 'engineer' })).resolves.toEqual({
+    await expect(service.createOffer('employee', { name: 'Ada', role: 'engineer' }, 3_600)).resolves.toEqual({
       credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
       issuanceSessionId: 'session-1',
     })
@@ -487,13 +486,13 @@ describe('IssuerService', () => {
     const service = new IssuerService(agent(api) as never, options())
     await service.ensureInitialized()
 
-    const result = await service.createOffer('employee', { name: 'Ada', role: 'engineer' })
+    const result = await service.createOffer('employee', { name: 'Ada', role: 'engineer' }, 3_600)
 
     expect(api.createCredentialOffer).toHaveBeenCalledWith({
       issuerId: 'issuer',
       credentialConfigurationIds: ['employee'],
       preAuthorizedCodeFlowConfig: {},
-      issuanceMetadata: { name: 'Ada', role: 'engineer' },
+      issuanceMetadata: { claims: { name: 'Ada', role: 'engineer' }, ttlSeconds: 3_600 },
     })
     expect(result).toEqual({
       credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
@@ -511,10 +510,12 @@ describe('IssuerService', () => {
     const service = new IssuerService(agent(api) as never, options())
     await service.ensureInitialized()
 
-    await service.createOffer('employee', { name: 'Ada' })
+    await service.createOffer('employee', { name: 'Ada' }, 3_600)
 
     expect(api.createCredentialOffer).toHaveBeenCalledWith(
-      expect.objectContaining({ issuanceMetadata: { name: 'Ada' } }),
+      expect.objectContaining({
+        issuanceMetadata: { claims: { name: 'Ada' }, ttlSeconds: 3_600 },
+      }),
     )
   })
 
@@ -529,7 +530,17 @@ describe('IssuerService', () => {
     const service = new IssuerService(agent(api) as never, options())
     await service.ensureInitialized()
 
-    await expect(service.createOffer('employee', claims)).rejects.toThrow(message)
+    await expect(service.createOffer('employee', claims, 3_600)).rejects.toThrow(message)
+    expect(api.createCredentialOffer).not.toHaveBeenCalled()
+  })
+
+  it.each([59, 7_776_001, '3600', undefined])('rejects an offer lifetime of %s', async ttlSeconds => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const service = new IssuerService(agent(api) as never, options())
+    await service.ensureInitialized()
+
+    await expect(service.createOffer('employee', { name: 'Ada' }, ttlSeconds)).rejects.toThrow('ttlSeconds')
     expect(api.createCredentialOffer).not.toHaveBeenCalled()
   })
 
@@ -543,7 +554,9 @@ describe('IssuerService', () => {
 
     const mapped = await service.mapCredentialRequest({
       credentialConfigurationId: 'employee',
-      issuanceSession: { issuanceMetadata: { name: 'Ada', role: 'engineer' } },
+      issuanceSession: {
+        issuanceMetadata: { claims: { name: 'Ada', role: 'engineer' }, ttlSeconds: 3_600 },
+      },
       holderBinding: {
         bindingMethod: 'jwk',
         proofType: 'jwt',
@@ -589,7 +602,9 @@ describe('IssuerService', () => {
 
     const mapped = await service.mapCredentialRequest({
       credentialConfigurationId: 'employee',
-      issuanceSession: { issuanceMetadata: { name: 'Ada', role: 'engineer', exp: 1 } },
+      issuanceSession: {
+        issuanceMetadata: { claims: { name: 'Ada', role: 'engineer', exp: 1 }, ttlSeconds: 3_600 },
+      },
       holderBinding: {
         bindingMethod: 'jwk',
         proofType: 'jwt',
@@ -614,7 +629,9 @@ describe('IssuerService', () => {
 
     const mapped = await service.mapCredentialRequest({
       credentialConfigurationId: 'employee',
-      issuanceSession: { issuanceMetadata: { name: 'Ada', role: 'engineer' } },
+      issuanceSession: {
+        issuanceMetadata: { claims: { name: 'Ada', role: 'engineer' }, ttlSeconds: 3_600 },
+      },
       holderBinding: {
         bindingMethod: 'did',
         proofType: 'jwt',
@@ -630,8 +647,9 @@ describe('IssuerService', () => {
   })
 
   it.each([
-    [{}, 'at least one'],
-    [{ name: 'Ada', role: 'engineer', admin: true }, "unknown claim 'admin'"],
+    [{ claims: {}, ttlSeconds: 3_600 }, 'at least one'],
+    [{ claims: { name: 'Ada', role: 'engineer', admin: true }, ttlSeconds: 3_600 }, "unknown claim 'admin'"],
+    [{ claims: { name: 'Ada' } }, 'ttlSeconds'],
   ])('rejects invalid issuance metadata %#', async (issuanceMetadata, message) => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
@@ -738,9 +756,9 @@ describe('IssuerService', () => {
 
     it('rejects an offer for an unknown credential configuration with a dedicated error', async () => {
       const { service } = await initialized()
-      await expect(service.createOffer('missing', { name: 'Ada', role: 'engineer' })).rejects.toBeInstanceOf(
-        UnknownCredentialConfigurationError,
-      )
+      await expect(
+        service.createOffer('missing', { name: 'Ada', role: 'engineer' }, 3_600),
+      ).rejects.toBeInstanceOf(UnknownCredentialConfigurationError)
     })
   })
 

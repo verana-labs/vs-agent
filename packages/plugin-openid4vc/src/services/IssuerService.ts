@@ -1,4 +1,4 @@
-import type { OpenId4VcPluginOptions } from '../types'
+import type { OpenId4VcOfferIssuanceMetadata, OpenId4VcPluginOptions } from '../types'
 import type { BaseAgent, JwsProtectedHeaderOptions, Kms, SdJwtVcTypeMetadata } from '@credo-ts/core'
 import type {
   OpenId4VcIssuanceSessionRecord,
@@ -11,7 +11,13 @@ import type {
 import { AgentContext, ClaimFormat, JwsService, RecordNotFoundError } from '@credo-ts/core'
 import { OpenId4VcIssuanceSessionRepository } from '@credo-ts/openid4vc'
 
-import { findCredentialConfiguration, ISSUER_CAPABILITY_ID, parseOfferClaims } from '../config'
+import {
+  findCredentialConfiguration,
+  ISSUER_CAPABILITY_ID,
+  parseOfferClaims,
+  parseOfferIssuanceMetadata,
+  parseOfferTtlSeconds,
+} from '../config'
 import {
   findBoundVerificationMethodId,
   ownDidResolutionPolicy,
@@ -98,6 +104,7 @@ export class IssuerService {
   public async createOffer(
     credentialConfigurationId: string,
     inputClaims: unknown,
+    ttlSeconds: unknown,
   ): Promise<OpenId4VcOfferResult> {
     await this.ensureInitialized()
     const configuration = findCredentialConfiguration(this.options, credentialConfigurationId)
@@ -107,18 +114,23 @@ export class IssuerService {
       )
     }
 
-    let claims: Record<string, unknown>
+    let issuanceMetadata: OpenId4VcOfferIssuanceMetadata
     try {
-      claims = parseOfferClaims(configuration, inputClaims)
+      issuanceMetadata = {
+        claims: parseOfferClaims(configuration, inputClaims),
+        ttlSeconds: parseOfferTtlSeconds(ttlSeconds),
+      }
     } catch (error) {
-      throw new OpenId4VcIssuerRequestError(error instanceof Error ? error.message : 'invalid claims')
+      throw new OpenId4VcIssuerRequestError(
+        error instanceof Error ? error.message : 'invalid credential offer',
+      )
     }
 
     const { credentialOffer, issuanceSession } = await this.issuerApi().createCredentialOffer({
       issuerId: ISSUER_CAPABILITY_ID,
       credentialConfigurationIds: [configuration.id],
       preAuthorizedCodeFlowConfig: {},
-      issuanceMetadata: claims,
+      issuanceMetadata,
     })
 
     return { credentialOffer, issuanceSessionId: issuanceSession.id }
@@ -206,13 +218,16 @@ export class IssuerService {
       throw new Error(`unknown credential configuration '${input.credentialConfigurationId}'`)
     }
 
-    const claims = parseOfferClaims(configuration, input.issuanceSession.issuanceMetadata)
+    const { claims, ttlSeconds } = parseOfferIssuanceMetadata(
+      configuration,
+      input.issuanceSession.issuanceMetadata,
+    )
     const issuedAt = Math.floor(Date.now() / 1_000)
     const payload = {
       ...claims,
       vct: configuration.vct,
       iat: issuedAt,
-      exp: issuedAt + configuration.ttlSeconds,
+      exp: issuedAt + ttlSeconds,
     }
 
     return {

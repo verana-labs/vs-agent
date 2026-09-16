@@ -23,7 +23,6 @@ const CONFIGURATION: OpenId4VcCredentialConfiguration = {
   vtjscId: 'https://credentials.example/vt/employee.json',
   claims: ['name', 'role'],
   disclosureFrame: ['name', 'role'],
-  ttlSeconds: 3_600,
 }
 
 describe('OpenID4VC test-agent startup cleanup', () => {

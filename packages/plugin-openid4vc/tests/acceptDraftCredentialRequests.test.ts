@@ -13,7 +13,6 @@ const configuration: OpenId4VcCredentialConfiguration = {
   vtjscId: 'vtjsc:example',
   claims: ['name', 'demoId'],
   disclosureFrame: ['name', 'demoId'],
-  ttlSeconds: 3600,
 }
 
 const run = (body: unknown, overrides: Partial<Request> = {}) => {

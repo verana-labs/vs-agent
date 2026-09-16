@@ -1,6 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { OpenId4VcIssuanceSessionState } from '@verana-labs/vs-agent-plugin-openid4vc'
-import { IsEnum, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator'
+import {
+  OFFER_TTL_SECONDS_MAX,
+  OFFER_TTL_SECONDS_MIN,
+  OpenId4VcIssuanceSessionState,
+} from '@verana-labs/vs-agent-plugin-openid4vc'
+import { IsEnum, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Max, Min } from 'class-validator'
 
 import { PageDto, PaginationQueryDto } from '../../../../../common'
 
@@ -21,6 +25,19 @@ export class Openid4vcCredentialOfferBodyDto {
   })
   @IsObject()
   claims!: Record<string, unknown>
+
+  @ApiProperty({
+    type: Number,
+    minimum: OFFER_TTL_SECONDS_MIN,
+    maximum: OFFER_TTL_SECONDS_MAX,
+    description:
+      'Lifetime of the credential in seconds, from 60 up to 7776000 (90 days). Nothing revokes the credential, so this lifetime is its only bound.',
+    example: 3600,
+  })
+  @IsInt()
+  @Min(OFFER_TTL_SECONDS_MIN)
+  @Max(OFFER_TTL_SECONDS_MAX)
+  ttlSeconds!: number
 }
 
 export class Openid4vcCredentialOfferResponseDto {
