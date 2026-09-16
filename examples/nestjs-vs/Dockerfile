@@ -27,7 +27,7 @@ COPY packages/nestjs-client/tsconfig.build.json packages/nestjs-client/tsconfig.
 
 COPY examples/nestjs-vs/ examples/nestjs-vs/
 
-RUN pnpm install
+RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @verana-labs/vs-agent-model build && \
     pnpm --filter @verana-labs/vs-agent-client build && \
     pnpm --filter @verana-labs/vs-agent-nestjs-client build && \
