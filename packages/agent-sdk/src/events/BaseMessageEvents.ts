@@ -3,7 +3,7 @@ import type { AnonCredsProof } from '@credo-ts/anoncreds'
 import type { DidCommConnectionRecord, DidCommProofExchangeRecord } from '@credo-ts/didcomm'
 
 import { DidCommPresentationV1Message, DidCommPresentationV1ProblemReportMessage } from '@credo-ts/anoncreds'
-import { BaseLogger } from '@credo-ts/core'
+import { BaseLogger, CredoError } from '@credo-ts/core'
 import {
   DidCommCredentialEventTypes,
   DidCommCredentialState,
@@ -13,10 +13,9 @@ import {
   DidCommMessageSender,
   DidCommPresentationV2Message,
   DidCommPresentationV2ProblemReportMessage,
-  DidCommProofEventTypes,
   DidCommProofRole,
+  DidCommProofsModuleConfig,
   DidCommProofState,
-  DidCommProofStateChangedEvent,
   getOutboundDidCommMessageContext,
 } from '@credo-ts/didcomm'
 import {
@@ -33,6 +32,7 @@ import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
   AnonCredsTrustProblemCode,
+  AUTO_ACCEPT_PRESENTATION_METADATA,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
   type RequestedCredentialSchemas,
 } from '../blockchain/AnonCredsTrustService'
@@ -124,13 +124,10 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
           )
           const formatData = await agent.didcomm.proofs.getFormatData(record.id)
 
-          const revealedAttributes =
-            formatData.presentation?.anoncreds?.requested_proof.revealed_attrs ??
-            formatData.presentation?.indy?.requested_proof.revealed_attrs
+          const revealedAttributes = formatData.presentation?.anoncreds?.requested_proof.revealed_attrs
 
           const revealedAttributeGroups =
-            formatData.presentation?.anoncreds?.requested_proof?.revealed_attr_groups ??
-            formatData.presentation?.indy?.requested_proof.revealed_attr_groups
+            formatData.presentation?.anoncreds?.requested_proof.revealed_attr_groups
 
           const claims: Claim[] = []
           if (revealedAttributes) {
@@ -249,22 +246,43 @@ function registerAnonCredsTrustDecision(agent: VsAgent<BaseAgentModules>, logger
 
     if (!isPresentation || !connection) return
 
+    let record: DidCommProofExchangeRecord | undefined
+    let presentation: AnonCredsProof | undefined
     try {
-      const record = await agent.didcomm.proofs.getByThreadAndConnectionId(message.threadId, connection.id)
+      record = await agent.didcomm.proofs.getByThreadAndConnectionId(message.threadId, connection.id)
       const formatData = await agent.didcomm.proofs.getFormatData(record.id)
-
-      const abandoned = await applyAnonCredsTrustDecision(
-        agent,
-        record,
-        connection,
-        formatData.presentation?.anoncreds ?? formatData.presentation?.indy,
-        logger,
-      )
-
-      if (abandoned) messageContext.responseMessage = undefined
+      presentation = formatData.presentation?.anoncreds
     } catch (error) {
-      logger.error(`The agent cannot apply the AnonCreds trust decision to ${message.threadId}: ${error}`)
+      logger.error(`The agent cannot read the presentation of ${message.threadId}: ${error}`)
       messageContext.responseMessage = undefined
+
+      // The check did not run, so the exchange ends here, per [VSA-VTI-FLOW-VERIFY-AC-8]
+      if (record?.role === DidCommProofRole.Verifier) {
+        await abandonPresentation(
+          agent,
+          record,
+          connection,
+          AnonCredsTrustProblemCode.TrustResolutionUnavailable,
+          `the agent cannot read the presentation: ${error}`,
+          logger,
+        )
+      }
+      return
+    }
+
+    if (await applyAnonCredsTrustDecision(agent, record, connection, presentation, logger)) {
+      messageContext.responseMessage = undefined
+      return
+    }
+
+    // The proof and the trust decision both succeeded, so the agent acknowledges the presentation.
+    const policy = record.metadata.get<{ autoAccept: boolean }>(AUTO_ACCEPT_PRESENTATION_METADATA)
+    if (!policy?.autoAccept || record.state !== DidCommProofState.PresentationReceived) return
+
+    try {
+      await agent.didcomm.proofs.acceptPresentation({ proofExchangeRecordId: record.id })
+    } catch (error) {
+      logger.error(`The agent cannot acknowledge the presentation ${record.id}: ${error}`)
     }
   })
 }
@@ -398,6 +416,17 @@ async function abandonPresentation(
   record.isVerified = false
   record.errorMessage = `${code}: ${description}`
 
+  // `updateState` emits the state change with `previousState`, per [VSA-VTI-FLOW-VERIFY-AC-7]
+  const protocol = agent.dependencyManager
+    .resolve(DidCommProofsModuleConfig)
+    .proofProtocols.find(candidate => candidate.version === record.protocolVersion)
+
+  if (!protocol) {
+    throw new CredoError(
+      `No proof protocol registered for protocol version ${record.protocolVersion}, so the presentation ${record.id} cannot end in abandoned`,
+    )
+  }
+
   const problemReport =
     record.protocolVersion === 'v1'
       ? new DidCommPresentationV1ProblemReportMessage({ description: { code, en: description } })
@@ -415,12 +444,5 @@ async function abandonPresentation(
     logger.error(`The agent cannot send the problem report of presentation ${record.id}: ${error}`)
   }
 
-  const previousState = record.state
-  record.state = DidCommProofState.Abandoned
-  await agent.didcomm.proofs.update(record)
-
-  agent.events.emit<DidCommProofStateChangedEvent>(agent.context, {
-    type: DidCommProofEventTypes.ProofStateChanged,
-    payload: { proofRecord: record.clone(), previousState },
-  })
+  await protocol.updateState(agent.context, record, DidCommProofState.Abandoned)
 }

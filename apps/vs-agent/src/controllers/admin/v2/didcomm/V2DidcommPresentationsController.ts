@@ -34,6 +34,7 @@ import {
 import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
+  AUTO_ACCEPT_PRESENTATION_METADATA,
   createInvitation,
   DerivedCredentialSchema,
   fetchJson,
@@ -180,11 +181,11 @@ export class V2DidcommPresentationsController {
       nonRevoked = { from: now, to: now }
     }
 
-    // The specification makes the caller run the verifier steps, unless the caller sets
-    // `autoAccept`. The exchange carries the policy, which the module default does not override.
+    // Credo acknowledges a presentation before the trust decision runs. The agent sends the
+    // acknowledgement itself, per [VSA-VTI-FLOW-VERIFY-AC-7].
     const request = await agent.didcomm.proofs.createRequest({
       protocolVersion: 'v2',
-      autoAcceptProof: autoAccept ? DidCommAutoAcceptProof.ContentApproved : DidCommAutoAcceptProof.Never,
+      autoAcceptProof: DidCommAutoAcceptProof.Never,
       proofFormats: {
         anoncreds: {
           name: 'proof-request',
@@ -197,6 +198,7 @@ export class V2DidcommPresentationsController {
 
     request.proofRecord.metadata.set(REQUESTED_CREDENTIALS_METADATA, requestedCredentials)
     request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, requestedCredentialSchemas)
+    request.proofRecord.metadata.set(AUTO_ACCEPT_PRESENTATION_METADATA, { autoAccept })
     await agent.didcomm.proofs.update(request.proofRecord)
 
     const { invitation } = await createInvitation({
@@ -259,7 +261,7 @@ export class V2DidcommPresentationsController {
     const verifierDid = connection?.theirDid
 
     const requestFormatData = await agent.didcomm.proofs.getFormatData(proofExchangeId)
-    const anonCredsRequest = requestFormatData.request?.anoncreds ?? requestFormatData.request?.indy
+    const anonCredsRequest = requestFormatData.request?.anoncreds
 
     if (anonCredsRequest) {
       if (!verifierDid) {
@@ -321,7 +323,7 @@ export class V2DidcommPresentationsController {
     const { proofFormats } = await agent.didcomm.proofs.getCredentialsForRequest({
       proofExchangeRecordId: proofExchangeId,
     })
-    const candidates = proofFormats.anoncreds ?? proofFormats.indy
+    const candidates = proofFormats.anoncreds
 
     if (!candidates) {
       throw noCompatibleCredentials('the request asks for a format that this agent cannot present')

@@ -163,14 +163,3 @@ export interface ReceiveInvitationResult {
   outOfBandId: string
   connectionId?: string
 }
-
-export interface ConnectionInvitationSchema {
-  id?: string
-  '@type': string
-  label: string
-  did?: string
-  recipientKeys?: string[]
-  serviceEndpoint?: string
-  routingKeys?: string[]
-  imageUrl?: string
-}
