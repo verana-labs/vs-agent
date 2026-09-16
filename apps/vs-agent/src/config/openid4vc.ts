@@ -24,6 +24,19 @@ const OPENID4VC_ISSUER_FIELDS = new Set([
 
 const OPENID4VC_VERIFIER_FIELDS = new Set(['displayName', 'signing', 'requestSigner'])
 
+const OPENID4VC_CREDENTIAL_CONFIGURATION_FIELDS = new Set([
+  'id',
+  'format',
+  'vct',
+  'name',
+  'description',
+  'vtjscId',
+  'claims',
+  'disclosureFrame',
+])
+
+const OPENID4VC_VERIFIER_POLICY_FIELDS = new Set(['id', 'credentialConfigurationId', 'requestedClaims'])
+
 export async function readOpenId4VcOptions(
   location: string,
   publicApiBaseUrl: string,
@@ -55,6 +68,13 @@ export async function readOpenId4VcOptions(
 
   assertKnownFields(parsed.issuer, OPENID4VC_ISSUER_FIELDS, 'issuer', name)
   assertKnownFields(parsed.verifier, OPENID4VC_VERIFIER_FIELDS, 'verifier', name)
+  assertKnownEntryFields(
+    parsed.credentialConfigurations,
+    OPENID4VC_CREDENTIAL_CONFIGURATION_FIELDS,
+    'credentialConfigurations',
+    name,
+  )
+  assertKnownEntryFields(parsed.verifierPolicies, OPENID4VC_VERIFIER_POLICY_FIELDS, 'verifierPolicies', name)
 
   const options = { ...parsed, publicApiBaseUrl } as OpenId4VcPluginOptions
   validateOpenId4VcOptions(options)
@@ -68,6 +88,14 @@ function assertKnownFields(value: unknown, allowed: Set<string>, path: string, n
   if (unknownField) {
     throw new Error(`OpenID4VC configuration file '${name}' contains unknown field '${path}.${unknownField}'`)
   }
+}
+
+function assertKnownEntryFields(value: unknown, allowed: Set<string>, path: string, name: string): void {
+  if (!Array.isArray(value)) return
+
+  value.forEach((entry, index) => {
+    assertKnownFields(entry, allowed, `${path}[${index}]`, name)
+  })
 }
 
 async function readConfiguration(path: string): Promise<string> {

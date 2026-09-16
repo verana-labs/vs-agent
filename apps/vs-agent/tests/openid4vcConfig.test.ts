@@ -90,6 +90,28 @@ describe('OpenID4VC configuration file', () => {
     )
   })
 
+  it('rejects a credential configuration that still carries the offer lifetime', async () => {
+    const config = validConfig()
+    ;(config.credentialConfigurations[0] as Record<string, unknown>).ttlSeconds = 3_600
+
+    await writeFile(configPath, JSON.stringify(config))
+
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
+      "contains unknown field 'credentialConfigurations[0].ttlSeconds'",
+    )
+  })
+
+  it('rejects an unknown field in a verifier policy entry', async () => {
+    const config = validConfig()
+    ;(config.verifierPolicies[0] as Record<string, unknown>).unexpected = 'value'
+
+    await writeFile(configPath, JSON.stringify(config))
+
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
+      "contains unknown field 'verifierPolicies[0].unexpected'",
+    )
+  })
+
   it('rejects an unknown top-level key without echoing its value', async () => {
     const secretValue = 'unknown-field-secret-value'
     await writeFile(configPath, JSON.stringify({ ...validConfig(), unexpected: secretValue }))
