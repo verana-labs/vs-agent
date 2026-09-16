@@ -1,69 +1,35 @@
-import { DynamicModule, ForwardReference, Type } from '@nestjs/common'
-import { ApiVersion } from '@verana-labs/vs-agent-client'
-import { ProfileMessageOptions } from '@verana-labs/vs-agent-model'
+import { Type } from '@nestjs/common'
 
 import { EventHandler } from './interfaces'
 
-export interface MessageEventOptions {
-  eventHandler?: Type<EventHandler>
-  imports?: (DynamicModule | Type<any> | Promise<DynamicModule> | ForwardReference<any>)[]
-  url?: string
-  version?: ApiVersion
-}
-
-export type UserProfile = Omit<ProfileMessageOptions, 'id' | 'connectionId'>
-
-export interface ConnectionEventOptions {
-  eventHandler?: Type<EventHandler>
-  imports?: (DynamicModule | Type<any> | Promise<DynamicModule> | ForwardReference<any>)[]
-  useMessages?: boolean
-}
-
-export interface StatEventOptions {
-  imports?: (DynamicModule | Type<any> | Promise<DynamicModule> | ForwardReference<any>)[]
-  statOptions?: {
-    host?: string
-    port?: number
-    queue?: string
-    username?: string
-    password?: string
-    reconnectLimit?: number
-    threads?: number
-    delay?: number
-  }
-}
-
-export interface CredentialOptions {
-  imports?: (DynamicModule | Type<any> | Promise<DynamicModule> | ForwardReference<any>)[]
-  url?: string
-  version?: ApiVersion
-}
-
-export interface ModulesConfig {
-  messages?: boolean
-  connections?: boolean
-  credentials?: boolean
-  stats?: boolean
+export interface StatOptions {
+  host?: string
+  port?: number
+  queue?: string
+  username?: string
+  password?: string
+  reconnectLimit?: number
+  threads?: number
+  delay?: number
 }
 
 export interface EventsModuleOptions {
-  modules: ModulesConfig
-  options: {
-    eventHandler?: Type<EventHandler>
-    imports?: (DynamicModule | Type<any> | Promise<DynamicModule> | ForwardReference<any>)[]
-    url?: string
-    version?: ApiVersion
-    statOptions?: {
-      host?: string
-      port?: number
-      queue?: string
-      username?: string
-      password?: string
-      reconnectLimit?: number
-      threads?: number
-      delay?: number
-    }
+  url: string
+  token?: string
+  webhookApiKey?: string
+  eventHandler: Type<EventHandler>
+  modules?: {
+    connections?: boolean | { requireProfile?: boolean }
+    credentials?: boolean
+    stats?: boolean
   }
+  statOptions?: StatOptions
+}
+
+export enum ConnectionStatus {
+  Start = 'start',
+  Completed = 'completed',
+  Terminated = 'terminated',
 }
 
 export enum CredentialStatus {
