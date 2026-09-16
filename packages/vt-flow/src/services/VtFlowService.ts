@@ -22,6 +22,7 @@ import {
   VtCredentialState,
 } from '../messages'
 import { VtFlowRecord, VtFlowRepository } from '../repository'
+import { peerAnchorDid } from '../utils'
 import {
   VtFlowEventTypes,
   VtFlowRole,
@@ -777,8 +778,10 @@ export class VtFlowService {
     connection: DidCommConnectionRecord,
     purpose?: VtFlowRequestPurpose,
   ): Promise<void> {
-    const peerDid = connection.theirDid
-    if (!peerDid) throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
+    const peerDid = peerAnchorDid(connection)
+    if (!connection.theirDid || !peerDid) {
+      throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
+    }
 
     const hook = this.config.assertVerifiableService
     if (!hook) {

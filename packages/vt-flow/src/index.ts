@@ -52,6 +52,9 @@ export type { CustomVtFlowTags, DefaultVtFlowTags, VtFlowStorageProps, VtFlowTag
 export { VtFlowService } from './services'
 export type { CreateIssuanceRequestParams, CreateOnboardingRequestParams } from './services'
 
+// Utils
+export { peerAnchorDid } from './utils'
+
 // Handlers
 export {
   CredentialStateChangeHandler,

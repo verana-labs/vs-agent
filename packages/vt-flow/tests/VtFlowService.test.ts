@@ -53,7 +53,7 @@ function makeMessageContext(agentContext: unknown, theirDid = 'did:web:agent-pee
   return {
     message,
     agentContext,
-    assertReadyConnection: () => ({ id: 'conn-new', theirDid }),
+    assertReadyConnection: () => ({ id: 'conn-new', theirDid, previousTheirDids: [] }),
   }
 }
 
@@ -170,9 +170,25 @@ function makeGatedService(config: Record<string, unknown>) {
   return { service, repository, logger }
 }
 
-const readyConnection = { id: 'conn-new', theirDid: 'did:web:agent-peer' }
+const readyConnection = { id: 'conn-new', theirDid: 'did:web:agent-peer', previousTheirDids: [] }
 
 describe('VtFlowService VS-CONN-VS gate', () => {
+  it.each([
+    ['the invitation DID', { invitationDid: 'did:web:validator', previousTheirDids: ['did:web:other'] }],
+    ['the DID the peer rotated away from', { previousTheirDids: ['did:web:validator'] }],
+  ])('checks %s of a connection whose peer rotated to a did:peer', async (_label, anchor) => {
+    const assertVerifiableService = vi.fn(
+      async ({ peerDid }: { peerDid: string }) => peerDid === 'did:web:validator',
+    )
+    const { service } = makeGatedService({ assertVerifiableService })
+    const connection = { id: 'conn-rotated', theirDid: 'did:peer:4zQmRotated', ...anchor }
+
+    await expect(service.checkIsVerifiableService({} as never, connection as never)).resolves.toBeUndefined()
+    expect(assertVerifiableService).toHaveBeenCalledWith(
+      expect.objectContaining({ peerDid: 'did:web:validator' }),
+    )
+  })
+
   it('rejects an unverifiable peer when no purpose is given', async () => {
     const checkEcsIssuanceExemption = vi.fn().mockResolvedValue(true)
     const { service } = makeGatedService({
