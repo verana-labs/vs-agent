@@ -2,11 +2,13 @@ import type { VsAgent } from '../agent/VsAgent'
 
 import { GenericRecord, TagsBase, utils } from '@credo-ts/core'
 import {
+  type DidCommConnectionRecord,
   DidCommConnectionRepository,
   DidCommHandshakeProtocol,
   DidCommMessage,
   type DidCommVersion,
 } from '@credo-ts/didcomm'
+import { peerAnchorDid } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { getLegacyDidWeb } from '../did/legacyDidWeb'
 
@@ -63,6 +65,10 @@ export async function createInvitation(options: {
   }
 }
 
+export function isUsableConnectionTo(connection: DidCommConnectionRecord, peerPublicDid: string): boolean {
+  return connection.isReady && !!connection.theirDid && peerAnchorDid(connection) === peerPublicDid
+}
+
 /**
  * Connects to a peer that publishes a public DID, and reuses the connection that the
  * agent already has to that peer.
@@ -83,7 +89,10 @@ export async function connectToPublicDid(agent: VsAgent, peerPublicDid: string):
   const [existing] = await agent.didcomm.connections.findAllByQuery({
     publicDid: peerPublicDid,
   })
-  if (existing) return (await agent.didcomm.connections.returnWhenIsConnected(existing.id)).id
+  if (existing) {
+    if (isUsableConnectionTo(existing, peerPublicDid)) return existing.id
+    await agent.didcomm.connections.deleteById(existing.id)
+  }
 
   const { connectionRecord } = await agent.didcomm.oob.receiveImplicitInvitation({
     did: peerPublicDid,

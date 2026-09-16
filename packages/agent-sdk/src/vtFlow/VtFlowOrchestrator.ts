@@ -21,7 +21,7 @@ import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
 import { BaseAgentModules, VsAgent } from '../agent'
 import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
-import { Participant, ParticipantRole, ParticipantState } from '../blockchain/types'
+import { Participant, ParticipantRole, ParticipantState, ValidationState } from '../blockchain/types'
 import {
   HOLDER_PARTICIPANT_TYPE,
   ISSUER_GRANTOR_PARTICIPANT_TYPE,
@@ -33,6 +33,7 @@ import {
   connectToPublicDid,
   createVtc,
   createW3cV2Credential,
+  isUsableConnectionTo,
   isVcdm2Credential,
   linkedVpSchemaId,
   removeStoredTrustCredential,
@@ -130,26 +131,39 @@ export class VtFlowOrchestrator {
       .filter(record => !isVtFlowTerminalState(record.state))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
-    if (latest && latest.state !== VtFlowState.Completed && latest.state !== VtFlowState.CredRevoked) {
-      this.agent.config.logger.info(
-        `[vt-flow] onboarding flow ${latest.id} for participant ${holderParticipant.id} is already in progress (state ${latest.state}); not resending`,
-      )
-      return latest
-    }
-    const existing = latest
+    const running =
+      latest !== undefined &&
+      latest.state !== VtFlowState.Completed &&
+      latest.state !== VtFlowState.CredRevoked
 
     let connectionId: string | undefined
-    if (existing) {
-      const connection = await this.agent.didcomm.connections.findById(existing.connectionId)
-      if (connection?.isReady) connectionId = connection.id
+    if (latest) {
+      const connection = await this.agent.didcomm.connections.findById(latest.connectionId)
+      if (connection && isUsableConnectionTo(connection, validatorParticipant.did))
+        connectionId = connection.id
+    }
+    const undelivered =
+      running && latest.state === VtFlowState.OrSent && holderParticipant.opState === ValidationState.PENDING
+    if (running && connectionId && !undelivered) {
+      this.agent.config.logger.info(
+        `[vt-flow] onboarding flow ${latest.id} for participant ${holderParticipant.id} is in progress (state ${latest.state}) on an open connection, not resending`,
+      )
+      return latest
     }
     if (!connectionId) {
       connectionId = await connectToPublicDid(this.agent, validatorParticipant.did)
     }
 
+    if (running) {
+      this.agent.config.logger.info(
+        `[vt-flow] resending the onboarding request of flow ${latest.id} (state ${latest.state}) on ${connectionId === latest.connectionId ? 'its' : 'a new'} connection`,
+      )
+      return vtFlowApi.resendOnboardingRequest({ vtFlowRecordId: latest.id, connectionId })
+    }
+
     return vtFlowApi.sendOnboardingRequest({
       connectionId,
-      participantSessionId: input.participantSessionId ?? existing?.participantSessionId ?? utils.uuid(),
+      participantSessionId: input.participantSessionId ?? latest?.participantSessionId ?? utils.uuid(),
       participantId: String(holderParticipant.id),
       agentParticipantId: String(this.options.agentParticipantId ?? 0),
       walletAgentParticipantId: String(this.options.walletAgentParticipantId ?? 0),
