@@ -24,7 +24,6 @@ import {
   type SigningCertificateHandle,
   type SigningCertificateInfo,
 } from './CertificateService'
-import { StatusListService } from './StatusListService'
 
 type IssuerApi = Pick<
   OpenId4VcIssuerApi,
@@ -82,7 +81,6 @@ export class OpenId4VcOfferNotFoundError extends Error {}
 export class IssuerService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
-  private statusListService?: StatusListService
   private initialized = false
 
   public constructor(
@@ -271,13 +269,11 @@ export class IssuerService {
 
     const claims = parseOfferClaims(configuration, input.issuanceSession.issuanceMetadata)
     const issuedAt = Math.floor(Date.now() / 1_000)
-    const status = await this.statusListService?.allocate(input.issuanceSession.id)
     const payload = {
       ...claims,
       vct: configuration.vct,
       iat: issuedAt,
       exp: issuedAt + configuration.ttlSeconds,
-      ...(status ?? {}),
     }
 
     return {
@@ -337,29 +333,8 @@ export class IssuerService {
 
     await this.createOrUpdateIssuer(signingCertificate)
 
-    if (this.options.revocation?.enabled) {
-      this.statusListService = new StatusListService(
-        this.agent,
-        signingCertificate,
-        this.options.publicApiBaseUrl,
-        this.options.revocation.size,
-      )
-      await this.statusListService.initialize()
-    }
-
     this.signingCertificate = signingCertificate
     this.initialized = true
-  }
-
-  /** The signed status list token for `listId`, served at `<publicApiBaseUrl>/oid4vc/status-list/:id`. */
-  public getStatusListToken(listId: string): string | undefined {
-    return this.statusListService?.getToken(listId)
-  }
-
-  /** Revoke every credential issued for `issuanceSessionId`. Idempotent. */
-  public revokeIssuanceSession(issuanceSessionId: string): Promise<number[]> {
-    if (!this.statusListService) throw new OpenId4VcIssuerRequestError('revocation is not enabled')
-    return this.statusListService.revoke(issuanceSessionId)
   }
 
   private async buildMetadataSigner(signingCertificate: SigningCertificateHandle) {

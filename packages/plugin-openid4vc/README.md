@@ -4,7 +4,8 @@
 
 The implemented foundation is deliberately narrow:
 
-- pre-authorized OpenID4VCI issuance of `dc+sd-jwt` credentials;
+- pre-authorized OpenID4VCI issuance of `dc+sd-jwt` credentials, valid until they expire: the
+  credential carries no `status` claim and there is no revocation;
 - DCQL OpenID4VP requests using `direct_post.jwt` and the `x509_hash` client identifier scheme;
 - internal admin routes for creating offers and verification requests and reading their state;
 - public wallet protocol and metadata routes only;

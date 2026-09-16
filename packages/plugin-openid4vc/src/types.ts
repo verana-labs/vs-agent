@@ -87,11 +87,6 @@ export interface OpenId4VcPluginOptions {
     credentialIssuerCertificates: string[]
     developmentCertificateFingerprints?: string[]
   }
-  revocation?: {
-    enabled: boolean
-    /** Status list capacity in entries; defaults to 131072. */
-    size?: number
-  }
   credentialConfigurations: OpenId4VcCredentialConfiguration[]
   verifierPolicies: OpenId4VcVerifierPolicy[]
 }
