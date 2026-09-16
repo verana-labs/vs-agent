@@ -54,6 +54,7 @@ In addition, it notifies the consumer of every event through HTTP webhooks, one 
     - [Connection Invitation](#connection-invitation)
     - [Presentation Request](#presentation-request)
     - [Credential Offer](#credential-offer)
+    - [Invitation on a Connection](#invitation-on-a-connection)
   - [Presentations](#presentations)
   - [Verifiable Data Registry Operations](#verifiable-data-registry-operations)
     - [Create Credential Type](#create-credential-type)
@@ -487,6 +488,8 @@ If no `did` specified, a new pairwise connection will be created. The newly crea
 
 The generated message id appears as `outOfBandId` in the `data` of subsequent `didcomm.connections.state-updated` events. This can be used to correlate connections.
 
+The v2 API serves this through `POST /v2/didcomm/invitations`, see [Invitation on a Connection](#invitation-on-a-connection).
+
 ```json
 {
   "type": "invitation",
@@ -754,7 +757,7 @@ record. A `message-received` event carries the inbound message.
 
 | `type` | Trigger | `data` |
 | --- | --- | --- |
-| `didcomm.connections.state-updated` | A connection record is created or changes state | the connection record as `GET /v2/didcomm/connections/{connectionId}` returns it, plus `previousState` |
+| `didcomm.connections.state-updated` | A connection record is created or changes state | the connection record as `GET /v2/didcomm/connections/{connectionId}` returns it, plus `previousState`. `outOfBandId` and `parentConnectionId` correlate a sub-connection with the [invitation](#invitation-on-a-connection) that produced it |
 | `didcomm.basic-messages.message-received` | The agent receives a basic message | the message record: `id`, `connectionId`, `role`, `content`, `sentTime`, `createdAt` |
 | `didcomm.receipts.message-receipts-received` | The agent receives a `message-receipts` message | `connectionId` and `receipts`, each with `messageId`, `state` and `timestamp` |
 | `didcomm.presentations.state-updated` | A presentation record is created or changes state | the presentation record as `GET /v2/didcomm/presentations/{proofExchangeId}` returns it, plus `previousState` |
@@ -777,6 +780,8 @@ VS Agent supports the creation of invitation codes that are used to start flows 
 - Connection Invitation: invite other agents to create a persistent, general purpose DIDComm connection. Codes created can be re-used by multiple agents that want to connect by processing it
 - Presentation Request: invite other agent to start a Presentation Request flow. Codes created can only be used once
 - Credential Offer: invite other agent to start a credential issuance flow. Codes created can only be used once
+
+A fourth kind, sent on a connection that already exists instead of rendered as a code, is described in [Invitation on a Connection](#invitation-on-a-connection).
 
 ### Connection Invitation
 
@@ -854,6 +859,79 @@ Response will include the invitation code in both short and long form URL format
 Note that the following VS Agent configuration environment variables are used when creating credential offer invitations:
 
 - PUBLIC_API_BASE_URL: Base URL for short URL creation (resulting something like `https://myHost.com/s?id=<uuid>`)
+
+### Invitation on a Connection
+
+The three invitation codes above start a flow with an agent that holds no connection yet. `POST /v2/didcomm/invitations` sends an Out-of-Band invitation on a connection that already exists, so that the peer opens a second one:
+
+- a **sub-connection** to this agent, related to the connection that carried the invitation. In a wallet it is a separate contact, with its own label and image.
+- a **referral** to another service that publishes a DID, for example a verifier. The agent creates no record for it, and the connection the peer opens belongs to the other service.
+
+The agent sends the invitation in the envelope of the connection. On a DIDComm v1 connection it sends an Out-of-Band 1.1 invitation message. On a DIDComm v2 connection it sends the Out-of-Band 2.0 invitation as an `_oob` URL (`<PUBLIC_API_BASE_URL>?_oob=...`) in a basic message. A sub-connection uses the same version as the invitation; the `didcommVersion` and `useLegacyDid` parameters of the invitation codes do not apply.
+
+The request body:
+
+- `connectionId` (required): connection to send the invitation on.
+- `did` (optional): DID of the service the peer is invited to connect to. When absent, the invitation opens a sub-connection to this agent.
+- `label` (optional): text the peer shows for the invitation. When absent for a sub-connection, the agent uses the `name` of its ECS-Service credential, or omits the field when it holds none. When absent for a referral, the agent omits the field.
+- `imageUrl` (optional): URL of an image the peer shows for the invitation.
+- `goal` and `goalCode` (optional): the `goal` and `goal_code` of the invitation.
+
+`label` and `imageUrl` are fields of an Out-of-Band 1.1 invitation only: the agent omits them on a v2 connection.
+
+A sub-connection invitation:
+
+```json
+{
+  "connectionId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "label": "Support",
+  "imageUrl": "https://example.com/support.png",
+  "goal": "Open a support chat",
+  "goalCode": "support-chat"
+}
+```
+
+A referral:
+
+```json
+{
+  "connectionId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "did": "did:webvh:QmbfsYcjFS2bnouwXBSoZZ65jREEgZGSPdcatcwY7i1Gq2:verifier.example.com",
+  "goal": "Verify your identity",
+  "goalCode": "identity-verification"
+}
+```
+
+Response (HTTP `201`):
+
+```json
+{
+  "id": "b6a2f0d4-7c1e-4f6a-9d2b-0f3c5e8a1b7d",
+  "outOfBandId": "8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f"
+}
+```
+
+- `id`: identifier of the sent message. On a v1 connection it is the id of the Out-of-Band 1.1 message; on a v2 connection it is the id of the basic message record that carries the invitation URL.
+- `outOfBandId`: identifier of the single-use Out-of-Band record the agent created for a sub-connection. Absent for a referral.
+
+The request fails with `404` (`UNKNOWN_ID`) when no connection has the given `connectionId`.
+
+A sub-connection invitation is single-use and its service is specific to the invitation, not the DID of the agent, so the peer opens a new connection instead of reusing the one it holds. The connection it produces is a regular connection record, with two fields that correlate it:
+
+- `outOfBandId` (`string | null`): the `outOfBandId` of the response.
+- `parentConnectionId` (`string | null`): the `connectionId` of the request. `null` for every connection that no invitation of this endpoint produced.
+
+Both fields arrive in every `didcomm.connections.state-updated` event of the sub-connection, from its creation on, and `GET /v2/didcomm/connections?parentConnectionId=<connectionId>` lists the sub-connections of a connection. Deleting the parent connection keeps its sub-connections, each with its `parentConnectionId`. A referral produces no record and no event on this agent.
+
+The endpoint replaces the [Invitation](#invitation) message of the v1 API:
+
+| v1 | v2 |
+| --- | --- |
+| `POST /v1/message` `{ "type": "invitation", "connectionId": "…", "label": "…", "imageUrl": "…", "did": "…" }` | `POST /v2/didcomm/invitations` `{ "connectionId": "…", "label": "…", "imageUrl": "…", "did": "…", "goal": "…", "goalCode": "…" }` |
+| Response `id` is the Out-of-Band record id for a sub-connection, and the invitation message id for a referral | Response `id` is the sent message id; `outOfBandId` is the Out-of-Band record id, present for a sub-connection only |
+| `invitationId` of the `ConnectionStateUpdated` event model | `data.outOfBandId` of `didcomm.connections.state-updated` |
+| `parentConnectionId` stored as a tag on the connection, not exposed | `data.parentConnectionId` on the record and the event; `GET /v2/didcomm/connections?parentConnectionId=` |
+| Sub-connection `label` omitted when the message carries none (`AGENT_LABEL` is no longer read) | Defaults to the `name` of the ECS-Service credential, omitted when the agent holds none. The v1 message now shares this default |
 
 ## Presentations
 

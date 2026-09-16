@@ -7,7 +7,6 @@ import {
   CredentialRevocationMessage,
   IdentityProofRequestMessage,
   IdentityProofSubmitMessage,
-  InvitationMessage,
   MenuDisplayMessage,
   MenuItem,
   MenuSelectMessage,
@@ -390,13 +389,12 @@ expressHandler.messageReceived(async (req, res) => {
       }
     } else if (content.startsWith('/invitation')) {
       const parsedContents = content.split(' ')
-      const body = new InvitationMessage({
+      await apiClient.didcomm.invitations.send({
         connectionId: obj.connectionId,
         label: parsedContents[1],
         imageUrl: parsedContents[2],
         did: parsedContents[3],
       })
-      await apiClient.messages.send(body)
     } else if (content.startsWith('/profile')) {
       const parsedContents = content.split(' ')
       const body = new ProfileMessage({
