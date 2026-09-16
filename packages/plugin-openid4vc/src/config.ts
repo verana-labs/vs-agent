@@ -19,7 +19,16 @@ export const VERIFIER_CAPABILITY_ID = 'verifier'
 export const OFFER_TTL_SECONDS_MIN = 60
 export const OFFER_TTL_SECONDS_MAX = 7_776_000
 
-const RESERVED_CREDENTIAL_CLAIMS = new Set(['vct', 'iat', 'exp', 'nbf', 'iss', 'cnf', 'status'])
+const RESERVED_CREDENTIAL_CLAIMS = new Set([
+  'vct',
+  'vct#integrity',
+  'iat',
+  'exp',
+  'nbf',
+  'iss',
+  'cnf',
+  'status',
+])
 
 /** [VSA-VTI-CFG-ENV-OID] Validation of the OpenID4VC configuration file. */
 export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void {

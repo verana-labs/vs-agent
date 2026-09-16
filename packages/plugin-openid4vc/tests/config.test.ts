@@ -134,7 +134,15 @@ describe('validateOpenId4VcOptions', () => {
     expect(() => validateOpenId4VcOptions(options)).toThrow('claims')
   })
 
-  it.each(['vct', 'iat', 'exp', 'nbf', 'iss', 'cnf'])('rejects reserved credential claim %s', claim => {
+  it.each([
+    'vct',
+    'vct#integrity',
+    'iat',
+    'exp',
+    'nbf',
+    'iss',
+    'cnf',
+  ])('rejects reserved credential claim %s', claim => {
     const options = validOptions()
     options.credentialConfigurations[0].claims.push(claim)
 
