@@ -35,7 +35,6 @@ import {
   VERANA_CHAIN_ID,
   VERANA_INDEXER_BASE_URL,
 } from '../config'
-import { MessageService } from '../controllers/admin/message/MessageService'
 
 import { TsLogger } from './logger'
 
@@ -250,17 +249,6 @@ export function commonAppConfig(
   }
 
   const document = SwaggerModule.createDocument(app, builder.build())
-
-  // Inject dynamic message examples from registered handlers
-  if (!publicApp) {
-    const messageService = app.get(MessageService)
-    for (const pathItem of Object.values(document.paths ?? {})) {
-      const postOp = (pathItem as any).post
-      if (postOp?.tags?.includes('message') && postOp?.requestBody?.content?.['application/json']) {
-        postOp.requestBody.content['application/json'].examples = messageService.openApiExamples
-      }
-    }
-  }
 
   if (serveSwagger && (!publicApp || ENABLE_PUBLIC_API_SWAGGER)) SwaggerModule.setup('api', app, document)
 

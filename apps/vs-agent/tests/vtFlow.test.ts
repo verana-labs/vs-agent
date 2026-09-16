@@ -185,15 +185,16 @@ describe('vt-flow: two-agent integration', () => {
     })
     await validatingReached
 
-    const { VtFlowsService } = await import('../src/controllers/admin/vt-flow/VtFlowsService')
+    const { VtFlowsService } = await import('../src/controllers/admin/v2/vt/VtFlowsService')
     const flowsService = new VtFlowsService({ getAgent: async () => validator } as never, undefined as never)
 
-    const flows = await flowsService.listFlows({ role: VtFlowRole.Validator })
+    const flows = (await flowsService.listFlowsPage({ role: VtFlowRole.Validator })).items
     expect(flows).toHaveLength(1)
     expect(flows[0].peerDid).toBe(applicant.did)
-    expect(flows[0].state).toBe(VtFlowState.Validating)
+    expect(flows[0].flowState).toBe(VtFlowState.Validating)
 
-    const none = await flowsService.listFlows({ role: VtFlowRole.Validator, peerDID: 'did:web:nobody' })
+    const none = (await flowsService.listFlowsPage({ role: VtFlowRole.Validator, peerDid: 'did:web:nobody' }))
+      .items
     expect(none).toHaveLength(0)
 
     const psid = flows[0].participantSessionId

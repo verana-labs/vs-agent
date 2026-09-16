@@ -2,7 +2,7 @@ import { DidDocument, DidDocumentService, DidRepository, NewDidCommV2Service } f
 import { BadRequestException, Inject, Injectable } from '@nestjs/common'
 import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { VsAgentService } from '../../../services/VsAgentService'
+import { VsAgentService } from '../../../../services/VsAgentService'
 
 export enum ServiceEndpointErrorCode {
   DidcommEntry = 'DIDCOMM_ENTRY',

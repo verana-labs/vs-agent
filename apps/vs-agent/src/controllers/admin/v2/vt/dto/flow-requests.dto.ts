@@ -2,45 +2,8 @@ import { ApiProperty } from '@nestjs/swagger'
 import { VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { IsEnum, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, IsUrl } from 'class-validator'
 
-import { PaginationQueryDto } from '../../../../common'
-import { VT_CONNECTION_STATES, type VtConnectionState } from '../../v2/vt/dto'
-
-export class ListFlowsQueryDto {
-  @ApiProperty({ required: false, enum: VtFlowRole })
-  @IsOptional()
-  @IsEnum(VtFlowRole)
-  role?: VtFlowRole
-
-  @ApiProperty({ required: false, enum: VT_CONNECTION_STATES })
-  @IsOptional()
-  @IsIn([...VT_CONNECTION_STATES])
-  connectionState?: VtConnectionState
-
-  @ApiProperty({ required: false, enum: VtFlowState })
-  @IsOptional()
-  @IsEnum(VtFlowState)
-  flowState?: VtFlowState
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  peerDID?: string
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  participant_id?: string
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  schema_id?: string
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  participant_session_id?: string
-}
+import { PaginationQueryDto } from '../../../../../common'
+import { VT_CONNECTION_STATES, type VtConnectionState } from './vt-flow-record.dto'
 
 export class ListFlowsV2QueryDto extends PaginationQueryDto {
   @ApiProperty({ required: false, enum: VtFlowRole })

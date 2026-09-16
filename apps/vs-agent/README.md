@@ -29,13 +29,13 @@ In order to make your agent reachable by other VS agents and user agents like Ho
 
 > **Note**: You'll need HTTPS in order to fully support the did:web and did:webvh specifications.
 >
-> The public DID will be used also for agents to easily connect to it using DIDComm without the need of creating an explicit invitation by doing a GET request to `/invitation` endpoint.
+> Peers connect to the agent through its public DID, no explicit invitation is needed ([VSA-PUB-DID](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-pub-did-did-document-and-did-log)).
 >
 > When `PUBLIC_API_BASE_URL` contains a path, the DID document is served at `<base>/did.json` and `<base>/did.jsonl` instead of under `/.well-known`. This assumes the reverse proxy strips the base path before forwarding requests to the agent.
 >
 > The persisted DID wins across restarts: if `PUBLIC_API_BASE_URL` later derives a different location than the one the DID was created for, the agent refuses to start. Restore the previous URL, or deliberately reset the wallet to mint a new DID.
 
-Besides these parameters, you are likely to use your VS Agent alongside a **controller** app that will be sending messages and also receiving events from it (such as new messages arrived, new connections, etc.). For that purpose, you'll need to set up an `EVENTS_WEBHOOK_URL` for your VS Agent to be able to send WebHooks to it. See the [VS Agent API document](../../doc//vs-agent-api.md#events) for the events your backend receives.
+Besides these parameters, you are likely to use your VS Agent alongside a **controller** app that will be sending messages and also receiving events from it (such as new messages arrived, new connections, etc.). For that purpose, you'll need to set up an `EVENTS_WEBHOOK_URL` for your VS Agent to be able to send WebHooks to it. See the [Events API](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#events-api) of the specification for the envelope and the event catalog.
 
 #### Database access settings
 
@@ -50,8 +50,6 @@ These are variables that you are likely to use when going into production, since
 | POSTGRES_PASSWORD       | PosgreSQL database password                                                                                                                                                             | None                     |
 | POSTGRES_ADMIN_USER     | PosgreSQL database admin user                                                                                                                                                           | None                     |
 | POSTGRES_ADMIN_PASSWORD | PosgreSQL database admin password                                                                                                                                                       | None                     |
-| REDIS_HOST              | Redis host used for message caching and asynchronous processing. The system requires this for production-ready performance.                                                             | None                     |
-| REDIS_PASSWORD          | Password for connecting to the Redis instance.                                                                                                                                          | None                     |
 | TAILS_DIRECTORY_PATH    | Directory where AnonCreds revocation tails files are stored and served from. Must be on durable storage that survives restarts, and on a shared volume when running multiple instances. | `<home>/.afj/data/tails` |
 
 VS Agent supports two database backends:
@@ -65,9 +63,6 @@ On the other hand, if you go to production, you'll likely want to use a PostgreS
 
 - define AGENT_WALLET_ID and AGENT_WALLET_KEY, since the ID will be used as the name of the database that will be used to store VS Agent wallet
 - define the other `POSTGRES_*` parameters, including the ones for administration in case VS Agent wallet's database is not yet created in your Postgres host. You might skip using these parameters if your DBA creates this database beforehand and gives permissions to `POSTGRES_USER`.
-
-Another thing you'll likely to do if you go to production is to enable message caching and asynchronous processing, which is done by using Redis.
-By offloading message handling and enabling asynchronous processing, Redis helps optimize I/O operations and significantly enhances the service's capacity to manage large volumes of data efficiently. Point your `REDIS_HOST` and `REDIS_PASSWORD` environment variables to an instance accessible by VS Agent.
 
 #### Debugging/development variables
 
@@ -91,7 +86,7 @@ These are variables that are updated only on specific use cases.
 | MRTD_MASTER_LIST_CSCA_LOCATION              | **Enables the eMRTD verification module**. Location (URL or absolute path) of the CSCA Master List in **LDIF** format When set, VS Agent loads trust anchors at startup and activates ePassport verification capabilities.                       | none                     |
 | AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP   | Toggle automatic storage migration on startup. If true, the agent runs migrations and attempts to make a backup of the wallet on startup                                                                                                         | false                    |
 | AGENT_BACKUP_BEFORE_STORAGE_UPDATE     | Toggle backup before storage update. If true, the agent creates a backup of the wallet using Askar's export before performing storage migrations                                                                                                 | false                    |
-| VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. Set by the Docker image in production, only override in development. See [Plugin system](#plugin-system) for available values.                                                               | `messaging,chat`         |
+| VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. Set by the Docker image in production, only override in development. See [Plugin system](#plugin-system) for available values.                                                               | `chat`                   |
 
 > **Note about Key derivation method**: By default, we use the strongest ARGON2I_MOD, but since this is the slowest one as well, depending on the security infrastructure you have, you might want to not derive the key at all (use RAW). However, in versions of VS Agent we are going to deprecate this setting, so we recommend to keep the default setting to make migration process easier.
 
@@ -233,13 +228,12 @@ MRTD_MASTER_LIST_CSCA_LOCATION=https://pkddownloadsg.icao.int/file?id=f6e328050f
 
 ## Plugin system
 
-VS Agent uses an opt-in plugin architecture. Each plugin is an independent package that brings its own Credo modules, NestJS controllers, message handlers, and event listeners. Plugins are loaded dynamically at startup based on the `VS_AGENT_PLUGINS` environment variable, so only the required dependencies are pulled into the process.
+VS Agent uses an opt-in plugin architecture. Each plugin is an independent package that brings its own Credo modules, NestJS controllers, and event listeners. Plugins are loaded dynamically at startup based on the `VS_AGENT_PLUGINS` environment variable, so only the required dependencies are pulled into the process.
 
 ### Available plugins
 
 | Plugin      | Package                             | Description                                                                                   |
 | ----------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
-| `messaging` | _(built-in)_                        | Base credential and proof handlers. Always loaded — cannot be disabled.                       |
 | `chat`      | `@verana-labs/vs-agent-plugin-chat` | Chat protocols: text messages, media, reactions, receipts, calls, action menus, user profile. |
 | `mrtd`      | `@verana-labs/vs-agent-plugin-mrtd` | eMRTD / ePassport verification. Requires the `vs-agent-mrtd` Docker image.                    |
 
@@ -248,18 +242,16 @@ VS Agent uses an opt-in plugin architecture. Each plugin is an independent packa
 Set `VS_AGENT_PLUGINS` to a comma-separated list of the plugins you want active:
 
 ```bash
-# Default: base messaging + chat
-VS_AGENT_PLUGINS=messaging,chat
+# Default: chat
+VS_AGENT_PLUGINS=chat
 
-# Base only (no chat, no eMRTD)
-VS_AGENT_PLUGINS=messaging
+# No optional plugins
+VS_AGENT_PLUGINS=
 
 # All features
-VS_AGENT_PLUGINS=messaging,chat,mrtd
+VS_AGENT_PLUGINS=chat,mrtd
 ```
 
-> **Note:** `messaging` is always required and will be prepended automatically if omitted.
->
 > In production, `VS_AGENT_PLUGINS` is pre-configured by the Docker image, override it only in development environments. Using a value that references a plugin not bundled in the current image will result in a startup warning and the plugin being skipped.
 
 ### Optional dependencies
@@ -302,8 +294,8 @@ The Dockerfile produces two images of different sizes depending on which plugins
 
 | Target | Image | Plugins included |
 |--------|-------|-----------------|
-| `vs-agent` | `2060io/vs-agent` | messaging + chat |
-| `vs-agent-mrtd` | `2060io/vs-agent-mrtd` | messaging + chat + mrtd |
+| `vs-agent` | `2060io/vs-agent` | chat |
+| `vs-agent-mrtd` | `2060io/vs-agent-mrtd` | chat + mrtd |
 
 #### Building locally
 
@@ -348,15 +340,4 @@ services:
 
 ## API
 
-For the moment, some details about VS-A API can be found in this [Document](./doc/vs-agent-api.md). There is some work in progress to make the API available within Swagger: when deployed, just go to [VS_AGENT_ADMIN_BASE_URL]/api.
-
-### Credential exchanges
-
-The Admin API exposes a `credential-exchanges` resource for inspecting the issuance pipeline:
-
-| Method | Path                                             | Description                                                                                 |
-| ------ | ------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| GET    | `/v1/credential-exchanges`                       | List every credential exchange record with anoncreds metadata, state, and offer attributes. |
-| GET    | `/v1/credential-exchanges/:credentialExchangeId` | Fetch a single credential exchange by id.                                                   |
-
-Useful for backend integrations and during testing to inspect what was offered, issued, or revoked.
+The Administration API is the [Administration API](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#administration-api) of the VS Agent specification. Swagger UI and the OpenAPI document are served at `/api` on `ADMIN_API_PORT`, to callers from `ADMIN_API_TRUSTED_NETWORKS` only.

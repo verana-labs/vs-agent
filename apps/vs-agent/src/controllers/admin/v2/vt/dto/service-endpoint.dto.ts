@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsDefined, IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator'
 
-import { PageDto } from '../../../../common'
+import { PageDto } from '../../../../../common'
 import { ServiceEndpointValue } from '../ServiceEndpointsService'
 
 export class AddServiceEndpointDto {

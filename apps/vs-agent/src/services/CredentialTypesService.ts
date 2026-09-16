@@ -18,9 +18,9 @@ import {
   VsAgent,
 } from '@verana-labs/vs-agent-sdk'
 
-import { AdminApiError, AdminApiErrorCode } from '../../../common'
-import { REVOCATION_REGISTRY_DEFAULT_CAPACITY } from '../../../config/constants'
-import { VsAgentService } from '../../../services/VsAgentService'
+import { AdminApiError, AdminApiErrorCode } from '../common'
+import { REVOCATION_REGISTRY_DEFAULT_CAPACITY } from '../config/constants'
+import { VsAgentService } from './VsAgentService'
 
 const RESOLVE_TIMEOUT_MS = 30_000
 
@@ -595,55 +595,6 @@ export class CredentialTypesService {
     return credentialDefinitionRecord
   }
 
-  /**
-   * Gets or registers an AnonCreds Credential Definition based on the provided parameters. If a
-   * credential definition with the same schemaId, issuerId, name, version, and relatedJsonSchemaCredentialId
-   * already exists, it will be returned. Otherwise, a new credential definition will be registered.
-   *
-   * @returns AnonCredCredentialDefinitionRecord of the existing or newly created credential definition
-   */
-  public async getOrRegisterAnonCredsCredentialDefinition({
-    name,
-    schemaId,
-    supportRevocation = false,
-    version = '1.0',
-    attributes,
-    relatedJsonSchemaCredentialId,
-  }: {
-    name?: string
-    schemaId?: string
-    attributes?: string[]
-    supportRevocation?: boolean
-    version?: string
-    relatedJsonSchemaCredentialId?: string
-  }) {
-    let credentialDefinitionRecord = await this.findAnonCredsCredentialDefinition({
-      schemaId,
-      name,
-      version,
-      relatedJsonSchemaCredentialId,
-    })
-    if (credentialDefinitionRecord) return credentialDefinitionRecord
-
-    // Credential definition not found: create an appropriate schema for it
-    const getOrRegisterSchemaResult = await this.getOrRegisterAnonCredsSchema({
-      name,
-      version,
-      attributes,
-      relatedJsonSchemaCredentialId,
-    })
-    const { schema, schemaId: resolvedSchemaId } = getOrRegisterSchemaResult
-    credentialDefinitionRecord = await this.registerAnonCredsCredentialDefinition({
-      name: schema.name,
-      version: schema.version,
-      schemaId: resolvedSchemaId,
-      supportRevocation,
-      relatedJsonSchemaCredentialId,
-    })
-
-    return credentialDefinitionRecord
-  }
-
   private getCredentialSubjectId(credentialSubject: any): string {
     const subject = Array.isArray(credentialSubject) ? credentialSubject[0] : credentialSubject
     const id = subject?.id
@@ -651,20 +602,6 @@ export class CredentialTypesService {
       throw new Error('Missing credentialSubject.id in credential')
     }
     return id
-  }
-
-  public buildAnonCredsAttributes(
-    attrNames: string[],
-    providedAttributes: Array<{ name: string; value: string; mimeType?: string }>,
-  ): Array<{ name: string; value: string; mimeType?: string }> {
-    const providedNames = providedAttributes.map(a => a.name)
-    const result = [...providedAttributes]
-    for (const name of attrNames) {
-      if (!providedNames.includes(name)) {
-        result.push({ name, value: '' })
-      }
-    }
-    return result
   }
 
   /** Answers `undefined` when the document is absent, and RESOLVER_UNAVAILABLE when it cannot be read. */

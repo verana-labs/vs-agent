@@ -59,7 +59,7 @@ import {
 import { TERMINAL_STATES } from '../../../../config'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
-import { CredentialTypesService } from '../../credentials'
+import { CredentialTypesService } from '../../../../services/CredentialTypesService'
 
 import {
   CreatePresentationRequestBodyDto,

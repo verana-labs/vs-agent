@@ -2,7 +2,6 @@ import { DynamicModule, Module } from '@nestjs/common'
 import { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
-  CredentialTypesService,
   DefaultResourcesController,
   DidWebController,
   SelfTrController,
@@ -32,7 +31,6 @@ export class PublicModule {
         VsAgentService,
         TrustService,
         UrlShorteningService,
-        CredentialTypesService,
       ],
       exports: [],
     }

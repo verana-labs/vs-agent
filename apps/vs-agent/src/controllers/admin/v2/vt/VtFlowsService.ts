@@ -22,13 +22,14 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { HOLDER_PARTICIPANT_TYPE, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
-import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../common'
-import { VsAgentService } from '../../../services/VsAgentService'
-import { V2VtFlowRecordDto, VtConnectionState } from '../v2/vt/dto'
-import { CredentialTypesService } from '../credentials/CredentialTypeService'
+import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
+import { CredentialTypesService } from '../../../../services/CredentialTypesService'
+import { VsAgentService } from '../../../../services/VsAgentService'
 
-import { ListFlowsQueryDto, ListFlowsV2QueryDto } from './dto/flow-requests.dto'
-import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
+import { ListFlowsV2QueryDto } from './dto/flow-requests.dto'
+import { V2VtFlowRecordDto, VtConnectionState } from './dto/vt-flow-record.dto'
+
+type VtFlowRecordDto = Omit<V2VtFlowRecordDto, 'flowState'> & { state: VtFlowState }
 
 @Injectable()
 export class VtFlowsService {
@@ -36,19 +37,6 @@ export class VtFlowsService {
     @Inject(VsAgentService) private readonly agentService: VsAgentService,
     @Inject(CredentialTypesService) private readonly credentialTypesService: CredentialTypesService,
   ) {}
-
-  public async listFlows(query: ListFlowsQueryDto): Promise<VtFlowRecordDto[]> {
-    const flows = await this.collectFlows({
-      role: query.role,
-      connectionState: query.connectionState,
-      flowState: query.flowState,
-      peerDid: query.peerDID,
-      participantId: query.participant_id,
-      schemaId: query.schema_id,
-      participantSessionId: query.participant_session_id,
-    })
-    return flows.map(toDto)
-  }
 
   public async listFlowsPage(query: ListFlowsV2QueryDto): Promise<Page<V2VtFlowRecordDto>> {
     const flows = await this.collectFlows(query)
@@ -140,16 +128,6 @@ export class VtFlowsService {
         description: message ?? '',
       })
     })
-  }
-
-  public revokeCredential(participantSessionId: string, reason?: string): Promise<VtFlowRecordDto> {
-    return this.mutateFlow(participantSessionId, ({ vtFlowApi, record }) =>
-      vtFlowApi.notifyCredentialStateChange({
-        vtFlowRecordId: record.id,
-        state: VtCredentialState.Revoked,
-        reason,
-      }),
-    )
   }
 
   public revokeFlowCredential(participantSessionId: string, reason?: string): Promise<VtFlowRecordDto> {
@@ -335,8 +313,7 @@ interface ResolvedFlow {
 }
 
 /**
- * Filters that select the flows. The names follow [VSA-ADM-VT-FL-LIST] listFlows. The v1 query
- * maps its snake_case names onto these.
+ * Filters that select the flows. The names follow [VSA-ADM-VT-FL-LIST] listFlows.
  */
 interface FlowFilters {
   role?: VtFlowRole
@@ -362,7 +339,7 @@ function connectionStateOf(
 
 /**
  * Makes the v2 flow record of [VSA-ADM-VT-FL-LIST] listFlows. v2 renames `state` to `flowState`
- * and keeps every other field. The v1 record goes away with the v1 API, and this mapper with it.
+ * and keeps every other field.
  */
 export function toV2Dto({ state, ...rest }: VtFlowRecordDto): V2VtFlowRecordDto {
   return { ...rest, flowState: state }

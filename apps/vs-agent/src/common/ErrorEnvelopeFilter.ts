@@ -6,7 +6,7 @@ import { BaseExceptionFilter } from '@nestjs/core'
 import {
   ServiceEndpointError,
   ServiceEndpointErrorCode,
-} from '../controllers/admin/service-endpoints/ServiceEndpointsService'
+} from '../controllers/admin/v2/vt/ServiceEndpointsService'
 
 import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 

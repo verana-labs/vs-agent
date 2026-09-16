@@ -26,7 +26,7 @@ import {
   VsAgentVtFlowStateUpdatedEvent,
 } from '@verana-labs/vs-agent-sdk'
 
-import { resolveV2FlowRecord } from '../controllers/admin/vt-flow/VtFlowsService'
+import { resolveV2FlowRecord } from '../controllers/admin/v2/vt/VtFlowsService'
 
 import {
   toBasicMessageDto,

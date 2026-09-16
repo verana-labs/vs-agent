@@ -20,7 +20,7 @@ import {
 } from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
-import { CredentialTypesService } from '../src/controllers/admin/credentials'
+import { CredentialTypesService } from '../src/services'
 import { V2DidcommPresentationsController } from '../src/controllers/admin/v2/didcomm/V2DidcommPresentationsController'
 import { CreatePresentationRequestBodyDto } from '../src/controllers/admin/v2/didcomm/dto'
 import { UrlShorteningService } from '../src/services/UrlShorteningService'

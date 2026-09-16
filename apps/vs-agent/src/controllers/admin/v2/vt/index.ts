@@ -1,3 +1,5 @@
 export * from './dto'
+export * from './ServiceEndpointsService'
 export * from './V2VtFlowsController'
 export * from './V2VtServiceEndpointsController'
+export * from './VtFlowsService'
