@@ -167,8 +167,6 @@ export class EcsBootstrapService {
       return
     }
 
-    // startOnboardingProcess writes nothing on chain, and it refuses to resend while a flow is in
-    // progress, so this is safe on every boot.
     await waitUntilOwnDidIsPubliclyResolvable(this.agent, this.logger)
     const claims = await this.onboardingClaims(participant.schema_id)
     const record = await new VtFlowOrchestrator(this.agent).startOnboardingProcess({
@@ -176,7 +174,7 @@ export class EcsBootstrapService {
       ...(claims ? { claims } : {}),
     })
     this.logger.info(
-      `[EcsBootstrap] resumed the onboarding of participant ${participant.id} (flow ${record.id}, state ${record.state})`,
+      `[EcsBootstrap] checked the onboarding of participant ${participant.id} (flow ${record.id}, state ${record.state})`,
     )
   }
 
