@@ -49,12 +49,17 @@ database:
       memory: 512Mi
 
 # OpenID4VC plugin configuration. The plugin ships in the standard vs-agent
-# image but is disabled by default: set plugins to enable it. When config is
-# non-empty it is rendered into a ConfigMap, mounted read-only, and
-# OID4VC_CONFIG_FILE points at it. The JSON must NOT contain
-# publicApiBaseUrl (injected by VS Agent from PUBLIC_API_BASE_URL).
+# image but is disabled by default: set plugins to enable it. The file is
+# mounted read-only and OID4VC_CONFIG_FILE points at it, whether it comes from
+# config or from existingSecret. The JSON must NOT contain publicApiBaseUrl
+# (injected by VS Agent from PUBLIC_API_BASE_URL). A configured signing mode
+# puts a private key in this file, so use existingSecret for anything but
+# development signing.
 oid4vc:
-  config: "" # openid4vc.json content as a string
+  config: "" # openid4vc.json content as a string, rendered into a ConfigMap
+  # name of a pre-existing Secret whose openid4vc.json key holds the same
+  # configuration; mutually exclusive with config
+  existingSecret: ""
   plugins: "" # VS_AGENT_PLUGINS override, e.g. "messaging,chat,openid4vc" (required to activate the plugin)
 
 redis:

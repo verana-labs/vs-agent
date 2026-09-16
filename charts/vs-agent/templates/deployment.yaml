@@ -1,3 +1,6 @@
+{{- if and .Values.oid4vc.config .Values.oid4vc.existingSecret }}
+{{- fail "set either oid4vc.config or oid4vc.existingSecret, not both" }}
+{{- end }}
 # Service deployment for the VS Agent
 apiVersion: v1
 kind: Service
@@ -205,13 +208,15 @@ spec:
             - name: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS
               value: {{ .Values.adminApiCorporationAllowedAccounts | quote }}
             {{- end }}
-            {{- if .Values.oid4vc.config }}
+            {{- if or .Values.oid4vc.config .Values.oid4vc.existingSecret }}
             - name: OID4VC_CONFIG_FILE
               value: "/run/config/oid4vc/openid4vc.json"
+            {{- if .Values.oid4vc.config }}
             # The agent reads the config file once at boot; baking its hash
             # into the pod template makes a config-only change roll the pod.
             - name: OID4VC_CONFIG_CHECKSUM
               value: {{ sha256sum .Values.oid4vc.config | quote }}
+            {{- end }}
             {{- end }}
             {{- if .Values.oid4vc.plugins }}
             - name: VS_AGENT_PLUGINS
@@ -266,7 +271,7 @@ spec:
             volumeMounts:
             - name: {{ .Values.name }}-vsa-pv
               mountPath: /root/.afj
-            {{- if .Values.oid4vc.config }}
+            {{- if or .Values.oid4vc.config .Values.oid4vc.existingSecret }}
             - name: {{ .Values.name }}-oid4vc-config
               mountPath: /run/config/oid4vc
               readOnly: true
@@ -322,7 +327,11 @@ spec:
          - name: {{ .Values.name }}-vsa-pv
            persistentVolumeClaim:
              claimName: {{ .Values.name }}-vsa-pv
-        {{- if .Values.oid4vc.config }}
+        {{- if .Values.oid4vc.existingSecret }}
+         - name: {{ .Values.name }}-oid4vc-config
+           secret:
+             secretName: {{ .Values.oid4vc.existingSecret }}
+        {{- else if .Values.oid4vc.config }}
          - name: {{ .Values.name }}-oid4vc-config
            configMap:
              name: {{ .Values.name }}-oid4vc-config

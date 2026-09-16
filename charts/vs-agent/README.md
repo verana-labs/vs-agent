@@ -47,6 +47,18 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 | `publicDidMethod`          | DID method to use for public DID: 'web' or 'webvh' | `webvh` |
 | `extraEnv`                 | Additional environment variables for the agent   | `[]`                            |
 
+### OpenID4VC Plugin (Optional)
+
+The plugin ships in the standard `vs-agent` image but is disabled by default. Set `oid4vc.plugins` to enable it, and supply its JSON configuration through exactly one of `oid4vc.config` or `oid4vc.existingSecret`. Either way the file is mounted read-only at `/run/config/oid4vc/openid4vc.json` and `OID4VC_CONFIG_FILE` points at it.
+
+The configuration file holds a private key whenever a capability uses the `configured` signing mode, so it belongs in a Secret rather than a ConfigMap. Use `oid4vc.config` only for the `development` signing mode.
+
+| Parameter                  | Description                                                                 | Default              |
+| -------------------------- | --------------------------------------------------------------------------- | -------------------- |
+| `oid4vc.plugins`           | `VS_AGENT_PLUGINS` override, e.g. `messaging,chat,openid4vc`. Required to activate the plugin | `""` |
+| `oid4vc.config`            | `openid4vc.json` content as a string, rendered into a ConfigMap. Development signing only | `""` |
+| `oid4vc.existingSecret`    | Name of a pre-existing Secret whose `openid4vc.json` key holds the same configuration. Mutually exclusive with `oid4vc.config`: setting both fails the render | `""` |
+
 ### Secrets Management
 
 This chart does not create Kubernetes Secrets. Sensitive values must be stored in a pre-existing Secret (created manually, via External Secrets Operator, Vault, Sealed Secrets, etc.) and referenced through `extraEnv[].valueFrom`.
