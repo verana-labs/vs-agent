@@ -465,7 +465,13 @@ describe('IssuerService', () => {
     loadSigningCertificate.mockRejectedValueOnce(new Error('storage not ready'))
 
     await expect(service.ensureInitialized()).rejects.toThrow('storage not ready')
-    await expect(service.createOffer('employee', { name: 'Ada', role: 'engineer' }, 3_600)).resolves.toEqual({
+    await expect(
+      service.createOffer({
+        credentialConfigurationId: 'employee',
+        claims: { name: 'Ada', role: 'engineer' },
+        ttlSeconds: 3_600,
+      }),
+    ).resolves.toEqual({
       credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
       issuanceSessionId: 'session-1',
     })
@@ -486,7 +492,11 @@ describe('IssuerService', () => {
     const service = new IssuerService(agent(api) as never, options())
     await service.ensureInitialized()
 
-    const result = await service.createOffer('employee', { name: 'Ada', role: 'engineer' }, 3_600)
+    const result = await service.createOffer({
+      credentialConfigurationId: 'employee',
+      claims: { name: 'Ada', role: 'engineer' },
+      ttlSeconds: 3_600,
+    })
 
     expect(api.createCredentialOffer).toHaveBeenCalledWith({
       issuerId: 'issuer',
@@ -510,7 +520,11 @@ describe('IssuerService', () => {
     const service = new IssuerService(agent(api) as never, options())
     await service.ensureInitialized()
 
-    await service.createOffer('employee', { name: 'Ada' }, 3_600)
+    await service.createOffer({
+      credentialConfigurationId: 'employee',
+      claims: { name: 'Ada' },
+      ttlSeconds: 3_600,
+    })
 
     expect(api.createCredentialOffer).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -530,7 +544,9 @@ describe('IssuerService', () => {
     const service = new IssuerService(agent(api) as never, options())
     await service.ensureInitialized()
 
-    await expect(service.createOffer('employee', claims, 3_600)).rejects.toThrow(message)
+    await expect(
+      service.createOffer({ credentialConfigurationId: 'employee', claims, ttlSeconds: 3_600 }),
+    ).rejects.toThrow(message)
     expect(api.createCredentialOffer).not.toHaveBeenCalled()
   })
 
@@ -540,7 +556,9 @@ describe('IssuerService', () => {
     const service = new IssuerService(agent(api) as never, options())
     await service.ensureInitialized()
 
-    await expect(service.createOffer('employee', { name: 'Ada' }, ttlSeconds)).rejects.toThrow('ttlSeconds')
+    await expect(
+      service.createOffer({ credentialConfigurationId: 'employee', claims: { name: 'Ada' }, ttlSeconds }),
+    ).rejects.toThrow('ttlSeconds')
     expect(api.createCredentialOffer).not.toHaveBeenCalled()
   })
 
@@ -757,7 +775,11 @@ describe('IssuerService', () => {
     it('rejects an offer for an unknown credential configuration with a dedicated error', async () => {
       const { service } = await initialized()
       await expect(
-        service.createOffer('missing', { name: 'Ada', role: 'engineer' }, 3_600),
+        service.createOffer({
+          credentialConfigurationId: 'missing',
+          claims: { name: 'Ada', role: 'engineer' },
+          ttlSeconds: 3_600,
+        }),
       ).rejects.toBeInstanceOf(UnknownCredentialConfigurationError)
     })
   })

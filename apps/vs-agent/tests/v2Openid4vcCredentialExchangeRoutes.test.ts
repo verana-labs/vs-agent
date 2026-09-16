@@ -199,11 +199,11 @@ describe('v2 openid4vc credential exchange routes', () => {
       credentialExchangeId: 'ce-new',
       url: 'openid-credential-offer://?credential_offer_uri=https%3A%2F%2Fagent.test%2Foffers%2F1',
     })
-    expect(issuerService.createOffer).toHaveBeenCalledWith(
-      'employee',
-      { name: 'Ada Lovelace', role: 'engineer' },
-      3600,
-    )
+    expect(issuerService.createOffer).toHaveBeenCalledWith({
+      credentialConfigurationId: 'employee',
+      claims: { name: 'Ada Lovelace', role: 'engineer' },
+      ttlSeconds: 3600,
+    })
   })
 
   it('maps an unknown configuration to UNKNOWN_ID and a claim error to INVALID_INPUT', async () => {

@@ -62,6 +62,12 @@ export type VtSdJwtVcTypeMetadata = Omit<SdJwtVcTypeMetadata, 'display'> & {
   display?: (NonNullable<SdJwtVcTypeMetadata['display']>[number] & { lang?: string })[]
 }
 
+export interface OpenId4VcCreateOfferOptions {
+  credentialConfigurationId: string
+  claims: unknown
+  ttlSeconds: unknown
+}
+
 export interface OpenId4VcOfferResult {
   credentialOffer: string
   issuanceSessionId: string
@@ -101,11 +107,11 @@ export class IssuerService {
     return this.initialization
   }
 
-  public async createOffer(
-    credentialConfigurationId: string,
-    inputClaims: unknown,
-    ttlSeconds: unknown,
-  ): Promise<OpenId4VcOfferResult> {
+  public async createOffer({
+    credentialConfigurationId,
+    claims,
+    ttlSeconds,
+  }: OpenId4VcCreateOfferOptions): Promise<OpenId4VcOfferResult> {
     await this.ensureInitialized()
     const configuration = findCredentialConfiguration(this.options, credentialConfigurationId)
     if (!configuration) {
@@ -117,7 +123,7 @@ export class IssuerService {
     let issuanceMetadata: OpenId4VcOfferIssuanceMetadata
     try {
       issuanceMetadata = {
-        claims: parseOfferClaims(configuration, inputClaims),
+        claims: parseOfferClaims(configuration, claims),
         ttlSeconds: parseOfferTtlSeconds(ttlSeconds),
       }
     } catch (error) {

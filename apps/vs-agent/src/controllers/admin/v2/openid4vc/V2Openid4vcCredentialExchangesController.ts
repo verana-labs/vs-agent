@@ -76,11 +76,11 @@ export class V2Openid4vcCredentialExchangesController {
     @Body() body: Openid4vcCredentialOfferBodyDto,
   ): Promise<Openid4vcCredentialOfferResponseDto> {
     try {
-      const offer = await this.issuer().createOffer(
-        body.credentialConfigurationId,
-        body.claims,
-        body.ttlSeconds,
-      )
+      const offer = await this.issuer().createOffer({
+        credentialConfigurationId: body.credentialConfigurationId,
+        claims: body.claims,
+        ttlSeconds: body.ttlSeconds,
+      })
       return { credentialExchangeId: offer.issuanceSessionId, url: offer.credentialOffer }
     } catch (error) {
       throw translate(error)
