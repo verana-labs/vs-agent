@@ -9,6 +9,9 @@ export interface InvitationMessageOptions extends BaseMessageOptions {
   did?: string
 }
 
+/**
+ * @deprecated Use `POST /v2/didcomm/invitations` to send an invitation.
+ */
 export class InvitationMessage extends BaseMessage {
   public constructor(options: InvitationMessageOptions) {
     super()
