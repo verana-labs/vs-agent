@@ -71,7 +71,8 @@ export class V2Openid4vcPresentationsController {
     description: 'The presentation request',
     type: Openid4vcPresentationRequestResponseDto,
   })
-  @ApiBadRequestResponse({ description: 'Unknown verifier policy' })
+  @ApiBadRequestResponse({ description: 'The request body failed validation' })
+  @ApiNotFoundResponse({ description: 'The agent cannot resolve the verifier policy' })
   @ApiConflictResponse({
     description:
       'The configuration defines no verifier capability, or the DID does not publish the signing key',
@@ -183,7 +184,7 @@ function translate(error: unknown, proofExchangeId?: string): unknown {
     )
   }
   if (error instanceof UnknownVerifierPolicyError) {
-    return new AdminApiError(AdminApiErrorCode.UnknownPolicy, HttpStatus.BAD_REQUEST, error.message)
+    return new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, error.message)
   }
   if (error instanceof OpenId4VcVerifierRequestError) {
     return new AdminApiError(AdminApiErrorCode.InvalidState, HttpStatus.CONFLICT, error.message)

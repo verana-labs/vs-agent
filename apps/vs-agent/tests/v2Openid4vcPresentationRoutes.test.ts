@@ -198,15 +198,15 @@ describe('v2 openid4vc presentation routes', () => {
     expect(verifierService.createRequest).toHaveBeenLastCalledWith('employee-check', undefined, undefined)
   })
 
-  it('maps an unknown policy to UNKNOWN_POLICY and a signer problem to INVALID_STATE', async () => {
+  it('maps an unknown policy to UNKNOWN_ID and a signer problem to INVALID_STATE', async () => {
     verifierService.createRequest.mockRejectedValueOnce(
       new UnknownVerifierPolicyError("unknown verifier policy 'x'"),
     )
     const unknown = await request(app.getHttpServer())
       .post('/v2/openid4vc/presentation-request')
       .send({ policyId: 'x' })
-    expect(unknown.status).toBe(400)
-    expect(unknown.body.error).toEqual({ code: 'UNKNOWN_POLICY', message: "unknown verifier policy 'x'" })
+    expect(unknown.status).toBe(404)
+    expect(unknown.body.error).toEqual({ code: 'UNKNOWN_ID', message: "unknown verifier policy 'x'" })
 
     verifierService.createRequest.mockRejectedValueOnce(
       new OpenId4VcVerifierRequestError(

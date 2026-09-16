@@ -70,6 +70,7 @@ export class V2Openid4vcCredentialExchangesController {
   @ApiBadRequestResponse({
     description: 'Claims that do not match the configuration, or a ttlSeconds outside its range',
   })
+  @ApiNotFoundResponse({ description: 'The agent cannot resolve the credential configuration' })
   @ApiConflictResponse({ description: 'The configuration defines no issuer capability' })
   public async createCredentialOffer(
     @Body() body: Openid4vcCredentialOfferBodyDto,
@@ -189,7 +190,7 @@ function translate(error: unknown, credentialExchangeId?: string): unknown {
     )
   }
   if (error instanceof UnknownCredentialConfigurationError) {
-    return new AdminApiError(AdminApiErrorCode.UnknownConfiguration, HttpStatus.BAD_REQUEST, error.message)
+    return new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, error.message)
   }
   if (error instanceof OpenId4VcIssuerRequestError) {
     return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, error.message)

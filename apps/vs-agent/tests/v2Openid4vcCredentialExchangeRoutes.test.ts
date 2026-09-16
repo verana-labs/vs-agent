@@ -206,16 +206,16 @@ describe('v2 openid4vc credential exchange routes', () => {
     )
   })
 
-  it('maps an unknown configuration to UNKNOWN_CONFIGURATION and a claim error to INVALID_INPUT', async () => {
+  it('maps an unknown configuration to UNKNOWN_ID and a claim error to INVALID_INPUT', async () => {
     issuerService.createOffer.mockRejectedValueOnce(
       new UnknownCredentialConfigurationError("unknown credential configuration 'x'"),
     )
     const unknown = await request(app.getHttpServer())
       .post('/v2/openid4vc/credential-offer')
       .send({ credentialConfigurationId: 'x', claims: { name: 'Ada' }, ttlSeconds: 3600 })
-    expect(unknown.status).toBe(400)
+    expect(unknown.status).toBe(404)
     expect(unknown.body.error).toEqual({
-      code: 'UNKNOWN_CONFIGURATION',
+      code: 'UNKNOWN_ID',
       message: "unknown credential configuration 'x'",
     })
 
