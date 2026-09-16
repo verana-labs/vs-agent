@@ -3,8 +3,10 @@ export { OpenId4VcIssuanceSessionState, OpenId4VcVerificationSessionState } from
 export {
   findCredentialConfiguration,
   findVerifierPolicy,
+  ISSUER_CAPABILITY_ID,
   parseOfferClaims,
   validateOpenId4VcOptions,
+  VERIFIER_CAPABILITY_ID,
 } from './config'
 export { setupOpenId4Vc } from './sdk/setupOpenId4Vc'
 export type {

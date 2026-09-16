@@ -41,15 +41,19 @@ location or validation fails. Keys are camelCase. Full reference: [[VSA-VTI-CFG-
 
 | Key | Requirement |
 | --- | --- |
-| `issuer` | Defines the issuer capability: `id`, `displayName`, exactly one `signing` mode. Required when `verifier` is absent. |
+| `issuer` | Defines the issuer capability: `displayName`, exactly one `signing` mode. Required when `verifier` is absent. |
 | `issuer.metadataSigner` | `x5c` (default) or `did`. `did` signs the issuer metadata with the agent DID, so a wallet can trust-resolve it. |
 | `issuer.requireWalletAttestation` | When `true`, `issuer.walletAttestationCertificates` must hold the X.509 roots of the accepted wallet providers. |
 | `issuer.keyAttestationCertificates` | Roots for OpenID4VCI key attestations. Absent, the `attestation` proof type is neither advertised nor accepted. |
-| `verifier` | Defines the verifier capability: `id`, `displayName`, exactly one `signing` mode. Required when `issuer` is absent. |
+| `verifier` | Defines the verifier capability: `displayName`, exactly one `signing` mode. Required when `issuer` is absent. |
 | `verifier.requestSigner` | `x5c` (default) or `did`. `did` names the agent DID as `client_id`. A caller can override it per request. |
 | `trust` | Required with `verifier`: `resolverUrl` (`https://` Verana resolver), `timeoutMs` (1 to 30000), `allowedDidWebHosts`, `credentialIssuerCertificates` (self-issued CA roots with `keyCertSign`), optional `developmentCertificateFingerprints`. |
 | `credentialConfigurations` | Array. Each entry: unique `id`, `format` `dc+sd-jwt`, `https://` `vct` and `vtjscId`, `name`, optional `description`, `claims`, `disclosureFrame` (subset of `claims`), `ttlSeconds` (60 to 31536000). `claims` is the allowed set for an offer: an offer may omit any of them and the credential then omits them too, an offered claim must be non-empty, and an offer must carry at least one configured claim. |
 | `verifierPolicies` | Array. Each entry: unique `id`, `credentialConfigurationId`, `requestedClaims` (subset of that configuration's claims). |
+
+The identifier segment of each capability is fixed: `issuer` and `verifier`, so the public paths
+read `/oid4vci/issuer/...` and `/oid4vp/verifier/...`. The file declares neither, and the agent
+refuses to start on an `issuer.id` or a `verifier.id`, as it does on any other unknown key.
 
 A claim may not be named `vct`, `iat`, `exp`, `nbf`, `iss`, `cnf` or `status`: those belong to
 the credential envelope.
@@ -79,12 +83,10 @@ the agent's own DID is not needed on the list.
 ```json
 {
   "issuer": {
-    "id": "issuer",
     "displayName": "Development Issuer",
     "signing": { "development": { "enabled": true, "commonName": "Development Issuer" } }
   },
   "verifier": {
-    "id": "verifier",
     "displayName": "Development Verifier",
     "signing": { "development": { "enabled": true, "commonName": "Development Verifier" } }
   },
@@ -152,8 +154,8 @@ Admin API and the metadata return; it never builds a path itself.
 | Path | Purpose |
 | --- | --- |
 | `/.well-known/openid-credential-issuer`, `/.well-known/oauth-authorization-server`, `/.well-known/jwt-vc-issuer` | Issuer and authorization-server metadata, also at the path-inserted forms. |
-| `/oid4vci/{issuerId}/...` | Token and credential traffic of the issuer capability. |
-| `/oid4vp/{verifierId}/...` | Authorization request and response traffic of the verifier capability. |
+| `/oid4vci/issuer/...` | Token and credential traffic of the issuer capability. |
+| `/oid4vp/verifier/...` | Authorization request and response traffic of the verifier capability. |
 | `/oid4vc/vct/{credentialConfigurationId}` | SD-JWT VC type metadata, extended with `relatedJsonSchemaCredentialId` (the VTJSC). |
 
 ## Trust decision

@@ -11,12 +11,10 @@ import { createCertificateFixtures } from './helpers/certificates'
 const validOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   issuer: {
-    id: 'issuer',
     displayName: 'Example Issuer',
     signing: { development: { enabled: true, commonName: 'Example Issuer' } },
   },
   verifier: {
-    id: 'verifier',
     displayName: 'Example Verifier',
     signing: { development: { enabled: true, commonName: 'Example Verifier' } },
   },

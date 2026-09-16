@@ -9,12 +9,10 @@ const publicApiBaseUrl = 'https://agent.example'
 
 const validConfig = () => ({
   issuer: {
-    id: 'issuer',
     displayName: 'Example Issuer',
     signing: { development: { enabled: true, commonName: 'Example Issuer' } },
   },
   verifier: {
-    id: 'verifier',
     displayName: 'Example Verifier',
     signing: { development: { enabled: true, commonName: 'Example Verifier' } },
   },
@@ -79,6 +77,17 @@ describe('OpenID4VC configuration file', () => {
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
       'publicApiBaseUrl must not be set',
+    )
+  })
+
+  it.each(['issuer', 'verifier'])('rejects a configured %s identifier segment', async capability => {
+    const config = validConfig() as unknown as Record<string, Record<string, unknown>>
+    config[capability].id = capability
+
+    await writeFile(configPath, JSON.stringify(config))
+
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
+      `contains unknown field '${capability}.id'`,
     )
   })
 

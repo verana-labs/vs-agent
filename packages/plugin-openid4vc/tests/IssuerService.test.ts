@@ -50,7 +50,6 @@ const HOLDER_JWK = {
 const options = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   issuer: {
-    id: 'issuer',
     displayName: 'Example Issuer',
     signing: { development: { enabled: true, commonName: 'Example Issuer' } },
   },

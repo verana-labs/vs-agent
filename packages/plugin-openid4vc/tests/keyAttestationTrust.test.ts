@@ -6,7 +6,6 @@ import type { OpenId4VcPluginOptions } from '../src/types'
 const options = (keyAttestationCertificates?: string[]): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   issuer: {
-    id: 'issuer',
     displayName: 'Example Issuer',
     signing: { development: { enabled: true, commonName: 'Example Issuer' } },
     ...(keyAttestationCertificates ? { keyAttestationCertificates } : {}),

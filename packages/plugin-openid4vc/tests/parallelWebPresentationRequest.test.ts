@@ -198,7 +198,6 @@ async function startWebvhVerifier({ seedAlternativeDids }: { seedAlternativeDids
   const options = {
     publicApiBaseUrl,
     verifier: {
-      id: 'verifier',
       displayName: 'Webvh Fixture Verifier',
       signing: {
         configured: {

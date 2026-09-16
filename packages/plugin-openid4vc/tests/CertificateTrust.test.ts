@@ -104,7 +104,6 @@ function validOptions(root: X509Certificate): OpenId4VcPluginOptions {
   return {
     publicApiBaseUrl: 'https://agent.example',
     issuer: {
-      id: 'issuer',
       displayName: 'Issuer',
       signing: { development: { enabled: true, commonName: 'Issuer' } },
     },

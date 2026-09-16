@@ -30,7 +30,6 @@ export interface OpenId4VcVerifierPolicy {
 export interface OpenId4VcPluginOptions {
   publicApiBaseUrl: string
   issuer?: {
-    id: string
     displayName: string
     signing: OpenId4VcSigningOptions
     requireWalletAttestation?: boolean
@@ -39,7 +38,6 @@ export interface OpenId4VcPluginOptions {
     keyAttestationCertificates?: string[]
   }
   verifier?: {
-    id: string
     displayName: string
     signing: OpenId4VcSigningOptions
     requestSigner?: 'x5c' | 'did'

@@ -11,7 +11,7 @@ import type {
 import { AgentContext, ClaimFormat, JwsService, RecordNotFoundError } from '@credo-ts/core'
 import { OpenId4VcIssuanceSessionRepository } from '@credo-ts/openid4vc'
 
-import { findCredentialConfiguration, parseOfferClaims } from '../config'
+import { findCredentialConfiguration, ISSUER_CAPABILITY_ID, parseOfferClaims } from '../config'
 import {
   findBoundVerificationMethodId,
   ownDidResolutionPolicy,
@@ -115,7 +115,7 @@ export class IssuerService {
     }
 
     const { credentialOffer, issuanceSession } = await this.issuerApi().createCredentialOffer({
-      issuerId: this.issuerOptions().id,
+      issuerId: ISSUER_CAPABILITY_ID,
       credentialConfigurationIds: [configuration.id],
       preAuthorizedCodeFlowConfig: {},
       issuanceMetadata: claims,
@@ -133,7 +133,7 @@ export class IssuerService {
     await this.ensureInitialized()
     const repository = this.agent.dependencyManager.resolve(OpenId4VcIssuanceSessionRepository)
     const agentContext = this.agent.dependencyManager.resolve(AgentContext)
-    const sessions = await repository.findByQuery(agentContext, { issuerId: this.issuerOptions().id })
+    const sessions = await repository.findByQuery(agentContext, { issuerId: ISSUER_CAPABILITY_ID })
     return sessions.map(summarizeIssuanceSession)
   }
 
@@ -153,7 +153,7 @@ export class IssuerService {
       }
       throw error
     }
-    if (session.issuerId !== this.issuerOptions().id) {
+    if (session.issuerId !== ISSUER_CAPABILITY_ID) {
       throw new UnknownIssuanceSessionError(`unknown issuance session '${id}'`)
     }
     return session
@@ -301,7 +301,7 @@ export class IssuerService {
   private async buildCertificateBoundSignedMetadata(
     signingCertificate: SigningCertificateHandle,
   ): Promise<string | undefined> {
-    const { signedMetadataJwt } = await this.issuerApi().getIssuerMetadata(this.issuerOptions().id)
+    const { signedMetadataJwt } = await this.issuerApi().getIssuerMetadata(ISSUER_CAPABILITY_ID)
     if (!signedMetadataJwt) return undefined
 
     const [encodedHeader, encodedPayload] = signedMetadataJwt.split('.')
@@ -319,15 +319,14 @@ export class IssuerService {
 
   private async createOrUpdateIssuer(signingCertificate: SigningCertificateHandle): Promise<void> {
     const issuer = this.issuerOptions()
-    const issuerId = issuer.id
     const metadata = {
-      issuerId,
+      issuerId: ISSUER_CAPABILITY_ID,
       display: [{ name: issuer.displayName, locale: 'en' }],
       credentialConfigurationsSupported: this.credentialConfigurationsSupported(),
     }
 
     try {
-      await this.issuerApi().getIssuerByIssuerId(issuerId)
+      await this.issuerApi().getIssuerByIssuerId(ISSUER_CAPABILITY_ID)
     } catch (error) {
       if (!(error instanceof RecordNotFoundError)) throw error
       await this.issuerApi().createIssuer({

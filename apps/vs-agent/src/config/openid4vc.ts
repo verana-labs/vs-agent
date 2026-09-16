@@ -13,6 +13,17 @@ const OPENID4VC_CONFIG_FIELDS = new Set([
   'verifierPolicies',
 ])
 
+const OPENID4VC_ISSUER_FIELDS = new Set([
+  'displayName',
+  'signing',
+  'requireWalletAttestation',
+  'walletAttestationCertificates',
+  'keyAttestationCertificates',
+  'metadataSigner',
+])
+
+const OPENID4VC_VERIFIER_FIELDS = new Set(['displayName', 'signing', 'requestSigner'])
+
 export async function readOpenId4VcOptions(
   location: string,
   publicApiBaseUrl: string,
@@ -42,9 +53,21 @@ export async function readOpenId4VcOptions(
     )
   }
 
+  assertKnownFields(parsed.issuer, OPENID4VC_ISSUER_FIELDS, 'issuer', name)
+  assertKnownFields(parsed.verifier, OPENID4VC_VERIFIER_FIELDS, 'verifier', name)
+
   const options = { ...parsed, publicApiBaseUrl } as OpenId4VcPluginOptions
   validateOpenId4VcOptions(options)
   return options
+}
+
+function assertKnownFields(value: unknown, allowed: Set<string>, path: string, name: string): void {
+  if (!isRecord(value)) return
+
+  const unknownField = Object.keys(value).find(field => !allowed.has(field))
+  if (unknownField) {
+    throw new Error(`OpenID4VC configuration file '${name}' contains unknown field '${path}.${unknownField}'`)
+  }
 }
 
 async function readConfiguration(path: string): Promise<string> {

@@ -297,7 +297,6 @@ function developmentOptions(role: Role): OpenId4VcPluginOptions {
     ...(role !== 'verifier'
       ? {
           issuer: {
-            id: 'issuer',
             displayName: 'Development Issuer',
             signing: { development: { enabled: true as const, commonName: 'Development Issuer' } },
           },
@@ -306,7 +305,6 @@ function developmentOptions(role: Role): OpenId4VcPluginOptions {
     ...(role !== 'issuer'
       ? {
           verifier: {
-            id: 'verifier',
             displayName: 'Development Verifier',
             signing: { development: { enabled: true as const, commonName: 'Development Verifier' } },
           },

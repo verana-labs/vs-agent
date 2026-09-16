@@ -49,7 +49,6 @@ const PUBLIC_JWK = {
 const options = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   verifier: {
-    id: 'verifier',
     displayName: 'Example Verifier',
     signing: { development: { enabled: true, commonName: 'Example Verifier' } },
   },
@@ -369,7 +368,6 @@ describe('VerifierService', () => {
     const didSigning: OpenId4VcPluginOptions = {
       ...options(),
       verifier: {
-        id: 'verifier',
         displayName: 'Example Verifier',
         signing: { development: { enabled: true, commonName: 'Example Verifier' } },
         requestSigner: 'did',

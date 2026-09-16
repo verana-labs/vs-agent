@@ -194,7 +194,6 @@ export async function startOpenId4VcTestAgents(input: {
     options: publicApiBaseUrl => ({
       publicApiBaseUrl,
       issuer: {
-        id: 'issuer',
         displayName: 'Fixture Issuer',
         signing: {
           configured: {
@@ -230,7 +229,6 @@ export async function startOpenId4VcTestAgents(input: {
       options: publicApiBaseUrl => ({
         publicApiBaseUrl,
         verifier: {
-          id: 'verifier',
           displayName: 'Fixture Verifier',
           signing: {
             configured: {

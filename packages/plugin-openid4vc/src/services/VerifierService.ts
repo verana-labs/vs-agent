@@ -12,7 +12,7 @@ import {
   OpenId4VcVerificationSessionState,
 } from '@credo-ts/openid4vc'
 
-import { findCredentialConfiguration, findVerifierPolicy } from '../config'
+import { findCredentialConfiguration, findVerifierPolicy, VERIFIER_CAPABILITY_ID } from '../config'
 import { TrustClient } from '../trust/TrustClient'
 import {
   findBoundVerificationMethodId,
@@ -125,7 +125,7 @@ export class VerifierService {
 
     const { authorizationRequest, verificationSession } = await this.verifierApi().createAuthorizationRequest(
       {
-        verifierId: this.verifierOptions().id,
+        verifierId: VERIFIER_CAPABILITY_ID,
         requestSigner: await this.buildRequestSigner(queryLanguage, requestSigner),
         // JARM (direct_post.jwt) is DCQL-only: Presentation Exchange wallets can't build the JWE it needs.
         responseMode: queryLanguage === 'presentation_exchange' ? 'direct_post' : 'direct_post.jwt',
@@ -154,7 +154,7 @@ export class VerifierService {
   public async listVerificationSessions(): Promise<OpenId4VcVerificationSessionSummary[]> {
     await this.ensureInitialized()
     const sessions = await this.verifierApi().findVerificationSessionsByQuery({
-      verifierId: this.verifierOptions().id,
+      verifierId: VERIFIER_CAPABILITY_ID,
     })
     return sessions.map(session => this.summarizeKnown(session))
   }
@@ -276,12 +276,12 @@ export class VerifierService {
   private async createOrUpdateVerifier(): Promise<void> {
     const verifier = this.verifierOptions()
     const metadata = {
-      verifierId: verifier.id,
+      verifierId: VERIFIER_CAPABILITY_ID,
       clientMetadata: { client_name: verifier.displayName },
     }
 
     try {
-      await this.verifierApi().getVerifierByVerifierId(verifier.id)
+      await this.verifierApi().getVerifierByVerifierId(VERIFIER_CAPABILITY_ID)
     } catch (error) {
       if (!(error instanceof RecordNotFoundError)) throw error
       await this.verifierApi().createVerifier(metadata)
@@ -318,7 +318,7 @@ export class VerifierService {
   }
 
   private assertSessionOwnership(session: OpenId4VcVerificationSessionRecord, sessionId: string): void {
-    if (session.verifierId !== this.verifierOptions().id) {
+    if (session.verifierId !== VERIFIER_CAPABILITY_ID) {
       throw new UnknownVerificationSessionError(`OpenID4VC verification session '${sessionId}' was not found`)
     }
   }
@@ -329,7 +329,7 @@ export class VerifierService {
   ): void {
     if (
       verified.verificationSession.id !== sessionId ||
-      verified.verificationSession.verifierId !== this.verifierOptions().id ||
+      verified.verificationSession.verifierId !== VERIFIER_CAPABILITY_ID ||
       verified.verificationSession.state !== OpenId4VcVerificationSessionState.ResponseVerified
     ) {
       throw new Error('OpenID4VC verification session changed while reading its verified result')

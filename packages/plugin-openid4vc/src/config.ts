@@ -12,6 +12,9 @@ import { certificateFingerprint } from './trust/CertificateTrust'
 import { MAX_DID_RESOLUTION_TIMEOUT_MS } from './trust/keyBinding'
 import { isRecord } from './utils/isRecord'
 
+export const ISSUER_CAPABILITY_ID = 'issuer'
+export const VERIFIER_CAPABILITY_ID = 'verifier'
+
 const MAX_TTL_SECONDS = 31_536_000
 const MIN_TTL_SECONDS = 60
 const RESERVED_CREDENTIAL_CLAIMS = new Set(['vct', 'iat', 'exp', 'nbf', 'iss', 'cnf', 'status'])
@@ -25,7 +28,6 @@ export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void 
   }
 
   if (options.issuer) {
-    assertNonEmptyString(options.issuer.id, 'issuer.id')
     assertNonEmptyString(options.issuer.displayName, 'issuer.displayName')
     assertSigningOptions(options.issuer.signing, 'issuer.signing')
 
@@ -46,7 +48,6 @@ export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void 
   }
 
   if (options.verifier) {
-    assertNonEmptyString(options.verifier.id, 'verifier.id')
     assertNonEmptyString(options.verifier.displayName, 'verifier.displayName')
     assertSigningOptions(options.verifier.signing, 'verifier.signing')
     assertTrustOptions(options.trust, true)
