@@ -18,6 +18,7 @@ services:
       - PUBLIC_API_BASE_URL=https://ngrok-free.app
       - USE_CORS=true
       - EVENTS_WEBHOOK_URL=http://verifier-backend:5100/events
+      - ADMIN_API_TRUSTED_NETWORKS=172.16.0.0/12,192.168.0.0/16
     volumes:
       - ./afj:/root/.afj
 
@@ -35,7 +36,7 @@ services:
     environment:
       - PORT=5100
       - VS_AGENT_ADMIN_BASE_URL=http://verifier-vs-agent:3000
-      - PUBLIC_BASE_URL=http://10.82.14.12:5100
+      - CREDENTIAL_DEFINITION_ID=
 
 networks:
   verifier:

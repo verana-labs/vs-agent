@@ -66,7 +66,12 @@ spec:
             env:
             # Base URL for the Agent Admin API
             - name: VS_AGENT_ADMIN_BASE_URL
-              value: "{{ .Values.env.vsAgentAdminUrl }}/v1"
+              value: "{{ .Values.env.vsAgentAdminUrl }}"
+            {{- if .Values.env.credentialDefinitionId }}
+            # AnonCreds credential definition behind the issue, proof and /revoke features
+            - name: CREDENTIAL_DEFINITION_ID
+              value: {{ .Values.env.credentialDefinitionId | quote }}
+            {{- end }}
             # Base URL for the Service API
             - name: PUBLIC_BASE_URL
               value: "https://{{ tpl .Values.ingress.host . }}"

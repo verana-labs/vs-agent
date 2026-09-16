@@ -70,16 +70,15 @@ Once your VS Agent is up and running, you can manage it from your backend basica
 
 ### Using NestJS Client (preferred way)
 
-[NestJS client](./packages/nestjs-client/) can be imported as a module in your backend, and it will implement all endpoints required to handle event coming from VS Agent. It also provides some extra models to manage credential revocation, use statistics and handling user profile (including useful information such as preferred language). See [NestJS client documentation]((./packages/nestjs-client/README.md) for more details.
+[NestJS client](./packages/nestjs-client/) can be imported as a module in your backend. It receives the Events API webhook, tracks connections and issued credentials, and provides a configured API client for injection. See [NestJS client documentation](./packages/nestjs-client/README.md) for more details.
 
 ### Using basic client
 
-[Base client](./packages/client) provides a basic model for every VS API message and event, and it is handy when you want to create a simple backend based on NodeJS, especially if you use Express. See [JS client documentation](./packages/client/README.md) for more details.
+[Base client](./packages/client) is a typed fetch wrapper over the v2 Administration API plus an event dispatcher for the webhook. It is handy when you want to create a simple backend based on NodeJS, especially if you use Express. See [JS client documentation](./packages/client/README.md) for more details.
 
 ### Using VS Agent REST API
 
-This can be used regardless the software stack you use in your backend. See [VS Agent API reference](./doc/vs-agent-api.md) for a detailed guide about all endpoints.
-
+This can be used regardless the software stack you use in your backend. The API is the [Administration API](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#administration-api) of the VS Agent specification, and Swagger UI is served at `/api` on the admin port for callers from the trusted networks.
 
 ---
 
