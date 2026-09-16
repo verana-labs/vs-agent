@@ -1,0 +1,1 @@
+export { peerAnchorDid } from './peerAnchorDid'

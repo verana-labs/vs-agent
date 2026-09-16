@@ -22,6 +22,7 @@ import {
   VtCredentialState,
 } from '../messages'
 import { VtFlowRecord, VtFlowRepository } from '../repository'
+import { peerAnchorDid } from '../utils'
 import {
   VtFlowEventTypes,
   VtFlowRole,
@@ -164,6 +165,37 @@ export class VtFlowService {
     return { message, record }
   }
 
+  public async reattachOnboardingProcessRecord(
+    agentContext: AgentContext,
+    params: { vtFlowRecordId: string; connectionId: string },
+  ): Promise<{ message: OnboardingRequestMessage; record: VtFlowRecord }> {
+    const record = await this.repository.getById(agentContext, params.vtFlowRecordId)
+    record.assertRole(VtFlowRole.Applicant)
+    record.assertVariant(VtFlowVariant.OnboardingProcess)
+    if (
+      isVtFlowTerminalState(record.state) ||
+      record.state === VtFlowState.Completed ||
+      record.state === VtFlowState.CredRevoked
+    ) {
+      throw new CredoError(`vt-flow: flow '${record.id}' in state ${record.state} cannot be re-attached`)
+    }
+    if (!record.participantId) throw new CredoError(`vt-flow: flow '${record.id}' has no participant_id`)
+
+    const message = new OnboardingRequestMessage({
+      participantId: record.participantId,
+      participantSessionId: record.participantSessionId,
+      agentParticipantId: record.agentParticipantId,
+      walletAgentParticipantId: record.walletAgentParticipantId,
+      claims: record.claims,
+      proofsAttach: record.proofsAttach,
+    })
+    message.setThread({ threadId: record.threadId })
+
+    record.connectionId = params.connectionId
+    await this.repository.update(agentContext, record)
+    return { message, record }
+  }
+
   /** Validator-side OnboardingProcess: create or re-attach (by `participant_session_id`) a record in `AWAITING_OR` from an inbound `onboarding-request`. */
   public async processReceiveOnboardingRequest(
     messageContext: DidCommInboundMessageContext<OnboardingRequestMessage>,
@@ -183,11 +215,18 @@ export class VtFlowService {
           `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
         )
       }
+      if (existing.participantId !== message.participantId) {
+        throw new CredoError(
+          `vt-flow: participant_id '${message.participantId}' does not match the flow of participant_session_id '${message.participantSessionId}'`,
+        )
+      }
       await this.assertSamePeer(agentContext, existing, connection)
       existing.connectionId = connection.id
-      existing.threadId = message.threadId
-      if (message.claims) existing.claims = message.claims
-      if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
+      if (existing.threadId !== message.threadId) {
+        existing.threadId = message.threadId
+        if (message.claims) existing.claims = message.claims
+        if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
+      }
       if (existing.state === VtFlowState.Completed || existing.state === VtFlowState.CredRevoked) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
         existing.oobLinkUrl = undefined
@@ -777,8 +816,10 @@ export class VtFlowService {
     connection: DidCommConnectionRecord,
     purpose?: VtFlowRequestPurpose,
   ): Promise<void> {
-    const peerDid = connection.theirDid
-    if (!peerDid) throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
+    const peerDid = peerAnchorDid(connection)
+    if (!connection.theirDid || !peerDid) {
+      throw new CredoError(`vt-flow: ready connection '${connection.id}' has no theirDid`)
+    }
 
     const hook = this.config.assertVerifiableService
     if (!hook) {

@@ -4,6 +4,7 @@ import type {
   OfferCredentialForSessionOptions,
   ProblemReportDispatchOptions,
   SendIssuanceRequestOptions,
+  ResendOnboardingRequestOptions,
   SendOnboardingRequestOptions,
   SendOobLinkOptions,
 } from './types'
@@ -59,6 +60,26 @@ export class VtFlowApi {
       agentParticipantId: options.agentParticipantId,
       walletAgentParticipantId: options.walletAgentParticipantId,
       claims: options.claims,
+    })
+
+    const outboundMessageContext = await getOutboundDidCommMessageContext(this.agentContext, {
+      message,
+      associatedRecord: record,
+      connectionRecord: connection,
+    })
+    await this.messageSender.sendMessage(outboundMessageContext)
+
+    return record
+  }
+
+  public async resendOnboardingRequest(options: ResendOnboardingRequestOptions): Promise<VtFlowRecord> {
+    const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
+    connection.assertReady()
+    await this.vtFlowService.checkIsVerifiableService(this.agentContext, connection)
+
+    const { message, record } = await this.vtFlowService.reattachOnboardingProcessRecord(this.agentContext, {
+      vtFlowRecordId: options.vtFlowRecordId,
+      connectionId: options.connectionId,
     })
 
     const outboundMessageContext = await getOutboundDidCommMessageContext(this.agentContext, {

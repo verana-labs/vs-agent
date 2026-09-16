@@ -73,6 +73,11 @@ export interface SendOnboardingRequestOptions {
   claims?: Record<string, unknown>
 }
 
+export interface ResendOnboardingRequestOptions {
+  vtFlowRecordId: string
+  connectionId: string
+}
+
 export interface SendIssuanceRequestOptions {
   connectionId: string
   participantSessionId?: string
