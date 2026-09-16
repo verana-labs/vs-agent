@@ -124,6 +124,77 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
       service.processReceiveOnboardingRequest(makeMessageContext(agentContext, 'did:web:attacker') as never),
     ).rejects.toThrow(/peer does not match/)
   })
+
+  it('validator keeps its edited claims when the applicant resends the same thread', async () => {
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.Validating,
+      claims: { edited: true },
+    })
+    const { service, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+    const context = makeMessageContext(agentContext)
+    context.message.setThread({ threadId: existing.threadId })
+    context.message.claims = { name: 'Acme' }
+
+    const record = await service.processReceiveOnboardingRequest(context as never)
+
+    expect(record.claims).toEqual({ edited: true })
+    expect(record.state).toBe(VtFlowState.Validating)
+    expect(record.connectionId).toBe('conn-new')
+  })
+
+  it('validator rejects a re-attach whose participant_id does not match the session', async () => {
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.Validating,
+      participantId: '43',
+    })
+    const { service, repository, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+
+    await expect(
+      service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never),
+    ).rejects.toThrow(/participant_id '42' does not match/)
+    expect(repository.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('VtFlowService.reattachOnboardingProcessRecord', () => {
+  it('rebuilds the request of a running flow on the same thread and moves only the connection', async () => {
+    const existing = makeRecord({ state: VtFlowState.OrSent, claims: { name: 'Acme' } })
+    const { service, repository } = makeService(existing)
+
+    const { message, record } = await service.reattachOnboardingProcessRecord({} as never, {
+      vtFlowRecordId: existing.id,
+      connectionId: 'conn-new',
+    })
+
+    expect(message.id).not.toBe(existing.threadId)
+    expect(message.threadId).toBe(existing.threadId)
+    expect(message.participantSessionId).toBe('sess-1')
+    expect(message.claims).toEqual({ name: 'Acme' })
+    expect(record.connectionId).toBe('conn-new')
+    expect(record.state).toBe(VtFlowState.OrSent)
+    expect(repository.save).not.toHaveBeenCalled()
+  })
+
+  it('refuses a finished flow', async () => {
+    const existing = makeRecord({ state: VtFlowState.Completed })
+    const { service, repository } = makeService(existing)
+
+    await expect(
+      service.reattachOnboardingProcessRecord({} as never, {
+        vtFlowRecordId: existing.id,
+        connectionId: 'c',
+      }),
+    ).rejects.toThrow(/cannot be re-attached/)
+    expect(repository.update).not.toHaveBeenCalled()
+  })
 })
 
 describe('VtFlowService.notifyCredentialStateChange', () => {
