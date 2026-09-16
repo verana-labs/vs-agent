@@ -46,6 +46,7 @@ import { applyAdminApiServiceEntry } from '../did/adminApiService'
 import { KmsVerifier, migrateWebVhLogIfBroken } from '../did/migrateWebVhLog'
 import { migrateWebVhVersionTimeIfBroken } from '../did/migrateWebVhVersionTime'
 import { restoreShadowedWebVhDidDocument } from '../did/restoreShadowedWebVhDidDocument'
+import { migratedAuthentication, needsAuthenticationMigration } from '../did/webvhAuthentication'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { connectionEvents } from '../events/ConnectionEvents'
 import { vtFlowEvents } from '../events/VtFlowEvents'
@@ -322,10 +323,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       const authHasUpdateKey =
         parsedDid.method === 'webvh' &&
         !!ed25519VerificationMethodId &&
-        (didDocument.authentication ?? []).some(a => {
-          const id = typeof a === 'string' ? a : a.id
-          return id !== ed25519VerificationMethodId
-        })
+        needsAuthenticationMigration(didDocument.authentication ?? [], ed25519VerificationMethodId)
       const currentAdminEntry = (didDocument.service ?? []).find(s => s.type === 'VsAgentAdminAPI')
       const adminEntryChanged = currentAdminEntry?.serviceEndpoint !== this.adminApiServiceEndpoint
       if (hasLegacyMethods || servicesChanged || authHasUpdateKey || adminEntryChanged) {
@@ -343,7 +341,11 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           newKeys.push(await this.createAndAddDidCommKeysAndServices(didDocument))
         }
 
-        if (authHasUpdateKey) didDocument.authentication = [ed25519VerificationMethodId!]
+        if (authHasUpdateKey)
+          didDocument.authentication = migratedAuthentication(
+            didDocument.authentication ?? [],
+            ed25519VerificationMethodId!,
+          )
 
         if (newKeys.length && parsedDid.method === 'webvh') {
           // webvh registrar doesn't accept keys in update options; persist directly
