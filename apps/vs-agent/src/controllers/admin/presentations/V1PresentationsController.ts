@@ -118,13 +118,9 @@ export class V1PresentationsController {
       '_2060/requestedCredentials',
     ) as RequestedCredential[]
 
-    const revealedAttributes =
-      formatData.presentation?.anoncreds?.requested_proof.revealed_attrs ??
-      formatData.presentation?.indy?.requested_proof.revealed_attrs
+    const revealedAttributes = formatData.presentation?.anoncreds?.requested_proof.revealed_attrs
 
-    const revealedAttributeGroups =
-      formatData.presentation?.anoncreds?.requested_proof?.revealed_attr_groups ??
-      formatData.presentation?.indy?.requested_proof.revealed_attr_groups
+    const revealedAttributeGroups = formatData.presentation?.anoncreds?.requested_proof.revealed_attr_groups
 
     const claims: Claim[] = []
     if (revealedAttributes) {

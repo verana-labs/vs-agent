@@ -10,7 +10,6 @@ import {
   assertVerifiableService,
   createVsAgent,
   HttpInboundTransport,
-  migrateLegacyTailsFiles,
   setupBaseDidComm,
   AuthorizationService,
   VeranaChainService,
@@ -207,8 +206,6 @@ export const setupAgent = async ({
       new VsAgentWsInboundTransport({ server: new WebSocket.Server({ noServer: true }) }),
     )
   }
-
-  migrateLegacyTailsFiles(agent.context)
 
   const verifyPeer = verifiablePublicRegistries
     ? async (peerDid: string): Promise<boolean> => {

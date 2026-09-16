@@ -559,15 +559,6 @@ describe('v2 didcomm presentation routes', () => {
       expect(proofs.acceptRequest).not.toHaveBeenCalled()
     })
 
-    it('answers a legacy indy request from the indy matches', async () => {
-      proofs.getCredentialsForRequest.mockResolvedValue({ proofFormats: { indy: matchingCredentials } })
-
-      const response = await request(app.getHttpServer()).post('/v2/didcomm/presentations/p-1/accept-request')
-
-      expect(response.status).toBe(200)
-      expect(proofs.acceptRequest).toHaveBeenCalledWith({ proofExchangeRecordId: 'p-1' })
-    })
-
     it('reports an unknown presentation as UNKNOWN_ID', async () => {
       proofs.findById.mockResolvedValue(null)
 

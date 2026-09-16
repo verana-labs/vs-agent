@@ -51,7 +51,7 @@ export async function createInvitation(options: {
       ...(isV2
         ? { ourDid }
         : {
-            handshakeProtocols: [DidCommHandshakeProtocol.DidExchange, DidCommHandshakeProtocol.Connections],
+            handshakeProtocols: [DidCommHandshakeProtocol.DidExchange],
             invitationDid: ourDid,
           }),
     })
