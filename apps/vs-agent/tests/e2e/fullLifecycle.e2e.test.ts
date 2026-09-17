@@ -13,7 +13,7 @@ import {
 } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { ConsoleLogger, DidRepository, LogLevel } from '@credo-ts/core'
-import { VtFlowApi, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { VtCredentialState, VtFlowApi, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
 
@@ -52,7 +52,7 @@ import {
 import { mockResponses, startAgent } from '../__mocks__'
 import { FakeDidResolver } from '../__mocks__/fakeDidResolver'
 import { AdminApiError } from '../../src/common'
-import { CredentialTypesService } from '../../src/controllers/admin/credentials'
+import { CredentialTypesService } from '../../src/services'
 import { V2DidcommCredentialExchangesController } from '../../src/controllers/admin/v2/didcomm/V2DidcommCredentialExchangesController'
 import { V2DidcommPresentationsController } from '../../src/controllers/admin/v2/didcomm/V2DidcommPresentationsController'
 import {
@@ -347,17 +347,17 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       expect(orRecord.state).toBe(VtFlowState.OrSent)
       await validatorAwaitingOr
 
-      const { VtFlowsService } = await import('../../src/controllers/admin/vt-flow/VtFlowsService')
+      const { VtFlowsService } = await import('../../src/controllers/admin/v2/vt/VtFlowsService')
       const flowsService = new VtFlowsService(
         { getAgent: async () => validator } as never,
-        undefined as never,
+        new CredentialTypesService({ getAgent: async () => validator } as never),
       )
 
       const applicantCompleted = waitForEvent(
         applicantEvents,
         isVtFlowStateChangedEvent(VtFlowState.Completed),
       )
-      const validatorFlow = (await flowsService.listFlows({ role: VtFlowRole.Validator }))[0]
+      const validatorFlow = (await flowsService.listFlowsPage({ role: VtFlowRole.Validator })).items[0]
       const orchestrator = new VtFlowOrchestrator(validator, {
         publicApiBaseUrl: validator.publicApiBaseUrl,
       })
@@ -386,15 +386,19 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       expect(credentials.length).toBeGreaterThan(0)
       const credentialCountBeforeRevoke = credentials.length
 
-      const completedFlows = await flowsService.listFlows({ role: VtFlowRole.Validator })
+      const completedFlows = (await flowsService.listFlowsPage({ role: VtFlowRole.Validator })).items
       expect(completedFlows).toHaveLength(1)
-      expect(completedFlows[0].state).toBe(VtFlowState.Completed)
+      expect(completedFlows[0].flowState).toBe(VtFlowState.Completed)
 
       const applicantRevoked = waitForEvent(
         applicantEvents,
         isVtFlowStateChangedEvent(VtFlowState.CredRevoked),
       )
-      const revoked = await flowsService.revokeCredential(orRecord.participantSessionId, 'lifecycle test')
+      const revoked = await validator.dependencyManager.resolve(VtFlowApi).notifyCredentialStateChange({
+        vtFlowRecordId: validatorFlow.id,
+        state: VtCredentialState.Revoked,
+        reason: 'lifecycle test',
+      })
       expect(revoked.state).toBe(VtFlowState.CredRevoked)
       await applicantRevoked
 
@@ -415,17 +419,17 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       expect(renewalRecord.participantSessionId).toBe(orRecord.participantSessionId)
       await validatorRenewal
 
-      const renewedFlows = await flowsService.listFlows({ role: VtFlowRole.Validator })
+      const renewedFlows = (await flowsService.listFlowsPage({ role: VtFlowRole.Validator })).items
       expect(renewedFlows).toHaveLength(1)
-      expect(renewedFlows[0].state).toBe(VtFlowState.AwaitingOr)
+      expect(renewedFlows[0].flowState).toBe(VtFlowState.AwaitingOr)
 
       await seederChain.cancelParticipantOPLastRequest(holderOp.id)
       await reconcileVtFlowRecordsOnCancel(validator, String(holderOp.id))
       await reconcileVtFlowRecordsOnCancel(applicant, String(holderOp.id))
 
-      const restoredFlows = await flowsService.listFlows({ role: VtFlowRole.Validator })
+      const restoredFlows = (await flowsService.listFlowsPage({ role: VtFlowRole.Validator })).items
       expect(restoredFlows).toHaveLength(1)
-      expect(restoredFlows[0].state).toBe(VtFlowState.Completed)
+      expect(restoredFlows[0].flowState).toBe(VtFlowState.Completed)
     },
     SETUP_TIMEOUT_MS,
   )

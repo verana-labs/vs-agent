@@ -125,22 +125,6 @@ Both sides then reach `COMPLETED` and the applicant's HOLDER participant goes `V
 - On completion the applicant logs `onCompleted failed: authorization check failed`: the seed grants it no authorization for the post-issuance on-chain call, so it never links the VP or triggers the resolver.
 - Both agents log webhook errors for `http://localhost:5000`; the demo runs no backend.
 
-The ECS Organization schema requires claims the applicant does not send, so set them before validating (`<sid>` is the flow's `participantSessionId`):
-
-```bash
-curl -X PUT http://localhost:4000/v1/vt/flows/<sid>/claims -H 'Content-Type: application/json' \
-  -d '{"claims":{"name":"Applicant Demo Org","logoUri":"https://agent-applicant.demo/vt/default/logo.svg","logoDigestSri":"sha384-AAAA","registryId":"DEMO-1","address":"1 Demo Street","countryCode":"ES"}}'
-curl -X POST http://localhost:4000/v1/vt/flows/<sid>/validate -H 'Content-Type: application/json' -d '{}'
-```
-
-Both sides then reach `COMPLETED` and the applicant's HOLDER participant goes `VALIDATED` / `ACTIVE` on chain.
-
-### Known gaps
-
-- The applicant's second bootstrap leg (an ISSUER participant on the Service schema) stays `PENDING`. Its validator is the ecosystem root participant, which the seed creates with a `did:example:` DID, so there is no DIDComm peer to onboard against.
-- On completion the applicant logs `onCompleted failed: authorization check failed`: the seed grants it no authorization for the post-issuance on-chain call, so it never links the VP or triggers the resolver.
-- Both agents log webhook errors for `http://localhost:5000`; the demo runs no backend.
-
 ### TLS and DIDs
 
 A Caddy container with an internal CA terminates TLS for `agent-validator.demo`, `agent-applicant.demo` and `agent-ecosystem.demo` (network aliases on the compose network). Each agent boots with a real `did:webvh` DID on its hostname and trusts the CA via `NODE_EXTRA_CA_CERTS`, so the containers resolve each other's DID documents over HTTPS and DIDComm works container-to-container. The hostnames only resolve inside the compose network; from the host, use the mapped ports above.

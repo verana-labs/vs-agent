@@ -22,10 +22,6 @@ spec:
     port: 5432
     targetPort: 5432
     protocol: TCP
-  - name: redis
-    port: 6379
-    targetPort: 6379
-    protocol: TCP
 ---
 # Ingress resource for the VS Agent
 # This resource defines how external traffic can access the VS Agent service
@@ -127,35 +123,12 @@ spec:
       storage: 1Gi
 {{- end }}
 ---
-# PersistentVolumeClaim for the Redis database
-# This PVC is used to store the Redis data
-# If Redis is enabled, this PVC will be created
-{{- if .Values.redis.enabled }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ .Values.name }}-redis-main
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app: {{ .Values.name }}
-  annotations:
-    helm.sh/resource-policy: keep
-spec:
-  accessModes:
-    - "ReadWriteOnce"
-  storageClassName: csi-cinder-classic
-  resources:
-    requests:
-      storage: 1Gi
-{{- end }}
----
 # StatefulSet description for the VS Agent
 # This StatefulSet manages the deployment of the VS Agent service
-# It includes the agent container, PostgreSQL database (if enabled), and Redis (if enabled)
+# It includes the agent container and the PostgreSQL database (if enabled)
 # The StatefulSet ensures that the agent service is deployed with a stable identity and persistent storage
 # The agent service is configured with environment variables for the public base URL, the public DID method, the Verana network and the Admin API
 # The PostgreSQL database is configured with environment variables for the user and password
-# The Redis service is configured with its own container and persistent storage
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -285,30 +258,6 @@ spec:
             - name: {{ .Values.name }}-pg-pv-main
               mountPath: /var/lib/postgresql/data
         {{- end }}
-        {{- if .Values.redis.enabled }}
-         -  name: {{ .Values.name }}-redis-container
-            image: {{ .Values.redis.image | default "redis:alpine" }}
-            imagePullPolicy: Always
-            {{- if or .Values.redis.maxmemory .Values.redis.extraArgs }}
-            args:
-            {{- if .Values.redis.maxmemory }}
-            -  --maxmemory
-            -  {{ .Values.redis.maxmemory | quote }}
-            -  --maxmemory-policy
-            -  {{ .Values.redis.maxmemoryPolicy | default "noeviction" }}
-            {{- end }}
-            {{- range .Values.redis.extraArgs }}
-            -  {{ . | quote }}
-            {{- end }}
-            {{- end }}
-            ports:
-            -  containerPort: 6379
-            resources:
-{{- toYaml .Values.redis.resources | nindent 14 }}
-            volumeMounts:
-            - name: {{ .Values.name }}-redis-main
-              mountPath: /data
-        {{- end }}
 
          volumes:
          - name: {{ .Values.name }}-vsa-pv
@@ -318,9 +267,4 @@ spec:
          - name: {{ .Values.name }}-pg-pv-main
            persistentVolumeClaim:
              claimName: {{ .Values.name }}-pg-pv-main
-        {{- end }}
-        {{- if .Values.redis.enabled }}
-         - name: {{ .Values.name }}-redis-main
-           persistentVolumeClaim:
-             claimName: {{ .Values.name }}-redis-main
         {{- end }}

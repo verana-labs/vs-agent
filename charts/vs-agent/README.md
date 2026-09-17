@@ -1,6 +1,6 @@
 # VS Agent Helm Chart
 
-This Helm chart deploys **VS Agent** application with a StatefulSet, supporting private and public ingress, persistent storage, and configurable environment variables. It is designed to be flexible, supporting PostgreSQL and Redis integrations.
+This Helm chart deploys **VS Agent** application with a StatefulSet, supporting private and public ingress, persistent storage, and configurable environment variables. It is designed to be flexible, supporting an optional PostgreSQL sidecar.
 
 ## Features
 
@@ -8,7 +8,7 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 * Supports private and public ingress with TLS certificates via cert-manager
 * Persistent storage using PersistentVolumeClaim with customizable storage class and size
 * Configurable environment variables for agent ports, endpoints, and external services
-* Optional PostgreSQL and Redis support
+* Optional PostgreSQL support
 * Sensitive environment variable injection via pre-existing Kubernetes Secrets using `extraEnv[].valueFrom`
 
 ## Kubernetes Resources
@@ -103,16 +103,6 @@ extraEnv:
 | `database.user`            | PostgreSQL username (plain value)                                           | `""`                 |
 | `database.secretPwdKey`    | Key name for the password inside `database.existingSecret`                  | `POSTGRES_PASSWORD`  |
 
-### Redis Configuration (Optional)
-
-| Parameter                  | Description                                      | Default                          |
-| -------------------------- | ------------------------------------------------ | -------------------------------- |
-| `redis.enabled`            | Enable Redis                                     | `false`                         |
-| `redis.image`              | Redis container image (pin a tag for reproducible deploys) | `redis:alpine`       |
-| `redis.maxmemory`          | Redis `maxmemory`; set `""` for unlimited        | `80mb`                          |
-| `redis.maxmemoryPolicy`    | Redis `maxmemory-policy` (applied only when `maxmemory` is set) | `noeviction`     |
-| `redis.extraArgs`          | Additional `redis-server` flags (list)          | `[]`                            |
-
 ### Persistent Storage
 
 | Parameter                  | Description                                      | Default                          |
@@ -186,7 +176,7 @@ extraEnv:
 
 ### Resources (New)
 
-Configurable CPU/Memory requests and limits for the VS-Agent container and, if enabled, for PostgreSQL and Redis. Defaults are conservative and can be adjusted after observing real usage.
+Configurable CPU/Memory requests and limits for the VS-Agent container and, if enabled, for PostgreSQL. Defaults are conservative and can be adjusted after observing real usage.
 
 #### VS-Agent container
 
@@ -207,17 +197,6 @@ Configurable CPU/Memory requests and limits for the VS-Agent container and, if e
 | `database.resources.requests.memory`       | Minimum reserved memory  | `256Mi` |
 | `database.resources.limits.cpu`            | Maximum allowed CPU      | `400m`  |
 | `database.resources.limits.memory`         | Maximum allowed memory   | `512Mi` |
-
-#### Redis (optional)
-
-> Applies only when `redis.enabled: true`.
-
-| Parameter                             | Description               | Default |
-| ------------------------------------- | ------------------------- | ------- |
-| `redis.resources.requests.cpu`        | Minimum reserved CPU      | `25m`   |
-| `redis.resources.requests.memory`     | Minimum reserved memory   | `64Mi`  |
-| `redis.resources.limits.cpu`          | Maximum allowed CPU       | `100m`  |
-| `redis.resources.limits.memory`       | Maximum allowed memory    | `128Mi` |
 
 #### Quick Helm overrides
 

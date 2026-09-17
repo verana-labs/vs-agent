@@ -76,7 +76,7 @@ import {
   AGENT_DELEGATED_PARENT_VS_DID,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
 } from './config'
-import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
+import { VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
@@ -279,7 +279,6 @@ const run = async () => {
 
   // Build the list of active NestJS plugins
   const nestPlugins: VsAgentNestPlugin[] = [
-    ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
     ...(chatModule ? [chatModule.ChatPlugin({ defaultProfile: ecsServiceProfile })] : []),
     ...(mrtdModule
       ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MRTD_MASTER_LIST_CSCA_LOCATION })]

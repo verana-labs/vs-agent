@@ -1,37 +1,35 @@
+import { ActionMenu } from '@verana-labs/vs-agent-client'
+
 export const welcomeMessage =
   'Welcome to our service. Use context menu or write help to see available actions'
 
-export const helpMessage =
-  'Available commands: \n/echo: repeat what you say \n/menu: display main menu \n/link [url] [title] [desc] [icon] [openingMode]: send link to URL\n/media [url]: retrieve image from URL \n/rocky: get an inspiring quote from Rocky \n/context: refresh context menu'
+export const helpMessage = [
+  'Available commands:',
+  '/echo <text>: repeat what you say',
+  '/menu: display main menu',
+  '/context: refresh context menu',
+  '/link <url> [title] [desc] [icon] [openingMode]: send a link',
+  '/media [url] [desc]: send an image',
+  '/profile [name] [image] [icon]: send the bot profile',
+  '/call [wsUrl] [roomId]: offer a call',
+  '/mrz: request the MRZ of a passport',
+  '/emrtd: request the eMRTD data of a passport',
+  '/proof: request a phoneNumber credential presentation',
+  '/revoke <credentialExchangeId>: revoke an issued credential',
+  '/rocky: get an inspiring quote from Rocky',
+  '/terminate: delete the connection record on the agent, the wallet is not told',
+].join('\n')
 
-export const rootContextMenu = {
+export const rootContextMenu: ActionMenu = {
   title: 'Root menu',
   description: 'These are the main available options to interact with this chatbot',
   options: [
-    {
-      title: '🏡 Home',
-      id: 'home',
-    },
-    {
-      title: '⚽ World Cup poll',
-      id: 'poll',
-    },
-    {
-      title: '💪 Rocky quotes',
-      id: 'rocky',
-    },
-    {
-      title: 'Issue credential',
-      id: 'issue',
-    },
-    {
-      title: 'Request proof',
-      id: 'proof',
-    },
-    {
-      title: '🆘 Help',
-      id: 'help',
-    },
+    { name: 'home', title: '🏡 Home', description: 'Welcome message' },
+    { name: 'poll', title: '⚽ World Cup poll', description: 'Vote for the winner' },
+    { name: 'rocky', title: '💪 Rocky quotes', description: 'An inspiring quote' },
+    { name: 'issue', title: 'Issue credential', description: 'Receive a phoneNumber credential' },
+    { name: 'proof', title: 'Request proof', description: 'Present your phoneNumber credential' },
+    { name: 'help', title: '🆘 Help', description: 'List the available commands' },
   ],
 }
 

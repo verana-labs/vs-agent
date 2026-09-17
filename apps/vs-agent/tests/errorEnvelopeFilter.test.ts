@@ -1,15 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 
-import {
-  Body,
-  Controller,
-  Get,
-  HttpStatus,
-  NotFoundException,
-  Post,
-  UseFilters,
-  ValidationPipe,
-} from '@nestjs/common'
+import { Body, Controller, Get, HttpStatus, NotFoundException, Post, ValidationPipe } from '@nestjs/common'
 import { APP_GUARD } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
 import { IsString } from 'class-validator'
@@ -19,11 +10,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 import { BOOTSTRAP_STATE, BootstrapState } from '../src/common/BootstrapState'
 import { V2AgentController } from '../src/controllers/admin/v2/agent/V2AgentController'
-import { ServiceEndpointExceptionFilter } from '../src/controllers/admin/service-endpoints/ServiceEndpointExceptionFilter'
 import {
   ServiceEndpointError,
   ServiceEndpointErrorCode,
-} from '../src/controllers/admin/service-endpoints/ServiceEndpointsService'
+} from '../src/controllers/admin/v2/vt/ServiceEndpointsService'
 import { AdminAuthGuard, AdminAuthService } from '../src/security'
 import { parseTrustedNetworks } from '../src/security/trustedNetworks'
 import { VsAgentService } from '../src/services/VsAgentService'
@@ -82,23 +72,11 @@ class V2ServiceEndpointsFixtureController {
   }
 }
 
-@Controller({ path: 'connections', version: '1' })
-class V1ConnectionsFixtureController {
+@Controller('connections')
+class UnversionedConnectionsFixtureController {
   @Get(':connectionId')
   getConnection(): never {
     throw new NotFoundException('connection not found')
-  }
-}
-
-@UseFilters(ServiceEndpointExceptionFilter)
-@Controller({ path: 'vt/service-endpoints', version: '1' })
-class V1ServiceEndpointsFixtureController {
-  @Post()
-  addServiceEndpoint(): never {
-    throw new ServiceEndpointError(
-      ServiceEndpointErrorCode.DuplicateId,
-      'an entry with that id already exists',
-    )
   }
 }
 
@@ -113,8 +91,7 @@ describe('v2 error envelope', () => {
       controllers: [
         V2DidcommFixtureController,
         V2ServiceEndpointsFixtureController,
-        V1ConnectionsFixtureController,
-        V1ServiceEndpointsFixtureController,
+        UnversionedConnectionsFixtureController,
         V2AgentController,
       ],
       providers: [
@@ -333,20 +310,10 @@ describe('v2 error envelope', () => {
     expect(response.body).toEqual({ status: 'ready' })
   })
 
-  it('leaves the body of a v1 method untouched', async () => {
-    const response = await request(app.getHttpServer()).get('/v1/connections/unknown-id')
+  it('leaves the body of an unversioned route untouched', async () => {
+    const response = await request(app.getHttpServer()).get('/connections/unknown-id')
 
     expect(response.status).toBe(404)
     expect(response.body).toEqual({ statusCode: 404, message: 'connection not found', error: 'Not Found' })
-  })
-
-  it('keeps the v1 service endpoint filter ahead of the envelope', async () => {
-    const response = await request(app.getHttpServer()).post('/v1/vt/service-endpoints').send({})
-
-    expect(response.status).toBe(409)
-    expect(response.body).toEqual({
-      code: 'DUPLICATE_ID',
-      reason: 'an entry with that id already exists',
-    })
   })
 })

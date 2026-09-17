@@ -1,74 +1,26 @@
 # Verifier Example
 
-## Overview
+An Express backend on port `5100` that asks a VS Agent for a proof request and logs the presentation the wallet sends back. It uses `@verana-labs/vs-agent-client`.
 
-This example shows how to request and verify a Verifiable Credential presentation from a connected user. It covers:
-
-- Sending a proof request
-- Validating the received credential
-- Handling success or failure flows
-
-## Prerequisites
-
-- Docker & Docker Compose
-- A credential already stored in your wallet (issue via the Chatbot example)
-
-## Installation
+## Running
 
 ```bash
-cd vs-agent/examples/verifier
+cd examples/verifier
+docker-compose up --build
 ```
 
-## Running Locally
+Set `PUBLIC_API_BASE_URL` in `docker-compose.yml` to the public `https` URL that fronts port `3001`. The agent derives its DID and its `wss://` DIDComm endpoint from it, so a wallet cannot reach an agent published under a plain `http` URL. Set `CREDENTIAL_DEFINITION_ID` to the AnonCreds credential definition the wallet holds a credential for (the chatbot example issues one).
 
-1. Start services:
+The agent needs an active VERIFIER Participant for the credential schema behind that definition on a Verana ecosystem, `createPresentationRequest` refuses the call otherwise. See [examples/vt-flow-demo](../vt-flow-demo/README.md) for the setup.
 
-   ```bash
-   docker-compose up --build
-   ```
+## Flow
 
-2. Services:
-   - VS Agent → port `3001`
-   - Verifier backend → port `5000`
-3. Obtain connection via:
-   - Web: `http://localhost:3001/invitation`
-   - QR: `http://localhost:3001/invitation/qr`
+1. `GET http://localhost:5100/invitation/<ref>` calls `createPresentationRequest` for `CREDENTIAL_DEFINITION_ID` and returns `{ proofExchangeId, invitation, shortUrl }`. The backend remembers `ref` per `proofExchangeId`.
+2. Open `shortUrl` in the wallet. The wallet connects to the agent and presents the credential.
+3. The agent posts `didcomm.presentations.state-updated` to `POST /events`. The backend logs `state`, `verified`, `claims` and the `ref`.
 
-   Set `PUBLIC_API_BASE_URL` in `docker-compose.yml` to the public `https` URL that fronts port 3001. The agent derives its DID and its `wss://` DIDComm endpoint from it, so a wallet cannot reach an agent published under a plain `http` URL.
-4. Scan QR in your wallet and accept.
-
-## Flow Diagram
-
-```mermaid
-sequenceDiagram
-    actor User as DIDComm Wallet
-    participant Agent as VS Agent
-    participant Verifier as Verifier Service
-
-    User ->> Agent: Scan QR (invitation/qr)
-    Agent ->> User: Send invitation
-    User ->> Agent: Establish connection
-    Agent ->> Verifier: Forward connection event
-    Verifier ->> Agent: Send proof request
-    Agent ->> User: Deliver presentation request
-    User ->> Agent: Present credential
-    Agent ->> Verifier: Forward presentation
-    Verifier ->> Agent: Send verification result
-    Agent ->> User: Deliver result
-```
-
-## Usage
-
-- Upon connection, the Verifier sends a proof request for the credential.
-- Approve the presentation in your wallet.
-- Wallet shows verification result (✅ or ❌).
-
-## Configuration
-
-- Modify requested credential type in `src/index.ts`.
-- Adjust ports or URLs in `docker-compose.yml`.
-
-## Troubleshooting
-
-- If you lack the requested credential, run the Chatbot example first.
-- View logs: `docker-compose logs verifier`.
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `5100` | Port of the backend |
+| `VS_AGENT_ADMIN_BASE_URL` | `http://localhost:3000` | Admin API origin, the client appends `/v2` |
+| `CREDENTIAL_DEFINITION_ID` | unset | Credential definition to request. Unset answers `503` on `/invitation/:ref` |

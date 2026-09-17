@@ -1,10 +1,10 @@
 import { CredoError } from '@credo-ts/core'
-import { ConflictException } from '@nestjs/common'
+import { ConflictException, NotFoundException } from '@nestjs/common'
 import { VtCredentialState, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AdminApiError, AdminApiErrorCode } from '../src/common'
-import { VtFlowsService } from '../src/controllers/admin/vt-flow/VtFlowsService'
+import { VtFlowsService } from '../src/controllers/admin/v2/vt/VtFlowsService'
 
 function flowRecord(id: string, createdAtMs: number, state: VtFlowState = VtFlowState.Validating) {
   return {
@@ -155,6 +155,22 @@ describe('VtFlowsService v2 routes', () => {
     const rejection = expect(service.getFlow('sess-missing')).rejects
     await rejection.toBeInstanceOf(AdminApiError)
     await rejection.toMatchObject({ code: AdminApiErrorCode.UnknownId, status: 404 })
+  })
+
+  it('rejects an unknown session on a mutation with 404', async () => {
+    const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([]) })
+
+    await expect(service.editCredentialClaims('missing', {})).rejects.toThrow(NotFoundException)
+  })
+
+  it('refuses claim edits and oob links with 409 while the connection is not ready', async () => {
+    const service = makeService(
+      { findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) },
+      { connection: { isReady: false } },
+    )
+
+    await expect(service.editCredentialClaims('sess-a', {})).rejects.toThrow(ConflictException)
+    await expect(service.sendOobLink('sess-a', 'https://x')).rejects.toThrow(ConflictException)
   })
 
   it('revokes an AnonCreds credential through its registry before notifying the applicant', async () => {

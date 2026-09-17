@@ -12,7 +12,6 @@ import { chatEvents, ChatPlugin } from '@verana-labs/vs-agent-plugin-chat'
 import { type BaseAgentModules, type VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentModule } from '../../src/admin.module'
-import { MessagingPlugin } from '../../src/plugins/MessagingPlugin'
 import { PublicModule } from '../../src/public.module'
 import { ecsServiceProfile, ServerConfig, TsLogger } from '../../src/utils'
 
@@ -60,7 +59,7 @@ export const startServersTesting = async (
       VsAgentModule.register(
         agent,
         'http://localhost:3001',
-        chat ? [MessagingPlugin, ChatPlugin({ defaultProfile: ecsServiceProfile })] : [MessagingPlugin],
+        chat ? [ChatPlugin({ defaultProfile: ecsServiceProfile })] : [],
       ),
       PublicModule.register(agent, 'http://localhost:3001'),
     ],

@@ -14,6 +14,7 @@ env:
   visionUrl: 'http://webrtc-pymediasoup-client.{{ .Values.global.domain }}' # URL for the Vision Service demo
   webrtcUrl: 'https://webrtc.{{ .Values.global.domain }}' # WebRTC server URL, used for video calls and media streaming
   port: 5000 # Port on which the chatbot backend service listens
+  credentialDefinitionId: '' # AnonCreds credential definition for the credential features, empty disables them
 resources:
   requests:
     cpu: 100m
