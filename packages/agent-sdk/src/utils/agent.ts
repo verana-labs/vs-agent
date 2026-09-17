@@ -110,8 +110,8 @@ export async function connectToPublicDid(agent: VsAgent, peerPublicDid: string):
     const ready = await agent.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
     return ready.id
   } catch (error) {
-    // Without the tag the next call cannot find this record and dials again, which leaves two
-    // records for the pair and makes the message receiver's findByDids throw RecordDuplicateError.
+    // Without the tag, the next call cannot find this record. It dials again and leaves two
+    // records for the pair. The message receiver's findByDids then throws RecordDuplicateError.
     await agent.didcomm.connections.deleteById(connectionRecord.id).catch(deleteError => {
       agent.config.logger.warn(`Failed to delete the incomplete connection ${connectionRecord.id}`, {
         error: deleteError,
