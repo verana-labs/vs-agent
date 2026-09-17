@@ -1,11 +1,21 @@
-import { DidCommEventTypes, type DidCommMessageProcessedEvent } from '@credo-ts/didcomm'
+import {
+  DidCommCredentialState,
+  DidCommEventTypes,
+  type DidCommMessageProcessedEvent,
+} from '@credo-ts/didcomm'
 import {
   VT_FLOW_ONBOARDING_REQUEST_TYPE,
   VT_FLOW_VALIDATING_TYPE,
   VtFlowRole,
   VtFlowState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { ValidationState, type VsAgent, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
+import {
+  createW3cV2Credential,
+  toOfferedCredentialJson,
+  ValidationState,
+  type VsAgent,
+  VtFlowOrchestrator,
+} from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -179,5 +189,62 @@ describe('vt-flow: applicant reconnection', () => {
     expect(validatorRecords[0].id).toBe(validatorRecordId)
     expect(validatorRecords[0].threadId).toBe(record.threadId)
     expect(validatorRecords[0].state).toBe(VtFlowState.AwaitingOr)
+  }, 60_000)
+
+  it('reconnects during the credential offer and the flow is offered again on the new connection', async () => {
+    const { record, validatorRecordId, connection } = await onboardUntilValidatorRotates()
+    await validator.modules.vtFlow.markValidated(validatorRecordId)
+    const credential = toOfferedCredentialJson(
+      createW3cV2Credential({
+        id: `${validator.did}#vtc-1`,
+        type: ['VerifiableCredential', 'VerifiableTrustCredential'],
+        issuer: validator.did!,
+        credentialSubject: { id: applicant.did, name: 'Acme' },
+      }),
+    )
+    const offer = () =>
+      validator.modules.vtFlow.offerCredentialForSession({
+        vtFlowRecordId: validatorRecordId,
+        credentialFormats: { dataIntegrity: { credential, bindingRequired: false } },
+      })
+
+    const credOffered = waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.CredOffered))
+    const { credentialExchangeRecord: firstExchange } = await offer()
+    await credOffered
+    const offered = await applicant.modules.vtFlow.getById(record.id)
+    expect(offered.subprotocolThid).toBe(firstExchange.threadId)
+    await applicant.didcomm.credentials.acceptOffer({
+      credentialExchangeRecordId: offered.credentialExchangeRecordId!,
+      credentialFormats: { dataIntegrity: {} },
+    })
+    await vi.waitFor(async () =>
+      expect((await validator.didcomm.credentials.getById(firstExchange.id)).state).toBe(
+        DidCommCredentialState.RequestReceived,
+      ),
+    )
+    await applicant.didcomm.connections.deleteById(connection.id)
+
+    const before = onboardingRequestsProcessed()
+    const resent = await orchestrator.startOnboardingProcess({
+      applicantParticipantId: APPLICANT_PARTICIPANT,
+    })
+    await vi.waitFor(() => expect(onboardingRequestsProcessed()).toBe(before + 1))
+
+    const validatorRecord = await validator.modules.vtFlow.getById(validatorRecordId)
+    expect(validatorRecord.state).toBe(VtFlowState.Validated)
+    expect(validatorRecord.credentialExchangeRecordId).toBeUndefined()
+    expect(resent.id).toBe(record.id)
+    expect(resent.state).toBe(VtFlowState.Validating)
+    expect(resent.credentialExchangeRecordId).toBeUndefined()
+    expect(resent.connectionId).not.toBe(connection.id)
+
+    const { credentialExchangeRecord: secondExchange } = await offer()
+    expect(secondExchange.id).not.toBe(firstExchange.id)
+    await vi.waitFor(async () => {
+      const reoffered = await applicant.modules.vtFlow.getById(record.id)
+      expect(reoffered.state).toBe(VtFlowState.CredOffered)
+      expect(reoffered.subprotocolThid).toBe(secondExchange.threadId)
+      expect(reoffered.connectionId).toBe(resent.connectionId)
+    })
   }, 60_000)
 })

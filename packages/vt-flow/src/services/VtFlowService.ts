@@ -6,7 +6,11 @@ import type {
 } from '@credo-ts/didcomm'
 
 import { CredoError, EventEmitter, InjectionSymbols, inject, injectable } from '@credo-ts/core'
-import { DidCommConnectionRepository, DidCommCredentialState } from '@credo-ts/didcomm'
+import {
+  DidCommConnectionRepository,
+  DidCommCredentialExchangeRepository,
+  DidCommCredentialState,
+} from '@credo-ts/didcomm'
 
 import { VtFlowModuleConfig, type VtFlowRequestPurpose } from '../VtFlowModuleConfig'
 import { type BuildVtFlowProblemReportOptions, VtFlowErrorCode, buildVtFlowProblemReport } from '../errors'
@@ -192,8 +196,26 @@ export class VtFlowService {
     message.setThread({ threadId: record.threadId })
 
     record.connectionId = params.connectionId
-    await this.repository.update(agentContext, record)
+    if (record.state === VtFlowState.CredOffered) {
+      await this.releaseCredentialExchange(agentContext, record)
+      await this.updateState(agentContext, record, VtFlowState.Validating)
+    } else {
+      await this.repository.update(agentContext, record)
+    }
     return { message, record }
+  }
+
+  private async releaseCredentialExchange(agentContext: AgentContext, record: VtFlowRecord): Promise<void> {
+    if (record.credentialExchangeRecordId) {
+      const exchanges = agentContext.dependencyManager.resolve(DidCommCredentialExchangeRepository)
+      const stale = await exchanges.findById(agentContext, record.credentialExchangeRecordId)
+      if (stale) {
+        stale.parentThreadId = undefined
+        await exchanges.update(agentContext, stale)
+      }
+    }
+    record.credentialExchangeRecordId = undefined
+    record.subprotocolThid = undefined
   }
 
   /** Validator-side OnboardingProcess: create or re-attach (by `participant_session_id`) a record in `AWAITING_OR` from an inbound `onboarding-request`. */
@@ -231,6 +253,9 @@ export class VtFlowService {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
         existing.oobLinkUrl = undefined
         await this.updateState(agentContext, existing, VtFlowState.AwaitingOr)
+      } else if (existing.state === VtFlowState.CredOffered) {
+        await this.releaseCredentialExchange(agentContext, existing)
+        await this.updateState(agentContext, existing, VtFlowState.Validated)
       } else {
         await this.repository.update(agentContext, existing)
       }
@@ -278,7 +303,12 @@ export class VtFlowService {
       await this.assertSamePeer(agentContext, existing, connection)
       existing.connectionId = connection.id
       existing.threadId = message.threadId
-      await this.repository.update(agentContext, existing)
+      if (existing.state === VtFlowState.CredOffered) {
+        await this.releaseCredentialExchange(agentContext, existing)
+        await this.updateState(agentContext, existing, VtFlowState.Validating)
+      } else {
+        await this.repository.update(agentContext, existing)
+      }
       return existing
     }
 
