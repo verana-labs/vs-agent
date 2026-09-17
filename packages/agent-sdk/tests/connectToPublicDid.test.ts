@@ -95,13 +95,11 @@ describe('connectToPublicDid', () => {
     expect(agent.repository.update).toHaveBeenCalled()
   })
 
-  it('deletes the new connection when it does not become ready', async () => {
+  it('deletes the new connection when the tag update fails', async () => {
     const agent = makeAgent([])
-    agent.didcomm.connections.returnWhenIsConnected = vi.fn(async () => {
-      throw new Error('timeout')
-    })
+    agent.repository.update.mockRejectedValue(new Error('storage'))
 
-    await expect(connectToPublicDid(agent as never, PEER_DID)).rejects.toThrow('timeout')
+    await expect(connectToPublicDid(agent as never, PEER_DID)).rejects.toThrow('storage')
     expect(agent.didcomm.connections.deleteById).toHaveBeenCalledWith('fresh-record')
   })
 
