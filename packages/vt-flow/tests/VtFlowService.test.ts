@@ -3,7 +3,7 @@ import { DidCommCredentialExchangeRepository } from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
 import { VtCredentialState, VtFlowRole, VtFlowState, VtFlowVariant } from '../src'
-import { OnboardingRequestMessage } from '../src/messages'
+import { IssuanceRequestMessage, OnboardingRequestMessage } from '../src/messages'
 import { VtFlowRecord } from '../src/repository'
 import { VtFlowService } from '../src/services/VtFlowService'
 
@@ -167,6 +167,41 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     await expect(
       service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never),
     ).rejects.toThrow(/participant_id '42' does not match/)
+    expect(repository.update).not.toHaveBeenCalled()
+  })
+
+  it('validator rejects an issuance re-attach whose schema_id does not match the session', async () => {
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.Validating,
+      variant: VtFlowVariant.DirectIssuance,
+      participantId: undefined,
+      schemaId: '5',
+    })
+    const { service, repository, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+    const message = new IssuanceRequestMessage({
+      schemaId: '6',
+      participantSessionId: 'sess-1',
+      agentParticipantId: '0',
+      walletAgentParticipantId: '0',
+    })
+    message.setThread({ threadId: message.id })
+    const context = {
+      message,
+      agentContext,
+      assertReadyConnection: () => ({
+        id: 'conn-new',
+        theirDid: 'did:web:agent-peer',
+        previousTheirDids: [],
+      }),
+    }
+
+    await expect(service.processReceiveIssuanceRequest(context as never)).rejects.toThrow(
+      /schema_id '6' does not match/,
+    )
     expect(repository.update).not.toHaveBeenCalled()
   })
 

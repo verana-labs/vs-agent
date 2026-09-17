@@ -300,6 +300,11 @@ export class VtFlowService {
           `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
         )
       }
+      if (existing.schemaId !== message.schemaId) {
+        throw new CredoError(
+          `vt-flow: schema_id '${message.schemaId}' does not match the flow of participant_session_id '${message.participantSessionId}'`,
+        )
+      }
       await this.assertSamePeer(agentContext, existing, connection)
       existing.connectionId = connection.id
       existing.threadId = message.threadId
