@@ -201,4 +201,13 @@ describe('EventsService', () => {
 
     await expect(service.receive(credentialEvent('e1', 'done'))).rejects.toThrow('host failed')
   })
+
+  it('accepts a retry of the same id after onEvent failed', async () => {
+    vi.mocked(eventHandler.onEvent).mockRejectedValueOnce(new Error('host failed'))
+
+    await expect(service.receive(credentialEvent('e1', 'done'))).rejects.toThrow('host failed')
+    await service.receive(credentialEvent('e1', 'done'))
+
+    expect(eventHandler.onEvent).toHaveBeenCalledTimes(2)
+  })
 })

@@ -50,6 +50,11 @@ export class EventsService {
     } catch (error) {
       this.logger.error(`Internal handler failed for event ${envelope.type} (${envelope.id}): ${error}`)
     }
-    await this.eventHandler.onEvent(envelope)
+    try {
+      await this.eventHandler.onEvent(envelope)
+    } catch (error) {
+      this.seen.delete(envelope.id)
+      throw error
+    }
   }
 }
