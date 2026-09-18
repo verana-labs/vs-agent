@@ -16,7 +16,7 @@ const record = {
 
 function makeService(
   vtFlowApi: Record<string, unknown>,
-  connection: unknown = { isReady: true, theirDid: 'did:web:peer' },
+  connection: unknown = { isReady: true, theirDid: 'did:web:peer', previousTheirDids: [] },
 ) {
   const agent = {
     dependencyManager: { resolve: () => vtFlowApi },
@@ -28,7 +28,10 @@ function makeService(
 describe('VtFlowsService flow admin routes', () => {
   it('maps the spec list filters onto record tags and enriches the peer DID', async () => {
     const findAllByQuery = vi.fn().mockResolvedValue([record])
-    const service = makeService({ findAllByQuery })
+    const service = makeService(
+      { findAllByQuery },
+      { isReady: true, theirDid: 'did:peer:2.Ez6Mk.Vz6Mk', previousTheirDids: ['did:web:peer'] },
+    )
 
     const flows = await service.listFlows({
       role: VtFlowRole.Validator,

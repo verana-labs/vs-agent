@@ -109,6 +109,20 @@ describe('VtFlowOrchestrator.verifyOfferedCredential', () => {
 describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () => {
   const holder = { id: 5, did: 'did:web:agent', role: 1, validatorParticipantId: 9 }
   const validator = { id: 9, did: 'did:web:validator' }
+  const openConnection = {
+    id: 'conn-old',
+    isReady: true,
+    theirDid: 'did:web:validator',
+    invitationDid: 'did:web:validator',
+    previousTheirDids: [],
+  }
+  const rotatedConnection = {
+    id: 'conn-old',
+    isReady: true,
+    theirDid: 'did:peer:4zQmRotated',
+    invitationDid: 'did:web:validator',
+    previousTheirDids: ['did:web:validator'],
+  }
 
   function makeAgent(previousConnection: unknown) {
     const vtFlowApi = {
@@ -152,13 +166,43 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
   }
 
   it('reuses the previous session id and open connection', async () => {
-    const { agent, vtFlowApi } = makeAgent({ id: 'conn-old', isReady: true })
+    const { agent, vtFlowApi } = makeAgent(openConnection)
 
     await new VtFlowOrchestrator(agent as never).startOnboardingProcess({ applicantParticipantId: 5 })
 
     expect(agent.didcomm.oob.receiveImplicitInvitation).not.toHaveBeenCalled()
     expect(vtFlowApi.sendOnboardingRequest).toHaveBeenCalledWith(
       expect.objectContaining({ connectionId: 'conn-old', participantSessionId: 'sess-old' }),
+    )
+  })
+
+  it('reuses the open connection after the validator rotated to a did:peer', async () => {
+    const { agent, vtFlowApi } = makeAgent(rotatedConnection)
+
+    await new VtFlowOrchestrator(agent as never).startOnboardingProcess({ applicantParticipantId: 5 })
+
+    expect(agent.didcomm.oob.receiveImplicitInvitation).not.toHaveBeenCalled()
+    expect(vtFlowApi.sendOnboardingRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionId: 'conn-old', participantSessionId: 'sess-old' }),
+    )
+  })
+
+  it('ignores a ready connection whose peer is not the validator', async () => {
+    const { agent, vtFlowApi } = makeAgent({
+      id: 'conn-old',
+      isReady: true,
+      theirDid: 'did:peer:4zQmOther',
+      invitationDid: 'did:peer:4zQmOther',
+      previousTheirDids: [],
+    })
+
+    await new VtFlowOrchestrator(agent as never).startOnboardingProcess({ applicantParticipantId: 5 })
+
+    expect(agent.didcomm.oob.receiveImplicitInvitation).toHaveBeenCalledWith(
+      expect.objectContaining({ did: 'did:web:validator' }),
+    )
+    expect(vtFlowApi.sendOnboardingRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionId: 'conn-new', participantSessionId: 'sess-old' }),
     )
   })
 

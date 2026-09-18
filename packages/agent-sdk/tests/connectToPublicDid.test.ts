@@ -5,7 +5,23 @@ import { connectToPublicDid } from '../src/utils/agent'
 const AGENT_DID = 'did:webvh:QmAgent:agent.example'
 const PEER_DID = 'did:webvh:QmPeer:peer.example'
 
-function makeAgent(records: { id: string }[]) {
+interface ConnectionFixture {
+  id: string
+  isReady?: boolean
+  theirDid?: string
+  invitationDid?: string
+  previousTheirDids?: string[]
+}
+
+const rotatedToPeer: ConnectionFixture = {
+  id: 'existing',
+  isReady: true,
+  theirDid: 'did:peer:4zQmRotated',
+  invitationDid: PEER_DID,
+  previousTheirDids: [PEER_DID],
+}
+
+function makeAgent(records: ConnectionFixture[]) {
   const repository = { update: vi.fn(async () => undefined) }
   return {
     did: AGENT_DID,
@@ -32,8 +48,8 @@ function makeAgent(records: { id: string }[]) {
 }
 
 describe('connectToPublicDid', () => {
-  it('reuses the connection that the agent already has to the peer', async () => {
-    const agent = makeAgent([{ id: 'existing' }])
+  it('reuses the connection that the agent already has to the peer, after the peer rotated its DID', async () => {
+    const agent = makeAgent([rotatedToPeer])
 
     const id = await connectToPublicDid(agent as never, PEER_DID)
 
@@ -42,6 +58,17 @@ describe('connectToPublicDid', () => {
       publicDid: PEER_DID,
     })
     expect(agent.didcomm.oob.receiveImplicitInvitation).not.toHaveBeenCalled()
+  })
+
+  it('deletes a tagged connection the peer hung up on and dials again', async () => {
+    const agent = makeAgent([
+      { id: 'dead', isReady: true, theirDid: undefined, previousTheirDids: [PEER_DID] },
+    ])
+
+    const id = await connectToPublicDid(agent as never, PEER_DID)
+
+    expect(agent.didcomm.connections.deleteById).toHaveBeenCalledWith('dead')
+    expect(id).toBe('fresh-record')
   })
 
   it('creates a connection when the agent has none to the peer', async () => {
@@ -68,13 +95,11 @@ describe('connectToPublicDid', () => {
     expect(agent.repository.update).toHaveBeenCalled()
   })
 
-  it('deletes the new connection when it does not become ready', async () => {
+  it('deletes the new connection when the tag update fails', async () => {
     const agent = makeAgent([])
-    agent.didcomm.connections.returnWhenIsConnected = vi.fn(async () => {
-      throw new Error('timeout')
-    })
+    agent.repository.update.mockRejectedValue(new Error('storage'))
 
-    await expect(connectToPublicDid(agent as never, PEER_DID)).rejects.toThrow('timeout')
+    await expect(connectToPublicDid(agent as never, PEER_DID)).rejects.toThrow('storage')
     expect(agent.didcomm.connections.deleteById).toHaveBeenCalledWith('fresh-record')
   })
 

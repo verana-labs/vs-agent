@@ -33,6 +33,7 @@ import {
   connectToPublicDid,
   createVtc,
   createW3cV2Credential,
+  isUsableConnectionTo,
   isVcdm2Credential,
   linkedVpSchemaId,
   removeStoredTrustCredential,
@@ -141,7 +142,8 @@ export class VtFlowOrchestrator {
     let connectionId: string | undefined
     if (existing) {
       const connection = await this.agent.didcomm.connections.findById(existing.connectionId)
-      if (connection?.isReady) connectionId = connection.id
+      if (connection && isUsableConnectionTo(connection, validatorParticipant.did))
+        connectionId = connection.id
     }
     if (!connectionId) {
       connectionId = await connectToPublicDid(this.agent, validatorParticipant.did)
