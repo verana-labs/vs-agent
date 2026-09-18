@@ -59,6 +59,15 @@ database:
       cpu: 500m
       memory: 512Mi
 
+# OpenID4VC. Either config (rendered into a ConfigMap) or existingSecret (a Secret
+# holding openid4vc.json) is mounted read-only where OID4VC_CONFIG_FILE_LOCATION points,
+# which enables the OpenID4VC scope. The JSON must not contain publicApiBaseUrl:
+# the agent injects it from PUBLIC_API_BASE_URL.
+oid4vc:
+  config: "" # openid4vc.json content as a string
+  # name of a Secret holding openid4vc.json; use it for configured signing material instead of config
+  existingSecret: ""
+
 redis:
   enabled: false
   image: "redis:alpine"      # Redis container image (pin a tag for reproducible deploys)

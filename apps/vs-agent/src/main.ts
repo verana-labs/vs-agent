@@ -1,5 +1,7 @@
 import 'reflect-metadata'
 
+import type { OpenId4VcPluginOptions } from '@verana-labs/vs-agent-plugin-openid4vc'
+
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
@@ -62,6 +64,7 @@ import {
   PUBLIC_API_BASE_URL,
   USE_CORS,
   MRTD_MASTER_LIST_CSCA_LOCATION,
+  OID4VC_CONFIG_FILE_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
   VERANA_INDEXER_BASE_URL,
   VERANA_ACCOUNT_MNEMONIC,
@@ -76,7 +79,9 @@ import {
   AGENT_DELEGATED_PARENT_VS_DID,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
 } from './config'
+import { readOpenId4VcOptions } from './config/openid4vc'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
+import { OpenId4VcNestPlugin } from './plugins/OpenId4VcNestPlugin'
 import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
@@ -91,6 +96,7 @@ import {
   ecsServiceProfile,
   webhookEvent,
 } from './utils'
+import { initializeNestPlugins, mountPublicPluginMiddleware } from './utils/pluginLifecycle'
 
 const AGENT_LOG_LEVEL = resolveLogLevel(AGENT_LOG_LEVEL_NAME, DEFAULT_AGENT_LOG_LEVEL)
 const ADMIN_API_LOG_LEVEL = resolveLogLevel(ADMIN_API_LOG_LEVEL_NAME, DEFAULT_ADMIN_API_LOG_LEVEL)
@@ -120,6 +126,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
     logger: nestLogLevels,
   })
   commonAppConfig(publicApp, cors, true)
+  mountPublicPluginMiddleware(publicApp.getHttpAdapter().getInstance(), nestPlugins)
 
   publicApp.use(express.static(path.join(__dirname, '../../public')))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
@@ -259,6 +266,16 @@ const run = async () => {
   }
   const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE === 'corporation' ? ADMIN_API_PUBLIC_URL : undefined
 
+  let openId4VcOptions: OpenId4VcPluginOptions | undefined
+  if (OID4VC_CONFIG_FILE_LOCATION) {
+    try {
+      openId4VcOptions = await readOpenId4VcOptions(OID4VC_CONFIG_FILE_LOCATION, publicApiBaseUrl)
+    } catch (error) {
+      serverLogger.error(`Invalid configuration:\n- ${(error as Error).message}`)
+      process.exit(1)
+    }
+  }
+
   // Dynamically load optional plugin packages.
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
   const [chatModule, mrtdModule] = await Promise.all([
@@ -284,6 +301,7 @@ const run = async () => {
     ...(mrtdModule
       ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MRTD_MASTER_LIST_CSCA_LOCATION })]
       : []),
+    ...(openId4VcOptions ? [OpenId4VcNestPlugin(openId4VcOptions)] : []),
     VtFlowNestPlugin,
   ]
 
@@ -376,6 +394,7 @@ const run = async () => {
     veranaChain,
     authorizationService,
     adminApiServiceEndpoint,
+    nestPlugins,
   })
 
   const bootstrapState = new BootstrapState()
@@ -393,6 +412,7 @@ const run = async () => {
     nestPlugins,
     bootstrapState,
   }
+  await initializeNestPlugins(nestPlugins, agent, serverLogger)
   const { httpServer, webSocketServer } = await startServers(agent, conf)
 
   if (agent.did) {
