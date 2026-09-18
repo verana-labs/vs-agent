@@ -93,6 +93,7 @@ function makeMocks() {
       },
       connections: {
         findAllByQuery: vi.fn().mockResolvedValue([]),
+        findById: vi.fn().mockResolvedValue({ id: 'conn-1', isReady: true }),
         returnWhenIsConnected: vi.fn().mockResolvedValue({ id: 'conn-1' }),
         deleteById: vi.fn().mockResolvedValue(undefined),
       },
@@ -267,6 +268,30 @@ describe('EcsBootstrapService standalone', () => {
     expect(mocks.agent.didcomm.credentials.acceptOffer).toHaveBeenCalledWith({
       credentialExchangeRecordId: 'cred-ex-1',
     })
+  })
+
+  it('reconnects a CRED_OFFERED flow whose connection is gone instead of accepting the stale offer', async () => {
+    const mocks = makeMocks()
+    mocks.indexer.listParticipants.mockImplementation(async (filter: { role?: string; did?: string }) => {
+      if (filter.did === 'did:web:agent') {
+        return [{ id: 9, participant_state: ParticipantState.Active, revoked: null, slashed: null }]
+      }
+      return []
+    })
+    mocks.vtFlowApi.findAllByQuery.mockResolvedValue([
+      {
+        id: 'flow-1',
+        participantId: '9',
+        connectionId: 'conn-gone',
+        credentialExchangeRecordId: 'cred-ex-1',
+      },
+    ])
+    mocks.agent.didcomm.connections.findById.mockResolvedValue(null)
+
+    await makeService(mocks).run()
+
+    expect(startOnboardingProcess).toHaveBeenCalledWith({ applicantParticipantId: 9 })
+    expect(mocks.agent.didcomm.credentials.acceptOffer).not.toHaveBeenCalled()
   })
 })
 

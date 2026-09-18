@@ -1,6 +1,7 @@
 import { VtFlowRole } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { describe, expect, it, vi } from 'vitest'
 
+import { ValidationState } from '../src/blockchain/types'
 import { VtFlowOrchestrator } from '../src/vtFlow/VtFlowOrchestrator'
 
 const record = {
@@ -107,7 +108,13 @@ describe('VtFlowOrchestrator.verifyOfferedCredential', () => {
 })
 
 describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () => {
-  const holder = { id: 5, did: 'did:web:agent', role: 1, validatorParticipantId: 9 }
+  const holder = {
+    id: 5,
+    did: 'did:web:agent',
+    role: 1,
+    validatorParticipantId: 9,
+    opState: ValidationState.VALIDATED,
+  }
   const validator = { id: 9, did: 'did:web:validator' }
   const openConnection = {
     id: 'conn-old',
@@ -124,7 +131,15 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
     previousTheirDids: ['did:web:validator'],
   }
 
-  function makeAgent(previousConnection: unknown) {
+  const runningFlow = (state: string) => ({
+    id: 'rec-1',
+    participantSessionId: 'sess-old',
+    connectionId: 'conn-old',
+    state,
+    createdAt: new Date(0),
+  })
+
+  function makeAgent(previousConnection: unknown, participant = holder) {
     const vtFlowApi = {
       findAllByQuery: vi.fn().mockResolvedValue([
         {
@@ -135,13 +150,14 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
         },
       ]),
       sendOnboardingRequest: vi.fn().mockResolvedValue({ id: 'rec-2' }),
+      resendOnboardingRequest: vi.fn().mockResolvedValue({ id: 'rec-1' }),
     }
     const agent = {
       did: 'did:web:agent',
       publicApiBaseUrl: 'https://agent.example',
       dids: { getCreatedDids: vi.fn(async () => []) },
       config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
-      indexer: { findParticipant: vi.fn(async (id: number) => (Number(id) === 5 ? holder : validator)) },
+      indexer: { findParticipant: vi.fn(async (id: number) => (Number(id) === 5 ? participant : validator)) },
       veranaChain: {
         startParticipantOP: vi.fn(async () => ({ participantId: 5, txHash: 'AA' })),
         renewParticipantOP: vi.fn(async () => ({ txHash: 'BB' })),
@@ -217,15 +233,9 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
     )
   })
 
-  it('does not resend while a flow is still in progress', async () => {
-    const { agent, vtFlowApi } = makeAgent(null)
-    const inFlight = {
-      id: 'rec-1',
-      participantSessionId: 'sess-old',
-      connectionId: 'conn-old',
-      state: 'CRED_OFFERED',
-      createdAt: new Date(0),
-    }
+  it('does not resend while a flow is in progress on an open connection', async () => {
+    const { agent, vtFlowApi } = makeAgent(rotatedConnection)
+    const inFlight = runningFlow('CRED_OFFERED')
     vtFlowApi.findAllByQuery.mockResolvedValue([inFlight])
 
     const result = await new VtFlowOrchestrator(agent as never).startOnboardingProcess({
@@ -234,7 +244,35 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
 
     expect(result).toBe(inFlight)
     expect(vtFlowApi.sendOnboardingRequest).not.toHaveBeenCalled()
+    expect(vtFlowApi.resendOnboardingRequest).not.toHaveBeenCalled()
     expect(agent.didcomm.oob.receiveImplicitInvitation).not.toHaveBeenCalled()
+  })
+
+  it('reconnects and resends the request of a running flow whose connection is gone', async () => {
+    const { agent, vtFlowApi } = makeAgent(null)
+    vtFlowApi.findAllByQuery.mockResolvedValue([runningFlow('VALIDATING')])
+
+    await new VtFlowOrchestrator(agent as never).startOnboardingProcess({ applicantParticipantId: 5 })
+
+    expect(agent.didcomm.oob.receiveImplicitInvitation).toHaveBeenCalled()
+    expect(vtFlowApi.resendOnboardingRequest).toHaveBeenCalledWith({
+      vtFlowRecordId: 'rec-1',
+      connectionId: 'conn-new',
+    })
+    expect(vtFlowApi.sendOnboardingRequest).not.toHaveBeenCalled()
+  })
+
+  it('resends an undelivered request on the open connection while the participant is still PENDING', async () => {
+    const { agent, vtFlowApi } = makeAgent(openConnection, { ...holder, opState: ValidationState.PENDING })
+    vtFlowApi.findAllByQuery.mockResolvedValue([runningFlow('OR_SENT')])
+
+    await new VtFlowOrchestrator(agent as never).startOnboardingProcess({ applicantParticipantId: 5 })
+
+    expect(agent.didcomm.oob.receiveImplicitInvitation).not.toHaveBeenCalled()
+    expect(vtFlowApi.resendOnboardingRequest).toHaveBeenCalledWith({
+      vtFlowRecordId: 'rec-1',
+      connectionId: 'conn-old',
+    })
   })
 })
 

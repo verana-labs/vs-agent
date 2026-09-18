@@ -1,8 +1,9 @@
 import { utils } from '@credo-ts/core'
+import { DidCommCredentialExchangeRepository } from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
 import { VtCredentialState, VtFlowRole, VtFlowState, VtFlowVariant } from '../src'
-import { OnboardingRequestMessage } from '../src/messages'
+import { IssuanceRequestMessage, OnboardingRequestMessage } from '../src/messages'
 import { VtFlowRecord } from '../src/repository'
 import { VtFlowService } from '../src/services/VtFlowService'
 
@@ -32,14 +33,20 @@ function makeService(existing: VtFlowRecord | null, previousConnection: unknown 
   const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
   const config = { assertVerifiableService: undefined }
   const connectionRepository = { findById: vi.fn().mockResolvedValue(previousConnection) }
-  const agentContext = { dependencyManager: { resolve: () => connectionRepository } }
+  const exchangeRepository = { findById: vi.fn().mockResolvedValue(null), update: vi.fn() }
+  const agentContext = {
+    dependencyManager: {
+      resolve: (token: unknown) =>
+        token === DidCommCredentialExchangeRepository ? exchangeRepository : connectionRepository,
+    },
+  }
   const service = new VtFlowService(
     repository as never,
     eventEmitter as never,
     logger as never,
     config as never,
   )
-  return { service, repository, agentContext }
+  return { service, repository, agentContext, exchangeRepository }
 }
 
 function makeMessageContext(agentContext: unknown, theirDid = 'did:web:agent-peer') {
@@ -123,6 +130,158 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     await expect(
       service.processReceiveOnboardingRequest(makeMessageContext(agentContext, 'did:web:attacker') as never),
     ).rejects.toThrow(/peer does not match/)
+  })
+
+  it('validator keeps its edited claims when the applicant resends the same thread', async () => {
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.Validating,
+      claims: { edited: true },
+    })
+    const { service, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+    const context = makeMessageContext(agentContext)
+    context.message.setThread({ threadId: existing.threadId })
+    context.message.claims = { name: 'Acme' }
+
+    const record = await service.processReceiveOnboardingRequest(context as never)
+
+    expect(record.claims).toEqual({ edited: true })
+    expect(record.state).toBe(VtFlowState.Validating)
+    expect(record.connectionId).toBe('conn-new')
+  })
+
+  it('validator rejects a re-attach whose participant_id does not match the session', async () => {
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.Validating,
+      participantId: '43',
+    })
+    const { service, repository, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+
+    await expect(
+      service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never),
+    ).rejects.toThrow(/participant_id '42' does not match/)
+    expect(repository.update).not.toHaveBeenCalled()
+  })
+
+  it('validator rejects an issuance re-attach whose schema_id does not match the session', async () => {
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.Validating,
+      variant: VtFlowVariant.DirectIssuance,
+      participantId: undefined,
+      schemaId: '5',
+    })
+    const { service, repository, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+    const message = new IssuanceRequestMessage({
+      schemaId: '6',
+      participantSessionId: 'sess-1',
+      agentParticipantId: '0',
+      walletAgentParticipantId: '0',
+    })
+    message.setThread({ threadId: message.id })
+    const context = {
+      message,
+      agentContext,
+      assertReadyConnection: () => ({
+        id: 'conn-new',
+        theirDid: 'did:web:agent-peer',
+        previousTheirDids: [],
+      }),
+    }
+
+    await expect(service.processReceiveIssuanceRequest(context as never)).rejects.toThrow(
+      /schema_id '6' does not match/,
+    )
+    expect(repository.update).not.toHaveBeenCalled()
+  })
+
+  it('validator re-attach during the credential offer drops the exchange and steps back to Validated', async () => {
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.CredOffered,
+      credentialExchangeRecordId: 'cred-ex-1',
+      subprotocolThid: 'sub-1',
+    })
+    const { service, agentContext, exchangeRepository } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+    const stale = { id: 'cred-ex-1', parentThreadId: existing.threadId }
+    exchangeRepository.findById.mockResolvedValue(stale)
+
+    const record = await service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+
+    expect(record.state).toBe(VtFlowState.Validated)
+    expect(record.credentialExchangeRecordId).toBeUndefined()
+    expect(record.subprotocolThid).toBeUndefined()
+    expect(record.connectionId).toBe('conn-new')
+    expect(stale.parentThreadId).toBeUndefined()
+    expect(exchangeRepository.update).toHaveBeenCalledWith(agentContext, stale)
+  })
+})
+
+describe('VtFlowService.reattachOnboardingProcessRecord', () => {
+  it('rebuilds the request of a running flow on the same thread and moves only the connection', async () => {
+    const existing = makeRecord({ state: VtFlowState.OrSent, claims: { name: 'Acme' } })
+    const { service, repository } = makeService(existing)
+
+    const { message, record } = await service.reattachOnboardingProcessRecord({} as never, {
+      vtFlowRecordId: existing.id,
+      connectionId: 'conn-new',
+    })
+
+    expect(message.id).not.toBe(existing.threadId)
+    expect(message.threadId).toBe(existing.threadId)
+    expect(message.participantSessionId).toBe('sess-1')
+    expect(message.claims).toEqual({ name: 'Acme' })
+    expect(record.connectionId).toBe('conn-new')
+    expect(record.state).toBe(VtFlowState.OrSent)
+    expect(repository.save).not.toHaveBeenCalled()
+  })
+
+  it('drops the exchange of a flow in CredOffered and steps back to Validating', async () => {
+    const existing = makeRecord({
+      state: VtFlowState.CredOffered,
+      credentialExchangeRecordId: 'cred-ex-1',
+      subprotocolThid: 'sub-1',
+    })
+    const { service, agentContext, exchangeRepository } = makeService(existing)
+    const stale = { id: 'cred-ex-1', parentThreadId: existing.threadId }
+    exchangeRepository.findById.mockResolvedValue(stale)
+
+    const { record } = await service.reattachOnboardingProcessRecord(agentContext as never, {
+      vtFlowRecordId: existing.id,
+      connectionId: 'conn-new',
+    })
+
+    expect(record.state).toBe(VtFlowState.Validating)
+    expect(stale.parentThreadId).toBeUndefined()
+    expect(record.credentialExchangeRecordId).toBeUndefined()
+    expect(record.subprotocolThid).toBeUndefined()
+    expect(record.connectionId).toBe('conn-new')
+  })
+
+  it('refuses a finished flow', async () => {
+    const existing = makeRecord({ state: VtFlowState.Completed })
+    const { service, repository } = makeService(existing)
+
+    await expect(
+      service.reattachOnboardingProcessRecord({} as never, {
+        vtFlowRecordId: existing.id,
+        connectionId: 'c',
+      }),
+    ).rejects.toThrow(/cannot be re-attached/)
+    expect(repository.update).not.toHaveBeenCalled()
   })
 })
 

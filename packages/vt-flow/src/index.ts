@@ -11,6 +11,7 @@ export type {
   NotifyCredentialStateChangeOptions,
   OfferCredentialForSessionOptions,
   ProblemReportDispatchOptions,
+  ResendOnboardingRequestOptions,
   SendIssuanceRequestOptions,
   SendOnboardingRequestOptions,
   SendOobLinkOptions,
