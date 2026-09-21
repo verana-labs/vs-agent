@@ -21,7 +21,12 @@ import { ListConnectionsQueryDto, SendInvitationBodyDto } from '../src/controlle
 import { InvitationsService } from '../src/controllers/admin/v2/didcomm/InvitationsService'
 import { VsAgentService } from '../src/services/VsAgentService'
 
-const connection = (id: string, createdAt: string, extra: Record<string, unknown> = {}) => ({
+const connection = (
+  id: string,
+  createdAt: string,
+  extra: Record<string, unknown> = {},
+  tags: Record<string, string> = {},
+) => ({
   id,
   state: 'completed',
   role: 'responder',
@@ -30,8 +35,12 @@ const connection = (id: string, createdAt: string, extra: Record<string, unknown
   threadId: `thread-${id}`,
   createdAt: new Date(createdAt),
   updatedAt: new Date(createdAt),
+  getTag: (name: string) => tags[name],
   ...extra,
 })
+
+const subConnection = (id: string, createdAt: string, parentConnectionId: string) =>
+  connection(id, createdAt, { outOfBandId: `oob-${id}` }, { parentConnectionId })
 
 // Deliberately out of order: the controller owes a deterministic order of its own.
 const records = [
@@ -119,7 +128,7 @@ describe('v2 didcomm connection routes', () => {
 
   it('passes every supplied filter to the connection repository', async () => {
     const response = await request(app.getHttpServer()).get(
-      '/v2/didcomm/connections?state=completed&role=responder&theirDid=did:web:peer.test&mediatorId=med-1&didcommVersion=v2',
+      '/v2/didcomm/connections?state=completed&role=responder&theirDid=did:web:peer.test&mediatorId=med-1&didcommVersion=v2&parentConnectionId=c-1',
     )
 
     expect(response.status).toBe(200)
@@ -130,8 +139,22 @@ describe('v2 didcomm connection routes', () => {
         theirDid: 'did:web:peer.test',
         mediatorId: 'med-1',
         didcommVersion: 'v2',
+        parentConnectionId: 'c-1',
       }),
     )
+  })
+
+  it('refuses a cursor replayed against another parentConnectionId', async () => {
+    const first = await request(app.getHttpServer()).get(
+      '/v2/didcomm/connections?limit=1&parentConnectionId=c-1',
+    )
+
+    const replayed = await request(app.getHttpServer()).get(
+      `/v2/didcomm/connections?limit=1&parentConnectionId=c-2&cursor=${encodeURIComponent(first.body.nextCursor)}`,
+    )
+
+    expect(replayed.status).toBe(400)
+    expect(replayed.body.error.code).toBe('INVALID_CURSOR')
   })
 
   // Credo writes the didcommVersion tag only for v2 out-of-band connections and treats its
@@ -198,6 +221,19 @@ describe('v2 didcomm connection routes', () => {
     expect(single.body).toEqual(list.body.items[0])
   })
 
+  it('returns parentConnectionId from the tag, and null for it and outOfBandId when absent', async () => {
+    connections.findById.mockResolvedValueOnce(subConnection('c-4', '2026-01-04T00:00:00.000Z', 'c-1'))
+    const child = await request(app.getHttpServer()).get('/v2/didcomm/connections/c-4')
+    expect(child.status).toBe(200)
+    expect(child.body).toMatchObject({ id: 'c-4', outOfBandId: 'oob-c-4', parentConnectionId: 'c-1' })
+
+    connections.findById.mockResolvedValueOnce(records[2])
+    const plain = await request(app.getHttpServer()).get('/v2/didcomm/connections/c-1')
+    expect(plain.status).toBe(200)
+    expect(plain.body).toHaveProperty('outOfBandId', null)
+    expect(plain.body).toHaveProperty('parentConnectionId', null)
+  })
+
   it('reports an unknown connection as UNKNOWN_ID', async () => {
     connections.findById.mockResolvedValue(null)
 
@@ -215,6 +251,29 @@ describe('v2 didcomm connection routes', () => {
     expect(response.status).toBe(204)
     expect(response.body).toEqual({})
     expect(connections.deleteById).toHaveBeenCalledWith('c-1')
+  })
+
+  it('deletes a parent connection alone and keeps its children listed by parentConnectionId', async () => {
+    connections.deleteById.mockResolvedValue(undefined)
+    connections.findAllByQuery.mockResolvedValue([
+      subConnection('c-4', '2026-01-04T00:00:00.000Z', 'c-1'),
+      subConnection('c-5', '2026-01-05T00:00:00.000Z', 'c-1'),
+    ])
+
+    const deleted = await request(app.getHttpServer()).delete('/v2/didcomm/connections/c-1')
+    expect(deleted.status).toBe(204)
+    expect(connections.deleteById).toHaveBeenCalledTimes(1)
+    expect(connections.deleteById).toHaveBeenCalledWith('c-1')
+
+    const children = await request(app.getHttpServer()).get('/v2/didcomm/connections?parentConnectionId=c-1')
+    expect(children.status).toBe(200)
+    expect(connections.findAllByQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ parentConnectionId: 'c-1' }),
+    )
+    expect(idsOf(children.body)).toEqual(['c-4', 'c-5'])
+    expect(
+      children.body.items.map((item: { parentConnectionId: string }) => item.parentConnectionId),
+    ).toEqual(['c-1', 'c-1'])
   })
 
   it('reports a delete of an unknown connection as UNKNOWN_ID', async () => {
