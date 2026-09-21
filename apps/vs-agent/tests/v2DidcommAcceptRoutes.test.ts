@@ -7,7 +7,11 @@ import '@hyperledger/anoncreds-nodejs'
 
 import { LogLevel } from '@credo-ts/core'
 import {
+  DidCommBasicMessageRole,
+  DidCommHandshakeProtocol,
   DidCommMessageSender,
+  DidCommOutOfBandInvitation,
+  DidCommOutOfBandInvitationV2,
   DidCommPresentationV2AckMessage,
   DidCommPresentationV2ProblemReportMessage,
   DidCommProofEventTypes,
@@ -765,4 +769,168 @@ describe('v2 didcomm accept routes, over two agents', () => {
     expect(abandoned.body.errorMessage).toContain('e.p.trust-resolution-unavailable')
     expect(abandoned.body.errorMessage).toContain('records no CredentialSchema')
   }, 120_000)
+
+  describe('the invitations module, over an established connection', () => {
+    const faberDid = () => faberAgent.did as string
+
+    const untilFaberConnection = async (query: Record<string, string>) => {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const [record] = await faberAgent.didcomm.connections.findAllByQuery(query)
+        if (record) return record
+        await new Promise(resolve => setTimeout(resolve, 250))
+      }
+      throw new Error(`Faber has no connection matching ${JSON.stringify(query)}`)
+    }
+
+    let v2Parent: { id: string }
+    let aliceV2Parent: { id: string }
+
+    const aliceReceives = async (invitation: DidCommOutOfBandInvitation) => {
+      const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitation(invitation, {
+        label: 'Alice',
+      })
+      if (!connectionRecord) throw new Error('Alice did not open a connection from the invitation')
+      return connectionRecord
+    }
+
+    beforeAll(async () => {
+      const record = await faberAgent.didcomm.oob.createInvitation({
+        didCommVersion: 'v2',
+        ourDid: faberDid(),
+      })
+      aliceV2Parent = await aliceReceives(record.outOfBandInvitation)
+      await aliceAgent.didcomm.basicMessages.sendMessage(aliceV2Parent.id, 'hello')
+      v2Parent = await untilFaberConnection({ outOfBandId: record.id })
+    }, 60_000)
+
+    const untilAliceReceivesInvitationUrl = async (known: Set<string>) => {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const records = await aliceAgent.didcomm.basicMessages.findAllByQuery({
+          connectionId: aliceV2Parent.id,
+          role: DidCommBasicMessageRole.Receiver,
+        })
+        const match = records.find(record => !known.has(record.id))
+        if (match) return match.content
+        await new Promise(resolve => setTimeout(resolve, 250))
+      }
+      throw new Error('Alice received no invitation on the v2 connection')
+    }
+
+    const aliceKnownMessages = async () =>
+      new Set(
+        (await aliceAgent.didcomm.basicMessages.findAllByQuery({ connectionId: aliceV2Parent.id })).map(
+          r => r.id,
+        ),
+      )
+
+    const sentBy = async (app: () => request.SuperTest<request.Test>, body: Record<string, unknown>) => {
+      const sendMessage = vi.spyOn(faberAgent.dependencyManager.resolve(DidCommMessageSender), 'sendMessage')
+      try {
+        const response = await app().post('/v2/didcomm/invitations').send(body)
+        return { response, message: sendMessage.mock.calls.at(-1)?.[0].message }
+      } finally {
+        sendMessage.mockRestore()
+      }
+    }
+
+    it('opens a sub-connection over a v2 connection from a basic message that carries the OOB 2.0 URL', async () => {
+      const parent = v2Parent
+      const oobCount = (await faberAgent.didcomm.oob.getAll()).length
+      const known = await aliceKnownMessages()
+
+      const response = await faber().post('/v2/didcomm/invitations').send({
+        connectionId: parent.id,
+        label: 'Support',
+        imageUrl: 'https://faber.example/support.png',
+        goal: 'Open a support chat',
+      })
+
+      expect(response.status).toBe(201)
+      expect(response.body.outOfBandId).toBeDefined()
+      expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount + 1)
+
+      const sent = await faber().get(`/v2/didcomm/basic-messages?connectionId=${parent.id}&role=sender`)
+      expect(sent.body.items.map((item: { id: string }) => item.id)).toContain(response.body.id)
+
+      const url = await untilAliceReceivesInvitationUrl(known)
+      expect(url).toMatch(/^https:\/\/faber\?_oob=/)
+      const invitation = DidCommOutOfBandInvitationV2.fromUrl(url)
+      expect(invitation.from).toMatch(/^did:peer:/)
+      expect(invitation.from).not.toBe(faberDid())
+      expect(invitation.body).toEqual({ goal: 'Open a support chat', accept: ['didcomm/v2'] })
+      expect(JSON.stringify(invitation.toJSON())).not.toMatch(/Support|support\.png/)
+
+      const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitationFromUrl(url, {
+        label: 'Alice',
+      })
+      if (!connectionRecord) throw new Error('Alice did not open a connection from the invitation')
+      await aliceAgent.didcomm.basicMessages.sendMessage(connectionRecord.id, 'hello over the sub-connection')
+
+      const child = await untilFaberConnection({ outOfBandId: response.body.outOfBandId })
+      expect(child.id).not.toBe(parent.id)
+      expect(child.getTag('parentConnectionId')).toBe(parent.id)
+
+      const listed = await faber().get(`/v2/didcomm/connections?outOfBandId=${response.body.outOfBandId}`)
+      expect(listed.body.items.map((item: { id: string }) => item.id)).toEqual([child.id])
+    }, 120_000)
+
+    it('opens a sub-connection over a v1 connection with an OOB 1.1 invitation that carries the label', async () => {
+      const v1 = await faberAgent.didcomm.oob.createInvitation({
+        didCommVersion: 'v1',
+        handshakeProtocols: [DidCommHandshakeProtocol.DidExchange],
+      })
+      const aliceParent = await aliceReceives(v1.outOfBandInvitation)
+      const parent = await untilFaberConnection({ outOfBandId: v1.id, state: 'completed' })
+      await aliceAgent.didcomm.connections.returnWhenIsConnected(aliceParent.id)
+
+      const { response, message } = await sentBy(faber, {
+        connectionId: parent.id,
+        label: 'Support',
+        imageUrl: 'https://faber.example/support.png',
+      })
+
+      expect(response.status).toBe(201)
+      expect(message).toBeInstanceOf(DidCommOutOfBandInvitation)
+      const invitation = message as DidCommOutOfBandInvitation
+      expect(invitation.v2Invitation).toBeUndefined()
+      expect(invitation.id).toBe(response.body.id)
+      expect(invitation.label).toBe('Support')
+      expect(invitation.imageUrl).toBe('https://faber.example/support.png')
+      expect(invitation.getServices()).not.toContain(faberDid())
+
+      const aliceChild = await aliceReceives(invitation)
+      await aliceAgent.didcomm.connections.returnWhenIsConnected(aliceChild.id)
+
+      const child = await untilFaberConnection({ outOfBandId: response.body.outOfBandId, state: 'completed' })
+      expect(child.id).not.toBe(parent.id)
+      expect(child.getTag('parentConnectionId')).toBe(parent.id)
+    }, 120_000)
+
+    it('refers the peer to another DID without creating a record', async () => {
+      const parent = v2Parent
+      const oobCount = (await faberAgent.didcomm.oob.getAll()).length
+      const known = await aliceKnownMessages()
+
+      const response = await faber().post('/v2/didcomm/invitations').send({
+        connectionId: parent.id,
+        did: 'did:webvh:verifier',
+        goalCode: 'verify',
+      })
+
+      expect(response.status).toBe(201)
+      expect(response.body).toEqual({ id: expect.any(String) })
+      expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount)
+
+      const invitation = DidCommOutOfBandInvitationV2.fromUrl(await untilAliceReceivesInvitationUrl(known))
+      expect(invitation.from).toBe('did:webvh:verifier')
+      expect(invitation.toV2Plaintext().body).toEqual({ goal_code: 'verify', accept: ['didcomm/v2'] })
+    }, 120_000)
+
+    it('reports an unknown connection as UNKNOWN_ID', async () => {
+      const response = await faber().post('/v2/didcomm/invitations').send({ connectionId: 'nope' })
+
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
+    })
+  })
 })

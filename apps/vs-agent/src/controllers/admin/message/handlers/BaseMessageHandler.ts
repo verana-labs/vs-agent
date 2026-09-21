@@ -5,15 +5,11 @@ import {
   AnonCredsRequestedAttribute,
   dateToTimestamp,
 } from '@credo-ts/anoncreds'
-import { JsonTransformer, utils } from '@credo-ts/core'
+import { JsonTransformer } from '@credo-ts/core'
 import {
   DidCommAutoAcceptCredential,
   DidCommAutoAcceptProof,
   DidCommConnectionRecord,
-  DidCommMessageSender,
-  DidCommOutboundMessageContext,
-  DidCommOutOfBandInvitation,
-  DidCommOutOfBandRepository,
 } from '@credo-ts/didcomm'
 import { Inject, Injectable } from '@nestjs/common'
 import {
@@ -36,10 +32,14 @@ import {
 } from '@verana-labs/vs-agent-sdk'
 
 import { CredentialTypesService } from '../../credentials'
+import { InvitationsService } from '../../v2/didcomm/InvitationsService'
 
 @Injectable()
 export class BaseMessageHandler implements MessageHandler {
-  constructor(@Inject(CredentialTypesService) private readonly credentialService: CredentialTypesService) {}
+  constructor(
+    @Inject(CredentialTypesService) private readonly credentialService: CredentialTypesService,
+    @Inject(InvitationsService) private readonly invitationsService: InvitationsService,
+  ) {}
 
   readonly supportedTypes: MessageType[] = [
     MessageType.InvitationMessage,
@@ -141,45 +141,14 @@ export class BaseMessageHandler implements MessageHandler {
     let messageId: string | undefined
 
     if (messageType === InvitationMessage.type) {
-      const msg = JsonTransformer.fromJSON(message, InvitationMessage)
-      const { label, imageUrl, did } = msg
-
-      const messageSender = agent.context.dependencyManager.resolve(DidCommMessageSender)
-
-      if (did) {
-        const json = {
-          '@type': DidCommOutOfBandInvitation.type.messageTypeUri,
-          '@id': utils.uuid(),
-          label: label ?? '',
-          imageUrl: imageUrl,
-          services: [did],
-          handshake_protocols: ['https://didcomm.org/didexchange/1.0'],
-        }
-
-        const invitation = DidCommOutOfBandInvitation.fromJson(json)
-        invitation.setThread({ parentThreadId: did })
-
-        await messageSender.sendMessage(
-          new DidCommOutboundMessageContext(invitation, { agentContext: agent.context, connection }),
-        )
-
-        messageId = invitation.id
-      } else {
-        const outOfBandRecord = await agent.didcomm.oob.createInvitation({ label, imageUrl })
-        outOfBandRecord.setTag('parentConnectionId', connection.id)
-        await agent.dependencyManager
-          .resolve(DidCommOutOfBandRepository)
-          .update(agent.context, outOfBandRecord)
-
-        await messageSender.sendMessage(
-          new DidCommOutboundMessageContext(outOfBandRecord.outOfBandInvitation, {
-            agentContext: agent.context,
-            connection,
-          }),
-        )
-
-        messageId = outOfBandRecord.id
-      }
+      const { label, imageUrl, did } = JsonTransformer.fromJSON(message, InvitationMessage)
+      const { id, outOfBandId } = await this.invitationsService.sendInvitation({
+        connectionId: connection.id,
+        did,
+        label,
+        imageUrl,
+      })
+      messageId = outOfBandId ?? id
     } else if (messageType === TerminateConnectionMessage.type) {
       JsonTransformer.fromJSON(message, TerminateConnectionMessage)
       await agent.didcomm.connections.hangup({ connectionId: connection.id })
