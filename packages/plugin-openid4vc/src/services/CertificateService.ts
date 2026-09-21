@@ -66,15 +66,15 @@ type DevelopmentDidAgent = {
 
 export async function loadSigningCertificate(
   agent: CertificateAgent,
-  signing: OpenId4VcSigningOptions,
+  signing: OpenId4VcSigningOptions | undefined,
   publicApiBaseUrl = agent.publicApiBaseUrl,
   role: SigningRole = 'issuer',
 ): Promise<SigningCertificateHandle> {
-  if (signing.configured) {
+  if (signing) {
     return await loadConfiguredSigningCertificate(agent, signing.configured)
   }
 
-  return await loadDevelopmentSigningCertificate(agent, signing.development, publicApiBaseUrl, role)
+  return await loadDevelopmentSigningCertificate(agent, publicApiBaseUrl, role)
 }
 
 export function didFromValidatedCertificate(certificate: X509Certificate): string {
@@ -190,7 +190,7 @@ export async function ensureCreatedDidRecordKeyMapping(
 
 async function loadConfiguredSigningCertificate(
   agent: CertificateAgent,
-  configured: NonNullable<OpenId4VcSigningOptions['configured']>,
+  configured: OpenId4VcSigningOptions['configured'],
 ): Promise<SigningCertificateHandle> {
   if (configured.certificateChain.length === 0) {
     throw new Error('configured certificate chain must not be empty')
@@ -249,13 +249,9 @@ async function loadConfiguredSigningCertificate(
 
 async function loadDevelopmentSigningCertificate(
   agent: CertificateAgent,
-  development: NonNullable<OpenId4VcSigningOptions['development']>,
   publicApiBaseUrl?: string,
   role: SigningRole = 'issuer',
 ): Promise<SigningCertificateHandle> {
-  if (development.enabled !== true) {
-    throw new Error('development certificate mode must be explicitly enabled')
-  }
   if (!agent.did || !tryParseDid(agent.did)) {
     throw new Error('development certificate mode requires an agent DID')
   }
@@ -264,7 +260,8 @@ async function loadDevelopmentSigningCertificate(
   }
 
   const hostname = hostnameFromPublicApiBaseUrl(publicApiBaseUrl)
-  const recordId = developmentRecordId(agent.did, hostname, development.commonName, role)
+  const commonName = developmentCommonName(hostname, role)
+  const recordId = developmentRecordId(agent.did, hostname, role)
   const existing = await agent.genericRecords.findById(recordId)
   if (existing) {
     try {
@@ -299,7 +296,7 @@ async function loadDevelopmentSigningCertificate(
   const certificate = await agent.x509.createCertificate({
     serialNumber: createHash('sha256').update(keyId).digest('hex').slice(0, 32),
     authorityKey,
-    issuer: { commonName: development.commonName },
+    issuer: { commonName },
     validity: {
       notBefore: new Date(now.getTime() - 60_000),
       notAfter: new Date(now.getTime() + DEVELOPMENT_CERTIFICATE_VALIDITY_MS),
@@ -390,8 +387,12 @@ function hostnameFromPublicApiBaseUrl(publicApiBaseUrl: string): string {
   }
 }
 
-function developmentRecordId(did: string, hostname: string, commonName: string, role: SigningRole): string {
-  const suffix = createHash('sha256').update(`${did}\0${hostname}\0${commonName}\0${role}`).digest('hex')
+function developmentCommonName(hostname: string, role: SigningRole): string {
+  return `${hostname} ${role}`
+}
+
+function developmentRecordId(did: string, hostname: string, role: SigningRole): string {
+  const suffix = createHash('sha256').update(`${did}\0${hostname}\0${role}`).digest('hex')
   return `${DEVELOPMENT_RECORD_PREFIX}:${suffix}`
 }
 

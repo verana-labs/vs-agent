@@ -5,9 +5,9 @@ export interface OpenId4VcConfiguredSigningMaterial {
   privateJwk: Kms.KmsJwkPrivateEc
 }
 
-export type OpenId4VcSigningOptions =
-  | { configured: OpenId4VcConfiguredSigningMaterial; development?: never }
-  | { configured?: never; development: { enabled: true; commonName: string } }
+export interface OpenId4VcSigningOptions {
+  configured: OpenId4VcConfiguredSigningMaterial
+}
 
 export interface OpenId4VcCredentialConfiguration {
   id: string
@@ -29,12 +29,12 @@ export interface OpenId4VcVerifierPolicy {
 export interface OpenId4VcPluginOptions {
   publicApiBaseUrl: string
   issuer?: {
-    signing: OpenId4VcSigningOptions
+    signing?: OpenId4VcSigningOptions
     walletAttestationCertificates?: string[]
     keyAttestationCertificates?: string[]
   }
   verifier?: {
-    signing: OpenId4VcSigningOptions
+    signing?: OpenId4VcSigningOptions
   }
   trust?: {
     resolverUrl: string

@@ -45,57 +45,50 @@ export function setupOpenId4Vc(
   }
 
   const app = express()
-  if (options.issuer) app.use(advertiseDpopSupport)
+  app.use(advertiseDpopSupport)
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
-  if (options.issuer)
-    app.use(accommodateOpenId4VciKt(Boolean(options.issuer.keyAttestationCertificates?.length)))
-  if (options.issuer) app.use(serveCertificateBoundIssuerMetadata(getIssuerService))
-  if (options.issuer) app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
-  if (options.issuer) {
-    // RFC 8615 puts the issuer path after the well-known segment, so a holder whose issuer identifier carries a path requests `/.well-known/jwt-vc-issuer/oid4vci/<id>`, not just the bare form.
-    app.get(['/.well-known/jwt-vc-issuer', '/.well-known/jwt-vc-issuer/*'], (_request, response, next) => {
-      try {
-        if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
-        response.json(getIssuerService().getJwtVcIssuerMetadata())
-      } catch (error) {
-        next(error)
-      }
-    })
+  app.use(accommodateOpenId4VciKt(Boolean(options.issuer?.keyAttestationCertificates?.length)))
+  app.use(serveCertificateBoundIssuerMetadata(getIssuerService))
+  app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
+  // RFC 8615 puts the issuer path after the well-known segment, so a holder whose issuer identifier carries a path requests `/.well-known/jwt-vc-issuer/oid4vci/<id>`, not just the bare form.
+  app.get(['/.well-known/jwt-vc-issuer', '/.well-known/jwt-vc-issuer/*'], (_request, response, next) => {
+    try {
+      if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
+      response.json(getIssuerService().getJwtVcIssuerMetadata())
+    } catch (error) {
+      next(error)
+    }
+  })
 
-    app.get('/oid4vc/vct/:configurationId', (request, response, next) => {
-      try {
-        if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
-        const metadata = getIssuerService().getVctMetadata(request.params.configurationId)
-        if (!metadata) {
-          response.status(404).json({ message: 'credential configuration not found' })
-          return
-        }
-        response.json(metadata)
-      } catch (error) {
-        next(error)
+  app.get('/oid4vc/vct/:configurationId', (request, response, next) => {
+    try {
+      if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
+      const metadata = getIssuerService().getVctMetadata(request.params.configurationId)
+      if (!metadata) {
+        response.status(404).json({ message: 'credential configuration not found' })
+        return
       }
-    })
-  }
+      response.json(metadata)
+    } catch (error) {
+      next(error)
+    }
+  })
 
   const moduleOptions: OpenId4VcModuleConfigOptions<null, null> = {
     // Credo declares Express 5, while VS Agent mounts the compatible Express 4 application.
     app: app as unknown as OpenId4VcModuleConfigOptions<null, null>['app'],
-    ...(options.issuer
-      ? {
-          issuer: {
-            baseUrl: `${options.publicApiBaseUrl}/oid4vci`,
-            walletAttestationsRequired: walletAttestationEnabled,
-            credentialRequestToCredentialMapper: input => {
-              if (!getIssuerService) {
-                throw new Error('OpenID4VC issuer service is not initialized')
-              }
-
-              return getIssuerService().mapCredentialRequest(input)
-            },
-          },
+    issuer: {
+      baseUrl: `${options.publicApiBaseUrl}/oid4vci`,
+      walletAttestationsRequired: walletAttestationEnabled,
+      credentialRequestToCredentialMapper: input => {
+        if (!getIssuerService) {
+          throw new Error('OpenID4VC issuer service is not initialized')
         }
-      : {}),
-    ...(options.verifier ? { verifier: { baseUrl: `${options.publicApiBaseUrl}/oid4vp` } } : {}),
+
+        return getIssuerService().mapCredentialRequest(input)
+      },
+    },
+    verifier: { baseUrl: `${options.publicApiBaseUrl}/oid4vp` },
   }
 
   return {

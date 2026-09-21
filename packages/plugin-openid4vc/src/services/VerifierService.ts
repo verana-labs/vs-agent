@@ -236,7 +236,7 @@ export class VerifierService {
 
     const signingCertificate = await loadSigningCertificate(
       this.agent,
-      this.verifierOptions().signing,
+      this.options.verifier?.signing,
       this.options.publicApiBaseUrl,
       'verifier',
     )
@@ -335,12 +335,6 @@ export class VerifierService {
   private verifierApi(): VerifierApi {
     const verifier = this.agent.modules.openId4Vc?.verifier
     if (!verifier) throw new Error('OpenID4VC verifier API is not enabled on this agent')
-    return verifier
-  }
-
-  private verifierOptions(): NonNullable<OpenId4VcPluginOptions['verifier']> {
-    const verifier = this.options.verifier
-    if (!verifier) throw new Error('OpenID4VC verifier capability is not configured')
     return verifier
   }
 

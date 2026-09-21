@@ -60,11 +60,11 @@ about its own DID; no key of the file overrides them.
 
 ### Signing modes
 
-**Development signing** (`signing.development`, `{ "enabled": true, "commonName": "..." }`): the
-agent generates and persists a self-signed P-256 certificate for the capability, with a DNS SAN
-from `PUBLIC_API_BASE_URL` and a DID URI SAN with the agent DID, and publishes the public key in
-its DID Document before it completes startup (`assertionMethod` for the issuer, `authentication`
-for the verifier). A peer verifier still has to pin the fingerprint that
+**Development signing** (`signing` absent): the agent generates and persists a self-signed P-256
+certificate for the capability, with a common name and a DNS SAN derived from
+`PUBLIC_API_BASE_URL` and a DID URI SAN with the agent DID, and publishes the public key in its
+DID Document before it completes startup (`assertionMethod` for the issuer, `authentication` for
+the verifier). A peer verifier still has to pin the fingerprint that
 `GET /v2/openid4vc/signing-certificates` returns. Unsuitable for production.
 
 **Configured signing** (`signing.configured`): `certificateChain` (a non-self-signed leaf first,
@@ -76,11 +76,10 @@ source control, logs and image layers.
 ### Development example
 
 ```json
-{
-  "issuer": { "signing": { "development": { "enabled": true, "commonName": "Development Issuer" } } },
-  "verifier": { "signing": { "development": { "enabled": true, "commonName": "Development Verifier" } } }
-}
+{}
 ```
+
+A file with no key at all runs both capabilities under development signing.
 
 ## Administration API
 

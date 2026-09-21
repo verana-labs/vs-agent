@@ -33,10 +33,6 @@ const RESERVED_CREDENTIAL_CLAIMS = new Set([
 export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void {
   assertHttpsUrl(options.publicApiBaseUrl, 'publicApiBaseUrl')
 
-  if (!options.issuer && !options.verifier) {
-    throw new Error('OpenID4VC plugin requires an issuer or verifier capability')
-  }
-
   if (options.issuer) {
     assertSigningOptions(options.issuer.signing, 'issuer.signing')
 
@@ -219,29 +215,21 @@ function assertTrustOptions(trust: NonNullable<OpenId4VcPluginOptions['trust']>)
   }
 }
 
-function assertSigningOptions(signing: OpenId4VcSigningOptions, field: string): void {
-  const rawSigning = signing as unknown as Record<string, unknown>
-  const hasConfigured = rawSigning.configured !== undefined
-  const hasDevelopment = rawSigning.development !== undefined
+// An absent `signing` is development signing, so only the configured mode carries material to validate.
+function assertSigningOptions(signing: OpenId4VcSigningOptions | undefined, field: string): void {
+  if (signing === undefined) return
 
-  if (hasConfigured === hasDevelopment) {
-    throw new Error(`${field} must configure exactly one signing mode`)
+  const configured = (signing as unknown as Record<string, unknown>).configured as
+    | { certificateChain?: unknown; privateJwk?: unknown }
+    | undefined
+  if (!configured || typeof configured !== 'object') {
+    throw new Error(`${field}.configured is required`)
   }
 
-  if (hasConfigured) {
-    const configured = rawSigning.configured as { certificateChain?: unknown; privateJwk?: unknown }
-    assertNonEmptyStringArray(configured.certificateChain, `${field}.configured.certificateChain`)
-    if (!configured.privateJwk || typeof configured.privateJwk !== 'object') {
-      throw new Error(`${field}.configured.privateJwk is required`)
-    }
-    return
+  assertNonEmptyStringArray(configured.certificateChain, `${field}.configured.certificateChain`)
+  if (!configured.privateJwk || typeof configured.privateJwk !== 'object') {
+    throw new Error(`${field}.configured.privateJwk is required`)
   }
-
-  const development = rawSigning.development as { enabled?: unknown; commonName?: unknown }
-  if (development.enabled !== true) {
-    throw new Error(`${field}.development.enabled must be true`)
-  }
-  assertNonEmptyString(development.commonName, `${field}.development.commonName`)
 }
 
 function assertHttpsUrl(value: string, field: string): void {

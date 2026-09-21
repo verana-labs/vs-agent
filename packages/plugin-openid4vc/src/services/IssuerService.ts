@@ -258,7 +258,7 @@ export class IssuerService {
 
     const signingCertificate = await loadSigningCertificate(
       this.agent,
-      this.issuerOptions().signing,
+      this.options.issuer?.signing,
       this.options.publicApiBaseUrl,
       'issuer',
     )
@@ -364,12 +364,6 @@ export class IssuerService {
   private issuerApi(): IssuerApi {
     const issuer = this.agent.modules.openId4Vc?.issuer
     if (!issuer) throw new Error('OpenID4VC issuer API is not enabled on this agent')
-    return issuer
-  }
-
-  private issuerOptions(): NonNullable<OpenId4VcPluginOptions['issuer']> {
-    const issuer = this.options.issuer
-    if (!issuer) throw new Error('OpenID4VC issuer capability is not configured')
     return issuer
   }
 

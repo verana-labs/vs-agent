@@ -43,15 +43,13 @@ export function OpenId4VcNestPlugin(options: OpenId4VcPluginOptions): VsAgentNes
       V2Openid4vcSigningCertificatesController,
     ],
     providers: [
-      ...(options.issuer ? [{ provide: IssuerService, useFactory: issuerFor, inject: ['VSAGENT'] }] : []),
-      ...(options.verifier
-        ? [{ provide: VerifierService, useFactory: verifierFor, inject: ['VSAGENT'] }]
-        : []),
+      { provide: IssuerService, useFactory: issuerFor, inject: ['VSAGENT'] },
+      { provide: VerifierService, useFactory: verifierFor, inject: ['VSAGENT'] },
     ],
     initialize: async agent => {
       const openId4VcAgent = agent as unknown as OpenId4VcAgent
-      if (options.issuer) await issuerFor(openId4VcAgent).ensureInitialized()
-      if (options.verifier) await verifierFor(openId4VcAgent).ensureInitialized()
+      await issuerFor(openId4VcAgent).ensureInitialized()
+      await verifierFor(openId4VcAgent).ensureInitialized()
     },
   }
 }
