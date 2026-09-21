@@ -1,7 +1,11 @@
 import type { INestApplication } from '@nestjs/common'
 
 import { RecordNotFoundError } from '@credo-ts/core'
-import { DidCommOutOfBandInvitation, DidCommOutOfBandInvitationV2 } from '@credo-ts/didcomm'
+import {
+  DidCommHandshakeProtocol,
+  DidCommOutOfBandInvitation,
+  DidCommOutOfBandInvitationV2,
+} from '@credo-ts/didcomm'
 import { ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
@@ -302,7 +306,7 @@ describe('v2 didcomm invitation routes', () => {
       goal: 'chat',
       goalCode: 'support',
     })
-    expect(config.handshakeProtocols).toHaveLength(2)
+    expect(config.handshakeProtocols).toEqual([DidCommHandshakeProtocol.DidExchange])
     expect(config).not.toHaveProperty('invitationDid')
     expect(config).not.toHaveProperty('ourDid')
 

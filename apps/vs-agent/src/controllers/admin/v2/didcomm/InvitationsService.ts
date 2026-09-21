@@ -68,7 +68,7 @@ export class InvitationsService {
         : {
             label: options.label ?? (await this.ecsServiceName(agent)),
             imageUrl,
-            handshakeProtocols: [DidCommHandshakeProtocol.DidExchange, DidCommHandshakeProtocol.Connections],
+            handshakeProtocols: [DidCommHandshakeProtocol.DidExchange],
           }),
     })
     outOfBandRecord.setTag('parentConnectionId', connection.id)
