@@ -30,7 +30,6 @@ const validOptions = (): OpenId4VcPluginOptions => ({
 describe('setupOpenId4Vc', () => {
   it('creates a fresh non-global Express application for every setup', () => {
     const first = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -38,7 +37,6 @@ describe('setupOpenId4Vc', () => {
       },
     }))
     const second = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -63,7 +61,6 @@ describe('setupOpenId4Vc', () => {
 
   it('delegates X.509 trust only to configured trust anchors', async () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -107,7 +104,6 @@ describe('setupOpenId4Vc', () => {
 
   it('serves the SD-JWT VC issuer metadata that x5c-anchoring holders resolve', async () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({
         issuer: 'https://issuer.example',
@@ -129,7 +125,6 @@ describe('setupOpenId4Vc', () => {
   // form made every wwWallet issuance show a metadata-fetch failure above the trust card.
   it('serves the SD-JWT VC issuer metadata at the path-inserted well-known form', async () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({ issuer: 'https://issuer.example', jwks: { keys: [] } }),
       mapCredentialRequest: () => {
@@ -145,7 +140,6 @@ describe('setupOpenId4Vc', () => {
 
   const withSignedMetadata = (signedMetadataJwt: string | undefined) =>
     setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => signedMetadataJwt,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -201,7 +195,6 @@ describe('setupOpenId4Vc', () => {
   it('does not advertise wallet attestation metadata without attestation roots', async () => {
     const options = validOptions()
     const setup = setupOpenId4Vc(options, () => ({
-      getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -228,7 +221,6 @@ describe('setupOpenId4Vc', () => {
     const options = validOptions()
     options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]
     const setup = setupOpenId4Vc(options, () => ({
-      getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -260,7 +252,6 @@ describe('setupOpenId4Vc', () => {
 
     expect(() =>
       setupOpenId4Vc(options, () => ({
-        getVctMetadata: () => undefined,
         getSignedMetadataJwt: () => undefined,
         getJwtVcIssuerMetadata: () => ({}),
         mapCredentialRequest: () => {
@@ -270,17 +261,8 @@ describe('setupOpenId4Vc', () => {
     ).toThrowError(/^issuer\.walletAttestationCertificates\[1\] must be a valid X\.509 certificate$/)
   })
 
-  it('mounts only public VCT metadata and no credential-offer or credential-exchange route', async () => {
+  it('mounts no type metadata, credential-offer or credential-exchange route', async () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: id =>
-        id === 'employee'
-          ? {
-              vct: 'https://agent.example/oid4vc/vct/employee',
-              name: 'Employee credential',
-              display: [{ locale: 'en', name: 'Employee credential' }],
-              claims: [{ path: ['name'] }, { path: ['role'] }],
-            }
-          : undefined,
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -289,13 +271,10 @@ describe('setupOpenId4Vc', () => {
     }))
 
     const metadata = await request(setup.publicMiddleware).get('/oid4vc/vct/employee')
-    const unknown = await request(setup.publicMiddleware).get('/oid4vc/vct/unknown')
     const create = await request(setup.publicMiddleware).post('/v2/openid4vc/credential-offer').send({})
     const list = await request(setup.publicMiddleware).get('/v2/openid4vc/credential-exchanges')
 
-    expect(metadata.status).toBe(200)
-    expect(metadata.body.vct).toBe('https://agent.example/oid4vc/vct/employee')
-    expect(unknown.status).toBe(404)
+    expect(metadata.status).toBe(404)
     expect(create.status).toBe(404)
     expect(list.status).toBe(404)
   })
@@ -339,7 +318,6 @@ describe('setupOpenId4Vc', () => {
 
   it('does not mount verifier presentation or holder routes on the public middleware', async () => {
     const setup = setupOpenId4Vc(validOptions(), () => ({
-      getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {

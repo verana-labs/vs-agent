@@ -19,7 +19,6 @@ const DPOP_ALGORITHMS = ['ES256']
 
 export interface OpenId4VcIssuerRequestMapper {
   mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper
-  getVctMetadata: (configurationId: string) => Record<string, unknown> | undefined
   getJwtVcIssuerMetadata: () => Record<string, unknown>
   getSignedMetadataJwt: () => string | undefined
 }
@@ -63,20 +62,6 @@ export function setupOpenId4Vc(
 
   aliasBareWellKnownPath(app, '/.well-known/openid-credential-issuer', options.publicApiBaseUrl)
   aliasBareWellKnownPath(app, '/.well-known/oauth-authorization-server', options.publicApiBaseUrl)
-
-  app.get('/oid4vc/vct/:configurationId', (request, response, next) => {
-    try {
-      if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
-      const metadata = getIssuerService().getVctMetadata(request.params.configurationId)
-      if (!metadata) {
-        response.status(404).json({ message: 'credential configuration not found' })
-        return
-      }
-      response.json(metadata)
-    } catch (error) {
-      next(error)
-    }
-  })
 
   const moduleOptions: OpenId4VcModuleConfigOptions<null, null> = {
     // Credo declares Express 5, while VS Agent mounts the compatible Express 4 application.

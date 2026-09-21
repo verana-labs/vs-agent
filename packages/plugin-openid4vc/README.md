@@ -118,7 +118,6 @@ Admin API and the metadata return; it never builds a path itself.
 | `/.well-known/openid-credential-issuer`, `/.well-known/oauth-authorization-server`, `/.well-known/jwt-vc-issuer` | Issuer and authorization-server metadata, also at the path-inserted forms. |
 | `/oid4vci/issuer/...` | Token and credential traffic of the issuer capability. |
 | `/oid4vp/verifier/...` | Authorization request and response traffic of the verifier capability. |
-| `/oid4vc/vct/{credentialConfigurationId}` | SD-JWT VC type metadata, extended with `relatedJsonSchemaCredentialId` (the VTJSC). |
 
 ## Trust decision
 

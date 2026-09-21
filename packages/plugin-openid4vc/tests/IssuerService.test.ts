@@ -780,30 +780,6 @@ describe('IssuerService', () => {
     })
   })
 
-  it('returns VCT metadata with configured display and claim paths but no W3C credentialSchema', () => {
-    const service = new IssuerService(agent() as never, options())
-
-    const metadata = service.getVctMetadata('employee')
-
-    expect(metadata).toEqual({
-      vct: 'https://agent.example/oid4vc/vct/employee',
-      relatedJsonSchemaCredentialId: 'https://agent.example/vt/employee.json',
-      name: 'Employee credential',
-      description: 'Proof of employment',
-      display: [
-        {
-          lang: 'en',
-          locale: 'en',
-          name: 'Employee credential',
-          description: 'Proof of employment',
-        },
-      ],
-      claims: [{ path: ['name'] }, { path: ['role'] }],
-    })
-    expect(metadata).not.toHaveProperty('credentialSchema')
-    expect(service.getVctMetadata('unknown')).toBeUndefined()
-  })
-
   describe('ECS service display', () => {
     it('publishes the ECS Service name and logo in the issuer metadata', async () => {
       const api = issuerApi()

@@ -1,5 +1,5 @@
 import type { OpenId4VcPluginOptions } from '../types'
-import type { BaseAgent, JwsProtectedHeaderOptions, Kms, SdJwtVcTypeMetadata } from '@credo-ts/core'
+import type { BaseAgent, JwsProtectedHeaderOptions, Kms } from '@credo-ts/core'
 import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
 import type {
   OpenId4VcIssuanceSessionRecord,
@@ -54,11 +54,6 @@ export type OpenId4VcIssuerAgent = Pick<
       issuer?: IssuerApi
     }
   }
-}
-
-export type VtSdJwtVcTypeMetadata = Omit<SdJwtVcTypeMetadata, 'display'> & {
-  relatedJsonSchemaCredentialId: string
-  display?: (NonNullable<SdJwtVcTypeMetadata['display']>[number] & { lang?: string })[]
 }
 
 export interface OpenId4VcCreateOfferOptions {
@@ -191,28 +186,6 @@ export class IssuerService {
 
   public getSignedMetadataJwt(): string | undefined {
     return this.signedMetadataJwt
-  }
-
-  public getVctMetadata(configurationId: string): VtSdJwtVcTypeMetadata | undefined {
-    const configuration = findCredentialConfiguration(this.options, configurationId)
-    if (!configuration) return undefined
-
-    return {
-      vct: configuration.vct,
-      relatedJsonSchemaCredentialId: configuration.vtjscId,
-      name: configuration.name,
-      ...(configuration.description ? { description: configuration.description } : {}),
-      display: [
-        {
-          // swiyu predates the sd-jwt-vc rename of `lang` to `locale` and rejects the document when `lang` is absent.
-          lang: 'en',
-          locale: 'en',
-          name: configuration.name,
-          ...(configuration.description ? { description: configuration.description } : {}),
-        },
-      ],
-      claims: configuration.claims.map(claim => ({ path: [claim] })),
-    }
   }
 
   public mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper = async input => {
