@@ -8,7 +8,6 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
-  Optional,
   Param,
   Post,
   Query,
@@ -18,7 +17,6 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBody,
-  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -43,8 +41,6 @@ import {
   Openid4vcCredentialOfferResponseDto,
   Openid4vcListCredentialExchangesQueryDto,
 } from './dto'
-import { capabilityNotConfigured } from './errors'
-
 const CREDENTIAL_EXCHANGE_ID = {
   name: 'credentialExchangeId',
   type: String,
@@ -57,7 +53,7 @@ const CREDENTIAL_EXCHANGE_ID = {
 @Controller({ path: 'openid4vc', version: '2' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class V2Openid4vcCredentialExchangesController {
-  public constructor(@Optional() @Inject(IssuerService) private readonly issuerService?: IssuerService) {}
+  public constructor(@Inject(IssuerService) private readonly issuerService: IssuerService) {}
 
   @Post('credential-offer')
   @ApiOperation({
@@ -71,12 +67,11 @@ export class V2Openid4vcCredentialExchangesController {
     description: 'Claims that do not match the configuration, or a ttlSeconds outside its range',
   })
   @ApiNotFoundResponse({ description: 'The agent cannot resolve the credential configuration' })
-  @ApiConflictResponse({ description: 'The configuration defines no issuer capability' })
   public async createCredentialOffer(
     @Body() body: Openid4vcCredentialOfferBodyDto,
   ): Promise<Openid4vcCredentialOfferResponseDto> {
     try {
-      const offer = await this.issuer().createOffer({
+      const offer = await this.issuerService.createOffer({
         credentialConfigurationId: body.credentialConfigurationId,
         claims: body.claims,
         ttlSeconds: body.ttlSeconds,
@@ -96,11 +91,10 @@ export class V2Openid4vcCredentialExchangesController {
     description: 'A page of credential exchange records',
     type: Openid4vcCredentialExchangeRecordPageDto,
   })
-  @ApiConflictResponse({ description: 'The configuration defines no issuer capability' })
   public async listCredentialExchanges(
     @Query() query: Openid4vcListCredentialExchangesQueryDto,
   ): Promise<Page<Openid4vcCredentialExchangeRecordDto>> {
-    const sessions = await this.issuer().listIssuanceSessions()
+    const sessions = await this.issuerService.listIssuanceSessions()
     const filtered = sessions.filter(
       session =>
         (!query.credentialConfigurationId ||
@@ -132,12 +126,11 @@ export class V2Openid4vcCredentialExchangesController {
     type: Openid4vcCredentialExchangeRecordDto,
   })
   @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
-  @ApiConflictResponse({ description: 'The configuration defines no issuer capability' })
   public async getCredentialExchange(
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<Openid4vcCredentialExchangeRecordDto> {
     try {
-      return toRecordDto(await this.issuer().getIssuanceSession(credentialExchangeId))
+      return toRecordDto(await this.issuerService.getIssuanceSession(credentialExchangeId))
     } catch (error) {
       throw translate(error, credentialExchangeId)
     }
@@ -152,20 +145,14 @@ export class V2Openid4vcCredentialExchangesController {
   @ApiParam(CREDENTIAL_EXCHANGE_ID)
   @ApiNoContentResponse({ description: 'The credential exchange record is deleted' })
   @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
-  @ApiConflictResponse({ description: 'The configuration defines no issuer capability' })
   public async deleteCredentialExchange(
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<void> {
     try {
-      await this.issuer().deleteIssuanceSession(credentialExchangeId)
+      await this.issuerService.deleteIssuanceSession(credentialExchangeId)
     } catch (error) {
       throw translate(error, credentialExchangeId)
     }
-  }
-
-  private issuer(): IssuerService {
-    if (!this.issuerService) throw capabilityNotConfigured('issuer')
-    return this.issuerService
   }
 }
 

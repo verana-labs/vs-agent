@@ -84,8 +84,7 @@ A file with no key at all runs both capabilities under development signing.
 ## Administration API
 
 Every method lives under `/v2/openid4vc`, behind the Admin API authentication of the agent, and
-answers in the v2 error envelope. Without `OID4VC_CONFIG_FILE_LOCATION`, every path answers `404`. A method
-of an absent capability answers `409 CAPABILITY_NOT_CONFIGURED`.
+answers in the v2 error envelope. Without `OID4VC_CONFIG_FILE_LOCATION`, every path answers `404`.
 
 | Method | Path | Notes |
 | --- | --- | --- |

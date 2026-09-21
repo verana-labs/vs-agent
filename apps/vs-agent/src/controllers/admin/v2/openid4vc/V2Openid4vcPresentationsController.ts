@@ -8,7 +8,6 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
-  Optional,
   Param,
   Post,
   Query,
@@ -43,8 +42,6 @@ import {
   Openid4vcPresentationRequestBodyDto,
   Openid4vcPresentationRequestResponseDto,
 } from './dto'
-import { capabilityNotConfigured } from './errors'
-
 const PROOF_EXCHANGE_ID = {
   name: 'proofExchangeId',
   type: String,
@@ -57,9 +54,7 @@ const PROOF_EXCHANGE_ID = {
 @Controller({ path: 'openid4vc', version: '2' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class V2Openid4vcPresentationsController {
-  public constructor(
-    @Optional() @Inject(VerifierService) private readonly verifierService?: VerifierService,
-  ) {}
+  public constructor(@Inject(VerifierService) private readonly verifierService: VerifierService) {}
 
   @Post('presentation-request')
   @ApiOperation({
@@ -73,15 +68,12 @@ export class V2Openid4vcPresentationsController {
   })
   @ApiBadRequestResponse({ description: 'The request body failed validation' })
   @ApiNotFoundResponse({ description: 'The agent cannot resolve the verifier policy' })
-  @ApiConflictResponse({
-    description:
-      'The configuration defines no verifier capability, or the DID does not publish the signing key',
-  })
+  @ApiConflictResponse({ description: 'The DID does not publish the signing key' })
   public async createPresentationRequest(
     @Body() body: Openid4vcPresentationRequestBodyDto,
   ): Promise<Openid4vcPresentationRequestResponseDto> {
     try {
-      const request = await this.verifier().createRequest(
+      const request = await this.verifierService.createRequest(
         body.policyId,
         body.queryLanguage,
         body.requestSigner,
@@ -98,11 +90,10 @@ export class V2Openid4vcPresentationsController {
     description: 'Returns the OpenID4VP verification sessions that the agent created.',
   })
   @ApiOkResponse({ description: 'A page of presentation records', type: Openid4vcPresentationRecordPageDto })
-  @ApiConflictResponse({ description: 'The configuration defines no verifier capability' })
   public async listPresentations(
     @Query() query: Openid4vcListPresentationsQueryDto,
   ): Promise<Page<Openid4vcPresentationRecordDto>> {
-    const sessions = await this.verifier().listVerificationSessions()
+    const sessions = await this.verifierService.listVerificationSessions()
     const filtered = sessions.filter(
       session =>
         (!query.policyId || session.policyId === query.policyId) &&
@@ -128,12 +119,11 @@ export class V2Openid4vcPresentationsController {
   @ApiParam(PROOF_EXCHANGE_ID)
   @ApiOkResponse({ description: 'The presentation record', type: Openid4vcPresentationRecordDto })
   @ApiNotFoundResponse({ description: 'No presentation with the given id' })
-  @ApiConflictResponse({ description: 'The configuration defines no verifier capability' })
   public async getPresentation(
     @Param('proofExchangeId') proofExchangeId: string,
   ): Promise<Openid4vcPresentationRecordDto> {
     try {
-      return toRecordDto(await this.verifier().getVerificationSession(proofExchangeId))
+      return toRecordDto(await this.verifierService.getVerificationSession(proofExchangeId))
     } catch (error) {
       throw translate(error, proofExchangeId)
     }
@@ -145,18 +135,12 @@ export class V2Openid4vcPresentationsController {
   @ApiParam(PROOF_EXCHANGE_ID)
   @ApiNoContentResponse({ description: 'The presentation record is deleted' })
   @ApiNotFoundResponse({ description: 'No presentation with the given id' })
-  @ApiConflictResponse({ description: 'The configuration defines no verifier capability' })
   public async deletePresentation(@Param('proofExchangeId') proofExchangeId: string): Promise<void> {
     try {
-      await this.verifier().deleteVerificationSession(proofExchangeId)
+      await this.verifierService.deleteVerificationSession(proofExchangeId)
     } catch (error) {
       throw translate(error, proofExchangeId)
     }
-  }
-
-  private verifier(): VerifierService {
-    if (!this.verifierService) throw capabilityNotConfigured('verifier')
-    return this.verifierService
   }
 }
 

@@ -71,10 +71,10 @@ const verifierService = {
   deleteVerificationSession: vi.fn(),
 }
 
-async function createApp(withVerifier: boolean): Promise<INestApplication> {
+async function createApp(): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
     controllers: [V2Openid4vcPresentationsController],
-    providers: withVerifier ? [{ provide: VerifierService, useValue: verifierService }] : [],
+    providers: [{ provide: VerifierService, useValue: verifierService }],
   }).compile()
 
   const app = moduleRef.createNestApplication()
@@ -93,7 +93,7 @@ describe('v2 openid4vc presentation routes', () => {
   let app: INestApplication
 
   beforeAll(async () => {
-    app = await createApp(true)
+    app = await createApp()
   })
 
   afterAll(async () => {
@@ -263,40 +263,5 @@ describe('v2 openid4vc presentation routes', () => {
     expect(response.status).toBe(204)
     expect(response.text).toBe('')
     expect(verifierService.deleteVerificationSession).toHaveBeenCalledWith('pe-a')
-  })
-})
-
-describe('v2 openid4vc presentation routes without a verifier capability', () => {
-  let app: INestApplication
-
-  beforeAll(async () => {
-    app = await createApp(false)
-  })
-
-  afterAll(async () => {
-    await app?.close()
-  })
-
-  it('answers CAPABILITY_NOT_CONFIGURED on every method of the module', async () => {
-    const requests = [
-      () =>
-        request(app.getHttpServer())
-          .post('/v2/openid4vc/presentation-request')
-          .send({ policyId: 'employee-check' }),
-      () => request(app.getHttpServer()).get('/v2/openid4vc/presentations'),
-      () => request(app.getHttpServer()).get('/v2/openid4vc/presentations/pe-a'),
-      () => request(app.getHttpServer()).delete('/v2/openid4vc/presentations/pe-a'),
-    ]
-
-    for (const send of requests) {
-      const response = await send()
-      expect(response.status).toBe(409)
-      expect(response.body).toEqual({
-        error: {
-          code: 'CAPABILITY_NOT_CONFIGURED',
-          message: 'the OpenID4VC configuration defines no verifier capability',
-        },
-      })
-    }
   })
 })

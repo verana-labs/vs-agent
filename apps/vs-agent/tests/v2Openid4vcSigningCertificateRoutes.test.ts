@@ -1,4 +1,4 @@
-import type { INestApplication, Provider } from '@nestjs/common'
+import type { INestApplication } from '@nestjs/common'
 
 import { VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
@@ -33,10 +33,13 @@ const verifierService = {
   getCertificateInfo: vi.fn(() => verifierCertificate),
 }
 
-async function createApp(providers: Provider[]): Promise<INestApplication> {
+async function createApp(): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
     controllers: [V2Openid4vcSigningCertificatesController],
-    providers,
+    providers: [
+      { provide: IssuerService, useValue: issuerService },
+      { provide: VerifierService, useValue: verifierService },
+    ],
   }).compile()
 
   const app = moduleRef.createNestApplication()
@@ -58,11 +61,8 @@ describe('v2 openid4vc signing certificate routes', () => {
     app = undefined
   })
 
-  it('returns one record per configured capability, issuer first, as a bare array', async () => {
-    app = await createApp([
-      { provide: IssuerService, useValue: issuerService },
-      { provide: VerifierService, useValue: verifierService },
-    ])
+  it('returns one record per capability, issuer first, as a bare array', async () => {
+    app = await createApp()
 
     const response = await request(app.getHttpServer()).get('/v2/openid4vc/signing-certificates')
 
@@ -72,20 +72,8 @@ describe('v2 openid4vc signing certificate routes', () => {
     expect(verifierService.ensureInitialized).toHaveBeenCalledOnce()
   })
 
-  it('returns only the verifier certificate when the issuer capability is absent', async () => {
-    app = await createApp([{ provide: VerifierService, useValue: verifierService }])
-
-    const response = await request(app.getHttpServer()).get('/v2/openid4vc/signing-certificates')
-
-    expect(response.status).toBe(200)
-    expect(response.body).toEqual([verifierCertificate])
-  })
-
   it('ignores pagination parameters on this bounded collection', async () => {
-    app = await createApp([
-      { provide: IssuerService, useValue: issuerService },
-      { provide: VerifierService, useValue: verifierService },
-    ])
+    app = await createApp()
 
     const response = await request(app.getHttpServer()).get(
       '/v2/openid4vc/signing-certificates?limit=1&cursor=abc',
@@ -96,7 +84,7 @@ describe('v2 openid4vc signing certificate routes', () => {
   })
 
   it('never includes a private key', async () => {
-    app = await createApp([{ provide: IssuerService, useValue: issuerService }])
+    app = await createApp()
 
     const response = await request(app.getHttpServer()).get('/v2/openid4vc/signing-certificates')
 

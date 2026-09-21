@@ -48,10 +48,10 @@ const issuerService = {
   deleteIssuanceSession: vi.fn(),
 }
 
-async function createApp(withIssuer: boolean): Promise<INestApplication> {
+async function createApp(): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
     controllers: [V2Openid4vcCredentialExchangesController],
-    providers: withIssuer ? [{ provide: IssuerService, useValue: issuerService }] : [],
+    providers: [{ provide: IssuerService, useValue: issuerService }],
   }).compile()
 
   const app = moduleRef.createNestApplication()
@@ -66,7 +66,7 @@ describe('v2 openid4vc credential exchange routes', () => {
   let app: INestApplication
 
   beforeAll(async () => {
-    app = await createApp(true)
+    app = await createApp()
   })
 
   afterAll(async () => {
@@ -264,40 +264,5 @@ describe('v2 openid4vc credential exchange routes', () => {
     const missing = await request(app.getHttpServer()).delete('/v2/openid4vc/credential-exchanges/nope')
     expect(missing.status).toBe(404)
     expect(missing.body.error.code).toBe('UNKNOWN_ID')
-  })
-})
-
-describe('v2 openid4vc credential exchange routes without an issuer capability', () => {
-  let app: INestApplication
-
-  beforeAll(async () => {
-    app = await createApp(false)
-  })
-
-  afterAll(async () => {
-    await app?.close()
-  })
-
-  it('answers CAPABILITY_NOT_CONFIGURED on every method of the module', async () => {
-    const requests = [
-      () =>
-        request(app.getHttpServer())
-          .post('/v2/openid4vc/credential-offer')
-          .send({ credentialConfigurationId: 'employee', claims: { name: 'Ada' }, ttlSeconds: 3600 }),
-      () => request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges'),
-      () => request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges/ce-a'),
-      () => request(app.getHttpServer()).delete('/v2/openid4vc/credential-exchanges/ce-a'),
-    ]
-
-    for (const send of requests) {
-      const response = await send()
-      expect(response.status).toBe(409)
-      expect(response.body).toEqual({
-        error: {
-          code: 'CAPABILITY_NOT_CONFIGURED',
-          message: 'the OpenID4VC configuration defines no issuer capability',
-        },
-      })
-    }
   })
 })

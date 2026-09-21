@@ -12,7 +12,6 @@ export enum AdminApiErrorCode {
   Forbidden = 'FORBIDDEN',
   UnknownId = 'UNKNOWN_ID',
   InvalidState = 'INVALID_STATE',
-  CapabilityNotConfigured = 'CAPABILITY_NOT_CONFIGURED',
   NoCompatibleCredentials = 'NO_COMPATIBLE_CREDENTIALS',
   InvalidPackage = 'INVALID_PACKAGE',
   UnsupportedFormat = 'UNSUPPORTED_FORMAT',
