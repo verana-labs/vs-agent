@@ -681,6 +681,25 @@ describe('VerifierService', () => {
       expect(sessionRepository.update).not.toHaveBeenCalled()
     })
 
+    it('answers RESOLVER_UNAVAILABLE and stores nothing when no resolver is configured', async () => {
+      const api = verifierApi()
+      api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
+      const service = new VerifierService(agent(api) as never, { ...options(), trust: undefined })
+      const session = verificationSession({ state: 'ResponseVerified' })
+      api.getVerificationSessionById.mockResolvedValue(session)
+
+      const summary = await service.getVerificationSession('session-1')
+
+      expect(summary).toMatchObject({
+        cryptographicVerified: true,
+        accepted: false,
+        trust: { verdict: 'RESOLVER_UNAVAILABLE' },
+      })
+      expect(api.getVerifiedAuthorizationResponse).not.toHaveBeenCalled()
+      expect(session.metadata.get('openid4vc/verificationOutcome')).toBeNull()
+      expect(sessionRepository.update).not.toHaveBeenCalled()
+    })
+
     it('lists only the sessions of this verifier', async () => {
       const { service, api } = await initialized()
       api.findVerificationSessionsByQuery.mockResolvedValue([

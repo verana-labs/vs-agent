@@ -73,6 +73,22 @@ export type { OpenId4VcVerifiedCredentialResult } from './presentationVerificati
 const POLICY_TAG = 'policyId'
 const OUTCOME_METADATA_KEY = 'openid4vc/verificationOutcome'
 
+const UNCONFIGURED_RESOLVER_DECISION: PresentationDecision = {
+  cryptographicVerified: true,
+  accepted: false,
+  trust: {
+    verdict: 'RESOLVER_UNAVAILABLE',
+    evidence: {
+      did: null,
+      trustStatus: null,
+      vtjscId: null,
+      authorized: null,
+      queries: [],
+      note: 'no trust resolver is configured',
+    },
+  },
+}
+
 export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
   id: string
   policyId?: string
@@ -210,12 +226,15 @@ export class VerifierService {
     const stored = this.storedDecision(session)
     if (stored) return stored
 
+    const trustContext = this.trustContext()
+    if (!trustContext) return UNCONFIGURED_RESOLVER_DECISION
+
     const verified = await this.getVerifiedResponse(session.id)
     this.assertStableVerifiedSession(verified, session.id)
     const decision = await decidePresentation({
       agent: this.agent,
       options: this.options,
-      ...this.trustContext(),
+      ...trustContext,
       verified,
     })
     if (decision.trust?.verdict !== 'RESOLVER_UNAVAILABLE') {
@@ -342,9 +361,11 @@ export class VerifierService {
     return verifier
   }
 
-  private trustContext(): { trust: NonNullable<OpenId4VcPluginOptions['trust']>; trustClient: TrustClient } {
+  private trustContext():
+    | { trust: NonNullable<OpenId4VcPluginOptions['trust']>; trustClient: TrustClient }
+    | undefined {
     const trust = this.options.trust
-    if (!trust || !this.trustClient) throw new Error('OpenID4VC verifier requires trust configuration')
+    if (!trust || !this.trustClient) return undefined
     return { trust, trustClient: this.trustClient }
   }
 
