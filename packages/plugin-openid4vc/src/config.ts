@@ -38,35 +38,23 @@ export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void 
   }
 
   if (options.issuer) {
-    assertNonEmptyString(options.issuer.displayName, 'issuer.displayName')
     assertSigningOptions(options.issuer.signing, 'issuer.signing')
 
-    if (
-      options.issuer.requireWalletAttestation &&
-      !hasNonEmptyString(options.issuer.walletAttestationCertificates)
-    ) {
-      throw new Error('issuer.walletAttestationCertificates is required when wallet attestation is enabled')
+    if (options.issuer.walletAttestationCertificates !== undefined) {
+      assertStringArray(options.issuer.walletAttestationCertificates, 'issuer.walletAttestationCertificates')
     }
 
     if (options.issuer.keyAttestationCertificates !== undefined) {
       assertStringArray(options.issuer.keyAttestationCertificates, 'issuer.keyAttestationCertificates')
     }
-
-    if (options.issuer.metadataSigner !== undefined) {
-      assertSignerMode(options.issuer.metadataSigner, 'issuer.metadataSigner')
-    }
   }
 
   if (options.verifier) {
-    assertNonEmptyString(options.verifier.displayName, 'verifier.displayName')
     assertSigningOptions(options.verifier.signing, 'verifier.signing')
-    assertTrustOptions(options.trust, true)
+  }
 
-    if (options.verifier.requestSigner !== undefined) {
-      assertSignerMode(options.verifier.requestSigner, 'verifier.requestSigner')
-    }
-  } else if (options.trust) {
-    assertTrustOptions(options.trust, false)
+  if (options.trust) {
+    assertTrustOptions(options.trust)
   }
 
   assertCredentialConfigurations(options.credentialConfigurations)
@@ -196,12 +184,7 @@ function assertVerifierPolicies(
   }
 }
 
-function assertTrustOptions(trust: OpenId4VcPluginOptions['trust'], requiresAnchor: boolean): void {
-  if (!trust) {
-    if (requiresAnchor) throw new Error('verifier requires trust configuration')
-    return
-  }
-
+function assertTrustOptions(trust: NonNullable<OpenId4VcPluginOptions['trust']>): void {
   assertHttpsUrl(trust.resolverUrl, 'trust.resolverUrl')
   if (
     !Number.isInteger(trust.timeoutMs) ||
@@ -233,22 +216,6 @@ function assertTrustOptions(trust: OpenId4VcPluginOptions['trust'], requiresAnch
         'trust.developmentCertificateFingerprints must use SHA256 followed by 64 lowercase hexadecimal characters',
       )
     }
-  }
-
-  if (
-    requiresAnchor &&
-    !hasNonEmptyString(trust.credentialIssuerCertificates) &&
-    !hasNonEmptyString(trust.developmentCertificateFingerprints)
-  ) {
-    throw new Error(
-      'verifier trust requires credentialIssuerCertificates or developmentCertificateFingerprints',
-    )
-  }
-}
-
-function assertSignerMode(value: unknown, field: string): void {
-  if (value !== 'x5c' && value !== 'did') {
-    throw new Error(`${field} must be 'x5c' or 'did'`)
   }
 }
 
@@ -397,10 +364,6 @@ function assertNonEmptyString(value: unknown, field: string): asserts value is s
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(`${field} must be a non-empty string`)
   }
-}
-
-function hasNonEmptyString(value: unknown): boolean {
-  return Array.isArray(value) && value.some(item => typeof item === 'string' && item.trim())
 }
 
 function isEmptyClaim(value: unknown): boolean {

@@ -39,9 +39,8 @@ export function setupOpenId4Vc(
   getIssuerService?: () => OpenId4VcIssuerRequestMapper,
 ): OpenId4VcSdkPlugin {
   const walletAttestationCertificates = options.issuer?.walletAttestationCertificates
-  const walletAttestationEnabled =
-    options.issuer?.requireWalletAttestation === true && Boolean(walletAttestationCertificates?.length)
-  if (walletAttestationEnabled && walletAttestationCertificates) {
+  const walletAttestationEnabled = Boolean(walletAttestationCertificates?.length)
+  if (walletAttestationCertificates) {
     assertValidWalletAttestationCertificates(walletAttestationCertificates)
   }
 

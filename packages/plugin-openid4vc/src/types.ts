@@ -29,17 +29,12 @@ export interface OpenId4VcVerifierPolicy {
 export interface OpenId4VcPluginOptions {
   publicApiBaseUrl: string
   issuer?: {
-    displayName: string
     signing: OpenId4VcSigningOptions
-    requireWalletAttestation?: boolean
     walletAttestationCertificates?: string[]
-    metadataSigner?: 'x5c' | 'did'
     keyAttestationCertificates?: string[]
   }
   verifier?: {
-    displayName: string
     signing: OpenId4VcSigningOptions
-    requestSigner?: 'x5c' | 'did'
   }
   trust?: {
     resolverUrl: string

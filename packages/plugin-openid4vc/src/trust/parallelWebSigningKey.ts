@@ -16,7 +16,7 @@ type ParallelWebSigningAgent = Pick<BaseAgent, 'dids' | 'dependencyManager'> & {
 
 export async function publishParallelWebSigningKey(
   agent: ParallelWebSigningAgent,
-  timeoutMs: number,
+  timeoutMs?: number,
 ): Promise<string | undefined> {
   const did = agent.did
   if (!did?.startsWith('did:webvh:')) return undefined

@@ -88,15 +88,13 @@ export class VerifierService {
   private signingCertificate?: SigningCertificateHandle
   private parallelWebSigningDidUrl?: string
   private initialized = false
-  private readonly trustClient: TrustClient
+  private readonly trustClient?: TrustClient
 
   public constructor(
     private readonly agent: OpenId4VcVerifierAgent,
     private readonly options: OpenId4VcPluginOptions,
   ) {
-    const trust = this.options.trust
-    if (!trust) throw new Error('OpenID4VC verifier requires trust configuration')
-    this.trustClient = new TrustClient(trust)
+    this.trustClient = options.trust ? new TrustClient(options.trust) : undefined
   }
 
   public ensureInitialized(): Promise<void> {
@@ -214,8 +212,7 @@ export class VerifierService {
     const decision = await decidePresentation({
       agent: this.agent,
       options: this.options,
-      trust: this.trustOptions(),
-      trustClient: this.trustClient,
+      ...this.trustContext(),
       verified,
     })
     if (decision.trust?.verdict !== 'RESOLVER_UNAVAILABLE') {
@@ -251,7 +248,7 @@ export class VerifierService {
 
     this.parallelWebSigningDidUrl = await publishParallelWebSigningKey(
       this.agent,
-      this.trustOptions().timeoutMs,
+      this.options.trust?.timeoutMs,
     )
 
     const binding = await verifyKeyBoundToDid(
@@ -259,7 +256,7 @@ export class VerifierService {
       agentDid,
       signingCertificate.certificate.publicJwk.toJson(),
       ['authentication'],
-      ownDidResolutionPolicy(agentDid, this.trustOptions().timeoutMs),
+      ownDidResolutionPolicy(agentDid, this.options.trust?.timeoutMs),
     )
     if (binding === 'unresolvable') {
       throw new Error('OpenID4VC verifier DID could not be resolved for authentication key binding')
@@ -274,10 +271,9 @@ export class VerifierService {
   }
 
   private async createOrUpdateVerifier(): Promise<void> {
-    const verifier = this.verifierOptions()
     const metadata = {
       verifierId: VERIFIER_CAPABILITY_ID,
-      clientMetadata: { client_name: verifier.displayName },
+      clientMetadata: { client_name: new URL(this.options.publicApiBaseUrl).host },
     }
 
     try {
@@ -348,10 +344,10 @@ export class VerifierService {
     return verifier
   }
 
-  private trustOptions(): NonNullable<OpenId4VcPluginOptions['trust']> {
+  private trustContext(): { trust: NonNullable<OpenId4VcPluginOptions['trust']>; trustClient: TrustClient } {
     const trust = this.options.trust
-    if (!trust) throw new Error('OpenID4VC verifier requires trust configuration')
-    return trust
+    if (!trust || !this.trustClient) throw new Error('OpenID4VC verifier requires trust configuration')
+    return { trust, trustClient: this.trustClient }
   }
 
   private signingCertificateHandle(): SigningCertificateHandle {
@@ -363,7 +359,7 @@ export class VerifierService {
 
   private async buildRequestSigner(queryLanguage: OpenId4VcQueryLanguage, override?: 'x5c' | 'did') {
     const certificate = this.signingCertificateHandle()
-    if ((override ?? this.verifierOptions().requestSigner) !== 'did') {
+    if (override !== 'did') {
       return {
         method: 'x5c' as const,
         x5c: x5cCertificateChain(certificate),
@@ -382,7 +378,7 @@ export class VerifierService {
         this.agent,
         did,
         ['authentication'],
-        ownDidResolutionPolicy(did ?? '', this.trustOptions().timeoutMs),
+        ownDidResolutionPolicy(did ?? '', this.options.trust?.timeoutMs),
       )
       if (ed25519DidUrl) return { method: 'did' as const, didUrl: ed25519DidUrl }
     }
@@ -392,7 +388,7 @@ export class VerifierService {
       did,
       certificate.certificate.publicJwk.toJson(),
       ['authentication'],
-      ownDidResolutionPolicy(did ?? '', this.trustOptions().timeoutMs),
+      ownDidResolutionPolicy(did ?? '', this.options.trust?.timeoutMs),
     )
     if (!didUrl) {
       throw new OpenId4VcVerifierRequestError(

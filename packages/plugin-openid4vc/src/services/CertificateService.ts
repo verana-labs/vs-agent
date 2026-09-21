@@ -90,7 +90,6 @@ export async function publishDevelopmentSigningKey(
   agent: DevelopmentDidAgent,
   signingCertificate: SigningCertificateHandle,
   role: SigningRole,
-  extraPurposes: DidPurpose[] = [],
 ): Promise<void> {
   if (!signingCertificate.development) return
 
@@ -111,8 +110,7 @@ export async function publishDevelopmentSigningKey(
   }
 
   const methodId = `${did}#openid4vc-development-${role}`
-  const basePurpose: DidPurpose = role === 'issuer' ? 'assertionMethod' : 'authentication'
-  const purposes = [...new Set<DidPurpose>([basePurpose, ...extraPurposes])]
+  const purposes: DidPurpose[] = [role === 'issuer' ? 'assertionMethod' : 'authentication']
   const publicJwk = canonicalP256PublicJwk(signingCertificate.certificate.publicJwk.toJson())
   await ensureCreatedDidRecordKeyMapping(agent, did, methodId.slice(did.length), signingCertificate.keyId)
   const existingMethod = resolution.didDocument.verificationMethod?.find(method => method.id === methodId)

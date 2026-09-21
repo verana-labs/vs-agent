@@ -18,11 +18,7 @@ import {
   parseOfferIssuanceMetadata,
   parseOfferTtlSeconds,
 } from '../config'
-import {
-  findBoundVerificationMethodId,
-  ownDidResolutionPolicy,
-  verifyKeyBoundToDid,
-} from '../trust/keyBinding'
+import { ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
 
 import {
   didFromValidatedCertificate,
@@ -270,12 +266,7 @@ export class IssuerService {
     if (certificateDid !== agentDid) {
       throw new Error('OpenID4VC issuer certificate DID does not match the agent DID')
     }
-    await publishDevelopmentSigningKey(
-      this.agent,
-      signingCertificate,
-      'issuer',
-      this.issuerOptions().metadataSigner === 'did' ? ['authentication'] : [],
-    )
+    await publishDevelopmentSigningKey(this.agent, signingCertificate, 'issuer')
 
     const binding = await verifyKeyBoundToDid(
       this.agent,
@@ -298,24 +289,7 @@ export class IssuerService {
     this.initialized = true
   }
 
-  private async buildMetadataSigner(signingCertificate: SigningCertificateHandle) {
-    if (this.issuerOptions().metadataSigner === 'did') {
-      const did = this.agent.did ?? null
-      const didUrl = await findBoundVerificationMethodId(
-        this.agent,
-        did,
-        signingCertificate.certificate.publicJwk.toJson(),
-        ['authentication'],
-        ownDidResolutionPolicy(did ?? ''),
-      )
-      if (!didUrl) {
-        throw new Error(
-          'OpenID4VC issuer is configured to sign metadata with its DID, but the DID does not publish the signing key for authentication',
-        )
-      }
-      return { method: 'did' as const, didUrl }
-    }
-
+  private metadataSigner(signingCertificate: SigningCertificateHandle) {
     return { method: 'x5c' as const, x5c: x5cCertificateChain(signingCertificate) }
   }
 
@@ -339,28 +313,22 @@ export class IssuerService {
   }
 
   private async createOrUpdateIssuer(signingCertificate: SigningCertificateHandle): Promise<void> {
-    const issuer = this.issuerOptions()
     const metadata = {
       issuerId: ISSUER_CAPABILITY_ID,
-      display: [{ name: issuer.displayName, locale: 'en' }],
+      display: [{ name: new URL(this.options.publicApiBaseUrl).host, locale: 'en' }],
       credentialConfigurationsSupported: this.credentialConfigurationsSupported(),
+      metadataSigner: this.metadataSigner(signingCertificate),
     }
 
     try {
       await this.issuerApi().getIssuerByIssuerId(ISSUER_CAPABILITY_ID)
     } catch (error) {
       if (!(error instanceof RecordNotFoundError)) throw error
-      await this.issuerApi().createIssuer({
-        ...metadata,
-        metadataSigner: await this.buildMetadataSigner(signingCertificate),
-      })
+      await this.issuerApi().createIssuer(metadata)
       return
     }
 
-    await this.issuerApi().updateIssuerMetadata({
-      ...metadata,
-      metadataSigner: await this.buildMetadataSigner(signingCertificate),
-    })
+    await this.issuerApi().updateIssuerMetadata(metadata)
   }
 
   private credentialConfigurationsSupported(): OpenId4VciCredentialConfigurationsSupportedWithFormats {
