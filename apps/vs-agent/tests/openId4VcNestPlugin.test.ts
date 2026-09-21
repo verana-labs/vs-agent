@@ -29,21 +29,6 @@ vi.mock('@verana-labs/vs-agent-plugin-openid4vc', async importOriginal => {
 
 const options = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
-  issuer: {
-    displayName: 'Example Issuer',
-    signing: { development: { enabled: true, commonName: 'Example Issuer' } },
-  },
-  verifier: {
-    displayName: 'Example Verifier',
-    signing: { development: { enabled: true, commonName: 'Example Verifier' } },
-  },
-  trust: {
-    resolverUrl: 'https://resolver.example/v1/trust',
-    timeoutMs: 5_000,
-    allowedDidWebHosts: ['issuer.example'],
-    credentialIssuerCertificates: [],
-    developmentCertificateFingerprints: [`SHA256:${'0'.repeat(64)}`],
-  },
   credentialConfigurations: [],
   verifierPolicies: [],
 })
@@ -60,26 +45,15 @@ describe('OpenId4VcNestPlugin', () => {
     ensureVerifier.mockReset().mockResolvedValue(undefined)
   })
 
-  it('registers the three v2 controllers whatever the configured capabilities', () => {
-    const issuerOnly = options()
-    issuerOnly.verifier = undefined
-    issuerOnly.trust = undefined
-
-    expect(OpenId4VcNestPlugin(issuerOnly).controllers).toEqual([
+  it('registers the three v2 controllers', () => {
+    expect(OpenId4VcNestPlugin(options()).controllers).toEqual([
       V2Openid4vcCredentialExchangesController,
       V2Openid4vcPresentationsController,
       V2Openid4vcSigningCertificatesController,
     ])
   })
 
-  it('provides a service only for a configured capability', () => {
-    const issuerOnly = options()
-    issuerOnly.verifier = undefined
-    issuerOnly.trust = undefined
-
-    expect(providers(OpenId4VcNestPlugin(issuerOnly)).map(provider => provider.provide)).toEqual([
-      IssuerService,
-    ])
+  it('provides both services from a configuration file that declares no capability', () => {
     expect(providers(OpenId4VcNestPlugin(options())).map(provider => provider.provide)).toEqual([
       IssuerService,
       VerifierService,
@@ -89,13 +63,11 @@ describe('OpenId4VcNestPlugin', () => {
     ).toBe(true)
   })
 
-  it('provides only the verifier service when the issuer capability is absent', () => {
-    const verifierOnly = options()
-    verifierOnly.issuer = undefined
+  it('initializes both capabilities from a configuration file that declares no capability', async () => {
+    await OpenId4VcNestPlugin(options()).initialize?.({} as never, {} as never)
 
-    expect(providers(OpenId4VcNestPlugin(verifierOnly)).map(provider => provider.provide)).toEqual([
-      VerifierService,
-    ])
+    expect(ensureIssuer).toHaveBeenCalledOnce()
+    expect(ensureVerifier).toHaveBeenCalledOnce()
   })
 
   it('exposes the credo modules and the public middleware', () => {
@@ -144,9 +116,8 @@ describe('OpenId4VcNestPlugin', () => {
 
   it('refuses invalid options synchronously', () => {
     const invalid = options()
-    invalid.issuer = undefined
-    invalid.verifier = undefined
+    invalid.publicApiBaseUrl = 'not-a-url'
 
-    expect(() => OpenId4VcNestPlugin(invalid)).toThrow('requires an issuer or verifier capability')
+    expect(() => OpenId4VcNestPlugin(invalid)).toThrow('publicApiBaseUrl must be a valid URL')
   })
 })

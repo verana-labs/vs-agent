@@ -15,14 +15,8 @@ import { createCertificateFixtures } from './helpers/certificates'
 
 const validOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
-  issuer: {
-    displayName: 'Example Issuer',
-    signing: { development: { enabled: true, commonName: 'Example Issuer' } },
-  },
-  verifier: {
-    displayName: 'Example Verifier',
-    signing: { development: { enabled: true, commonName: 'Example Verifier' } },
-  },
+  issuer: {},
+  verifier: {},
   trust: {
     resolverUrl: 'https://resolver.example/v1/trust',
     timeoutMs: 5_000,
@@ -57,34 +51,14 @@ describe('setupOpenId4Vc', () => {
     expect(second.modules.openId4Vc.config.app).toBe(second.publicMiddleware)
   })
 
-  it('configures only enabled role bases', () => {
-    const issuerOnly = validOptions()
-    delete issuerOnly.verifier
-    delete issuerOnly.trust
-    const issuerSetup = setupOpenId4Vc(issuerOnly, () => ({
-      getVctMetadata: () => undefined,
-      getSignedMetadataJwt: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
+  it('configures both role bases from a file that declares no capability', () => {
+    const empty = validOptions()
+    delete empty.issuer
+    delete empty.verifier
+    const setup = setupOpenId4Vc(empty)
 
-    expect(issuerSetup.modules.openId4Vc.config).toHaveProperty(
-      'issuer.baseUrl',
-      'https://agent.example/oid4vci',
-    )
-    expect(issuerSetup.modules.openId4Vc.config.verifier).toBeUndefined()
-
-    const verifierOnly = validOptions()
-    delete verifierOnly.issuer
-    const verifierSetup = setupOpenId4Vc(verifierOnly)
-
-    expect(verifierSetup.modules.openId4Vc.config.issuer).toBeUndefined()
-    expect(verifierSetup.modules.openId4Vc.config).toHaveProperty(
-      'verifier.baseUrl',
-      'https://agent.example/oid4vp',
-    )
+    expect(setup.modules.openId4Vc.config).toHaveProperty('issuer.baseUrl', 'https://agent.example/oid4vci')
+    expect(setup.modules.openId4Vc.config).toHaveProperty('verifier.baseUrl', 'https://agent.example/oid4vp')
   })
 
   it('delegates X.509 trust only to configured trust anchors', async () => {
@@ -224,9 +198,8 @@ describe('setupOpenId4Vc', () => {
     expect(noAccept.status).toBe(404)
   })
 
-  it('does not advertise wallet attestation metadata by default', async () => {
+  it('does not advertise wallet attestation metadata without attestation roots', async () => {
     const options = validOptions()
-    options.issuer!.walletAttestationCertificates = ['unused-while-attestation-is-not-required']
     const setup = setupOpenId4Vc(options, () => ({
       getVctMetadata: () => undefined,
       getSignedMetadataJwt: () => undefined,
@@ -250,10 +223,9 @@ describe('setupOpenId4Vc', () => {
     expect(setup.modules.openId4Vc.config).toHaveProperty('issuer.walletAttestationsRequired', false)
   })
 
-  it('advertises wallet attestation only when it is required and has trusted roots', async () => {
+  it('advertises wallet attestation as soon as attestation roots are configured', async () => {
     const fixtures = await createCertificateFixtures()
     const options = validOptions()
-    options.issuer!.requireWalletAttestation = true
     options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]
     const setup = setupOpenId4Vc(options, () => ({
       getVctMetadata: () => undefined,
@@ -278,10 +250,9 @@ describe('setupOpenId4Vc', () => {
     expect(setup.modules.openId4Vc.config).toHaveProperty('issuer.walletAttestationsRequired', true)
   })
 
-  it('rejects a malformed required wallet-attestation root synchronously', async () => {
+  it('rejects a malformed wallet-attestation root synchronously', async () => {
     const fixtures = await createCertificateFixtures()
     const options = validOptions()
-    options.issuer!.requireWalletAttestation = true
     options.issuer!.walletAttestationCertificates = [
       fixtures.root.toString('base64'),
       'MIIB-private-attestation-material',
@@ -327,6 +298,43 @@ describe('setupOpenId4Vc', () => {
     expect(unknown.status).toBe(404)
     expect(create.status).toBe(404)
     expect(list.status).toBe(404)
+  })
+
+  it.each([
+    '/.well-known/openid-credential-issuer',
+    '/.well-known/oauth-authorization-server',
+  ])('serves %s at the bare path credo leaves unrouted', async wellKnown => {
+    const setup = setupOpenId4Vc(validOptions())
+    setup.publicMiddleware.get(`${wellKnown}/oid4vci/issuer`, (incoming, response) =>
+      response.json({ credential_issuer: 'https://agent.example/oid4vci/issuer', query: incoming.query }),
+    )
+
+    const bare = await request(setup.publicMiddleware).get(wellKnown)
+    const withQuery = await request(setup.publicMiddleware).get(`${wellKnown}/?v=1`)
+    const other = await request(setup.publicMiddleware).get(`${wellKnown}/oid4vci/other`)
+
+    expect(bare.status).toBe(200)
+    expect(bare.body.credential_issuer).toBe('https://agent.example/oid4vci/issuer')
+    expect(withQuery.status).toBe(200)
+    expect(withQuery.body.query).toEqual({ v: '1' })
+    expect(other.status).toBe(404)
+  })
+
+  it('aliases the bare well-known path under a public API base path', async () => {
+    const options = validOptions()
+    options.publicApiBaseUrl = 'https://agent.example/public/base'
+    const setup = setupOpenId4Vc(options)
+    setup.publicMiddleware.get(
+      '/.well-known/openid-credential-issuer/public/base/oid4vci/issuer',
+      (_incoming, response) => response.json({ credential_issuer: 'https://agent.example/public/base' }),
+    )
+
+    const response = await request(setup.publicMiddleware).get(
+      '/.well-known/openid-credential-issuer/public/base',
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.body.credential_issuer).toBe('https://agent.example/public/base')
   })
 
   it('does not mount verifier presentation or holder routes on the public middleware', async () => {

@@ -48,10 +48,7 @@ const PUBLIC_JWK = {
 
 const options = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
-  verifier: {
-    displayName: 'Example Verifier',
-    signing: { development: { enabled: true, commonName: 'Example Verifier' } },
-  },
+  verifier: {},
   trust: {
     resolverUrl: 'https://resolver.example/v1/trust',
     timeoutMs: 5_000,
@@ -93,9 +90,14 @@ function verifierApi() {
 
 const sessionRepository = { update: vi.fn() }
 
-function agent(api = verifierApi(), did: string | undefined = AGENT_DID) {
+function agent(
+  api = verifierApi(),
+  did: string | undefined = AGENT_DID,
+  ecsClaims?: { service?: Record<string, string | undefined> },
+) {
   return {
     did,
+    ecsClaims,
     dids: { resolve: vi.fn() },
     genericRecords: {},
     kms: {},
@@ -211,16 +213,11 @@ function trust(verdict: 'TRUSTED_AUTHORIZED' | 'TRUSTED_NOT_AUTHORIZED' | 'RESOL
   }
 }
 
-async function initialized(
-  overrides: { verifier?: Partial<NonNullable<OpenId4VcPluginOptions['verifier']>> } = {},
-) {
+async function initialized() {
   const api = verifierApi()
   api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
 
-  const configured = options()
-  if (overrides.verifier && configured.verifier) Object.assign(configured.verifier, overrides.verifier)
-
-  const service = new VerifierService(agent(api) as never, configured)
+  const service = new VerifierService(agent(api) as never, options())
   await service.ensureInitialized()
   return { service, api }
 }
@@ -257,7 +254,7 @@ describe('VerifierService', () => {
     )
     expect(api.createVerifier).toHaveBeenCalledWith({
       verifierId: 'verifier',
-      clientMetadata: { client_name: 'Example Verifier' },
+      clientMetadata: { client_name: 'agent.example' },
     })
     expect(api.updateVerifierMetadata).not.toHaveBeenCalled()
   })
@@ -274,7 +271,7 @@ describe('VerifierService', () => {
     expect(api.getVerifierByVerifierId).toHaveBeenCalledOnce()
     expect(api.updateVerifierMetadata).toHaveBeenCalledWith({
       verifierId: 'verifier',
-      clientMetadata: { client_name: 'Example Verifier' },
+      clientMetadata: { client_name: 'agent.example' },
     })
     expect(api.createVerifier).not.toHaveBeenCalled()
   })
@@ -357,22 +354,14 @@ describe('VerifierService', () => {
     })
   })
 
-  it('honours a per-request x5c signer override on a did-signing verifier', async () => {
+  it('honours an explicit per-request x5c signer', async () => {
     const api = verifierApi()
     api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
     api.createAuthorizationRequest.mockResolvedValue({
       authorizationRequest: 'openid4vp://?request_uri=opaque',
       verificationSession: session('RequestCreated'),
     })
-    const didSigning: OpenId4VcPluginOptions = {
-      ...options(),
-      verifier: {
-        displayName: 'Example Verifier',
-        signing: { development: { enabled: true, commonName: 'Example Verifier' } },
-        requestSigner: 'did',
-      },
-    }
-    const service = new VerifierService(agent(api) as never, didSigning)
+    const service = new VerifierService(agent(api) as never, options())
     await service.ensureInitialized()
 
     await service.createRequest('employee-name', 'dcql', 'x5c')
@@ -771,15 +760,15 @@ describe('VerifierService', () => {
   })
 
   describe('DID request signer', () => {
-    it('signs a DCQL request with the DID when requestSigner is did', async () => {
+    it('signs a DCQL request with the DID on a per-request did override', async () => {
       findBoundVerificationMethodId.mockResolvedValue(`${AGENT_DID}#openid4vc-verifier`)
-      const { service, api } = await initialized({ verifier: { requestSigner: 'did' } })
+      const { service, api } = await initialized()
       api.createAuthorizationRequest.mockResolvedValue({
         authorizationRequest: 'openid4vp://r',
         verificationSession: verificationSession(),
       })
 
-      await service.createRequest('employee-name')
+      await service.createRequest('employee-name', 'dcql', 'did')
 
       expect(api.createAuthorizationRequest).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -790,10 +779,40 @@ describe('VerifierService', () => {
 
     it('fails a did-signed request when the DID does not publish the signing key', async () => {
       findBoundVerificationMethodId.mockResolvedValue(null)
-      const { service } = await initialized({ verifier: { requestSigner: 'did' } })
-      await expect(service.createRequest('employee-name')).rejects.toBeInstanceOf(
+      const { service } = await initialized()
+      await expect(service.createRequest('employee-name', 'dcql', 'did')).rejects.toBeInstanceOf(
         OpenId4VcVerifierRequestError,
       )
+    })
+  })
+
+  describe('ECS service display', () => {
+    it('publishes the ECS Service name and logo in the client metadata', async () => {
+      const api = verifierApi()
+      api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
+      const ecsClaims = { service: { name: 'Verana Demo', logoUri: 'https://agent.example/logo.svg' } }
+
+      await new VerifierService(agent(api, AGENT_DID, ecsClaims) as never, options()).ensureInitialized()
+
+      expect(api.updateVerifierMetadata).toHaveBeenCalledWith({
+        verifierId: 'verifier',
+        clientMetadata: { client_name: 'Verana Demo', logo_uri: 'https://agent.example/logo.svg' },
+      })
+    })
+
+    it('falls back to the public API host and omits the logo without an ECS Service claim', async () => {
+      const api = verifierApi()
+      api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
+
+      await new VerifierService(
+        agent(api, AGENT_DID, { service: {} }) as never,
+        options(),
+      ).ensureInitialized()
+
+      expect(api.updateVerifierMetadata).toHaveBeenCalledWith({
+        verifierId: 'verifier',
+        clientMetadata: { client_name: 'agent.example' },
+      })
     })
   })
 })

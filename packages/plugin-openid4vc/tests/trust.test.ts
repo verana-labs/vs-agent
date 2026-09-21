@@ -111,10 +111,7 @@ describe('CertificateTrust', () => {
 function validOptions(root: X509Certificate): OpenId4VcPluginOptions {
   return {
     publicApiBaseUrl: 'https://agent.example',
-    issuer: {
-      displayName: 'Issuer',
-      signing: { development: { enabled: true, commonName: 'Issuer' } },
-    },
+    issuer: {},
     trust: {
       resolverUrl: 'https://resolver.example',
       timeoutMs: 5_000,
@@ -128,11 +125,7 @@ function validOptions(root: X509Certificate): OpenId4VcPluginOptions {
 
 const options = (keyAttestationCertificates?: string[]): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
-  issuer: {
-    displayName: 'Example Issuer',
-    signing: { development: { enabled: true, commonName: 'Example Issuer' } },
-    ...(keyAttestationCertificates ? { keyAttestationCertificates } : {}),
-  },
+  issuer: { ...(keyAttestationCertificates ? { keyAttestationCertificates } : {}) },
   credentialConfigurations: [],
   verifierPolicies: [],
 })

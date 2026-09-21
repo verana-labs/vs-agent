@@ -21,14 +21,8 @@ beforeAll(async () => {
 
 const validOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
-  issuer: {
-    displayName: 'Example Issuer',
-    signing: { development: { enabled: true, commonName: 'Example Issuer' } },
-  },
-  verifier: {
-    displayName: 'Example Verifier',
-    signing: { development: { enabled: true, commonName: 'Example Verifier' } },
-  },
+  issuer: {},
+  verifier: {},
   trust: {
     resolverUrl: 'https://resolver.example/v1/trust',
     timeoutMs: 5_000,
@@ -56,12 +50,13 @@ describe('validateOpenId4VcOptions', () => {
     expect(() => validateOpenId4VcOptions(validOptions())).not.toThrow()
   })
 
-  it('rejects a plugin with no capability', () => {
+  it('accepts a file that configures neither capability', () => {
     const options = validOptions()
     delete options.issuer
     delete options.verifier
+    delete options.trust
 
-    expect(() => validateOpenId4VcOptions(options)).toThrow('issuer or verifier')
+    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
   })
 
   it('rejects a non-HTTPS public URL outside test mode', () => {
@@ -171,21 +166,6 @@ describe('validateOpenId4VcOptions', () => {
     expect(() => validateOpenId4VcOptions(options)).toThrow('credentialConfigurationId')
   })
 
-  it('rejects verifier mode without credential issuer trust anchors', () => {
-    const options = validOptions()
-    options.trust!.credentialIssuerCertificates = []
-
-    expect(() => validateOpenId4VcOptions(options)).toThrow('credentialIssuerCertificates')
-  })
-
-  it('accepts development certificate fingerprints as verifier trust anchors', () => {
-    const options = validOptions()
-    options.trust!.credentialIssuerCertificates = []
-    options.trust!.developmentCertificateFingerprints = [`SHA256:${'0'.repeat(64)}`]
-
-    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
-  })
-
   it('rejects malformed credential issuer certificate material without exposing it', () => {
     const malformed = 'private-malformed-certificate-material'
     const options = validOptions()
@@ -262,45 +242,38 @@ describe('validateOpenId4VcOptions', () => {
     expect(() => validateOpenId4VcOptions(excessiveTimeout)).toThrow('timeoutMs')
   })
 
-  it('rejects required wallet attestation without attestation anchors', () => {
+  it('accepts a capability that declares no signing mode', () => {
     const options = validOptions()
-    options.issuer!.requireWalletAttestation = true
 
-    expect(() => validateOpenId4VcOptions(options)).toThrow('walletAttestationCertificates')
+    expect(options.issuer!.signing).toBeUndefined()
+    expect(options.verifier!.signing).toBeUndefined()
+    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
   })
 
-  it('rejects configured and development signing modes selected together', () => {
+  it('rejects a signing block that declares no configured material', () => {
     const options = validOptions()
-    ;(options.issuer!.signing as unknown as { configured: unknown }).configured = {
-      certificateChain: ['MIIB-test-cert'],
-      privateJwk: {} as never,
+    options.issuer!.signing = {} as never
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('issuer.signing.configured is required')
+  })
+
+  it('accepts configured signing material', () => {
+    const options = validOptions()
+    options.issuer!.signing = {
+      configured: { certificateChain: ['MIIB-test-cert'], privateJwk: { kty: 'EC' } as never },
     }
 
-    expect(() => validateOpenId4VcOptions(options)).toThrow('signing')
+    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
   })
 
-  it('accepts both signer modes on the issuer and the verifier', () => {
-    for (const mode of ['x5c', 'did'] as const) {
-      const options = validOptions()
-      options.issuer!.metadataSigner = mode
-      options.verifier!.requestSigner = mode
+  it('rejects attestation certificates that are not non-empty strings', () => {
+    const walletAttestation = validOptions()
+    walletAttestation.issuer!.walletAttestationCertificates = ['']
+    expect(() => validateOpenId4VcOptions(walletAttestation)).toThrow('issuer.walletAttestationCertificates')
 
-      expect(() => validateOpenId4VcOptions(options)).not.toThrow()
-    }
-  })
-
-  it('rejects an issuer metadata signer that is neither x5c nor did', () => {
-    const options = validOptions()
-    options.issuer!.metadataSigner = 'jwk' as never
-
-    expect(() => validateOpenId4VcOptions(options)).toThrow("issuer.metadataSigner must be 'x5c' or 'did'")
-  })
-
-  it('rejects a verifier request signer that is neither x5c nor did', () => {
-    const options = validOptions()
-    options.verifier!.requestSigner = 'jwk' as never
-
-    expect(() => validateOpenId4VcOptions(options)).toThrow("verifier.requestSigner must be 'x5c' or 'did'")
+    const keyAttestation = validOptions()
+    keyAttestation.issuer!.keyAttestationCertificates = [' ']
+    expect(() => validateOpenId4VcOptions(keyAttestation)).toThrow('issuer.keyAttestationCertificates')
   })
 })
 

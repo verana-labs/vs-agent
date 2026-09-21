@@ -7,36 +7,13 @@ import { readOpenId4VcOptions } from '../src/config/openid4vc'
 
 const publicApiBaseUrl = 'https://agent.example'
 
-const validConfig = () => ({
-  issuer: {
-    displayName: 'Example Issuer',
-    signing: { development: { enabled: true, commonName: 'Example Issuer' } },
-  },
-  verifier: {
-    displayName: 'Example Verifier',
-    signing: { development: { enabled: true, commonName: 'Example Verifier' } },
-  },
-  trust: {
-    resolverUrl: 'https://resolver.example/v1/trust',
-    timeoutMs: 5_000,
-    allowedDidWebHosts: ['issuer.example'],
-    credentialIssuerCertificates: [],
-    developmentCertificateFingerprints: [`SHA256:${'0'.repeat(64)}`],
-  },
-  credentialConfigurations: [
-    {
-      id: 'employee',
-      format: 'dc+sd-jwt',
-      vct: 'https://agent.example/oid4vc/vct/employee',
-      name: 'Employee credential',
-      vtjscId: 'https://agent.example/vt/employee.json',
-      claims: ['name', 'role'],
-      disclosureFrame: ['name', 'role'],
-    },
-  ],
-  verifierPolicies: [
-    { id: 'employee-check', credentialConfigurationId: 'employee', requestedClaims: ['name'] },
-  ],
+const validConfig = () => ({ issuer: {}, verifier: {} })
+
+const readOptions = () => ({
+  ...validConfig(),
+  publicApiBaseUrl,
+  credentialConfigurations: [],
+  verifierPolicies: [],
 })
 
 describe('OpenID4VC configuration file', () => {
@@ -54,10 +31,46 @@ describe('OpenID4VC configuration file', () => {
   })
 
   it('reads and validates the file and injects the trusted public API base URL', async () => {
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).resolves.toEqual(readOptions())
+  })
+
+  it('accepts an empty document and defaults the internal structures', async () => {
+    await writeFile(configPath, JSON.stringify({}))
+
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).resolves.toEqual({
-      ...validConfig(),
       publicApiBaseUrl,
+      credentialConfigurations: [],
+      verifierPolicies: [],
     })
+  })
+
+  it.each([
+    'trust',
+    'credentialConfigurations',
+    'verifierPolicies',
+  ])('rejects the %s block the spec no longer defines', async field => {
+    await writeFile(configPath, JSON.stringify({ ...validConfig(), [field]: [] }))
+
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
+      `unknown top-level field '${field}'`,
+    )
+  })
+
+  it.each([
+    ['issuer', 'displayName'],
+    ['issuer', 'metadataSigner'],
+    ['issuer', 'requireWalletAttestation'],
+    ['verifier', 'displayName'],
+    ['verifier', 'requestSigner'],
+  ])('rejects %s.%s', async (capability, field) => {
+    const config = validConfig() as unknown as Record<string, Record<string, unknown>>
+    config[capability][field] = 'value'
+
+    await writeFile(configPath, JSON.stringify(config))
+
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
+      `contains unknown field '${capability}.${field}'`,
+    )
   })
 
   it('refuses a file that still carries a revocation block', async () => {
@@ -90,28 +103,6 @@ describe('OpenID4VC configuration file', () => {
     )
   })
 
-  it('rejects a credential configuration that still carries the offer lifetime', async () => {
-    const config = validConfig()
-    ;(config.credentialConfigurations[0] as Record<string, unknown>).ttlSeconds = 3_600
-
-    await writeFile(configPath, JSON.stringify(config))
-
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      "contains unknown field 'credentialConfigurations[0].ttlSeconds'",
-    )
-  })
-
-  it('rejects an unknown field in a verifier policy entry', async () => {
-    const config = validConfig()
-    ;(config.verifierPolicies[0] as Record<string, unknown>).unexpected = 'value'
-
-    await writeFile(configPath, JSON.stringify(config))
-
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      "contains unknown field 'verifierPolicies[0].unexpected'",
-    )
-  })
-
   it('rejects an unknown top-level key without echoing its value', async () => {
     const secretValue = 'unknown-field-secret-value'
     await writeFile(configPath, JSON.stringify({ ...validConfig(), unexpected: secretValue }))
@@ -126,10 +117,10 @@ describe('OpenID4VC configuration file', () => {
   it('does not echo private JWK or certificate values in validation errors', async () => {
     const privateValue = 'private-jwk-secret-value'
     const certificateValue = 'private-certificate-value'
-    const config = validConfig()
+    const config = validConfig() as { issuer: Record<string, unknown> }
     config.issuer.signing = {
       configured: { certificateChain: [certificateValue], privateJwk: privateValue },
-    } as never
+    }
     await writeFile(configPath, JSON.stringify(config))
 
     const error = await readOpenId4VcOptions(configPath, publicApiBaseUrl).catch(value => value)
@@ -185,10 +176,7 @@ describe('OpenID4VC configuration location', () => {
   it('fetches an https location once without following a redirect, then validates it', async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify(validConfig()), { status: 200 }))
 
-    await expect(readOpenId4VcOptions(location, publicApiBaseUrl)).resolves.toEqual({
-      ...validConfig(),
-      publicApiBaseUrl,
-    })
+    await expect(readOpenId4VcOptions(location, publicApiBaseUrl)).resolves.toEqual(readOptions())
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(fetchMock).toHaveBeenCalledWith(location, { redirect: 'manual', signal: expect.any(AbortSignal) })
   })

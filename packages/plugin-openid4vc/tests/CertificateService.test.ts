@@ -2,7 +2,9 @@ import type { OpenId4VcPluginOptions, OpenId4VcSigningOptions } from '../src/typ
 import type {
   DidCreateResult,
   DidDeactivateResult,
+  DidRegistrar,
   DidResolutionResult,
+  DidResolver,
   DidUpdateOptions,
   DidUpdateResult,
 } from '@credo-ts/core'
@@ -205,9 +207,7 @@ describe('CertificateService', () => {
     const agent = createAgent({ developmentCertificate: fixtures.attacker })
     agent.did = 'did:web:attacker.example'
     agent.publicApiBaseUrl = 'https://attacker.example/agent'
-    const handle = await loadSigningCertificate(agent, {
-      development: { enabled: true, commonName: 'Development Agent' },
-    })
+    const handle = await loadSigningCertificate(agent, undefined)
     agent.dids.resolve.mockResolvedValue({
       didDocument: DidDocument.fromJSON({ id: 'did:web:attacker.example' }),
     })
@@ -228,9 +228,7 @@ describe('CertificateService', () => {
     const agent = createAgent({ developmentCertificate: fixtures.attacker })
     agent.did = 'did:web:attacker.example'
     agent.publicApiBaseUrl = 'https://attacker.example/agent'
-    const handle = await loadSigningCertificate(agent, {
-      development: { enabled: true, commonName: 'Development Agent' },
-    })
+    const handle = await loadSigningCertificate(agent, undefined)
     agent.dids.resolve.mockResolvedValue({
       didDocument: DidDocument.fromJSON({
         '@context': ['https://www.w3.org/ns/did/v1'],
@@ -253,9 +251,7 @@ describe('CertificateService', () => {
     const agent = createAgent({ developmentCertificate: fixtures.attacker })
     agent.did = 'did:web:attacker.example'
     agent.publicApiBaseUrl = 'https://attacker.example/agent'
-    const handle = await loadSigningCertificate(agent, {
-      development: { enabled: true, commonName: 'Development Agent' },
-    })
+    const handle = await loadSigningCertificate(agent, undefined)
     const published = publishedDidDocument('did:web:attacker.example', handle.keyId)
     published.context = ['https://www.w3.org/ns/did/v1']
     agent.dids.resolve.mockResolvedValue({ didDocument: published })
@@ -275,9 +271,7 @@ describe('CertificateService', () => {
     const agent = createAgent({ developmentCertificate: fixtures.attacker })
     agent.did = 'did:web:attacker.example'
     agent.publicApiBaseUrl = 'https://attacker.example/agent'
-    const handle = await loadSigningCertificate(agent, {
-      development: { enabled: true, commonName: 'Development Agent' },
-    })
+    const handle = await loadSigningCertificate(agent, undefined)
     agent.dids.resolve.mockResolvedValue({
       didDocument: publishedDidDocument('did:web:attacker.example', handle.keyId),
     })
@@ -295,9 +289,7 @@ describe('CertificateService', () => {
     const agent = createAgent({ developmentCertificate: fixtures.attacker })
     agent.did = 'did:web:attacker.example'
     agent.publicApiBaseUrl = 'https://attacker.example/agent'
-    const handle = await loadSigningCertificate(agent, {
-      development: { enabled: true, commonName: 'Development Agent' },
-    })
+    const handle = await loadSigningCertificate(agent, undefined)
     agent.didRecord.keys = [
       { didDocumentRelativeKeyId: '#openid4vc-development-issuer', kmsKeyId: handle.keyId },
     ]
@@ -331,12 +323,8 @@ describe('CertificateService', () => {
     const agent = createAgent({ developmentCertificate: fixtures.attacker })
     agent.did = 'did:web:attacker.example'
     agent.publicApiBaseUrl = 'https://attacker.example/agent'
-    const signing: OpenId4VcSigningOptions = {
-      development: { enabled: true, commonName: 'Development Agent' },
-    }
-
-    const first = await loadSigningCertificate(agent, signing)
-    const second = await loadSigningCertificate(agent, signing)
+    const first = await loadSigningCertificate(agent, undefined)
+    const second = await loadSigningCertificate(agent, undefined)
 
     expect(first.development).toBe(true)
     expect(second.certificate.equal(first.certificate)).toBe(true)
@@ -357,17 +345,14 @@ describe('CertificateService', () => {
     )
   })
 
-  it('uses separate development records for concurrent issuer and verifier roles with equal names', async () => {
+  it('uses separate development records for the issuer and the verifier role', async () => {
     const agent = createAgent({ developmentCertificate: fixtures.attacker })
     agent.did = 'did:web:attacker.example'
     agent.publicApiBaseUrl = 'https://attacker.example/agent'
-    const signing: OpenId4VcSigningOptions = {
-      development: { enabled: true, commonName: 'Development Agent' },
-    }
 
     await Promise.all([
-      loadSigningCertificate(agent, signing, agent.publicApiBaseUrl, 'issuer'),
-      loadSigningCertificate(agent, signing, agent.publicApiBaseUrl, 'verifier'),
+      loadSigningCertificate(agent, undefined, agent.publicApiBaseUrl, 'issuer'),
+      loadSigningCertificate(agent, undefined, agent.publicApiBaseUrl, 'verifier'),
     ])
 
     const savedRecordIds = agent.genericRecords.save.mock.calls.map(([record]) => record.id)
@@ -383,9 +368,7 @@ describe('CertificateService', () => {
     agent.did = 'did:web:attacker.example'
     agent.publicApiBaseUrl = 'https://attacker.example/agent'
 
-    const handle = await loadSigningCertificate(agent, {
-      development: { enabled: true, commonName: 'Development Agent' },
-    })
+    const handle = await loadSigningCertificate(agent, undefined)
 
     expect(handle.certificate.equal(fixtures.attacker)).toBe(true)
     expect(agent.genericRecords.deleteById).toHaveBeenCalledTimes(1)
@@ -402,9 +385,7 @@ describe('CertificateService', () => {
     agent.publicApiBaseUrl = 'https://attacker.example/agent'
     agent.keys.clear()
 
-    const handle = await loadSigningCertificate(agent, {
-      development: { enabled: true, commonName: 'Development Agent' },
-    })
+    const handle = await loadSigningCertificate(agent, undefined)
 
     expect(handle.development).toBe(true)
     expect(agent.genericRecords.deleteById).toHaveBeenCalledTimes(1)
@@ -420,11 +401,7 @@ describe('CertificateService', () => {
     agent.publicApiBaseUrl = 'https://attacker.example/agent'
     agent.kms.getPublicKey.mockRejectedValueOnce(new Kms.KeyManagementError('backend unavailable'))
 
-    await expect(
-      loadSigningCertificate(agent, {
-        development: { enabled: true, commonName: 'Development Agent' },
-      }),
-    ).rejects.toThrow('backend unavailable')
+    await expect(loadSigningCertificate(agent, undefined)).rejects.toThrow('backend unavailable')
     expect(agent.genericRecords.deleteById).not.toHaveBeenCalled()
     expect(agent.kms.createKey).not.toHaveBeenCalled()
   })
@@ -688,17 +665,6 @@ describe('development signing DID publication', () => {
     ])
   })
 
-  it('publishes the issuer key under authentication as well when metadataSigner is did', async () => {
-    const { initialize, registry } = await createHarness('issuer', DID_WEB, { metadataSigner: 'did' })
-
-    await initialize()
-
-    const document = registry.document(DID_WEB)
-    const methodId = `${DID_WEB}#openid4vc-development-issuer`
-    expect(relationshipIds(document.assertionMethod)).toContain(methodId)
-    expect(relationshipIds(document.authentication)).toContain(methodId)
-  })
-
   it('publishes the generated verifier key through the generic DID API for did:webvh', async () => {
     const { agent, initialize, registry } = await createHarness('verifier', DID_WEBVH)
 
@@ -777,14 +743,12 @@ describe('development signing DID publication', () => {
 async function createHarness(
   role: Role,
   did: string,
-  issuerOverrides: Partial<NonNullable<OpenId4VcPluginOptions['issuer']>> = {},
 ): Promise<{
   agent: TestAgent
   initialize: () => Promise<void>
   registry: MutableDidRegistry
 }> {
   const options = developmentOptions(role)
-  if (options.issuer) Object.assign(options.issuer, issuerOverrides)
   validateOpenId4VcOptions(options)
 
   let issuerService: IssuerService | undefined
@@ -794,25 +758,7 @@ async function createHarness(
   })
 
   const registry = new MutableDidRegistry(new Map([[did, initialDidDocument(did)]]))
-  const agent = new Agent({
-    config: { logger: new ConsoleLogger(LogLevel.Off) },
-    dependencies: agentDependencies,
-    modules: {
-      askar: new AskarModule({
-        askar,
-        store: {
-          id: `openid4vc-development-${utils.uuid()}`,
-          key: ASKAR_STORE_KEY,
-          keyDerivationMethod: 'raw',
-          database: { type: 'sqlite', config: { inMemory: true } } as AskarSqliteStorageConfig,
-        },
-      }),
-      dids: new DidsModule({ resolvers: [registry], registrars: [registry] }),
-      ...sdkPlugin.modules,
-    },
-  }) as TestAgent
-  agent.did = did
-  await agent.initialize()
+  const agent = await startTestAgent('openid4vc-development', did, registry, sdkPlugin.modules)
   await agent.dependencyManager
     .resolve(DidRepository)
     .save(
@@ -835,23 +781,41 @@ async function createHarness(
   return { agent, initialize, registry }
 }
 
+async function startTestAgent(
+  storePrefix: string,
+  did: string,
+  registry: DidResolver & DidRegistrar,
+  extraModules: Record<string, unknown> = {},
+): Promise<TestAgent> {
+  const agent = new Agent({
+    config: { logger: new ConsoleLogger(LogLevel.Off) },
+    dependencies: agentDependencies,
+    modules: {
+      askar: new AskarModule({
+        askar,
+        store: {
+          id: `${storePrefix}-${utils.uuid()}`,
+          key: ASKAR_STORE_KEY,
+          keyDerivationMethod: 'raw',
+          database: { type: 'sqlite', config: { inMemory: true } } as AskarSqliteStorageConfig,
+        },
+      }),
+      dids: new DidsModule({ resolvers: [registry], registrars: [registry] }),
+      ...extraModules,
+    },
+  }) as TestAgent
+  agent.did = did
+  await agent.initialize()
+  return agent
+}
+
 function developmentOptions(role: Role): OpenId4VcPluginOptions {
   return {
     publicApiBaseUrl: 'https://agent.example',
-    ...(role !== 'verifier'
-      ? {
-          issuer: {
-            displayName: 'Development Issuer',
-            signing: { development: { enabled: true as const, commonName: 'Development Issuer' } },
-          },
-        }
-      : {}),
+    ...(role !== 'verifier' ? { issuer: {} } : {}),
     ...(role !== 'issuer'
       ? {
-          verifier: {
-            displayName: 'Development Verifier',
-            signing: { development: { enabled: true as const, commonName: 'Development Verifier' } },
-          },
+          verifier: {},
           trust: {
             resolverUrl: 'https://resolver.example/v1/trust',
             timeoutMs: 5_000,
@@ -1053,24 +1017,7 @@ async function createParallelWebHarness(
   }: { seedKeyMapping?: boolean; seedAlternativeDids?: boolean } = {},
 ): Promise<{ agent: TestAgent; registry: ParallelWebDidRegistry }> {
   const registry = new ParallelWebDidRegistry(new Map([[did, parallelWebInitialDidDocument(did)]]))
-  const agent = new Agent({
-    config: { logger: new ConsoleLogger(LogLevel.Off) },
-    dependencies: agentDependencies,
-    modules: {
-      askar: new AskarModule({
-        askar,
-        store: {
-          id: `parallel-web-signing-${utils.uuid()}`,
-          key: ASKAR_STORE_KEY,
-          keyDerivationMethod: 'raw',
-          database: { type: 'sqlite', config: { inMemory: true } } as AskarSqliteStorageConfig,
-        },
-      }),
-      dids: new DidsModule({ resolvers: [registry], registrars: [registry] }),
-    },
-  }) as TestAgent
-  agent.did = did
-  await agent.initialize()
+  const agent = await startTestAgent('parallel-web-signing', did, registry)
   const didRecord = new DidRecord({
     did,
     role: DidDocumentRole.Created,

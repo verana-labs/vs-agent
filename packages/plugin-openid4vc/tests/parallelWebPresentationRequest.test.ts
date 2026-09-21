@@ -108,7 +108,7 @@ describe('presentation-exchange request signing for a webvh verifier', () => {
   it('signs under the published parallel did:web method when the record is reachable', async () => {
     const { service, fetchRequestJwt } = await startWebvhVerifier({ seedAlternativeDids: true })
 
-    const request = await service.createRequest('employee-check', 'presentation_exchange')
+    const request = await service.createRequest('employee-check', 'presentation_exchange', 'did')
     const { header, payload } = await fetchRequestJwt(request.authorizationRequest)
 
     expect(header.alg).toBe('EdDSA')
@@ -131,7 +131,7 @@ describe('presentation-exchange request signing for a webvh verifier', () => {
       seedAlternativeDids: false,
     })
 
-    const request = await service.createRequest('employee-check', 'presentation_exchange')
+    const request = await service.createRequest('employee-check', 'presentation_exchange', 'did')
     const { header } = await fetchRequestJwt(request.authorizationRequest)
 
     expect(header.alg).toBe('EdDSA')
@@ -197,14 +197,12 @@ async function startWebvhVerifier({ seedAlternativeDids }: { seedAlternativeDids
   const options = {
     publicApiBaseUrl,
     verifier: {
-      displayName: 'Webvh Fixture Verifier',
       signing: {
         configured: {
           certificateChain: [verifierCertificate.toString('base64'), certificates.root.toString('base64')],
           privateJwk: OTHER_PRIVATE_JWK,
         },
       },
-      requestSigner: 'did' as const,
     },
     trust: {
       resolverUrl: resolverStub.url,

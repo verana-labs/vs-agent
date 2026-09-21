@@ -10,16 +10,10 @@ import {
   UnknownIssuanceSessionError,
 } from '../src/services/IssuerService'
 
-const {
-  loadSigningCertificate,
-  publishDevelopmentSigningKey,
-  verifyKeyBoundToDid,
-  findBoundVerificationMethodId,
-} = vi.hoisted(() => ({
+const { loadSigningCertificate, publishDevelopmentSigningKey, verifyKeyBoundToDid } = vi.hoisted(() => ({
   loadSigningCertificate: vi.fn(),
   publishDevelopmentSigningKey: vi.fn(),
   verifyKeyBoundToDid: vi.fn(),
-  findBoundVerificationMethodId: vi.fn(),
 }))
 
 vi.mock('../src/services/CertificateService', async importOriginal => ({
@@ -30,7 +24,6 @@ vi.mock('../src/services/CertificateService', async importOriginal => ({
 vi.mock('../src/trust/keyBinding', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/trust/keyBinding')>()),
   verifyKeyBoundToDid,
-  findBoundVerificationMethodId,
 }))
 
 const AGENT_DID = 'did:web:agent.example'
@@ -49,10 +42,7 @@ const HOLDER_JWK = {
 
 const options = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
-  issuer: {
-    displayName: 'Example Issuer',
-    signing: { development: { enabled: true, commonName: 'Example Issuer' } },
-  },
+  issuer: {},
   credentialConfigurations: [
     {
       id: 'employee',
@@ -112,9 +102,15 @@ function jwsService() {
   return { createJwsCompact: vi.fn().mockResolvedValue('re-signed.metadata.jwt') }
 }
 
-function agent(api = issuerApi(), did: string | undefined = AGENT_DID, jws = jwsService()) {
+function agent(
+  api = issuerApi(),
+  did: string | undefined = AGENT_DID,
+  jws = jwsService(),
+  ecsClaims?: { service?: Record<string, string | undefined> },
+) {
   return {
     did,
+    ecsClaims,
     dids: { resolve: vi.fn() },
     genericRecords: { findById: vi.fn().mockResolvedValue(null), save: vi.fn(), update: vi.fn() },
     kms: {},
@@ -209,7 +205,7 @@ describe('IssuerService', () => {
 
     expect(api.createIssuer).toHaveBeenCalledWith({
       issuerId: 'issuer',
-      display: [{ name: 'Example Issuer', locale: 'en' }],
+      display: [{ name: 'agent.example', locale: 'en' }],
       metadataSigner: {
         method: 'x5c',
         x5c: [leafCertificate],
@@ -808,37 +804,40 @@ describe('IssuerService', () => {
     expect(service.getVctMetadata('unknown')).toBeUndefined()
   })
 
-  describe('DID metadata signer', () => {
-    it('creates the issuer with a did signer when the DID publishes the key for authentication', async () => {
-      findBoundVerificationMethodId.mockResolvedValue(`${AGENT_DID}#openid4vc-issuer`)
-      const { api } = await initialized({ issuer: { metadataSigner: 'did' }, issuerMissing: true })
+  describe('ECS service display', () => {
+    it('publishes the ECS Service name and logo in the issuer metadata', async () => {
+      const api = issuerApi()
+      api.getIssuerByIssuerId.mockRejectedValue(new RecordNotFoundError('missing', { recordType: 'issuer' }))
+      const ecsClaims = { service: { name: 'Verana Demo', logoUri: 'https://agent.example/logo.svg' } }
+
+      await new IssuerService(
+        agent(api, AGENT_DID, jwsService(), ecsClaims) as never,
+        options(),
+      ).ensureInitialized()
+
       expect(api.createIssuer).toHaveBeenCalledWith(
         expect.objectContaining({
-          metadataSigner: { method: 'did', didUrl: `${AGENT_DID}#openid4vc-issuer` },
+          display: [{ name: 'Verana Demo', locale: 'en', logo: { uri: 'https://agent.example/logo.svg' } }],
         }),
       )
     })
 
-    it('refuses to start when the DID does not publish the signing key for authentication', async () => {
-      findBoundVerificationMethodId.mockResolvedValue(null)
-      await expect(initialized({ issuer: { metadataSigner: 'did' }, issuerMissing: true })).rejects.toThrow(
-        'does not publish the signing key for authentication',
-      )
-    })
+    it('falls back to the public API host and omits the logo without an ECS Service claim', async () => {
+      const api = issuerApi()
+      api.getIssuerByIssuerId.mockRejectedValue(new RecordNotFoundError('missing', { recordType: 'issuer' }))
 
-    it('refreshes the did signer on an issuer record that already exists', async () => {
-      findBoundVerificationMethodId.mockResolvedValue(`${AGENT_DID}#openid4vc-issuer`)
-      const { api } = await initialized({ issuer: { metadataSigner: 'did' } })
-      expect(api.createIssuer).not.toHaveBeenCalled()
-      expect(api.updateIssuerMetadata).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadataSigner: { method: 'did', didUrl: `${AGENT_DID}#openid4vc-issuer` },
-        }),
+      await new IssuerService(
+        agent(api, AGENT_DID, jwsService(), { service: {} }) as never,
+        options(),
+      ).ensureInitialized()
+
+      expect(api.createIssuer).toHaveBeenCalledWith(
+        expect.objectContaining({ display: [{ name: 'agent.example', locale: 'en' }] }),
       )
     })
 
     it('refreshes the x5c signer on an issuer record that already exists', async () => {
-      const { api } = await initialized({ issuer: { metadataSigner: 'x5c' } })
+      const { api } = await initialized()
       expect(api.createIssuer).not.toHaveBeenCalled()
       expect(api.updateIssuerMetadata).toHaveBeenCalledWith(
         expect.objectContaining({
