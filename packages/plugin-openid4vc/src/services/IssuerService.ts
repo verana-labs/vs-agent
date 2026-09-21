@@ -1,5 +1,6 @@
 import type { OpenId4VcPluginOptions } from '../types'
 import type { BaseAgent, JwsProtectedHeaderOptions, Kms, SdJwtVcTypeMetadata } from '@credo-ts/core'
+import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
 import type {
   OpenId4VcIssuanceSessionRecord,
   OpenId4VcIssuanceSessionState,
@@ -19,6 +20,7 @@ import {
   parseOfferTtlSeconds,
 } from '../config'
 import { ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
+import { serviceDisplay } from '../utils/serviceDisplay'
 
 import {
   didFromValidatedCertificate,
@@ -46,6 +48,7 @@ export type OpenId4VcIssuerAgent = Pick<
   'dids' | 'genericRecords' | 'kms' | 'x509' | 'dependencyManager'
 > & {
   did?: string
+  ecsClaims?: EcsClaims
   modules: {
     openId4Vc?: {
       issuer?: IssuerApi
@@ -313,9 +316,10 @@ export class IssuerService {
   }
 
   private async createOrUpdateIssuer(signingCertificate: SigningCertificateHandle): Promise<void> {
+    const { name, logoUri } = serviceDisplay(this.agent, this.options.publicApiBaseUrl)
     const metadata = {
       issuerId: ISSUER_CAPABILITY_ID,
-      display: [{ name: new URL(this.options.publicApiBaseUrl).host, locale: 'en' }],
+      display: [{ name, locale: 'en', ...(logoUri ? { logo: { uri: logoUri } } : {}) }],
       credentialConfigurationsSupported: this.credentialConfigurationsSupported(),
       metadataSigner: this.metadataSigner(signingCertificate),
     }

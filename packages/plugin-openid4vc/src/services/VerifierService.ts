@@ -1,5 +1,6 @@
 import type { OpenId4VcPluginOptions } from '../types'
 import type { BaseAgent } from '@credo-ts/core'
+import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
 import type {
   OpenId4VcVerificationSessionRecord,
   OpenId4VcVerifierApi,
@@ -21,6 +22,7 @@ import {
   verifyKeyBoundToDid,
 } from '../trust/keyBinding'
 import { publishParallelWebSigningKey } from '../trust/parallelWebSigningKey'
+import { serviceDisplay } from '../utils/serviceDisplay'
 
 import {
   didFromValidatedCertificate,
@@ -51,6 +53,7 @@ export type OpenId4VcVerifierAgent = Pick<
   'dids' | 'genericRecords' | 'kms' | 'x509' | 'dependencyManager'
 > & {
   did?: string
+  ecsClaims?: EcsClaims
   modules: {
     openId4Vc?: {
       verifier?: VerifierApi
@@ -271,9 +274,10 @@ export class VerifierService {
   }
 
   private async createOrUpdateVerifier(): Promise<void> {
+    const { name, logoUri } = serviceDisplay(this.agent, this.options.publicApiBaseUrl)
     const metadata = {
       verifierId: VERIFIER_CAPABILITY_ID,
-      clientMetadata: { client_name: new URL(this.options.publicApiBaseUrl).host },
+      clientMetadata: { client_name: name, ...(logoUri ? { logo_uri: logoUri } : {}) },
     }
 
     try {
