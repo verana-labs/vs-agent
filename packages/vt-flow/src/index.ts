@@ -11,6 +11,7 @@ export type {
   NotifyCredentialStateChangeOptions,
   OfferCredentialForSessionOptions,
   ProblemReportDispatchOptions,
+  ResendOnboardingRequestOptions,
   SendIssuanceRequestOptions,
   SendOnboardingRequestOptions,
   SendOobLinkOptions,
@@ -51,6 +52,9 @@ export type { CustomVtFlowTags, DefaultVtFlowTags, VtFlowStorageProps, VtFlowTag
 // Service
 export { VtFlowService } from './services'
 export type { CreateIssuanceRequestParams, CreateOnboardingRequestParams } from './services'
+
+// Utils
+export { peerAnchorDid } from './utils'
 
 // Handlers
 export {

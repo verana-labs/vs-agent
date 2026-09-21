@@ -31,6 +31,7 @@ import {
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
+import { peerAnchorDid } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
@@ -258,7 +259,7 @@ export class V2DidcommPresentationsController {
     const connection = record.connectionId
       ? await agent.didcomm.connections.findById(record.connectionId)
       : undefined
-    const verifierDid = connection?.theirDid
+    const verifierDid = connection && peerAnchorDid(connection)
 
     const requestFormatData = await agent.didcomm.proofs.getFormatData(proofExchangeId)
     const anonCredsRequest = requestFormatData.request?.anoncreds

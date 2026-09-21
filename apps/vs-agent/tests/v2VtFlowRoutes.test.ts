@@ -27,11 +27,13 @@ function makeService(
   options: {
     credential?: unknown
     credentialTypesService?: Record<string, unknown>
-    connection?: { isReady: boolean; theirDid?: string } | null
+    connection?: { isReady: boolean; theirDid?: string; previousTheirDids: string[] } | null
   } = {},
 ) {
   const connection =
-    options.connection === undefined ? { isReady: true, theirDid: 'did:web:peer' } : options.connection
+    options.connection === undefined
+      ? { isReady: true, theirDid: 'did:web:peer', previousTheirDids: [] }
+      : options.connection
   const agent = {
     dependencyManager: { resolve: () => vtFlowApi },
     didcomm: {
@@ -110,6 +112,21 @@ describe('VtFlowsService v2 routes', () => {
     })
   })
 
+  it('reports the DID the peer connected with once it has rotated', async () => {
+    const service = makeService(
+      { findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) },
+      {
+        connection: {
+          isReady: true,
+          theirDid: 'did:peer:2.Ez6Mk.Vz6Mk',
+          previousTheirDids: ['did:web:peer'],
+        },
+      },
+    )
+
+    await expect(service.getFlow('sess-a')).resolves.toMatchObject({ peerDid: 'did:web:peer' })
+  })
+
   it('reports the flow state and the connection state on every listed flow', async () => {
     const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) })
 
@@ -124,7 +141,7 @@ describe('VtFlowsService v2 routes', () => {
   it('reports NOT_CONNECTED while the connection of a live flow is not ready', async () => {
     const service = makeService(
       { findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) },
-      { connection: { isReady: false, theirDid: 'did:web:peer' } },
+      { connection: { isReady: false, theirDid: 'did:web:peer', previousTheirDids: [] } },
     )
 
     await expect(service.getFlow('sess-a')).resolves.toMatchObject({
@@ -166,7 +183,7 @@ describe('VtFlowsService v2 routes', () => {
   it('refuses claim edits and oob links with 409 while the connection is not ready', async () => {
     const service = makeService(
       { findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) },
-      { connection: { isReady: false } },
+      { connection: { isReady: false, previousTheirDids: [] } },
     )
 
     await expect(service.editCredentialClaims('sess-a', {})).rejects.toThrow(ConflictException)

@@ -19,6 +19,7 @@ import {
   VtFlowState,
   VtFlowVariant,
   isVtFlowTerminalState,
+  peerAnchorDid,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { HOLDER_PARTICIPANT_TYPE, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
@@ -102,9 +103,10 @@ export class VtFlowsService {
     for (const record of records) {
       const connection = connections.get(record.connectionId)
       const connectionState = connectionStateOf(record, connection)
-      if (query.peerDid && connection?.theirDid !== query.peerDid) continue
+      const peerDid = connection ? peerAnchorDid(connection) : undefined
+      if (query.peerDid && peerDid !== query.peerDid) continue
       if (query.connectionState && connectionState !== query.connectionState) continue
-      flows.push({ record, peerDid: connection?.theirDid, connectionState })
+      flows.push({ record, peerDid, connectionState })
     }
     return flows
   }
@@ -353,7 +355,7 @@ async function resolveFlow(agent: VsAgent, record: VtFlowRecord): Promise<Resolv
   const connection = await agent.didcomm.connections.findById(record.connectionId)
   return {
     record,
-    peerDid: connection?.theirDid,
+    peerDid: connection ? peerAnchorDid(connection) : undefined,
     connectionState: connectionStateOf(record, connection),
   }
 }
