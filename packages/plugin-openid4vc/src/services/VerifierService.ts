@@ -293,10 +293,17 @@ export class VerifierService {
   }
 
   private async createOrUpdateVerifier(): Promise<void> {
-    const { name, logoUri } = serviceDisplay(this.agent, this.options.publicApiBaseUrl)
+    const display = serviceDisplay(this.agent)
     const metadata = {
       verifierId: VERIFIER_CAPABILITY_ID,
-      clientMetadata: { client_name: name, ...(logoUri ? { logo_uri: logoUri } : {}) },
+      ...(display
+        ? {
+            clientMetadata: {
+              client_name: display.name,
+              ...(display.logoUri ? { logo_uri: display.logoUri } : {}),
+            },
+          }
+        : {}),
     }
 
     try {

@@ -205,7 +205,6 @@ describe('IssuerService', () => {
 
     expect(api.createIssuer).toHaveBeenCalledWith({
       issuerId: 'issuer',
-      display: [{ name: 'agent.example', locale: 'en' }],
       metadataSigner: {
         method: 'x5c',
         x5c: [leafCertificate],
@@ -798,7 +797,7 @@ describe('IssuerService', () => {
       )
     })
 
-    it('falls back to the public API host and omits the logo without an ECS Service claim', async () => {
+    it('publishes no display at all without an ECS Service claim', async () => {
       const api = issuerApi()
       api.getIssuerByIssuerId.mockRejectedValue(new RecordNotFoundError('missing', { recordType: 'issuer' }))
 
@@ -807,8 +806,20 @@ describe('IssuerService', () => {
         options(),
       ).ensureInitialized()
 
+      expect(api.createIssuer.mock.calls[0][0]).not.toHaveProperty('display')
+    })
+
+    it('omits the logo when the ECS Service claim carries no logo URI', async () => {
+      const api = issuerApi()
+      api.getIssuerByIssuerId.mockRejectedValue(new RecordNotFoundError('missing', { recordType: 'issuer' }))
+
+      await new IssuerService(
+        agent(api, AGENT_DID, jwsService(), { service: { name: 'Verana Demo' } }) as never,
+        options(),
+      ).ensureInitialized()
+
       expect(api.createIssuer).toHaveBeenCalledWith(
-        expect.objectContaining({ display: [{ name: 'agent.example', locale: 'en' }] }),
+        expect.objectContaining({ display: [{ name: 'Verana Demo', locale: 'en' }] }),
       )
     })
 

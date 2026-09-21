@@ -289,10 +289,20 @@ export class IssuerService {
   }
 
   private async createOrUpdateIssuer(signingCertificate: SigningCertificateHandle): Promise<void> {
-    const { name, logoUri } = serviceDisplay(this.agent, this.options.publicApiBaseUrl)
+    const display = serviceDisplay(this.agent)
     const metadata = {
       issuerId: ISSUER_CAPABILITY_ID,
-      display: [{ name, locale: 'en', ...(logoUri ? { logo: { uri: logoUri } } : {}) }],
+      ...(display
+        ? {
+            display: [
+              {
+                name: display.name,
+                locale: 'en',
+                ...(display.logoUri ? { logo: { uri: display.logoUri } } : {}),
+              },
+            ],
+          }
+        : {}),
       credentialConfigurationsSupported: this.credentialConfigurationsSupported(),
       metadataSigner: this.metadataSigner(signingCertificate),
     }

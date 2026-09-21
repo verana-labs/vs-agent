@@ -252,10 +252,7 @@ describe('VerifierService', () => {
       ['authentication'],
       { allowedWebHosts: ['agent.example'], timeoutMs: 5_000 },
     )
-    expect(api.createVerifier).toHaveBeenCalledWith({
-      verifierId: 'verifier',
-      clientMetadata: { client_name: 'agent.example' },
-    })
+    expect(api.createVerifier).toHaveBeenCalledWith({ verifierId: 'verifier' })
     expect(api.updateVerifierMetadata).not.toHaveBeenCalled()
   })
 
@@ -269,10 +266,7 @@ describe('VerifierService', () => {
     expect(loadSigningCertificate).toHaveBeenCalledOnce()
     expect(verifyKeyBoundToDid).toHaveBeenCalledOnce()
     expect(api.getVerifierByVerifierId).toHaveBeenCalledOnce()
-    expect(api.updateVerifierMetadata).toHaveBeenCalledWith({
-      verifierId: 'verifier',
-      clientMetadata: { client_name: 'agent.example' },
-    })
+    expect(api.updateVerifierMetadata).toHaveBeenCalledWith({ verifierId: 'verifier' })
     expect(api.createVerifier).not.toHaveBeenCalled()
   })
 
@@ -819,7 +813,7 @@ describe('VerifierService', () => {
       })
     })
 
-    it('falls back to the public API host and omits the logo without an ECS Service claim', async () => {
+    it('publishes no client metadata at all without an ECS Service claim', async () => {
       const api = verifierApi()
       api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
 
@@ -828,9 +822,21 @@ describe('VerifierService', () => {
         options(),
       ).ensureInitialized()
 
+      expect(api.updateVerifierMetadata).toHaveBeenCalledWith({ verifierId: 'verifier' })
+    })
+
+    it('omits the logo when the ECS Service claim carries no logo URI', async () => {
+      const api = verifierApi()
+      api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
+
+      await new VerifierService(
+        agent(api, AGENT_DID, { service: { name: 'Verana Demo' } }) as never,
+        options(),
+      ).ensureInitialized()
+
       expect(api.updateVerifierMetadata).toHaveBeenCalledWith({
         verifierId: 'verifier',
-        clientMetadata: { client_name: 'agent.example' },
+        clientMetadata: { client_name: 'Verana Demo' },
       })
     })
   })
