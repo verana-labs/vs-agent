@@ -305,7 +305,8 @@ describe('setupOpenId4Vc', () => {
     const setup = setupOpenId4Vc(options)
     setup.publicMiddleware.get(
       '/.well-known/openid-credential-issuer/public/base/oid4vci/issuer',
-      (_incoming, response) => response.json({ credential_issuer: 'https://agent.example/public/base' }),
+      (_incoming, response) =>
+        response.json({ credential_issuer: 'https://agent.example/public/base/oid4vci/issuer' }),
     )
 
     const response = await request(setup.publicMiddleware).get(
@@ -313,7 +314,7 @@ describe('setupOpenId4Vc', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(response.body.credential_issuer).toBe('https://agent.example/public/base')
+    expect(response.body.credential_issuer).toBe('https://agent.example/public/base/oid4vci/issuer')
   })
 
   it('does not mount verifier presentation or holder routes on the public middleware', async () => {
