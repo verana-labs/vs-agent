@@ -7,13 +7,19 @@ import '@hyperledger/anoncreds-nodejs'
 import { AnonCredsCredentialDefinitionRepository, AnonCredsSchemaRepository } from '@credo-ts/anoncreds'
 import {
   DidCommCredentialState,
+  DidCommEventTypes,
   DidCommProofEventTypes,
   DidCommProofState,
   type DidCommProofStateChangedEvent,
 } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { ConsoleLogger, DidRepository, LogLevel } from '@credo-ts/core'
-import { VtFlowApi, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  VT_FLOW_ONBOARDING_REQUEST_TYPE,
+  VtFlowApi,
+  VtFlowRole,
+  VtFlowState,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { computeSchemaDigest } from '@verana-labs/vs-agent-model'
 import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
 
@@ -29,6 +35,7 @@ import {
   reconcileVtFlowRecordsOnCancel,
   reconcileVtjscPublications,
   removeSelfIssuedEcsCredentialsIfIssuerRevoked,
+  ValidationState,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
   resolveJsonSchemaCredentialId,
   VeranaChainService,
@@ -212,7 +219,10 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       didcommVersions: ['v1', 'v2'],
       veranaChain: validatorChain,
       indexer,
-      vtFlowOptions: { assertVerifiableService: async () => true, autoIssueCredentialOnRequest: true },
+      vtFlowOptions: {
+        assertVerifiableService: async ({ peerDid }) => !peerDid.startsWith('did:peer:'),
+        autoIssueCredentialOnRequest: true,
+      },
     })
     validator.didcomm.registerInboundTransport(new SubjectInboundTransport(validatorMessages))
     validator.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
@@ -244,7 +254,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       veranaChain: seederChain,
       indexer,
       vtFlowOptions: {
-        assertVerifiableService: async () => true,
+        assertVerifiableService: async ({ peerDid }) => !peerDid.startsWith('did:peer:'),
         autoAcceptCredentialOffer: true,
         autoAcceptIssuanceRequest: true,
         autoIssueCredentialOnRequest: true,
@@ -382,7 +392,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
 
       expect(await until(() => indexer.getParticipant(holderOp.id))).toBeDefined()
 
-      const credentials = await applicant.w3cCredentials.getAll()
+      const credentials = await applicant.w3cV2Credentials.getAll()
       expect(credentials.length).toBeGreaterThan(0)
       const credentialCountBeforeRevoke = credentials.length
 
@@ -399,7 +409,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       await applicantRevoked
 
       await until(async () => {
-        const remaining = await applicant.w3cCredentials.getAll()
+        const remaining = await applicant.w3cV2Credentials.getAll()
         return remaining.length < credentialCountBeforeRevoke ? true : undefined
       })
 
@@ -419,7 +429,32 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       expect(renewedFlows).toHaveLength(1)
       expect(renewedFlows[0].state).toBe(VtFlowState.AwaitingOr)
 
+      await applicant.didcomm.connections.deleteById(renewalRecord.connectionId)
+      validatorEvents.mockClear()
+      const reattached = waitForEvent(
+        validatorEvents,
+        (event: unknown): event is { type: string } =>
+          (event as { type?: string })?.type === DidCommEventTypes.DidCommMessageProcessed &&
+          (event as { payload?: { message?: { type?: string } } }).payload?.message?.type ===
+            VT_FLOW_ONBOARDING_REQUEST_TYPE,
+      )
+      const resentRecord = await applicantOrchestrator.startOnboardingProcess({
+        applicantParticipantId: holderOp.id,
+      })
+      await reattached
+      expect(resentRecord.id).toBe(renewalRecord.id)
+      expect(resentRecord.threadId).toBe(renewalRecord.threadId)
+      expect(resentRecord.connectionId).not.toBe(renewalRecord.connectionId)
+      const reattachedFlows = await flowsService.listFlows({ role: VtFlowRole.Validator })
+      expect(reattachedFlows).toHaveLength(1)
+      expect(reattachedFlows[0].id).toBe(renewedFlows[0].id)
+      expect(reattachedFlows[0].state).toBe(VtFlowState.AwaitingOr)
+
       await seederChain.cancelParticipantOPLastRequest(holderOp.id)
+      await until(async () => {
+        const participant = await indexer.findParticipant(holderOp.id)
+        return participant?.opState === ValidationState.VALIDATED ? participant : undefined
+      })
       await reconcileVtFlowRecordsOnCancel(validator, String(holderOp.id))
       await reconcileVtFlowRecordsOnCancel(applicant, String(holderOp.id))
 
@@ -490,7 +525,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         veranaChain: childChain,
         indexer,
         vtFlowOptions: {
-          assertVerifiableService: async () => true,
+          assertVerifiableService: async ({ peerDid }) => !peerDid.startsWith('did:peer:'),
           autoAcceptCredentialOffer: true,
           verifyCredential: async ({ record }) => {
             for (let attempt = 1; ; attempt++) {
@@ -569,7 +604,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       })
 
       await childCompleted
-      const childCredentials = await child.w3cCredentials.getAll()
+      const childCredentials = await child.w3cV2Credentials.getAll()
       expect(childCredentials.length).toBeGreaterThan(0)
 
       await child.shutdown().catch(() => undefined)

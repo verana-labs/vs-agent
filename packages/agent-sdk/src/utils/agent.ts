@@ -2,11 +2,13 @@ import type { VsAgent } from '../agent/VsAgent'
 
 import { GenericRecord, TagsBase, utils } from '@credo-ts/core'
 import {
+  type DidCommConnectionRecord,
   DidCommConnectionRepository,
   DidCommHandshakeProtocol,
   DidCommMessage,
   type DidCommVersion,
 } from '@credo-ts/didcomm'
+import { peerAnchorDid } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { getLegacyDidWeb } from '../did/legacyDidWeb'
 
@@ -63,6 +65,10 @@ export async function createInvitation(options: {
   }
 }
 
+export function isUsableConnectionTo(connection: DidCommConnectionRecord, peerPublicDid: string): boolean {
+  return connection.isReady && !!connection.theirDid && peerAnchorDid(connection) === peerPublicDid
+}
+
 /**
  * Connects to a peer that publishes a public DID, and reuses the connection that the
  * agent already has to that peer.
@@ -83,7 +89,10 @@ export async function connectToPublicDid(agent: VsAgent, peerPublicDid: string):
   const [existing] = await agent.didcomm.connections.findAllByQuery({
     publicDid: peerPublicDid,
   })
-  if (existing) return (await agent.didcomm.connections.returnWhenIsConnected(existing.id)).id
+  if (existing) {
+    if (isUsableConnectionTo(existing, peerPublicDid)) return existing.id
+    await agent.didcomm.connections.deleteById(existing.id)
+  }
 
   const { connectionRecord } = await agent.didcomm.oob.receiveImplicitInvitation({
     did: peerPublicDid,
@@ -101,8 +110,8 @@ export async function connectToPublicDid(agent: VsAgent, peerPublicDid: string):
     const ready = await agent.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
     return ready.id
   } catch (error) {
-    // Delete the incomplete record. If it stays, the next call reuses a connection that
-    // the peer never completed, and a later retry adds a duplicate record for the pair.
+    // Without the tag, the next call cannot find this record. It dials again and leaves two
+    // records for the pair. The message receiver's findByDids then throws RecordDuplicateError.
     await agent.didcomm.connections.deleteById(connectionRecord.id).catch(deleteError => {
       agent.config.logger.warn(`Failed to delete the incomplete connection ${connectionRecord.id}`, {
         error: deleteError,

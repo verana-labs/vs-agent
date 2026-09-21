@@ -103,6 +103,20 @@ export class EcsBootstrapService {
       role: VtFlowRole.Applicant,
     })
     for (const record of pending) {
+      const connection = await this.agent.didcomm.connections.findById(record.connectionId)
+      if (!connection?.isReady && record.participantId) {
+        try {
+          await new VtFlowOrchestrator(this.agent).startOnboardingProcess({
+            applicantParticipantId: Number(record.participantId),
+          })
+          this.logger.info(`[EcsBootstrap] reconnected flow ${record.id} so the validator can offer again`)
+        } catch (error) {
+          this.logger.warn(
+            `[EcsBootstrap] could not reconnect flow ${record.id}: ${(error as Error).message}`,
+          )
+        }
+        continue
+      }
       if (!record.credentialExchangeRecordId) continue
       try {
         await this.agent.didcomm.credentials.acceptOffer({
@@ -167,8 +181,6 @@ export class EcsBootstrapService {
       return
     }
 
-    // startOnboardingProcess writes nothing on chain, and it refuses to resend while a flow is in
-    // progress, so this is safe on every boot.
     await waitUntilOwnDidIsPubliclyResolvable(this.agent, this.logger)
     const claims = await this.onboardingClaims(participant.schema_id)
     const record = await new VtFlowOrchestrator(this.agent).startOnboardingProcess({
@@ -176,7 +188,7 @@ export class EcsBootstrapService {
       ...(claims ? { claims } : {}),
     })
     this.logger.info(
-      `[EcsBootstrap] resumed the onboarding of participant ${participant.id} (flow ${record.id}, state ${record.state})`,
+      `[EcsBootstrap] checked the onboarding of participant ${participant.id} (flow ${record.id}, state ${record.state})`,
     )
   }
 

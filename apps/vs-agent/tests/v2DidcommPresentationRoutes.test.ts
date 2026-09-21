@@ -142,7 +142,11 @@ describe('v2 didcomm presentation routes', () => {
       message: { id: 'msg-1' },
     })
     proofs.getFormatData.mockResolvedValue({})
-    connections.findById.mockResolvedValue({ id: 'conn-proof-1', theirDid: VERIFIER_DID })
+    connections.findById.mockResolvedValue({
+      id: 'conn-proof-1',
+      theirDid: VERIFIER_DID,
+      previousTheirDids: [],
+    })
     anonCredsTrust.deriveCredentialSchema.mockResolvedValue({
       credentialSchemaId: CREDENTIAL_SCHEMA_ID,
       ecosystemDid: 'did:webvh:QmEcosystem:ecosystem.example',
@@ -792,7 +796,7 @@ describe('v2 didcomm presentation routes', () => {
       })
 
       it('answers PEER_NOT_AUTHORIZED when the verifier established no DID', async () => {
-        connections.findById.mockResolvedValue({ id: 'conn-p-1', theirDid: undefined })
+        connections.findById.mockResolvedValue({ id: 'conn-p-1', theirDid: undefined, previousTheirDids: [] })
 
         const response = await request(app.getHttpServer()).post(
           '/v2/didcomm/presentations/p-1/accept-request',
@@ -803,8 +807,32 @@ describe('v2 didcomm presentation routes', () => {
         expect(proofs.acceptRequest).not.toHaveBeenCalled()
       })
 
+      it('checks the DID the verifier connected with when it has rotated since', async () => {
+        connections.findById.mockResolvedValue({
+          id: 'conn-p-1',
+          theirDid: 'did:peer:2.Ez6Mk.Vz6Mk',
+          invitationDid: VERIFIER_DID,
+          previousTheirDids: [VERIFIER_DID],
+        })
+
+        const response = await request(app.getHttpServer()).post(
+          '/v2/didcomm/presentations/p-1/accept-request',
+        )
+
+        expect(response.status).toBe(200)
+        expect(anonCredsTrust.assertAuthorized).toHaveBeenCalledWith({
+          did: VERIFIER_DID,
+          role: ParticipantRole.Verifier,
+          credentialSchemaId: CREDENTIAL_SCHEMA_ID,
+        })
+      })
+
       it('answers PEER_NOT_AUTHORIZED when the verifier connected with a DID that is not public', async () => {
-        connections.findById.mockResolvedValue({ id: 'conn-p-1', theirDid: 'did:peer:2.Ez6Mk.Vz6Mk' })
+        connections.findById.mockResolvedValue({
+          id: 'conn-p-1',
+          theirDid: 'did:peer:2.Ez6Mk.Vz6Mk',
+          previousTheirDids: [],
+        })
 
         const response = await request(app.getHttpServer()).post(
           '/v2/didcomm/presentations/p-1/accept-request',
