@@ -58,7 +58,10 @@ export async function readOpenId4VcOptions(
 }
 
 function assertKnownFields(value: unknown, allowed: Set<string>, path: string, name: string): void {
-  if (!isRecord(value)) return
+  if (value === undefined) return
+  if (!isRecord(value)) {
+    throw new Error(`OpenID4VC configuration file '${name}' field '${path}' must be a JSON object`)
+  }
 
   const unknownField = Object.keys(value).find(field => !allowed.has(field))
   if (unknownField) {

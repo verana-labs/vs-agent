@@ -218,6 +218,9 @@ function assertTrustOptions(trust: NonNullable<OpenId4VcPluginOptions['trust']>)
 // An absent `signing` is development signing, so only the configured mode carries material to validate.
 function assertSigningOptions(signing: OpenId4VcSigningOptions | undefined, field: string): void {
   if (signing === undefined) return
+  if (!isRecord(signing)) {
+    throw new Error(`${field} must be an object`)
+  }
 
   const configured = (signing as unknown as Record<string, unknown>).configured as
     | { certificateChain?: unknown; privateJwk?: unknown }

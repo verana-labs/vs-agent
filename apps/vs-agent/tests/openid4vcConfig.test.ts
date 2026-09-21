@@ -73,6 +73,26 @@ describe('OpenID4VC configuration file', () => {
     )
   })
 
+  it.each([
+    ['issuer', 'hello'],
+    ['issuer', []],
+    ['verifier', 42],
+  ])('rejects a %s that is not an object: %j', async (capability, value) => {
+    await writeFile(configPath, JSON.stringify({ [capability]: value }))
+
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
+      `field '${capability}' must be a JSON object`,
+    )
+  })
+
+  it('rejects a null signing block instead of dying while reading it', async () => {
+    await writeFile(configPath, JSON.stringify({ issuer: { signing: null } }))
+
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
+      'issuer.signing must be an object',
+    )
+  })
+
   it('refuses a file that still carries a revocation block', async () => {
     await writeFile(configPath, JSON.stringify({ ...validConfig(), revocation: { enabled: true } }))
 
