@@ -8,6 +8,7 @@ import {
 } from '@credo-ts/openid4vc'
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 
+import { ISSUER_CAPABILITY_ID } from '../config'
 import { assertCredentialExpires } from '../services/presentationVerification'
 import { trustedCertificatesForVerification } from '../trust/CertificateTrust'
 import { isRecord } from '../utils/isRecord'
@@ -60,6 +61,9 @@ export function setupOpenId4Vc(
     }
   })
 
+  aliasBareWellKnownPath(app, '/.well-known/openid-credential-issuer', options.publicApiBaseUrl)
+  aliasBareWellKnownPath(app, '/.well-known/oauth-authorization-server', options.publicApiBaseUrl)
+
   app.get('/oid4vc/vct/:configurationId', (request, response, next) => {
     try {
       if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
@@ -107,6 +111,25 @@ export function setupOpenId4Vc(
     },
     publicMiddleware: app,
   }
+}
+
+// A credential carries `iss: publicApiBaseUrl`, and a wallet deriving the metadata URL from it the RFC 8615 way (wwWallet does) asks for the bare path, which credo only serves under the issuer-scoped route.
+function aliasBareWellKnownPath(app: Express, wellKnown: string, publicApiBaseUrl: string): void {
+  const alias = withoutTrailingSlash(`${wellKnown}${new URL(publicApiBaseUrl).pathname}`)
+  const issuerScopedPath = `${wellKnown}${withoutTrailingSlash(
+    new URL(`${publicApiBaseUrl}/oid4vci`).pathname,
+  )}/${encodeURIComponent(ISSUER_CAPABILITY_ID)}`
+
+  app.get([wellKnown, `${wellKnown}/*`], (request, _response, next) => {
+    if (withoutTrailingSlash(request.path) === alias) {
+      request.url = `${issuerScopedPath}${request.url.slice(request.path.length)}`
+    }
+    next()
+  })
+}
+
+function withoutTrailingSlash(path: string): string {
+  return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path
 }
 
 function assertValidWalletAttestationCertificates(certificates: string[]): void {
