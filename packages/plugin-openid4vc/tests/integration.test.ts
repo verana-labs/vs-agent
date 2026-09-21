@@ -1,4 +1,8 @@
-import type { OpenId4VcPluginOptions, OpenId4VcSigningOptions } from '../src/types'
+import type {
+  OpenId4VcCredentialConfiguration,
+  OpenId4VcPluginOptions,
+  OpenId4VcSigningOptions,
+} from '../src/types'
 import type {
   DidCreateResult,
   DidDeactivateResult,
@@ -8,6 +12,7 @@ import type {
   DidUpdateOptions,
   DidUpdateResult,
 } from '@credo-ts/core'
+import type { Server } from 'node:http'
 
 import { AskarModule, type AskarSqliteStorageConfig } from '@credo-ts/askar'
 import {
@@ -26,8 +31,15 @@ import {
   X509Certificate,
 } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
+import { ed25519 } from '@noble/curves/ed25519.js'
 import { askar } from '@openwallet-foundation/askar-nodejs'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { base58 } from '@scure/base'
+import { CachedWebDidResolver } from '@verana-labs/vs-agent-sdk'
+import express from 'express'
+import { webcrypto } from 'node:crypto'
+import { readdir } from 'node:fs/promises'
+import { join } from 'node:path'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { validateOpenId4VcOptions } from '../src/config'
 import { setupOpenId4Vc } from '../src/sdk/setupOpenId4Vc'
@@ -36,8 +48,16 @@ import {
   loadSigningCertificate,
   publishDevelopmentSigningKey,
 } from '../src/services/CertificateService'
-import { IssuerService, type OpenId4VcIssuerAgent } from '../src/services/IssuerService'
-import { VerifierService, type OpenId4VcVerifierAgent } from '../src/services/VerifierService'
+import {
+  IssuerService,
+  UnknownIssuanceSessionError,
+  type OpenId4VcIssuerAgent,
+} from '../src/services/IssuerService'
+import {
+  UnknownVerificationSessionError,
+  VerifierService,
+  type OpenId4VcVerifierAgent,
+} from '../src/services/VerifierService'
 import {
   asParallelDidWeb,
   PARALLEL_WEB_SIGNING_KEY_FRAGMENT,
@@ -45,6 +65,16 @@ import {
 } from '../src/trust/parallelWebSigningKey'
 
 import { createCertificateFixtures, LEAF_PRIVATE_JWK, OTHER_PRIVATE_JWK } from './helpers/certificates'
+import { didDocumentWithKey, MapDidResolver } from './helpers/didResolver'
+import { startResolverStub } from './helpers/resolverStub'
+import {
+  activeTcpServers,
+  createAggregateError,
+  createVerifierCertificate,
+  OpenId4VcTestStartupError,
+  startOpenId4VcTestAgents,
+  type TestAgentFailureHooks,
+} from './helpers/testAgent'
 
 describe('CertificateService', () => {
   let fixtures: Awaited<ReturnType<typeof createCertificateFixtures>>
@@ -482,7 +512,7 @@ function createAgent({
   }
   const deletedIds = new Set<string>()
   const genericRecords = {
-    findById: vi.fn(async (id: string) => {
+    findById: async (id: string) => {
       if (persistedDevelopmentCertificate && !deletedIds.has(id) && !records.has(id)) {
         return {
           id,
@@ -493,7 +523,7 @@ function createAgent({
         }
       }
       return records.get(id) ?? null
-    }),
+    },
     save: vi.fn(async (record: { id: string; content: Record<string, unknown> }) => {
       records.set(record.id, record)
       return record
@@ -521,16 +551,16 @@ function createAgent({
     keys: undefined as { didDocumentRelativeKeyId: string; kmsKeyId: string }[] | undefined,
   }
   const didRepository = {
-    findCreatedDid: vi.fn(async () => didRecord),
+    findCreatedDid: async () => didRecord,
     update: vi.fn(async () => undefined),
   }
   const agentContext = {}
   const dependencyManager = {
-    resolve: vi.fn((token: unknown) => {
+    resolve: (token: unknown) => {
       if (token === DidRepository) return didRepository
       if (token === AgentContext) return agentContext
       throw new Error('unexpected dependency requested in test')
-    }),
+    },
   }
 
   const agent = {
@@ -643,10 +673,10 @@ class MutableDidRegistry {
   }
 }
 
-const agents: TestAgent[] = []
+const developmentAgents: TestAgent[] = []
 
 afterEach(async () => {
-  await Promise.all(agents.splice(0).map(agent => agent.shutdown()))
+  await Promise.all(developmentAgents.splice(0).map(agent => agent.shutdown()))
 })
 
 describe('development signing DID publication', () => {
@@ -765,7 +795,7 @@ async function createHarness(
       agent.context,
       new DidRecord({ did, role: DidDocumentRole.Created, didDocument: initialDidDocument(did) }),
     )
-  agents.push(agent)
+  developmentAgents.push(agent)
 
   const initialize = async (): Promise<void> => {
     const lifecycleAgent = agent as unknown as OpenId4VcIssuerAgent & OpenId4VcVerifierAgent
@@ -1063,4 +1093,681 @@ async function parallelWebCreatedDidRecordKeys(agent: TestAgent) {
 
 function clone(document: DidDocument): DidDocument {
   return JsonTransformer.fromJSON(document.toJSON(), DidDocument)
+}
+
+const WEBVH_DID = 'did:webvh:QmYwAPJzv5CZsnAzt8auVZRnGi2C9AwBypHj6yQVB5hJiJ:verifier.example'
+const WEB_DID = 'did:web:verifier.example'
+const CONFIGURATION: OpenId4VcCredentialConfiguration = {
+  id: 'employee',
+  format: 'dc+sd-jwt',
+  vct: 'https://credentials.example/vct/employee',
+  name: 'Employee credential',
+  vtjscId: 'https://credentials.example/vt/employee.json',
+  claims: ['name', 'role'],
+  disclosureFrame: ['name', 'role'],
+}
+
+class WebvhStubRegistry {
+  public readonly supportedMethods = ['webvh']
+  public readonly allowsCaching = false
+  public readonly allowsLocalDidRecord = false
+
+  public constructor(private readonly documents: Map<string, DidDocument>) {}
+
+  public async resolve(_agentContext: AgentContext, did: string): Promise<DidResolutionResult> {
+    const stored = this.documents.get(did)
+    if (!stored) {
+      return { didDocument: null, didDocumentMetadata: {}, didResolutionMetadata: { error: 'notFound' } }
+    }
+    return { didDocument: clone(stored), didDocumentMetadata: {}, didResolutionMetadata: {} }
+  }
+
+  public async update(agentContext: AgentContext, options: DidUpdateOptions): Promise<DidUpdateResult> {
+    const didDocument = clone(options.didDocument as DidDocument)
+    this.documents.set(options.did, didDocument)
+    const didRepository = agentContext.dependencyManager.resolve(DidRepository)
+    const didRecord = await didRepository.findCreatedDid(agentContext, options.did)
+    if (didRecord) {
+      didRecord.didDocument = clone(didDocument)
+      await didRepository.update(agentContext, didRecord)
+    }
+    return {
+      didState: { state: 'finished', did: options.did, didDocument },
+      didDocumentMetadata: {},
+      didRegistrationMetadata: {},
+    }
+  }
+
+  public async create(): Promise<DidCreateResult> {
+    return {
+      didState: { state: 'failed', reason: 'not implemented' },
+      didDocumentMetadata: {},
+      didRegistrationMetadata: {},
+    }
+  }
+
+  public async deactivate(): Promise<DidDeactivateResult> {
+    return {
+      didState: { state: 'failed', reason: 'not implemented' },
+      didDocumentMetadata: {},
+      didRegistrationMetadata: {},
+    }
+  }
+}
+
+const cleanups: Array<() => Promise<unknown>> = []
+
+afterEach(async () => {
+  await Promise.all(cleanups.splice(0).map(stop => stop().catch(() => undefined)))
+})
+
+describe('presentation-exchange request signing for a webvh verifier', () => {
+  it('signs under the published parallel did:web method when the record is reachable', async () => {
+    const { service, fetchRequestJwt } = await startWebvhVerifier({ seedAlternativeDids: true })
+
+    const request = await service.createRequest('employee-check', 'presentation_exchange', 'did')
+    const { header, payload } = await fetchRequestJwt(request.authorizationRequest)
+
+    expect(header.alg).toBe('EdDSA')
+    expect(header.kid).toBe(`${WEB_DID}#openid4vc-parallel-web`)
+
+    const filter = payload.presentation_definition?.input_descriptors?.[0]?.constraints?.fields?.[0]
+      ?.filter as { const?: string; pattern?: string } | undefined
+    expect(filter?.const).toBe(CONFIGURATION.vct)
+    expect(filter?.pattern).toBe(CONFIGURATION.vct.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    expect(payload.presentation_definition?.input_descriptors?.[0]?.constraints?.limit_disclosure).toBe(
+      'preferred',
+    )
+    // No JARM on this rail: the wallets that need it cannot build the encrypted response.
+    expect(payload.response_mode).toBe('direct_post')
+    expect(payload.client_metadata?.jwks).toBeUndefined()
+  })
+
+  it('falls back to the webvh-named key when the parallel record lookup fails', async () => {
+    const { service, fetchRequestJwt, ed25519MethodId } = await startWebvhVerifier({
+      seedAlternativeDids: false,
+    })
+
+    const request = await service.createRequest('employee-check', 'presentation_exchange', 'did')
+    const { header } = await fetchRequestJwt(request.authorizationRequest)
+
+    expect(header.alg).toBe('EdDSA')
+    expect(header.kid).toBe(ed25519MethodId)
+  })
+})
+
+async function startWebvhVerifier({ seedAlternativeDids }: { seedAlternativeDids: boolean }) {
+  const certificates = await createCertificateFixtures()
+  const verifierCertificate = await createVerifierCertificate(certificates.root, WEBVH_DID)
+  const resolverStub = await startResolverStub({
+    trusted: new Set([WEBVH_DID, WEB_DID]),
+    authorized: new Set([WEBVH_DID, WEB_DID]),
+  })
+  cleanups.push(() => resolverStub.stop())
+
+  const secretKey = ed25519.utils.randomSecretKey()
+  const publicKey = ed25519.getPublicKey(secretKey)
+  const publicKeyMultibase = `z${base58.encode(new Uint8Array([0xed, 0x01, ...publicKey]))}`
+  const ed25519MethodId = `${WEBVH_DID}#${publicKeyMultibase}`
+  const certMethodId = `${WEBVH_DID}#certificate`
+
+  const didDocument = JsonTransformer.fromJSON(
+    {
+      id: WEBVH_DID,
+      alsoKnownAs: [WEB_DID],
+      verificationMethod: [
+        {
+          id: ed25519MethodId,
+          type: 'Multikey',
+          controller: WEBVH_DID,
+          publicKeyMultibase,
+        },
+        {
+          id: certMethodId,
+          type: 'JsonWebKey2020',
+          controller: WEBVH_DID,
+          publicKeyJwk: verifierCertificate.publicJwk.toJson(),
+        },
+      ],
+      authentication: [ed25519MethodId, certMethodId],
+      assertionMethod: [ed25519MethodId],
+    },
+    DidDocument,
+  )
+
+  const documents = new Map<string, DidDocument>([[WEBVH_DID, clone(didDocument)]])
+  const registry = new WebvhStubRegistry(documents)
+
+  const app = express()
+  const server = await new Promise<Server>((resolve, reject) => {
+    const started = app.listen(0, '127.0.0.1', () => resolve(started))
+    started.on('error', reject)
+  })
+  cleanups.push(async () => {
+    server.closeAllConnections?.()
+    await new Promise<void>(resolve => server.close(() => resolve()))
+  })
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('no server address')
+  const publicApiBaseUrl = `http://127.0.0.1:${address.port}`
+
+  const options = {
+    publicApiBaseUrl,
+    verifier: {
+      signing: {
+        configured: {
+          certificateChain: [verifierCertificate.toString('base64'), certificates.root.toString('base64')],
+          privateJwk: OTHER_PRIVATE_JWK,
+        },
+      },
+    },
+    trust: {
+      resolverUrl: resolverStub.url,
+      timeoutMs: 500,
+      allowedDidWebHosts: ['verifier.example'],
+      credentialIssuerCertificates: [certificates.root.toString('base64')],
+    },
+    credentialConfigurations: [CONFIGURATION],
+    verifierPolicies: [
+      {
+        id: 'employee-check',
+        credentialConfigurationId: CONFIGURATION.id,
+        requestedClaims: ['name', 'role'],
+      },
+    ],
+  }
+  validateOpenId4VcOptions(options)
+  let issuerService: IssuerService | undefined
+  const sdkPlugin = setupOpenId4Vc(options, () => {
+    if (!issuerService) throw new Error('OpenID4VC issuer service is not initialized')
+    return issuerService
+  })
+  app.use(sdkPlugin.publicMiddleware)
+
+  const logger = new ConsoleLogger(LogLevel.Off)
+  const agent = new Agent({
+    config: { logger, allowInsecureHttpUrls: true },
+    dependencies: agentDependencies,
+    modules: {
+      askar: new AskarModule({
+        askar,
+        store: {
+          id: `webvh-pe-${utils.uuid()}`,
+          key: ASKAR_STORE_KEY,
+          keyDerivationMethod: 'raw',
+          database: { type: 'sqlite', config: { inMemory: true } } as AskarSqliteStorageConfig,
+        },
+      }),
+      dids: new DidsModule({
+        resolvers: [new CachedWebDidResolver(), registry],
+        registrars: [registry],
+      }),
+      ...sdkPlugin.modules,
+    },
+  }) as Agent & { did?: string }
+  agent.did = WEBVH_DID
+  await agent.initialize()
+  cleanups.push(() => agent.shutdown())
+
+  const imported = await agent.kms.importKey({
+    privateJwk: {
+      kty: 'OKP',
+      crv: 'Ed25519',
+      x: Buffer.from(publicKey).toString('base64url'),
+      d: Buffer.from(secretKey).toString('base64url'),
+    },
+  })
+
+  const didRecord = new DidRecord({
+    did: WEBVH_DID,
+    role: DidDocumentRole.Created,
+    didDocument: clone(didDocument),
+    keys: [{ didDocumentRelativeKeyId: `#${publicKeyMultibase}`, kmsKeyId: imported.keyId }],
+  })
+  didRecord.setTag('domain', 'verifier.example')
+  if (seedAlternativeDids) didRecord.setTag('alternativeDids', [WEB_DID])
+  await agent.dependencyManager.resolve(DidRepository).save(agent.context, didRecord)
+
+  const service = new VerifierService(
+    agent as unknown as OpenId4VcIssuerAgent & OpenId4VcVerifierAgent,
+    options,
+  )
+  await service.ensureInitialized()
+
+  const fetchRequestJwt = async (authorizationRequest: string) => {
+    const url = new URL(authorizationRequest.replace('openid4vp://', 'https://x/'))
+    const requestUri = url.searchParams.get('request_uri')
+    if (!requestUri) throw new Error(`no request_uri in ${authorizationRequest}`)
+    const jwt = await (await fetch(requestUri)).text()
+    const [headerPart, payloadPart] = jwt.split('.')
+    return {
+      header: JSON.parse(Buffer.from(headerPart, 'base64url').toString()) as {
+        alg: string
+        kid: string
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: raw JWT payload probing
+      payload: JSON.parse(Buffer.from(payloadPart, 'base64url').toString()) as any,
+    }
+  }
+
+  return { service, fetchRequestJwt, ed25519MethodId }
+}
+
+const ISSUER_DID = 'did:web:issuer.example'
+const VERIFIER_DID = 'did:web:verifier.example'
+const TTL_SECONDS = 3_600
+
+describe('in-process OpenID4VC issuance and presentation', () => {
+  let didDocuments: Map<string, DidDocument>
+  let resolver: Awaited<ReturnType<typeof startResolverStub>>
+  let agents: Awaited<ReturnType<typeof startOpenId4VcTestAgents>>
+  let verifierCertificate: X509Certificate
+  let storedCredential: Awaited<
+    ReturnType<Awaited<ReturnType<typeof startOpenId4VcTestAgents>>['holder']['acceptCredentialOffer']>
+  >
+  let tcpServerBaseline: string[]
+
+  beforeEach(async () => {
+    tcpServerBaseline = activeTcpServers()
+    const certificates = await createCertificateFixtures()
+    verifierCertificate = await createVerifierCertificate(certificates.root, VERIFIER_DID)
+    didDocuments = new Map<string, DidDocument>()
+    const didResolver = new MapDidResolver(didDocuments)
+
+    didDocuments.set(
+      ISSUER_DID,
+      didDocumentWithKey(ISSUER_DID, certificates.leaf.publicJwk.toJson(), ['assertionMethod']),
+    )
+    didDocuments.set(
+      VERIFIER_DID,
+      didDocumentWithKey(VERIFIER_DID, verifierCertificate.publicJwk.toJson(), ['authentication']),
+    )
+
+    try {
+      resolver = await startResolverStub({
+        trusted: new Set([ISSUER_DID, VERIFIER_DID]),
+        authorized: new Set([ISSUER_DID, VERIFIER_DID]),
+      })
+      agents = await startOpenId4VcTestAgents({
+        certificates,
+        verifierCertificate,
+        didResolver,
+        resolverUrl: resolver.url,
+        issuerDid: ISSUER_DID,
+        verifierDid: VERIFIER_DID,
+        credentialConfiguration: CONFIGURATION,
+      })
+      const offer = await agents.issuer.service.createOffer({
+        credentialConfigurationId: CONFIGURATION.id,
+        claims: { name: 'Ada Lovelace', role: 'engineer' },
+        ttlSeconds: TTL_SECONDS,
+      })
+      storedCredential = await agents.holder.acceptCredentialOffer(offer.credentialOffer)
+    } catch (error) {
+      await rethrowAfterFixtureCleanup(error, [agents?.stop(), resolver?.stop()])
+    }
+  }, 60_000)
+
+  afterEach(async () => {
+    const cleanup = await Promise.allSettled([agents?.stop(), resolver?.stop()])
+    expect(cleanup.filter(result => result.status === 'rejected')).toEqual([])
+    await new Promise(resolve => setImmediate(resolve))
+    expect(activeTcpServers()).toEqual(tcpServerBaseline)
+  })
+
+  it('issues and stores a holder-bound dc+sd-jwt through the pre-authorized flow', async () => {
+    expect(storedCredential.claimFormat).toBe('dc+sd-jwt')
+    expect(storedCredential.prettyClaims).toMatchObject({
+      vct: CONFIGURATION.vct,
+      name: 'Ada Lovelace',
+      role: 'engineer',
+    })
+    expect(Number(storedCredential.prettyClaims.exp) - Number(storedCredential.prettyClaims.iat)).toBe(
+      TTL_SECONDS,
+    )
+    expect(storedCredential.prettyClaims).not.toHaveProperty('status')
+    const records = await agents.holder.agent.sdJwtVc.getAll()
+    expect(records).toHaveLength(1)
+    expect(records[0].firstCredential.claimFormat).toBe('dc+sd-jwt')
+  }, 60_000)
+
+  it('lists, reads and deletes the issuance sessions of this issuer', async () => {
+    const offer = await agents.issuer.service.createOffer({
+      credentialConfigurationId: CONFIGURATION.id,
+      claims: { name: 'Grace Hopper', role: 'admiral' },
+      ttlSeconds: TTL_SECONDS,
+    })
+
+    const listed = await agents.issuer.service.listIssuanceSessions()
+    expect(listed.map(session => session.id)).toContain(offer.issuanceSessionId)
+
+    const read = await agents.issuer.service.getIssuanceSession(offer.issuanceSessionId)
+    expect(read).toMatchObject({
+      id: offer.issuanceSessionId,
+      credentialConfigurationId: CONFIGURATION.id,
+      state: 'OfferCreated',
+    })
+    expect(read.expiresAt).toBeInstanceOf(Date)
+    expect(read).not.toHaveProperty('credentialOffer')
+
+    await agents.issuer.service.deleteIssuanceSession(offer.issuanceSessionId)
+    await expect(agents.issuer.service.getIssuanceSession(offer.issuanceSessionId)).rejects.toBeInstanceOf(
+      UnknownIssuanceSessionError,
+    )
+  }, 60_000)
+
+  it('presents the stored credential through DCQL and returns TRUSTED_AUTHORIZED', async () => {
+    const exchange = await presentCredential()
+
+    expect(exchange.resolved.authorizationRequestPayload.response_mode).toBe('direct_post.jwt')
+    expect(exchange.resolved.dcql).toBeDefined()
+    expect(exchange.submission.ok).toBe(true)
+    expect(exchange.submission.serverResponse?.status).toBe(200)
+    expect(
+      await agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
+    ).toMatchObject({
+      state: 'ResponseVerified',
+      cryptographicVerified: true,
+      accepted: true,
+      trust: { verdict: 'TRUSTED_AUTHORIZED' },
+      credential: {
+        vct: CONFIGURATION.vct,
+        disclosedClaims: { name: 'Ada Lovelace', role: 'engineer' },
+      },
+    })
+  }, 60_000)
+
+  it('carries the policy id, stores the decision, and lets the verifier delete the session', async () => {
+    const exchange = await presentCredential()
+
+    const first = await agents.verifier.service.getVerificationSession(exchange.verificationSessionId)
+    expect(first).toMatchObject({ policyId: 'employee-check', accepted: true })
+    expect(first.createdAt).toBeInstanceOf(Date)
+
+    resolver.reset()
+    const second = await agents.verifier.service.getVerificationSession(exchange.verificationSessionId)
+    expect(second).toMatchObject({ accepted: true, trust: { verdict: 'TRUSTED_AUTHORIZED' } })
+    expect(resolver.requestCount).toBe(0)
+
+    const listed = await agents.verifier.service.listVerificationSessions()
+    expect(listed.map(session => session.id)).toContain(exchange.verificationSessionId)
+
+    await agents.verifier.service.deleteVerificationSession(exchange.verificationSessionId)
+    await expect(
+      agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
+    ).rejects.toBeInstanceOf(UnknownVerificationSessionError)
+  }, 60_000)
+
+  it('returns UNTRUSTED without querying Verana when the issuer DID key is wrong', async () => {
+    const boundDocument = didDocuments.get(ISSUER_DID)
+    didDocuments.set(
+      ISSUER_DID,
+      didDocumentWithKey(ISSUER_DID, verifierCertificate.publicJwk.toJson(), ['assertionMethod']),
+    )
+
+    try {
+      const exchange = await presentCredential()
+      expect(exchange.submission.ok).toBe(true)
+      resolver.reset()
+
+      expect(
+        await agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
+      ).toMatchObject({
+        state: 'ResponseVerified',
+        cryptographicVerified: true,
+        accepted: false,
+        trust: { verdict: 'UNTRUSTED' },
+      })
+      expect(resolver.requestCount).toBe(0)
+    } finally {
+      if (boundDocument) didDocuments.set(ISSUER_DID, boundDocument)
+    }
+  }, 60_000)
+
+  it('returns TRUSTED_NOT_AUTHORIZED when issuer authorization is false', async () => {
+    resolver.behavior.authorized.delete(ISSUER_DID)
+    try {
+      const exchange = await presentCredential()
+      resolver.reset()
+
+      expect(
+        await agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
+      ).toMatchObject({
+        state: 'ResponseVerified',
+        cryptographicVerified: true,
+        accepted: false,
+        trust: { verdict: 'TRUSTED_NOT_AUTHORIZED' },
+      })
+      expect(resolver.requestCount).toBe(2)
+    } finally {
+      resolver.behavior.authorized.add(ISSUER_DID)
+    }
+  }, 60_000)
+
+  it('rejects a replayed completed authorization response in Credo', async () => {
+    const exchange = await presentCredential()
+    expect(exchange.submission.ok).toBe(true)
+    expect(exchange.submission.serverResponse?.status).toBe(200)
+    expect(
+      await agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
+    ).toMatchObject({
+      state: 'ResponseVerified',
+      cryptographicVerified: true,
+    })
+
+    const responseUri = exchange.resolved.authorizationRequestPayload.response_uri
+    const authorizationResponse = exchange.submission.authorizationResponse
+    if (typeof responseUri !== 'string' || !('response' in authorizationResponse)) {
+      throw new Error('expected a direct_post.jwt response URI and encrypted authorization response')
+    }
+
+    const replay = await fetch(responseUri, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ response: String(authorizationResponse.response) }),
+    })
+
+    expect(replay.status).toBe(400)
+    await expect(replay.json()).resolves.toMatchObject({
+      error: 'invalid_request',
+      error_description: 'Invalid session',
+    })
+  }, 60_000)
+
+  it('returns RESOLVER_UNAVAILABLE after the resolver is stopped', async () => {
+    const exchange = await presentCredential()
+    await resolver.stop()
+
+    expect(
+      await agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
+    ).toMatchObject({
+      state: 'ResponseVerified',
+      cryptographicVerified: true,
+      accepted: false,
+      trust: { verdict: 'RESOLVER_UNAVAILABLE' },
+    })
+  }, 60_000)
+
+  it('serves a verifiable x5c-headed signed metadata JWT to a jwt-only client', async () => {
+    const metadataUrl = `${agents.issuer.publicApiBaseUrl}/.well-known/openid-credential-issuer/oid4vci/issuer`
+
+    const signed = await fetch(metadataUrl, { headers: { accept: 'application/jwt' } })
+    const jwt = await signed.text()
+    const [encodedHeader, encodedPayload, encodedSignature] = jwt.split('.')
+    const header = JSON.parse(Buffer.from(encodedHeader, 'base64url').toString('utf8'))
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'))
+
+    expect(signed.status).toBe(200)
+    expect(signed.headers.get('content-type')).toContain('application/jwt')
+    expect(jwt).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/)
+    expect(header).toMatchObject({ alg: 'ES256', typ: 'openidvci-issuer-metadata+jwt' })
+    expect(header.x5c).toHaveLength(2)
+    expect(header.x5c).not.toContain(agents.rootCertificate)
+    // NL Wallet reads x5c through serde_with Base64<Standard, Padded> into DER, so base64url or
+    // PEM armour would fail to deserialize before any signature check runs.
+    expect(header.x5c.every((entry: string) => /^[A-Za-z0-9+/]+={0,2}$/.test(entry))).toBe(true)
+    expect(header.x5c.every((entry: string) => entry.length % 4 === 0)).toBe(true)
+    expect(header.x5c.every((entry: string) => Buffer.from(entry, 'base64')[0] === 0x30)).toBe(true)
+    expect(payload).toMatchObject({
+      credential_issuer: `${agents.issuer.publicApiBaseUrl}/oid4vci/issuer`,
+      sub: `${agents.issuer.publicApiBaseUrl}/oid4vci/issuer`,
+    })
+    await expect(verifyEs256(jwt, header.x5c[0])).resolves.toBe(true)
+    expect(Buffer.from(encodedSignature, 'base64url')).toHaveLength(64)
+
+    const plain = await fetch(metadataUrl, { headers: { accept: 'application/json' } })
+    expect(plain.headers.get('content-type')).toContain('application/json')
+    await expect(plain.json()).resolves.toMatchObject({
+      credential_issuer: `${agents.issuer.publicApiBaseUrl}/oid4vci/issuer`,
+    })
+  }, 60_000)
+
+  it('keeps holder controllers and services out of production source', async () => {
+    const sourceFiles = await filesBelow(join(__dirname, '../src'))
+    expect(sourceFiles).not.toContain('WalletController.ts')
+    expect(sourceFiles).not.toContain('WalletService.ts')
+    const publicApi = await import('../src')
+    expect(publicApi).not.toHaveProperty('WalletController')
+    expect(publicApi).not.toHaveProperty('WalletService')
+  }, 60_000)
+
+  async function presentCredential() {
+    const request = await agents.verifier.service.createRequest('employee-check')
+    const resolved = await agents.holder.resolvePresentationRequest(request.authorizationRequest, [
+      agents.rootCertificate,
+    ])
+    const submission = await agents.holder.submitPresentation(resolved)
+    return { resolved, submission, verificationSessionId: request.verificationSessionId }
+  }
+})
+
+async function rethrowAfterFixtureCleanup(
+  primaryError: unknown,
+  tasks: Array<Promise<unknown> | undefined>,
+): Promise<never> {
+  const cleanup = await Promise.allSettled(tasks)
+  const cleanupErrors = cleanup.flatMap(result => (result.status === 'rejected' ? [result.reason] : []))
+  if (cleanupErrors.length > 0) {
+    throw createAggregateError([primaryError, ...cleanupErrors], 'OpenID4VC fixture setup and cleanup failed')
+  }
+  throw primaryError
+}
+
+async function verifyEs256(jwt: string, encodedLeafCertificate: string): Promise<boolean> {
+  const [encodedHeader, encodedPayload, encodedSignature] = jwt.split('.')
+  const leaf = X509Certificate.fromEncodedCertificate(encodedLeafCertificate)
+  const key = await webcrypto.subtle.importKey(
+    'jwk',
+    leaf.publicJwk.toJson(),
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['verify'],
+  )
+
+  return await webcrypto.subtle.verify(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    key,
+    Buffer.from(encodedSignature, 'base64url'),
+    Buffer.from(`${encodedHeader}.${encodedPayload}`, 'utf8'),
+  )
+}
+
+async function filesBelow(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true })
+  const nested = await Promise.all(
+    entries.map(async entry => {
+      if (!entry.isDirectory()) return [entry.name]
+      return await filesBelow(join(directory, entry.name))
+    }),
+  )
+  return nested.flat()
+}
+
+describe('OpenID4VC test-agent startup cleanup', () => {
+  it('closes the acquired server when plugin option creation fails', async () => {
+    const primary = new Error('deliberate issuer options failure')
+    await expectCleanStartupFailure(
+      {
+        beforeOptions: role => {
+          if (role === 'issuer') throw primary
+        },
+      },
+      primary,
+    )
+  })
+
+  it('shuts down an acquired holder agent when holder initialization fails', async () => {
+    const primary = new Error('deliberate holder initialization failure')
+    await expectCleanStartupFailure(
+      {
+        afterInitialize: role => {
+          if (role === 'holder') throw primary
+        },
+      },
+      primary,
+    )
+  })
+
+  it('closes verifier resources and reports cleanup failure without losing the startup error', async () => {
+    const primary = new Error('deliberate verifier initialization failure')
+    const cleanup = new Error('deliberate verifier cleanup failure')
+    const outcome = await captureStartup({
+      afterInitialize: role => {
+        if (role === 'verifier') throw primary
+      },
+      afterCleanup: role => {
+        if (role === 'verifier') throw cleanup
+      },
+    })
+
+    expect(outcome.error).toBeInstanceOf(OpenId4VcTestStartupError)
+    expect(outcome.error).toMatchObject({ cause: primary, cleanupErrors: [cleanup] })
+    expect(outcome.after).toEqual(outcome.before)
+  })
+})
+
+async function expectCleanStartupFailure(hooks: TestAgentFailureHooks, primary: Error): Promise<void> {
+  const outcome = await captureStartup(hooks)
+  expect(outcome.error).toBe(primary)
+  expect(outcome.after).toEqual(outcome.before)
+}
+
+async function captureStartup(hooks: TestAgentFailureHooks): Promise<{
+  before: string[]
+  after: string[]
+  error?: unknown
+}> {
+  const input = await startupInput()
+  const before = activeTcpServers()
+  let error: unknown
+  const started = await startOpenId4VcTestAgents({ ...input, failureHooks: hooks }).catch(cause => {
+    error = cause
+    return undefined
+  })
+  await started?.stop()
+  await new Promise(resolve => setImmediate(resolve))
+  return { before, after: activeTcpServers(), error }
+}
+
+async function startupInput() {
+  const certificates = await createCertificateFixtures()
+  const verifierCertificate = await createVerifierCertificate(certificates.root, VERIFIER_DID)
+  const documents = new Map<string, DidDocument>()
+  documents.set(
+    ISSUER_DID,
+    didDocumentWithKey(ISSUER_DID, certificates.leaf.publicJwk.toJson(), ['assertionMethod']),
+  )
+  documents.set(
+    VERIFIER_DID,
+    didDocumentWithKey(VERIFIER_DID, verifierCertificate.publicJwk.toJson(), ['authentication']),
+  )
+  return {
+    certificates,
+    verifierCertificate,
+    didResolver: new MapDidResolver(documents),
+    resolverUrl: 'http://127.0.0.1:9/v1/trust',
+    issuerDid: ISSUER_DID,
+    verifierDid: VERIFIER_DID,
+    credentialConfiguration: CONFIGURATION,
+  }
 }

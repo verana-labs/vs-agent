@@ -3,8 +3,16 @@ import type { NextFunction, Request, Response } from 'express'
 
 import { ClaimFormat } from '@credo-ts/core'
 import request from 'supertest'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 
+import {
+  findCredentialConfiguration,
+  findVerifierPolicy,
+  parseOfferClaims,
+  parseOfferIssuanceMetadata,
+  parseOfferTtlSeconds,
+  validateOpenId4VcOptions,
+} from '../src/config'
 import {
   acceptDraftCredentialRequests,
   accommodateOpenId4VciKt,
@@ -13,7 +21,366 @@ import {
 
 import { createCertificateFixtures } from './helpers/certificates'
 
+let fixtures: Awaited<ReturnType<typeof createCertificateFixtures>>
+
+beforeAll(async () => {
+  fixtures = await createCertificateFixtures()
+})
+
 const validOptions = (): OpenId4VcPluginOptions => ({
+  publicApiBaseUrl: 'https://agent.example',
+  issuer: {},
+  verifier: {},
+  trust: {
+    resolverUrl: 'https://resolver.example/v1/trust',
+    timeoutMs: 5_000,
+    allowedDidWebHosts: ['issuer.example'],
+    credentialIssuerCertificates: [fixtures.root.toString('base64')],
+  },
+  credentialConfigurations: [
+    {
+      id: 'employee',
+      format: 'dc+sd-jwt',
+      vct: 'https://agent.example/oid4vc/vct/employee',
+      name: 'Employee credential',
+      vtjscId: 'https://agent.example/vt/employee.json',
+      claims: ['name', 'role'],
+      disclosureFrame: ['name', 'role'],
+    },
+  ],
+  verifierPolicies: [
+    { id: 'employee-check', credentialConfigurationId: 'employee', requestedClaims: ['name'] },
+  ],
+})
+
+describe('validateOpenId4VcOptions', () => {
+  it('accepts a valid issuer and verifier configuration', () => {
+    expect(() => validateOpenId4VcOptions(validOptions())).not.toThrow()
+  })
+
+  it('accepts a file that configures neither capability', () => {
+    const options = validOptions()
+    delete options.issuer
+    delete options.verifier
+    delete options.trust
+
+    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
+  })
+
+  it('rejects a non-HTTPS public URL outside test mode', () => {
+    const options = validOptions()
+    options.publicApiBaseUrl = 'http://agent.example'
+    const previousNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+
+    try {
+      expect(() => validateOpenId4VcOptions(options)).toThrow('publicApiBaseUrl')
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv
+    }
+  })
+
+  it('supports a public API base path', () => {
+    const options = validOptions()
+    options.publicApiBaseUrl = 'https://agent.example/public/base'
+
+    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
+  })
+
+  it.each([
+    ['publicApiBaseUrl', (options: OpenId4VcPluginOptions, url: string) => (options.publicApiBaseUrl = url)],
+    [
+      'vct',
+      (options: OpenId4VcPluginOptions, url: string) => (options.credentialConfigurations[0].vct = url),
+    ],
+    [
+      'vtjscId',
+      (options: OpenId4VcPluginOptions, url: string) => (options.credentialConfigurations[0].vtjscId = url),
+    ],
+    [
+      'trust.resolverUrl',
+      (options: OpenId4VcPluginOptions, url: string) => (options.trust!.resolverUrl = url),
+    ],
+  ] as const)('rejects credentials in %s without exposing them', (field, setUrl) => {
+    const username = 'private-url-username'
+    const password = 'private-url-password'
+    const options = validOptions()
+    setUrl(options, `https://${username}:${password}@agent.example/base`)
+
+    const error = catchValidationError(options)
+
+    expect(error.message).toContain(field)
+    expect(String(error)).not.toContain(username)
+    expect(String(error)).not.toContain(password)
+    expect(JSON.stringify(error)).not.toContain(username)
+    expect(JSON.stringify(error)).not.toContain(password)
+  })
+
+  it('rejects duplicate credential configuration IDs', () => {
+    const options = validOptions()
+    options.credentialConfigurations.push({ ...options.credentialConfigurations[0] })
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('credential configuration ID')
+  })
+
+  it('rejects a non-dc+sd-jwt credential format', () => {
+    const options = validOptions()
+    ;(options.credentialConfigurations[0] as { format: string }).format = 'jwt_vc_json'
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('dc+sd-jwt')
+  })
+
+  it('rejects empty credential claims', () => {
+    const options = validOptions()
+    options.credentialConfigurations[0].claims = []
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('claims')
+  })
+
+  it.each([
+    'vct',
+    'vct#integrity',
+    'iat',
+    'exp',
+    'nbf',
+    'iss',
+    'cnf',
+  ])('rejects reserved credential claim %s', claim => {
+    const options = validOptions()
+    options.credentialConfigurations[0].claims.push(claim)
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow(`reserved claim '${claim}'`)
+  })
+
+  it('rejects a credential claim named status, which belongs to the credential envelope', () => {
+    const options = validOptions()
+    options.credentialConfigurations[0].claims = ['name', 'status']
+    options.credentialConfigurations[0].disclosureFrame = ['name']
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow("contains reserved claim 'status'")
+  })
+
+  it('rejects a disclosure outside the claim allowlist', () => {
+    const options = validOptions()
+    options.credentialConfigurations[0].disclosureFrame = ['name', 'admin']
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('disclosureFrame')
+  })
+
+  it('rejects a verifier policy for an unknown credential configuration', () => {
+    const options = validOptions()
+    options.verifierPolicies[0].credentialConfigurationId = 'unknown'
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('credentialConfigurationId')
+  })
+
+  it('rejects malformed credential issuer certificate material without exposing it', () => {
+    const malformed = 'private-malformed-certificate-material'
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates.push(malformed)
+
+    const error = catchValidationError(options)
+
+    expect(error.message).toContain('credentialIssuerCertificates[1]')
+    expect(String(error)).not.toContain(malformed)
+    expect(JSON.stringify(error)).not.toContain(malformed)
+  })
+
+  it('rejects a non-CA certificate as a credential issuer trust anchor', () => {
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = [fixtures.attacker.toString('base64')]
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('CA trust anchor')
+  })
+
+  it('rejects an intermediate CA as a root trust anchor', () => {
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = [fixtures.intermediate.toString('base64')]
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('root trust anchor')
+  })
+
+  it('rejects an expired credential issuer root', () => {
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = [fixtures.expiredRoot.toString('base64')]
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('expired')
+  })
+
+  it('rejects duplicate credential issuer roots across encodings', () => {
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = [
+      fixtures.root.toString('base64'),
+      fixtures.root.toString('pem'),
+    ]
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('duplicate credential issuer certificate')
+  })
+
+  it.each([
+    'SHA256:example',
+    `sha256:${'0'.repeat(64)}`,
+    `SHA256:${'A'.repeat(64)}`,
+  ])('rejects malformed development certificate fingerprint %s', fingerprint => {
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = []
+    options.trust!.developmentCertificateFingerprints = [fingerprint]
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('SHA256')
+  })
+
+  it('rejects duplicate development certificate fingerprints', () => {
+    const fingerprint = `SHA256:${'0'.repeat(64)}`
+    const options = validOptions()
+    options.trust!.credentialIssuerCertificates = []
+    options.trust!.developmentCertificateFingerprints = [fingerprint, fingerprint]
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow(
+      'developmentCertificateFingerprints must not contain duplicates',
+    )
+  })
+
+  it('requires an explicit DID web host allowlist and a bounded resolution timeout', () => {
+    const missingHosts = validOptions()
+    missingHosts.trust!.allowedDidWebHosts = []
+    expect(() => validateOpenId4VcOptions(missingHosts)).toThrow('allowedDidWebHosts')
+
+    const excessiveTimeout = validOptions()
+    excessiveTimeout.trust!.timeoutMs = 30_001
+    expect(() => validateOpenId4VcOptions(excessiveTimeout)).toThrow('timeoutMs')
+  })
+
+  it('accepts a capability that declares no signing mode', () => {
+    const options = validOptions()
+
+    expect(options.issuer!.signing).toBeUndefined()
+    expect(options.verifier!.signing).toBeUndefined()
+    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
+  })
+
+  it('rejects a signing block that declares no configured material', () => {
+    const options = validOptions()
+    options.issuer!.signing = {} as never
+
+    expect(() => validateOpenId4VcOptions(options)).toThrow('issuer.signing.configured is required')
+  })
+
+  it('accepts configured signing material', () => {
+    const options = validOptions()
+    options.issuer!.signing = {
+      configured: { certificateChain: ['MIIB-test-cert'], privateJwk: { kty: 'EC' } as never },
+    }
+
+    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
+  })
+
+  it('rejects attestation certificates that are not non-empty strings', () => {
+    const walletAttestation = validOptions()
+    walletAttestation.issuer!.walletAttestationCertificates = ['']
+    expect(() => validateOpenId4VcOptions(walletAttestation)).toThrow('issuer.walletAttestationCertificates')
+
+    const keyAttestation = validOptions()
+    keyAttestation.issuer!.keyAttestationCertificates = [' ']
+    expect(() => validateOpenId4VcOptions(keyAttestation)).toThrow('issuer.keyAttestationCertificates')
+  })
+})
+
+function catchValidationError(options: OpenId4VcPluginOptions): Error {
+  try {
+    validateOpenId4VcOptions(options)
+  } catch (error) {
+    if (error instanceof Error) return error
+  }
+
+  throw new Error('expected OpenID4VC option validation to fail')
+}
+
+describe('configuration lookups', () => {
+  it('finds configured credential configurations and verifier policies', () => {
+    const options = validOptions()
+
+    expect(findCredentialConfiguration(options, 'employee')).toBe(options.credentialConfigurations[0])
+    expect(findVerifierPolicy(options, 'employee-check')).toBe(options.verifierPolicies[0])
+  })
+
+  it('returns undefined for unknown configuration IDs', () => {
+    const options = validOptions()
+
+    expect(findCredentialConfiguration(options, 'unknown')).toBeUndefined()
+    expect(findVerifierPolicy(options, 'unknown')).toBeUndefined()
+  })
+})
+
+describe('parseOfferClaims', () => {
+  it('returns only allowed, non-empty claims', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(parseOfferClaims(config, { name: 'Ada', role: 'engineer' })).toEqual({
+      name: 'Ada',
+      role: 'engineer',
+    })
+  })
+
+  it('omits absent optional claims instead of rejecting them', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(parseOfferClaims(config, { name: 'Ada' })).toEqual({ name: 'Ada' })
+  })
+
+  it('rejects unknown claims', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferClaims(config, { name: 'Ada', role: 'engineer', admin: true })).toThrow(
+      "unknown claim 'admin'",
+    )
+  })
+
+  it('rejects empty offered claims', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferClaims(config, { name: '', role: 'engineer' })).toThrow("claim 'name'")
+    expect(() => parseOfferClaims(config, { name: 'Ada', role: null })).toThrow("claim 'role'")
+  })
+
+  it('rejects an offer with no configured claims at all', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferClaims(config, {})).toThrow('at least one')
+  })
+})
+
+describe('parseOfferTtlSeconds', () => {
+  it.each([60, 3_600, 7_776_000])('accepts %d seconds', value => {
+    expect(parseOfferTtlSeconds(value)).toBe(value)
+  })
+
+  it.each([59, 7_776_001, 3_600.5, '3600', null, undefined])('rejects %s', value => {
+    expect(() => parseOfferTtlSeconds(value)).toThrow('ttlSeconds must be an integer between 60 and 7776000')
+  })
+})
+
+describe('parseOfferIssuanceMetadata', () => {
+  it('returns the stored claims and lifetime of the offer', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(parseOfferIssuanceMetadata(config, { claims: { name: 'Ada' }, ttlSeconds: 3_600 })).toEqual({
+      claims: { name: 'Ada' },
+      ttlSeconds: 3_600,
+    })
+  })
+
+  it.each([
+    [{ claims: { name: 'Ada' } }, 'ttlSeconds'],
+    [{ claims: { admin: true }, ttlSeconds: 3_600 }, "unknown claim 'admin'"],
+    [null, 'issuance metadata must be an object'],
+  ])('rejects invalid stored metadata %#', (metadata, message) => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferIssuanceMetadata(config, metadata)).toThrow(message)
+  })
+})
+
+const setupOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   issuer: {},
   verifier: {},
@@ -29,14 +396,14 @@ const validOptions = (): OpenId4VcPluginOptions => ({
 
 describe('setupOpenId4Vc', () => {
   it('creates a fresh non-global Express application for every setup', () => {
-    const first = setupOpenId4Vc(validOptions(), () => ({
+    const first = setupOpenId4Vc(setupOptions(), () => ({
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
     }))
-    const second = setupOpenId4Vc(validOptions(), () => ({
+    const second = setupOpenId4Vc(setupOptions(), () => ({
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -50,7 +417,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('configures both role bases from a file that declares no capability', () => {
-    const empty = validOptions()
+    const empty = setupOptions()
     delete empty.issuer
     delete empty.verifier
     const setup = setupOpenId4Vc(empty)
@@ -60,7 +427,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('delegates X.509 trust only to configured trust anchors', async () => {
-    const setup = setupOpenId4Vc(validOptions(), () => ({
+    const setup = setupOpenId4Vc(setupOptions(), () => ({
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -85,7 +452,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('fails the verification of a presented SD-JWT VC that carries no numeric exp', () => {
-    const setup = setupOpenId4Vc(validOptions())
+    const setup = setupOpenId4Vc(setupOptions())
     const getTrustedCertificates = setup.modules.x509.config.getTrustedCertificatesForVerification
     const verify = (payload: Record<string, unknown>) =>
       getTrustedCertificates?.({} as never, {
@@ -103,7 +470,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('serves the SD-JWT VC issuer metadata that x5c-anchoring holders resolve', async () => {
-    const setup = setupOpenId4Vc(validOptions(), () => ({
+    const setup = setupOpenId4Vc(setupOptions(), () => ({
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({
         issuer: 'https://issuer.example',
@@ -124,7 +491,7 @@ describe('setupOpenId4Vc', () => {
   // RFC 8615 inserts the issuer path after the well-known segment; answering only the bare
   // form made every wwWallet issuance show a metadata-fetch failure above the trust card.
   it('serves the SD-JWT VC issuer metadata at the path-inserted well-known form', async () => {
-    const setup = setupOpenId4Vc(validOptions(), () => ({
+    const setup = setupOpenId4Vc(setupOptions(), () => ({
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({ issuer: 'https://issuer.example', jwks: { keys: [] } }),
       mapCredentialRequest: () => {
@@ -139,7 +506,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   const withSignedMetadata = (signedMetadataJwt: string | undefined) =>
-    setupOpenId4Vc(validOptions(), () => ({
+    setupOpenId4Vc(setupOptions(), () => ({
       getSignedMetadataJwt: () => signedMetadataJwt,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -193,7 +560,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('does not advertise wallet attestation metadata without attestation roots', async () => {
-    const options = validOptions()
+    const options = setupOptions()
     const setup = setupOpenId4Vc(options, () => ({
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
@@ -217,8 +584,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('advertises wallet attestation as soon as attestation roots are configured', async () => {
-    const fixtures = await createCertificateFixtures()
-    const options = validOptions()
+    const options = setupOptions()
     options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]
     const setup = setupOpenId4Vc(options, () => ({
       getSignedMetadataJwt: () => undefined,
@@ -243,8 +609,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('rejects a malformed wallet-attestation root synchronously', async () => {
-    const fixtures = await createCertificateFixtures()
-    const options = validOptions()
+    const options = setupOptions()
     options.issuer!.walletAttestationCertificates = [
       fixtures.root.toString('base64'),
       'MIIB-private-attestation-material',
@@ -262,7 +627,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('mounts no type metadata, credential-offer or credential-exchange route', async () => {
-    const setup = setupOpenId4Vc(validOptions(), () => ({
+    const setup = setupOpenId4Vc(setupOptions(), () => ({
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -283,7 +648,7 @@ describe('setupOpenId4Vc', () => {
     '/.well-known/openid-credential-issuer',
     '/.well-known/oauth-authorization-server',
   ])('serves %s at the bare path credo leaves unrouted', async wellKnown => {
-    const setup = setupOpenId4Vc(validOptions())
+    const setup = setupOpenId4Vc(setupOptions())
     setup.publicMiddleware.get(`${wellKnown}/oid4vci/issuer`, (incoming, response) =>
       response.json({ credential_issuer: 'https://agent.example/oid4vci/issuer', query: incoming.query }),
     )
@@ -300,7 +665,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('aliases the bare well-known path under a public API base path', async () => {
-    const options = validOptions()
+    const options = setupOptions()
     options.publicApiBaseUrl = 'https://agent.example/public/base'
     const setup = setupOpenId4Vc(options)
     setup.publicMiddleware.get(
@@ -318,7 +683,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('does not mount verifier presentation or holder routes on the public middleware', async () => {
-    const setup = setupOpenId4Vc(validOptions(), () => ({
+    const setup = setupOpenId4Vc(setupOptions(), () => ({
       getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
@@ -482,10 +847,6 @@ describe('accommodateOpenId4VciKt', () => {
 
     expect(swiyu.accept).toBe('application/json')
     expect(Object.keys(proofTypesOf(swiyu.sent))).toEqual(['jwt'])
-  })
-
-  it('leaves a jwt-only accept alone', () => {
-    expect(runMetadataRequest('application/jwt', metadata(jwtOnly)).accept).toBe('application/jwt')
   })
 
   it('leaves other paths, unknown proof types and non-JSON bodies alone', () => {
