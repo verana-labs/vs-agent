@@ -10,7 +10,8 @@ import { PageDto, PaginationQueryDto } from '../../../../../common'
 
 export class Openid4vcCredentialOfferBodyDto {
   @ApiProperty({
-    description: 'Identifier of a credential configuration of the OpenID4VC configuration file',
+    description:
+      'Identifier of the credential configuration the offer issues. The agent holds none yet: issue #711 reads them from the VPR, so every identifier answers UNKNOWN_ID until then.',
     example: 'employee',
   })
   @IsString()

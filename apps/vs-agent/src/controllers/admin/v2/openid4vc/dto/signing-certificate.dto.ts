@@ -13,8 +13,7 @@ export class Openid4vcSigningCertificateDto {
   development!: boolean
 
   @ApiProperty({
-    description:
-      'SHA-256 fingerprint of the leaf, the pin format of trust.developmentCertificateFingerprints',
+    description: 'SHA-256 fingerprint of the leaf, for an operator to pin it on a peer verifier',
     example: `SHA256:${'0'.repeat(64)}`,
   })
   fingerprint!: string

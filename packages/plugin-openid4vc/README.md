@@ -19,6 +19,21 @@ What it does:
 Out of scope, and not implied: W3C VCDM credentials, ISO mdoc, authorization-code issuance,
 wallet-attestation trust-list distribution, production PKI onboarding, formal conformance.
 
+## Not wired up yet
+
+The configuration file the spec defines carries no credential configuration, no verifier policy
+and no trust setting, and the agent derives none of them yet. So `createCredentialOffer` and
+`createPresentationRequest` answer `404 UNKNOWN_ID` for every identifier, and reading a verified
+presentation answers the `RESOLVER_UNAVAILABLE` verdict. Four issues carry the rest:
+
+- [#710](https://github.com/verana-labs/vs-agent/issues/710): SD-JWT VC Type Metadata, served at
+  the spec path `/vt/vct/{credentialSchemaId}`;
+- [#711](https://github.com/verana-labs/vs-agent/issues/711): credential configurations and
+  verifier policies read from the VPR, one per active issuer participant;
+- [#712](https://github.com/verana-labs/vs-agent/issues/712): the verifier trust decision on the
+  eight steps the spec now defines, with no `trust` block anywhere;
+- [#713](https://github.com/verana-labs/vs-agent/issues/713): status lists.
+
 ## Enable it
 
 ```bash
@@ -88,11 +103,11 @@ answers in the v2 error envelope. Without `OID4VC_CONFIG_FILE_LOCATION`, every p
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `createCredentialOffer` | `POST /credential-offer` | `credentialConfigurationId`, `claims`, `ttlSeconds` (60 to 7776000). Returns `credentialExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`. |
+| `createCredentialOffer` | `POST /credential-offer` | `credentialConfigurationId`, `claims`, `ttlSeconds` (60 to 7776000). Returns `credentialExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`. Answers `UNKNOWN_ID` for every identifier until #711. |
 | `listCredentialExchanges` | `GET /credential-exchanges` | Filters `credentialConfigurationId`, `state`. Keyset pagination. |
 | `getCredentialExchange` | `GET /credential-exchanges/{credentialExchangeId}` | `credentialExchangeId`, `credentialConfigurationId`, `state`, `createdAt`, `updatedAt`, `expiresAt`, `errorMessage`. Never the claims, the offer URL or the pre-authorized code. |
 | `deleteCredentialExchange` | `DELETE /credential-exchanges/{credentialExchangeId}` | `204`. Deletes the record only, never a credential that a wallet holds. |
-| `createPresentationRequest` | `POST /presentation-request` | `policyId`, optional `queryLanguage` (`dcql`, `presentation_exchange`), optional `requestSigner` (`x5c`, `did`). Returns `proofExchangeId` and `url`. `404 UNKNOWN_ID`, `409 INVALID_STATE`. |
+| `createPresentationRequest` | `POST /presentation-request` | `policyId`, optional `queryLanguage` (`dcql`, `presentation_exchange`), optional `requestSigner` (`x5c`, `did`). Returns `proofExchangeId` and `url`. `404 UNKNOWN_ID`, `409 INVALID_STATE`. Answers `UNKNOWN_ID` for every identifier until #711. |
 | `listPresentations` | `GET /presentations` | Filters `policyId`, `state`. Keyset pagination. |
 | `getPresentation` | `GET /presentations/{proofExchangeId}` | Adds `cryptographicVerified`, `accepted`, `trust` and `credential` once the wallet answered. |
 | `deletePresentation` | `DELETE /presentations/{proofExchangeId}` | `204`. |
@@ -121,7 +136,10 @@ Admin API and the metadata return; it never builds a path itself.
 
 ## Trust decision
 
-A verifier accepts a presentation only after each step succeeds, in this order:
+Nothing configures the resolver URL, the allowed `did:web` hosts, the credential-issuer roots or
+the development fingerprints any more: the file rejects a `trust` block, and #712 rebuilds the
+decision without one. Until it lands, a verified presentation answers `RESOLVER_UNAVAILABLE` and
+is never accepted. What the code below does, once a resolver reaches it again, in this order:
 
 1. credo verifies the OpenID4VP response, the nonce, the audience, the holder binding, the SD-JWT
    disclosure, the signature, the X.509 chain against the configured roots or an exact

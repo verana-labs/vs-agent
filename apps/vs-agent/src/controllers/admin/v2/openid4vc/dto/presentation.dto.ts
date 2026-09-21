@@ -18,7 +18,8 @@ const TRUST_STATUSES = ['TRUSTED', 'PARTIAL', 'UNTRUSTED'] as const
 
 export class Openid4vcPresentationRequestBodyDto {
   @ApiProperty({
-    description: 'Identifier of a verifier policy of the OpenID4VC configuration file',
+    description:
+      'Identifier of the verifier policy that names the credential and the claims to request. The agent holds none yet: issue #711 reads them from the VPR, so every identifier answers UNKNOWN_ID until then.',
     example: 'employee-check',
   })
   @IsString()
