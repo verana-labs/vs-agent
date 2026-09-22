@@ -813,8 +813,8 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const aliceKnownShares = async () => new Set((await aliceSharedMedia()).map(record => record.id))
 
     /**
-     * The invitation that Faber sends travels in the attachment of a share-media message, so Alice
-     * reads it from the media sharing record that the inbound message creates.
+     * Faber sends the invitation in the attachment of a share-media message. Alice reads it from
+     * the media sharing record that the agent makes for that message.
      */
     const untilAliceReceivesInvitation = async (known: Set<string>) => {
       for (let attempt = 0; attempt < 80; attempt++) {
