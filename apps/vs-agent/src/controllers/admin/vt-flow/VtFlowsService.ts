@@ -366,7 +366,12 @@ function toDto({ record, peerDid, connectionState }: ResolvedFlow): VtFlowRecord
   return {
     peerDid,
     connectionState,
-    oobLinkUrl: record.oobLinkUrl,
+    oobLink: record.oobLink && {
+      url: record.oobLink.url,
+      description: record.oobLink.description,
+      expiresAt: record.oobLink.expiresAt?.toISOString(),
+      at: record.oobLink.at.toISOString(),
+    },
     proofs: record.proofsAttach,
     credentialDigest: record.credentialDigest,
     id: record.id,

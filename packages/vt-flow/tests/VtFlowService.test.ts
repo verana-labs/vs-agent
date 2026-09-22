@@ -364,13 +364,13 @@ describe('VtFlowService.sendValidatingForSession', () => {
     const pending = makeRecord({
       role: VtFlowRole.Validator,
       state: VtFlowState.OobPending,
-      oobLinkUrl: 'https://x',
+      oobLink: { url: 'https://x', description: 'd', at: new Date() },
     })
     const { service } = makeService(pending)
 
     const { record, message } = await service.sendValidatingForSession({} as never, pending.id)
     expect(record.state).toBe(VtFlowState.Validating)
-    expect(record.oobLinkUrl).toBeUndefined()
+    expect(record.oobLink).toBeUndefined()
     expect(message.threadId).toBe(pending.threadId)
 
     await expect(service.sendValidatingForSession({} as never, pending.id)).rejects.toThrow(

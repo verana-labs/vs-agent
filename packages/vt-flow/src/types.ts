@@ -77,6 +77,14 @@ export interface VtFlowStateChangedEvent extends BaseEvent {
   }
 }
 
+/** The outstanding `oob-link` of a flow; `at` is when the agent sent or received the message. */
+export interface VtFlowOobLink {
+  url: string
+  description: string
+  expiresAt?: Date
+  at: Date
+}
+
 export interface SendOnboardingRequestOptions {
   connectionId: string
   participantSessionId?: string

@@ -14,6 +14,14 @@ export type VtConnectionState = (typeof VT_CONNECTION_STATES)[number]
  * One credential acquisition flow record of [VSA-ADM-VT-FL-LIST] listFlows.
  * [VSA-ADM-VT-FL-GET] getFlow returns one record of this shape.
  */
+export class V2VtFlowOobLinkDto {
+  @ApiProperty() url!: string
+  @ApiProperty() description!: string
+  @ApiPropertyOptional({ description: 'expires_time of the message, when the sender set one.' })
+  expiresAt?: string
+  @ApiProperty({ description: 'When the agent sent or received the message.' }) at!: string
+}
+
 export class V2VtFlowRecordDto {
   @ApiProperty({ description: 'Identifier of the flow record.' })
   id!: string
@@ -89,9 +97,11 @@ export class V2VtFlowRecordDto {
   proofs?: unknown[]
 
   @ApiPropertyOptional({
-    description: 'URL of the outstanding OOB_LINK message, when one exists.',
+    description:
+      'The outstanding oob-link, when one exists. Cleared on every transition out of OOB_PENDING. ' +
+      'An expired link stays on the record until then and pendingAction reports it.',
   })
-  oobLinkUrl?: string
+  oobLink?: V2VtFlowOobLinkDto
 
   @ApiPropertyOptional({
     description: 'Identifier of the credential exchange of the offered credential.',

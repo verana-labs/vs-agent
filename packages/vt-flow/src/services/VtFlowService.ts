@@ -255,7 +255,7 @@ export class VtFlowService {
       }
       if (existing.state === VtFlowState.Completed || existing.state === VtFlowState.CredRevoked) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
-        existing.oobLinkUrl = undefined
+        existing.oobLink = undefined
         await this.updateState(agentContext, existing, VtFlowState.AwaitingOr)
       } else if (existing.state === VtFlowState.CredOffered) {
         await this.releaseCredentialExchange(agentContext, existing)
@@ -354,6 +354,12 @@ export class VtFlowService {
       VtFlowState.Validating,
       VtFlowState.OobPending,
     ])
+    record.oobLink = {
+      url: message.url,
+      description: message.description,
+      expiresAt: message.expiresTime,
+      at: new Date(),
+    }
     await this.updateState(agentContext, record, VtFlowState.OobPending)
     return record
   }
@@ -570,7 +576,12 @@ export class VtFlowService {
       expiresTime: params.expiresTime,
     })
 
-    record.oobLinkUrl = params.url
+    record.oobLink = {
+      url: params.url,
+      description: params.description,
+      expiresAt: params.expiresTime,
+      at: new Date(),
+    }
     await this.updateState(agentContext, record, VtFlowState.OobPending)
 
     return { record, message }
@@ -812,7 +823,7 @@ export class VtFlowService {
     const previousState = record.state
     if (previousState === newState) return
 
-    if (previousState === VtFlowState.OobPending) record.oobLinkUrl = undefined
+    if (previousState === VtFlowState.OobPending) record.oobLink = undefined
 
     record.state = newState
     await this.repository.update(agentContext, record)

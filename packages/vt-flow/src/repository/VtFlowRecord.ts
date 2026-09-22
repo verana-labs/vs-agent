@@ -3,7 +3,7 @@ import type { DidCommAttachment } from '@credo-ts/didcomm'
 
 import { BaseRecord, CredoError, utils } from '@credo-ts/core'
 
-import { VtFlowRole, VtFlowState, VtFlowVariant } from '../types'
+import { VtFlowOobLink, VtFlowRole, VtFlowState, VtFlowVariant } from '../types'
 
 /** Indexed storage tags queryable through `VtFlowRepository`; the participant ids are OnboardingProcess-only and `schemaId` is DirectIssuance-only. */
 export type DefaultVtFlowTags = {
@@ -49,7 +49,7 @@ export interface VtFlowStorageProps {
 
   ecsSchemaKey?: string
 
-  oobLinkUrl?: string
+  oobLink?: VtFlowOobLink
   proofsAttach?: DidCommAttachment[]
   credentialDigest?: string
   errorMessage?: string
@@ -85,7 +85,7 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
   /** ECS key of the credential schema, resolved while verifying the offer so publication needs no indexer */
   public ecsSchemaKey?: string
 
-  public oobLinkUrl?: string
+  public oobLink?: VtFlowOobLink
   public proofsAttach?: DidCommAttachment[]
   public credentialDigest?: string
   public errorMessage?: string
@@ -118,7 +118,7 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
       this.subprotocolThid = props.subprotocolThid
       this.ecsSchemaKey = props.ecsSchemaKey
 
-      this.oobLinkUrl = props.oobLinkUrl
+      this.oobLink = props.oobLink
       this.proofsAttach = props.proofsAttach
       this.credentialDigest = props.credentialDigest
       this.errorMessage = props.errorMessage

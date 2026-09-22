@@ -19,7 +19,8 @@ export class VtFlowRecordDto {
   @ApiProperty({ required: false, type: Object }) claims?: Record<string, unknown>
   @ApiProperty({ required: false }) credentialExchangeRecordId?: string
   @ApiProperty({ required: false }) subprotocolThid?: string
-  @ApiProperty({ required: false }) oobLinkUrl?: string
+  @ApiProperty({ required: false, type: Object })
+  oobLink?: { url: string; description: string; expiresAt?: string; at: string }
   @ApiProperty({ required: false, type: [Object] }) proofs?: unknown[]
   @ApiProperty({ required: false }) credentialDigest?: string
   @ApiProperty({ required: false }) peerDid?: string

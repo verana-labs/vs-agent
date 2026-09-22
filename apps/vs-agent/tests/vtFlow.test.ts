@@ -201,12 +201,12 @@ describe('vt-flow: two-agent integration', () => {
       isVtFlowStateChangedEvent(VtFlowState.OobPending),
     )
     const sent = await flowsService.sendOobLink(psid, 'https://collect.example/form', 'complete the form')
-    expect(sent.oobLinkUrl).toBe('https://collect.example/form')
+    expect(sent.oobLink?.url).toBe('https://collect.example/form')
     expect(sent.state).toBe(VtFlowState.OobPending)
     await applicantOobPending
 
     const resent = await flowsService.sendOobLink(psid, 'https://collect.example/form-v2')
-    expect(resent.oobLinkUrl).toBe('https://collect.example/form-v2')
+    expect(resent.oobLink?.url).toBe('https://collect.example/form-v2')
     expect(resent.state).toBe(VtFlowState.OobPending)
   })
 
