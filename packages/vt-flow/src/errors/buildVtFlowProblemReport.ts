@@ -70,6 +70,8 @@ function defaultEnglishDescription(code: VtFlowErrorCode): string {
       return "The peer's DID does not identify a Verifiable Service."
     case VtFlowErrorCode.ValidationFailed:
       return 'Off-chain validation of the submitted documentation failed.'
+    case VtFlowErrorCode.ValidationRefused:
+      return 'The Validator refused the request after its off-chain validation.'
     case VtFlowErrorCode.OobExpired:
       return 'The OOB link expired before the Applicant completed it.'
     case VtFlowErrorCode.SessionTerminated:

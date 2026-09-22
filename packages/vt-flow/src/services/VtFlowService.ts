@@ -249,7 +249,11 @@ export class VtFlowService {
         if (message.claims) existing.claims = message.claims
         if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
       }
-      if (existing.state === VtFlowState.Completed || existing.state === VtFlowState.CredRevoked) {
+      if (
+        existing.state === VtFlowState.Completed ||
+        existing.state === VtFlowState.Validated ||
+        existing.state === VtFlowState.CredRevoked
+      ) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
         existing.oobLinkUrl = undefined
         await this.updateState(agentContext, existing, VtFlowState.AwaitingOr)
@@ -540,7 +544,6 @@ export class VtFlowService {
       VtFlowState.AwaitingIr,
       VtFlowState.Validating,
       VtFlowState.OobPending,
-      VtFlowState.Completed,
     ])
 
     const message = new OobLinkMessage({
@@ -551,11 +554,7 @@ export class VtFlowService {
     })
 
     record.oobLinkUrl = params.url
-    if (record.state !== VtFlowState.Completed) {
-      await this.updateState(agentContext, record, VtFlowState.OobPending)
-    } else {
-      await this.updateRecord(agentContext, record)
-    }
+    await this.updateState(agentContext, record, VtFlowState.OobPending)
 
     return { record, message }
   }
@@ -577,11 +576,18 @@ export class VtFlowService {
     return { record, message }
   }
 
-  /** `VALIDATING => VALIDATED`; call after `SetParticipantOPtoValidated` lands on-chain. */
+  /** Validator-side states preceding `VALIDATED` => `VALIDATED`; call after `SetParticipantOPtoValidated` lands on-chain. */
   public async markValidated(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    record.assertState([VtFlowState.Validating, VtFlowState.OobPending])
+    record.assertState([
+      VtFlowState.Validating,
+      VtFlowState.OobPending,
+      VtFlowState.AwaitingValidationTx,
+      VtFlowState.ValidationTxSubmitted,
+      VtFlowState.ValidationTxFailed,
+      VtFlowState.TerminatedByValidator,
+    ])
     record.assertVariant(VtFlowVariant.OnboardingProcess)
 
     await this.updateState(agentContext, record, VtFlowState.Validated)
@@ -619,6 +625,7 @@ export class VtFlowService {
     record.assertRole(VtFlowRole.Validator)
     record.assertState([
       VtFlowState.Validated,
+      VtFlowState.ValidatedPendingClaims,
       VtFlowState.Validating,
       VtFlowState.OobPending,
       VtFlowState.Completed,
