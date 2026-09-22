@@ -17,6 +17,7 @@ import { VtFlowErrorCode } from './errors'
 import { VtFlowModuleConfig, type VtFlowModuleConfigOptions } from './VtFlowModuleConfig'
 import {
   CredentialStateChangeHandler,
+  ProblemReportHandler,
   IssuanceRequestHandler,
   OnboardingRequestHandler,
   OobLinkHandler,
@@ -61,6 +62,7 @@ export class VtFlowModule implements Module {
       new OobLinkHandler(service),
       new ValidatingHandler(service),
       new CredentialStateChangeHandler(service),
+      new ProblemReportHandler(service),
     ])
 
     featureRegistry.register(

@@ -12,11 +12,13 @@ import {
   VtFlowState,
   VtFlowVariant,
 } from '../src'
+import { VtFlowErrorCode } from '../src/errors'
 import {
   IssuanceRequestMessage,
   OnboardingRequestMessage,
   OobLinkMessage,
   ValidatingMessage,
+  VtFlowProblemReportMessage,
 } from '../src/messages'
 import { VtFlowRecord } from '../src/repository'
 import { VtFlowService } from '../src/services/VtFlowService'
@@ -86,6 +88,65 @@ const applicantParams = {
   agentParticipantId: '0',
   walletAgentParticipantId: '0',
 }
+
+describe('VtFlowService inbound problem-report', () => {
+  function makeReport(code: string) {
+    const message = new VtFlowProblemReportMessage({ description: { code, en: 'because' } })
+    message.setThread({ threadId: 'thid-1' })
+    return message
+  }
+
+  async function receive(code: string, role: VtFlowRole) {
+    const existing = makeRecord({ role, state: VtFlowState.Validating })
+    const repository = {
+      findByThreadId: vi.fn().mockResolvedValue(existing),
+      update: vi.fn(),
+    }
+    const service = new VtFlowService(
+      repository as never,
+      { emit: vi.fn() } as never,
+      { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+      {} as never,
+    )
+    const record = await service.processReceiveProblemReport({
+      message: makeReport(code),
+      agentContext: {},
+    } as never)
+    return record as VtFlowRecord
+  }
+
+  it('terminates the applicant on a refused validation and records the message', async () => {
+    const record = await receive(VtFlowErrorCode.ValidationRefused, VtFlowRole.Applicant)
+
+    expect(record.state).toBe(VtFlowState.TerminatedByValidator)
+    expect(record.messages).toEqual([
+      expect.objectContaining({ type: VtFlowMessageType.ProblemReport, text: 'because' }),
+    ])
+  })
+
+  it('resolves session-terminated from the role of the sender', async () => {
+    await expect(receive(VtFlowErrorCode.SessionTerminated, VtFlowRole.Applicant)).resolves.toMatchObject({
+      state: VtFlowState.TerminatedByValidator,
+    })
+    await expect(receive(VtFlowErrorCode.SessionTerminated, VtFlowRole.Validator)).resolves.toMatchObject({
+      state: VtFlowState.TerminatedByApplicant,
+    })
+  })
+
+  it('leaves the flow where it is on a retryable code', async () => {
+    const record = await receive(VtFlowErrorCode.InvalidClaims, VtFlowRole.Applicant)
+
+    expect(record.state).toBe(VtFlowState.Validating)
+    expect(record.messages).toHaveLength(1)
+  })
+
+  it('moves an unknown code nowhere and still records it', async () => {
+    const record = await receive('vt-flow.not-a-real-code', VtFlowRole.Applicant)
+
+    expect(record.state).toBe(VtFlowState.Validating)
+    expect(record.messages).toHaveLength(1)
+  })
+})
 
 describe('VtFlowService re-attach on same participant_session_id', () => {
   it('applicant renewal re-attaches the finished flow and re-runs it', async () => {

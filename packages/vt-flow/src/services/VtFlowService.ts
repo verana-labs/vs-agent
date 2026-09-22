@@ -13,7 +13,14 @@ import {
 } from '@credo-ts/didcomm'
 
 import { VtFlowModuleConfig, type VtFlowRequestPurpose } from '../VtFlowModuleConfig'
-import { type BuildVtFlowProblemReportOptions, VtFlowErrorCode, buildVtFlowProblemReport } from '../errors'
+import {
+  type BuildVtFlowProblemReportOptions,
+  VT_FLOW_ERROR_INFO,
+  type VtFlowErrorFlowState,
+  VtFlowErrorCode,
+  buildVtFlowProblemReport,
+  isVtFlowErrorCode,
+} from '../errors'
 import {
   CredentialStateChangeMessage,
   type CredentialStateChangeMessageOptions,
@@ -21,6 +28,7 @@ import {
   OnboardingRequestMessage,
   OobLinkMessage,
   type OobLinkMessageOptions,
+  VtFlowProblemReportMessage,
   ValidatingMessage,
   type ValidatingMessageOptions,
   VtCredentialState,
@@ -866,6 +874,51 @@ export class VtFlowService {
     await this.repository.update(agentContext, record)
 
     this.emitStateChanged(agentContext, record, previousState)
+  }
+
+  /**
+   * Inbound adopted `problem-report`. The Error Codes table gives the state the receiving party
+   * moves to, so both sides run this same mapping. A retryable code records the message and leaves
+   * the flow where it is.
+   */
+  public async processReceiveProblemReport(
+    messageContext: DidCommInboundMessageContext<VtFlowProblemReportMessage>,
+  ): Promise<VtFlowRecord | undefined> {
+    const { message, agentContext } = messageContext
+
+    const record = await this.repository.findByThreadId(agentContext, message.threadId)
+    if (!record) return undefined
+
+    const code = message.description?.code
+    const info = code && isVtFlowErrorCode(code) ? VT_FLOW_ERROR_INFO[code] : undefined
+
+    this.appendMessage(record, {
+      type: VtFlowMessageType.ProblemReport,
+      text: message.description?.en ?? code ?? 'problem-report',
+      at: new Date().toISOString(),
+    })
+    record.errorMessage = message.description?.en ?? code
+
+    const target = info && this.resolveErrorFlowState(info.flowState, record.role)
+    if (!target) {
+      await this.updateRecord(agentContext, record)
+      return record
+    }
+
+    await this.updateState(agentContext, record, target)
+    return record
+  }
+
+  /** `terminated-by-sender` is the peer's termination, so the receiver lands in the state named after the sender. */
+  private resolveErrorFlowState(
+    flowState: VtFlowErrorFlowState,
+    receiverRole: VtFlowRole,
+  ): VtFlowState | undefined {
+    if (flowState === 'unchanged') return undefined
+    if (flowState !== 'terminated-by-sender') return flowState
+    return receiverRole === VtFlowRole.Applicant
+      ? VtFlowState.TerminatedByValidator
+      : VtFlowState.TerminatedByApplicant
   }
 
   /** Append to `messages[]`, which a validator fills with what it sent and an applicant with what it received. */
