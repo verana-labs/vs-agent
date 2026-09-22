@@ -10,9 +10,8 @@ import {
   DidCommOutOfBandRepository,
 } from '@credo-ts/didcomm'
 import { Inject, Injectable } from '@nestjs/common'
-import { ecsServiceClaims, sendMessage } from '@verana-labs/vs-agent-sdk'
+import { connectionOf, ecsServiceClaims, sendMessage } from '@verana-labs/vs-agent-sdk'
 
-import { unknownConnection } from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
 const invitationMediaType = 'application/didcomm-plain+json'
@@ -38,8 +37,7 @@ export class InvitationsService {
   public async sendInvitation(options: SendInvitationOptions): Promise<SendInvitationResult> {
     const agent = await this.vsAgentService.getAgent()
 
-    const connection = await agent.didcomm.connections.findById(options.connectionId)
-    if (!connection) throw unknownConnection(options.connectionId)
+    const connection = await connectionOf(agent, options.connectionId)
 
     const isV2 = (connection.didcommVersion ?? 'v1') === 'v2'
     const { did, imageUrl, goal, goalCode } = options
