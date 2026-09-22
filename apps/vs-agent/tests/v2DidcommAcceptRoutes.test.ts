@@ -168,11 +168,17 @@ const claims = [
 
 const faberMessages = new Subject<SubjectMessage>()
 const aliceMessages = new Subject<SubjectMessage>()
-const subjectMap = { 'rxjs:faber': faberMessages, 'rxjs:alice': aliceMessages }
+const charlieMessages = new Subject<SubjectMessage>()
+const subjectMap = {
+  'rxjs:faber': faberMessages,
+  'rxjs:alice': aliceMessages,
+  'rxjs:charlie': charlieMessages,
+}
 
 describe('v2 didcomm accept routes, over two agents', () => {
   let faberAgent: VsAgent<BaseAgentModules>
   let aliceAgent: VsAgent<BaseAgentModules>
+  let charlieAgent: VsAgent<BaseAgentModules>
   let faberApp: INestApplication
   let aliceApp: INestApplication
   let credentialDefinitionId: string
@@ -197,9 +203,16 @@ describe('v2 didcomm accept routes, over two agents', () => {
     await aliceAgent.initialize()
     aliceApp = await startAdminApi(aliceAgent)
 
+    charlieAgent = await startAgent({ label: 'Charlie', domain: 'charlie', veranaChain })
+    charlieAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(charlieMessages))
+    charlieAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+    charlieAgent.dids.config.resolvers.unshift(resolver)
+    await charlieAgent.initialize()
+
     // Neither DID is published on a reachable host, so each agent resolves the other from memory.
     await resolver.registerAgent(faberAgent)
     await resolver.registerAgent(aliceAgent)
+    await resolver.registerAgent(charlieAgent)
 
     JSON_SCHEMA_CREDENTIAL_ID = await publishVtjsc(faberAgent, 'https://faber')
     const ecosystemDid = faberAgent.did
@@ -243,6 +256,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     await aliceApp?.close()
     await faberAgent?.shutdown()
     await aliceAgent?.shutdown()
+    await charlieAgent?.shutdown()
     vi.restoreAllMocks()
   })
 
@@ -773,6 +787,16 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
   describe('the invitations module, over an established connection', () => {
     const faberDid = () => faberAgent.did as string
+    const charlieDid = () => charlieAgent.did as string
+
+    const untilConnection = async (agent: VsAgent<BaseAgentModules>, query: Record<string, string>) => {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const [record] = await agent.didcomm.connections.findAllByQuery(query)
+        if (record) return record
+        await new Promise(resolve => setTimeout(resolve, 250))
+      }
+      throw new Error(`no connection of the referred agent matches ${JSON.stringify(query)}`)
+    }
 
     const untilFaberConnection = async (query: Record<string, string>) => {
       for (let attempt = 0; attempt < 80; attempt++) {
@@ -829,6 +853,35 @@ describe('v2 didcomm accept routes, over two agents', () => {
         await new Promise(resolve => setTimeout(resolve, 250))
       }
       throw new Error('Alice received no invitation on the v2 connection')
+    }
+
+    const connectFromUrl = async (
+      agent: VsAgent<BaseAgentModules>,
+      name: string,
+      url: string,
+      greeting: string,
+    ) => {
+      const { connectionRecord } = await agent.didcomm.oob.receiveInvitationFromUrl(url, { label: name })
+      if (!connectionRecord) throw new Error(`${name} opened no connection`)
+      await agent.didcomm.basicMessages.sendMessage(connectionRecord.id, greeting)
+      return connectionRecord
+    }
+
+    /**
+     * The inviter closes a connection with a rotation to nothing. Therefore the peer keeps the
+     * record, but without the DID of the inviter.
+     */
+    const untilTerminated = async (
+      agent: VsAgent<BaseAgentModules>,
+      name: string,
+      connectionId: string,
+    ) => {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const record = await agent.didcomm.connections.findById(connectionId)
+        if (record && record.theirDid === undefined) return record
+        await new Promise(resolve => setTimeout(resolve, 250))
+      }
+      throw new Error(`${name} keeps connection ${connectionId} open`)
     }
 
     const sentBy = async (app: () => request.SuperTest<request.Test>, body: Record<string, unknown>) => {
@@ -915,6 +968,31 @@ describe('v2 didcomm accept routes, over two agents', () => {
       expect(child.getTag('parentConnectionId')).toBe(parent.id)
     }, 120_000)
 
+    it('accepts one connection only from a single-use invitation', async () => {
+      const known = await aliceKnownShares()
+
+      const response = await faber().post('/v2/didcomm/invitations').send({ connectionId: v2Parent.id })
+      expect(response.status).toBe(201)
+
+      const { invitation } = await untilAliceReceivesInvitation(known)
+      const url = invitation.toUrl({ domain: 'https://alice' })
+
+      const accepted = await connectFromUrl(aliceAgent, 'Alice', url, 'the first use')
+      const child = await untilFaberConnection({ outOfBandId: response.body.outOfBandId })
+      expect(child.getTag('parentConnectionId')).toBe(v2Parent.id)
+
+      const refused = await connectFromUrl(charlieAgent, 'Charlie', url, 'the second use')
+
+      const terminated = await untilTerminated(charlieAgent, 'Charlie', refused.id)
+      expect(terminated.previousTheirDids?.length).toBeGreaterThan(0)
+
+      const surviving = await faberAgent.didcomm.connections.findAllByOutOfBandId(
+        response.body.outOfBandId,
+      )
+      expect(surviving.map(record => record.id)).toEqual([child.id])
+      expect(accepted.theirDid).toBeDefined()
+    }, 120_000)
+
     it('refers the peer to another DID without creating a record', async () => {
       const parent = v2Parent
       const oobCount = (await faberAgent.didcomm.oob.getAll()).length
@@ -922,7 +1000,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       const response = await faber().post('/v2/didcomm/invitations').send({
         connectionId: parent.id,
-        did: 'did:webvh:verifier',
+        did: charlieDid(),
         goalCode: 'verify',
       })
 
@@ -932,8 +1010,22 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       const { record, invitation } = await untilAliceReceivesInvitation(known)
       expect(record.description).toBeUndefined()
-      expect(invitation.from).toBe('did:webvh:verifier')
+      expect(invitation.from).toBe(charlieDid())
       expect(invitation.toV2Plaintext().body).toEqual({ goal_code: 'verify', accept: ['didcomm/v2'] })
+
+      const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitationFromUrl(
+        invitation.toUrl({ domain: 'https://alice' }),
+        { label: 'Alice' },
+      )
+      if (!connectionRecord) throw new Error('Alice did not open a connection to the referred agent')
+      await aliceAgent.didcomm.basicMessages.sendMessage(connectionRecord.id, 'hello from the referral')
+
+      const aliceDid = connectionRecord.did
+      if (!aliceDid) throw new Error('Alice opened the connection without a DID of her own')
+
+      const referred = await untilConnection(charlieAgent, { theirDid: aliceDid })
+      expect(referred.outOfBandId).toBeUndefined()
+      expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount)
     }, 120_000)
 
     it('reports an unknown connection as UNKNOWN_ID', async () => {
