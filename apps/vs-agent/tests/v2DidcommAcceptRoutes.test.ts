@@ -871,11 +871,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
      * The inviter closes a connection with a rotation to nothing. Therefore the peer keeps the
      * record, but without the DID of the inviter.
      */
-    const untilTerminated = async (
-      agent: VsAgent<BaseAgentModules>,
-      name: string,
-      connectionId: string,
-    ) => {
+    const untilTerminated = async (agent: VsAgent<BaseAgentModules>, name: string, connectionId: string) => {
       for (let attempt = 0; attempt < 80; attempt++) {
         const record = await agent.didcomm.connections.findById(connectionId)
         if (record && record.theirDid === undefined) return record
@@ -986,9 +982,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
       const terminated = await untilTerminated(charlieAgent, 'Charlie', refused.id)
       expect(terminated.previousTheirDids?.length).toBeGreaterThan(0)
 
-      const surviving = await faberAgent.didcomm.connections.findAllByOutOfBandId(
-        response.body.outOfBandId,
-      )
+      const surviving = await faberAgent.didcomm.connections.findAllByOutOfBandId(response.body.outOfBandId)
       expect(surviving.map(record => record.id)).toEqual([child.id])
       expect(accepted.theirDid).toBeDefined()
     }, 120_000)
