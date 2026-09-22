@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsOptional, IsString, IsUrl, Matches } from 'class-validator'
+import { IsNotEmpty, IsOptional, IsString, IsUrl, Matches } from 'class-validator'
 
 export class SendInvitationBodyDto {
   @ApiProperty({
@@ -7,6 +7,7 @@ export class SendInvitationBodyDto {
     example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
   })
   @IsString()
+  @IsNotEmpty()
   connectionId!: string
 
   @ApiPropertyOptional({
