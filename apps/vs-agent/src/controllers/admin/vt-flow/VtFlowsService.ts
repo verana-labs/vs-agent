@@ -378,6 +378,8 @@ function toDto({ record, peerDid, connectionState }: ResolvedFlow): VtFlowRecord
       at: message.at,
       url: message.url,
     })),
+    validation: record.validation,
+    issuance: record.issuance,
     proofs: record.proofsAttach,
     credentialDigest: record.credentialDigest,
     id: record.id,

@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { VtFlowRole, VtFlowVariant, type VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  VtFlowRole,
+  VtFlowVariant,
+  type VtFlowIssuance,
+  type VtFlowState,
+  type VtFlowValidation,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { VT_CONNECTION_STATES, type VtConnectionState } from '../../v2/vt/dto'
 
@@ -24,6 +30,9 @@ export class VtFlowRecordDto {
 
   @ApiProperty({ required: false, type: [Object] })
   messages?: { type: string; text: string; at: string; url?: string }[]
+
+  @ApiProperty({ required: false, type: Object }) validation?: VtFlowValidation
+  @ApiProperty({ required: false, type: Object }) issuance?: VtFlowIssuance
   @ApiProperty({ required: false, type: [Object] }) proofs?: unknown[]
   @ApiProperty({ required: false }) credentialDigest?: string
   @ApiProperty({ required: false }) peerDid?: string

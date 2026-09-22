@@ -3,7 +3,15 @@ import type { DidCommAttachment } from '@credo-ts/didcomm'
 
 import { BaseRecord, CredoError, utils } from '@credo-ts/core'
 
-import { VtFlowMessage, VtFlowOobLink, VtFlowRole, VtFlowState, VtFlowVariant } from '../types'
+import {
+  VtFlowIssuance,
+  VtFlowMessage,
+  VtFlowOobLink,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowValidation,
+  VtFlowVariant,
+} from '../types'
 
 /** Indexed storage tags queryable through `VtFlowRepository`; the participant ids are OnboardingProcess-only and `schemaId` is DirectIssuance-only. */
 export type DefaultVtFlowTags = {
@@ -51,6 +59,8 @@ export interface VtFlowStorageProps {
 
   oobLink?: VtFlowOobLink
   messages?: VtFlowMessage[]
+  validation?: VtFlowValidation
+  issuance?: VtFlowIssuance
   proofsAttach?: DidCommAttachment[]
   credentialDigest?: string
   errorMessage?: string
@@ -88,6 +98,8 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
 
   public oobLink?: VtFlowOobLink
   public messages?: VtFlowMessage[]
+  public validation?: VtFlowValidation
+  public issuance?: VtFlowIssuance
   public proofsAttach?: DidCommAttachment[]
   public credentialDigest?: string
   public errorMessage?: string
@@ -122,6 +134,8 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
 
       this.oobLink = props.oobLink
       this.messages = props.messages
+      this.validation = props.validation
+      this.issuance = props.issuance
       this.proofsAttach = props.proofsAttach
       this.credentialDigest = props.credentialDigest
       this.errorMessage = props.errorMessage

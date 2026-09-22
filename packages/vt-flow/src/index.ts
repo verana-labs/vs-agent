@@ -1,15 +1,24 @@
 // Types: enums, events, API option interfaces
 export {
   VtFlowEventTypes,
+  VtFlowMessageType,
   VtFlowRole,
   VtFlowState,
+  VtFlowSubmission,
   VtFlowTerminalStates,
+  VtFlowTxReason,
+  VtFlowTxStatus,
   VtFlowValidatedFromStates,
   VtFlowVariant,
   isVtFlowTerminalState,
 } from './types'
 export type {
   NotifyCredentialStateChangeOptions,
+  VtFlowIssuance,
+  VtFlowMessage,
+  VtFlowOobLink,
+  VtFlowTx,
+  VtFlowValidation,
   OfferCredentialForSessionOptions,
   ProblemReportDispatchOptions,
   ResendOnboardingRequestOptions,

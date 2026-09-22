@@ -22,6 +22,31 @@ export class V2VtFlowOobLinkDto {
   @ApiProperty({ description: 'When the agent sent or received the message.' }) at!: string
 }
 
+export class V2VtFlowTxDto {
+  @ApiPropertyOptional() hash?: string
+  @ApiPropertyOptional() height?: number
+  @ApiProperty({ enum: ['SUBMITTED', 'SUCCEEDED', 'FAILED'] }) status!: string
+  @ApiPropertyOptional({ description: 'Set when the transaction failed.' }) reason?: string
+  @ApiPropertyOptional({ description: 'Raw node or chain message.' }) error?: string
+}
+
+export class V2VtFlowValidationDto {
+  @ApiProperty() decidedAt!: string
+  @ApiProperty({ enum: ['AGENT', 'OPERATOR'] }) submission!: string
+  @ApiPropertyOptional() validationFees?: number
+  @ApiPropertyOptional() issuanceFees?: number
+  @ApiPropertyOptional() verificationFees?: number
+  @ApiPropertyOptional({ description: 'Decimal between 0 and 1.' }) issuanceFeeDiscount?: number
+  @ApiPropertyOptional({ description: 'Decimal between 0 and 1.' }) verificationFeeDiscount?: number
+  @ApiPropertyOptional() effectiveUntil?: string
+  @ApiPropertyOptional() opSummaryDigest?: string
+  @ApiPropertyOptional({ type: V2VtFlowTxDto }) tx?: V2VtFlowTxDto
+}
+
+export class V2VtFlowIssuanceDto {
+  @ApiPropertyOptional({ type: V2VtFlowTxDto }) tx?: V2VtFlowTxDto
+}
+
 export class V2VtFlowMessageDto {
   @ApiProperty({ enum: ['oob-link', 'validating', 'problem-report'] }) type!: string
   @ApiProperty() text!: string
@@ -116,6 +141,18 @@ export class V2VtFlowRecordDto {
     type: [V2VtFlowMessageDto],
   })
   messages?: V2VtFlowMessageDto[]
+
+  @ApiPropertyOptional({
+    description: 'Validation decision of an Onboarding Process flow, set by validateFlow.',
+    type: V2VtFlowValidationDto,
+  })
+  validation?: V2VtFlowValidationDto
+
+  @ApiPropertyOptional({
+    description: 'Outcome of the transaction that anchors the issued credential.',
+    type: V2VtFlowIssuanceDto,
+  })
+  issuance?: V2VtFlowIssuanceDto
 
   @ApiPropertyOptional({
     description: 'Identifier of the credential exchange of the offered credential.',

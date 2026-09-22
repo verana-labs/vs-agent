@@ -77,6 +77,58 @@ export interface VtFlowStateChangedEvent extends BaseEvent {
   }
 }
 
+/** Who submitted `SetParticipantOPtoValidated`. */
+export enum VtFlowSubmission {
+  Agent = 'AGENT',
+  Operator = 'OPERATOR',
+}
+
+/** Why a flow transaction failed, per [VSA-ADM-VT-FL-VALIDATE-9]. */
+export enum VtFlowTxReason {
+  InsufficientFundsAgent = 'INSUFFICIENT_FUNDS_AGENT',
+  InsufficientFundsCorporation = 'INSUFFICIENT_FUNDS_CORPORATION',
+  FeegrantExhausted = 'FEEGRANT_EXHAUSTED',
+  FeegrantExpired = 'FEEGRANT_EXPIRED',
+  AuthorizationExpired = 'AUTHORIZATION_EXPIRED',
+  BroadcastError = 'BROADCAST_ERROR',
+  TxFailed = 'TX_FAILED',
+  TxNotFound = 'TX_NOT_FOUND',
+}
+
+export enum VtFlowTxStatus {
+  Submitted = 'SUBMITTED',
+  Succeeded = 'SUCCEEDED',
+  Failed = 'FAILED',
+}
+
+/** Outcome of a flow transaction; `height` and `reason` appear once the chain resolved it. */
+export interface VtFlowTx {
+  hash?: string
+  height?: number
+  status: VtFlowTxStatus
+  reason?: VtFlowTxReason
+  error?: string
+}
+
+/** The validation decision of an Onboarding Process flow, recorded by `validateFlow`. Discounts are decimals between 0 and 1. */
+export interface VtFlowValidation {
+  decidedAt: string
+  submission: VtFlowSubmission
+  validationFees?: number
+  issuanceFees?: number
+  verificationFees?: number
+  issuanceFeeDiscount?: number
+  verificationFeeDiscount?: number
+  effectiveUntil?: string
+  opSummaryDigest?: string
+  tx?: VtFlowTx
+}
+
+/** Outcome of the `CreateOrUpdateParticipantSession` transaction that anchors the issued credential. */
+export interface VtFlowIssuance {
+  tx?: VtFlowTx
+}
+
 /** Kind of a human-readable flow message recorded in `messages[]`. */
 export enum VtFlowMessageType {
   OobLink = 'oob-link',
