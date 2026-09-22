@@ -30,7 +30,7 @@ function makeRecord(overrides: Partial<ConstructorParameters<typeof VtFlowRecord
     variant: VtFlowVariant.OnboardingProcess,
     agentParticipantId: '0',
     walletAgentParticipantId: '0',
-    participantId: '42',
+    applicantParticipantId: '42',
     ...overrides,
   })
 }
@@ -81,7 +81,7 @@ function makeMessageContext(agentContext: unknown, theirDid = 'did:web:agent-pee
 const applicantParams = {
   connectionId: 'conn-new',
   participantSessionId: 'sess-1',
-  participantId: '42',
+  applicantParticipantId: '42',
   agentParticipantId: '0',
   walletAgentParticipantId: '0',
 }
@@ -185,7 +185,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     const existing = makeRecord({
       role: VtFlowRole.Validator,
       state: VtFlowState.Validating,
-      participantId: '43',
+      applicantParticipantId: '43',
     })
     const { service, repository, agentContext } = makeService(existing, {
       id: 'conn-old',
@@ -203,7 +203,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
       role: VtFlowRole.Validator,
       state: VtFlowState.Validating,
       variant: VtFlowVariant.DirectIssuance,
-      participantId: undefined,
+      applicantParticipantId: undefined,
       schemaId: '5',
     })
     const { service, repository, agentContext } = makeService(existing, {

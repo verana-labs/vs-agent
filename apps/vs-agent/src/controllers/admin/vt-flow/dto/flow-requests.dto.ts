@@ -66,7 +66,12 @@ export class ListFlowsV2QueryDto extends PaginationQueryDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  participantId?: string
+  applicantParticipantId?: string
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  validatorParticipantId?: string
 
   @ApiProperty({ required: false })
   @IsOptional()

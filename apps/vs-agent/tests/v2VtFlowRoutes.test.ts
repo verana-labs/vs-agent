@@ -55,7 +55,8 @@ describe('VtFlowsService v2 routes', () => {
     await service.listFlowsPage({
       role: VtFlowRole.Validator,
       flowState: VtFlowState.Validating,
-      participantId: '42',
+      applicantParticipantId: '42',
+      validatorParticipantId: '7',
       schemaId: '5',
       participantSessionId: 'sess-1',
     })
@@ -63,7 +64,8 @@ describe('VtFlowsService v2 routes', () => {
     expect(findAllByQuery).toHaveBeenCalledWith({
       role: VtFlowRole.Validator,
       flowState: VtFlowState.Validating,
-      participantId: '42',
+      applicantParticipantId: '42',
+      validatorParticipantId: '7',
       schemaId: '5',
       participantSessionId: 'sess-1',
     })

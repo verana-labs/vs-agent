@@ -282,7 +282,7 @@ describe('VtFlowOrchestrator onboarding validation', () => {
     role: VtFlowRole.Validator,
     variant: 'onboarding-process',
     state: 'AWAITING_OR',
-    participantId: '94',
+    applicantParticipantId: '94',
     claims: {},
   }
 

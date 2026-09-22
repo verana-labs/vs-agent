@@ -5,7 +5,7 @@ import { BaseRecord, CredoError, utils } from '@credo-ts/core'
 
 import { VtFlowRole, VtFlowState, VtFlowVariant } from '../types'
 
-/** Indexed storage tags queryable through `VtFlowRepository`; `participantId` is OnboardingProcess-only and `schemaId` is DirectIssuance-only. */
+/** Indexed storage tags queryable through `VtFlowRepository`; the participant ids are OnboardingProcess-only and `schemaId` is DirectIssuance-only. */
 export type DefaultVtFlowTags = {
   threadId: string
   participantSessionId: string
@@ -13,7 +13,8 @@ export type DefaultVtFlowTags = {
   role: VtFlowRole
   flowState: VtFlowState
   flowVariant: VtFlowVariant
-  participantId?: string
+  applicantParticipantId?: string
+  validatorParticipantId?: string
   schemaId?: string
   credentialExchangeRecordId?: string
   subprotocolThid?: string
@@ -38,7 +39,8 @@ export interface VtFlowStorageProps {
   walletAgentParticipantId: string
   issuerParticipantId?: number
 
-  participantId?: string
+  applicantParticipantId?: string
+  validatorParticipantId?: string
   schemaId?: string
   claims?: Record<string, unknown>
 
@@ -71,7 +73,8 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
   public walletAgentParticipantId!: string
   public issuerParticipantId?: number
 
-  public participantId?: string
+  public applicantParticipantId?: string
+  public validatorParticipantId?: string
   public schemaId?: string
 
   public claims?: Record<string, unknown>
@@ -106,7 +109,8 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
       this.walletAgentParticipantId = props.walletAgentParticipantId
       this.issuerParticipantId = props.issuerParticipantId
 
-      this.participantId = props.participantId
+      this.applicantParticipantId = props.applicantParticipantId
+      this.validatorParticipantId = props.validatorParticipantId
       this.schemaId = props.schemaId
       this.claims = props.claims
 
@@ -130,7 +134,8 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
       role: this.role,
       flowState: this.state,
       flowVariant: this.variant,
-      participantId: this.participantId,
+      applicantParticipantId: this.applicantParticipantId,
+      validatorParticipantId: this.validatorParticipantId,
       schemaId: this.schemaId,
       credentialExchangeRecordId: this.credentialExchangeRecordId,
       subprotocolThid: this.subprotocolThid,

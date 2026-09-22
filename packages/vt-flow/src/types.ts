@@ -80,7 +80,8 @@ export interface VtFlowStateChangedEvent extends BaseEvent {
 export interface SendOnboardingRequestOptions {
   connectionId: string
   participantSessionId?: string
-  participantId: string
+  applicantParticipantId: string
+  validatorParticipantId?: string
   agentParticipantId: string
   walletAgentParticipantId: string
   claims?: Record<string, unknown>

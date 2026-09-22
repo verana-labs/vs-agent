@@ -187,7 +187,7 @@ export async function reconcileVtFlowRecordsForParticipant(
 ): Promise<void> {
   const agentContext = agent.context
   const service = agentContext.dependencyManager.resolve(VtFlowService)
-  const records = await service.findAllByQuery(agentContext, { participantId })
+  const records = await service.findAllByQuery(agentContext, { applicantParticipantId: participantId })
 
   for (const record of records) {
     try {
@@ -311,7 +311,7 @@ export async function removeHolderTrustCredentialIfRevoked(
 
   const agentContext = agent.context
   const service = agentContext.dependencyManager.resolve(VtFlowService)
-  const records = await service.findAllByQuery(agentContext, { participantId })
+  const records = await service.findAllByQuery(agentContext, { applicantParticipantId: participantId })
   for (const record of records) {
     if (record.role !== VtFlowRole.Applicant || !record.credentialExchangeRecordId) continue
     try {

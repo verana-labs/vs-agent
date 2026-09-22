@@ -44,7 +44,7 @@ describe('VtFlowsService flow admin routes', () => {
     expect(findAllByQuery).toHaveBeenCalledWith({
       role: VtFlowRole.Validator,
       flowState: VtFlowState.Validating,
-      participantId: '42',
+      applicantParticipantId: '42',
       schemaId: '5',
       participantSessionId: 'sess-1',
     })

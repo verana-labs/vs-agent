@@ -13,7 +13,8 @@ export class VtFlowRecordDto {
   @ApiProperty() state!: VtFlowState
   @ApiProperty() agentParticipantId!: string
   @ApiProperty() walletAgentParticipantId!: string
-  @ApiProperty({ required: false }) participantId?: string
+  @ApiProperty({ required: false }) applicantParticipantId?: string
+  @ApiProperty({ required: false }) validatorParticipantId?: string
   @ApiProperty({ required: false }) schemaId?: string
   @ApiProperty({ required: false, type: Object }) claims?: Record<string, unknown>
   @ApiProperty({ required: false }) credentialExchangeRecordId?: string

@@ -62,11 +62,14 @@ export class V2VtFlowRecordDto {
   peerDid?: string
 
   @ApiPropertyOptional({
-    description:
-      'Participant identifier of the remote peer: the validator when the agent is the applicant, ' +
-      'the applicant when the agent is the validator.',
+    description: 'Participant identifier of the applicant entry being onboarded.',
   })
-  participantId?: string
+  applicantParticipantId?: string
+
+  @ApiPropertyOptional({
+    description: 'Participant identifier of the validator entry the applicant is onboarding under.',
+  })
+  validatorParticipantId?: string
 
   @ApiPropertyOptional({
     description: 'Credential schema identifier of the flow.',

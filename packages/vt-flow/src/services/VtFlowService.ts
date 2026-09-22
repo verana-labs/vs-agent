@@ -40,7 +40,8 @@ import {
 export interface CreateOnboardingRequestParams {
   connectionId: string
   participantSessionId: string
-  participantId: string
+  applicantParticipantId: string
+  validatorParticipantId?: string
   agentParticipantId: string
   walletAgentParticipantId: string
   claims?: Record<string, unknown>
@@ -94,7 +95,7 @@ export class VtFlowService {
     params: CreateOnboardingRequestParams,
   ): Promise<{ message: OnboardingRequestMessage; record: VtFlowRecord }> {
     const message = new OnboardingRequestMessage({
-      participantId: params.participantId,
+      participantId: params.applicantParticipantId,
       participantSessionId: params.participantSessionId,
       agentParticipantId: params.agentParticipantId,
       walletAgentParticipantId: params.walletAgentParticipantId,
@@ -129,7 +130,8 @@ export class VtFlowService {
       variant: VtFlowVariant.OnboardingProcess,
       agentParticipantId: params.agentParticipantId,
       walletAgentParticipantId: params.walletAgentParticipantId,
-      participantId: params.participantId,
+      applicantParticipantId: params.applicantParticipantId,
+      validatorParticipantId: params.validatorParticipantId,
       claims: params.claims,
     })
 
@@ -184,10 +186,11 @@ export class VtFlowService {
     ) {
       throw new CredoError(`vt-flow: flow '${record.id}' in state ${record.state} cannot be re-attached`)
     }
-    if (!record.participantId) throw new CredoError(`vt-flow: flow '${record.id}' has no participant_id`)
+    if (!record.applicantParticipantId)
+      throw new CredoError(`vt-flow: flow '${record.id}' has no participant_id`)
 
     const message = new OnboardingRequestMessage({
-      participantId: record.participantId,
+      participantId: record.applicantParticipantId,
       participantSessionId: record.participantSessionId,
       agentParticipantId: record.agentParticipantId,
       walletAgentParticipantId: record.walletAgentParticipantId,
@@ -238,7 +241,7 @@ export class VtFlowService {
           `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
         )
       }
-      if (existing.participantId !== message.participantId) {
+      if (existing.applicantParticipantId !== message.participantId) {
         throw new CredoError(
           `vt-flow: participant_id '${message.participantId}' does not match the flow of participant_session_id '${message.participantSessionId}'`,
         )
@@ -272,7 +275,7 @@ export class VtFlowService {
       variant: VtFlowVariant.OnboardingProcess,
       agentParticipantId: message.agentParticipantId,
       walletAgentParticipantId: message.walletAgentParticipantId,
-      participantId: message.participantId,
+      applicantParticipantId: message.participantId,
       claims: message.claims,
       proofsAttach: message.proofsAttach,
     })

@@ -104,10 +104,10 @@ export class EcsBootstrapService {
     })
     for (const record of pending) {
       const connection = await this.agent.didcomm.connections.findById(record.connectionId)
-      if (!connection?.isReady && record.participantId) {
+      if (!connection?.isReady && record.applicantParticipantId) {
         try {
           await new VtFlowOrchestrator(this.agent).startOnboardingProcess({
-            applicantParticipantId: Number(record.participantId),
+            applicantParticipantId: Number(record.applicantParticipantId),
           })
           this.logger.info(`[EcsBootstrap] reconnected flow ${record.id} so the validator can offer again`)
         } catch (error) {
@@ -158,7 +158,7 @@ export class EcsBootstrapService {
     const api = this.agent.dependencyManager.resolve(VtFlowApi)
     const [latest] = (
       await api.findAllByQuery({
-        participantId: String(participant.id),
+        applicantParticipantId: String(participant.id),
         role: VtFlowRole.Applicant,
         flowVariant: VtFlowVariant.OnboardingProcess,
       })
