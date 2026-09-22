@@ -10,7 +10,7 @@ import {
   DidCommOutOfBandRepository,
 } from '@credo-ts/didcomm'
 import { Inject, Injectable } from '@nestjs/common'
-import { findMetadataEntry, sendMessage } from '@verana-labs/vs-agent-sdk'
+import { ecsServiceClaims, sendMessage } from '@verana-labs/vs-agent-sdk'
 
 import { unknownConnection } from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
@@ -43,7 +43,7 @@ export class InvitationsService {
 
     const isV2 = (connection.didcommVersion ?? 'v1') === 'v2'
     const { did, imageUrl, goal, goalCode } = options
-    const label = did ? options.label : (options.label ?? (await this.ecsServiceName(agent)))
+    const label = did ? options.label : (options.label ?? (await ecsServiceClaims(agent))?.name)
 
     if (did) {
       if (isV2) {
@@ -100,19 +100,5 @@ export class InvitationsService {
     })
 
     return sendMessage(agent, connection, new DidCommShareMediaMessage({ description: label, items: [item] }))
-  }
-
-  private async ecsServiceName(agent: VsAgent<BaseAgentModules>): Promise<string | undefined> {
-    if (!agent.did) return undefined
-    const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
-    if (!didRecord) return undefined
-
-    const entry = findMetadataEntry(
-      didRecord,
-      '_vt/vtc',
-      `${agent.publicApiBaseUrl}/vt/ecs-service-vtc-vp.json`,
-    )
-    const name = entry?.credential?.credentialSubject?.name
-    return typeof name === 'string' ? name : undefined
   }
 }

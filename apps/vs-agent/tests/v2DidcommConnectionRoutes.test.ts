@@ -431,9 +431,9 @@ describe('v2 didcomm invitation routes', () => {
       {
         metadata: {
           get: () => ({
-            'https://ecosystem.test/vt/ecs-service-vtjsc-vp.json': {
+            'https://ecosystem.test/vt/schemas-service-vtc-vp.json': {
               credential: { credentialSubject: { name: 'Acme Support' } },
-              verifiablePresentation: { id: 'https://agent.test/vt/ecs-service-vtc-vp.json' },
+              didDocumentServiceId: 'did:webvh:agent.test#vpr-schemas-service-vtc-vp',
             },
           }),
         },
