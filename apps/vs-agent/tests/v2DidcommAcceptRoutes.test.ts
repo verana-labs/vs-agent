@@ -1,3 +1,4 @@
+import type { JsonObject } from '@credo-ts/core'
 import type { INestApplication } from '@nestjs/common'
 import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
@@ -5,9 +6,9 @@ import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 // itself into the shared module on import.
 import '@hyperledger/anoncreds-nodejs'
 
+import { DidCommMediaSharingService } from '@2060.io/credo-ts-didcomm-media-sharing'
 import { LogLevel } from '@credo-ts/core'
 import {
-  DidCommBasicMessageRole,
   DidCommHandshakeProtocol,
   DidCommMessageSender,
   DidCommOutOfBandInvitation,
@@ -803,25 +804,32 @@ describe('v2 didcomm accept routes, over two agents', () => {
       v2Parent = await untilFaberConnection({ outOfBandId: record.id })
     }, 60_000)
 
-    const untilAliceReceivesInvitationUrl = async (known: Set<string>) => {
+    const aliceMediaSharing = () =>
+      aliceAgent.dependencyManager.resolve(DidCommMediaSharingService) as DidCommMediaSharingService
+
+    const aliceSharedMedia = async () =>
+      aliceMediaSharing().findAllByQuery(aliceAgent.context, { connectionId: aliceV2Parent.id })
+
+    const aliceKnownShares = async () => new Set((await aliceSharedMedia()).map(record => record.id))
+
+    /**
+     * The invitation that Faber sends travels in the attachment of a share-media message, so Alice
+     * reads it from the media sharing record that the inbound message creates.
+     */
+    const untilAliceReceivesInvitation = async (known: Set<string>) => {
       for (let attempt = 0; attempt < 80; attempt++) {
-        const records = await aliceAgent.didcomm.basicMessages.findAllByQuery({
-          connectionId: aliceV2Parent.id,
-          role: DidCommBasicMessageRole.Receiver,
-        })
-        const match = records.find(record => !known.has(record.id))
-        if (match) return match.content
+        const record = (await aliceSharedMedia()).find(shared => !known.has(shared.id))
+        if (record) {
+          expect(record.items).toHaveLength(1)
+          const [item] = record.items ?? []
+          expect(item.mimeType).toBe('application/didcomm-plain+json')
+          expect(item.uri).toBeUndefined()
+          return { record, invitation: DidCommOutOfBandInvitationV2.fromJson(item.json as JsonObject) }
+        }
         await new Promise(resolve => setTimeout(resolve, 250))
       }
       throw new Error('Alice received no invitation on the v2 connection')
     }
-
-    const aliceKnownMessages = async () =>
-      new Set(
-        (await aliceAgent.didcomm.basicMessages.findAllByQuery({ connectionId: aliceV2Parent.id })).map(
-          r => r.id,
-        ),
-      )
 
     const sentBy = async (app: () => request.SuperTest<request.Test>, body: Record<string, unknown>) => {
       const sendMessage = vi.spyOn(faberAgent.dependencyManager.resolve(DidCommMessageSender), 'sendMessage')
@@ -833,10 +841,10 @@ describe('v2 didcomm accept routes, over two agents', () => {
       }
     }
 
-    it('opens a sub-connection over a v2 connection from a basic message that carries the OOB 2.0 URL', async () => {
+    it('opens a sub-connection over a v2 connection from the attachment of a share-media message', async () => {
       const parent = v2Parent
       const oobCount = (await faberAgent.didcomm.oob.getAll()).length
-      const known = await aliceKnownMessages()
+      const known = await aliceKnownShares()
 
       const response = await faber().post('/v2/didcomm/invitations').send({
         connectionId: parent.id,
@@ -849,20 +857,21 @@ describe('v2 didcomm accept routes, over two agents', () => {
       expect(response.body.outOfBandId).toBeDefined()
       expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount + 1)
 
-      const sent = await faber().get(`/v2/didcomm/basic-messages?connectionId=${parent.id}&role=sender`)
-      expect(sent.body.items.map((item: { id: string }) => item.id)).toContain(response.body.id)
+      const { record, invitation } = await untilAliceReceivesInvitation(known)
+      expect(record.description).toBe('Support')
+      expect(record.items?.[0].metadata).toEqual({
+        title: 'Support',
+        icon: 'https://faber.example/support.png',
+      })
 
-      const url = await untilAliceReceivesInvitationUrl(known)
-      expect(url).toMatch(/^https:\/\/faber\?_oob=/)
-      const invitation = DidCommOutOfBandInvitationV2.fromUrl(url)
       expect(invitation.from).toMatch(/^did:peer:/)
       expect(invitation.from).not.toBe(faberDid())
       expect(invitation.body).toEqual({ goal: 'Open a support chat', accept: ['didcomm/v2'] })
-      expect(JSON.stringify(invitation.toJSON())).not.toMatch(/Support|support\.png/)
 
-      const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitationFromUrl(url, {
-        label: 'Alice',
-      })
+      const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitationFromUrl(
+        invitation.toUrl({ domain: 'https://alice' }),
+        { label: 'Alice' },
+      )
       if (!connectionRecord) throw new Error('Alice did not open a connection from the invitation')
       await aliceAgent.didcomm.basicMessages.sendMessage(connectionRecord.id, 'hello over the sub-connection')
 
@@ -909,7 +918,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     it('refers the peer to another DID without creating a record', async () => {
       const parent = v2Parent
       const oobCount = (await faberAgent.didcomm.oob.getAll()).length
-      const known = await aliceKnownMessages()
+      const known = await aliceKnownShares()
 
       const response = await faber().post('/v2/didcomm/invitations').send({
         connectionId: parent.id,
@@ -921,7 +930,8 @@ describe('v2 didcomm accept routes, over two agents', () => {
       expect(response.body).toEqual({ id: expect.any(String) })
       expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount)
 
-      const invitation = DidCommOutOfBandInvitationV2.fromUrl(await untilAliceReceivesInvitationUrl(known))
+      const { record, invitation } = await untilAliceReceivesInvitation(known)
+      expect(record.description).toBeUndefined()
       expect(invitation.from).toBe('did:webvh:verifier')
       expect(invitation.toV2Plaintext().body).toEqual({ goal_code: 'verify', accept: ['didcomm/v2'] })
     }, 120_000)

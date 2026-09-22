@@ -21,8 +21,9 @@ export class SendInvitationBodyDto {
 
   @ApiPropertyOptional({
     description:
-      'Text the peer shows for the invitation. Out-of-Band 1.1 only. Sub-connection default: the ' +
-      '`name` of the ECS-Service credential of the agent, omitted when it holds none.',
+      'Text the peer shows for the invitation. On a v2 connection it travels as the `description` ' +
+      'of the share-media message and as the `metadata.title` of its item. Sub-connection default: ' +
+      'the `name` of the ECS-Service credential of the agent, omitted when it holds none.',
     example: 'My Service',
   })
   @IsOptional()
@@ -30,7 +31,9 @@ export class SendInvitationBodyDto {
   label?: string
 
   @ApiPropertyOptional({
-    description: 'URL of an image the peer shows for the invitation. Out-of-Band 1.1 only.',
+    description:
+      'URL of an image the peer shows for the invitation. On a v2 connection it travels as the ' +
+      '`metadata.icon` of the item of the share-media message.',
     example: 'https://example.com/logo.png',
   })
   @IsOptional()
@@ -51,8 +54,8 @@ export class SendInvitationBodyDto {
 export class SendInvitationResponseDto {
   @ApiProperty({
     description:
-      'Identifier of the sent message: the Out-of-Band 1.1 message on a v1 connection, the basic ' +
-      'message record that carries the invitation URL on a v2 connection.',
+      'Identifier of the sent message: the Out-of-Band 1.1 invitation on a v1 connection, the ' +
+      'share-media message that carries the Out-of-Band 2.0 invitation on a v2 connection.',
     example: 'b6a2f0d4-7c1e-4f6a-9d2b-0f3c5e8a1b7d',
   })
   id!: string

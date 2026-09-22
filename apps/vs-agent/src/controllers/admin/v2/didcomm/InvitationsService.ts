@@ -1,19 +1,21 @@
 import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { JsonValue } from '@credo-ts/core'
 
+import { DidCommShareMediaMessage, SharedMediaItem } from '@2060.io/credo-ts-didcomm-media-sharing'
 import {
   DidCommConnectionRecord,
   DidCommHandshakeProtocol,
-  DidCommMessageSender,
-  DidCommOutboundMessageContext,
   DidCommOutOfBandInvitation,
   DidCommOutOfBandInvitationV2,
   DidCommOutOfBandRepository,
 } from '@credo-ts/didcomm'
 import { Inject, Injectable } from '@nestjs/common'
-import { findMetadataEntry } from '@verana-labs/vs-agent-sdk'
+import { findMetadataEntry, sendMessage } from '@verana-labs/vs-agent-sdk'
 
 import { unknownConnection } from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
+
+const invitationMediaType = 'application/didcomm-plain+json'
 
 export interface SendInvitationOptions {
   connectionId: string
@@ -41,21 +43,28 @@ export class InvitationsService {
 
     const isV2 = (connection.didcommVersion ?? 'v1') === 'v2'
     const { did, imageUrl, goal, goalCode } = options
+    const label = did ? options.label : (options.label ?? (await this.ecsServiceName(agent)))
 
     if (did) {
-      const invitation = isV2
-        ? new DidCommOutOfBandInvitationV2({ from: did, body: { goal, goalCode, accept: ['didcomm/v2'] } })
-        : new DidCommOutOfBandInvitation({
-            label: options.label,
-            imageUrl,
-            goal,
-            goalCode,
-            services: [did],
-            handshakeProtocols: ['https://didcomm.org/didexchange/1.0'],
-          })
-      if (!isV2) invitation.setThread({ parentThreadId: did })
+      if (isV2) {
+        const invitation = new DidCommOutOfBandInvitationV2({
+          from: did,
+          body: { goal, goalCode, accept: ['didcomm/v2'] },
+        })
+        return { id: await this.shareInvitation(agent, connection, invitation, label, imageUrl) }
+      }
 
-      return { id: await this.send(agent, connection, invitation) }
+      const invitation = new DidCommOutOfBandInvitation({
+        label,
+        imageUrl,
+        goal,
+        goalCode,
+        services: [did],
+        handshakeProtocols: ['https://didcomm.org/didexchange/1.0'],
+      })
+      invitation.setThread({ parentThreadId: did })
+
+      return { id: await sendMessage(agent, connection, invitation) }
     }
 
     const outOfBandRecord = await agent.didcomm.oob.createInvitation({
@@ -63,38 +72,34 @@ export class InvitationsService {
       multiUseInvitation: false,
       goal,
       goalCode,
-      ...(isV2
-        ? {}
-        : {
-            label: options.label ?? (await this.ecsServiceName(agent)),
-            imageUrl,
-            handshakeProtocols: [DidCommHandshakeProtocol.DidExchange],
-          }),
+      ...(isV2 ? {} : { label, imageUrl, handshakeProtocols: [DidCommHandshakeProtocol.DidExchange] }),
     })
     outOfBandRecord.setTag('parentConnectionId', connection.id)
     await agent.dependencyManager.resolve(DidCommOutOfBandRepository).update(agent.context, outOfBandRecord)
 
-    const invitation = outOfBandRecord.outOfBandInvitation.v2Invitation ?? outOfBandRecord.outOfBandInvitation
-    return { id: await this.send(agent, connection, invitation), outOfBandId: outOfBandRecord.id }
+    const { v2Invitation } = outOfBandRecord.outOfBandInvitation
+    const id = v2Invitation
+      ? await this.shareInvitation(agent, connection, v2Invitation, label, imageUrl)
+      : await sendMessage(agent, connection, outOfBandRecord.outOfBandInvitation)
+
+    return { id, outOfBandId: outOfBandRecord.id }
   }
 
-  private async send(
+  private async shareInvitation(
     agent: VsAgent<BaseAgentModules>,
     connection: DidCommConnectionRecord,
-    invitation: DidCommOutOfBandInvitation | DidCommOutOfBandInvitationV2,
+    invitation: DidCommOutOfBandInvitationV2,
+    label?: string,
+    imageUrl?: string,
   ): Promise<string> {
-    if (invitation instanceof DidCommOutOfBandInvitationV2) {
-      const record = await agent.didcomm.basicMessages.sendMessage(
-        connection.id,
-        invitation.toUrl({ domain: agent.publicApiBaseUrl }),
-      )
-      return record.id
-    }
+    const metadata = { ...(label && { title: label }), ...(imageUrl && { icon: imageUrl }) }
+    const item = new SharedMediaItem({
+      json: invitation.toV2Plaintext() as unknown as JsonValue,
+      mimeType: invitationMediaType,
+      ...(Object.keys(metadata).length > 0 && { metadata }),
+    })
 
-    await agent.context.dependencyManager
-      .resolve(DidCommMessageSender)
-      .sendMessage(new DidCommOutboundMessageContext(invitation, { agentContext: agent.context, connection }))
-    return invitation.id
+    return sendMessage(agent, connection, new DidCommShareMediaMessage({ description: label, items: [item] }))
   }
 
   private async ecsServiceName(agent: VsAgent<BaseAgentModules>): Promise<string | undefined> {

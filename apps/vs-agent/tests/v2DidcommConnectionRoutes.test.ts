@@ -1,7 +1,9 @@
 import type { INestApplication } from '@nestjs/common'
 
+import { DidCommShareMediaMessage } from '@2060.io/credo-ts-didcomm-media-sharing'
 import { RecordNotFoundError } from '@credo-ts/core'
 import {
+  DidCommAttachment,
   DidCommHandshakeProtocol,
   DidCommOutOfBandInvitation,
   DidCommOutOfBandInvitationV2,
@@ -250,11 +252,18 @@ describe('v2 didcomm invitation routes', () => {
 
   const sentMessage = () => messageSender.sendMessage.mock.calls[0][0].message
 
-  const sentInvitationUrl = () => {
-    const [connectionId, url] = basicMessages.sendMessage.mock.calls[0]
-    expect(connectionId).toBe('parent')
-    expect(url).toMatch(/^https:\/\/agent\.test\?_oob=/)
-    return DidCommOutOfBandInvitationV2.fromUrl(url)
+  const sharedInvitation = () => {
+    const message = sentMessage()
+    expect(message).toBeInstanceOf(DidCommShareMediaMessage)
+
+    expect(message.items).toHaveLength(1)
+    const [item] = message.items
+    const attachment = message.appendedAttachments?.find(
+      (appended: DidCommAttachment) => appended.id === item.attachmentId,
+    )
+    expect(attachment?.mimeType).toBe('application/didcomm-plain+json')
+
+    return { message, item, invitation: attachment?.data.json }
   }
 
   const send = (body: Record<string, unknown>) =>
@@ -327,7 +336,7 @@ describe('v2 didcomm invitation routes', () => {
     )
   })
 
-  it('sends an OOB 2.0 sub-connection invitation on a v2 connection as a basic message URL, without label or imageUrl', async () => {
+  it('carries the OOB 2.0 sub-connection invitation in the attachment of a share-media message', async () => {
     connections.findById.mockResolvedValue(parentConnection('v2'))
 
     const response = await send({
@@ -338,7 +347,6 @@ describe('v2 didcomm invitation routes', () => {
     })
 
     expect(response.status).toBe(201)
-    expect(response.body).toEqual({ id: 'bm-1', outOfBandId: 'oob-1' })
 
     const [config] = oob.createInvitation.mock.calls[0]
     expect(config).toMatchObject({ didCommVersion: 'v2', multiUseInvitation: false, goal: 'chat' })
@@ -346,8 +354,26 @@ describe('v2 didcomm invitation routes', () => {
     expect(config).not.toHaveProperty('imageUrl')
     expect(config).not.toHaveProperty('ourDid')
 
-    expect(messageSender.sendMessage).not.toHaveBeenCalled()
-    expect(sentInvitationUrl().from).toBe('did:peer:4zQmFresh')
+    const { message, item, invitation } = sharedInvitation()
+    expect(response.body).toEqual({ id: message.id, outOfBandId: 'oob-1' })
+    expect(invitation).toMatchObject({
+      type: 'https://didcomm.org/out-of-band/2.0/invitation',
+      from: 'did:peer:4zQmFresh',
+    })
+
+    expect(message.description).toBe('Support')
+    expect(item.metadata).toEqual({ title: 'Support', icon: 'https://agent.test/support.png' })
+    expect(basicMessages.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('omits the description and the item metadata of a share-media message that has no label and no imageUrl', async () => {
+    connections.findById.mockResolvedValue(parentConnection('v2'))
+
+    await send({ connectionId: 'parent' })
+
+    const { message, item } = sharedInvitation()
+    expect(message.description).toBeUndefined()
+    expect(item.metadata).toBeUndefined()
   })
 
   it('sends an OOB 1.1 referral whose only service is the did and creates no record', async () => {
@@ -372,7 +398,7 @@ describe('v2 didcomm invitation routes', () => {
     expect(json['~thread'].pthid).toBe('did:webvh:verifier.test')
   })
 
-  it('sends an OOB 2.0 referral as a basic message URL with the did as from and no label, imageUrl or thread', async () => {
+  it('sends an OOB 2.0 referral whose from is the did, in a share-media message and with no thread', async () => {
     connections.findById.mockResolvedValue(parentConnection('v2'))
 
     const response = await send({
@@ -385,18 +411,22 @@ describe('v2 didcomm invitation routes', () => {
     })
 
     expect(response.status).toBe(201)
-    expect(response.body).toEqual({ id: 'bm-1' })
     expect(oob.createInvitation).not.toHaveBeenCalled()
-    expect(messageSender.sendMessage).not.toHaveBeenCalled()
+    expect(basicMessages.sendMessage).not.toHaveBeenCalled()
 
-    const json = sentInvitationUrl().toV2Plaintext()
-    expect(json.from).toBe('did:webvh:verifier.test')
-    expect(json.body).toEqual({ goal: 'verify you', goal_code: 'verify', accept: ['didcomm/v2'] })
-    expect(JSON.stringify(json)).not.toMatch(/label|imageUrl|pthid/)
+    const { message, item, invitation } = sharedInvitation()
+    expect(response.body).toEqual({ id: message.id })
+    expect(invitation).toMatchObject({
+      from: 'did:webvh:verifier.test',
+      body: { goal: 'verify you', goal_code: 'verify', accept: ['didcomm/v2'] },
+    })
+    expect(JSON.stringify(invitation)).not.toMatch(/label|imageUrl|pthid/)
+
+    expect(message.description).toBe('Verifier')
+    expect(item.metadata).toEqual({ title: 'Verifier', icon: 'https://verifier.test/logo.png' })
   })
 
-  it('defaults the OOB 1.1 label to the name of the ECS-Service credential, and omits it otherwise', async () => {
-    connections.findById.mockResolvedValue(parentConnection())
+  it('defaults the label of a sub-connection to the name of the ECS-Service credential, on both envelopes', async () => {
     dids.getCreatedDids.mockResolvedValue([
       {
         metadata: {
@@ -410,12 +440,23 @@ describe('v2 didcomm invitation routes', () => {
       },
     ])
 
+    connections.findById.mockResolvedValue(parentConnection())
     await send({ connectionId: 'parent' })
     expect(oob.createInvitation.mock.calls[0][0].label).toBe('Acme Support')
 
-    dids.getCreatedDids.mockResolvedValue([{ metadata: { get: () => undefined } }])
+    vi.clearAllMocks()
+    connections.findById.mockResolvedValue(parentConnection('v2'))
     await send({ connectionId: 'parent' })
-    expect(oob.createInvitation.mock.calls[1][0].label).toBeUndefined()
+    expect(oob.createInvitation.mock.calls[0][0]).not.toHaveProperty('label')
+    expect(sharedInvitation().message.description).toBe('Acme Support')
+  })
+
+  it('omits the label of a sub-connection when the agent holds no ECS-Service credential', async () => {
+    connections.findById.mockResolvedValue(parentConnection())
+    dids.getCreatedDids.mockResolvedValue([{ metadata: { get: () => undefined } }])
+
+    await send({ connectionId: 'parent' })
+    expect(oob.createInvitation.mock.calls[0][0].label).toBeUndefined()
   })
 
   it('reports an unknown connection as UNKNOWN_ID and sends nothing', async () => {
