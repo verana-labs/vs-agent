@@ -364,7 +364,7 @@ describe('VtFlowService.sendValidatingForSession', () => {
     const pending = makeRecord({
       role: VtFlowRole.Validator,
       state: VtFlowState.OobPending,
-      oobLink: { url: 'https://x', description: 'd', at: new Date() },
+      oobLink: { url: 'https://x', description: 'd', at: new Date().toISOString() },
     })
     const { service } = makeService(pending)
 

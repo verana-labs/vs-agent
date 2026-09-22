@@ -77,12 +77,27 @@ export interface VtFlowStateChangedEvent extends BaseEvent {
   }
 }
 
+/** Kind of a human-readable flow message recorded in `messages[]`. */
+export enum VtFlowMessageType {
+  OobLink = 'oob-link',
+  Validating = 'validating',
+  ProblemReport = 'problem-report',
+}
+
+/** One human-readable message of a flow; `url` is set for an `oob-link` only. Timestamps are ISO 8601, the record is stored as JSON. */
+export interface VtFlowMessage {
+  type: VtFlowMessageType
+  text: string
+  at: string
+  url?: string
+}
+
 /** The outstanding `oob-link` of a flow; `at` is when the agent sent or received the message. */
 export interface VtFlowOobLink {
   url: string
   description: string
-  expiresAt?: Date
-  at: Date
+  expiresAt?: string
+  at: string
 }
 
 export interface SendOnboardingRequestOptions {

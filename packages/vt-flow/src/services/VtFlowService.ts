@@ -29,6 +29,8 @@ import { VtFlowRecord, VtFlowRepository } from '../repository'
 import { peerAnchorDid } from '../utils'
 import {
   VtFlowEventTypes,
+  type VtFlowMessage,
+  VtFlowMessageType,
   VtFlowRole,
   VtFlowState,
   VtFlowValidatedFromStates,
@@ -357,9 +359,15 @@ export class VtFlowService {
     record.oobLink = {
       url: message.url,
       description: message.description,
-      expiresAt: message.expiresTime,
-      at: new Date(),
+      expiresAt: message.expiresTime?.toISOString(),
+      at: new Date().toISOString(),
     }
+    this.appendMessage(record, {
+      type: VtFlowMessageType.OobLink,
+      text: message.description,
+      at: record.oobLink.at,
+      url: message.url,
+    })
     await this.updateState(agentContext, record, VtFlowState.OobPending)
     return record
   }
@@ -375,6 +383,15 @@ export class VtFlowService {
     this.logger.debug(
       `[vt-flow] validating received for session ${record.threadId}: ${message.comment ?? '(no comment)'}`,
     )
+
+    if (record.role === VtFlowRole.Applicant && message.comment) {
+      this.appendMessage(record, {
+        type: VtFlowMessageType.Validating,
+        text: message.comment,
+        at: new Date().toISOString(),
+      })
+      await this.updateRecord(agentContext, record)
+    }
 
     if (
       record.role === VtFlowRole.Applicant &&
@@ -579,9 +596,15 @@ export class VtFlowService {
     record.oobLink = {
       url: params.url,
       description: params.description,
-      expiresAt: params.expiresTime,
-      at: new Date(),
+      expiresAt: params.expiresTime?.toISOString(),
+      at: new Date().toISOString(),
     }
+    this.appendMessage(record, {
+      type: VtFlowMessageType.OobLink,
+      text: params.description,
+      at: record.oobLink.at,
+      url: params.url,
+    })
     await this.updateState(agentContext, record, VtFlowState.OobPending)
 
     return { record, message }
@@ -829,6 +852,11 @@ export class VtFlowService {
     await this.repository.update(agentContext, record)
 
     this.emitStateChanged(agentContext, record, previousState)
+  }
+
+  /** Append to `messages[]`, which a validator fills with what it sent and an applicant with what it received. */
+  public appendMessage(record: VtFlowRecord, message: VtFlowMessage): void {
+    record.messages = [...(record.messages ?? []), message]
   }
 
   /** Persist record changes without state-transition semantics (no event emitted). */

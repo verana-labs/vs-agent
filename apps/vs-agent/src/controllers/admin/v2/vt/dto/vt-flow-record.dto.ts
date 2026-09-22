@@ -22,6 +22,13 @@ export class V2VtFlowOobLinkDto {
   @ApiProperty({ description: 'When the agent sent or received the message.' }) at!: string
 }
 
+export class V2VtFlowMessageDto {
+  @ApiProperty({ enum: ['oob-link', 'validating', 'problem-report'] }) type!: string
+  @ApiProperty() text!: string
+  @ApiProperty() at!: string
+  @ApiPropertyOptional({ description: 'Set for an oob-link only.' }) url?: string
+}
+
 export class V2VtFlowRecordDto {
   @ApiProperty({ description: 'Identifier of the flow record.' })
   id!: string
@@ -102,6 +109,13 @@ export class V2VtFlowRecordDto {
       'An expired link stays on the record until then and pendingAction reports it.',
   })
   oobLink?: V2VtFlowOobLinkDto
+
+  @ApiPropertyOptional({
+    description:
+      'Human-readable messages of the flow, in order. A validator lists what it sent, an applicant what it received.',
+    type: [V2VtFlowMessageDto],
+  })
+  messages?: V2VtFlowMessageDto[]
 
   @ApiPropertyOptional({
     description: 'Identifier of the credential exchange of the offered credential.',
