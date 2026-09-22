@@ -2,6 +2,7 @@
 export {
   VtFlowEventTypes,
   VtFlowMessageType,
+  VtFlowPendingAction,
   VtFlowRole,
   VtFlowState,
   VtFlowSubmission,

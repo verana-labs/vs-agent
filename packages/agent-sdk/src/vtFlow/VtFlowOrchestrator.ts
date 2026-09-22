@@ -165,6 +165,7 @@ export class VtFlowOrchestrator {
       connectionId,
       participantSessionId: input.participantSessionId ?? latest?.participantSessionId ?? utils.uuid(),
       applicantParticipantId: String(holderParticipant.id),
+      applicantParticipantRole: Number(holderParticipant.role),
       validatorParticipantId: String(holderParticipant.validatorParticipantId),
       agentParticipantId: String(this.options.agentParticipantId ?? 0),
       walletAgentParticipantId: String(this.options.walletAgentParticipantId ?? 0),

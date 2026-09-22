@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  VtFlowPendingAction,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowVariant,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { PageDto } from '../../../../../common'
 
@@ -141,6 +146,12 @@ export class V2VtFlowRecordDto {
     type: [V2VtFlowMessageDto],
   })
   messages?: V2VtFlowMessageDto[]
+
+  @ApiProperty({
+    enum: VtFlowPendingAction,
+    description: 'The party that must act for the flow to progress.',
+  })
+  pendingAction!: VtFlowPendingAction
 
   @ApiPropertyOptional({
     description: 'Validation decision of an Onboarding Process flow, set by validateFlow.',

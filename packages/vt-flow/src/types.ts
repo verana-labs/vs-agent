@@ -77,6 +77,15 @@ export interface VtFlowStateChangedEvent extends BaseEvent {
   }
 }
 
+/** The party that must act for a flow to progress, per the [VSA-ADM-VT-FL-LIST] pendingAction table. */
+export enum VtFlowPendingAction {
+  Applicant = 'APPLICANT',
+  Validator = 'VALIDATOR',
+  Agent = 'AGENT',
+  Chain = 'CHAIN',
+  None = 'NONE',
+}
+
 /** Who submitted `SetParticipantOPtoValidated`. */
 export enum VtFlowSubmission {
   Agent = 'AGENT',
@@ -156,6 +165,7 @@ export interface SendOnboardingRequestOptions {
   connectionId: string
   participantSessionId?: string
   applicantParticipantId: string
+  applicantParticipantRole?: number
   validatorParticipantId?: string
   agentParticipantId: string
   walletAgentParticipantId: string

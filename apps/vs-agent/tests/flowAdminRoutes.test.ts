@@ -1,6 +1,12 @@
 import { CredoError } from '@credo-ts/core'
 import { ConflictException, NotFoundException } from '@nestjs/common'
-import { VtCredentialState, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  VtCredentialState,
+  VtFlowPendingAction,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowTxStatus,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { describe, expect, it, vi } from 'vitest'
 
 import { VtFlowsService } from '../src/controllers/admin/vt-flow/VtFlowsService'
@@ -24,6 +30,47 @@ function makeService(
   }
   return new VtFlowsService({ getAgent: async () => agent } as never, undefined as never)
 }
+
+describe('VtFlowsService pendingAction', () => {
+  async function pendingActionFor(overrides: Record<string, unknown>) {
+    const service = makeService({
+      findAllByQuery: vi.fn().mockResolvedValue([{ ...record, ...overrides }]),
+    })
+    const [flow] = await service.listFlows({})
+    return flow.pendingAction
+  }
+
+  it('hands an expired oob-link back to the validator', async () => {
+    const link = { url: 'https://collect.example/form', description: 'Upload', at: new Date(0).toISOString() }
+
+    await expect(
+      pendingActionFor({
+        state: VtFlowState.OobPending,
+        oobLink: { ...link, expiresAt: new Date(Date.now() + 60_000).toISOString() },
+      }),
+    ).resolves.toBe(VtFlowPendingAction.Applicant)
+
+    await expect(
+      pendingActionFor({
+        state: VtFlowState.OobPending,
+        oobLink: { ...link, expiresAt: new Date(Date.now() - 60_000).toISOString() },
+      }),
+    ).resolves.toBe(VtFlowPendingAction.Validator)
+  })
+
+  it('hands CRED_OFFERED back to the validator when the anchoring transaction failed', async () => {
+    await expect(pendingActionFor({ state: VtFlowState.CredOffered })).resolves.toBe(
+      VtFlowPendingAction.Agent,
+    )
+
+    await expect(
+      pendingActionFor({
+        state: VtFlowState.CredOffered,
+        issuance: { tx: { status: VtFlowTxStatus.Failed } },
+      }),
+    ).resolves.toBe(VtFlowPendingAction.Validator)
+  })
+})
 
 describe('VtFlowsService flow admin routes', () => {
   it('maps the spec list filters onto record tags and enriches the peer DID', async () => {

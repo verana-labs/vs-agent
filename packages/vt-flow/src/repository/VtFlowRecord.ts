@@ -48,6 +48,7 @@ export interface VtFlowStorageProps {
   issuerParticipantId?: number
 
   applicantParticipantId?: string
+  applicantParticipantRole?: number
   validatorParticipantId?: string
   schemaId?: string
   claims?: Record<string, unknown>
@@ -85,6 +86,7 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
   public issuerParticipantId?: number
 
   public applicantParticipantId?: string
+  public applicantParticipantRole?: number
   public validatorParticipantId?: string
   public schemaId?: string
 
@@ -124,6 +126,7 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
       this.issuerParticipantId = props.issuerParticipantId
 
       this.applicantParticipantId = props.applicantParticipantId
+      this.applicantParticipantRole = props.applicantParticipantRole
       this.validatorParticipantId = props.validatorParticipantId
       this.schemaId = props.schemaId
       this.claims = props.claims

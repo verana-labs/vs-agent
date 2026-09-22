@@ -57,6 +57,7 @@ export class VtFlowApi {
       connectionId: options.connectionId,
       participantSessionId,
       applicantParticipantId: options.applicantParticipantId,
+      applicantParticipantRole: options.applicantParticipantRole,
       validatorParticipantId: options.validatorParticipantId,
       agentParticipantId: options.agentParticipantId,
       walletAgentParticipantId: options.walletAgentParticipantId,

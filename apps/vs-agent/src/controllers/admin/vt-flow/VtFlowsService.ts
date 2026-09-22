@@ -14,9 +14,11 @@ import {
 import {
   VtCredentialState,
   VtFlowApi,
+  VtFlowPendingAction,
   VtFlowRecord,
   VtFlowRole,
   VtFlowState,
+  VtFlowTxStatus,
   VtFlowVariant,
   isVtFlowTerminalState,
   peerAnchorDid,
@@ -333,6 +335,61 @@ interface FlowFilters {
  * Gives the Connection State of one flow, per [VSA-VTI-FLOW-STATE] Flow State. A flow in a
  * terminal state is TERMINATED, and so is a flow whose connection no longer exists.
  */
+const AGENT_STATES: ReadonlySet<VtFlowState> = new Set([
+  VtFlowState.OrSent,
+  VtFlowState.IrSent,
+  VtFlowState.AwaitingOr,
+  VtFlowState.AwaitingIr,
+])
+
+const VALIDATOR_STATES: ReadonlySet<VtFlowState> = new Set([
+  VtFlowState.Validating,
+  VtFlowState.AwaitingValidationTx,
+  VtFlowState.ValidationTxFailed,
+  VtFlowState.ValidatedPendingClaims,
+])
+
+/**
+ * Gives the party that must act for a flow to progress, per the [VSA-ADM-VT-FL-LIST] pendingAction
+ * table. An expired oob-link hands OOB_PENDING back to the validator, and a failed issuance
+ * anchoring hands CRED_OFFERED back to it so the operator can re-anchor.
+ */
+function pendingActionOf(record: VtFlowRecord): VtFlowPendingAction {
+  const { state, role } = record
+  if (isVtFlowTerminalState(state)) return VtFlowPendingAction.None
+
+  if (state === VtFlowState.AwaitingOp) {
+    return role === VtFlowRole.Applicant ? VtFlowPendingAction.Applicant : VtFlowPendingAction.None
+  }
+  if (AGENT_STATES.has(state)) return VtFlowPendingAction.Agent
+  if (state === VtFlowState.OobPending) {
+    const expiresAt = record.oobLink?.expiresAt
+    const expired = expiresAt !== undefined && Date.parse(expiresAt) <= Date.now()
+    return expired ? VtFlowPendingAction.Validator : VtFlowPendingAction.Applicant
+  }
+  if (VALIDATOR_STATES.has(state)) {
+    if (state !== VtFlowState.Validating && role === VtFlowRole.Applicant) {
+      return VtFlowPendingAction.None
+    }
+    return VtFlowPendingAction.Validator
+  }
+  if (state === VtFlowState.ValidationTxSubmitted) {
+    return role === VtFlowRole.Applicant ? VtFlowPendingAction.None : VtFlowPendingAction.Chain
+  }
+  if (state === VtFlowState.Validated) {
+    return record.applicantParticipantRole === HOLDER_PARTICIPANT_TYPE
+      ? VtFlowPendingAction.Agent
+      : VtFlowPendingAction.None
+  }
+  if (state === VtFlowState.CredOffered) {
+    const anchoringFailed = record.issuance?.tx?.status === VtFlowTxStatus.Failed
+    return role === VtFlowRole.Validator && anchoringFailed
+      ? VtFlowPendingAction.Validator
+      : VtFlowPendingAction.Agent
+  }
+  return VtFlowPendingAction.None
+}
+
 function connectionStateOf(
   record: VtFlowRecord,
   connection: DidCommConnectionRecord | null | undefined,
@@ -378,6 +435,7 @@ function toDto({ record, peerDid, connectionState }: ResolvedFlow): VtFlowRecord
       at: message.at,
       url: message.url,
     })),
+    pendingAction: pendingActionOf(record),
     validation: record.validation,
     issuance: record.issuance,
     proofs: record.proofsAttach,

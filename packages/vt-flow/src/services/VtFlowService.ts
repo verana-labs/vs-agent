@@ -43,6 +43,7 @@ export interface CreateOnboardingRequestParams {
   connectionId: string
   participantSessionId: string
   applicantParticipantId: string
+  applicantParticipantRole?: number
   validatorParticipantId?: string
   agentParticipantId: string
   walletAgentParticipantId: string
@@ -133,6 +134,7 @@ export class VtFlowService {
       agentParticipantId: params.agentParticipantId,
       walletAgentParticipantId: params.walletAgentParticipantId,
       applicantParticipantId: params.applicantParticipantId,
+      applicantParticipantRole: params.applicantParticipantRole,
       validatorParticipantId: params.validatorParticipantId,
       claims: params.claims,
     })
