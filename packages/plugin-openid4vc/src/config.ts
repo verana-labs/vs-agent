@@ -2,7 +2,6 @@ import type {
   OpenId4VcCredentialConfiguration,
   OpenId4VcPluginOptions,
   OpenId4VcSigningOptions,
-  OpenId4VcVerifierPolicy,
 } from './types'
 
 import { X509Certificate, X509KeyUsage } from '@credo-ts/core'
@@ -54,21 +53,15 @@ export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void 
   }
 
   assertCredentialConfigurations(options.credentialConfigurations)
-  assertVerifierPolicies(options.verifierPolicies, options.credentialConfigurations)
 }
+
+export class UnknownCredentialConfigurationError extends Error {}
 
 export function findCredentialConfiguration(
   options: Pick<OpenId4VcPluginOptions, 'credentialConfigurations'>,
   id: string,
 ): OpenId4VcCredentialConfiguration | undefined {
   return options.credentialConfigurations.find(configuration => configuration.id === id)
-}
-
-export function findVerifierPolicy(
-  options: Pick<OpenId4VcPluginOptions, 'verifierPolicies'>,
-  id: string,
-): OpenId4VcVerifierPolicy | undefined {
-  return options.verifierPolicies.find(policy => policy.id === id)
 }
 
 export function parseOfferClaims(
@@ -152,31 +145,6 @@ function assertCredentialConfigurations(configurations: OpenId4VcCredentialConfi
       throw new Error(`${prefix}.claims contains reserved claim '${reservedClaim}'`)
     }
     assertSubset(configuration.disclosureFrame, configuration.claims, `${prefix}.disclosureFrame`)
-  }
-}
-
-function assertVerifierPolicies(
-  policies: OpenId4VcVerifierPolicy[],
-  configurations: OpenId4VcCredentialConfiguration[],
-): void {
-  if (!Array.isArray(policies)) {
-    throw new Error('verifierPolicies must be an array')
-  }
-
-  assertUniqueNonEmptyIds(policies, 'verifier policy')
-
-  for (const policy of policies) {
-    const configuration = configurations.find(item => item.id === policy.credentialConfigurationId)
-    if (!configuration) {
-      throw new Error(
-        `verifier policy '${policy.id}': unknown credentialConfigurationId '${policy.credentialConfigurationId}'`,
-      )
-    }
-    assertSubset(
-      policy.requestedClaims,
-      configuration.claims,
-      `verifier policy '${policy.id}'.requestedClaims`,
-    )
   }
 }
 

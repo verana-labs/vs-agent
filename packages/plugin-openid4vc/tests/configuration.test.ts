@@ -7,7 +7,6 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
   findCredentialConfiguration,
-  findVerifierPolicy,
   parseOfferClaims,
   parseOfferIssuanceMetadata,
   parseOfferTtlSeconds,
@@ -47,9 +46,6 @@ const validOptions = (): OpenId4VcPluginOptions => ({
       claims: ['name', 'role'],
       disclosureFrame: ['name', 'role'],
     },
-  ],
-  verifierPolicies: [
-    { id: 'employee-check', credentialConfigurationId: 'employee', requestedClaims: ['name'] },
   ],
 })
 
@@ -165,13 +161,6 @@ describe('validateOpenId4VcOptions', () => {
     options.credentialConfigurations[0].disclosureFrame = ['name', 'admin']
 
     expect(() => validateOpenId4VcOptions(options)).toThrow('disclosureFrame')
-  })
-
-  it('rejects a verifier policy for an unknown credential configuration', () => {
-    const options = validOptions()
-    options.verifierPolicies[0].credentialConfigurationId = 'unknown'
-
-    expect(() => validateOpenId4VcOptions(options)).toThrow('credentialConfigurationId')
   })
 
   it('rejects malformed credential issuer certificate material without exposing it', () => {
@@ -296,18 +285,16 @@ function catchValidationError(options: OpenId4VcPluginOptions): Error {
 }
 
 describe('configuration lookups', () => {
-  it('finds configured credential configurations and verifier policies', () => {
+  it('finds a configured credential configuration', () => {
     const options = validOptions()
 
     expect(findCredentialConfiguration(options, 'employee')).toBe(options.credentialConfigurations[0])
-    expect(findVerifierPolicy(options, 'employee-check')).toBe(options.verifierPolicies[0])
   })
 
   it('returns undefined for unknown configuration IDs', () => {
     const options = validOptions()
 
     expect(findCredentialConfiguration(options, 'unknown')).toBeUndefined()
-    expect(findVerifierPolicy(options, 'unknown')).toBeUndefined()
   })
 })
 
@@ -391,7 +378,6 @@ const setupOptions = (): OpenId4VcPluginOptions => ({
     credentialIssuerCertificates: ['MIIB-trusted-root'],
   },
   credentialConfigurations: [],
-  verifierPolicies: [],
 })
 
 describe('setupOpenId4Vc', () => {

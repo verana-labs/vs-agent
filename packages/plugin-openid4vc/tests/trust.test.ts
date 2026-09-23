@@ -119,7 +119,6 @@ function validOptions(root: X509Certificate): OpenId4VcPluginOptions {
       credentialIssuerCertificates: [root.toString('base64')],
     },
     credentialConfigurations: [],
-    verifierPolicies: [],
   }
 }
 
@@ -127,7 +126,6 @@ const options = (keyAttestationCertificates?: string[]): OpenId4VcPluginOptions 
   publicApiBaseUrl: 'https://agent.example',
   issuer: { ...(keyAttestationCertificates ? { keyAttestationCertificates } : {}) },
   credentialConfigurations: [],
-  verifierPolicies: [],
 })
 
 describe('key attestation trust', () => {

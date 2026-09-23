@@ -18,6 +18,7 @@ import {
   parseOfferClaims,
   parseOfferIssuanceMetadata,
   parseOfferTtlSeconds,
+  UnknownCredentialConfigurationError,
 } from '../config'
 import { ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
 import { serviceDisplay } from '../utils/serviceDisplay'
@@ -57,9 +58,11 @@ export type OpenId4VcIssuerAgent = Pick<
 }
 
 export interface OpenId4VcCreateOfferOptions {
-  credentialConfigurationId: string
+  jsonSchemaCredentialId: string
   claims: unknown
   ttlSeconds: unknown
+  statusListId?: string
+  statusListIndex?: number
 }
 
 export interface OpenId4VcOfferResult {
@@ -69,7 +72,9 @@ export interface OpenId4VcOfferResult {
 
 export interface OpenId4VcIssuanceSessionSummary {
   id: string
-  credentialConfigurationId: string
+  jsonSchemaCredentialId: string
+  statusListId?: string
+  statusListIndex?: number
   state: OpenId4VcIssuanceSessionState
   createdAt: Date
   updatedAt: Date
@@ -78,7 +83,7 @@ export interface OpenId4VcIssuanceSessionSummary {
 }
 
 export class OpenId4VcIssuerRequestError extends Error {}
-export class UnknownCredentialConfigurationError extends Error {}
+export class UnknownStatusListError extends Error {}
 export class UnknownIssuanceSessionError extends Error {}
 
 export class IssuerService {
@@ -102,16 +107,25 @@ export class IssuerService {
   }
 
   public async createOffer({
-    credentialConfigurationId,
+    jsonSchemaCredentialId,
     claims,
     ttlSeconds,
+    statusListId,
+    statusListIndex,
   }: OpenId4VcCreateOfferOptions): Promise<OpenId4VcOfferResult> {
     await this.ensureInitialized()
-    const configuration = findCredentialConfiguration(this.options, credentialConfigurationId)
+    const configuration = findCredentialConfiguration(this.options, jsonSchemaCredentialId)
     if (!configuration) {
-      throw new UnknownCredentialConfigurationError(
-        `unknown credential configuration '${credentialConfigurationId}'`,
+      throw new UnknownCredentialConfigurationError(`unknown credential type '${jsonSchemaCredentialId}'`)
+    }
+
+    if ((statusListId === undefined) !== (statusListIndex === undefined)) {
+      throw new OpenId4VcIssuerRequestError(
+        'statusListId and statusListIndex must be both present or both absent',
       )
+    }
+    if (statusListId !== undefined) {
+      throw new UnknownStatusListError(`unknown status list '${statusListId}'`)
     }
 
     let issuanceMetadata: { claims: Record<string, unknown>; ttlSeconds: number }
@@ -370,7 +384,7 @@ export class IssuerService {
 function summarizeIssuanceSession(session: OpenId4VcIssuanceSessionRecord): OpenId4VcIssuanceSessionSummary {
   return {
     id: session.id,
-    credentialConfigurationId: session.credentialOfferPayload.credential_configuration_ids?.[0] ?? '',
+    jsonSchemaCredentialId: session.credentialOfferPayload.credential_configuration_ids?.[0] ?? '',
     state: session.state,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt ?? session.createdAt,

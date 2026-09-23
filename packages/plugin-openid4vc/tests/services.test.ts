@@ -7,15 +7,17 @@ import {
 } from '@credo-ts/openid4vc'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { UnknownCredentialConfigurationError } from '../src/config'
 import {
   IssuerService,
-  UnknownCredentialConfigurationError,
+  OpenId4VcIssuerRequestError,
   UnknownIssuanceSessionError,
+  UnknownStatusListError,
 } from '../src/services/IssuerService'
 import {
+  InvalidPresentationRequestError,
   OpenId4VcVerifierRequestError,
   UnknownVerificationSessionError,
-  UnknownVerifierPolicyError,
   VerifierService,
 } from '../src/services/VerifierService'
 
@@ -78,7 +80,6 @@ const issuerOptions = (): OpenId4VcPluginOptions => ({
       disclosureFrame: ['name', 'role'],
     },
   ],
-  verifierPolicies: [],
 })
 
 function issuerApi() {
@@ -466,7 +467,7 @@ describe('IssuerService', () => {
     await expect(service.ensureInitialized()).rejects.toThrow('storage not ready')
     await expect(
       service.createOffer({
-        credentialConfigurationId: 'employee',
+        jsonSchemaCredentialId: 'employee',
         claims: { name: 'Ada', role: 'engineer' },
         ttlSeconds: 3_600,
       }),
@@ -492,7 +493,7 @@ describe('IssuerService', () => {
     await service.ensureInitialized()
 
     const result = await service.createOffer({
-      credentialConfigurationId: 'employee',
+      jsonSchemaCredentialId: 'employee',
       claims: { name: 'Ada', role: 'engineer' },
       ttlSeconds: 3_600,
     })
@@ -520,7 +521,7 @@ describe('IssuerService', () => {
     await service.ensureInitialized()
 
     await service.createOffer({
-      credentialConfigurationId: 'employee',
+      jsonSchemaCredentialId: 'employee',
       claims: { name: 'Ada' },
       ttlSeconds: 3_600,
     })
@@ -544,7 +545,7 @@ describe('IssuerService', () => {
     await service.ensureInitialized()
 
     await expect(
-      service.createOffer({ credentialConfigurationId: 'employee', claims, ttlSeconds: 3_600 }),
+      service.createOffer({ jsonSchemaCredentialId: 'employee', claims, ttlSeconds: 3_600 }),
     ).rejects.toThrow(message)
     expect(api.createCredentialOffer).not.toHaveBeenCalled()
   })
@@ -556,7 +557,7 @@ describe('IssuerService', () => {
     await service.ensureInitialized()
 
     await expect(
-      service.createOffer({ credentialConfigurationId: 'employee', claims: { name: 'Ada' }, ttlSeconds }),
+      service.createOffer({ jsonSchemaCredentialId: 'employee', claims: { name: 'Ada' }, ttlSeconds }),
     ).rejects.toThrow('ttlSeconds')
     expect(api.createCredentialOffer).not.toHaveBeenCalled()
   })
@@ -700,7 +701,7 @@ describe('IssuerService', () => {
 
     await expect(service.getIssuanceSession('session-id')).resolves.toEqual({
       id: 'session-id',
-      credentialConfigurationId: 'employee',
+      jsonSchemaCredentialId: 'employee',
       state: 'OfferCreated',
       createdAt: new Date('2026-07-21T10:00:00.000Z'),
       updatedAt: new Date('2026-07-21T10:00:00.000Z'),
@@ -719,7 +720,7 @@ describe('IssuerService', () => {
 
       expect(summary).toEqual({
         id: 'session-1',
-        credentialConfigurationId: 'employee',
+        jsonSchemaCredentialId: 'employee',
         state: 'OfferCreated',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -771,11 +772,26 @@ describe('IssuerService', () => {
       expect(api.deleteIssuanceSessionById).toHaveBeenCalledTimes(1)
     })
 
+    it('rejects half a status list pair as invalid input and a whole one as an unknown list', async () => {
+      const { service } = await initializedIssuer()
+      const offer = { jsonSchemaCredentialId: 'employee', claims: { name: 'Ada' }, ttlSeconds: 3_600 }
+
+      await expect(service.createOffer({ ...offer, statusListIndex: 0 })).rejects.toBeInstanceOf(
+        OpenId4VcIssuerRequestError,
+      )
+      await expect(service.createOffer({ ...offer, statusListId: 'list-1' })).rejects.toBeInstanceOf(
+        OpenId4VcIssuerRequestError,
+      )
+      await expect(
+        service.createOffer({ ...offer, statusListId: 'list-1', statusListIndex: 0 }),
+      ).rejects.toBeInstanceOf(UnknownStatusListError)
+    })
+
     it('rejects an offer for an unknown credential configuration with a dedicated error', async () => {
       const { service } = await initializedIssuer()
       await expect(
         service.createOffer({
-          credentialConfigurationId: 'missing',
+          jsonSchemaCredentialId: 'missing',
           claims: { name: 'Ada', role: 'engineer' },
           ttlSeconds: 3_600,
         }),
@@ -863,13 +879,6 @@ const verifierOptions = (): OpenId4VcPluginOptions => ({
       disclosureFrame: ['name', 'role'],
     },
   ],
-  verifierPolicies: [
-    {
-      id: 'employee-name',
-      credentialConfigurationId: 'employee',
-      requestedClaims: ['name'],
-    },
-  ],
 })
 
 function verifierApi() {
@@ -930,7 +939,7 @@ function verifierSigningHandle() {
 }
 
 function verificationSession(overrides: Record<string, unknown> = {}) {
-  const tags: Record<string, unknown> = { policyId: 'employee-name' }
+  const tags: Record<string, unknown> = { jsonSchemaCredentialId: 'employee', requestedClaims: ['name'] }
   const metadata: Record<string, unknown> = {}
   return {
     id: 'session-1',
@@ -1002,7 +1011,7 @@ function trust(verdict: 'TRUSTED_AUTHORIZED' | 'TRUSTED_NOT_AUTHORIZED' | 'RESOL
     evidence: {
       did: ISSUER_DID,
       trustStatus: verdict === 'RESOLVER_UNAVAILABLE' ? null : 'TRUSTED',
-      vtjscId: VTJSC_ID,
+      jsonSchemaCredentialId: VTJSC_ID,
       authorized:
         verdict === 'TRUSTED_AUTHORIZED' ? true : verdict === 'TRUSTED_NOT_AUTHORIZED' ? false : null,
       queries: ['https://resolver.example/safe-evidence'],
@@ -1108,7 +1117,7 @@ describe('VerifierService', () => {
     await expect(service.ensureInitialized()).rejects.toThrow(message)
   })
 
-  it('creates a direct_post.jwt DCQL request for exactly the selected policy', async () => {
+  it('creates a direct_post.jwt DCQL request for exactly the requested claims', async () => {
     const api = verifierApi()
     api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
     api.createAuthorizationRequest.mockResolvedValue({
@@ -1118,7 +1127,9 @@ describe('VerifierService', () => {
     const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
     await service.ensureInitialized()
 
-    await expect(service.createRequest('employee-name')).resolves.toEqual({
+    await expect(
+      service.createRequest({ jsonSchemaCredentialId: 'employee', requestedClaims: ['name'] }),
+    ).resolves.toEqual({
       authorizationRequest: 'openid4vp://?request_uri=opaque',
       verificationSessionId: 'session-id',
     })
@@ -1155,7 +1166,12 @@ describe('VerifierService', () => {
     const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
     await service.ensureInitialized()
 
-    await service.createRequest('employee-name', 'dcql', 'x5c')
+    await service.createRequest({
+      jsonSchemaCredentialId: 'employee',
+      requestedClaims: ['name'],
+      queryLanguage: 'dcql',
+      requestSigner: 'x5c',
+    })
 
     expect(api.createAuthorizationRequest).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1168,14 +1184,60 @@ describe('VerifierService', () => {
     )
   })
 
-  it('fails unknown policies clearly without creating a request', async () => {
+  it('fails an unknown credential type clearly without creating a request', async () => {
     const api = verifierApi()
     api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
     const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
     await service.ensureInitialized()
 
-    await expect(service.createRequest('unknown')).rejects.toBeInstanceOf(UnknownVerifierPolicyError)
-    await expect(service.createRequest('unknown')).rejects.toThrow("unknown verifier policy 'unknown'")
+    await expect(service.createRequest({ jsonSchemaCredentialId: 'unknown' })).rejects.toBeInstanceOf(
+      UnknownCredentialConfigurationError,
+    )
+    await expect(service.createRequest({ jsonSchemaCredentialId: 'unknown' })).rejects.toThrow(
+      "unknown credential type 'unknown'",
+    )
+    expect(api.createAuthorizationRequest).not.toHaveBeenCalled()
+  })
+
+  it('requests every claim of the type when the caller names none', async () => {
+    const { service, api } = await initializedVerifier()
+    api.createAuthorizationRequest.mockResolvedValue({
+      authorizationRequest: 'openid4vp://?request_uri=opaque',
+      verificationSession: session('RequestCreated'),
+    })
+
+    await service.createRequest({ jsonSchemaCredentialId: 'employee' })
+
+    expect(api.createAuthorizationRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dcql: {
+          query: {
+            credentials: [
+              {
+                id: 'employee',
+                format: 'dc+sd-jwt',
+                meta: { vct_values: [VCT] },
+                claims: [{ path: ['name'] }, { path: ['role'] }],
+              },
+            ],
+          },
+        },
+      }),
+    )
+  })
+
+  it.each([
+    [['name', 'name'], 'duplicate'],
+    [['name', 'admin'], "unknown claim 'admin'"],
+  ])('rejects requestedClaims %j without creating a request', async (requestedClaims, message) => {
+    const { service, api } = await initializedVerifier()
+
+    await expect(
+      service.createRequest({ jsonSchemaCredentialId: 'employee', requestedClaims }),
+    ).rejects.toBeInstanceOf(InvalidPresentationRequestError)
+    await expect(
+      service.createRequest({ jsonSchemaCredentialId: 'employee', requestedClaims }),
+    ).rejects.toThrow(message)
     expect(api.createAuthorizationRequest).not.toHaveBeenCalled()
   })
 
@@ -1186,7 +1248,8 @@ describe('VerifierService', () => {
 
     await expect(service.getVerificationSession('session-id')).resolves.toEqual({
       id: 'session-id',
-      policyId: 'employee-name',
+      jsonSchemaCredentialId: 'employee',
+      requestedClaims: ['name'],
       state: 'RequestUriRetrieved',
       createdAt: new Date('2026-07-21T10:00:00.000Z'),
       updatedAt: new Date('2026-07-21T10:00:00.000Z'),
@@ -1245,7 +1308,8 @@ describe('VerifierService', () => {
 
     expect(result).toEqual({
       id: 'session-id',
-      policyId: 'employee-name',
+      jsonSchemaCredentialId: 'employee',
+      requestedClaims: ['name'],
       state: 'ResponseVerified',
       createdAt: new Date('2026-07-21T10:00:00.000Z'),
       updatedAt: new Date('2026-07-21T10:00:00.000Z'),
@@ -1356,45 +1420,53 @@ describe('VerifierService', () => {
     })
   })
 
-  it('fails closed when the verified response no longer matches the session or configured policy', async () => {
+  it('fails closed when the verified response no longer matches the session', async () => {
     const api = verifierApi()
     api.getVerificationSessionById.mockResolvedValue(session())
-    api.getVerifiedAuthorizationResponse
-      .mockResolvedValueOnce(verifiedResponse([presentation()], session('RequestUriRetrieved')))
-      .mockResolvedValueOnce({
-        ...verifiedResponse(),
-        dcql: {
-          ...verifiedResponse().dcql,
-          query: {
-            credentials: [
-              {
-                id: 'attacker-credential',
-                format: 'dc+sd-jwt',
-                meta: { vct_values: [VCT] },
-                claims: [{ path: ['name'] }],
-              },
-            ],
-          },
-        },
-      })
+    api.getVerifiedAuthorizationResponse.mockResolvedValue(
+      verifiedResponse([presentation()], session('RequestUriRetrieved')),
+    )
     const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
 
     await expect(service.getVerificationSession('session-id')).rejects.toThrow('changed while reading')
-    await expect(service.getVerificationSession('session-id')).resolves.toMatchObject({
-      accepted: false,
-      trust: { verdict: 'UNTRUSTED', evidence: { queries: [] } },
-    })
     expect(verdictFor).not.toHaveBeenCalled()
   })
 
+  it('reads the stored request of the session and never the query of the response', async () => {
+    const api = verifierApi()
+    api.getVerificationSessionById.mockResolvedValue(session())
+    api.getVerifiedAuthorizationResponse.mockResolvedValue({
+      ...verifiedResponse(),
+      dcql: {
+        ...verifiedResponse().dcql,
+        query: {
+          credentials: [
+            {
+              id: 'attacker-credential',
+              format: 'dc+sd-jwt',
+              meta: { vct_values: ['https://attacker.example/vct'] },
+              claims: [{ path: ['admin'] }],
+            },
+          ],
+        },
+      },
+    })
+    const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
+
+    await expect(service.getVerificationSession('session-id')).resolves.toMatchObject({
+      accepted: true,
+      credential: { vct: VCT, disclosedClaims: { name: 'Ada' } },
+    })
+  })
+
   describe('verification sessions', () => {
-    it('stores the policy id on the session it creates', async () => {
+    it('stores the credential type and the requested claims on the session it creates', async () => {
       const { service, api } = await initializedVerifier()
-      let tag: unknown
+      const tags: Record<string, unknown> = {}
       const session = verificationSession({
-        getTag: () => tag,
-        setTag: (_name: string, value: unknown) => {
-          tag = value
+        getTag: (name: string) => tags[name],
+        setTag: (name: string, value: unknown) => {
+          tags[name] = value
         },
       })
       api.createAuthorizationRequest.mockResolvedValue({
@@ -1402,19 +1474,21 @@ describe('VerifierService', () => {
         verificationSession: session,
       })
 
-      await service.createRequest('employee-name')
+      await service.createRequest({ jsonSchemaCredentialId: 'employee', requestedClaims: ['name'] })
 
-      expect(session.getTag('policyId')).toBe('employee-name')
+      expect(session.getTag('jsonSchemaCredentialId')).toBe('employee')
+      expect(session.getTag('requestedClaims')).toEqual(['name'])
       expect(verificationSessionRepository.update).toHaveBeenCalledWith(expect.anything(), session)
     })
 
-    it('summarizes a pending session with its policy and no trust block', async () => {
+    it('summarizes a pending session with its request and no trust block', async () => {
       const { service, api } = await initializedVerifier()
       api.getVerificationSessionById.mockResolvedValue(verificationSession())
 
       await expect(service.getVerificationSession('session-1')).resolves.toEqual({
         id: 'session-1',
-        policyId: 'employee-name',
+        jsonSchemaCredentialId: 'employee',
+        requestedClaims: ['name'],
         state: 'RequestCreated',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -1435,7 +1509,7 @@ describe('VerifierService', () => {
           evidence: {
             did: ISSUER_DID,
             trustStatus: 'TRUSTED',
-            vtjscId: VTJSC_ID,
+            jsonSchemaCredentialId: VTJSC_ID,
             authorized: true,
             queries: [],
           },
@@ -1513,7 +1587,8 @@ describe('VerifierService', () => {
       expect(sessions).toEqual([
         {
           id: 'session-1',
-          policyId: 'employee-name',
+          jsonSchemaCredentialId: 'employee',
+          requestedClaims: ['name'],
           state: 'ResponseVerified',
           createdAt: new Date('2026-01-01T00:00:00.000Z'),
           updatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -1537,7 +1612,7 @@ describe('VerifierService', () => {
           evidence: {
             did: ISSUER_DID,
             trustStatus: 'TRUSTED',
-            vtjscId: VTJSC_ID,
+            jsonSchemaCredentialId: VTJSC_ID,
             authorized: true,
             queries: [],
           },
@@ -1576,7 +1651,12 @@ describe('VerifierService', () => {
         verificationSession: verificationSession(),
       })
 
-      await service.createRequest('employee-name', 'dcql', 'did')
+      await service.createRequest({
+        jsonSchemaCredentialId: 'employee',
+        requestedClaims: ['name'],
+        queryLanguage: 'dcql',
+        requestSigner: 'did',
+      })
 
       expect(api.createAuthorizationRequest).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1588,9 +1668,14 @@ describe('VerifierService', () => {
     it('fails a did-signed request when the DID does not publish the signing key', async () => {
       findBoundVerificationMethodId.mockResolvedValue(null)
       const { service } = await initializedVerifier()
-      await expect(service.createRequest('employee-name', 'dcql', 'did')).rejects.toBeInstanceOf(
-        OpenId4VcVerifierRequestError,
-      )
+      await expect(
+        service.createRequest({
+          jsonSchemaCredentialId: 'employee',
+          requestedClaims: ['name'],
+          queryLanguage: 'dcql',
+          requestSigner: 'did',
+        }),
+      ).rejects.toBeInstanceOf(OpenId4VcVerifierRequestError)
     })
   })
 

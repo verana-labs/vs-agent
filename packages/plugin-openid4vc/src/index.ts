@@ -2,10 +2,10 @@ export { OpenId4VcIssuanceSessionState, OpenId4VcVerificationSessionState } from
 
 export {
   findCredentialConfiguration,
-  findVerifierPolicy,
   OFFER_TTL_SECONDS_MAX,
   OFFER_TTL_SECONDS_MIN,
   parseOfferClaims,
+  UnknownCredentialConfigurationError,
   validateOpenId4VcOptions,
 } from './config'
 export { setupOpenId4Vc } from './sdk/setupOpenId4Vc'
@@ -18,8 +18,8 @@ export type { SigningCertificateInfo, SigningRole } from './services/Certificate
 export {
   IssuerService,
   OpenId4VcIssuerRequestError,
-  UnknownCredentialConfigurationError,
   UnknownIssuanceSessionError,
+  UnknownStatusListError,
 } from './services/IssuerService'
 export type {
   OpenId4VcIssuanceSessionSummary,
@@ -27,12 +27,13 @@ export type {
   OpenId4VcOfferResult,
 } from './services/IssuerService'
 export {
+  InvalidPresentationRequestError,
   OpenId4VcVerifierRequestError,
   UnknownVerificationSessionError,
-  UnknownVerifierPolicyError,
   VerifierService,
 } from './services/VerifierService'
 export type {
+  OpenId4VcCreatePresentationRequestOptions,
   OpenId4VcQueryLanguage,
   OpenId4VcVerificationRequest,
   OpenId4VcVerificationSessionSummary,
@@ -46,5 +47,4 @@ export type {
   OpenId4VcCredentialConfiguration,
   OpenId4VcPluginOptions,
   OpenId4VcSigningOptions,
-  OpenId4VcVerifierPolicy,
 } from './types'

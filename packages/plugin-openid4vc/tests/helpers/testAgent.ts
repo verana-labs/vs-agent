@@ -211,7 +211,6 @@ export async function startOpenId4VcTestAgents(input: {
         credentialIssuerCertificates: [rootCertificate],
       },
       credentialConfigurations: [input.credentialConfiguration],
-      verifierPolicies: [],
     }),
     createService: (agent, options) => new IssuerService(agent, options),
     failureHooks: input.failureHooks,
@@ -245,13 +244,6 @@ export async function startOpenId4VcTestAgents(input: {
           credentialIssuerCertificates: [rootCertificate],
         },
         credentialConfigurations: [input.credentialConfiguration],
-        verifierPolicies: [
-          {
-            id: 'employee-check',
-            credentialConfigurationId: input.credentialConfiguration.id,
-            requestedClaims: ['name', 'role'],
-          },
-        ],
       }),
       createService: (agent, options) => new VerifierService(agent, options),
       failureHooks: input.failureHooks,

@@ -851,7 +851,6 @@ function developmentOptions(role: Role): OpenId4VcPluginOptions {
         }
       : {}),
     credentialConfigurations: [],
-    verifierPolicies: [],
   }
 }
 
@@ -970,7 +969,12 @@ describe('presentation-exchange request signing for a webvh verifier', () => {
   it('signs under the agent webvh DID with its Ed25519 authentication key', async () => {
     const { service, fetchRequestJwt, ed25519MethodId } = await startWebvhVerifier()
 
-    const request = await service.createRequest('employee-check', 'presentation_exchange', 'did')
+    const request = await service.createRequest({
+      jsonSchemaCredentialId: CONFIGURATION.id,
+      requestedClaims: ['name', 'role'],
+      queryLanguage: 'presentation_exchange',
+      requestSigner: 'did',
+    })
     const { header, payload } = await fetchRequestJwt(request.authorizationRequest)
 
     expect(header.alg).toBe('EdDSA')
@@ -1061,13 +1065,6 @@ async function startWebvhVerifier() {
       credentialIssuerCertificates: [certificates.root.toString('base64')],
     },
     credentialConfigurations: [CONFIGURATION],
-    verifierPolicies: [
-      {
-        id: 'employee-check',
-        credentialConfigurationId: CONFIGURATION.id,
-        requestedClaims: ['name', 'role'],
-      },
-    ],
   }
   validateOpenId4VcOptions(options)
   let issuerService: IssuerService | undefined
@@ -1190,7 +1187,7 @@ describe('in-process OpenID4VC issuance and presentation', () => {
         credentialConfiguration: CONFIGURATION,
       })
       const offer = await agents.issuer.service.createOffer({
-        credentialConfigurationId: CONFIGURATION.id,
+        jsonSchemaCredentialId: CONFIGURATION.id,
         claims: { name: 'Ada Lovelace', role: 'engineer' },
         ttlSeconds: TTL_SECONDS,
       })
@@ -1225,7 +1222,7 @@ describe('in-process OpenID4VC issuance and presentation', () => {
 
   it('lists, reads and deletes the issuance sessions of this issuer', async () => {
     const offer = await agents.issuer.service.createOffer({
-      credentialConfigurationId: CONFIGURATION.id,
+      jsonSchemaCredentialId: CONFIGURATION.id,
       claims: { name: 'Grace Hopper', role: 'admiral' },
       ttlSeconds: TTL_SECONDS,
     })
@@ -1236,7 +1233,7 @@ describe('in-process OpenID4VC issuance and presentation', () => {
     const read = await agents.issuer.service.getIssuanceSession(offer.issuanceSessionId)
     expect(read).toMatchObject({
       id: offer.issuanceSessionId,
-      credentialConfigurationId: CONFIGURATION.id,
+      jsonSchemaCredentialId: CONFIGURATION.id,
       state: 'OfferCreated',
     })
     expect(read.expiresAt).toBeInstanceOf(Date)
@@ -1269,11 +1266,15 @@ describe('in-process OpenID4VC issuance and presentation', () => {
     })
   }, 60_000)
 
-  it('carries the policy id, stores the decision, and lets the verifier delete the session', async () => {
+  it('carries the stored request, stores the decision, and lets the verifier delete the session', async () => {
     const exchange = await presentCredential()
 
     const first = await agents.verifier.service.getVerificationSession(exchange.verificationSessionId)
-    expect(first).toMatchObject({ policyId: 'employee-check', accepted: true })
+    expect(first).toMatchObject({
+      jsonSchemaCredentialId: CONFIGURATION.id,
+      requestedClaims: ['name', 'role'],
+      accepted: true,
+    })
     expect(first.createdAt).toBeInstanceOf(Date)
 
     resolver.reset()
@@ -1424,7 +1425,10 @@ describe('in-process OpenID4VC issuance and presentation', () => {
   }, 60_000)
 
   async function presentCredential() {
-    const request = await agents.verifier.service.createRequest('employee-check')
+    const request = await agents.verifier.service.createRequest({
+      jsonSchemaCredentialId: CONFIGURATION.id,
+      requestedClaims: ['name', 'role'],
+    })
     const resolved = await agents.holder.resolvePresentationRequest(request.authorizationRequest, [
       agents.rootCertificate,
     ])

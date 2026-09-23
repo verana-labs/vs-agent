@@ -11,12 +11,12 @@ import { PageDto, PaginationQueryDto } from '../../../../../common'
 export class Openid4vcCredentialOfferBodyDto {
   @ApiProperty({
     description:
-      'Identifier of the credential configuration the offer issues. The agent holds none yet: issue #711 reads them from the VPR, so every identifier answers UNKNOWN_ID until then.',
+      'Credential type of the offer. The agent holds none yet: issue #711 reads them from the VPR, so every identifier answers UNKNOWN_ID until then.',
     example: 'employee',
   })
   @IsString()
   @IsNotEmpty()
-  credentialConfigurationId!: string
+  jsonSchemaCredentialId!: string
 
   @ApiProperty({
     type: Object,
@@ -39,6 +39,27 @@ export class Openid4vcCredentialOfferBodyDto {
   @Min(OFFER_TTL_SECONDS_MIN)
   @Max(OFFER_TTL_SECONDS_MAX)
   ttlSeconds!: number
+
+  @ApiPropertyOptional({
+    description:
+      'Status list the credential is registered on, with statusListIndex. The agent hosts none yet: issue #713 brings them, so every identifier answers UNKNOWN_ID until then.',
+    example: 'list-1',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  statusListId?: string
+
+  @ApiPropertyOptional({
+    type: Number,
+    minimum: 0,
+    description: 'Index of the credential on that status list. Required whenever statusListId is present.',
+    example: 42,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  statusListIndex?: number
 }
 
 export class Openid4vcCredentialOfferResponseDto {
@@ -57,11 +78,17 @@ export class Openid4vcCredentialOfferResponseDto {
 }
 
 export class Openid4vcListCredentialExchangesQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Filter by credential configuration', example: 'employee' })
+  @ApiPropertyOptional({ description: 'Filter by credential type', example: 'employee' })
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  credentialConfigurationId?: string
+  jsonSchemaCredentialId?: string
+
+  @ApiPropertyOptional({ description: 'Filter by the status list the offer named', example: 'list-1' })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  statusListId?: string
 
   @ApiPropertyOptional({
     enum: OpenId4VcIssuanceSessionState,
@@ -79,8 +106,21 @@ export class Openid4vcCredentialExchangeRecordDto {
   })
   credentialExchangeId!: string
 
-  @ApiProperty({ description: 'Credential configuration of the offer', example: 'employee' })
-  credentialConfigurationId!: string
+  @ApiProperty({ description: 'Credential type of the offer', example: 'employee' })
+  jsonSchemaCredentialId!: string
+
+  @ApiPropertyOptional({
+    description: 'Status list the credential is registered on. Present only when the offer set it.',
+    example: 'list-1',
+  })
+  statusListId?: string
+
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'Index of the credential on that status list. Present only when the offer set it.',
+    example: 42,
+  })
+  statusListIndex?: number
 
   @ApiProperty({ enum: OpenId4VcIssuanceSessionState, description: 'State of the issuance session' })
   state!: OpenId4VcIssuanceSessionState

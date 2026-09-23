@@ -18,7 +18,7 @@ export type KeyBindingResult = 'bound' | 'unbound' | 'unresolvable'
 export interface TrustEvidence {
   did: string | null
   trustStatus: VeranaTrustStatus | null
-  vtjscId: string | null
+  jsonSchemaCredentialId: string | null
   authorized: boolean | null
   queries: string[]
   note?: string

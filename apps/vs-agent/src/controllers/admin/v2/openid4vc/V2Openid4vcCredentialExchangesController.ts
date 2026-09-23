@@ -30,6 +30,7 @@ import {
   OpenId4VcIssuerRequestError,
   UnknownCredentialConfigurationError,
   UnknownIssuanceSessionError,
+  UnknownStatusListError,
 } from '@verana-labs/vs-agent-plugin-openid4vc'
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
@@ -64,17 +65,20 @@ export class V2Openid4vcCredentialExchangesController {
   @ApiBody({ type: Openid4vcCredentialOfferBodyDto })
   @ApiCreatedResponse({ description: 'The credential offer', type: Openid4vcCredentialOfferResponseDto })
   @ApiBadRequestResponse({
-    description: 'Claims that do not match the configuration, or a ttlSeconds outside its range',
+    description:
+      'Claims that do not match the type, a ttlSeconds outside its range, or only one of statusListId and statusListIndex',
   })
-  @ApiNotFoundResponse({ description: 'The agent cannot resolve the credential configuration' })
+  @ApiNotFoundResponse({ description: 'The agent cannot resolve the credential type or the status list' })
   public async createCredentialOffer(
     @Body() body: Openid4vcCredentialOfferBodyDto,
   ): Promise<Openid4vcCredentialOfferResponseDto> {
     try {
       const offer = await this.issuerService.createOffer({
-        credentialConfigurationId: body.credentialConfigurationId,
+        jsonSchemaCredentialId: body.jsonSchemaCredentialId,
         claims: body.claims,
         ttlSeconds: body.ttlSeconds,
+        statusListId: body.statusListId,
+        statusListIndex: body.statusListIndex,
       })
       return { credentialExchangeId: offer.issuanceSessionId, url: offer.credentialOffer }
     } catch (error) {
@@ -97,8 +101,8 @@ export class V2Openid4vcCredentialExchangesController {
     const sessions = await this.issuerService.listIssuanceSessions()
     const filtered = sessions.filter(
       session =>
-        (!query.credentialConfigurationId ||
-          session.credentialConfigurationId === query.credentialConfigurationId) &&
+        (!query.jsonSchemaCredentialId || session.jsonSchemaCredentialId === query.jsonSchemaCredentialId) &&
+        (!query.statusListId || session.statusListId === query.statusListId) &&
         (!query.state || session.state === query.state),
     )
 
@@ -107,7 +111,11 @@ export class V2Openid4vcCredentialExchangesController {
       query,
       {
         method: 'openid4vc.listCredentialExchanges',
-        filters: { credentialConfigurationId: query.credentialConfigurationId, state: query.state },
+        filters: {
+          jsonSchemaCredentialId: query.jsonSchemaCredentialId,
+          statusListId: query.statusListId,
+          state: query.state,
+        },
       },
       createdAtKey,
     )
@@ -159,7 +167,9 @@ export class V2Openid4vcCredentialExchangesController {
 function toRecordDto(session: OpenId4VcIssuanceSessionSummary): Openid4vcCredentialExchangeRecordDto {
   return {
     credentialExchangeId: session.id,
-    credentialConfigurationId: session.credentialConfigurationId,
+    jsonSchemaCredentialId: session.jsonSchemaCredentialId,
+    statusListId: session.statusListId,
+    statusListIndex: session.statusListIndex,
     state: session.state,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
@@ -176,7 +186,7 @@ function translate(error: unknown, credentialExchangeId?: string): unknown {
       `no credential exchange with id "${credentialExchangeId}"`,
     )
   }
-  if (error instanceof UnknownCredentialConfigurationError) {
+  if (error instanceof UnknownCredentialConfigurationError || error instanceof UnknownStatusListError) {
     return new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, error.message)
   }
   if (error instanceof OpenId4VcIssuerRequestError) {

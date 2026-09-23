@@ -13,7 +13,6 @@ const readOptions = () => ({
   ...validConfig(),
   publicApiBaseUrl,
   credentialConfigurations: [],
-  verifierPolicies: [],
 })
 
 describe('OpenID4VC configuration file', () => {
@@ -40,7 +39,6 @@ describe('OpenID4VC configuration file', () => {
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).resolves.toEqual({
       publicApiBaseUrl,
       credentialConfigurations: [],
-      verifierPolicies: [],
     })
   })
 

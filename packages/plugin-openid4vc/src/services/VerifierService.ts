@@ -13,7 +13,11 @@ import {
   OpenId4VcVerificationSessionState,
 } from '@credo-ts/openid4vc'
 
-import { findCredentialConfiguration, findVerifierPolicy, VERIFIER_CAPABILITY_ID } from '../config'
+import {
+  findCredentialConfiguration,
+  UnknownCredentialConfigurationError,
+  VERIFIER_CAPABILITY_ID,
+} from '../config'
 import { TrustClient } from '../trust/TrustClient'
 import {
   findBoundVerificationMethodId,
@@ -67,9 +71,17 @@ export interface OpenId4VcVerificationRequest {
   verificationSessionId: string
 }
 
+export interface OpenId4VcCreatePresentationRequestOptions {
+  jsonSchemaCredentialId: string
+  requestedClaims?: string[]
+  queryLanguage?: OpenId4VcQueryLanguage
+  requestSigner?: 'x5c' | 'did'
+}
+
 export type { OpenId4VcVerifiedCredentialResult } from './presentationVerification'
 
-const POLICY_TAG = 'policyId'
+const JSON_SCHEMA_CREDENTIAL_ID_TAG = 'jsonSchemaCredentialId'
+const REQUESTED_CLAIMS_TAG = 'requestedClaims'
 const OUTCOME_METADATA_KEY = 'openid4vc/verificationOutcome'
 
 const UNCONFIGURED_RESOLVER_DECISION: PresentationDecision = {
@@ -80,17 +92,18 @@ const UNCONFIGURED_RESOLVER_DECISION: PresentationDecision = {
     evidence: {
       did: null,
       trustStatus: null,
-      vtjscId: null,
+      jsonSchemaCredentialId: null,
       authorized: null,
       queries: [],
-      note: 'no trust resolver is configured',
+      note: 'the agent does not decide OpenID4VP trust yet; issue #712 brings the decision',
     },
   },
 }
 
 export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
   id: string
-  policyId?: string
+  jsonSchemaCredentialId?: string
+  requestedClaims?: string[]
   state: OpenId4VcVerificationSessionState
   createdAt: Date
   updatedAt: Date
@@ -98,7 +111,7 @@ export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
 }
 
 export class OpenId4VcVerifierRequestError extends Error {}
-export class UnknownVerifierPolicyError extends Error {}
+export class InvalidPresentationRequestError extends Error {}
 export class UnknownVerificationSessionError extends Error {}
 
 export class VerifierService {
@@ -122,21 +135,21 @@ export class VerifierService {
     return this.initialization
   }
 
-  public async createRequest(
-    policyId: string,
-    queryLanguage: OpenId4VcQueryLanguage = 'dcql',
-    requestSigner?: 'x5c' | 'did',
-  ): Promise<OpenId4VcVerificationRequest> {
+  public async createRequest({
+    jsonSchemaCredentialId,
+    requestedClaims,
+    queryLanguage = 'dcql',
+    requestSigner,
+  }: OpenId4VcCreatePresentationRequestOptions): Promise<OpenId4VcVerificationRequest> {
     await this.ensureInitialized()
 
-    const policy = findVerifierPolicy(this.options, policyId)
-    if (!policy) {
-      throw new UnknownVerifierPolicyError(`unknown verifier policy '${policyId}'`)
-    }
-    const configuration = findCredentialConfiguration(this.options, policy.credentialConfigurationId)
+    const configuration = findCredentialConfiguration(this.options, jsonSchemaCredentialId)
     if (!configuration) {
-      throw new Error(`verifier policy '${policyId}' references an unknown credential configuration`)
+      throw new UnknownCredentialConfigurationError(`unknown credential type '${jsonSchemaCredentialId}'`)
     }
+
+    const claims = requestedClaims ?? configuration.claims
+    assertRequestedClaims(claims, configuration.claims)
 
     const { authorizationRequest, verificationSession } = await this.verifierApi().createAuthorizationRequest(
       {
@@ -144,11 +157,12 @@ export class VerifierService {
         requestSigner: await this.buildRequestSigner(queryLanguage, requestSigner),
         // JARM (direct_post.jwt) is DCQL-only: Presentation Exchange wallets can't build the JWE it needs.
         responseMode: queryLanguage === 'presentation_exchange' ? 'direct_post' : 'direct_post.jwt',
-        ...presentationQueryFor(configuration, policy, queryLanguage),
+        ...presentationQueryFor(configuration, claims, queryLanguage),
       },
     )
 
-    verificationSession.setTag(POLICY_TAG, policyId)
+    verificationSession.setTag(JSON_SCHEMA_CREDENTIAL_ID_TAG, jsonSchemaCredentialId)
+    verificationSession.setTag(REQUESTED_CLAIMS_TAG, claims)
     await this.sessionRepository().update(this.agentContext(), verificationSession)
 
     return {
@@ -201,15 +215,28 @@ export class VerifierService {
     session: OpenId4VcVerificationSessionRecord,
     decision: PresentationDecision,
   ): OpenId4VcVerificationSessionSummary {
-    const policyId = session.getTag(POLICY_TAG)
+    const { jsonSchemaCredentialId, requestedClaims } = this.storedRequest(session)
     return {
       id: session.id,
-      ...(typeof policyId === 'string' ? { policyId } : {}),
+      ...(jsonSchemaCredentialId ? { jsonSchemaCredentialId } : {}),
+      ...(requestedClaims ? { requestedClaims } : {}),
       state: session.state,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt ?? session.createdAt,
       ...(session.errorMessage ? { errorMessage: session.errorMessage } : {}),
       ...decision,
+    }
+  }
+
+  private storedRequest(session: OpenId4VcVerificationSessionRecord): {
+    jsonSchemaCredentialId?: string
+    requestedClaims?: string[]
+  } {
+    const jsonSchemaCredentialId = session.getTag(JSON_SCHEMA_CREDENTIAL_ID_TAG)
+    const requestedClaims = session.getTag(REQUESTED_CLAIMS_TAG)
+    return {
+      ...(typeof jsonSchemaCredentialId === 'string' ? { jsonSchemaCredentialId } : {}),
+      ...(Array.isArray(requestedClaims) ? { requestedClaims } : {}),
     }
   }
 
@@ -232,6 +259,7 @@ export class VerifierService {
     const decision = await decidePresentation({
       agent: this.agent,
       options: this.options,
+      ...this.storedRequest(session),
       ...trustContext,
       verified,
     })
@@ -413,5 +441,16 @@ export class VerifierService {
     }
 
     return { method: 'did' as const, didUrl }
+  }
+}
+
+function assertRequestedClaims(requestedClaims: string[], configuredClaims: string[]): void {
+  if (new Set(requestedClaims).size !== requestedClaims.length) {
+    throw new InvalidPresentationRequestError('requestedClaims must not contain a duplicate')
+  }
+
+  const unknownClaim = requestedClaims.find(claim => !configuredClaims.includes(claim))
+  if (unknownClaim) {
+    throw new InvalidPresentationRequestError(`unknown claim '${unknownClaim}'`)
   }
 }

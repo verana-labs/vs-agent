@@ -30,7 +30,6 @@ vi.mock('@verana-labs/vs-agent-plugin-openid4vc', async importOriginal => {
 const options = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   credentialConfigurations: [],
-  verifierPolicies: [],
 })
 
 type FactoryProvider = { provide: unknown; useFactory: (agent: unknown) => unknown; inject: string[] }

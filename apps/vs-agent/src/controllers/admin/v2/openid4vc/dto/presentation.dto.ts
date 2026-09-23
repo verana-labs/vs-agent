@@ -2,7 +2,7 @@ import type { TrustVerdictName, VeranaTrustStatus } from '@verana-labs/vs-agent-
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { OpenId4VcVerificationSessionState } from '@verana-labs/vs-agent-plugin-openid4vc'
-import { IsEnum, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator'
+import { ArrayUnique, IsArray, IsEnum, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 import { PageDto, PaginationQueryDto } from '../../../../../common'
 
@@ -19,12 +19,25 @@ const TRUST_STATUSES = ['TRUSTED', 'PARTIAL', 'UNTRUSTED'] as const
 export class Openid4vcPresentationRequestBodyDto {
   @ApiProperty({
     description:
-      'Identifier of the verifier policy that names the credential and the claims to request. The agent holds none yet: issue #711 reads them from the VPR, so every identifier answers UNKNOWN_ID until then.',
-    example: 'employee-check',
+      'Credential type the request asks for. The agent holds none yet: issue #711 reads them from the VPR, so every identifier answers UNKNOWN_ID until then.',
+    example: 'employee',
   })
   @IsString()
   @IsNotEmpty()
-  policyId!: string
+  jsonSchemaCredentialId!: string
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Claim names the request asks the wallet to disclose, without a duplicate. Defaults to every claim of the type.',
+    example: ['name', 'role'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  @ArrayUnique()
+  requestedClaims?: string[]
 
   @ApiPropertyOptional({
     enum: QUERY_LANGUAGES,
@@ -61,11 +74,11 @@ export class Openid4vcPresentationRequestResponseDto {
 }
 
 export class Openid4vcListPresentationsQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Filter by verifier policy', example: 'employee-check' })
+  @ApiPropertyOptional({ description: 'Filter by credential type', example: 'employee' })
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  policyId?: string
+  jsonSchemaCredentialId?: string
 
   @ApiPropertyOptional({
     enum: OpenId4VcVerificationSessionState,
@@ -83,13 +96,13 @@ export class Openid4vcTrustEvidenceDto {
   @ApiProperty({ enum: TRUST_STATUSES, nullable: true, description: 'Trust status the resolver returned' })
   trustStatus!: VeranaTrustStatus | null
 
-  @ApiProperty({ type: String, nullable: true, description: 'VTJSC of the credential configuration' })
-  vtjscId!: string | null
+  @ApiProperty({ type: String, nullable: true, description: 'Credential type of the request' })
+  jsonSchemaCredentialId!: string | null
 
   @ApiProperty({
     type: Boolean,
     nullable: true,
-    description: 'Whether the resolver authorizes the issuer for the VTJSC',
+    description: 'Whether the resolver authorizes the issuer for the credential type',
   })
   authorized!: boolean | null
 
@@ -130,8 +143,15 @@ export class Openid4vcPresentationRecordDto {
   })
   proofExchangeId!: string
 
-  @ApiPropertyOptional({ description: 'Verifier policy of the request', example: 'employee-check' })
-  policyId?: string
+  @ApiPropertyOptional({ description: 'Credential type of the request', example: 'employee' })
+  jsonSchemaCredentialId?: string
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Claim names the request asked for',
+    example: ['name', 'role'],
+  })
+  requestedClaims?: string[]
 
   @ApiProperty({ enum: OpenId4VcVerificationSessionState, description: 'State of the verification session' })
   state!: OpenId4VcVerificationSessionState

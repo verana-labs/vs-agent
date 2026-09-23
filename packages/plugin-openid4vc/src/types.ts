@@ -20,12 +20,6 @@ export interface OpenId4VcCredentialConfiguration {
   disclosureFrame: string[]
 }
 
-export interface OpenId4VcVerifierPolicy {
-  id: string
-  credentialConfigurationId: string
-  requestedClaims: string[]
-}
-
 export interface OpenId4VcPluginOptions {
   publicApiBaseUrl: string
   issuer?: {
@@ -44,5 +38,4 @@ export interface OpenId4VcPluginOptions {
     developmentCertificateFingerprints?: string[]
   }
   credentialConfigurations: OpenId4VcCredentialConfiguration[]
-  verifierPolicies: OpenId4VcVerifierPolicy[]
 }

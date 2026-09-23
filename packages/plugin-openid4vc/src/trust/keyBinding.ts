@@ -278,7 +278,7 @@ async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise
 
 export function blockingBindingVerdict(
   did: string | null,
-  vtjscId: string | null,
+  jsonSchemaCredentialId: string | null,
   binding: Exclude<KeyBindingResult, 'bound'>,
 ): TrustVerdict {
   return {
@@ -286,7 +286,7 @@ export function blockingBindingVerdict(
     evidence: {
       did,
       trustStatus: null,
-      vtjscId,
+      jsonSchemaCredentialId,
       authorized: null,
       queries: [],
       note:

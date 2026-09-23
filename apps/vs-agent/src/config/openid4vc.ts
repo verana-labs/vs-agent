@@ -51,7 +51,6 @@ export async function readOpenId4VcOptions(
     ...parsed,
     publicApiBaseUrl,
     credentialConfigurations: [],
-    verifierPolicies: [],
   } as OpenId4VcPluginOptions
   validateOpenId4VcOptions(options)
   return options

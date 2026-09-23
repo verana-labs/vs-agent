@@ -9,13 +9,14 @@ import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  InvalidPresentationRequestError,
   IssuerService,
   OpenId4VcIssuerRequestError,
   OpenId4VcVerifierRequestError,
   UnknownCredentialConfigurationError,
   UnknownIssuanceSessionError,
+  UnknownStatusListError,
   UnknownVerificationSessionError,
-  UnknownVerifierPolicyError,
   VerifierService,
 } from '@verana-labs/vs-agent-plugin-openid4vc'
 
@@ -41,7 +42,7 @@ const trust = {
   evidence: {
     did: 'did:web:issuer.example',
     trustStatus: 'TRUSTED',
-    vtjscId: 'https://trust.example/vtjsc/employee',
+    jsonSchemaCredentialId: 'employee',
     authorized: true,
     queries: ['resolve', 'issuer-authorization'],
   },
@@ -50,7 +51,7 @@ const trust = {
 function issuanceSession(id: string, createdAt: string, overrides: Record<string, unknown> = {}) {
   return {
     id,
-    credentialConfigurationId: 'employee',
+    jsonSchemaCredentialId: 'employee',
     state: 'OfferCreated',
     createdAt: new Date(createdAt),
     updatedAt: new Date(createdAt),
@@ -62,7 +63,8 @@ function issuanceSession(id: string, createdAt: string, overrides: Record<string
 function verificationSession(id: string, createdAt: string, overrides: Record<string, unknown> = {}) {
   return {
     id,
-    policyId: 'employee-check',
+    jsonSchemaCredentialId: 'employee',
+    requestedClaims: ['name'],
     state: 'RequestCreated',
     createdAt: new Date(createdAt),
     updatedAt: new Date(createdAt),
@@ -75,7 +77,7 @@ function verificationSession(id: string, createdAt: string, overrides: Record<st
 const issuanceSessions = [
   issuanceSession('ce-a', '2026-01-01T00:00:00.000Z'),
   issuanceSession('ce-b', '2026-01-01T00:01:00.000Z', { state: 'Completed' }),
-  issuanceSession('ce-c', '2026-01-01T00:02:00.000Z', { credentialConfigurationId: 'badge' }),
+  issuanceSession('ce-c', '2026-01-01T00:02:00.000Z', { jsonSchemaCredentialId: 'badge' }),
 ]
 
 const verificationSessions = [
@@ -90,7 +92,7 @@ const verificationSessions = [
       disclosedClaims: { name: 'Ada Lovelace' },
     },
   }),
-  verificationSession('pe-c', '2026-01-01T00:02:00.000Z', { policyId: 'badge-check' }),
+  verificationSession('pe-c', '2026-01-01T00:02:00.000Z', { jsonSchemaCredentialId: 'badge' }),
 ]
 
 const issuerCertificate = {
@@ -198,32 +200,37 @@ describe('v2 openid4vc routes', () => {
       expect(Object.keys(response.body.items[0]).sort()).toEqual(
         [
           'createdAt',
-          'credentialConfigurationId',
           'credentialExchangeId',
           'expiresAt',
+          'jsonSchemaCredentialId',
           'state',
           'updatedAt',
         ].sort(),
       )
       expect(response.body.items[0]).toMatchObject({
         credentialExchangeId: 'ce-a',
-        credentialConfigurationId: 'employee',
+        jsonSchemaCredentialId: 'employee',
         state: 'OfferCreated',
         createdAt: '2026-01-01T00:00:00.000Z',
         expiresAt: '2026-01-02T00:00:00.000Z',
       })
     })
 
-    it('filters by state and by credential configuration', async () => {
+    it('filters by state, by credential type and by status list', async () => {
       const byState = await request(app.getHttpServer()).get(
         '/v2/openid4vc/credential-exchanges?state=Completed',
       )
       expect(exchangeIds(byState.body)).toEqual(['ce-b'])
 
-      const byConfiguration = await request(app.getHttpServer()).get(
-        '/v2/openid4vc/credential-exchanges?credentialConfigurationId=badge',
+      const byType = await request(app.getHttpServer()).get(
+        '/v2/openid4vc/credential-exchanges?jsonSchemaCredentialId=badge',
       )
-      expect(exchangeIds(byConfiguration.body)).toEqual(['ce-c'])
+      expect(exchangeIds(byType.body)).toEqual(['ce-c'])
+
+      const byStatusList = await request(app.getHttpServer()).get(
+        '/v2/openid4vc/credential-exchanges?statusListId=list-1',
+      )
+      expect(exchangeIds(byStatusList.body)).toEqual([])
     })
 
     it('refuses an unknown state filter', async () => {
@@ -272,7 +279,7 @@ describe('v2 openid4vc routes', () => {
       const response = await request(app.getHttpServer())
         .post('/v2/openid4vc/credential-offer')
         .send({
-          credentialConfigurationId: 'employee',
+          jsonSchemaCredentialId: 'employee',
           claims: { name: 'Ada Lovelace', role: 'engineer' },
           ttlSeconds: 3600,
         })
@@ -280,58 +287,109 @@ describe('v2 openid4vc routes', () => {
       expect(response.status).toBe(201)
       expect(response.body).toEqual({ credentialExchangeId: 'ce-new', url: CREDENTIAL_OFFER })
       expect(issuerService.createOffer).toHaveBeenCalledWith({
-        credentialConfigurationId: 'employee',
+        jsonSchemaCredentialId: 'employee',
         claims: { name: 'Ada Lovelace', role: 'engineer' },
         ttlSeconds: 3600,
+        statusListId: undefined,
+        statusListIndex: undefined,
       })
     })
 
-    it('maps an unknown configuration to UNKNOWN_ID and a claim error to INVALID_INPUT', async () => {
+    it('maps an unknown type to UNKNOWN_ID and a claim error to INVALID_INPUT', async () => {
       issuerService.createOffer.mockRejectedValueOnce(
-        new UnknownCredentialConfigurationError("unknown credential configuration 'x'"),
+        new UnknownCredentialConfigurationError("unknown credential type 'x'"),
       )
       const unknown = await request(app.getHttpServer())
         .post('/v2/openid4vc/credential-offer')
-        .send({ credentialConfigurationId: 'x', claims: { name: 'Ada' }, ttlSeconds: 3600 })
+        .send({ jsonSchemaCredentialId: 'x', claims: { name: 'Ada' }, ttlSeconds: 3600 })
       expect(unknown.status).toBe(404)
       expect(unknown.body.error).toEqual({
         code: 'UNKNOWN_ID',
-        message: "unknown credential configuration 'x'",
+        message: "unknown credential type 'x'",
       })
 
       issuerService.createOffer.mockRejectedValueOnce(new OpenId4VcIssuerRequestError("unknown claim 'age'"))
       const badClaims = await request(app.getHttpServer())
         .post('/v2/openid4vc/credential-offer')
-        .send({ credentialConfigurationId: 'employee', claims: { age: 3 }, ttlSeconds: 3600 })
+        .send({ jsonSchemaCredentialId: 'employee', claims: { age: 3 }, ttlSeconds: 3600 })
       expect(badClaims.status).toBe(400)
       expect(badClaims.body.error).toEqual({ code: 'INVALID_INPUT', message: "unknown claim 'age'" })
     })
 
+    it('maps an unknown status list to UNKNOWN_ID', async () => {
+      issuerService.createOffer.mockRejectedValueOnce(new UnknownStatusListError("unknown status list 'x'"))
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/openid4vc/credential-offer')
+        .send({
+          jsonSchemaCredentialId: 'employee',
+          claims: { name: 'Ada' },
+          ttlSeconds: 3600,
+          statusListId: 'x',
+          statusListIndex: 0,
+        })
+
+      expect(response.status).toBe(404)
+      expect(response.body.error).toEqual({ code: 'UNKNOWN_ID', message: "unknown status list 'x'" })
+    })
+
     it('validates the offer body and refuses fields the specification does not define', async () => {
       const missing = await validate(
-        plainToInstance(Openid4vcCredentialOfferBodyDto, { credentialConfigurationId: 'employee' }),
+        plainToInstance(Openid4vcCredentialOfferBodyDto, { jsonSchemaCredentialId: 'employee' }),
       )
       expect(missing.map(error => error.property)).toEqual(['claims', 'ttlSeconds'])
 
       const outOfRange = await validate(
         plainToInstance(Openid4vcCredentialOfferBodyDto, {
-          credentialConfigurationId: 'employee',
+          jsonSchemaCredentialId: 'employee',
           claims: { name: 'Ada' },
           ttlSeconds: 5,
         }),
       )
       expect(outOfRange.map(error => error.property)).toEqual(['ttlSeconds'])
 
-      const extra = await validate(
+      const statusList = await validate(
         plainToInstance(Openid4vcCredentialOfferBodyDto, {
-          credentialConfigurationId: 'employee',
+          jsonSchemaCredentialId: 'employee',
           claims: { name: 'Ada' },
           ttlSeconds: 3600,
           statusListId: 'list-1',
+          statusListIndex: 0,
         }),
         { whitelist: true, forbidNonWhitelisted: true },
       )
-      expect(extra.map(error => error.property)).toEqual(['statusListId'])
+      expect(statusList).toEqual([])
+
+      const extra = await validate(
+        plainToInstance(Openid4vcCredentialOfferBodyDto, {
+          jsonSchemaCredentialId: 'employee',
+          claims: { name: 'Ada' },
+          ttlSeconds: 3600,
+          revocable: true,
+        }),
+        { whitelist: true, forbidNonWhitelisted: true },
+      )
+      expect(extra.map(error => error.property)).toEqual(['revocable'])
+    })
+
+    it('refuses half a status list pair at the service, which the controller maps to INVALID_INPUT', async () => {
+      issuerService.createOffer.mockRejectedValueOnce(
+        new OpenId4VcIssuerRequestError(
+          'statusListId and statusListIndex must be both present or both absent',
+        ),
+      )
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/openid4vc/credential-offer')
+        .send({
+          jsonSchemaCredentialId: 'employee',
+          claims: { name: 'Ada' },
+          ttlSeconds: 3600,
+          statusListIndex: 0,
+        })
+
+      expect(response.status).toBe(400)
+      expect(response.body.error.code).toBe('INVALID_INPUT')
     })
 
     it('deletes a credential exchange with 204 and answers UNKNOWN_ID otherwise', async () => {
@@ -374,8 +432,9 @@ describe('v2 openid4vc routes', () => {
           'createdAt',
           'credential',
           'cryptographicVerified',
-          'policyId',
+          'jsonSchemaCredentialId',
           'proofExchangeId',
+          'requestedClaims',
           'state',
           'trust',
           'updatedAt',
@@ -401,11 +460,11 @@ describe('v2 openid4vc routes', () => {
       })
     })
 
-    it('filters by policy and by state', async () => {
-      const byPolicy = await request(app.getHttpServer()).get(
-        '/v2/openid4vc/presentations?policyId=badge-check',
+    it('filters by credential type and by state', async () => {
+      const byType = await request(app.getHttpServer()).get(
+        '/v2/openid4vc/presentations?jsonSchemaCredentialId=badge',
       )
-      expect(proofIds(byPolicy.body)).toEqual(['pe-c'])
+      expect(proofIds(byType.body)).toEqual(['pe-c'])
 
       const byState = await request(app.getHttpServer()).get(
         '/v2/openid4vc/presentations?state=ResponseVerified',
@@ -418,36 +477,47 @@ describe('v2 openid4vc routes', () => {
       expect(errors.map(error => error.property)).toEqual(['state'])
     })
 
-    it('creates a presentation request with the optional query language and signer', async () => {
+    it('creates a presentation request with the optional claims, query language and signer', async () => {
       const full = await request(app.getHttpServer())
         .post('/v2/openid4vc/presentation-request')
-        .send({ policyId: 'employee-check', queryLanguage: 'presentation_exchange', requestSigner: 'x5c' })
+        .send({
+          jsonSchemaCredentialId: 'employee',
+          requestedClaims: ['name'],
+          queryLanguage: 'presentation_exchange',
+          requestSigner: 'x5c',
+        })
 
       expect(full.status).toBe(201)
       expect(full.body).toEqual({ proofExchangeId: 'pe-new', url: AUTHORIZATION_REQUEST })
-      expect(verifierService.createRequest).toHaveBeenCalledWith(
-        'employee-check',
-        'presentation_exchange',
-        'x5c',
-      )
+      expect(verifierService.createRequest).toHaveBeenCalledWith({
+        jsonSchemaCredentialId: 'employee',
+        requestedClaims: ['name'],
+        queryLanguage: 'presentation_exchange',
+        requestSigner: 'x5c',
+      })
 
       const bare = await request(app.getHttpServer())
         .post('/v2/openid4vc/presentation-request')
-        .send({ policyId: 'employee-check' })
+        .send({ jsonSchemaCredentialId: 'employee' })
 
       expect(bare.status).toBe(201)
-      expect(verifierService.createRequest).toHaveBeenLastCalledWith('employee-check', undefined, undefined)
+      expect(verifierService.createRequest).toHaveBeenLastCalledWith({
+        jsonSchemaCredentialId: 'employee',
+        requestedClaims: undefined,
+        queryLanguage: undefined,
+        requestSigner: undefined,
+      })
     })
 
-    it('maps an unknown policy to UNKNOWN_ID and a signer problem to INVALID_STATE', async () => {
+    it('maps an unknown type to UNKNOWN_ID and a signer problem to INVALID_STATE', async () => {
       verifierService.createRequest.mockRejectedValueOnce(
-        new UnknownVerifierPolicyError("unknown verifier policy 'x'"),
+        new UnknownCredentialConfigurationError("unknown credential type 'x'"),
       )
       const unknown = await request(app.getHttpServer())
         .post('/v2/openid4vc/presentation-request')
-        .send({ policyId: 'x' })
+        .send({ jsonSchemaCredentialId: 'x' })
       expect(unknown.status).toBe(404)
-      expect(unknown.body.error).toEqual({ code: 'UNKNOWN_ID', message: "unknown verifier policy 'x'" })
+      expect(unknown.body.error).toEqual({ code: 'UNKNOWN_ID', message: "unknown credential type 'x'" })
 
       verifierService.createRequest.mockRejectedValueOnce(
         new OpenId4VcVerifierRequestError(
@@ -456,23 +526,44 @@ describe('v2 openid4vc routes', () => {
       )
       const unsigned = await request(app.getHttpServer())
         .post('/v2/openid4vc/presentation-request')
-        .send({ policyId: 'employee-check', requestSigner: 'did' })
+        .send({ jsonSchemaCredentialId: 'employee', requestSigner: 'did' })
       expect(unsigned.status).toBe(409)
       expect(unsigned.body.error.code).toBe('INVALID_STATE')
+    })
+
+    it('maps a rejected requestedClaims to INVALID_INPUT', async () => {
+      verifierService.createRequest.mockRejectedValueOnce(
+        new InvalidPresentationRequestError("unknown claim 'admin'"),
+      )
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/openid4vc/presentation-request')
+        .send({ jsonSchemaCredentialId: 'employee', requestedClaims: ['admin'] })
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toEqual({ code: 'INVALID_INPUT', message: "unknown claim 'admin'" })
     })
 
     it('validates the request body and refuses fields the specification does not define', async () => {
       const badLanguage = await validate(
         plainToInstance(Openid4vcPresentationRequestBodyDto, {
-          policyId: 'employee-check',
+          jsonSchemaCredentialId: 'employee',
           queryLanguage: 'sql',
         }),
       )
       expect(badLanguage.map(error => error.property)).toEqual(['queryLanguage'])
 
+      const duplicateClaims = await validate(
+        plainToInstance(Openid4vcPresentationRequestBodyDto, {
+          jsonSchemaCredentialId: 'employee',
+          requestedClaims: ['name', 'name'],
+        }),
+      )
+      expect(duplicateClaims.map(error => error.property)).toEqual(['requestedClaims'])
+
       const extra = await validate(
         plainToInstance(Openid4vcPresentationRequestBodyDto, {
-          policyId: 'employee-check',
+          jsonSchemaCredentialId: 'employee',
           responseMode: 'direct_post',
         }),
         { whitelist: true, forbidNonWhitelisted: true },
@@ -480,7 +571,7 @@ describe('v2 openid4vc routes', () => {
       expect(extra.map(error => error.property)).toEqual(['responseMode'])
 
       const empty = await validate(plainToInstance(Openid4vcPresentationRequestBodyDto, {}))
-      expect(empty.map(error => error.property)).toEqual(['policyId'])
+      expect(empty.map(error => error.property)).toEqual(['jsonSchemaCredentialId'])
     })
 
     it('answers UNKNOWN_ID for an unknown presentation on get and delete', async () => {

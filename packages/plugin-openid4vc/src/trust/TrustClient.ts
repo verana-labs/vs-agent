@@ -71,7 +71,7 @@ export class TrustClient {
         evidence: {
           did,
           trustStatus: null,
-          vtjscId,
+          jsonSchemaCredentialId: vtjscId,
           authorized: null,
           queries: [],
           note: 'no DID was available for trust resolution',
@@ -84,7 +84,7 @@ export class TrustClient {
     const evidence: TrustEvidence = {
       did,
       trustStatus: resolution.status === 'ok' ? resolution.trustStatus : null,
-      vtjscId,
+      jsonSchemaCredentialId: vtjscId,
       authorized: null,
       queries: [resolutionUrl.toString()],
     }

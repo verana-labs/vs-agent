@@ -11,7 +11,6 @@ import { blockingBindingVerdict, verifyKeyBoundToDid, type DidResolverAgent } fr
 import { isRecord } from '../utils/isRecord'
 
 import { didFromValidatedCertificate } from './CertificateService'
-import { matchVerifierPolicy } from './presentationRequest'
 
 export interface OpenId4VcVerifiedCredentialResult {
   vct: string
@@ -28,24 +27,25 @@ export type PresentationDecision = {
 /** Trust decision of [VSA-ADM-OID-PR]. */
 export async function decidePresentation(input: {
   agent: DidResolverAgent
-  options: Pick<OpenId4VcPluginOptions, 'credentialConfigurations' | 'verifierPolicies'>
+  options: Pick<OpenId4VcPluginOptions, 'credentialConfigurations'>
+  jsonSchemaCredentialId?: string
+  requestedClaims?: string[]
   trust: NonNullable<OpenId4VcPluginOptions['trust']>
   trustClient: Pick<TrustClient, 'verdictFor'>
   verified: OpenId4VpVerifiedAuthorizationResponse
 }): Promise<PresentationDecision> {
-  const { agent, options, trust, trustClient, verified } = input
+  const { agent, options, jsonSchemaCredentialId, requestedClaims, trust, trustClient, verified } = input
 
-  const policy = matchVerifierPolicy(options, verified)
-  if (!policy) return blocked(null, null, 'unbound')
+  if (!jsonSchemaCredentialId || !requestedClaims) return blocked(null, null, 'unbound')
 
-  const configuration = findCredentialConfiguration(options, policy.credentialConfigurationId)
+  const configuration = findCredentialConfiguration(options, jsonSchemaCredentialId)
   if (!configuration) return blocked(null, null, 'unbound')
 
   const presentation =
     verified.dcql?.presentations[configuration.id]?.[0] ?? verified.presentationExchange?.presentations[0]
   if (!isX5cSdJwtDcPresentation(presentation)) return blocked(null, configuration.vtjscId, 'unbound')
 
-  const disclosedClaims = configuredDisclosedClaims(presentation.prettyClaims, policy.requestedClaims)
+  const disclosedClaims = configuredDisclosedClaims(presentation.prettyClaims, requestedClaims)
   if (presentation.prettyClaims.vct !== configuration.vct || !disclosedClaims) {
     return blocked(null, configuration.vtjscId, 'unbound')
   }
@@ -92,13 +92,13 @@ export function assertCredentialExpires(credential: unknown): void {
 
 function blocked(
   did: string | null,
-  vtjscId: string | null,
+  jsonSchemaCredentialId: string | null,
   binding: 'unbound' | 'unresolvable',
 ): PresentationDecision {
   return {
     cryptographicVerified: true,
     accepted: false,
-    trust: blockingBindingVerdict(did, vtjscId, binding),
+    trust: blockingBindingVerdict(did, jsonSchemaCredentialId, binding),
   }
 }
 

@@ -27,9 +27,10 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 import {
+  InvalidPresentationRequestError,
   OpenId4VcVerifierRequestError,
+  UnknownCredentialConfigurationError,
   UnknownVerificationSessionError,
-  UnknownVerifierPolicyError,
   VerifierService,
 } from '@verana-labs/vs-agent-plugin-openid4vc'
 
@@ -59,25 +60,30 @@ export class V2Openid4vcPresentationsController {
   @Post('presentation-request')
   @ApiOperation({
     summary: 'Create a presentation request',
-    description: 'Creates an OpenID4VP authorization request for one verifier policy.',
+    description:
+      'Creates an OpenID4VP authorization request for one credential type, and for the claims of that type the caller asks the wallet to disclose.',
   })
   @ApiBody({ type: Openid4vcPresentationRequestBodyDto })
   @ApiCreatedResponse({
     description: 'The presentation request',
     type: Openid4vcPresentationRequestResponseDto,
   })
-  @ApiBadRequestResponse({ description: 'The request body failed validation' })
-  @ApiNotFoundResponse({ description: 'The agent cannot resolve the verifier policy' })
+  @ApiBadRequestResponse({
+    description:
+      'The request body failed validation, or requestedClaims names a claim the type does not define',
+  })
+  @ApiNotFoundResponse({ description: 'The agent cannot resolve the credential type' })
   @ApiConflictResponse({ description: 'The DID does not publish the signing key' })
   public async createPresentationRequest(
     @Body() body: Openid4vcPresentationRequestBodyDto,
   ): Promise<Openid4vcPresentationRequestResponseDto> {
     try {
-      const request = await this.verifierService.createRequest(
-        body.policyId,
-        body.queryLanguage,
-        body.requestSigner,
-      )
+      const request = await this.verifierService.createRequest({
+        jsonSchemaCredentialId: body.jsonSchemaCredentialId,
+        requestedClaims: body.requestedClaims,
+        queryLanguage: body.queryLanguage,
+        requestSigner: body.requestSigner,
+      })
       return { proofExchangeId: request.verificationSessionId, url: request.authorizationRequest }
     } catch (error) {
       throw translate(error)
@@ -96,14 +102,17 @@ export class V2Openid4vcPresentationsController {
     const sessions = await this.verifierService.listVerificationSessions()
     const filtered = sessions.filter(
       session =>
-        (!query.policyId || session.policyId === query.policyId) &&
+        (!query.jsonSchemaCredentialId || session.jsonSchemaCredentialId === query.jsonSchemaCredentialId) &&
         (!query.state || session.state === query.state),
     )
 
     const page = paginate(
       filtered,
       query,
-      { method: 'openid4vc.listPresentations', filters: { policyId: query.policyId, state: query.state } },
+      {
+        method: 'openid4vc.listPresentations',
+        filters: { jsonSchemaCredentialId: query.jsonSchemaCredentialId, state: query.state },
+      },
       createdAtKey,
     )
 
@@ -147,7 +156,8 @@ export class V2Openid4vcPresentationsController {
 function toRecordDto(session: OpenId4VcVerificationSessionSummary): Openid4vcPresentationRecordDto {
   return {
     proofExchangeId: session.id,
-    policyId: session.policyId,
+    jsonSchemaCredentialId: session.jsonSchemaCredentialId,
+    requestedClaims: session.requestedClaims,
     state: session.state,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
@@ -167,8 +177,11 @@ function translate(error: unknown, proofExchangeId?: string): unknown {
       `no presentation with id "${proofExchangeId}"`,
     )
   }
-  if (error instanceof UnknownVerifierPolicyError) {
+  if (error instanceof UnknownCredentialConfigurationError) {
     return new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, error.message)
+  }
+  if (error instanceof InvalidPresentationRequestError) {
+    return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, error.message)
   }
   if (error instanceof OpenId4VcVerifierRequestError) {
     return new AdminApiError(AdminApiErrorCode.InvalidState, HttpStatus.CONFLICT, error.message)
