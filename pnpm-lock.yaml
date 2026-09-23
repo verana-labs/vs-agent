@@ -754,9 +754,6 @@ importers:
       '@credo-ts/openid4vc':
         specifier: 0.7.1-pr-2704-20260909134930
         version: 0.7.1-pr-2704-20260909134930(typescript@5.8.3)
-      '@owf/token-status-list':
-        specifier: 0.3.1
-        version: 0.3.1
       '@verana-labs/vs-agent-sdk':
         specifier: workspace:*
         version: link:../agent-sdk

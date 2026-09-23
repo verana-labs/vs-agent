@@ -31,8 +31,8 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@credo-ts/core": "catalog:",
     "@credo-ts/openid4vc": "catalog:",
-    "@owf/token-status-list": "0.3.1",
     "@verana-labs/vs-agent-sdk": "workspace:*",
     "express": "^4.18.1"
   },
