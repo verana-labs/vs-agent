@@ -331,10 +331,6 @@ interface FlowFilters {
   participantSessionId?: string
 }
 
-/**
- * Gives the Connection State of one flow, per [VSA-VTI-FLOW-STATE] Flow State. A flow in a
- * terminal state is TERMINATED, and so is a flow whose connection no longer exists.
- */
 const AGENT_STATES: ReadonlySet<VtFlowState> = new Set([
   VtFlowState.OrSent,
   VtFlowState.IrSent,
@@ -390,6 +386,10 @@ function pendingActionOf(record: VtFlowRecord): VtFlowPendingAction {
   return VtFlowPendingAction.None
 }
 
+/**
+ * Gives the Connection State of one flow, per [VSA-VTI-FLOW-STATE] Flow State. A flow in a
+ * terminal state is TERMINATED, and so is a flow whose connection no longer exists.
+ */
 function connectionStateOf(
   record: VtFlowRecord,
   connection: DidCommConnectionRecord | null | undefined,

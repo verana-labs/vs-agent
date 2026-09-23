@@ -15,10 +15,6 @@ export const VT_CONNECTION_STATES = ['NOT_CONNECTED', 'ESTABLISHED', 'TERMINATED
 
 export type VtConnectionState = (typeof VT_CONNECTION_STATES)[number]
 
-/**
- * One credential acquisition flow record of [VSA-ADM-VT-FL-LIST] listFlows.
- * [VSA-ADM-VT-FL-GET] getFlow returns one record of this shape.
- */
 export class V2VtFlowOobLinkDto {
   @ApiProperty() url!: string
   @ApiProperty() description!: string
@@ -59,6 +55,10 @@ export class V2VtFlowMessageDto {
   @ApiPropertyOptional({ description: 'Set for an oob-link only.' }) url?: string
 }
 
+/**
+ * One credential acquisition flow record of [VSA-ADM-VT-FL-LIST] listFlows.
+ * [VSA-ADM-VT-FL-GET] getFlow returns one record of this shape.
+ */
 export class V2VtFlowRecordDto {
   @ApiProperty({ description: 'Identifier of the flow record.' })
   id!: string
