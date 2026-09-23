@@ -679,6 +679,45 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(vtFlowApi.markValidated).toHaveBeenCalledWith('rec-v')
   })
 
+  function makeDirectIssuance(claims: Record<string, unknown>) {
+    const setup = makeValidateAgent({ claims })
+    const record = setup.current()
+    record.variant = 'direct-issuance'
+    record.schemaId = '22'
+    record.connectionId = 'conn-1'
+    const offerCredentialForSession = vi.fn(async () => ({ record: { ...record, state: 'CRED_OFFERED' } }))
+    Object.assign(setup.vtFlowApi, { offerCredentialForSession })
+    Object.assign(setup.agent, {
+      didcomm: { connections: { findById: vi.fn(async () => ({ theirDid: 'did:web:holder' })) } },
+    })
+    const orchestrator = new VtFlowOrchestrator(setup.agent as never)
+    ;(orchestrator as unknown as { buildDirectIssuanceOffer: unknown }).buildDirectIssuanceOffer = vi.fn(
+      async () => ({ credentialFormats: {}, issuerParticipantId: 93 }),
+    )
+    return { ...setup, orchestrator, offerCredentialForSession }
+  }
+
+  it('offers a Direct Issuance credential without any chain transaction', async () => {
+    const { orchestrator, chain, offerCredentialForSession } = makeDirectIssuance({ name: 'Acme' })
+
+    const offered = await orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(offered.state).toBe('CRED_OFFERED')
+    expect(offerCredentialForSession).toHaveBeenCalledWith(
+      expect.objectContaining({ vtFlowRecordId: 'rec-v', issuerParticipantId: 93 }),
+    )
+    expect(chain.estimateFee).not.toHaveBeenCalled()
+  })
+
+  it('refuses Direct Issuance claims that do not fit the schema before offering', async () => {
+    const { orchestrator, offerCredentialForSession } = makeDirectIssuance({})
+
+    await expect(orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })).rejects.toMatchObject({
+      code: 'INVALID_CLAIMS',
+    })
+    expect(offerCredentialForSession).not.toHaveBeenCalled()
+  })
+
   it('reads the entry before recording a transaction that was not found', async () => {
     const { agent, vtFlowApi, current } = makeValidateAgent({
       state: 'VALIDATION_TX_SUBMITTED',

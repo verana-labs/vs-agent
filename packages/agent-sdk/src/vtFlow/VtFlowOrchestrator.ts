@@ -352,9 +352,7 @@ export class VtFlowOrchestrator {
       throw new AdminApiError(AdminApiErrorCode.UnknownId, 404, `no flow with id "${input.vtFlowRecordId}"`)
     }
     if (record.role !== VtFlowRole.Validator) throw invalidState('validate is a validator action')
-    if (record.variant !== VtFlowVariant.OnboardingProcess) {
-      throw invalidState(`validate applies to an Onboarding Process flow, not '${record.variant}'`)
-    }
+    if (record.variant === VtFlowVariant.DirectIssuance) return this.validateDirectIssuance(record)
     if (!record.applicantParticipantId) throw invalidState('the flow names no applicant participant')
 
     const applicant = await this.agent.indexer.getParticipant(record.applicantParticipantId)
@@ -382,6 +380,42 @@ export class VtFlowOrchestrator {
       return vtFlowApi.recordValidation(record.id, validation, VtFlowState.AwaitingValidationTx)
     }
     return this.submitValidation(record.id, applicant, validation)
+  }
+
+  // A Direct Issuance flow has no entry to validate, so no transaction: check the claims, then offer.
+  private async validateDirectIssuance(record: VtFlowRecord): Promise<VtFlowRecord> {
+    if (record.state !== VtFlowState.Validating && record.state !== VtFlowState.OobPending) {
+      throw invalidState(`the flow is '${record.state}', which validate does not accept`)
+    }
+    if (!record.schemaId) throw invalidState('the flow names no credential schema')
+    const connection = await this.agent.didcomm.connections.findById(record.connectionId)
+    if (!connection?.theirDid) throw invalidState('the flow connection has no peer DID')
+
+    const schema = await this.agent.indexer.getCredentialSchema(record.schemaId)
+    this.assertClaims(schema.json_schema, connection.theirDid, record.claims)
+
+    const vtFlowApi = this.resolveVtFlowApi()
+    if (record.state === VtFlowState.OobPending) await vtFlowApi.startValidation(record.id)
+
+    const offer = await this.buildDirectIssuanceOffer(record.id)
+    if (!offer) throw invalidState('the agent holds no active ISSUER participant for the schema of the flow')
+    const { record: offered } = await vtFlowApi.offerCredentialForSession({
+      vtFlowRecordId: record.id,
+      ...offer,
+    })
+    return offered
+  }
+
+  private assertClaims(jsonSchema: string, subjectDid: string, claims?: Record<string, unknown>): void {
+    const violations = schemaViolations(JSON.parse(jsonSchema), { id: subjectDid, ...(claims ?? {}) })
+    if (violations.length > 0) {
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidClaims,
+        422,
+        'the claim set does not satisfy the json_schema',
+        { violations },
+      )
+    }
   }
 
   private assertValidateState(record: VtFlowRecord, entryValidated: boolean): void {
@@ -466,19 +500,9 @@ export class VtFlowOrchestrator {
   ): Promise<void> {
     if (applicant.role !== ParticipantRole.Holder) return
 
+    if (!applicant.did) throw invalidState('the applicant entry has no DID to issue to')
     const schema = await this.agent.indexer.getCredentialSchema(applicant.schema_id)
-    const violations = schemaViolations(JSON.parse(schema.json_schema), {
-      id: applicant.did,
-      ...(record.claims ?? {}),
-    })
-    if (violations.length > 0) {
-      throw new AdminApiError(
-        AdminApiErrorCode.InvalidClaims,
-        422,
-        'the claim set does not satisfy the json_schema',
-        { violations },
-      )
-    }
+    this.assertClaims(schema.json_schema, applicant.did, record.claims)
 
     // An ECS Organization or Persona credential needs a validUntil. With a validity period of 0 the
     // VPR sets no effective_until, so the call has to carry one.
