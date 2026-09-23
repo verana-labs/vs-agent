@@ -7,6 +7,7 @@ import {
   VtFlowRole,
   VtFlowService,
   VtFlowState,
+  VtFlowValidatedFromStates,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { classifyEcsSchema } from '@verana-labs/vs-agent-model'
@@ -205,21 +206,12 @@ export async function reconcileVtFlowRecordsForParticipant(
   }
 }
 
-const VALIDATED_FROM_STATES: ReadonlySet<VtFlowState> = new Set([
-  VtFlowState.Validating,
-  VtFlowState.OobPending,
-  VtFlowState.AwaitingValidationTx,
-  VtFlowState.ValidationTxSubmitted,
-  VtFlowState.ValidationTxFailed,
-  VtFlowState.TerminatedByValidator,
-])
-
 export async function markVtFlowRecordsValidated(agent: VsAgent, participantId: string): Promise<void> {
   await reconcileVtFlowRecordsForParticipant(
     agent,
     participantId,
     async (record, service, agentContext) => {
-      if (!VALIDATED_FROM_STATES.has(record.state)) {
+      if (!VtFlowValidatedFromStates.has(record.state)) {
         return null
       }
       await service.markValidated(agentContext, record.id)

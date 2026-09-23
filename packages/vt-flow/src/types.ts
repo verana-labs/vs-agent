@@ -48,6 +48,16 @@ export const VtFlowTerminalStates: ReadonlySet<VtFlowState> = new Set([
   VtFlowState.ParticipantSlashed,
 ])
 
+/** Validator states that `SetParticipantOPtoValidated` on-chain moves to `VALIDATED` ([VSA-VTI-FLOW-OP-ISSUE]). */
+export const VtFlowValidatedFromStates: ReadonlySet<VtFlowState> = new Set([
+  VtFlowState.Validating,
+  VtFlowState.OobPending,
+  VtFlowState.AwaitingValidationTx,
+  VtFlowState.ValidationTxSubmitted,
+  VtFlowState.ValidationTxFailed,
+  VtFlowState.TerminatedByValidator,
+])
+
 export function isVtFlowTerminalState(state: VtFlowState): boolean {
   return VtFlowTerminalStates.has(state)
 }

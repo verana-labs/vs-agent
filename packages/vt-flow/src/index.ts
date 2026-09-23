@@ -4,6 +4,7 @@ export {
   VtFlowRole,
   VtFlowState,
   VtFlowTerminalStates,
+  VtFlowValidatedFromStates,
   VtFlowVariant,
   isVtFlowTerminalState,
 } from './types'

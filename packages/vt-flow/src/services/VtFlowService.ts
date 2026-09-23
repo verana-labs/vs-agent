@@ -31,6 +31,7 @@ import {
   VtFlowEventTypes,
   VtFlowRole,
   VtFlowState,
+  VtFlowValidatedFromStates,
   VtFlowVariant,
   type VtFlowStateChangedEvent,
   isVtFlowTerminalState,
@@ -571,14 +572,7 @@ export class VtFlowService {
   public async markValidated(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    record.assertState([
-      VtFlowState.Validating,
-      VtFlowState.OobPending,
-      VtFlowState.AwaitingValidationTx,
-      VtFlowState.ValidationTxSubmitted,
-      VtFlowState.ValidationTxFailed,
-      VtFlowState.TerminatedByValidator,
-    ])
+    record.assertState([...VtFlowValidatedFromStates])
     record.assertVariant(VtFlowVariant.OnboardingProcess)
 
     await this.updateState(agentContext, record, VtFlowState.Validated)
