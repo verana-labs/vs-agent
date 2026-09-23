@@ -20,11 +20,9 @@ import {
 
 import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 
-/**
- * DIDComm v2 starts a connection at the first encrypted message. No handshake can refuse a second
- * use of a single-use invitation. Therefore the agent closes that connection here. DIDComm v1
- * refuses it in the handshake.
- */
+// TODO: Fix single-use invitations for DIDComm v2 in Credo, then remove this function.
+// In Credo, multiUseInvitation: false only sets reusable: false on the OOB record. It does not
+// refuse a second connection from a v2 invitation, because v2 has no handshake.
 async function discardExtraConnection(
   agent: VsAgent<any>,
   record: DidCommConnectionRecord,
