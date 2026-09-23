@@ -42,7 +42,6 @@ import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
-import { findDidCommVerificationMethodId } from '../did/didcommVerificationMethod'
 import { applyArtifactServices, artifactServicesMatch } from '../did/artifactServices'
 import { getLegacyDidWeb } from '../did/legacyDidWeb'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
@@ -295,8 +294,19 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     })
   }
 
+  // Prefer Ed25519VerificationKey2020 over Multikey: webvh's update Multikey is not ours to use.
   private findEd25519VerificationMethodId(didDocument: DidDocument): string | undefined {
-    return findDidCommVerificationMethodId(didDocument)
+    const vms = didDocument.verificationMethod ?? []
+    const preferred = vms.find(vm => vm.type === 'Ed25519VerificationKey2020')
+    if (preferred) return preferred.id
+    const fallback = vms.find(
+      vm =>
+        vm.type === 'Ed25519VerificationKey2018' ||
+        (vm.type === 'Multikey' &&
+          typeof vm.publicKeyMultibase === 'string' &&
+          vm.publicKeyMultibase.startsWith('z6Mk')),
+    )
+    return fallback?.id
   }
 
   private getDidCommServices(publicDid: string, ed25519VerificationMethodId: string) {
