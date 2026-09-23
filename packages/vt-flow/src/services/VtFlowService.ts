@@ -249,11 +249,7 @@ export class VtFlowService {
         if (message.claims) existing.claims = message.claims
         if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
       }
-      if (
-        existing.state === VtFlowState.Completed ||
-        existing.state === VtFlowState.Validated ||
-        existing.state === VtFlowState.CredRevoked
-      ) {
+      if (existing.state === VtFlowState.Completed || existing.state === VtFlowState.CredRevoked) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
         existing.oobLinkUrl = undefined
         await this.updateState(agentContext, existing, VtFlowState.AwaitingOr)

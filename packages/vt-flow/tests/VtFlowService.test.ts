@@ -111,16 +111,18 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(repository.save).not.toHaveBeenCalled()
   })
 
-  it('validator re-runs a renewal from VALIDATED, the terminal state of a non-HOLDER flow', async () => {
+  it('validator keeps a flow in VALIDATED when the applicant resends its request', async () => {
     const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validated })
     const { service, agentContext } = makeService(existing, {
       id: 'conn-old',
       theirDid: 'did:web:agent-peer',
     })
+    const context = makeMessageContext(agentContext)
+    context.message.setThread({ threadId: existing.threadId })
 
-    const record = await service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+    const record = await service.processReceiveOnboardingRequest(context as never)
 
-    expect(record.state).toBe(VtFlowState.AwaitingOr)
+    expect(record.state).toBe(VtFlowState.Validated)
   })
 
   it('validator rejects a session id colliding with a terminated flow', async () => {
