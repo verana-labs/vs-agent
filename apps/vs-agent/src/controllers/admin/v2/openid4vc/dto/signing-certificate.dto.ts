@@ -2,6 +2,7 @@ import type { SigningRole } from '@verana-labs/vs-agent-plugin-openid4vc'
 
 import { ApiProperty } from '@nestjs/swagger'
 
+/** One entry of [VSA-ADM-OID-CS] listSigningCertificates. */
 export class Openid4vcSigningCertificateDto {
   @ApiProperty({
     enum: ['issuer', 'verifier'],

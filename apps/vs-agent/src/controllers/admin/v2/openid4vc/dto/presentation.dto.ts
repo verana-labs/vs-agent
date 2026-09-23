@@ -16,10 +16,11 @@ const VERDICTS = [
 ] as const
 const TRUST_STATUSES = ['TRUSTED', 'PARTIAL', 'UNTRUSTED'] as const
 
+/** Request body of [VSA-ADM-OID-PR] createPresentationRequest. */
 export class Openid4vcPresentationRequestBodyDto {
   @ApiProperty({
     description:
-      'Credential type the request asks for. The agent holds none yet: issue #711 reads them from the VPR, so every identifier answers UNKNOWN_ID until then.',
+      'Credential type the request asks for. The agent derives no credential type yet, so every identifier answers UNKNOWN_ID.',
     example: 'employee',
   })
   @IsString()
@@ -58,6 +59,7 @@ export class Openid4vcPresentationRequestBodyDto {
   requestSigner?: (typeof REQUEST_SIGNERS)[number]
 }
 
+/** Response of [VSA-ADM-OID-PR] createPresentationRequest. */
 export class Openid4vcPresentationRequestResponseDto {
   @ApiProperty({
     description: 'Identifier of the verification session, for later tracking',
@@ -73,6 +75,7 @@ export class Openid4vcPresentationRequestResponseDto {
   url!: string
 }
 
+/** Query of [VSA-ADM-OID-PR] listPresentations. */
 export class Openid4vcListPresentationsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Filter by credential type', example: 'employee' })
   @IsOptional()
@@ -89,6 +92,7 @@ export class Openid4vcListPresentationsQueryDto extends PaginationQueryDto {
   state?: OpenId4VcVerificationSessionState
 }
 
+/** What the agent read from the resolver to reach a trust verdict on a presentation. */
 export class Openid4vcTrustEvidenceDto {
   @ApiProperty({ type: String, nullable: true, description: 'DID of the issuer, read from the certificate' })
   did!: string | null
@@ -113,6 +117,7 @@ export class Openid4vcTrustEvidenceDto {
   note?: string
 }
 
+/** The trust verdict on a presentation, on the record of [VSA-ADM-OID-PR] getPresentation. */
 export class Openid4vcTrustVerdictDto {
   @ApiProperty({ enum: VERDICTS, description: 'The trust verdict' })
   verdict!: TrustVerdictName
@@ -121,6 +126,7 @@ export class Openid4vcTrustVerdictDto {
   evidence!: Openid4vcTrustEvidenceDto
 }
 
+/** The credential a wallet presented, on the record of [VSA-ADM-OID-PR] getPresentation. */
 export class Openid4vcPresentedCredentialDto {
   @ApiProperty({
     description: 'SD-JWT VC type of the presented credential',
@@ -129,13 +135,15 @@ export class Openid4vcPresentedCredentialDto {
   vct!: string
 
   @ApiProperty({
-    type: Object,
+    type: 'object',
+    additionalProperties: true,
     description: 'The claims the wallet disclosed',
     example: { name: 'Ada Lovelace' },
   })
   disclosedClaims!: Record<string, unknown>
 }
 
+/** A presentation record, as returned by listPresentations and getPresentation. */
 export class Openid4vcPresentationRecordDto {
   @ApiProperty({
     description: 'Identifier of the verification session',

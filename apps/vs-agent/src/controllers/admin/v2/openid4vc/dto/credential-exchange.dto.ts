@@ -8,10 +8,11 @@ import { IsEnum, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Max, Min } f
 
 import { PageDto, PaginationQueryDto } from '../../../../../common'
 
+/** Request body of [VSA-ADM-OID-CE] createCredentialOffer. */
 export class Openid4vcCredentialOfferBodyDto {
   @ApiProperty({
     description:
-      'Credential type of the offer. The agent holds none yet: issue #711 reads them from the VPR, so every identifier answers UNKNOWN_ID until then.',
+      'Credential type of the offer. The agent derives no credential type yet, so every identifier answers UNKNOWN_ID.',
     example: 'employee',
   })
   @IsString()
@@ -19,7 +20,8 @@ export class Openid4vcCredentialOfferBodyDto {
   jsonSchemaCredentialId!: string
 
   @ApiProperty({
-    type: Object,
+    type: 'object',
+    additionalProperties: true,
     description:
       'Claim values of the offered credential. Any subset of the configured claims, at least one, each non-empty; an omitted claim is left out of the credential.',
     example: { name: 'Ada Lovelace', role: 'engineer' },
@@ -42,7 +44,7 @@ export class Openid4vcCredentialOfferBodyDto {
 
   @ApiPropertyOptional({
     description:
-      'Status list the credential is registered on, with statusListIndex. The agent hosts none yet: issue #713 brings them, so every identifier answers UNKNOWN_ID until then.',
+      'Status list the credential is registered on, with statusListIndex. The agent hosts no status list yet, so every identifier answers UNKNOWN_ID.',
     example: 'list-1',
   })
   @IsOptional()
@@ -62,6 +64,7 @@ export class Openid4vcCredentialOfferBodyDto {
   statusListIndex?: number
 }
 
+/** Response of [VSA-ADM-OID-CE] createCredentialOffer. */
 export class Openid4vcCredentialOfferResponseDto {
   @ApiProperty({
     description: 'Identifier of the issuance session, for later tracking',
@@ -77,6 +80,7 @@ export class Openid4vcCredentialOfferResponseDto {
   url!: string
 }
 
+/** Query of [VSA-ADM-OID-CE] listCredentialExchanges. */
 export class Openid4vcListCredentialExchangesQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Filter by credential type', example: 'employee' })
   @IsOptional()
@@ -99,6 +103,7 @@ export class Openid4vcListCredentialExchangesQueryDto extends PaginationQueryDto
   state?: OpenId4VcIssuanceSessionState
 }
 
+/** A credential exchange record, as returned by listCredentialExchanges and getCredentialExchange. */
 export class Openid4vcCredentialExchangeRecordDto {
   @ApiProperty({
     description: 'Identifier of the issuance session',
