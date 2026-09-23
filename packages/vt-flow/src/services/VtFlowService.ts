@@ -893,11 +893,13 @@ export class VtFlowService {
     const code = message.description?.code
     const info = code && isVtFlowErrorCode(code) ? VT_FLOW_ERROR_INFO[code] : undefined
 
-    this.appendMessage(record, {
-      type: VtFlowMessageType.ProblemReport,
-      text: message.description?.en ?? code ?? 'problem-report',
-      at: new Date().toISOString(),
-    })
+    if (record.role === VtFlowRole.Applicant) {
+      this.appendMessage(record, {
+        type: VtFlowMessageType.ProblemReport,
+        text: message.description?.en ?? code ?? 'problem-report',
+        at: new Date().toISOString(),
+      })
+    }
     record.errorMessage = message.description?.en ?? code
 
     const target = info && this.resolveErrorFlowState(info.flowState, record.role, message.whoRetries)

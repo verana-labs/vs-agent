@@ -130,6 +130,8 @@ describe('VtFlowService inbound problem-report', () => {
     })
     await expect(receive(VtFlowErrorCode.SessionTerminated, VtFlowRole.Validator)).resolves.toMatchObject({
       state: VtFlowState.TerminatedByApplicant,
+      messages: undefined,
+      errorMessage: 'because',
     })
   })
 
