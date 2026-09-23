@@ -13,6 +13,7 @@ import { assertCredentialExpires } from '../services/presentationVerification'
 import { trustedCertificatesForVerification } from '../trust/CertificateTrust'
 import { isRecord } from '../utils/isRecord'
 
+const ISSUER_BODY_LIMIT = '1mb'
 const ATTESTATION_AUTH_METHOD = 'attest_jwt_client_auth'
 const ATTESTATION_ALGORITHMS = ['ES256']
 const DPOP_ALGORITHMS = ['ES256']
@@ -45,7 +46,12 @@ export function setupOpenId4Vc(
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
   app.use(accommodateOpenId4VciKt(Boolean(options.issuer?.keyAttestationCertificates?.length)))
   app.use(serveCertificateBoundIssuerMetadata(getIssuerService))
-  app.use(express.json(), acceptDraftCredentialRequests(options.credentialConfigurations))
+  // Credo raises the body limits of its own routers (1 MB issuer, 5 MB verifier), and a parser registered on the same app before them decides first, so this one covers the issuer path alone and at the limit credo sets there.
+  app.use(
+    new URL(`${options.publicApiBaseUrl}/oid4vci`).pathname,
+    express.json({ limit: ISSUER_BODY_LIMIT }),
+    acceptDraftCredentialRequests(options.credentialConfigurations),
+  )
   // RFC 8615 puts the issuer path after the well-known segment, so a holder whose issuer identifier carries a path requests `/.well-known/jwt-vc-issuer/oid4vci/<id>`, not just the bare form.
   app.get(['/.well-known/jwt-vc-issuer', '/.well-known/jwt-vc-issuer/*'], (_request, response, next) => {
     try {

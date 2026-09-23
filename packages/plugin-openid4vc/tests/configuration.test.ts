@@ -527,6 +527,41 @@ describe('setupOpenId4Vc', () => {
     expect(response.body.credential_issuer).toBe('https://agent.example/public/base/oid4vci/issuer')
   })
 
+  it('leaves a body on the verifier path to the limits credo sets on its own routers', async () => {
+    const setup = setupOpenId4Vc(setupOptions())
+    let parsed: unknown = 'middleware was not reached'
+    setup.publicMiddleware.post('/oid4vp/verifier/authorize', (incoming, response) => {
+      parsed = incoming.body
+      response.json({ ok: true })
+    })
+
+    const response = await request(setup.publicMiddleware)
+      .post('/oid4vp/verifier/authorize')
+      .send({ response: 'x'.repeat(200_000) })
+
+    expect(response.status).toBe(200)
+    expect(parsed).toBeUndefined()
+  })
+
+  it.each([
+    ['https://agent.example', '/oid4vci/issuer/credential'],
+    ['https://agent.example/public/base', '/public/base/oid4vci/issuer/credential'],
+  ])('parses a credential request of %s above the default 100 kB limit', async (baseUrl, path) => {
+    const options = setupOptions()
+    options.publicApiBaseUrl = baseUrl
+    const setup = setupOpenId4Vc(options)
+    setup.publicMiddleware.post(path, (incoming, response) =>
+      response.json({ length: (incoming.body as { vct: string }).vct.length }),
+    )
+
+    const response = await request(setup.publicMiddleware)
+      .post(path)
+      .send({ vct: 'x'.repeat(200_000) })
+
+    expect(response.status).toBe(200)
+    expect(response.body.length).toBe(200_000)
+  })
+
   it('does not mount verifier presentation or holder routes on the public middleware', async () => {
     const setup = setupOpenId4Vc(setupOptions(), () => ({
       getSignedMetadataJwt: () => undefined,
