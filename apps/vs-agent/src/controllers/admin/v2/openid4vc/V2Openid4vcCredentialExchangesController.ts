@@ -22,13 +22,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import {
-  IssuerService,
-  OpenId4VcIssuerRequestError,
-  UnknownCredentialConfigurationError,
-  UnknownIssuanceSessionError,
-  UnknownStatusListError,
-} from '@verana-labs/vs-agent-plugin-openid4vc'
+import { IssuerService, OpenId4VcError, OpenId4VcErrorCode } from '@verana-labs/vs-agent-plugin-openid4vc'
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
 
@@ -160,7 +154,7 @@ export class V2Openid4vcCredentialExchangesController {
 }
 
 function translate(error: unknown, credentialExchangeId: string): unknown {
-  if (error instanceof UnknownIssuanceSessionError) {
+  if (error instanceof OpenId4VcError && error.code === OpenId4VcErrorCode.UnknownIssuanceSession) {
     return new AdminApiError(
       AdminApiErrorCode.UnknownId,
       HttpStatus.NOT_FOUND,
@@ -171,11 +165,15 @@ function translate(error: unknown, credentialExchangeId: string): unknown {
 }
 
 function translateOffer(error: unknown): unknown {
-  if (error instanceof UnknownCredentialConfigurationError || error instanceof UnknownStatusListError) {
-    return new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, error.message)
+  if (!(error instanceof OpenId4VcError)) return error
+
+  switch (error.code) {
+    case OpenId4VcErrorCode.UnknownCredentialType:
+    case OpenId4VcErrorCode.UnknownStatusList:
+      return new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, error.message)
+    case OpenId4VcErrorCode.InvalidCredentialOffer:
+      return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, error.message)
+    default:
+      return error
   }
-  if (error instanceof OpenId4VcIssuerRequestError) {
-    return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, error.message)
-  }
-  return error
 }

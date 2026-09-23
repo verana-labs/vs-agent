@@ -9,11 +9,8 @@ import {
   OpenId4VcVerificationSessionState,
 } from '@credo-ts/openid4vc'
 
-import {
-  findCredentialConfiguration,
-  UnknownCredentialConfigurationError,
-  VERIFIER_CAPABILITY_ID,
-} from '../config'
+import { findCredentialConfiguration, VERIFIER_CAPABILITY_ID } from '../config'
+import { OpenId4VcError, OpenId4VcErrorCode } from '../errors'
 import {
   findBoundVerificationMethodId,
   findEd25519VerificationMethodId,
@@ -104,10 +101,6 @@ export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
   errorMessage?: string
 }
 
-export class OpenId4VcVerifierRequestError extends Error {}
-export class InvalidPresentationRequestError extends Error {}
-export class UnknownVerificationSessionError extends Error {}
-
 export class VerifierService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
@@ -136,7 +129,10 @@ export class VerifierService {
 
     const configuration = findCredentialConfiguration(this.options, jsonSchemaCredentialId)
     if (!configuration) {
-      throw new UnknownCredentialConfigurationError(`unknown credential type '${jsonSchemaCredentialId}'`)
+      throw new OpenId4VcError(
+        OpenId4VcErrorCode.UnknownCredentialType,
+        `no credential type with id "${jsonSchemaCredentialId}"`,
+      )
     }
 
     const claims = requestedClaims ?? configuration.claims
@@ -306,8 +302,9 @@ export class VerifierService {
       return await this.verifierApi().getVerificationSessionById(sessionId)
     } catch (error) {
       if (error instanceof RecordNotFoundError) {
-        throw new UnknownVerificationSessionError(
-          `OpenID4VC verification session '${sessionId}' was not found`,
+        throw new OpenId4VcError(
+          OpenId4VcErrorCode.UnknownVerificationSession,
+          `no verification session with id "${sessionId}"`,
         )
       }
       throw error
@@ -316,7 +313,10 @@ export class VerifierService {
 
   private assertSessionOwnership(session: OpenId4VcVerificationSessionRecord, sessionId: string): void {
     if (session.verifierId !== VERIFIER_CAPABILITY_ID) {
-      throw new UnknownVerificationSessionError(`OpenID4VC verification session '${sessionId}' was not found`)
+      throw new OpenId4VcError(
+        OpenId4VcErrorCode.UnknownVerificationSession,
+        `no verification session with id "${sessionId}"`,
+      )
     }
   }
 
@@ -364,7 +364,8 @@ export class VerifierService {
       ownDidResolutionPolicy(did ?? ''),
     )
     if (!didUrl) {
-      throw new OpenId4VcVerifierRequestError(
+      throw new OpenId4VcError(
+        OpenId4VcErrorCode.RequestSigningKeyNotPublished,
         'verifier is configured to sign requests with its DID, but the DID does not publish the signing key for authentication',
       )
     }
@@ -375,11 +376,14 @@ export class VerifierService {
 
 function assertRequestedClaims(requestedClaims: string[], configuredClaims: string[]): void {
   if (new Set(requestedClaims).size !== requestedClaims.length) {
-    throw new InvalidPresentationRequestError('requestedClaims must not contain a duplicate')
+    throw new OpenId4VcError(
+      OpenId4VcErrorCode.InvalidPresentationRequest,
+      'requestedClaims must not contain a duplicate',
+    )
   }
 
   const unknownClaim = requestedClaims.find(claim => !configuredClaims.includes(claim))
   if (unknownClaim) {
-    throw new InvalidPresentationRequestError(`unknown claim '${unknownClaim}'`)
+    throw new OpenId4VcError(OpenId4VcErrorCode.InvalidPresentationRequest, `unknown claim '${unknownClaim}'`)
   }
 }

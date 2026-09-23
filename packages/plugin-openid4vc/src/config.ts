@@ -101,8 +101,6 @@ function assertX509Certificates(value: unknown, path: string): void {
   })
 }
 
-export class UnknownCredentialConfigurationError extends Error {}
-
 export function findCredentialConfiguration(
   options: Pick<OpenId4VcPluginOptions, 'credentialConfigurations'>,
   id: string,

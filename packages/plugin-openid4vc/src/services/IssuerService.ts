@@ -18,8 +18,8 @@ import {
   parseOfferClaims,
   parseOfferIssuanceMetadata,
   parseOfferTtlSeconds,
-  UnknownCredentialConfigurationError,
 } from '../config'
+import { OpenId4VcError, OpenId4VcErrorCode } from '../errors'
 import { ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
@@ -82,10 +82,6 @@ export interface OpenId4VcIssuanceSessionSummary {
   errorMessage?: string
 }
 
-export class OpenId4VcIssuerRequestError extends Error {}
-export class UnknownStatusListError extends Error {}
-export class UnknownIssuanceSessionError extends Error {}
-
 export class IssuerService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
@@ -116,16 +112,23 @@ export class IssuerService {
     await this.ensureInitialized()
     const configuration = findCredentialConfiguration(this.options, jsonSchemaCredentialId)
     if (!configuration) {
-      throw new UnknownCredentialConfigurationError(`unknown credential type '${jsonSchemaCredentialId}'`)
+      throw new OpenId4VcError(
+        OpenId4VcErrorCode.UnknownCredentialType,
+        `no credential type with id "${jsonSchemaCredentialId}"`,
+      )
     }
 
     if ((statusListId === undefined) !== (statusListIndex === undefined)) {
-      throw new OpenId4VcIssuerRequestError(
+      throw new OpenId4VcError(
+        OpenId4VcErrorCode.InvalidCredentialOffer,
         'statusListId and statusListIndex must be both present or both absent',
       )
     }
     if (statusListId !== undefined) {
-      throw new UnknownStatusListError(`unknown status list '${statusListId}'`)
+      throw new OpenId4VcError(
+        OpenId4VcErrorCode.UnknownStatusList,
+        `no status list with id "${statusListId}"`,
+      )
     }
 
     let issuanceMetadata: { claims: Record<string, unknown>; ttlSeconds: number }
@@ -135,7 +138,8 @@ export class IssuerService {
         ttlSeconds: parseOfferTtlSeconds(ttlSeconds),
       }
     } catch (error) {
-      throw new OpenId4VcIssuerRequestError(
+      throw new OpenId4VcError(
+        OpenId4VcErrorCode.InvalidCredentialOffer,
         error instanceof Error ? error.message : 'invalid credential offer',
       )
     }
@@ -175,12 +179,18 @@ export class IssuerService {
       session = await this.issuerApi().getIssuanceSessionById(id)
     } catch (error) {
       if (error instanceof RecordNotFoundError) {
-        throw new UnknownIssuanceSessionError(`unknown issuance session '${id}'`)
+        throw new OpenId4VcError(
+          OpenId4VcErrorCode.UnknownIssuanceSession,
+          `no issuance session with id "${id}"`,
+        )
       }
       throw error
     }
     if (session.issuerId !== ISSUER_CAPABILITY_ID) {
-      throw new UnknownIssuanceSessionError(`unknown issuance session '${id}'`)
+      throw new OpenId4VcError(
+        OpenId4VcErrorCode.UnknownIssuanceSession,
+        `no issuance session with id "${id}"`,
+      )
     }
     return session
   }

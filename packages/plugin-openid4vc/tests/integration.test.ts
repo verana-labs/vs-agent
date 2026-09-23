@@ -42,16 +42,13 @@ import { join } from 'node:path'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { setupOpenId4Vc } from '../src/sdk/setupOpenId4Vc'
+import { OpenId4VcErrorCode } from '../src/errors'
 import {
   didFromValidatedCertificate,
   loadSigningCertificate,
   publishDevelopmentSigningKey,
 } from '../src/services/CertificateService'
-import {
-  IssuerService,
-  UnknownIssuanceSessionError,
-  type OpenId4VcIssuerAgent,
-} from '../src/services/IssuerService'
+import { IssuerService, type OpenId4VcIssuerAgent } from '../src/services/IssuerService'
 import { VerifierService, type OpenId4VcVerifierAgent } from '../src/services/VerifierService'
 
 import { createCertificateFixtures, LEAF_PRIVATE_JWK, OTHER_PRIVATE_JWK } from './helpers/certificates'
@@ -1239,9 +1236,9 @@ describe('in-process OpenID4VC issuance', () => {
     expect(read).not.toHaveProperty('credentialOffer')
 
     await agents.issuer.service.deleteIssuanceSession(offer.issuanceSessionId)
-    await expect(agents.issuer.service.getIssuanceSession(offer.issuanceSessionId)).rejects.toBeInstanceOf(
-      UnknownIssuanceSessionError,
-    )
+    await expect(agents.issuer.service.getIssuanceSession(offer.issuanceSessionId)).rejects.toMatchObject({
+      code: OpenId4VcErrorCode.UnknownIssuanceSession,
+    })
   }, 60_000)
 
   it('serves a verifiable x5c-headed signed metadata JWT to a jwt-only client', async () => {

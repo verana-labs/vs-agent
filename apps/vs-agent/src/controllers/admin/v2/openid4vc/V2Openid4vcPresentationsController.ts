@@ -23,13 +23,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import {
-  InvalidPresentationRequestError,
-  OpenId4VcVerifierRequestError,
-  UnknownCredentialConfigurationError,
-  UnknownVerificationSessionError,
-  VerifierService,
-} from '@verana-labs/vs-agent-plugin-openid4vc'
+import { OpenId4VcError, OpenId4VcErrorCode, VerifierService } from '@verana-labs/vs-agent-plugin-openid4vc'
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
 
@@ -149,7 +143,7 @@ export class V2Openid4vcPresentationsController {
 }
 
 function translate(error: unknown, proofExchangeId: string): unknown {
-  if (error instanceof UnknownVerificationSessionError) {
+  if (error instanceof OpenId4VcError && error.code === OpenId4VcErrorCode.UnknownVerificationSession) {
     return new AdminApiError(
       AdminApiErrorCode.UnknownId,
       HttpStatus.NOT_FOUND,
@@ -160,14 +154,16 @@ function translate(error: unknown, proofExchangeId: string): unknown {
 }
 
 function translateRequest(error: unknown): unknown {
-  if (error instanceof UnknownCredentialConfigurationError) {
-    return new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, error.message)
+  if (!(error instanceof OpenId4VcError)) return error
+
+  switch (error.code) {
+    case OpenId4VcErrorCode.UnknownCredentialType:
+      return new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, error.message)
+    case OpenId4VcErrorCode.InvalidPresentationRequest:
+      return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, error.message)
+    case OpenId4VcErrorCode.RequestSigningKeyNotPublished:
+      return new AdminApiError(AdminApiErrorCode.InvalidState, HttpStatus.CONFLICT, error.message)
+    default:
+      return error
   }
-  if (error instanceof InvalidPresentationRequestError) {
-    return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, error.message)
-  }
-  if (error instanceof OpenId4VcVerifierRequestError) {
-    return new AdminApiError(AdminApiErrorCode.InvalidState, HttpStatus.CONFLICT, error.message)
-  }
-  return error
 }

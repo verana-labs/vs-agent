@@ -7,19 +7,9 @@ import {
 } from '@credo-ts/openid4vc'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { UnknownCredentialConfigurationError } from '../src/config'
-import {
-  IssuerService,
-  OpenId4VcIssuerRequestError,
-  UnknownIssuanceSessionError,
-  UnknownStatusListError,
-} from '../src/services/IssuerService'
-import {
-  InvalidPresentationRequestError,
-  OpenId4VcVerifierRequestError,
-  UnknownVerificationSessionError,
-  VerifierService,
-} from '../src/services/VerifierService'
+import { OpenId4VcErrorCode } from '../src/errors'
+import { IssuerService } from '../src/services/IssuerService'
+import { VerifierService } from '../src/services/VerifierService'
 
 const {
   findBoundVerificationMethodId,
@@ -726,12 +716,14 @@ describe('IssuerService', () => {
       api.getIssuanceSessionById.mockRejectedValueOnce(
         new RecordNotFoundError('missing', { recordType: 'session' }),
       )
-      await expect(service.getIssuanceSession('missing')).rejects.toBeInstanceOf(UnknownIssuanceSessionError)
+      await expect(service.getIssuanceSession('missing')).rejects.toMatchObject({
+        code: OpenId4VcErrorCode.UnknownIssuanceSession,
+      })
 
       api.getIssuanceSessionById.mockResolvedValueOnce(issuanceSession({ issuerId: 'other-issuer' }))
-      await expect(service.getIssuanceSession('session-1')).rejects.toBeInstanceOf(
-        UnknownIssuanceSessionError,
-      )
+      await expect(service.getIssuanceSession('session-1')).rejects.toMatchObject({
+        code: OpenId4VcErrorCode.UnknownIssuanceSession,
+      })
     })
 
     it('lists only the sessions of this issuer', async () => {
@@ -759,9 +751,9 @@ describe('IssuerService', () => {
       expect(api.deleteIssuanceSessionById).toHaveBeenCalledWith('session-1')
 
       api.getIssuanceSessionById.mockResolvedValueOnce(issuanceSession({ issuerId: 'other-issuer' }))
-      await expect(service.deleteIssuanceSession('session-1')).rejects.toBeInstanceOf(
-        UnknownIssuanceSessionError,
-      )
+      await expect(service.deleteIssuanceSession('session-1')).rejects.toMatchObject({
+        code: OpenId4VcErrorCode.UnknownIssuanceSession,
+      })
       expect(api.deleteIssuanceSessionById).toHaveBeenCalledTimes(1)
     })
 
@@ -769,15 +761,15 @@ describe('IssuerService', () => {
       const { service } = await initializedIssuer()
       const offer = { jsonSchemaCredentialId: 'employee', claims: { name: 'Ada' }, ttlSeconds: 3_600 }
 
-      await expect(service.createOffer({ ...offer, statusListIndex: 0 })).rejects.toBeInstanceOf(
-        OpenId4VcIssuerRequestError,
-      )
-      await expect(service.createOffer({ ...offer, statusListId: 'list-1' })).rejects.toBeInstanceOf(
-        OpenId4VcIssuerRequestError,
-      )
+      await expect(service.createOffer({ ...offer, statusListIndex: 0 })).rejects.toMatchObject({
+        code: OpenId4VcErrorCode.InvalidCredentialOffer,
+      })
+      await expect(service.createOffer({ ...offer, statusListId: 'list-1' })).rejects.toMatchObject({
+        code: OpenId4VcErrorCode.InvalidCredentialOffer,
+      })
       await expect(
         service.createOffer({ ...offer, statusListId: 'list-1', statusListIndex: 0 }),
-      ).rejects.toBeInstanceOf(UnknownStatusListError)
+      ).rejects.toMatchObject({ code: OpenId4VcErrorCode.UnknownStatusList })
     })
 
     it('rejects an offer for an unknown credential configuration with a dedicated error', async () => {
@@ -788,7 +780,7 @@ describe('IssuerService', () => {
           claims: { name: 'Ada', role: 'engineer' },
           ttlSeconds: 3_600,
         }),
-      ).rejects.toBeInstanceOf(UnknownCredentialConfigurationError)
+      ).rejects.toMatchObject({ code: OpenId4VcErrorCode.UnknownCredentialType })
     })
   })
 
@@ -1124,11 +1116,11 @@ describe('VerifierService', () => {
     const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
     await service.ensureInitialized()
 
-    await expect(service.createRequest({ jsonSchemaCredentialId: 'unknown' })).rejects.toBeInstanceOf(
-      UnknownCredentialConfigurationError,
-    )
+    await expect(service.createRequest({ jsonSchemaCredentialId: 'unknown' })).rejects.toMatchObject({
+      code: OpenId4VcErrorCode.UnknownCredentialType,
+    })
     await expect(service.createRequest({ jsonSchemaCredentialId: 'unknown' })).rejects.toThrow(
-      "unknown credential type 'unknown'",
+      'no credential type with id "unknown"',
     )
     expect(api.createAuthorizationRequest).not.toHaveBeenCalled()
   })
@@ -1168,7 +1160,7 @@ describe('VerifierService', () => {
 
     await expect(
       service.createRequest({ jsonSchemaCredentialId: 'employee', requestedClaims }),
-    ).rejects.toBeInstanceOf(InvalidPresentationRequestError)
+    ).rejects.toMatchObject({ code: OpenId4VcErrorCode.InvalidPresentationRequest })
     await expect(
       service.createRequest({ jsonSchemaCredentialId: 'employee', requestedClaims }),
     ).rejects.toThrow(message)
@@ -1199,9 +1191,9 @@ describe('VerifierService', () => {
     )
     const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
 
-    await expect(service.getVerificationSession('missing')).rejects.toBeInstanceOf(
-      UnknownVerificationSessionError,
-    )
+    await expect(service.getVerificationSession('missing')).rejects.toMatchObject({
+      code: OpenId4VcErrorCode.UnknownVerificationSession,
+    })
   })
 
   it('rejects sessions owned by another configured verifier', async () => {
@@ -1209,9 +1201,9 @@ describe('VerifierService', () => {
     api.getVerificationSessionById.mockResolvedValue(session('ResponseVerified', 'other-verifier'))
     const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
 
-    await expect(service.getVerificationSession('session-id')).rejects.toBeInstanceOf(
-      UnknownVerificationSessionError,
-    )
+    await expect(service.getVerificationSession('session-id')).rejects.toMatchObject({
+      code: OpenId4VcErrorCode.UnknownVerificationSession,
+    })
   })
 
   it('reports a verified session it has not decided as RESOLVER_UNAVAILABLE', async () => {
@@ -1373,9 +1365,9 @@ describe('VerifierService', () => {
       expect(api.deleteVerificationSessionById).toHaveBeenCalledWith('session-1')
 
       api.getVerificationSessionById.mockResolvedValueOnce(verificationSession({ verifierId: 'other' }))
-      await expect(service.deleteVerificationSession('session-1')).rejects.toBeInstanceOf(
-        UnknownVerificationSessionError,
-      )
+      await expect(service.deleteVerificationSession('session-1')).rejects.toMatchObject({
+        code: OpenId4VcErrorCode.UnknownVerificationSession,
+      })
       expect(api.deleteVerificationSessionById).toHaveBeenCalledTimes(1)
     })
   })
@@ -1413,7 +1405,7 @@ describe('VerifierService', () => {
           queryLanguage: 'dcql',
           requestSigner: 'did',
         }),
-      ).rejects.toBeInstanceOf(OpenId4VcVerifierRequestError)
+      ).rejects.toMatchObject({ code: OpenId4VcErrorCode.RequestSigningKeyNotPublished })
     })
   })
 

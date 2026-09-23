@@ -6,8 +6,8 @@ export {
   OFFER_TTL_SECONDS_MIN,
   parseOfferClaims,
   parseOpenId4VcConfiguration,
-  UnknownCredentialConfigurationError,
 } from './config'
+export { OpenId4VcError, OpenId4VcErrorCode } from './errors'
 export { setupOpenId4Vc } from './sdk/setupOpenId4Vc'
 export type {
   OpenId4VcAgentModules,
@@ -15,23 +15,13 @@ export type {
   OpenId4VcSdkPlugin,
 } from './sdk/setupOpenId4Vc'
 export type { SigningCertificateInfo, SigningRole } from './services/CertificateService'
-export {
-  IssuerService,
-  OpenId4VcIssuerRequestError,
-  UnknownIssuanceSessionError,
-  UnknownStatusListError,
-} from './services/IssuerService'
+export { IssuerService } from './services/IssuerService'
 export type {
   OpenId4VcIssuanceSessionSummary,
   OpenId4VcIssuerAgent,
   OpenId4VcOfferResult,
 } from './services/IssuerService'
-export {
-  InvalidPresentationRequestError,
-  OpenId4VcVerifierRequestError,
-  UnknownVerificationSessionError,
-  VerifierService,
-} from './services/VerifierService'
+export { VerifierService } from './services/VerifierService'
 export type {
   OpenId4VcCreatePresentationRequestOptions,
   OpenId4VcQueryLanguage,

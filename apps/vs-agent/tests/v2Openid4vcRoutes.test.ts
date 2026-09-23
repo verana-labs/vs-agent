@@ -9,14 +9,9 @@ import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  InvalidPresentationRequestError,
   IssuerService,
-  OpenId4VcIssuerRequestError,
-  OpenId4VcVerifierRequestError,
-  UnknownCredentialConfigurationError,
-  UnknownIssuanceSessionError,
-  UnknownStatusListError,
-  UnknownVerificationSessionError,
+  OpenId4VcError,
+  OpenId4VcErrorCode,
   VerifierService,
 } from '@verana-labs/vs-agent-plugin-openid4vc'
 
@@ -267,7 +262,9 @@ describe('v2 openid4vc routes', () => {
       expect(found.body.credentialExchangeId).toBe('ce-a')
       expect(issuerService.getIssuanceSession).toHaveBeenCalledWith('ce-a')
 
-      issuerService.getIssuanceSession.mockRejectedValue(new UnknownIssuanceSessionError('unknown'))
+      issuerService.getIssuanceSession.mockRejectedValue(
+        new OpenId4VcError(OpenId4VcErrorCode.UnknownIssuanceSession, 'no issuance session with id "nope"'),
+      )
       const missing = await request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges/nope')
       expect(missing.status).toBe(404)
       expect(missing.body).toEqual({
@@ -297,7 +294,7 @@ describe('v2 openid4vc routes', () => {
 
     it('maps an unknown type to UNKNOWN_ID and a claim error to INVALID_INPUT', async () => {
       issuerService.createOffer.mockRejectedValueOnce(
-        new UnknownCredentialConfigurationError("unknown credential type 'x'"),
+        new OpenId4VcError(OpenId4VcErrorCode.UnknownCredentialType, 'no credential type with id "x"'),
       )
       const unknown = await request(app.getHttpServer())
         .post('/v2/openid4vc/credential-offer')
@@ -305,10 +302,12 @@ describe('v2 openid4vc routes', () => {
       expect(unknown.status).toBe(404)
       expect(unknown.body.error).toEqual({
         code: 'UNKNOWN_ID',
-        message: "unknown credential type 'x'",
+        message: 'no credential type with id "x"',
       })
 
-      issuerService.createOffer.mockRejectedValueOnce(new OpenId4VcIssuerRequestError("unknown claim 'age'"))
+      issuerService.createOffer.mockRejectedValueOnce(
+        new OpenId4VcError(OpenId4VcErrorCode.InvalidCredentialOffer, "unknown claim 'age'"),
+      )
       const badClaims = await request(app.getHttpServer())
         .post('/v2/openid4vc/credential-offer')
         .send({ jsonSchemaCredentialId: 'employee', claims: { age: 3 }, ttlSeconds: 3600 })
@@ -317,7 +316,9 @@ describe('v2 openid4vc routes', () => {
     })
 
     it('maps an unknown status list to UNKNOWN_ID', async () => {
-      issuerService.createOffer.mockRejectedValueOnce(new UnknownStatusListError("unknown status list 'x'"))
+      issuerService.createOffer.mockRejectedValueOnce(
+        new OpenId4VcError(OpenId4VcErrorCode.UnknownStatusList, 'no status list with id "x"'),
+      )
 
       const response = await request(app.getHttpServer())
         .post('/v2/openid4vc/credential-offer')
@@ -330,7 +331,7 @@ describe('v2 openid4vc routes', () => {
         })
 
       expect(response.status).toBe(404)
-      expect(response.body.error).toEqual({ code: 'UNKNOWN_ID', message: "unknown status list 'x'" })
+      expect(response.body.error).toEqual({ code: 'UNKNOWN_ID', message: 'no status list with id "x"' })
     })
 
     it('validates the offer body and refuses fields the specification does not define', async () => {
@@ -374,7 +375,8 @@ describe('v2 openid4vc routes', () => {
 
     it('refuses half a status list pair at the service, which the controller maps to INVALID_INPUT', async () => {
       issuerService.createOffer.mockRejectedValueOnce(
-        new OpenId4VcIssuerRequestError(
+        new OpenId4VcError(
+          OpenId4VcErrorCode.InvalidCredentialOffer,
           'statusListId and statusListIndex must be both present or both absent',
         ),
       )
@@ -398,7 +400,9 @@ describe('v2 openid4vc routes', () => {
       expect(deleted.text).toBe('')
       expect(issuerService.deleteIssuanceSession).toHaveBeenCalledWith('ce-a')
 
-      issuerService.deleteIssuanceSession.mockRejectedValue(new UnknownIssuanceSessionError('unknown'))
+      issuerService.deleteIssuanceSession.mockRejectedValue(
+        new OpenId4VcError(OpenId4VcErrorCode.UnknownIssuanceSession, 'no issuance session with id "nope"'),
+      )
       const missing = await request(app.getHttpServer()).delete('/v2/openid4vc/credential-exchanges/nope')
       expect(missing.status).toBe(404)
       expect(missing.body.error.code).toBe('UNKNOWN_ID')
@@ -511,16 +515,20 @@ describe('v2 openid4vc routes', () => {
 
     it('maps an unknown type to UNKNOWN_ID and a signer problem to INVALID_STATE', async () => {
       verifierService.createRequest.mockRejectedValueOnce(
-        new UnknownCredentialConfigurationError("unknown credential type 'x'"),
+        new OpenId4VcError(OpenId4VcErrorCode.UnknownCredentialType, 'no credential type with id "x"'),
       )
       const unknown = await request(app.getHttpServer())
         .post('/v2/openid4vc/presentation-request')
         .send({ jsonSchemaCredentialId: 'x' })
       expect(unknown.status).toBe(404)
-      expect(unknown.body.error).toEqual({ code: 'UNKNOWN_ID', message: "unknown credential type 'x'" })
+      expect(unknown.body.error).toEqual({
+        code: 'UNKNOWN_ID',
+        message: 'no credential type with id "x"',
+      })
 
       verifierService.createRequest.mockRejectedValueOnce(
-        new OpenId4VcVerifierRequestError(
+        new OpenId4VcError(
+          OpenId4VcErrorCode.RequestSigningKeyNotPublished,
           'verifier is configured to sign requests with its DID, but the DID does not publish the signing key for authentication',
         ),
       )
@@ -533,7 +541,7 @@ describe('v2 openid4vc routes', () => {
 
     it('maps a rejected requestedClaims to INVALID_INPUT', async () => {
       verifierService.createRequest.mockRejectedValueOnce(
-        new InvalidPresentationRequestError("unknown claim 'admin'"),
+        new OpenId4VcError(OpenId4VcErrorCode.InvalidPresentationRequest, "unknown claim 'admin'"),
       )
 
       const response = await request(app.getHttpServer())
@@ -575,9 +583,17 @@ describe('v2 openid4vc routes', () => {
     })
 
     it('answers UNKNOWN_ID for an unknown presentation on get and delete', async () => {
-      verifierService.getVerificationSession.mockRejectedValue(new UnknownVerificationSessionError('unknown'))
+      verifierService.getVerificationSession.mockRejectedValue(
+        new OpenId4VcError(
+          OpenId4VcErrorCode.UnknownVerificationSession,
+          'no verification session with id "nope"',
+        ),
+      )
       verifierService.deleteVerificationSession.mockRejectedValue(
-        new UnknownVerificationSessionError('unknown'),
+        new OpenId4VcError(
+          OpenId4VcErrorCode.UnknownVerificationSession,
+          'no verification session with id "nope"',
+        ),
       )
 
       const read = await request(app.getHttpServer()).get('/v2/openid4vc/presentations/nope')
