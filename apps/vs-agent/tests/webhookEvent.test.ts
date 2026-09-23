@@ -49,6 +49,7 @@ const connectionRecord = {
   role: 'responder',
   did: 'did:peer:1',
   createdAt: new Date('2026-09-01T00:00:00Z'),
+  getTag: () => undefined,
 }
 
 describe('Events API delivery', () => {
@@ -75,7 +76,31 @@ describe('Events API delivery', () => {
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/)
     expect(body.type).toBe('didcomm.connections.state-updated')
     expect(body.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/)
-    expect(body.data).toMatchObject({ id: 'conn-1', state: 'completed', previousState: null })
+    expect(body.data).toMatchObject({
+      id: 'conn-1',
+      state: 'completed',
+      previousState: null,
+      outOfBandId: null,
+      parentConnectionId: null,
+    })
+  })
+
+  it('delivers a sub-connection with its outOfBandId and parentConnectionId', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit(DidCommConnectionEventTypes.DidCommConnectionStateChanged, {
+      connectionRecord: {
+        ...connectionRecord,
+        outOfBandId: 'oob-1',
+        getTag: (name: string) => (name === 'parentConnectionId' ? 'conn-0' : undefined),
+      },
+      previousState: null,
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.connections.state-updated')
+    expect(body.data).toMatchObject({ id: 'conn-1', outOfBandId: 'oob-1', parentConnectionId: 'conn-0' })
   })
 
   it('delivers a received basic message as its record and ignores sent ones', async () => {
