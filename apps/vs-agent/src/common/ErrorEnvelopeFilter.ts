@@ -14,6 +14,7 @@ interface ErrorEnvelope {
   status: number
   code: string
   message: string
+  details?: Record<string, unknown>
 }
 
 const INTERNAL_MESSAGE = 'the agent failed to complete the request'
@@ -39,7 +40,8 @@ export class ErrorEnvelopeFilter extends BaseExceptionFilter {
     const response = http.getResponse<Response>()
     if (response.headersSent) return
 
-    response.status(envelope.status).json({ error: { code: envelope.code, message: envelope.message } })
+    const { status, code, message, details } = envelope
+    response.status(status).json({ error: { code, message, ...(details && { details }) } })
   }
 
   private isV2Request(request: Request): boolean {
@@ -53,7 +55,12 @@ export class ErrorEnvelopeFilter extends BaseExceptionFilter {
 
   private envelopeFor(exception: unknown): ErrorEnvelope {
     if (exception instanceof AdminApiError) {
-      return { status: exception.status, code: exception.code, message: exception.message }
+      return {
+        status: exception.status,
+        code: exception.code,
+        message: exception.message,
+        details: exception.details,
+      }
     }
 
     if (exception instanceof ServiceEndpointError) {
