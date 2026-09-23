@@ -846,7 +846,10 @@ export class VtFlowService {
     newState: VtFlowState,
   ): Promise<void> {
     const previousState = record.state
-    if (previousState === newState) return
+    if (previousState === newState) {
+      await this.repository.update(agentContext, record)
+      return
+    }
 
     if (previousState === VtFlowState.OobPending) record.oobLink = undefined
 

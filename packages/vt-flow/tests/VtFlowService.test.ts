@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   VtCredentialState,
   VtFlowEventTypes,
+  VtFlowMessageType,
   VtFlowModule,
   VtFlowModuleConfig,
   VtFlowRole,
@@ -60,7 +61,7 @@ function makeService(existing: VtFlowRecord | null, previousConnection: unknown 
     logger as never,
     config as never,
   )
-  return { service, repository, agentContext, exchangeRepository }
+  return { service, repository, agentContext, exchangeRepository, eventEmitter }
 }
 
 function makeMessageContext(agentContext: unknown, theirDid = 'did:web:agent-peer') {
@@ -406,6 +407,43 @@ describe('VtFlowService.notifyCredentialStateChange', () => {
       subprotocolThid: 'sub-1',
     })
     expect(record.state).toBe(VtFlowState.CredRevoked)
+  })
+})
+
+describe('VtFlowService.sendOobLinkForSession', () => {
+  it('stores a resent link in OOB_PENDING without a state event', async () => {
+    const pending = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.OobPending,
+      oobLink: { url: 'https://a.example', description: 'A', at: '2026-01-01T00:00:00.000Z' },
+      messages: [
+        {
+          type: VtFlowMessageType.OobLink,
+          text: 'A',
+          at: '2026-01-01T00:00:00.000Z',
+          url: 'https://a.example',
+        },
+      ],
+    })
+    const { service, repository, eventEmitter } = makeService(pending)
+
+    await service.sendOobLinkForSession({} as never, pending.id, {
+      url: 'https://b.example',
+      description: 'B',
+    })
+
+    expect(repository.update).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        state: VtFlowState.OobPending,
+        oobLink: expect.objectContaining({ url: 'https://b.example', description: 'B' }),
+        messages: [
+          expect.objectContaining({ url: 'https://a.example' }),
+          expect.objectContaining({ type: VtFlowMessageType.OobLink, text: 'B', url: 'https://b.example' }),
+        ],
+      }),
+    )
+    expect(eventEmitter.emit).not.toHaveBeenCalled()
   })
 })
 
