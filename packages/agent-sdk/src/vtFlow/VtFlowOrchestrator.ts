@@ -56,7 +56,8 @@ import {
   validateSchema,
 } from '../utils'
 
-// The chain carries a fee discount as an integer from 0 to 10000, the API as a decimal from 0 to 1.
+// The chain carries a fee discount as an integer from 0 to 10000. The API and the indexer carry it
+// as a decimal from 0 to 1, so only the message is scaled.
 const DISCOUNT_SCALE = 10_000
 const TX_LOOKUP_TIMEOUT_MS = 60_000
 const TX_LOOKUP_INTERVAL_MS = 3_000
@@ -469,8 +470,8 @@ export class VtFlowOrchestrator {
       validationFees: applicant.validation_fees ?? 0,
       issuanceFees: applicant.issuance_fees ?? 0,
       verificationFees: applicant.verification_fees ?? 0,
-      issuanceFeeDiscount: (applicant.issuance_fee_discount ?? 0) / DISCOUNT_SCALE,
-      verificationFeeDiscount: (applicant.verification_fee_discount ?? 0) / DISCOUNT_SCALE,
+      issuanceFeeDiscount: applicant.issuance_fee_discount ?? 0,
+      verificationFeeDiscount: applicant.verification_fee_discount ?? 0,
     }
     const renewal = !!applicant.effective_from
     const recorded = record.state === VtFlowState.ValidationTxFailed ? record.validation : undefined

@@ -652,7 +652,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
   })
 
   it('keeps the agreed terms on a renewal and refuses a different one', async () => {
-    const renewal = { effective_from: past, validation_fees: 7, issuance_fee_discount: 1235 }
+    const renewal = { effective_from: past, validation_fees: 7, issuance_fee_discount: 0.1235 }
 
     const refused = makeValidateAgent({ applicant: renewal })
     await expect(
