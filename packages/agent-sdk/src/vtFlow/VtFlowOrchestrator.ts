@@ -572,15 +572,18 @@ export class VtFlowOrchestrator {
     const amount = BigInt(fee.amount.find(coin => coin.denom === FEE_DENOM)?.amount ?? '0')
 
     if (granter) {
-      const remaining = await chain.remainingFeeAllowance(granter, FEE_DENOM)
-      if (remaining === undefined) {
+      const allowance = await chain.feeAllowance(granter, FEE_DENOM)
+      if (!allowance) {
         return fail(
           VtFlowTxReason.FeegrantExpired,
           'the Corporation grants the agent no active fee allowance',
         )
       }
-      if (remaining < amount) {
-        return fail(VtFlowTxReason.FeegrantExhausted, `the fee allowance has ${remaining}${FEE_DENOM} left`)
+      if (!allowance.unlimited && allowance.remaining < amount) {
+        return fail(
+          VtFlowTxReason.FeegrantExhausted,
+          `the fee allowance has ${allowance.remaining}${FEE_DENOM} left`,
+        )
       }
       const corporation = BigInt((await chain.getAccountBalance(granter, FEE_DENOM)).amount)
       if (corporation < amount) {

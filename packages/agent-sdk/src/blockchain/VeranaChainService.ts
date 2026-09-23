@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
-import { DirectSecp256k1HdWallet, type EncodeObject } from '@cosmjs/proto-signing'
+import { encodeSecp256k1Pubkey } from '@cosmjs/amino'
+import { DirectSecp256k1HdWallet, encodePubkey, type EncodeObject } from '@cosmjs/proto-signing'
 import {
   SigningStargateClient,
   GasPrice,
@@ -10,7 +11,17 @@ import {
   type DeliverTxResponse,
   type StdFee,
 } from '@cosmjs/stargate'
-import { AllowedMsgAllowance, PeriodicAllowance } from 'cosmjs-types/cosmos/feegrant/v1beta1/feegrant'
+import type { Coin as ProtoCoin } from 'cosmjs-types/cosmos/base/v1beta1/coin'
+import {
+  AllowedMsgAllowance,
+  BasicAllowance,
+  PeriodicAllowance,
+} from 'cosmjs-types/cosmos/feegrant/v1beta1/feegrant'
+import { SignMode } from 'cosmjs-types/cosmos/tx/signing/v1beta1/signing'
+import { SimulateRequest, SimulateResponse } from 'cosmjs-types/cosmos/tx/v1beta1/service'
+import { AuthInfo, Fee, Tx, TxBody } from 'cosmjs-types/cosmos/tx/v1beta1/tx'
+import type { Any } from 'cosmjs-types/google/protobuf/any'
+import type { Timestamp } from 'cosmjs-types/google/protobuf/timestamp'
 import { connectComet } from '@cosmjs/tendermint-rpc'
 import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
 
@@ -36,6 +47,54 @@ const {
   MsgSelfCreateParticipantResponse,
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/tx')
 
+export type FeeAllowance = { unlimited: true } | { unlimited: false; remaining: bigint }
+
+const ALLOWED_MSG_ALLOWANCE = '/cosmos.feegrant.v1beta1.AllowedMsgAllowance'
+const BASIC_ALLOWANCE = '/cosmos.feegrant.v1beta1.BasicAllowance'
+const PERIODIC_ALLOWANCE = '/cosmos.feegrant.v1beta1.PeriodicAllowance'
+
+function hasPassed(timestamp: Timestamp | undefined, now: number): boolean {
+  return timestamp !== undefined && Number(timestamp.seconds) * 1000 <= now
+}
+
+function amountOf(coins: ProtoCoin[], denom: string): bigint {
+  return BigInt(coins.find(coin => coin.denom === denom)?.amount ?? '0')
+}
+
+// An empty spend_limit on a BasicAllowance means no limit, while an empty period_can_spend on a
+// PeriodicAllowance means nothing left. verana-node v0.10.1 grants a BasicAllowance, the VPR of
+// 2026-09-16 (MOD-DE-MSG-5-5) a PeriodicAllowance, so both are read.
+export function feeAllowanceOf(
+  allowance: Any | undefined,
+  denom: string,
+  now = Date.now(),
+): FeeAllowance | undefined {
+  const granted =
+    allowance?.typeUrl === ALLOWED_MSG_ALLOWANCE
+      ? AllowedMsgAllowance.decode(allowance.value).allowance
+      : allowance
+  if (granted?.typeUrl === BASIC_ALLOWANCE) {
+    const basic = BasicAllowance.decode(granted.value)
+    if (hasPassed(basic.expiration, now)) return undefined
+    return basic.spendLimit.length === 0
+      ? { unlimited: true }
+      : { unlimited: false, remaining: amountOf(basic.spendLimit, denom) }
+  }
+  if (granted?.typeUrl === PERIODIC_ALLOWANCE) {
+    const periodic = PeriodicAllowance.decode(granted.value)
+    if (hasPassed(periodic.basic?.expiration, now)) return undefined
+    const inPeriod = amountOf(
+      hasPassed(periodic.periodReset, now) ? periodic.periodSpendLimit : periodic.periodCanSpend,
+      denom,
+    )
+    const overall = periodic.basic?.spendLimit ?? []
+    const remaining =
+      overall.length === 0 ? inPeriod : [inPeriod, amountOf(overall, denom)].reduce((a, b) => (a < b ? a : b))
+    return { unlimited: false, remaining }
+  }
+  return undefined
+}
+
 // A simulation signs with an empty signature and runs against the state of the moment, so it
 // reports less gas than the delivery consumes. Cosmos SDK 0.47 made the difference larger (see
 // cosmos-sdk#16020), and cosmjs answers it with a default multiplier of 1.4. Not always enough.
@@ -48,7 +107,8 @@ export class VeranaChainService {
   private corporationAddress!: string
   private gasAdjustment!: number
   private gasPrice!: GasPrice
-  private feegrantQuery!: QueryClient & ReturnType<typeof setupFeegrantExtension>
+  private operatorPubkey!: Uint8Array
+  private queryClient!: QueryClient & ReturnType<typeof setupFeegrantExtension>
 
   constructor(private readonly config: VeranaChainConfig) {}
 
@@ -76,6 +136,7 @@ export class VeranaChainService {
     })
     const [account] = await wallet.getAccounts()
     this.operatorAddress = account.address
+    this.operatorPubkey = account.pubkey
     this.corporationAddress = this.config.corporationAddress ?? account.address
     logger.info(
       `[VeranaChain] vs_operator address: ${this.operatorAddress} (fund this address with VNA to enable on-chain operations)`,
@@ -89,7 +150,7 @@ export class VeranaChainService {
       aminoTypes: createVeranaAminoTypes(),
       gasPrice: this.gasPrice,
     })
-    this.feegrantQuery = QueryClient.withExtensions(cometClient, setupFeegrantExtension)
+    this.queryClient = QueryClient.withExtensions(cometClient, setupFeegrantExtension)
 
     this.chainId = await this.signingClient.getChainId()
     if (chainId && this.chainId !== chainId) {
@@ -192,9 +253,31 @@ export class VeranaChainService {
     }
   }
 
-  // The granter goes on the fee, so the broadcast takes the Corporation's feegrant path.
+  // The simulation carries the granter too: a Corporation-paid fee also rewrites its allowance at
+  // delivery, and that write is gas a simulation without the granter never counts.
   async estimateFee(messages: EncodeObject[], granter?: string): Promise<StdFee> {
-    const gas = await this.signingClient.simulate(this.operatorAddress, messages, undefined)
+    const { sequence } = await this.signingClient.getSequence(this.operatorAddress)
+    const tx = Tx.fromPartial({
+      authInfo: AuthInfo.fromPartial({
+        fee: Fee.fromPartial({ granter }),
+        signerInfos: [
+          {
+            publicKey: encodePubkey(encodeSecp256k1Pubkey(this.operatorPubkey)),
+            sequence: BigInt(sequence),
+            modeInfo: { single: { mode: SignMode.SIGN_MODE_UNSPECIFIED } },
+          },
+        ],
+      }),
+      body: TxBody.fromPartial({
+        messages: messages.map(message => this.signingClient.registry.encodeAsAny(message)),
+      }),
+      signatures: [new Uint8Array()],
+    })
+    const request = SimulateRequest.encode(
+      SimulateRequest.fromPartial({ txBytes: Tx.encode(tx).finish() }),
+    ).finish()
+    const response = await this.queryClient.queryAbci('/cosmos.tx.v1beta1.Service/Simulate', request)
+    const gas = Number(SimulateResponse.decode(response.value).gasInfo?.gasUsed ?? 0)
     const fee = calculateFee(Math.ceil(gas * this.gasAdjustment), this.gasPrice)
     return granter ? { ...fee, granter } : fee
   }
@@ -214,21 +297,11 @@ export class VeranaChainService {
   }
 
   // The aggregate VS operator allowance of MOD-DE-MSG-5-5.
-  async remainingFeeAllowance(granter: string, denom = 'uvna'): Promise<bigint | undefined> {
-    const response = await this.feegrantQuery.feegrant
+  async feeAllowance(granter: string, denom = 'uvna'): Promise<FeeAllowance | undefined> {
+    const response = await this.queryClient.feegrant
       .allowance(granter, this.operatorAddress)
       .catch(() => undefined)
-    const allowance = response?.allowance?.allowance
-    if (!allowance) return undefined
-    const inner = AllowedMsgAllowance.decode(allowance.value).allowance
-    if (!inner) return undefined
-    const periodic = PeriodicAllowance.decode(inner.value)
-    const expiration = periodic.basic?.expiration
-    if (expiration && Number(expiration.seconds) * 1000 <= Date.now()) return undefined
-    const resetPassed =
-      periodic.periodReset !== undefined && Number(periodic.periodReset.seconds) * 1000 <= Date.now()
-    const coins = resetPassed ? periodic.periodSpendLimit : periodic.periodCanSpend
-    return BigInt(coins.find(coin => coin.denom === denom)?.amount ?? '0')
+    return feeAllowanceOf(response?.allowance?.allowance, denom)
   }
 
   async setParticipantOPToValidated(params: SetParticipantOPToValidatedParams): Promise<{ txHash: string }> {
