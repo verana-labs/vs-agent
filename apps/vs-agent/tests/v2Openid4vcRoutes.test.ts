@@ -182,7 +182,7 @@ describe('v2 openid4vc routes', () => {
     verifierService.deleteVerificationSession.mockResolvedValue(undefined)
   })
 
-  describe('credential exchanges', () => {
+  describe('listCredentialExchanges', () => {
     it('walks the credential exchanges with the keyset cursor and ends with a null cursor', async () => {
       const first = await request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges?limit=2')
 
@@ -270,23 +270,32 @@ describe('v2 openid4vc routes', () => {
       expect(response.status).toBe(400)
       expect(response.body.error.code).toBe('INVALID_CURSOR')
     })
+  })
 
-    it('gets one credential exchange by identifier and answers UNKNOWN_ID otherwise', async () => {
+  describe('getCredentialExchange', () => {
+    it('gets one credential exchange by identifier', async () => {
       const found = await request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges/ce-a')
+
       expect(found.status).toBe(200)
       expect(found.body.credentialExchangeId).toBe('ce-a')
       expect(issuerService.getIssuanceSession).toHaveBeenCalledWith('ce-a')
+    })
 
+    it('answers UNKNOWN_ID for an unknown credential exchange', async () => {
       issuerService.getIssuanceSession.mockRejectedValue(
         new OpenId4VcError(OpenId4VcErrorCode.UnknownIssuanceSession, 'no issuance session with id "nope"'),
       )
+
       const missing = await request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges/nope')
+
       expect(missing.status).toBe(404)
       expect(missing.body).toEqual({
         error: { code: 'UNKNOWN_ID', message: 'no credential exchange with id "nope"' },
       })
     })
+  })
 
+  describe('createCredentialOffer', () => {
     it('creates a credential offer and returns the exchange id and the offer URL', async () => {
       const response = await request(app.getHttpServer())
         .post('/v2/openid4vc/credential-offer')
@@ -408,23 +417,30 @@ describe('v2 openid4vc routes', () => {
       expect(response.status).toBe(400)
       expect(response.body.error.code).toBe('INVALID_INPUT')
     })
+  })
 
-    it('deletes a credential exchange with 204 and answers UNKNOWN_ID otherwise', async () => {
+  describe('deleteCredentialExchange', () => {
+    it('deletes a credential exchange with 204', async () => {
       const deleted = await request(app.getHttpServer()).delete('/v2/openid4vc/credential-exchanges/ce-a')
+
       expect(deleted.status).toBe(204)
       expect(deleted.text).toBe('')
       expect(issuerService.deleteIssuanceSession).toHaveBeenCalledWith('ce-a')
+    })
 
+    it('answers UNKNOWN_ID when deleting an unknown credential exchange', async () => {
       issuerService.deleteIssuanceSession.mockRejectedValue(
         new OpenId4VcError(OpenId4VcErrorCode.UnknownIssuanceSession, 'no issuance session with id "nope"'),
       )
+
       const missing = await request(app.getHttpServer()).delete('/v2/openid4vc/credential-exchanges/nope')
+
       expect(missing.status).toBe(404)
       expect(missing.body.error.code).toBe('UNKNOWN_ID')
     })
   })
 
-  describe('presentations', () => {
+  describe('listPresentations', () => {
     it('walks the presentations with the keyset cursor and ends with a null cursor', async () => {
       const first = await request(app.getHttpServer()).get('/v2/openid4vc/presentations?limit=2')
 
@@ -441,6 +457,29 @@ describe('v2 openid4vc routes', () => {
       expect(second.body.nextCursor).toBeNull()
     })
 
+    it('filters by credential type and by state', async () => {
+      const byType = await request(app.getHttpServer()).get(
+        '/v2/openid4vc/presentations?jsonSchemaCredentialId=badge',
+      )
+      expect(proofIds(byType.body)).toEqual(['pe-c'])
+
+      const byState = await request(app.getHttpServer()).get(
+        '/v2/openid4vc/presentations?state=ResponseVerified',
+      )
+      expect(proofIds(byState.body)).toEqual(['pe-b'])
+      expect(verifierService.listVerificationSessions).toHaveBeenLastCalledWith({
+        jsonSchemaCredentialId: undefined,
+        state: 'ResponseVerified',
+      })
+    })
+
+    it('refuses an unknown state filter', async () => {
+      const errors = await validate(plainToInstance(Openid4vcListPresentationsQueryDto, { state: 'Done' }))
+      expect(errors.map(error => error.property)).toEqual(['state'])
+    })
+  })
+
+  describe('getPresentation', () => {
     it('sends the verified record with its trust verdict and disclosed claims', async () => {
       const response = await request(app.getHttpServer()).get('/v2/openid4vc/presentations/pe-b')
 
@@ -479,27 +518,22 @@ describe('v2 openid4vc routes', () => {
       })
     })
 
-    it('filters by credential type and by state', async () => {
-      const byType = await request(app.getHttpServer()).get(
-        '/v2/openid4vc/presentations?jsonSchemaCredentialId=badge',
+    it('answers UNKNOWN_ID for an unknown presentation', async () => {
+      verifierService.getVerificationSession.mockRejectedValue(
+        new OpenId4VcError(
+          OpenId4VcErrorCode.UnknownVerificationSession,
+          'no verification session with id "nope"',
+        ),
       )
-      expect(proofIds(byType.body)).toEqual(['pe-c'])
 
-      const byState = await request(app.getHttpServer()).get(
-        '/v2/openid4vc/presentations?state=ResponseVerified',
-      )
-      expect(proofIds(byState.body)).toEqual(['pe-b'])
-      expect(verifierService.listVerificationSessions).toHaveBeenLastCalledWith({
-        jsonSchemaCredentialId: undefined,
-        state: 'ResponseVerified',
-      })
+      const read = await request(app.getHttpServer()).get('/v2/openid4vc/presentations/nope')
+
+      expect(read.status).toBe(404)
+      expect(read.body).toEqual({ error: { code: 'UNKNOWN_ID', message: 'no presentation with id "nope"' } })
     })
+  })
 
-    it('refuses an unknown state filter', async () => {
-      const errors = await validate(plainToInstance(Openid4vcListPresentationsQueryDto, { state: 'Done' }))
-      expect(errors.map(error => error.property)).toEqual(['state'])
-    })
-
+  describe('createPresentationRequest', () => {
     it('creates a presentation request with the optional claims, query language and signer', async () => {
       const full = await request(app.getHttpServer())
         .post('/v2/openid4vc/presentation-request')
@@ -600,30 +634,9 @@ describe('v2 openid4vc routes', () => {
       const empty = await validate(plainToInstance(Openid4vcPresentationRequestBodyDto, {}))
       expect(empty.map(error => error.property)).toEqual(['jsonSchemaCredentialId'])
     })
+  })
 
-    it('answers UNKNOWN_ID for an unknown presentation on get and delete', async () => {
-      verifierService.getVerificationSession.mockRejectedValue(
-        new OpenId4VcError(
-          OpenId4VcErrorCode.UnknownVerificationSession,
-          'no verification session with id "nope"',
-        ),
-      )
-      verifierService.deleteVerificationSession.mockRejectedValue(
-        new OpenId4VcError(
-          OpenId4VcErrorCode.UnknownVerificationSession,
-          'no verification session with id "nope"',
-        ),
-      )
-
-      const read = await request(app.getHttpServer()).get('/v2/openid4vc/presentations/nope')
-      expect(read.status).toBe(404)
-      expect(read.body).toEqual({ error: { code: 'UNKNOWN_ID', message: 'no presentation with id "nope"' } })
-
-      const deleted = await request(app.getHttpServer()).delete('/v2/openid4vc/presentations/nope')
-      expect(deleted.status).toBe(404)
-      expect(deleted.body.error.code).toBe('UNKNOWN_ID')
-    })
-
+  describe('deletePresentation', () => {
     it('deletes a presentation with 204', async () => {
       const response = await request(app.getHttpServer()).delete('/v2/openid4vc/presentations/pe-a')
 
@@ -631,9 +644,23 @@ describe('v2 openid4vc routes', () => {
       expect(response.text).toBe('')
       expect(verifierService.deleteVerificationSession).toHaveBeenCalledWith('pe-a')
     })
+
+    it('answers UNKNOWN_ID when deleting an unknown presentation', async () => {
+      verifierService.deleteVerificationSession.mockRejectedValue(
+        new OpenId4VcError(
+          OpenId4VcErrorCode.UnknownVerificationSession,
+          'no verification session with id "nope"',
+        ),
+      )
+
+      const deleted = await request(app.getHttpServer()).delete('/v2/openid4vc/presentations/nope')
+
+      expect(deleted.status).toBe(404)
+      expect(deleted.body.error.code).toBe('UNKNOWN_ID')
+    })
   })
 
-  describe('signing certificates', () => {
+  describe('listSigningCertificates', () => {
     it('returns one record per capability, issuer first, as a bare array', async () => {
       const response = await request(app.getHttpServer()).get('/v2/openid4vc/signing-certificates')
 
