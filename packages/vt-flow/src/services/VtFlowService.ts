@@ -40,6 +40,7 @@ import { peerAnchorDid } from '../utils'
 import {
   VtFlowEventTypes,
   type VtFlowMessage,
+  type VtFlowValidation,
   VtFlowMessageType,
   VtFlowRole,
   VtFlowState,
@@ -670,6 +671,21 @@ export class VtFlowService {
     }
     await this.updateState(agentContext, record, VtFlowState.Validating)
     return { record, message }
+  }
+
+  /** Record the validation decision or its transaction outcome, moving the flow when `state` is given. */
+  public async recordValidation(
+    agentContext: AgentContext,
+    recordId: string,
+    validation: VtFlowValidation,
+    state?: VtFlowState,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.validation = validation
+    if (state) await this.updateState(agentContext, record, state)
+    else await this.updateRecord(agentContext, record)
+    return record
   }
 
   /** Validator-side states preceding `VALIDATED` => `VALIDATED`; call after `SetParticipantOPtoValidated` lands on-chain. */

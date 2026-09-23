@@ -34,7 +34,7 @@ const serviceEndpointsService = {
 const vtFlowsService = {
   listFlowsPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
   getFlow: vi.fn(),
-  validateAndOfferCredential: vi.fn(),
+  validateFlow: vi.fn(),
   editCredentialClaims: vi.fn(),
   sendOobLink: vi.fn(),
   revokeFlowCredential: vi.fn(),
@@ -180,7 +180,7 @@ describe('v2 vt routes', () => {
   })
 
   it('returns the v2 flow record on validate, per [VSA-ADM-VT-FL-VALIDATE]', async () => {
-    vtFlowsService.validateAndOfferCredential.mockResolvedValue({
+    vtFlowsService.validateFlow.mockResolvedValue({
       id: 'a',
       participantSessionId: 'sess-a',
       state: 'CRED_OFFERED',

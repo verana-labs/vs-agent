@@ -16,6 +16,7 @@ import {
   type VsAgentNestPlugin,
   VeranaChainService,
   VeranaIndexerService,
+  VtFlowOrchestrator,
   IndexerWebSocketService,
   buildDefaultIndexerHandlerRegistry,
   registerAuthorizationHandlers,
@@ -497,6 +498,10 @@ const run = async () => {
         (error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`),
       )
     }
+
+    void new VtFlowOrchestrator(agent, { publicApiBaseUrl })
+      .resumeValidationSubmissions()
+      .catch((error: Error) => serverLogger.error(`[vt-flow] resuming validations failed: ${error.message}`))
   }
 
   const ecsBootstrap = new EcsBootstrapService(

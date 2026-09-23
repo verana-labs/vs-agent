@@ -1,4 +1,4 @@
-import { AnonCredsTrustError, AnonCredsTrustErrorReason } from '../blockchain'
+import { AnonCredsTrustError, AnonCredsTrustErrorReason } from '../blockchain/AnonCredsTrustService'
 
 const BAD_REQUEST = 400
 const NOT_FOUND = 404

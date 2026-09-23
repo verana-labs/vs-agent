@@ -1,3 +1,4 @@
+import type { StdFee } from '@cosmjs/stargate'
 import type { JsonObject, W3cVerifiableCredential } from '@credo-ts/core'
 
 import {
@@ -12,16 +13,28 @@ import {
   VtFlowRecord,
   VtFlowRole,
   VtFlowState,
+  VtFlowSubmission,
+  VtFlowTxReason,
+  VtFlowTxStatus,
   VtFlowVariant,
   isVtFlowTerminalState,
   type VtFlowEcsIssuanceExemptionContext,
+  type VtFlowValidation,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { veranaTypeUrls } from '@verana-labs/verana-types'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
+import { AdminApiError, AdminApiErrorCode } from '../adminApi'
 import { BaseAgentModules, VsAgent } from '../agent'
 import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
-import { Participant, ParticipantRole, ParticipantState, ValidationState } from '../blockchain/types'
+import {
+  Participant,
+  ParticipantDto,
+  ParticipantRole,
+  ParticipantState,
+  ValidationState,
+} from '../blockchain/types'
 import {
   HOLDER_PARTICIPANT_TYPE,
   ISSUER_GRANTOR_PARTICIPANT_TYPE,
@@ -38,9 +51,46 @@ import {
   linkedVpSchemaId,
   removeStoredTrustCredential,
   resolveJsonSchemaCredentialId,
+  schemaViolations,
   toOfferedCredentialJson,
   validateSchema,
 } from '../utils'
+
+// The chain carries a fee discount as an integer from 0 to 10000, the API as a decimal from 0 to 1.
+const DISCOUNT_SCALE = 10_000
+const TX_LOOKUP_TIMEOUT_MS = 60_000
+const TX_LOOKUP_INTERVAL_MS = 3_000
+const FEE_DENOM = 'uvna'
+
+const FEE_KEYS = ['validationFees', 'issuanceFees', 'verificationFees'] as const
+const DISCOUNT_KEYS = ['issuanceFeeDiscount', 'verificationFeeDiscount'] as const
+
+type ValidationTerms = Omit<VtFlowValidation, 'decidedAt' | 'submission' | 'tx'>
+
+function invalidInput(message: string): AdminApiError {
+  return new AdminApiError(AdminApiErrorCode.InvalidInput, 400, message)
+}
+
+function invalidState(message: string): AdminApiError {
+  return new AdminApiError(AdminApiErrorCode.InvalidState, 409, message)
+}
+
+// AUTHZ-CHECK-3 step 1. A record's expiration is only its budget clock, not a validity window.
+function isActiveParticipant(participant: ParticipantDto): boolean {
+  const now = Date.now()
+  if (!participant.effective_from || Date.parse(participant.effective_from) > now) return false
+  if (participant.effective_until && Date.parse(participant.effective_until) <= now) return false
+  return !participant.revoked && !participant.slashed
+}
+
+function sameTerm(key: string, given: number, onEntry: number): boolean {
+  const scale = (DISCOUNT_KEYS as readonly string[]).includes(key) ? DISCOUNT_SCALE : 1
+  return Math.round(given * scale) === Math.round(onEntry * scale)
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
 
 export interface VtFlowOrchestratorOptions {
   publicApiBaseUrl?: string
@@ -60,6 +110,17 @@ export interface ValidateOnboardingProcessInput {
   credentialSchemaId?: string
   credentialType?: string[]
   credentialContext?: string[]
+}
+
+export interface ValidateFlowInput {
+  vtFlowRecordId: string
+  validationFees?: number
+  issuanceFees?: number
+  verificationFees?: number
+  issuanceFeeDiscount?: number
+  verificationFeeDiscount?: number
+  effectiveUntil?: string
+  opSummaryDigest?: string
 }
 
 export interface OfferOnboardingCredentialInput {
@@ -280,6 +341,340 @@ export class VtFlowOrchestrator {
    */
   async completeOnboardingProcess(vtFlowRecordId: string): Promise<VtFlowRecord> {
     return this.resolveVtFlowApi().markCompleted(vtFlowRecordId)
+  }
+
+  /** [VSA-ADM-VT-FL-VALIDATE] */
+  async validateFlow(input: ValidateFlowInput): Promise<VtFlowRecord> {
+    this.requireChain()
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(input.vtFlowRecordId)
+    if (!record) {
+      throw new AdminApiError(AdminApiErrorCode.UnknownId, 404, `no flow with id "${input.vtFlowRecordId}"`)
+    }
+    if (record.role !== VtFlowRole.Validator) throw invalidState('validate is a validator action')
+    if (record.variant !== VtFlowVariant.OnboardingProcess) {
+      throw invalidState(`validate applies to an Onboarding Process flow, not '${record.variant}'`)
+    }
+    if (!record.applicantParticipantId) throw invalidState('the flow names no applicant participant')
+
+    const applicant = await this.agent.indexer.getParticipant(record.applicantParticipantId)
+    const entryValidated = applicant.op_state === 'VALIDATED'
+    this.assertValidateState(record, entryValidated)
+
+    const terms = this.validationTerms(input, applicant, record)
+    await this.assertClaimsAndTerm(record, applicant, terms)
+
+    if (record.state === VtFlowState.AwaitingOr) await vtFlowApi.acceptOnboardingRequest(record.id)
+    if (record.state === VtFlowState.OobPending) await vtFlowApi.startValidation(record.id)
+
+    if (record.state === VtFlowState.ValidatedPendingClaims) return this.continueAfterValidated(record.id)
+    if (entryValidated) {
+      if (record.state !== VtFlowState.Validated) await vtFlowApi.markValidated(record.id)
+      return this.continueAfterValidated(record.id)
+    }
+
+    const validation: VtFlowValidation = {
+      decidedAt: new Date().toISOString(),
+      submission: await this.submissionPath(applicant),
+      ...terms,
+    }
+    if (validation.submission === VtFlowSubmission.Operator) {
+      return vtFlowApi.recordValidation(record.id, validation, VtFlowState.AwaitingValidationTx)
+    }
+    return this.submitValidation(record.id, applicant, validation)
+  }
+
+  private assertValidateState(record: VtFlowRecord, entryValidated: boolean): void {
+    const accepted = [
+      VtFlowState.AwaitingOr,
+      VtFlowState.Validating,
+      VtFlowState.OobPending,
+      VtFlowState.ValidationTxFailed,
+      VtFlowState.ValidatedPendingClaims,
+    ]
+    // Once the entry is VALIDATED on chain any validator-side state resumes into issuance, which is
+    // how a backend that disabled the default notification handler drives the flow ([VSA-ADM-VT-FL-VALIDATE-11]).
+    const acceptedOnceValidated = [
+      VtFlowState.AwaitingValidationTx,
+      VtFlowState.ValidationTxSubmitted,
+      VtFlowState.Validated,
+    ]
+    if (accepted.includes(record.state)) return
+    if (
+      entryValidated &&
+      acceptedOnceValidated.includes(record.state) &&
+      !record.credentialExchangeRecordId
+    ) {
+      return
+    }
+    throw invalidState(`the flow is '${record.state}', which validate does not accept`)
+  }
+
+  private validationTerms(
+    input: ValidateFlowInput,
+    applicant: ParticipantDto,
+    record: VtFlowRecord,
+  ): ValidationTerms {
+    for (const key of FEE_KEYS) {
+      const fee = input[key]
+      if (fee !== undefined && !(Number.isInteger(fee) && fee >= 0)) {
+        throw invalidInput(`${key} must be a non-negative integer`)
+      }
+    }
+    for (const key of DISCOUNT_KEYS) {
+      const discount = input[key]
+      if (discount !== undefined && !(discount >= 0 && discount <= 1)) {
+        throw invalidInput(`${key} must be between 0 and 1`)
+      }
+    }
+    if (input.effectiveUntil !== undefined && Number.isNaN(Date.parse(input.effectiveUntil))) {
+      throw invalidInput('effectiveUntil must be an ISO 8601 datetime')
+    }
+
+    const onEntry: Record<(typeof FEE_KEYS)[number] | (typeof DISCOUNT_KEYS)[number], number> = {
+      validationFees: applicant.validation_fees ?? 0,
+      issuanceFees: applicant.issuance_fees ?? 0,
+      verificationFees: applicant.verification_fees ?? 0,
+      issuanceFeeDiscount: (applicant.issuance_fee_discount ?? 0) / DISCOUNT_SCALE,
+      verificationFeeDiscount: (applicant.verification_fee_discount ?? 0) / DISCOUNT_SCALE,
+    }
+    const renewal = !!applicant.effective_from
+    const recorded = record.state === VtFlowState.ValidationTxFailed ? record.validation : undefined
+
+    const terms: ValidationTerms = {
+      effectiveUntil: input.effectiveUntil ?? recorded?.effectiveUntil,
+      opSummaryDigest: input.opSummaryDigest ?? recorded?.opSummaryDigest,
+    }
+    for (const key of [...FEE_KEYS, ...DISCOUNT_KEYS]) {
+      const given = input[key]
+      if (renewal) {
+        if (given !== undefined && !sameTerm(key, given, onEntry[key])) {
+          throw invalidInput(`${key} differs from the entry, and a renewal keeps the agreed value`)
+        }
+        terms[key] = onEntry[key]
+      } else {
+        terms[key] = given ?? recorded?.[key] ?? 0
+      }
+    }
+    return terms
+  }
+
+  private async assertClaimsAndTerm(
+    record: VtFlowRecord,
+    applicant: ParticipantDto,
+    terms: ValidationTerms,
+  ): Promise<void> {
+    if (applicant.role !== ParticipantRole.Holder) return
+
+    const schema = await this.agent.indexer.getCredentialSchema(applicant.schema_id)
+    const violations = schemaViolations(JSON.parse(schema.json_schema), {
+      id: applicant.did,
+      ...(record.claims ?? {}),
+    })
+    if (violations.length > 0) {
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidClaims,
+        422,
+        'the claim set does not satisfy the json_schema',
+        { violations },
+      )
+    }
+
+    // An ECS Organization or Persona credential needs a validUntil. With a validity period of 0 the
+    // VPR sets no effective_until, so the call has to carry one.
+    const ecsKey = await classifyEcsSchema(schema.json_schema)
+    const needsValidUntil = ecsKey === ECS.ORG || ecsKey === ECS.PERSONA
+    if (needsValidUntil && (schema.holder_validation_validity_period ?? 0) === 0 && !terms.effectiveUntil) {
+      throw invalidInput('this schema has no validity period, so effectiveUntil is required')
+    }
+  }
+
+  private async submissionPath(applicant: ParticipantDto): Promise<VtFlowSubmission> {
+    const authorization = this.agent.authorizationService
+    if (!authorization || applicant.validator_participant_id == null) return VtFlowSubmission.Operator
+
+    const validator = await this.agent.indexer
+      .getParticipant(applicant.validator_participant_id)
+      .catch(() => undefined)
+    if (!validator || !isActiveParticipant(validator)) return VtFlowSubmission.Operator
+
+    await authorization.refreshForOperator().catch(() => undefined)
+    const grant = authorization.getVsOperatorAuthorizationRecord(validator.id)
+    return grant?.msgTypes.includes(veranaTypeUrls.MsgSetParticipantOPToValidated)
+      ? VtFlowSubmission.Agent
+      : VtFlowSubmission.Operator
+  }
+
+  private async submitValidation(
+    recordId: string,
+    applicant: ParticipantDto,
+    validation: VtFlowValidation,
+  ): Promise<VtFlowRecord> {
+    const chain = this.requireChain()
+    const vtFlowApi = this.resolveVtFlowApi()
+    const fail = (reason: VtFlowTxReason, error: string): Promise<VtFlowRecord> =>
+      vtFlowApi.recordValidation(
+        recordId,
+        { ...validation, tx: { status: VtFlowTxStatus.Failed, reason, error } },
+        VtFlowState.ValidationTxFailed,
+      )
+
+    const grant =
+      applicant.validator_participant_id == null
+        ? undefined
+        : this.agent.authorizationService?.getVsOperatorAuthorizationRecord(
+            applicant.validator_participant_id,
+          )
+    const granter = grant?.withFeegrant ? chain.corporation : undefined
+
+    const message = chain.setParticipantOPToValidatedMsg({
+      id: applicant.id,
+      effectiveUntil: validation.effectiveUntil ? new Date(validation.effectiveUntil) : undefined,
+      validationFees: validation.validationFees,
+      issuanceFees: validation.issuanceFees,
+      verificationFees: validation.verificationFees,
+      issuanceFeeDiscount: Math.round((validation.issuanceFeeDiscount ?? 0) * DISCOUNT_SCALE),
+      verificationFeeDiscount: Math.round((validation.verificationFeeDiscount ?? 0) * DISCOUNT_SCALE),
+      opSummaryDigest: validation.opSummaryDigest,
+    })
+
+    let fee: StdFee
+    try {
+      fee = await chain.estimateFee([message], granter)
+    } catch (error) {
+      return fail(VtFlowTxReason.TxFailed, errorMessage(error))
+    }
+    const amount = BigInt(fee.amount.find(coin => coin.denom === FEE_DENOM)?.amount ?? '0')
+
+    if (granter) {
+      const remaining = await chain.remainingFeeAllowance(granter, FEE_DENOM)
+      if (remaining === undefined) {
+        return fail(
+          VtFlowTxReason.FeegrantExpired,
+          'the Corporation grants the agent no active fee allowance',
+        )
+      }
+      if (remaining < amount) {
+        return fail(VtFlowTxReason.FeegrantExhausted, `the fee allowance has ${remaining}${FEE_DENOM} left`)
+      }
+      const corporation = BigInt((await chain.getAccountBalance(granter, FEE_DENOM)).amount)
+      if (corporation < amount) {
+        return fail(
+          VtFlowTxReason.InsufficientFundsCorporation,
+          `the Corporation holds ${corporation}${FEE_DENOM}`,
+        )
+      }
+    } else {
+      const own = BigInt((await chain.getBalance(FEE_DENOM)).amount)
+      if (own < amount) {
+        return fail(VtFlowTxReason.InsufficientFundsAgent, `the agent account holds ${own}${FEE_DENOM}`)
+      }
+    }
+
+    let hash: string
+    try {
+      hash = await chain.broadcastWithoutWaiting([message], fee)
+    } catch (error) {
+      return fail(VtFlowTxReason.BroadcastError, errorMessage(error))
+    }
+
+    const submitted = await vtFlowApi.recordValidation(
+      recordId,
+      { ...validation, tx: { hash, status: VtFlowTxStatus.Submitted } },
+      VtFlowState.ValidationTxSubmitted,
+    )
+    void this.resolveValidationTx(recordId).catch(error =>
+      this.agent.config.logger.error(`[vt-flow] resolving the validation of ${recordId} failed`, {
+        error: errorMessage(error),
+      }),
+    )
+    return submitted
+  }
+
+  // [VSA-ADM-VT-FL-VALIDATE-8]. Leaving VALIDATION_TX_SUBMITTED ends the loop, so the notification
+  // handler moving the flow first wins the race.
+  async resolveValidationTx(recordId: string): Promise<void> {
+    const chain = this.requireChain()
+    const vtFlowApi = this.resolveVtFlowApi()
+
+    for (;;) {
+      const record = await vtFlowApi.findById(recordId)
+      const validation = record?.validation
+      const hash = validation?.tx?.hash
+      if (!record || !validation || !hash || record.state !== VtFlowState.ValidationTxSubmitted) return
+
+      const tx = await chain.findTx(hash).catch(() => undefined)
+      if (tx && tx.code === 0) {
+        await vtFlowApi.recordValidation(recordId, {
+          ...validation,
+          tx: { hash, height: tx.height, status: VtFlowTxStatus.Succeeded },
+        })
+        await vtFlowApi.markValidated(recordId)
+        await this.continueAfterValidated(recordId)
+        return
+      }
+      if (tx)
+        return this.failUnlessValidated(record, validation, VtFlowTxReason.TxFailed, tx.rawLog, tx.height)
+
+      if (Date.now() - Date.parse(validation.decidedAt) >= TX_LOOKUP_TIMEOUT_MS) {
+        return this.failUnlessValidated(
+          record,
+          validation,
+          VtFlowTxReason.TxNotFound,
+          'not found 60 seconds after the broadcast',
+        )
+      }
+      await new Promise(resolve => setTimeout(resolve, TX_LOOKUP_INTERVAL_MS))
+    }
+  }
+
+  // The VPR has no distinct error for a second SetParticipantOPtoValidated, so the entry tells a
+  // rejected duplicate apart from a real failure.
+  private async failUnlessValidated(
+    record: VtFlowRecord,
+    validation: VtFlowValidation,
+    reason: VtFlowTxReason,
+    error: string,
+    height?: number,
+  ): Promise<void> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const applicant = record.applicantParticipantId
+      ? await this.agent.indexer.getParticipant(record.applicantParticipantId)
+      : undefined
+    if (applicant?.op_state === 'VALIDATED') {
+      await vtFlowApi.markValidated(record.id)
+      await this.continueAfterValidated(record.id)
+      return
+    }
+    await vtFlowApi.recordValidation(
+      record.id,
+      {
+        ...validation,
+        tx: { hash: validation.tx?.hash, height, status: VtFlowTxStatus.Failed, reason, error },
+      },
+      VtFlowState.ValidationTxFailed,
+    )
+  }
+
+  private async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(recordId)
+    if (!record) throw new Error(`vt-flow record ${recordId} not found`)
+    if (record.credentialExchangeRecordId) return record
+
+    const participant = await this.agent.indexer.findParticipant(Number(record.applicantParticipantId))
+    if (!participant) throw new Error(`Applicant participant ${record.applicantParticipantId} not found`)
+    if (Number(participant.role) !== HOLDER_PARTICIPANT_TYPE) return this.completeOnboardingProcess(recordId)
+    return this.offerOnboardingCredential({ vtFlowRecordId: recordId, participant })
+  }
+
+  /** [VSA-ADM-VT-FL-VALIDATE-8]: at startup, resume every flow left in VALIDATION_TX_SUBMITTED. */
+  async resumeValidationSubmissions(): Promise<void> {
+    const pending = await this.resolveVtFlowApi().findAllByQuery({
+      role: VtFlowRole.Validator,
+      flowState: VtFlowState.ValidationTxSubmitted,
+    })
+    await Promise.all(pending.map(record => this.resolveValidationTx(record.id)))
   }
 
   async acceptCredential(input: AcceptCredentialInput): Promise<VtFlowRecord> {

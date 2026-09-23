@@ -5,7 +5,6 @@ import type { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import {
   BadRequestException,
   ConflictException,
-  HttpException,
   HttpStatus,
   Inject,
   Injectable,
@@ -19,7 +18,6 @@ import {
   VtFlowRole,
   VtFlowState,
   VtFlowTxStatus,
-  VtFlowVariant,
   isVtFlowTerminalState,
   peerAnchorDid,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
@@ -30,7 +28,7 @@ import { VsAgentService } from '../../../services/VsAgentService'
 import { V2VtFlowRecordDto, VtConnectionState } from '../v2/vt/dto'
 import { CredentialTypesService } from '../credentials/CredentialTypeService'
 
-import { ListFlowsQueryDto, ListFlowsV2QueryDto } from './dto/flow-requests.dto'
+import { ListFlowsQueryDto, ListFlowsV2QueryDto, ValidateFlowDto } from './dto/flow-requests.dto'
 import { VtFlowRecordDto } from './dto/vt-flow-record.dto'
 
 @Injectable()
@@ -216,71 +214,14 @@ export class VtFlowsService {
     }
   }
 
-  public async validateAndOfferCredential(participantSessionId: string): Promise<VtFlowRecordDto> {
+  public async validateFlow(participantSessionId: string, input: ValidateFlowDto): Promise<VtFlowRecordDto> {
     const agent = await this.agentService.getAgent()
     this.requireChain(agent)
 
-    const vtFlowApi = this.resolveVtFlowApi(agent)
-    const record = await this.findRecordBySession(vtFlowApi, participantSessionId)
-    if (record.role !== VtFlowRole.Validator) {
-      throw new ConflictException('This record is applicant-side; validate is a validator action')
-    }
-    if (record.variant !== VtFlowVariant.OnboardingProcess) {
-      throw new ConflictException(
-        `This record is variant '${record.variant}'; validate only applies to OnboardingProcess`,
-      )
-    }
-    // A repeat call re-drives the offer of a record that reached VALIDATED and has no credential
-    // exchange. It recovers a credential build or an offer that failed after the chain write.
-    const resumeOffer = record.state === VtFlowState.Validated && !record.credentialExchangeRecordId
-    if (record.state !== VtFlowState.AwaitingOr && !resumeOffer) {
-      throw new ConflictException(
-        `Record state is '${record.state}'; validate applies to '${VtFlowState.AwaitingOr}', or to ` +
-          `'${VtFlowState.Validated}' with no credential exchange`,
-      )
-    }
-    if (!record.applicantParticipantId) throw new ConflictException('Record has no applicantParticipantId')
-
-    const applicant = await agent.indexer.getParticipant(Number(record.applicantParticipantId))
-    if (!applicant)
-      throw new BadRequestException(
-        `Applicant participant ${record.applicantParticipantId} not found on indexer`,
-      )
-    if (applicant.schema_id == null) throw new BadRequestException('Applicant participant has no schema_id')
-
-    const orchestrator = new VtFlowOrchestrator(agent, {
-      publicApiBaseUrl: agent.publicApiBaseUrl,
-    })
-    try {
-      const {
-        record: validated,
-        participant,
-        credential,
-      } = await orchestrator.validateOnboardingProcess({
-        vtFlowRecordId: record.id,
-        credentialSchemaId: String(applicant.schema_id),
-      })
-
-      // Only a HOLDER receives a credential. For every other role the chain records the outcome
-      // with SetParticipantOPToValidated, and the process ends there. The schema of an ISSUER
-      // entry describes what that issuer will give to others, so building a credential from it
-      // for the issuer itself fails on the required subject claims.
-      if (participant.role !== HOLDER_PARTICIPANT_TYPE) {
-        const completed = await orchestrator.completeOnboardingProcess(validated.id)
-        return toDto(await resolveFlow(agent, completed))
-      }
-
-      const offered = await orchestrator.offerOnboardingCredential({
-        vtFlowRecordId: validated.id,
-        credentialSchemaId: String(applicant.schema_id),
-        participant,
-        credential,
-      })
-      return toDto(await resolveFlow(agent, offered))
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      throw new HttpException(`validate failed: ${message}`, HttpStatus.INTERNAL_SERVER_ERROR)
-    }
+    const record = await this.findRecordBySession(this.resolveVtFlowApi(agent), participantSessionId)
+    const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
+    const validated = await orchestrator.validateFlow({ vtFlowRecordId: record.id, ...input })
+    return toDto(await resolveFlow(agent, validated))
   }
 
   private resolveVtFlowApi(agent: VsAgent): VtFlowApi {
