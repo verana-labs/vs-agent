@@ -889,6 +889,7 @@ export class VtFlowService {
 
     const record = await this.repository.findByThreadId(agentContext, message.threadId)
     if (!record) return undefined
+    if (isVtFlowTerminalState(record.state)) return record
 
     const code = message.description?.code
     const info = code && isVtFlowErrorCode(code) ? VT_FLOW_ERROR_INFO[code] : undefined

@@ -96,8 +96,12 @@ describe('VtFlowService inbound problem-report', () => {
     return message
   }
 
-  async function receive(code: string, role: VtFlowRole, options: { whoRetries?: WhoRetriesStatus } = {}) {
-    const existing = makeRecord({ role, state: VtFlowState.Validating })
+  async function receive(
+    code: string,
+    role: VtFlowRole,
+    options: { whoRetries?: WhoRetriesStatus; state?: VtFlowState } = {},
+  ) {
+    const existing = makeRecord({ role, state: options.state ?? VtFlowState.Validating })
     const repository = {
       findByThreadId: vi.fn().mockResolvedValue(existing),
       update: vi.fn(),
@@ -154,6 +158,16 @@ describe('VtFlowService inbound problem-report', () => {
     await expect(receive(VtFlowErrorCode.InternalError, VtFlowRole.Applicant)).resolves.toMatchObject({
       state: VtFlowState.Error,
     })
+  })
+
+  it('leaves a flow in a terminal state untouched', async () => {
+    const record = await receive(VtFlowErrorCode.ValidationRefused, VtFlowRole.Applicant, {
+      state: VtFlowState.TerminatedByApplicant,
+    })
+
+    expect(record.state).toBe(VtFlowState.TerminatedByApplicant)
+    expect(record.messages).toBeUndefined()
+    expect(record.errorMessage).toBeUndefined()
   })
 
   it('leaves the flow where it is on a retryable code', async () => {
