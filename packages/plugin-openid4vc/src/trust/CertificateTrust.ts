@@ -1,7 +1,7 @@
 import type { OpenId4VcPluginOptions } from '../types'
 import type { X509Certificate } from '@credo-ts/core'
 
-import { createHash } from 'node:crypto'
+import { createHash } from 'crypto'
 
 export function trustedCertificatesForVerification(
   options: OpenId4VcPluginOptions,

@@ -10,7 +10,7 @@ import {
   X509Certificate,
   X509KeyUsage,
 } from '@credo-ts/core'
-import { createHash } from 'node:crypto'
+import { createHash } from 'crypto'
 
 import { certificateFingerprint } from '../trust/CertificateTrust'
 import { isRecord } from '../utils/isRecord'
