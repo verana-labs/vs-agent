@@ -88,22 +88,10 @@ export class V2Openid4vcPresentationsController {
   public async listPresentations(
     @Query() query: Openid4vcListPresentationsQueryDto,
   ): Promise<Page<Openid4vcPresentationRecordDto>> {
-    const sessions = await this.verifierService.listVerificationSessions()
-    const filtered = sessions.filter(
-      session =>
-        (!query.jsonSchemaCredentialId || session.jsonSchemaCredentialId === query.jsonSchemaCredentialId) &&
-        (!query.state || session.state === query.state),
-    )
+    const filters = { jsonSchemaCredentialId: query.jsonSchemaCredentialId, state: query.state }
+    const sessions = await this.verifierService.listVerificationSessions(filters)
 
-    const page = paginate(
-      filtered,
-      query,
-      {
-        method: 'openid4vc.listPresentations',
-        filters: { jsonSchemaCredentialId: query.jsonSchemaCredentialId, state: query.state },
-      },
-      createdAtKey,
-    )
+    const page = paginate(sessions, query, { method: 'openid4vc.listPresentations', filters }, createdAtKey)
 
     return mapPage(page, toPresentationDto)
   }

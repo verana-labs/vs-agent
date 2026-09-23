@@ -103,10 +103,18 @@ const verifierCertificate = {
   certificateChain: ['MIIB-verifier-leaf', 'MIIB-intermediate', 'MIIB-root'],
 }
 
+type SessionFilters = Record<string, string | undefined>
+
+function matchesFilters(session: Record<string, unknown>, filters: SessionFilters): boolean {
+  return Object.entries(filters).every(([tag, value]) => value === undefined || session[tag] === value)
+}
+
 const issuerService = {
   ensureInitialized: vi.fn().mockResolvedValue(undefined),
   getCertificateInfo: () => issuerCertificate,
-  listIssuanceSessions: async () => issuanceSessions,
+  listIssuanceSessions: vi.fn(async (filters: SessionFilters = {}) =>
+    issuanceSessions.filter(session => matchesFilters(session, filters)),
+  ),
   createOffer: vi.fn(),
   getIssuanceSession: vi.fn(),
   deleteIssuanceSession: vi.fn(),
@@ -115,7 +123,9 @@ const issuerService = {
 const verifierService = {
   ensureInitialized: vi.fn().mockResolvedValue(undefined),
   getCertificateInfo: () => verifierCertificate,
-  listVerificationSessions: async () => verificationSessions,
+  listVerificationSessions: vi.fn(async (filters: SessionFilters = {}) =>
+    verificationSessions.filter(session => matchesFilters(session, filters)),
+  ),
   createRequest: vi.fn(),
   getVerificationSession: vi.fn(),
   deleteVerificationSession: vi.fn(),
@@ -226,6 +236,11 @@ describe('v2 openid4vc routes', () => {
         '/v2/openid4vc/credential-exchanges?statusListId=list-1',
       )
       expect(exchangeIds(byStatusList.body)).toEqual([])
+      expect(issuerService.listIssuanceSessions).toHaveBeenLastCalledWith({
+        jsonSchemaCredentialId: undefined,
+        statusListId: 'list-1',
+        state: undefined,
+      })
     })
 
     it('refuses an unknown state filter', async () => {
@@ -474,6 +489,10 @@ describe('v2 openid4vc routes', () => {
         '/v2/openid4vc/presentations?state=ResponseVerified',
       )
       expect(proofIds(byState.body)).toEqual(['pe-b'])
+      expect(verifierService.listVerificationSessions).toHaveBeenLastCalledWith({
+        jsonSchemaCredentialId: undefined,
+        state: 'ResponseVerified',
+      })
     })
 
     it('refuses an unknown state filter', async () => {

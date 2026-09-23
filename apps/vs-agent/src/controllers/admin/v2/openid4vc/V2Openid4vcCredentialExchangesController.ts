@@ -87,25 +87,17 @@ export class V2Openid4vcCredentialExchangesController {
   public async listCredentialExchanges(
     @Query() query: Openid4vcListCredentialExchangesQueryDto,
   ): Promise<Page<Openid4vcCredentialExchangeRecordDto>> {
-    const sessions = await this.issuerService.listIssuanceSessions()
-    const filtered = sessions.filter(
-      session =>
-        (!query.jsonSchemaCredentialId || session.jsonSchemaCredentialId === query.jsonSchemaCredentialId) &&
-        (!query.statusListId || session.statusListId === query.statusListId) &&
-        (!query.state || session.state === query.state),
-    )
+    const filters = {
+      jsonSchemaCredentialId: query.jsonSchemaCredentialId,
+      statusListId: query.statusListId,
+      state: query.state,
+    }
+    const sessions = await this.issuerService.listIssuanceSessions(filters)
 
     const page = paginate(
-      filtered,
+      sessions,
       query,
-      {
-        method: 'openid4vc.listCredentialExchanges',
-        filters: {
-          jsonSchemaCredentialId: query.jsonSchemaCredentialId,
-          statusListId: query.statusListId,
-          state: query.state,
-        },
-      },
+      { method: 'openid4vc.listCredentialExchanges', filters },
       createdAtKey,
     )
 

@@ -3,7 +3,9 @@ import type { OpenId4VcPluginOptions } from '../src/types'
 import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import {
   OpenId4VcIssuanceSessionRepository,
+  OpenId4VcIssuanceSessionState,
   OpenId4VcVerificationSessionRepository,
+  OpenId4VcVerificationSessionState,
 } from '@credo-ts/openid4vc'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -77,9 +79,10 @@ function issuerApi() {
   }
 }
 
-const issuanceSessionRepository = { findByQuery: vi.fn() }
+const issuanceSessionRepository = { findByQuery: vi.fn(), update: vi.fn() }
 
 function issuanceSession(overrides: Record<string, unknown> = {}) {
+  const tags: Record<string, unknown> = { jsonSchemaCredentialId: 'employee' }
   return {
     id: 'session-1',
     issuerId: 'issuer',
@@ -89,6 +92,10 @@ function issuanceSession(overrides: Record<string, unknown> = {}) {
     expiresAt: new Date('2026-01-01T01:00:00.000Z'),
     errorMessage: undefined,
     credentialOfferPayload: { credential_configuration_ids: ['employee'] },
+    getTag: (name: string) => tags[name],
+    setTag: (name: string, value: unknown) => {
+      tags[name] = value
+    },
     ...overrides,
   }
 }
@@ -443,7 +450,7 @@ describe('IssuerService', () => {
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
     api.createCredentialOffer.mockResolvedValue({
       credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
-      issuanceSession: { id: 'session-1' },
+      issuanceSession: issuanceSession({ id: 'session-1' }),
     })
     const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
     loadSigningCertificate.mockRejectedValueOnce(new Error('storage not ready'))
@@ -466,12 +473,12 @@ describe('IssuerService', () => {
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
     api.createCredentialOffer.mockResolvedValue({
       credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
-      issuanceSession: {
+      issuanceSession: issuanceSession({
         id: 'session-id',
         state: 'OfferCreated',
         createdAt: new Date('2026-07-21T10:00:00.000Z'),
         expiresAt: new Date('2026-07-21T10:05:00.000Z'),
-      },
+      }),
     })
     const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
     await service.ensureInitialized()
@@ -488,6 +495,10 @@ describe('IssuerService', () => {
       preAuthorizedCodeFlowConfig: {},
       issuanceMetadata: { claims: { name: 'Ada', role: 'engineer' }, ttlSeconds: 3_600 },
     })
+    expect(issuanceSessionRepository.update).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: 'session-id' }),
+    )
     expect(result).toEqual({
       credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
       issuanceSessionId: 'session-id',
@@ -499,7 +510,7 @@ describe('IssuerService', () => {
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
     api.createCredentialOffer.mockResolvedValue({
       credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
-      issuanceSession: { id: 'session-id' },
+      issuanceSession: issuanceSession({ id: 'session-id' }),
     })
     const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
     await service.ensureInitialized()
@@ -670,16 +681,16 @@ describe('IssuerService', () => {
   it('returns only safe offer state fields', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
-    api.getIssuanceSessionById.mockResolvedValue({
-      id: 'session-id',
-      issuerId: 'issuer',
-      state: 'OfferCreated',
-      createdAt: new Date('2026-07-21T10:00:00.000Z'),
-      expiresAt: new Date('2026-07-21T10:05:00.000Z'),
-      preAuthorizedCode: 'secret-code',
-      issuanceMetadata: { name: 'Ada', role: 'engineer' },
-      credentialOfferPayload: { credential_configuration_ids: ['employee'], grants: { secret: true } },
-    })
+    api.getIssuanceSessionById.mockResolvedValue(
+      issuanceSession({
+        id: 'session-id',
+        createdAt: new Date('2026-07-21T10:00:00.000Z'),
+        expiresAt: new Date('2026-07-21T10:05:00.000Z'),
+        preAuthorizedCode: 'secret-code',
+        issuanceMetadata: { name: 'Ada', role: 'engineer' },
+        credentialOfferPayload: { credential_configuration_ids: ['employee'], grants: { secret: true } },
+      }),
+    )
     const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
     await service.ensureInitialized()
 
@@ -727,7 +738,7 @@ describe('IssuerService', () => {
       })
     })
 
-    it('lists only the sessions of this issuer', async () => {
+    it('lists only the sessions of this issuer and leaves the filters to the query', async () => {
       const { service } = await initializedIssuer()
       issuanceSessionRepository.findByQuery.mockResolvedValue([
         issuanceSession(),
@@ -743,6 +754,19 @@ describe('IssuerService', () => {
         ['session-1', 'OfferCreated'],
         ['session-2', 'Completed'],
       ])
+
+      await service.listIssuanceSessions({
+        jsonSchemaCredentialId: 'badge',
+        statusListId: 'list-1',
+        state: OpenId4VcIssuanceSessionState.Completed,
+      })
+
+      expect(issuanceSessionRepository.findByQuery).toHaveBeenLastCalledWith(expect.anything(), {
+        issuerId: 'issuer',
+        jsonSchemaCredentialId: 'badge',
+        statusListId: 'list-1',
+        state: 'Completed',
+      })
     })
 
     it('deletes a session of this issuer and refuses a foreign one', async () => {
@@ -1296,7 +1320,7 @@ describe('VerifierService', () => {
       expect(verificationSessionRepository.update).not.toHaveBeenCalled()
     })
 
-    it('lists only the sessions of this verifier', async () => {
+    it('lists only the sessions of this verifier and leaves the filters to the query', async () => {
       const { service, api } = await initializedVerifier()
       api.findVerificationSessionsByQuery.mockResolvedValue([
         verificationSession(),
@@ -1306,6 +1330,17 @@ describe('VerifierService', () => {
       const sessions = await service.listVerificationSessions()
 
       expect(api.findVerificationSessionsByQuery).toHaveBeenCalledWith({ verifierId: 'verifier' })
+
+      await service.listVerificationSessions({
+        jsonSchemaCredentialId: 'badge',
+        state: OpenId4VcVerificationSessionState.ResponseVerified,
+      })
+
+      expect(api.findVerificationSessionsByQuery).toHaveBeenLastCalledWith({
+        verifierId: 'verifier',
+        jsonSchemaCredentialId: 'badge',
+        state: 'ResponseVerified',
+      })
       expect(sessions.map(session => session.id)).toEqual(['session-1', 'session-2'])
     })
 

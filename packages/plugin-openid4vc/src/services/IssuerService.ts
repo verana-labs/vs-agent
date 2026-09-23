@@ -51,6 +51,12 @@ export interface OpenId4VcCreateOfferOptions {
   statusListIndex?: number
 }
 
+export interface OpenId4VcIssuanceSessionFilters {
+  jsonSchemaCredentialId?: string
+  statusListId?: string
+  state?: OpenId4VcIssuanceSessionState
+}
+
 export interface OpenId4VcOfferResult {
   credentialOffer: string
   issuanceSessionId: string
@@ -67,6 +73,9 @@ export interface OpenId4VcIssuanceSessionSummary {
   expiresAt?: Date
   errorMessage?: string
 }
+
+const JSON_SCHEMA_CREDENTIAL_ID_TAG = 'jsonSchemaCredentialId'
+const STATUS_LIST_ID_TAG = 'statusListId'
 
 export class IssuerService {
   private initialization?: Promise<void>
@@ -137,6 +146,9 @@ export class IssuerService {
       issuanceMetadata,
     })
 
+    issuanceSession.setTag(JSON_SCHEMA_CREDENTIAL_ID_TAG, configuration.id)
+    await this.sessionRepository().update(this.agent.context, issuanceSession)
+
     return { credentialOffer, issuanceSessionId: issuanceSession.id }
   }
 
@@ -145,11 +157,16 @@ export class IssuerService {
     return summarizeIssuanceSession(await this.findOwnedSession(id))
   }
 
-  public async listIssuanceSessions(): Promise<OpenId4VcIssuanceSessionSummary[]> {
+  public async listIssuanceSessions(
+    filters: OpenId4VcIssuanceSessionFilters = {},
+  ): Promise<OpenId4VcIssuanceSessionSummary[]> {
     await this.ensureInitialized()
-    const agentContext = this.agent.context
-    const repository = agentContext.dependencyManager.resolve(OpenId4VcIssuanceSessionRepository)
-    const sessions = await repository.findByQuery(agentContext, { issuerId: ISSUER_CAPABILITY_ID })
+    const sessions = await this.sessionRepository().findByQuery(this.agent.context, {
+      issuerId: ISSUER_CAPABILITY_ID,
+      state: filters.state,
+      [JSON_SCHEMA_CREDENTIAL_ID_TAG]: filters.jsonSchemaCredentialId,
+      [STATUS_LIST_ID_TAG]: filters.statusListId,
+    })
     return sessions.map(summarizeIssuanceSession)
   }
 
@@ -358,6 +375,10 @@ export class IssuerService {
     )
   }
 
+  private sessionRepository(): OpenId4VcIssuanceSessionRepository {
+    return this.agent.context.dependencyManager.resolve(OpenId4VcIssuanceSessionRepository)
+  }
+
   private issuerApi(): IssuerApi {
     const issuer = this.agent.modules.openId4Vc?.issuer
     if (!issuer) throw new Error('OpenID4VC issuer API is not enabled on this agent')
@@ -378,9 +399,10 @@ export class IssuerService {
 }
 
 function summarizeIssuanceSession(session: OpenId4VcIssuanceSessionRecord): OpenId4VcIssuanceSessionSummary {
+  const jsonSchemaCredentialId = session.getTag(JSON_SCHEMA_CREDENTIAL_ID_TAG)
   return {
     id: session.id,
-    jsonSchemaCredentialId: session.credentialOfferPayload.credential_configuration_ids?.[0] ?? '',
+    jsonSchemaCredentialId: typeof jsonSchemaCredentialId === 'string' ? jsonSchemaCredentialId : '',
     state: session.state,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt ?? session.createdAt,

@@ -47,6 +47,11 @@ export interface OpenId4VcVerificationRequest {
   verificationSessionId: string
 }
 
+export interface OpenId4VcVerificationSessionFilters {
+  jsonSchemaCredentialId?: string
+  state?: OpenId4VcVerificationSessionState
+}
+
 export interface OpenId4VcCreatePresentationRequestOptions {
   jsonSchemaCredentialId: string
   requestedClaims?: string[]
@@ -153,10 +158,14 @@ export class VerifierService {
     return this.toSummary(session, this.storedDecision(session) ?? UNDECIDED_TRUST_DECISION)
   }
 
-  public async listVerificationSessions(): Promise<OpenId4VcVerificationSessionSummary[]> {
+  public async listVerificationSessions(
+    filters: OpenId4VcVerificationSessionFilters = {},
+  ): Promise<OpenId4VcVerificationSessionSummary[]> {
     await this.ensureInitialized()
     const sessions = await this.verifierApi().findVerificationSessionsByQuery({
       verifierId: VERIFIER_CAPABILITY_ID,
+      state: filters.state,
+      [JSON_SCHEMA_CREDENTIAL_ID_TAG]: filters.jsonSchemaCredentialId,
     })
     return sessions.map(session => this.summarizeKnown(session))
   }
