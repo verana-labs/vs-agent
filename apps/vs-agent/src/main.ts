@@ -98,6 +98,8 @@ import {
   webhookEvent,
 } from './utils'
 
+const SELECTABLE_PLUGINS = ['messaging', 'chat', 'mrtd']
+
 const AGENT_LOG_LEVEL = resolveLogLevel(AGENT_LOG_LEVEL_NAME, DEFAULT_AGENT_LOG_LEVEL)
 const ADMIN_API_LOG_LEVEL = resolveLogLevel(ADMIN_API_LOG_LEVEL_NAME, DEFAULT_ADMIN_API_LOG_LEVEL)
 
@@ -275,6 +277,12 @@ const run = async () => {
       process.exit(1)
     }
   }
+
+  const unselectable = ENABLED_PLUGINS.filter(name => !SELECTABLE_PLUGINS.includes(name))
+  if (unselectable.length > 0)
+    serverLogger.warn(
+      `VS_AGENT_PLUGINS names ${unselectable.join(', ')}, which this image does not bundle as a selectable plugin, so it is skipped. Supported values are ${SELECTABLE_PLUGINS.join(', ')}; openid4vc is built in and enabled by OID4VC_CONFIG_FILE_LOCATION.`,
+    )
 
   // Dynamically load optional plugin packages.
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
