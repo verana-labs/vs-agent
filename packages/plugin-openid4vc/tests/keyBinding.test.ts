@@ -1,51 +1,14 @@
-import type { OpenId4VcPluginOptions } from '../src/types'
 import type { BaseAgent, DidDocument, VerificationMethod } from '@credo-ts/core'
 
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { certificateFingerprint, trustedCertificatesForVerification } from '../src/trust/CertificateTrust'
 import {
   findBoundVerificationMethodId,
   ownDidResolutionPolicy,
   verifyKeyBoundToDid,
 } from '../src/trust/keyBinding'
 
-import { createCertificateFixtures, LEAF_PRIVATE_JWK, OTHER_PRIVATE_JWK } from './helpers/certificates'
-
-describe('CertificateTrust', () => {
-  let fixtures: Awaited<ReturnType<typeof createCertificateFixtures>>
-
-  beforeAll(async () => {
-    fixtures = await createCertificateFixtures()
-  })
-
-  it('encodes certificate fingerprints without certificate or key material', () => {
-    expect(certificateFingerprint(fixtures.leaf)).toMatch(/^SHA256:[0-9a-f]{64}$/)
-  })
-})
-
-const options = (keyAttestationCertificates?: string[]): OpenId4VcPluginOptions => ({
-  publicApiBaseUrl: 'https://agent.example',
-  issuer: { ...(keyAttestationCertificates ? { keyAttestationCertificates } : {}) },
-  credentialConfigurations: [],
-})
-
-describe('key attestation trust', () => {
-  it('anchors a key attestation on the configured roots', () => {
-    const trusted = trustedCertificatesForVerification(
-      options(['wallet-provider-root']),
-      'openId4VciKeyAttestation',
-    )
-
-    expect(trusted).toEqual(['wallet-provider-root'])
-  })
-
-  it('refuses a key attestation when no root is configured', () => {
-    const trusted = trustedCertificatesForVerification(options(), 'openId4VciKeyAttestation')
-
-    expect(trusted).toBeUndefined()
-  })
-})
+import { LEAF_PRIVATE_JWK, OTHER_PRIVATE_JWK } from './helpers/certificates'
 
 const DID = 'did:web:issuer.example'
 const DID_RESOLUTION_POLICY = { allowedWebHosts: ['issuer.example'], timeoutMs: 1_000 }

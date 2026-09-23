@@ -1,7 +1,7 @@
 import type { OpenId4VcAgent } from '../../src/types'
 import type { OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../../src/types'
 import type { AskarModuleConfigStoreOptions, AskarSqliteStorageConfig } from '@credo-ts/askar'
-import type { DidResolver, Kms, SdJwtVc, X509Certificate } from '@credo-ts/core'
+import type { BaseLogger, DidResolver, Kms, SdJwtVc, X509Certificate } from '@credo-ts/core'
 import type { OpenId4VcHolderApi } from '@credo-ts/openid4vc'
 import type { Server } from 'node:http'
 
@@ -9,6 +9,7 @@ import { AskarModule } from '@credo-ts/askar'
 import {
   Agent,
   ConsoleLogger,
+  DidDocument,
   DidsModule,
   Kms as KmsApi,
   LogLevel,
@@ -41,13 +42,26 @@ import {
   ROOT_PRIVATE_JWK,
   createCertificateFixtures,
 } from './certificates'
+import { didDocumentWithKey, FakeDidResolver } from './fakeDidResolver'
 
 type CertificateFixtures = Awaited<ReturnType<typeof createCertificateFixtures>>
 type AgentRole = 'issuer' | 'holder' | 'verifier'
 type PluginAgentRole = Exclude<AgentRole, 'holder'>
 
 const ASKAR_STORE_KEY = 'DZ9hPqFWTPxemcGea72C1X1nusqk5wFNLq6QPjwXGqAa'
-const LOG_LEVEL = process.env.OID4VC_TEST_LOG ? LogLevel.Debug : LogLevel.Off
+
+export const TEST_ISSUER_DID = 'did:web:issuer.example'
+export const TEST_VERIFIER_DID = 'did:web:verifier.example'
+
+export const testCredentialConfiguration: OpenId4VcCredentialConfiguration = {
+  id: 'employee',
+  format: 'dc+sd-jwt',
+  vct: 'https://credentials.example/vct/employee',
+  name: 'Employee credential',
+  vtjscId: 'https://credentials.example/vt/employee.json',
+  claims: ['name', 'role'],
+  disclosureFrame: ['name', 'role'],
+}
 
 interface TestAgentWithOpenId4Vc extends Agent {
   did?: string
@@ -173,7 +187,7 @@ async function createIssuerCertificate(intermediate: X509Certificate, did: strin
   return CredoX509Certificate.fromRawCertificate(new Uint8Array(certificate.rawData))
 }
 
-export async function startOpenId4VcTestAgents(input: {
+export async function startTestAgents(input: {
   certificates: CertificateFixtures
   verifierCertificate: X509Certificate
   didResolver: DidResolver
@@ -181,7 +195,9 @@ export async function startOpenId4VcTestAgents(input: {
   verifierDid: string
   credentialConfiguration: OpenId4VcCredentialConfiguration
   failureHooks?: TestAgentFailureHooks
+  logger?: BaseLogger
 }): Promise<OpenId4VcTestAgents> {
+  const logger = input.logger ?? new ConsoleLogger(LogLevel.Off)
   const rootCertificate = input.certificates.root.toString('base64')
   const issuerCertificate = await createIssuerCertificate(input.certificates.intermediate, input.issuerDid)
   const issuer = await startPluginAgent({
@@ -205,12 +221,13 @@ export async function startOpenId4VcTestAgents(input: {
     }),
     createService: (agent, options) => new IssuerService(agent, options),
     failureHooks: input.failureHooks,
+    logger,
   })
 
   let holder: Awaited<ReturnType<typeof startHolderAgent>> | undefined
   let verifier: Awaited<ReturnType<typeof startPluginAgent<VerifierService>>> | undefined
   try {
-    holder = await startHolderAgent(input.didResolver, rootCertificate, input.failureHooks)
+    holder = await startHolderAgent(input.didResolver, rootCertificate, logger, input.failureHooks)
     verifier = await startPluginAgent({
       role: 'verifier',
       did: input.verifierDid,
@@ -232,6 +249,7 @@ export async function startOpenId4VcTestAgents(input: {
       }),
       createService: (agent, options) => new VerifierService(agent, options),
       failureHooks: input.failureHooks,
+      logger,
     })
 
     return {
@@ -255,6 +273,7 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
   options: (publicApiBaseUrl: string) => OpenId4VcPluginOptions
   createService: (agent: OpenId4VcAgent, options: OpenId4VcPluginOptions) => Service
   failureHooks?: TestAgentFailureHooks
+  logger: BaseLogger
 }): Promise<{
   agent: TestAgentWithOpenId4Vc
   service: Service
@@ -277,12 +296,11 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
     })
     app.use(sdkPlugin.publicMiddleware)
 
-    const logger = new ConsoleLogger(LOG_LEVEL)
     agent = new Agent({
-      config: { logger, allowInsecureHttpUrls: true },
+      config: { logger: input.logger, allowInsecureHttpUrls: true },
       dependencies: agentDependencies,
       modules: {
-        askar: new AskarModule({ askar, store: askarStore(input.role) }),
+        askar: new AskarModule({ askar, store: getAskarStoreConfig(`openid4vc-${input.role}`) }),
         dids: new DidsModule({ resolvers: [input.didResolver] }),
         ...sdkPlugin.modules,
       },
@@ -310,15 +328,16 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
 async function startHolderAgent(
   didResolver: DidResolver,
   rootCertificate: string,
+  logger: BaseLogger,
   failureHooks?: TestAgentFailureHooks,
 ): Promise<OpenId4VcTestAgents['holder'] & { stop: () => Promise<void> }> {
   let agent: TestAgentWithOpenId4Vc | undefined
   try {
     agent = new Agent({
-      config: { logger: new ConsoleLogger(LOG_LEVEL), allowInsecureHttpUrls: true },
+      config: { logger, allowInsecureHttpUrls: true },
       dependencies: agentDependencies,
       modules: {
-        askar: new AskarModule({ askar, store: askarStore('holder') }),
+        askar: new AskarModule({ askar, store: getAskarStoreConfig('openid4vc-holder') }),
         dids: new DidsModule({ resolvers: [didResolver] }),
         openId4Vc: new OpenId4VcModule(),
         x509: new X509Module({ trustedCertificates: [rootCertificate] }),
@@ -378,12 +397,37 @@ async function startHolderAgent(
   }
 }
 
-function askarStore(role: AgentRole): AskarModuleConfigStoreOptions {
+export function getAskarStoreConfig(name: string): AskarModuleConfigStoreOptions {
   return {
-    id: `openid4vc-${role}-${utils.uuid()}`,
+    id: `${name}-${utils.uuid()}`,
     key: ASKAR_STORE_KEY,
     keyDerivationMethod: 'raw',
     database: { type: 'sqlite', config: { inMemory: true } } as AskarSqliteStorageConfig,
+  }
+}
+
+export async function createTestAgentsInput() {
+  const certificates = await createCertificateFixtures()
+  const verifierCertificate = await createVerifierCertificate(certificates.root, TEST_VERIFIER_DID)
+  const didDocuments = new Map<string, DidDocument>([
+    [
+      TEST_ISSUER_DID,
+      didDocumentWithKey(TEST_ISSUER_DID, certificates.leaf.publicJwk.toJson(), ['assertionMethod']),
+    ],
+    [
+      TEST_VERIFIER_DID,
+      didDocumentWithKey(TEST_VERIFIER_DID, verifierCertificate.publicJwk.toJson(), ['authentication']),
+    ],
+  ])
+
+  return {
+    certificates,
+    verifierCertificate,
+    didDocuments,
+    didResolver: new FakeDidResolver(didDocuments),
+    issuerDid: TEST_ISSUER_DID,
+    verifierDid: TEST_VERIFIER_DID,
+    credentialConfiguration: testCredentialConfiguration,
   }
 }
 

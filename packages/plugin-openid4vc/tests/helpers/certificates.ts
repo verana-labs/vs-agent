@@ -53,7 +53,7 @@ export const OTHER_PRIVATE_JWK: Kms.KmsJwkPrivateEc = {
   kid: 'fixture-other',
 }
 
-interface CertificateFixtures {
+export interface CertificateFixtures {
   root: X509Certificate
   expiredRoot: X509Certificate
   intermediate: X509Certificate

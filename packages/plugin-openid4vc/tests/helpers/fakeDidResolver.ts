@@ -27,7 +27,7 @@ export function didDocumentWithKey(
   )
 }
 
-export class MapDidResolver implements DidResolver {
+export class FakeDidResolver implements DidResolver {
   public readonly supportedMethods = ['web']
   public readonly allowsCaching = false
   public readonly allowsLocalDidRecord = false
