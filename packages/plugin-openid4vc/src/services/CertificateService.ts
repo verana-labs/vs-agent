@@ -250,7 +250,7 @@ async function loadDevelopmentSigningCertificate(
     throw new Error('development certificate mode requires publicApiBaseUrl')
   }
 
-  const hostname = hostnameFromPublicApiBaseUrl(publicApiBaseUrl)
+  const hostname = new URL(publicApiBaseUrl).hostname
   const commonName = developmentCommonName(hostname, role)
   const recordId = developmentRecordId(agent.did, hostname, role)
   const existing = await agent.genericRecords.findById(recordId)
@@ -335,7 +335,7 @@ function assertCertificateSignsIssuedCredentials(
     throw new Error('configured issuer certificate mode requires publicApiBaseUrl')
   }
 
-  const hostname = hostnameFromPublicApiBaseUrl(publicApiBaseUrl)
+  const hostname = new URL(publicApiBaseUrl).hostname
   if (certificate.sanUriNames.includes(publicApiBaseUrl) || certificate.sanDnsNames.includes(hostname)) {
     return
   }
@@ -384,16 +384,6 @@ function equalVerificationMethodJwk(method: VerificationMethod, expected: Kms.Km
     return equalPublicJwk(canonicalP256PublicJwk(method.publicKeyJwk), expected)
   } catch {
     return false
-  }
-}
-
-function hostnameFromPublicApiBaseUrl(publicApiBaseUrl: string): string {
-  try {
-    const hostname = new URL(publicApiBaseUrl).hostname
-    if (!hostname) throw new Error()
-    return hostname
-  } catch {
-    throw new Error('certificate signing requires a valid publicApiBaseUrl')
   }
 }
 
