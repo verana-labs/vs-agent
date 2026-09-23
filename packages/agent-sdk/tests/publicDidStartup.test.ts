@@ -99,6 +99,12 @@ describe('public DID startup lifecycle', () => {
       expect(resolved.did).toBe(agent.did)
       expect(resolved.doc.service?.length).toBeGreaterThan(0)
 
+      const didCommMethodId = records[0].didDocument?.authentication?.[0]
+      const didCommMethod = records[0].didDocument?.verificationMethod?.find(
+        method => method.id === didCommMethodId,
+      )
+      expect(didCommMethod?.type).toBe('Multikey')
+
       await agent.shutdown()
     },
     TEST_TIMEOUT_MS,

@@ -376,7 +376,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         controller: publicDid,
         id: verificationMethodId,
         publicKeyMultibase,
-        type: 'Ed25519VerificationKey2020',
+        // did:webvh 1.0's data model admits only JsonWebKey2020 or Multikey; swiyu rejects an Ed25519VerificationKey2020 method.
+        type: 'Multikey',
       },
       {
         controller: publicDid,
