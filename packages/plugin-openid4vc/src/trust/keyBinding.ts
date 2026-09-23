@@ -1,5 +1,5 @@
 import type { KeyBindingResult } from './types'
-import type { BaseAgent, DidPurpose, VerificationMethod } from '@credo-ts/core'
+import type { BaseAgent, DidDocument, DidPurpose, VerificationMethod } from '@credo-ts/core'
 
 import { getPublicJwkFromVerificationMethod, Kms, tryParseDid } from '@credo-ts/core'
 import { BlockList, isIP } from 'node:net'
@@ -32,48 +32,14 @@ export async function verifyKeyBoundToDid(
   purposes: BindingPurpose[],
   resolutionPolicy: DidResolutionPolicy,
 ): Promise<KeyBindingResult> {
-  if (!did) return 'unbound'
-
-  let certificateKey: Kms.PublicJwk
-  try {
-    certificateKey = Kms.PublicJwk.fromUnknown(certificatePublicJwk)
-  } catch {
-    return 'unbound'
-  }
-
-  if (!isResolutionAllowed(did, resolutionPolicy)) return 'unresolvable'
-
-  let didDocument
-  try {
-    const resolution = await withTimeout(
-      agent.dids.resolve(did, { useCache: false, persistInCache: false }),
-      resolutionPolicy.timeoutMs,
-    )
-    if (resolution.didResolutionMetadata?.error || !resolution.didDocument) return 'unresolvable'
-    if (resolution.didDocument.id !== did) return 'unresolvable'
-    didDocument = resolution.didDocument
-  } catch {
-    return 'unresolvable'
-  }
-
-  for (const purpose of purposes) {
-    for (const entry of didDocument[purpose] ?? []) {
-      let verificationMethod: VerificationMethod
-      try {
-        verificationMethod =
-          typeof entry === 'string' ? didDocument.dereferenceVerificationMethod(entry) : entry
-      } catch {
-        continue
-      }
-
-      try {
-        const methodKey = getPublicJwkFromVerificationMethod(verificationMethod)
-        if (certificateKey.equals(methodKey)) return 'bound'
-      } catch {}
-    }
-  }
-
-  return 'unbound'
+  const lookup = await lookupBoundVerificationMethod(
+    agent,
+    did,
+    certificatePublicJwk,
+    purposes,
+    resolutionPolicy,
+  )
+  return lookup.result
 }
 
 export async function findBoundVerificationMethodId(
@@ -83,49 +49,14 @@ export async function findBoundVerificationMethodId(
   purposes: BindingPurpose[],
   resolutionPolicy: DidResolutionPolicy,
 ): Promise<string | null> {
-  if (!did) return null
-
-  let certificateKey: Kms.PublicJwk
-  try {
-    certificateKey = Kms.PublicJwk.fromUnknown(certificatePublicJwk)
-  } catch {
-    return null
-  }
-
-  if (!isResolutionAllowed(did, resolutionPolicy)) return null
-
-  let didDocument
-  try {
-    const resolution = await withTimeout(
-      agent.dids.resolve(did, { useCache: false, persistInCache: false }),
-      resolutionPolicy.timeoutMs,
-    )
-    if (resolution.didResolutionMetadata?.error || !resolution.didDocument) return null
-    if (resolution.didDocument.id !== did) return null
-    didDocument = resolution.didDocument
-  } catch {
-    return null
-  }
-
-  for (const purpose of purposes) {
-    for (const entry of didDocument[purpose] ?? []) {
-      let verificationMethod: VerificationMethod
-      try {
-        verificationMethod =
-          typeof entry === 'string' ? didDocument.dereferenceVerificationMethod(entry) : entry
-      } catch {
-        continue
-      }
-
-      try {
-        if (certificateKey.equals(getPublicJwkFromVerificationMethod(verificationMethod))) {
-          return verificationMethod.id
-        }
-      } catch {}
-    }
-  }
-
-  return null
+  const lookup = await lookupBoundVerificationMethod(
+    agent,
+    did,
+    certificatePublicJwk,
+    purposes,
+    resolutionPolicy,
+  )
+  return lookup.result === 'bound' ? lookup.verificationMethodId : null
 }
 
 // MOSIP Inji's OpenID4VP library declares a RequestSigningAlgorithm enum whose only constant is EdDSA and rejects anything else before reading the request.
@@ -135,21 +66,82 @@ export async function findEd25519VerificationMethodId(
   purposes: BindingPurpose[],
   resolutionPolicy: DidResolutionPolicy,
 ): Promise<string | null> {
-  if (!did || !isResolutionAllowed(did, resolutionPolicy)) return null
+  if (!did) return null
 
-  let didDocument
+  const didDocument = await resolveDidDocument(agent, did, resolutionPolicy)
+  if (!didDocument) return null
+
+  for (const verificationMethod of verificationMethodsForPurposes(didDocument, purposes)) {
+    try {
+      const jwk = getPublicJwkFromVerificationMethod(verificationMethod).toJson() as {
+        kty?: string
+        crv?: string
+      }
+      if (jwk.kty === 'OKP' && jwk.crv === 'Ed25519') return verificationMethod.id
+    } catch {}
+  }
+
+  return null
+}
+
+type BoundKeyLookup =
+  | { result: 'bound'; verificationMethodId: string }
+  | { result: 'unbound' | 'unresolvable' }
+
+async function lookupBoundVerificationMethod(
+  agent: DidResolverAgent,
+  did: string | null,
+  certificatePublicJwk: unknown,
+  purposes: BindingPurpose[],
+  resolutionPolicy: DidResolutionPolicy,
+): Promise<BoundKeyLookup> {
+  if (!did) return { result: 'unbound' }
+
+  let certificateKey: Kms.PublicJwk
+  try {
+    certificateKey = Kms.PublicJwk.fromUnknown(certificatePublicJwk)
+  } catch {
+    return { result: 'unbound' }
+  }
+
+  const didDocument = await resolveDidDocument(agent, did, resolutionPolicy)
+  if (!didDocument) return { result: 'unresolvable' }
+
+  for (const verificationMethod of verificationMethodsForPurposes(didDocument, purposes)) {
+    try {
+      if (certificateKey.equals(getPublicJwkFromVerificationMethod(verificationMethod))) {
+        return { result: 'bound', verificationMethodId: verificationMethod.id }
+      }
+    } catch {}
+  }
+
+  return { result: 'unbound' }
+}
+
+async function resolveDidDocument(
+  agent: DidResolverAgent,
+  did: string,
+  policy: DidResolutionPolicy,
+): Promise<DidDocument | null> {
+  if (!isResolutionAllowed(did, policy)) return null
+
   try {
     const resolution = await withTimeout(
       agent.dids.resolve(did, { useCache: false, persistInCache: false }),
-      resolutionPolicy.timeoutMs,
+      policy.timeoutMs,
     )
     if (resolution.didResolutionMetadata?.error || !resolution.didDocument) return null
     if (resolution.didDocument.id !== did) return null
-    didDocument = resolution.didDocument
+    return resolution.didDocument
   } catch {
     return null
   }
+}
 
+function* verificationMethodsForPurposes(
+  didDocument: DidDocument,
+  purposes: BindingPurpose[],
+): Generator<VerificationMethod> {
   for (const purpose of purposes) {
     for (const entry of didDocument[purpose] ?? []) {
       let verificationMethod: VerificationMethod
@@ -160,17 +152,9 @@ export async function findEd25519VerificationMethodId(
         continue
       }
 
-      try {
-        const jwk = getPublicJwkFromVerificationMethod(verificationMethod).toJson() as {
-          kty?: string
-          crv?: string
-        }
-        if (jwk.kty === 'OKP' && jwk.crv === 'Ed25519') return verificationMethod.id
-      } catch {}
+      yield verificationMethod
     }
   }
-
-  return null
 }
 
 function isResolutionAllowed(did: string, policy: DidResolutionPolicy): boolean {
