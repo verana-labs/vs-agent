@@ -21,7 +21,6 @@ import {
   ownDidResolutionPolicy,
   verifyKeyBoundToDid,
 } from '../trust/keyBinding'
-import { publishParallelWebSigningKey } from '../trust/parallelWebSigningKey'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
 import {
@@ -105,7 +104,6 @@ export class UnknownVerificationSessionError extends Error {}
 export class VerifierService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
-  private parallelWebSigningDidUrl?: string
   private initialized = false
   private readonly trustClient?: TrustClient
 
@@ -268,11 +266,6 @@ export class VerifierService {
     }
     await publishDevelopmentSigningKey(this.agent, signingCertificate, 'verifier')
 
-    this.parallelWebSigningDidUrl = await publishParallelWebSigningKey(
-      this.agent,
-      this.options.trust?.timeoutMs,
-    )
-
     const binding = await verifyKeyBoundToDid(
       this.agent,
       agentDid,
@@ -395,11 +388,8 @@ export class VerifierService {
 
     const did = this.agent.did ?? null
 
-    // Presentation Exchange requests sign with the Ed25519 parallel did:web key: MOSIP verifies EdDSA over did:web only, never did:webvh.
+    // Presentation Exchange requests sign with the agent's Ed25519 authentication key: MOSIP's RequestSigningAlgorithm enum only has EdDSA.
     if (queryLanguage === 'presentation_exchange') {
-      if (this.parallelWebSigningDidUrl) {
-        return { method: 'did' as const, didUrl: this.parallelWebSigningDidUrl }
-      }
       const ed25519DidUrl = await findEd25519VerificationMethodId(
         this.agent,
         did,

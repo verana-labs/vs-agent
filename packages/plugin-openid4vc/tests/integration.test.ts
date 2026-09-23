@@ -58,11 +58,6 @@ import {
   VerifierService,
   type OpenId4VcVerifierAgent,
 } from '../src/services/VerifierService'
-import {
-  asParallelDidWeb,
-  PARALLEL_WEB_SIGNING_KEY_FRAGMENT,
-  publishParallelWebSigningKey,
-} from '../src/trust/parallelWebSigningKey'
 
 import { createCertificateFixtures, LEAF_PRIVATE_JWK, OTHER_PRIVATE_JWK } from './helpers/certificates'
 import { didDocumentWithKey, MapDidResolver } from './helpers/didResolver'
@@ -901,196 +896,6 @@ function relationshipIds(relationship: DidDocument['assertionMethod']): string[]
   return relationship?.map(method => (typeof method === 'string' ? method : method.id)) ?? []
 }
 
-const SOURCE_METHOD_SUFFIX = 'z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp'
-const SOURCE_MULTIBASE = 'z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp'
-const SOURCE_KMS_KEY_ID = 'kms-key-for-didcomm-ed25519'
-
-class ParallelWebDidRegistry {
-  public readonly supportedMethods = ['web', 'webvh']
-  public readonly allowsCaching = false
-  public readonly allowsLocalDidRecord = false
-  public updateCount = 0
-
-  public constructor(private readonly documents: Map<string, DidDocument>) {}
-
-  public async resolve(_agentContext: AgentContext, did: string): Promise<DidResolutionResult> {
-    const stored = this.documents.get(did)
-    if (!stored) {
-      return { didDocument: null, didDocumentMetadata: {}, didResolutionMetadata: { error: 'notFound' } }
-    }
-    return { didDocument: clone(stored), didDocumentMetadata: {}, didResolutionMetadata: {} }
-  }
-
-  public async update(agentContext: AgentContext, options: DidUpdateOptions): Promise<DidUpdateResult> {
-    this.updateCount += 1
-    const didDocument = clone(options.didDocument as DidDocument)
-    this.documents.set(options.did, didDocument)
-    const didRepository = agentContext.dependencyManager.resolve(DidRepository)
-    const didRecord = await didRepository.findCreatedDid(agentContext, options.did)
-    if (didRecord) {
-      didRecord.didDocument = clone(didDocument)
-      await didRepository.update(agentContext, didRecord)
-    }
-    return {
-      didState: { state: 'finished', did: options.did, didDocument },
-      didDocumentMetadata: {},
-      didRegistrationMetadata: {},
-    }
-  }
-
-  public async create(): Promise<DidCreateResult> {
-    return {
-      didState: { state: 'failed', reason: 'not implemented in test registrar' },
-      didDocumentMetadata: {},
-      didRegistrationMetadata: {},
-    }
-  }
-
-  public async deactivate(): Promise<DidDeactivateResult> {
-    return {
-      didState: { state: 'failed', reason: 'not implemented in test registrar' },
-      didDocumentMetadata: {},
-      didRegistrationMetadata: {},
-    }
-  }
-
-  public document(did: string): DidDocument {
-    const document = this.documents.get(did)
-    if (!document) throw new Error(`missing test DID document for ${did}`)
-    return clone(document)
-  }
-}
-
-const parallelWebAgents: TestAgent[] = []
-
-afterEach(async () => {
-  await Promise.all(parallelWebAgents.splice(0).map(agent => agent.shutdown()))
-})
-
-describe('asParallelDidWeb', () => {
-  it('maps a did:webvh and its did urls onto the parallel did:web', () => {
-    expect(asParallelDidWeb(DID_WEBVH)).toBe(DID_WEB)
-    expect(asParallelDidWeb(`${DID_WEBVH}#key-1`)).toBe(`${DID_WEB}#key-1`)
-  })
-
-  it('returns anything that is not a did:webvh unchanged', () => {
-    expect(asParallelDidWeb(DID_WEB)).toBe(DID_WEB)
-    expect(asParallelDidWeb('did:key:z6Mk')).toBe('did:key:z6Mk')
-  })
-})
-
-describe('publishParallelWebSigningKey', () => {
-  it('publishes the Ed25519 authentication key under the parallel did:web name, appended last', async () => {
-    const { agent, registry } = await createParallelWebHarness(DID_WEBVH)
-
-    const didUrl = await publishParallelWebSigningKey(agent, 5_000)
-
-    const methodId = `${DID_WEB}${PARALLEL_WEB_SIGNING_KEY_FRAGMENT}`
-    expect(didUrl).toBe(methodId)
-
-    const document = registry.document(DID_WEBVH)
-    const methods = document.verificationMethod ?? []
-    const published = methods[methods.length - 1]
-    expect(published?.id).toBe(methodId)
-    expect(published?.type).toBe('Ed25519VerificationKey2020')
-    expect(published?.controller).toBe(DID_WEBVH)
-    expect(published?.publicKeyMultibase).toBe(SOURCE_MULTIBASE)
-
-    const relationshipIds = (document.authentication ?? []).map(entry =>
-      typeof entry === 'string' ? entry : entry.id,
-    )
-    expect(relationshipIds).toContain(methodId)
-
-    expect(await parallelWebCreatedDidRecordKeys(agent)).toContainEqual({
-      didDocumentRelativeKeyId: PARALLEL_WEB_SIGNING_KEY_FRAGMENT,
-      kmsKeyId: SOURCE_KMS_KEY_ID,
-    })
-  })
-
-  it('does not publish again when the method already exists', async () => {
-    const { agent, registry } = await createParallelWebHarness(DID_WEBVH)
-
-    await publishParallelWebSigningKey(agent, 5_000)
-    const didUrl = await publishParallelWebSigningKey(agent, 5_000)
-
-    expect(didUrl).toBe(`${DID_WEB}${PARALLEL_WEB_SIGNING_KEY_FRAGMENT}`)
-    expect(registry.updateCount).toBe(1)
-  })
-
-  it('returns undefined for an agent that is not did:webvh', async () => {
-    const { agent, registry } = await createParallelWebHarness(DID_WEB)
-
-    expect(await publishParallelWebSigningKey(agent, 5_000)).toBeUndefined()
-    expect(registry.updateCount).toBe(0)
-  })
-
-  it('returns undefined without publishing when the record has no key mapping for the method', async () => {
-    const { agent, registry } = await createParallelWebHarness(DID_WEBVH, { seedKeyMapping: false })
-
-    expect(await publishParallelWebSigningKey(agent, 5_000)).toBeUndefined()
-    expect(registry.updateCount).toBe(0)
-    expect(await parallelWebCreatedDidRecordKeys(agent)).toBeUndefined()
-  })
-
-  it('returns undefined when the record is not reachable under the did:web name', async () => {
-    const { agent } = await createParallelWebHarness(DID_WEBVH, { seedAlternativeDids: false })
-
-    expect(await publishParallelWebSigningKey(agent, 5_000)).toBeUndefined()
-  })
-})
-
-async function createParallelWebHarness(
-  did: string,
-  {
-    seedKeyMapping = true,
-    seedAlternativeDids = true,
-  }: { seedKeyMapping?: boolean; seedAlternativeDids?: boolean } = {},
-): Promise<{ agent: TestAgent; registry: ParallelWebDidRegistry }> {
-  const registry = new ParallelWebDidRegistry(new Map([[did, parallelWebInitialDidDocument(did)]]))
-  const agent = await startTestAgent('parallel-web-signing', did, registry)
-  const didRecord = new DidRecord({
-    did,
-    role: DidDocumentRole.Created,
-    didDocument: parallelWebInitialDidDocument(did),
-    keys: seedKeyMapping
-      ? [{ didDocumentRelativeKeyId: `#${SOURCE_METHOD_SUFFIX}`, kmsKeyId: SOURCE_KMS_KEY_ID }]
-      : undefined,
-  })
-  if (seedAlternativeDids && did.startsWith('did:webvh:')) {
-    didRecord.setTag('alternativeDids', [DID_WEB])
-  }
-  await agent.dependencyManager.resolve(DidRepository).save(agent.context, didRecord)
-  parallelWebAgents.push(agent)
-  return { agent, registry }
-}
-
-function parallelWebInitialDidDocument(did: string): DidDocument {
-  const methodId = `${did}#${SOURCE_METHOD_SUFFIX}`
-  return JsonTransformer.fromJSON(
-    {
-      id: did,
-      verificationMethod: [
-        {
-          id: methodId,
-          type: 'Multikey',
-          controller: did,
-          publicKeyMultibase: SOURCE_MULTIBASE,
-        },
-      ],
-      authentication: [methodId],
-      assertionMethod: [methodId],
-    },
-    DidDocument,
-  )
-}
-
-async function parallelWebCreatedDidRecordKeys(agent: TestAgent) {
-  const record = await agent.dependencyManager
-    .resolve(DidRepository)
-    .findCreatedDid(agent.context, agent.did as string)
-  return record?.keys
-}
-
 function clone(document: DidDocument): DidDocument {
   return JsonTransformer.fromJSON(document.toJSON(), DidDocument)
 }
@@ -1162,14 +967,14 @@ afterEach(async () => {
 })
 
 describe('presentation-exchange request signing for a webvh verifier', () => {
-  it('signs under the published parallel did:web method when the record is reachable', async () => {
-    const { service, fetchRequestJwt } = await startWebvhVerifier({ seedAlternativeDids: true })
+  it('signs under the agent webvh DID with its Ed25519 authentication key', async () => {
+    const { service, fetchRequestJwt, ed25519MethodId } = await startWebvhVerifier()
 
     const request = await service.createRequest('employee-check', 'presentation_exchange', 'did')
     const { header, payload } = await fetchRequestJwt(request.authorizationRequest)
 
     expect(header.alg).toBe('EdDSA')
-    expect(header.kid).toBe(`${WEB_DID}#openid4vc-parallel-web`)
+    expect(header.kid).toBe(ed25519MethodId)
 
     const filter = payload.presentation_definition?.input_descriptors?.[0]?.constraints?.fields?.[0]
       ?.filter as { const?: string; pattern?: string } | undefined
@@ -1182,21 +987,9 @@ describe('presentation-exchange request signing for a webvh verifier', () => {
     expect(payload.response_mode).toBe('direct_post')
     expect(payload.client_metadata?.jwks).toBeUndefined()
   })
-
-  it('falls back to the webvh-named key when the parallel record lookup fails', async () => {
-    const { service, fetchRequestJwt, ed25519MethodId } = await startWebvhVerifier({
-      seedAlternativeDids: false,
-    })
-
-    const request = await service.createRequest('employee-check', 'presentation_exchange', 'did')
-    const { header } = await fetchRequestJwt(request.authorizationRequest)
-
-    expect(header.alg).toBe('EdDSA')
-    expect(header.kid).toBe(ed25519MethodId)
-  })
 })
 
-async function startWebvhVerifier({ seedAlternativeDids }: { seedAlternativeDids: boolean }) {
+async function startWebvhVerifier() {
   const certificates = await createCertificateFixtures()
   const verifierCertificate = await createVerifierCertificate(certificates.root, WEBVH_DID)
   const resolverStub = await startResolverStub({
@@ -1325,7 +1118,6 @@ async function startWebvhVerifier({ seedAlternativeDids }: { seedAlternativeDids
     keys: [{ didDocumentRelativeKeyId: `#${publicKeyMultibase}`, kmsKeyId: imported.keyId }],
   })
   didRecord.setTag('domain', 'verifier.example')
-  if (seedAlternativeDids) didRecord.setTag('alternativeDids', [WEB_DID])
   await agent.dependencyManager.resolve(DidRepository).save(agent.context, didRecord)
 
   const service = new VerifierService(
