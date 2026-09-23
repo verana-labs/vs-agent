@@ -30,12 +30,5 @@ export interface OpenId4VcPluginOptions {
   verifier?: {
     signing?: OpenId4VcSigningOptions
   }
-  trust?: {
-    resolverUrl: string
-    timeoutMs: number
-    allowedDidWebHosts: string[]
-    credentialIssuerCertificates: string[]
-    developmentCertificateFingerprints?: string[]
-  }
   credentialConfigurations: OpenId4VcCredentialConfiguration[]
 }

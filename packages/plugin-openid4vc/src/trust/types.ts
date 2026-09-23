@@ -6,13 +6,6 @@ export type TrustVerdictName =
 
 export type VeranaTrustStatus = 'TRUSTED' | 'PARTIAL' | 'UNTRUSTED'
 
-export type TrustResolution =
-  | { status: 'ok'; trustStatus: VeranaTrustStatus }
-  | { status: 'not_found' }
-  | { status: 'unreachable' }
-
-export type TrustRole = 'issuer' | 'verifier'
-
 export type KeyBindingResult = 'bound' | 'unbound' | 'unresolvable'
 
 export interface TrustEvidence {
@@ -27,9 +20,4 @@ export interface TrustEvidence {
 export interface TrustVerdict {
   verdict: TrustVerdictName
   evidence: TrustEvidence
-}
-
-export interface TrustClientOptions {
-  resolverUrl: string
-  timeoutMs: number
 }

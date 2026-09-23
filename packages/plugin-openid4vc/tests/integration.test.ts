@@ -53,15 +53,10 @@ import {
   UnknownIssuanceSessionError,
   type OpenId4VcIssuerAgent,
 } from '../src/services/IssuerService'
-import {
-  UnknownVerificationSessionError,
-  VerifierService,
-  type OpenId4VcVerifierAgent,
-} from '../src/services/VerifierService'
+import { VerifierService, type OpenId4VcVerifierAgent } from '../src/services/VerifierService'
 
 import { createCertificateFixtures, LEAF_PRIVATE_JWK, OTHER_PRIVATE_JWK } from './helpers/certificates'
 import { didDocumentWithKey, MapDidResolver } from './helpers/didResolver'
-import { startResolverStub } from './helpers/resolverStub'
 import {
   activeTcpServers,
   createAggregateError,
@@ -838,18 +833,7 @@ function developmentOptions(role: Role): OpenId4VcPluginOptions {
   return {
     publicApiBaseUrl: 'https://agent.example',
     ...(role !== 'verifier' ? { issuer: {} } : {}),
-    ...(role !== 'issuer'
-      ? {
-          verifier: {},
-          trust: {
-            resolverUrl: 'https://resolver.example/v1/trust',
-            timeoutMs: 5_000,
-            allowedDidWebHosts: ['agent.example'],
-            credentialIssuerCertificates: [],
-            developmentCertificateFingerprints: [`SHA256:${'0'.repeat(64)}`],
-          },
-        }
-      : {}),
+    ...(role !== 'issuer' ? { verifier: {} } : {}),
     credentialConfigurations: [],
   }
 }
@@ -996,11 +980,6 @@ describe('presentation-exchange request signing for a webvh verifier', () => {
 async function startWebvhVerifier() {
   const certificates = await createCertificateFixtures()
   const verifierCertificate = await createVerifierCertificate(certificates.root, WEBVH_DID)
-  const resolverStub = await startResolverStub({
-    trusted: new Set([WEBVH_DID, WEB_DID]),
-    authorized: new Set([WEBVH_DID, WEB_DID]),
-  })
-  cleanups.push(() => resolverStub.stop())
 
   const secretKey = ed25519.utils.randomSecretKey()
   const publicKey = ed25519.getPublicKey(secretKey)
@@ -1057,12 +1036,6 @@ async function startWebvhVerifier() {
           privateJwk: OTHER_PRIVATE_JWK,
         },
       },
-    },
-    trust: {
-      resolverUrl: resolverStub.url,
-      timeoutMs: 500,
-      allowedDidWebHosts: ['verifier.example'],
-      credentialIssuerCertificates: [certificates.root.toString('base64')],
     },
     credentialConfigurations: [CONFIGURATION],
   }
@@ -1146,9 +1119,8 @@ const ISSUER_DID = 'did:web:issuer.example'
 const VERIFIER_DID = 'did:web:verifier.example'
 const TTL_SECONDS = 3_600
 
-describe('in-process OpenID4VC issuance and presentation', () => {
+describe('in-process OpenID4VC issuance', () => {
   let didDocuments: Map<string, DidDocument>
-  let resolver: Awaited<ReturnType<typeof startResolverStub>>
   let agents: Awaited<ReturnType<typeof startOpenId4VcTestAgents>>
   let verifierCertificate: X509Certificate
   let storedCredential: Awaited<
@@ -1173,15 +1145,10 @@ describe('in-process OpenID4VC issuance and presentation', () => {
     )
 
     try {
-      resolver = await startResolverStub({
-        trusted: new Set([ISSUER_DID, VERIFIER_DID]),
-        authorized: new Set([ISSUER_DID, VERIFIER_DID]),
-      })
       agents = await startOpenId4VcTestAgents({
         certificates,
         verifierCertificate,
         didResolver,
-        resolverUrl: resolver.url,
         issuerDid: ISSUER_DID,
         verifierDid: VERIFIER_DID,
         credentialConfiguration: CONFIGURATION,
@@ -1193,12 +1160,12 @@ describe('in-process OpenID4VC issuance and presentation', () => {
       })
       storedCredential = await agents.holder.acceptCredentialOffer(offer.credentialOffer)
     } catch (error) {
-      await rethrowAfterFixtureCleanup(error, [agents?.stop(), resolver?.stop()])
+      await rethrowAfterFixtureCleanup(error, [agents?.stop()])
     }
   }, 60_000)
 
   afterEach(async () => {
-    const cleanup = await Promise.allSettled([agents?.stop(), resolver?.stop()])
+    const cleanup = await Promise.allSettled([agents?.stop()])
     expect(cleanup.filter(result => result.status === 'rejected')).toEqual([])
     await new Promise(resolve => setImmediate(resolve))
     expect(activeTcpServers()).toEqual(tcpServerBaseline)
@@ -1245,142 +1212,6 @@ describe('in-process OpenID4VC issuance and presentation', () => {
     )
   }, 60_000)
 
-  it('presents the stored credential through DCQL and returns TRUSTED_AUTHORIZED', async () => {
-    const exchange = await presentCredential()
-
-    expect(exchange.resolved.authorizationRequestPayload.response_mode).toBe('direct_post.jwt')
-    expect(exchange.resolved.dcql).toBeDefined()
-    expect(exchange.submission.ok).toBe(true)
-    expect(exchange.submission.serverResponse?.status).toBe(200)
-    expect(
-      await agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
-    ).toMatchObject({
-      state: 'ResponseVerified',
-      cryptographicVerified: true,
-      accepted: true,
-      trust: { verdict: 'TRUSTED_AUTHORIZED' },
-      credential: {
-        vct: CONFIGURATION.vct,
-        disclosedClaims: { name: 'Ada Lovelace', role: 'engineer' },
-      },
-    })
-  }, 60_000)
-
-  it('carries the stored request, stores the decision, and lets the verifier delete the session', async () => {
-    const exchange = await presentCredential()
-
-    const first = await agents.verifier.service.getVerificationSession(exchange.verificationSessionId)
-    expect(first).toMatchObject({
-      jsonSchemaCredentialId: CONFIGURATION.id,
-      requestedClaims: ['name', 'role'],
-      accepted: true,
-    })
-    expect(first.createdAt).toBeInstanceOf(Date)
-
-    resolver.reset()
-    const second = await agents.verifier.service.getVerificationSession(exchange.verificationSessionId)
-    expect(second).toMatchObject({ accepted: true, trust: { verdict: 'TRUSTED_AUTHORIZED' } })
-    expect(resolver.requestCount).toBe(0)
-
-    const listed = await agents.verifier.service.listVerificationSessions()
-    expect(listed.map(session => session.id)).toContain(exchange.verificationSessionId)
-
-    await agents.verifier.service.deleteVerificationSession(exchange.verificationSessionId)
-    await expect(
-      agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
-    ).rejects.toBeInstanceOf(UnknownVerificationSessionError)
-  }, 60_000)
-
-  it('returns UNTRUSTED without querying Verana when the issuer DID key is wrong', async () => {
-    const boundDocument = didDocuments.get(ISSUER_DID)
-    didDocuments.set(
-      ISSUER_DID,
-      didDocumentWithKey(ISSUER_DID, verifierCertificate.publicJwk.toJson(), ['assertionMethod']),
-    )
-
-    try {
-      const exchange = await presentCredential()
-      expect(exchange.submission.ok).toBe(true)
-      resolver.reset()
-
-      expect(
-        await agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
-      ).toMatchObject({
-        state: 'ResponseVerified',
-        cryptographicVerified: true,
-        accepted: false,
-        trust: { verdict: 'UNTRUSTED' },
-      })
-      expect(resolver.requestCount).toBe(0)
-    } finally {
-      if (boundDocument) didDocuments.set(ISSUER_DID, boundDocument)
-    }
-  }, 60_000)
-
-  it('returns TRUSTED_NOT_AUTHORIZED when issuer authorization is false', async () => {
-    resolver.behavior.authorized.delete(ISSUER_DID)
-    try {
-      const exchange = await presentCredential()
-      resolver.reset()
-
-      expect(
-        await agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
-      ).toMatchObject({
-        state: 'ResponseVerified',
-        cryptographicVerified: true,
-        accepted: false,
-        trust: { verdict: 'TRUSTED_NOT_AUTHORIZED' },
-      })
-      expect(resolver.requestCount).toBe(2)
-    } finally {
-      resolver.behavior.authorized.add(ISSUER_DID)
-    }
-  }, 60_000)
-
-  it('rejects a replayed completed authorization response in Credo', async () => {
-    const exchange = await presentCredential()
-    expect(exchange.submission.ok).toBe(true)
-    expect(exchange.submission.serverResponse?.status).toBe(200)
-    expect(
-      await agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
-    ).toMatchObject({
-      state: 'ResponseVerified',
-      cryptographicVerified: true,
-    })
-
-    const responseUri = exchange.resolved.authorizationRequestPayload.response_uri
-    const authorizationResponse = exchange.submission.authorizationResponse
-    if (typeof responseUri !== 'string' || !('response' in authorizationResponse)) {
-      throw new Error('expected a direct_post.jwt response URI and encrypted authorization response')
-    }
-
-    const replay = await fetch(responseUri, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ response: String(authorizationResponse.response) }),
-    })
-
-    expect(replay.status).toBe(400)
-    await expect(replay.json()).resolves.toMatchObject({
-      error: 'invalid_request',
-      error_description: 'Invalid session',
-    })
-  }, 60_000)
-
-  it('returns RESOLVER_UNAVAILABLE after the resolver is stopped', async () => {
-    const exchange = await presentCredential()
-    await resolver.stop()
-
-    expect(
-      await agents.verifier.service.getVerificationSession(exchange.verificationSessionId),
-    ).toMatchObject({
-      state: 'ResponseVerified',
-      cryptographicVerified: true,
-      accepted: false,
-      trust: { verdict: 'RESOLVER_UNAVAILABLE' },
-    })
-  }, 60_000)
-
   it('serves a verifiable x5c-headed signed metadata JWT to a jwt-only client', async () => {
     const metadataUrl = `${agents.issuer.publicApiBaseUrl}/.well-known/openid-credential-issuer/oid4vci/issuer`
 
@@ -1423,18 +1254,6 @@ describe('in-process OpenID4VC issuance and presentation', () => {
     expect(publicApi).not.toHaveProperty('WalletController')
     expect(publicApi).not.toHaveProperty('WalletService')
   }, 60_000)
-
-  async function presentCredential() {
-    const request = await agents.verifier.service.createRequest({
-      jsonSchemaCredentialId: CONFIGURATION.id,
-      requestedClaims: ['name', 'role'],
-    })
-    const resolved = await agents.holder.resolvePresentationRequest(request.authorizationRequest, [
-      agents.rootCertificate,
-    ])
-    const submission = await agents.holder.submitPresentation(resolved)
-    return { resolved, submission, verificationSessionId: request.verificationSessionId }
-  }
 })
 
 async function rethrowAfterFixtureCleanup(
@@ -1561,7 +1380,6 @@ async function startupInput() {
     certificates,
     verifierCertificate,
     didResolver: new MapDidResolver(documents),
-    resolverUrl: 'http://127.0.0.1:9/v1/trust',
     issuerDid: ISSUER_DID,
     verifierDid: VERIFIER_DID,
     credentialConfiguration: CONFIGURATION,

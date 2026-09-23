@@ -1,11 +1,7 @@
 import type { OpenId4VcPluginOptions } from '../types'
 import type { BaseAgent } from '@credo-ts/core'
 import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
-import type {
-  OpenId4VcVerificationSessionRecord,
-  OpenId4VcVerifierApi,
-  OpenId4VpVerifiedAuthorizationResponse,
-} from '@credo-ts/openid4vc'
+import type { OpenId4VcVerificationSessionRecord, OpenId4VcVerifierApi } from '@credo-ts/openid4vc'
 
 import { AgentContext, RecordNotFoundError } from '@credo-ts/core'
 import {
@@ -18,7 +14,6 @@ import {
   UnknownCredentialConfigurationError,
   VERIFIER_CAPABILITY_ID,
 } from '../config'
-import { TrustClient } from '../trust/TrustClient'
 import {
   findBoundVerificationMethodId,
   findEd25519VerificationMethodId,
@@ -37,7 +32,7 @@ import {
   x5cCertificateChain,
 } from './CertificateService'
 import { presentationQueryFor, type OpenId4VcQueryLanguage } from './presentationRequest'
-import { decidePresentation, type PresentationDecision } from './presentationVerification'
+import type { PresentationDecision } from './presentationVerification'
 
 type VerifierApi = Pick<
   OpenId4VcVerifierApi,
@@ -46,7 +41,6 @@ type VerifierApi = Pick<
   | 'updateVerifierMetadata'
   | 'createAuthorizationRequest'
   | 'getVerificationSessionById'
-  | 'getVerifiedAuthorizationResponse'
   | 'findVerificationSessionsByQuery'
   | 'deleteVerificationSessionById'
 >
@@ -84,7 +78,7 @@ const JSON_SCHEMA_CREDENTIAL_ID_TAG = 'jsonSchemaCredentialId'
 const REQUESTED_CLAIMS_TAG = 'requestedClaims'
 const OUTCOME_METADATA_KEY = 'openid4vc/verificationOutcome'
 
-const UNCONFIGURED_RESOLVER_DECISION: PresentationDecision = {
+const UNDECIDED_TRUST_DECISION: PresentationDecision = {
   cryptographicVerified: true,
   accepted: false,
   trust: {
@@ -118,14 +112,11 @@ export class VerifierService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
   private initialized = false
-  private readonly trustClient?: TrustClient
 
   public constructor(
     private readonly agent: OpenId4VcVerifierAgent,
     private readonly options: OpenId4VcPluginOptions,
-  ) {
-    this.trustClient = options.trust ? new TrustClient(options.trust) : undefined
-  }
+  ) {}
 
   public ensureInitialized(): Promise<void> {
     this.initialization ??= this.initialize().catch(error => {
@@ -177,7 +168,8 @@ export class VerifierService {
 
   public async getVerificationSession(id: string): Promise<OpenId4VcVerificationSessionSummary> {
     await this.ensureInitialized()
-    return this.summarize(await this.findOwnedSession(id))
+    const session = await this.findOwnedSession(id)
+    return this.toSummary(session, this.storedDecision(session) ?? UNDECIDED_TRUST_DECISION)
   }
 
   public async listVerificationSessions(): Promise<OpenId4VcVerificationSessionSummary[]> {
@@ -198,12 +190,6 @@ export class VerifierService {
     const session = await this.getSession(id)
     this.assertSessionOwnership(session, id)
     return session
-  }
-
-  private async summarize(
-    session: OpenId4VcVerificationSessionRecord,
-  ): Promise<OpenId4VcVerificationSessionSummary> {
-    return this.toSummary(session, await this.decisionFor(session))
   }
 
   private summarizeKnown(session: OpenId4VcVerificationSessionRecord): OpenId4VcVerificationSessionSummary {
@@ -247,29 +233,6 @@ export class VerifierService {
     return session.metadata.get<PresentationDecision>(OUTCOME_METADATA_KEY) ?? undefined
   }
 
-  private async decisionFor(session: OpenId4VcVerificationSessionRecord): Promise<PresentationDecision> {
-    const stored = this.storedDecision(session)
-    if (stored) return stored
-
-    const trustContext = this.trustContext()
-    if (!trustContext) return UNCONFIGURED_RESOLVER_DECISION
-
-    const verified = await this.getVerifiedResponse(session.id)
-    this.assertStableVerifiedSession(verified, session.id)
-    const decision = await decidePresentation({
-      agent: this.agent,
-      options: this.options,
-      ...this.storedRequest(session),
-      ...trustContext,
-      verified,
-    })
-    if (decision.trust?.verdict !== 'RESOLVER_UNAVAILABLE') {
-      session.metadata.set(OUTCOME_METADATA_KEY, decision)
-      await this.sessionRepository().update(this.agentContext(), session)
-    }
-    return decision
-  }
-
   private sessionRepository(): OpenId4VcVerificationSessionRepository {
     return this.agent.dependencyManager.resolve(OpenId4VcVerificationSessionRepository)
   }
@@ -299,7 +262,7 @@ export class VerifierService {
       agentDid,
       signingCertificate.certificate.publicJwk.toJson(),
       ['authentication'],
-      ownDidResolutionPolicy(agentDid, this.options.trust?.timeoutMs),
+      ownDidResolutionPolicy(agentDid),
     )
     if (binding === 'unresolvable') {
       throw new Error('OpenID4VC verifier DID could not be resolved for authentication key binding')
@@ -351,35 +314,9 @@ export class VerifierService {
     }
   }
 
-  private async getVerifiedResponse(sessionId: string): Promise<OpenId4VpVerifiedAuthorizationResponse> {
-    try {
-      return await this.verifierApi().getVerifiedAuthorizationResponse(sessionId)
-    } catch (error) {
-      if (error instanceof RecordNotFoundError) {
-        throw new UnknownVerificationSessionError(
-          `OpenID4VC verification session '${sessionId}' was not found`,
-        )
-      }
-      throw error
-    }
-  }
-
   private assertSessionOwnership(session: OpenId4VcVerificationSessionRecord, sessionId: string): void {
     if (session.verifierId !== VERIFIER_CAPABILITY_ID) {
       throw new UnknownVerificationSessionError(`OpenID4VC verification session '${sessionId}' was not found`)
-    }
-  }
-
-  private assertStableVerifiedSession(
-    verified: OpenId4VpVerifiedAuthorizationResponse,
-    sessionId: string,
-  ): void {
-    if (
-      verified.verificationSession.id !== sessionId ||
-      verified.verificationSession.verifierId !== VERIFIER_CAPABILITY_ID ||
-      verified.verificationSession.state !== OpenId4VcVerificationSessionState.ResponseVerified
-    ) {
-      throw new Error('OpenID4VC verification session changed while reading its verified result')
     }
   }
 
@@ -387,14 +324,6 @@ export class VerifierService {
     const verifier = this.agent.modules.openId4Vc?.verifier
     if (!verifier) throw new Error('OpenID4VC verifier API is not enabled on this agent')
     return verifier
-  }
-
-  private trustContext():
-    | { trust: NonNullable<OpenId4VcPluginOptions['trust']>; trustClient: TrustClient }
-    | undefined {
-    const trust = this.options.trust
-    if (!trust || !this.trustClient) return undefined
-    return { trust, trustClient: this.trustClient }
   }
 
   private signingCertificateHandle(): SigningCertificateHandle {
@@ -422,7 +351,7 @@ export class VerifierService {
         this.agent,
         did,
         ['authentication'],
-        ownDidResolutionPolicy(did ?? '', this.options.trust?.timeoutMs),
+        ownDidResolutionPolicy(did ?? ''),
       )
       if (ed25519DidUrl) return { method: 'did' as const, didUrl: ed25519DidUrl }
     }
@@ -432,7 +361,7 @@ export class VerifierService {
       did,
       certificate.certificate.publicJwk.toJson(),
       ['authentication'],
-      ownDidResolutionPolicy(did ?? '', this.options.trust?.timeoutMs),
+      ownDidResolutionPolicy(did ?? ''),
     )
     if (!didUrl) {
       throw new OpenId4VcVerifierRequestError(

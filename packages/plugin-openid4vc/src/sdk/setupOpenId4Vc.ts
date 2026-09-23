@@ -84,13 +84,10 @@ export function setupOpenId4Vc(
     modules: {
       openId4Vc: new OpenId4VcModule(moduleOptions),
       x509: new X509Module({
-        getTrustedCertificatesForVerification: (_agentContext, { certificateChain, verification }) => {
+        getTrustedCertificatesForVerification: (_agentContext, { verification }) => {
           // Credo accepts an SD-JWT VC without `exp`, and this callback is the only hook inside its presentation verification.
           if (verification.type === 'credential') assertCredentialExpires(verification.credential)
-          return trustedCertificatesForVerification(options, {
-            type: verification.type,
-            certificateChain,
-          })
+          return trustedCertificatesForVerification(options, verification.type)
         },
       }),
     },

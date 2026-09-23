@@ -179,7 +179,6 @@ export async function startOpenId4VcTestAgents(input: {
   certificates: CertificateFixtures
   verifierCertificate: X509Certificate
   didResolver: DidResolver
-  resolverUrl: string
   issuerDid: string
   verifierDid: string
   credentialConfiguration: OpenId4VcCredentialConfiguration
@@ -203,12 +202,6 @@ export async function startOpenId4VcTestAgents(input: {
             privateJwk: LEAF_PRIVATE_JWK,
           },
         },
-      },
-      trust: {
-        resolverUrl: input.resolverUrl,
-        timeoutMs: 500,
-        allowedDidWebHosts: ['issuer.example'],
-        credentialIssuerCertificates: [rootCertificate],
       },
       credentialConfigurations: [input.credentialConfiguration],
     }),
@@ -236,12 +229,6 @@ export async function startOpenId4VcTestAgents(input: {
               privateJwk: OTHER_PRIVATE_JWK,
             },
           },
-        },
-        trust: {
-          resolverUrl: input.resolverUrl,
-          timeoutMs: 500,
-          allowedDidWebHosts: ['issuer.example'],
-          credentialIssuerCertificates: [rootCertificate],
         },
         credentialConfigurations: [input.credentialConfiguration],
       }),

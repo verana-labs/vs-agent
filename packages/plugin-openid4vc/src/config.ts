@@ -4,11 +4,6 @@ import type {
   OpenId4VcSigningOptions,
 } from './types'
 
-import { X509Certificate, X509KeyUsage } from '@credo-ts/core'
-
-import { assertCertificateChainUsable } from './services/CertificateService'
-import { certificateFingerprint } from './trust/CertificateTrust'
-import { MAX_DID_RESOLUTION_TIMEOUT_MS } from './trust/keyBinding'
 import { isRecord } from './utils/isRecord'
 
 export const ISSUER_CAPABILITY_ID = 'issuer'
@@ -16,17 +11,6 @@ export const VERIFIER_CAPABILITY_ID = 'verifier'
 
 export const OFFER_TTL_SECONDS_MIN = 60
 export const OFFER_TTL_SECONDS_MAX = 7_776_000
-
-const RESERVED_CREDENTIAL_CLAIMS = new Set([
-  'vct',
-  'vct#integrity',
-  'iat',
-  'exp',
-  'nbf',
-  'iss',
-  'cnf',
-  'status',
-])
 
 /** [VSA-VTI-CFG-ENV-OID] Validation of the OpenID4VC configuration file. */
 export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void {
@@ -47,12 +31,6 @@ export function validateOpenId4VcOptions(options: OpenId4VcPluginOptions): void 
   if (options.verifier) {
     assertSigningOptions(options.verifier.signing, 'verifier.signing')
   }
-
-  if (options.trust) {
-    assertTrustOptions(options.trust)
-  }
-
-  assertCredentialConfigurations(options.credentialConfigurations)
 }
 
 export class UnknownCredentialConfigurationError extends Error {}
@@ -124,65 +102,6 @@ export function parseOfferIssuanceMetadata(
   }
 }
 
-function assertCredentialConfigurations(configurations: OpenId4VcCredentialConfiguration[]): void {
-  if (!Array.isArray(configurations)) {
-    throw new Error('credentialConfigurations must be an array')
-  }
-
-  assertUniqueNonEmptyIds(configurations, 'credential configuration')
-
-  for (const configuration of configurations) {
-    const prefix = `credential configuration '${configuration.id}'`
-    if (configuration.format !== 'dc+sd-jwt') {
-      throw new Error(`${prefix}: format must be 'dc+sd-jwt'`)
-    }
-    assertHttpUrl(configuration.vct, `${prefix}.vct`)
-    assertHttpUrl(configuration.vtjscId, `${prefix}.vtjscId`)
-    assertNonEmptyString(configuration.name, `${prefix}.name`)
-    assertNonEmptyUniqueStrings(configuration.claims, `${prefix}.claims`)
-    const reservedClaim = configuration.claims.find(claim => RESERVED_CREDENTIAL_CLAIMS.has(claim))
-    if (reservedClaim) {
-      throw new Error(`${prefix}.claims contains reserved claim '${reservedClaim}'`)
-    }
-    assertSubset(configuration.disclosureFrame, configuration.claims, `${prefix}.disclosureFrame`)
-  }
-}
-
-function assertTrustOptions(trust: NonNullable<OpenId4VcPluginOptions['trust']>): void {
-  assertHttpsUrl(trust.resolverUrl, 'trust.resolverUrl')
-  if (
-    !Number.isInteger(trust.timeoutMs) ||
-    trust.timeoutMs <= 0 ||
-    trust.timeoutMs > MAX_DID_RESOLUTION_TIMEOUT_MS
-  ) {
-    throw new Error(
-      `trust.timeoutMs must be a positive integer no greater than ${MAX_DID_RESOLUTION_TIMEOUT_MS}`,
-    )
-  }
-  assertNonEmptyUniqueStrings(trust.allowedDidWebHosts, 'trust.allowedDidWebHosts')
-  trust.allowedDidWebHosts.forEach((host, index) =>
-    assertDidWebHost(host, `trust.allowedDidWebHosts[${index}]`),
-  )
-  assertStringArray(trust.credentialIssuerCertificates, 'trust.credentialIssuerCertificates')
-  assertCredentialIssuerTrustAnchors(trust.credentialIssuerCertificates)
-  if (trust.developmentCertificateFingerprints) {
-    assertStringArray(trust.developmentCertificateFingerprints, 'trust.developmentCertificateFingerprints')
-    if (
-      new Set(trust.developmentCertificateFingerprints).size !==
-      trust.developmentCertificateFingerprints.length
-    ) {
-      throw new Error('trust.developmentCertificateFingerprints must not contain duplicates')
-    }
-    if (
-      trust.developmentCertificateFingerprints.some(fingerprint => !/^SHA256:[0-9a-f]{64}$/.test(fingerprint))
-    ) {
-      throw new Error(
-        'trust.developmentCertificateFingerprints must use SHA256 followed by 64 lowercase hexadecimal characters',
-      )
-    }
-  }
-}
-
 function assertSigningOptions(signing: OpenId4VcSigningOptions | undefined, field: string): void {
   if (signing === undefined) return
   if (!isRecord(signing)) {
@@ -210,13 +129,6 @@ function assertHttpsUrl(value: string, field: string): void {
   }
 }
 
-function assertHttpUrl(value: string, field: string): void {
-  const url = parseUrl(value, field)
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new Error(`${field} must use HTTP(S)`)
-  }
-}
-
 function parseUrl(value: string, field: string): URL {
   let url: URL
   try {
@@ -231,72 +143,6 @@ function parseUrl(value: string, field: string): URL {
   return url
 }
 
-function assertCredentialIssuerTrustAnchors(encodedCertificates: string[]): void {
-  const fingerprints = new Set<string>()
-
-  encodedCertificates.forEach((encodedCertificate, index) => {
-    let certificate: X509Certificate
-    try {
-      certificate = X509Certificate.fromEncodedCertificate(encodedCertificate)
-    } catch {
-      throw new Error(`trust.credentialIssuerCertificates[${index}] must be a valid X.509 certificate`)
-    }
-
-    assertCertificateChainUsable([certificate])
-    if (!certificate.isCertificateAuthority || !certificate.keyUsage?.includes(X509KeyUsage.KeyCertSign)) {
-      throw new Error(
-        `trust.credentialIssuerCertificates[${index}] must be a CA trust anchor with keyCertSign usage`,
-      )
-    }
-    if (certificate.subject !== certificate.issuer) {
-      throw new Error(`trust.credentialIssuerCertificates[${index}] must be a self-issued root trust anchor`)
-    }
-
-    const fingerprint = certificateFingerprint(certificate)
-    if (fingerprints.has(fingerprint)) {
-      throw new Error('trust.credentialIssuerCertificates contains a duplicate credential issuer certificate')
-    }
-    fingerprints.add(fingerprint)
-  })
-}
-
-function assertDidWebHost(value: string, field: string): void {
-  try {
-    const url = new URL(`https://${value}`)
-    if (
-      url.username ||
-      url.password ||
-      !url.hostname ||
-      url.pathname !== '/' ||
-      url.search ||
-      url.hash ||
-      url.host.toLowerCase() !== value
-    ) {
-      throw new Error()
-    }
-  } catch {
-    throw new Error(`${field} must be an exact lowercase host with an optional port`)
-  }
-}
-
-function assertUniqueNonEmptyIds(items: Array<{ id: string }>, label: string): void {
-  const ids = new Set<string>()
-  for (const item of items) {
-    assertNonEmptyString(item.id, `${label} ID`)
-    if (ids.has(item.id)) {
-      throw new Error(`duplicate ${label} ID '${item.id}'`)
-    }
-    ids.add(item.id)
-  }
-}
-
-function assertNonEmptyUniqueStrings(values: string[], field: string): void {
-  assertNonEmptyStringArray(values, field)
-  if (new Set(values).size !== values.length) {
-    throw new Error(`${field} must not contain duplicates`)
-  }
-}
-
 function assertNonEmptyStringArray(value: unknown, field: string): asserts value is string[] {
   assertStringArray(value, field)
   if (value.length === 0) {
@@ -307,18 +153,6 @@ function assertNonEmptyStringArray(value: unknown, field: string): asserts value
 function assertStringArray(value: unknown, field: string): asserts value is string[] {
   if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || !item.trim())) {
     throw new Error(`${field} must contain non-empty strings`)
-  }
-}
-
-function assertSubset(values: string[], allowedValues: string[], field: string): void {
-  if (!Array.isArray(values) || values.some(value => !allowedValues.includes(value))) {
-    throw new Error(`${field} must be a subset of configured claims`)
-  }
-}
-
-function assertNonEmptyString(value: unknown, field: string): asserts value is string {
-  if (typeof value !== 'string' || !value.trim()) {
-    throw new Error(`${field} must be a non-empty string`)
   }
 }
 

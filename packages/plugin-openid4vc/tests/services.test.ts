@@ -25,13 +25,11 @@ const {
   findBoundVerificationMethodId,
   loadSigningCertificate,
   publishDevelopmentSigningKey,
-  verdictFor,
   verifyKeyBoundToDid,
 } = vi.hoisted(() => ({
   findBoundVerificationMethodId: vi.fn(),
   loadSigningCertificate: vi.fn(),
   publishDevelopmentSigningKey: vi.fn(),
-  verdictFor: vi.fn(),
   verifyKeyBoundToDid: vi.fn(),
 }))
 
@@ -44,11 +42,6 @@ vi.mock('../src/trust/keyBinding', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/trust/keyBinding')>()),
   findBoundVerificationMethodId,
   verifyKeyBoundToDid,
-}))
-vi.mock('../src/trust/TrustClient', () => ({
-  TrustClient: class {
-    public verdictFor = verdictFor
-  },
 }))
 
 const AGENT_DID = 'did:web:agent.example'
@@ -862,12 +855,6 @@ const VTJSC_ID = 'https://agent.example/vt/employee.json'
 const verifierOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   verifier: {},
-  trust: {
-    resolverUrl: 'https://resolver.example/v1/trust',
-    timeoutMs: 5_000,
-    allowedDidWebHosts: ['issuer.example'],
-    credentialIssuerCertificates: ['trusted-root'],
-  },
   credentialConfigurations: [
     {
       id: 'employee',
@@ -888,7 +875,6 @@ function verifierApi() {
     updateVerifierMetadata: vi.fn(),
     createAuthorizationRequest: vi.fn(),
     getVerificationSessionById: vi.fn(),
-    getVerifiedAuthorizationResponse: vi.fn(),
     findVerificationSessionsByQuery: vi.fn(),
     deleteVerificationSessionById: vi.fn(),
   }
@@ -924,10 +910,6 @@ const signingLeaf = {
   publicJwk: { toJson: () => PUBLIC_JWK },
 }
 const signingRoot = { subject: 'root' }
-const issuerLeaf = {
-  sanUriNames: [ISSUER_DID],
-  publicJwk: { toJson: () => PUBLIC_JWK },
-}
 
 function verifierSigningHandle() {
   return {
@@ -972,53 +954,6 @@ function session(state = 'ResponseVerified', verifierId = 'verifier') {
   })
 }
 
-function presentation(overrides: Record<string, unknown> = {}) {
-  return {
-    claimFormat: ClaimFormat.SdJwtDc,
-    encoded: 'secret-encoded-credential',
-    compact: 'secret-compact-credential',
-    header: { x5c: ['secret-certificate'] },
-    issuer: { method: 'x5c', x5c: [issuerLeaf] },
-    payload: { vct: VCT, name: 'Ada' },
-    prettyClaims: { vct: VCT, name: 'Ada', admin: true },
-    ...overrides,
-  }
-}
-
-function verifiedResponse(presented: unknown[] = [presentation()], responseSession = session()) {
-  return {
-    verificationSession: responseSession,
-    dcql: {
-      query: {
-        credentials: [
-          {
-            id: 'employee',
-            format: 'dc+sd-jwt',
-            meta: { vct_values: [VCT] },
-            claims: [{ path: ['name'] }],
-          },
-        ],
-      },
-      presentations: { employee: presented },
-      presentationResult: {},
-    },
-  }
-}
-
-function trust(verdict: 'TRUSTED_AUTHORIZED' | 'TRUSTED_NOT_AUTHORIZED' | 'RESOLVER_UNAVAILABLE') {
-  return {
-    verdict,
-    evidence: {
-      did: ISSUER_DID,
-      trustStatus: verdict === 'RESOLVER_UNAVAILABLE' ? null : 'TRUSTED',
-      jsonSchemaCredentialId: VTJSC_ID,
-      authorized:
-        verdict === 'TRUSTED_AUTHORIZED' ? true : verdict === 'TRUSTED_NOT_AUTHORIZED' ? false : null,
-      queries: ['https://resolver.example/safe-evidence'],
-    },
-  }
-}
-
 async function initializedVerifier() {
   const api = verifierApi()
   api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
@@ -1033,7 +968,6 @@ describe('VerifierService', () => {
     vi.clearAllMocks()
     loadSigningCertificate.mockResolvedValue(verifierSigningHandle())
     verifyKeyBoundToDid.mockResolvedValue('bound')
-    verdictFor.mockResolvedValue(trust('TRUSTED_AUTHORIZED'))
   })
 
   it('creates the configured verifier after authentication key binding succeeds', async () => {
@@ -1256,8 +1190,6 @@ describe('VerifierService', () => {
       cryptographicVerified: false,
       accepted: false,
     })
-    expect(api.getVerifiedAuthorizationResponse).not.toHaveBeenCalled()
-    expect(verdictFor).not.toHaveBeenCalled()
   })
 
   it('maps missing sessions to a typed error', async () => {
@@ -1270,7 +1202,6 @@ describe('VerifierService', () => {
     await expect(service.getVerificationSession('missing')).rejects.toBeInstanceOf(
       UnknownVerificationSessionError,
     )
-    expect(api.getVerifiedAuthorizationResponse).not.toHaveBeenCalled()
   })
 
   it('rejects sessions owned by another configured verifier', async () => {
@@ -1281,181 +1212,18 @@ describe('VerifierService', () => {
     await expect(service.getVerificationSession('session-id')).rejects.toBeInstanceOf(
       UnknownVerificationSessionError,
     )
-    expect(api.getVerifiedAuthorizationResponse).not.toHaveBeenCalled()
   })
 
-  it('maps a session removed between state and verified-response reads to the typed error', async () => {
+  it('reports a verified session it has not decided as RESOLVER_UNAVAILABLE', async () => {
     const api = verifierApi()
     api.getVerificationSessionById.mockResolvedValue(session())
-    api.getVerifiedAuthorizationResponse.mockRejectedValue(
-      new RecordNotFoundError('not found', { recordType: 'OpenId4VcVerificationSessionRecord' }),
-    )
     const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
-
-    await expect(service.getVerificationSession('session-id')).rejects.toBeInstanceOf(
-      UnknownVerificationSessionError,
-    )
-    expect(verdictFor).not.toHaveBeenCalled()
-  })
-
-  it('accepts only a Credo-verified, key-bound, exactly authorized SD-JWT presentation', async () => {
-    const api = verifierApi()
-    api.getVerificationSessionById.mockResolvedValue(session())
-    api.getVerifiedAuthorizationResponse.mockResolvedValue(verifiedResponse())
-    const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
-
-    const result = await service.getVerificationSession('session-id')
-
-    expect(result).toEqual({
-      id: 'session-id',
-      jsonSchemaCredentialId: 'employee',
-      requestedClaims: ['name'],
-      state: 'ResponseVerified',
-      createdAt: new Date('2026-07-21T10:00:00.000Z'),
-      updatedAt: new Date('2026-07-21T10:00:00.000Z'),
-      cryptographicVerified: true,
-      accepted: true,
-      trust: trust('TRUSTED_AUTHORIZED'),
-      credential: { vct: VCT, disclosedClaims: { name: 'Ada' } },
-    })
-    expect(verifyKeyBoundToDid).toHaveBeenCalledWith(
-      expect.anything(),
-      ISSUER_DID,
-      PUBLIC_JWK,
-      ['assertionMethod'],
-      { allowedWebHosts: ['issuer.example'], timeoutMs: 5_000 },
-    )
-    expect(verdictFor).toHaveBeenCalledWith('issuer', ISSUER_DID, VTJSC_ID)
-    expect(JSON.stringify(result)).not.toContain('secret-')
-    expect(JSON.stringify(result)).not.toContain('admin')
-  })
-
-  it.each([
-    ['TRUSTED_NOT_AUTHORIZED', false],
-    ['RESOLVER_UNAVAILABLE', false],
-  ] as const)('fails closed for %s trust verdicts', async (verdict, accepted) => {
-    verdictFor.mockResolvedValue(trust(verdict))
-    const api = verifierApi()
-    api.getVerificationSessionById.mockResolvedValue(session())
-    api.getVerifiedAuthorizationResponse.mockResolvedValue(verifiedResponse())
-    const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
-
-    await expect(service.getVerificationSession('session-id')).resolves.toMatchObject({
-      state: 'ResponseVerified',
-      cryptographicVerified: true,
-      accepted,
-      trust: { verdict },
-    })
-  })
-
-  it.each([
-    ['unbound', 'UNTRUSTED'],
-    ['unresolvable', 'RESOLVER_UNAVAILABLE'],
-  ] as const)('blocks %s issuer key binding before any Verana query', async (binding, verdict) => {
-    const api = verifierApi()
-    api.getVerificationSessionById.mockResolvedValue(session())
-    api.getVerifiedAuthorizationResponse.mockResolvedValue(verifiedResponse())
-    const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
-    await service.ensureInitialized()
-
-    verifyKeyBoundToDid.mockResolvedValue(binding)
 
     await expect(service.getVerificationSession('session-id')).resolves.toMatchObject({
       state: 'ResponseVerified',
       cryptographicVerified: true,
       accepted: false,
-      trust: { verdict, evidence: { queries: [] } },
-    })
-    expect(verdictFor).not.toHaveBeenCalled()
-  })
-
-  it.each([
-    ['missing presentation', verifiedResponse([])],
-    ['wrong credential format', verifiedResponse([presentation({ claimFormat: 'jwt_vc_json' })])],
-    ['missing x5c', verifiedResponse([presentation({ issuer: { method: 'did', didUrl: ISSUER_DID } })])],
-    [
-      'missing DID URI SAN',
-      verifiedResponse([
-        presentation({ issuer: { method: 'x5c', x5c: [{ ...issuerLeaf, sanUriNames: [] }] } }),
-      ]),
-    ],
-    [
-      'wrong VCT',
-      verifiedResponse([
-        presentation({ prettyClaims: { vct: 'https://attacker.example/vct', name: 'Ada' } }),
-      ]),
-    ],
-    ['missing requested claim', verifiedResponse([presentation({ prettyClaims: { vct: VCT } })])],
-  ])('fails closed for a %s without resolver queries', async (_case, response) => {
-    const api = verifierApi()
-    api.getVerificationSessionById.mockResolvedValue(session())
-    api.getVerifiedAuthorizationResponse.mockResolvedValue(response)
-    const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
-
-    const result = await service.getVerificationSession('session-id')
-
-    expect(result).toMatchObject({
-      state: 'ResponseVerified',
-      cryptographicVerified: true,
-      accepted: false,
-      trust: { verdict: 'UNTRUSTED', evidence: { queries: [] } },
-    })
-    expect(verdictFor).not.toHaveBeenCalled()
-    expect(JSON.stringify(result)).not.toContain('secret-')
-  })
-
-  it('uses only the first presentation for the configured credential id', async () => {
-    const api = verifierApi()
-    api.getVerificationSessionById.mockResolvedValue(session())
-    api.getVerifiedAuthorizationResponse.mockResolvedValue(
-      verifiedResponse([
-        presentation({ prettyClaims: { vct: VCT, name: 'First' } }),
-        presentation({ prettyClaims: { vct: VCT, name: 'Second' } }),
-      ]),
-    )
-    const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
-
-    await expect(service.getVerificationSession('session-id')).resolves.toMatchObject({
-      credential: { disclosedClaims: { name: 'First' } },
-    })
-  })
-
-  it('fails closed when the verified response no longer matches the session', async () => {
-    const api = verifierApi()
-    api.getVerificationSessionById.mockResolvedValue(session())
-    api.getVerifiedAuthorizationResponse.mockResolvedValue(
-      verifiedResponse([presentation()], session('RequestUriRetrieved')),
-    )
-    const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
-
-    await expect(service.getVerificationSession('session-id')).rejects.toThrow('changed while reading')
-    expect(verdictFor).not.toHaveBeenCalled()
-  })
-
-  it('reads the stored request of the session and never the query of the response', async () => {
-    const api = verifierApi()
-    api.getVerificationSessionById.mockResolvedValue(session())
-    api.getVerifiedAuthorizationResponse.mockResolvedValue({
-      ...verifiedResponse(),
-      dcql: {
-        ...verifiedResponse().dcql,
-        query: {
-          credentials: [
-            {
-              id: 'attacker-credential',
-              format: 'dc+sd-jwt',
-              meta: { vct_values: ['https://attacker.example/vct'] },
-              claims: [{ path: ['admin'] }],
-            },
-          ],
-        },
-      },
-    })
-    const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
-
-    await expect(service.getVerificationSession('session-id')).resolves.toMatchObject({
-      accepted: true,
-      credential: { vct: VCT, disclosedClaims: { name: 'Ada' } },
+      trust: { verdict: 'RESOLVER_UNAVAILABLE', evidence: { authorized: null, queries: [] } },
     })
   })
 
@@ -1495,7 +1263,6 @@ describe('VerifierService', () => {
         cryptographicVerified: false,
         accepted: false,
       })
-      expect(api.getVerifiedAuthorizationResponse).not.toHaveBeenCalled()
     })
 
     it('returns the stored decision of a verified session without deciding again', async () => {
@@ -1523,42 +1290,16 @@ describe('VerifierService', () => {
         state: 'ResponseVerified',
         ...stored,
       })
-      expect(api.getVerifiedAuthorizationResponse).not.toHaveBeenCalled()
-      expect(verdictFor).not.toHaveBeenCalled()
     })
 
-    it('does not store a RESOLVER_UNAVAILABLE decision', async () => {
+    it('stores nothing for a verified session it has not decided', async () => {
       const { service, api } = await initializedVerifier()
       const session = verificationSession({ state: 'ResponseVerified' })
       api.getVerificationSessionById.mockResolvedValue(session)
-      api.getVerifiedAuthorizationResponse.mockResolvedValue(verifiedResponse([presentation()], session))
-      verifyKeyBoundToDid.mockResolvedValue('unresolvable')
 
       const summary = await service.getVerificationSession('session-1')
 
       expect(summary.trust?.verdict).toBe('RESOLVER_UNAVAILABLE')
-      expect(session.metadata.get('openid4vc/verificationOutcome')).toBeNull()
-      expect(verificationSessionRepository.update).not.toHaveBeenCalled()
-    })
-
-    it('answers RESOLVER_UNAVAILABLE and stores nothing when no resolver is configured', async () => {
-      const api = verifierApi()
-      api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
-      const service = new VerifierService(verifierAgent(api) as never, {
-        ...verifierOptions(),
-        trust: undefined,
-      })
-      const session = verificationSession({ state: 'ResponseVerified' })
-      api.getVerificationSessionById.mockResolvedValue(session)
-
-      const summary = await service.getVerificationSession('session-1')
-
-      expect(summary).toMatchObject({
-        cryptographicVerified: true,
-        accepted: false,
-        trust: { verdict: 'RESOLVER_UNAVAILABLE' },
-      })
-      expect(api.getVerifiedAuthorizationResponse).not.toHaveBeenCalled()
       expect(session.metadata.get('openid4vc/verificationOutcome')).toBeNull()
       expect(verificationSessionRepository.update).not.toHaveBeenCalled()
     })
@@ -1596,8 +1337,6 @@ describe('VerifierService', () => {
           accepted: false,
         },
       ])
-      expect(api.getVerifiedAuthorizationResponse).not.toHaveBeenCalled()
-      expect(verdictFor).not.toHaveBeenCalled()
       expect(verificationSessionRepository.update).not.toHaveBeenCalled()
     })
 
@@ -1625,7 +1364,6 @@ describe('VerifierService', () => {
       const sessions = await service.listVerificationSessions()
 
       expect(sessions[0]).toMatchObject(stored)
-      expect(api.getVerifiedAuthorizationResponse).not.toHaveBeenCalled()
     })
 
     it('deletes a session of this verifier and refuses a foreign one', async () => {

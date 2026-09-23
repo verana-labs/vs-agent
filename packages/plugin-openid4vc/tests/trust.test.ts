@@ -1,17 +1,10 @@
 import type { OpenId4VcPluginOptions } from '../src/types'
-import type { TrustResolution } from '../src/trust/types'
-import type { BaseAgent, DidDocument, VerificationMethod, X509Certificate } from '@credo-ts/core'
+import type { BaseAgent, DidDocument, VerificationMethod } from '@credo-ts/core'
 
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { certificateFingerprint, trustedCertificatesForVerification } from '../src/trust/CertificateTrust'
-import {
-  blockingBindingVerdict,
-  findBoundVerificationMethodId,
-  verifyKeyBoundToDid,
-} from '../src/trust/keyBinding'
-import { TrustClient } from '../src/trust/TrustClient'
-import { computeVerdict } from '../src/trust/verdict'
+import { findBoundVerificationMethodId, verifyKeyBoundToDid } from '../src/trust/keyBinding'
 
 import { createCertificateFixtures, LEAF_PRIVATE_JWK, OTHER_PRIVATE_JWK } from './helpers/certificates'
 
@@ -22,105 +15,10 @@ describe('CertificateTrust', () => {
     fixtures = await createCertificateFixtures()
   })
 
-  it('never returns the peer-provided chain as a trust anchor', () => {
-    const options = validOptions(fixtures.root)
-    const attackerChain = [fixtures.attacker]
-
-    const anchors = trustedCertificatesForVerification(options, {
-      type: 'credential',
-      certificateChain: attackerChain,
-    })
-
-    expect(anchors).toEqual(options.trust?.credentialIssuerCertificates)
-    expect(anchors).not.toEqual(attackerChain.map(certificate => certificate.toString('base64')))
-  })
-
-  it('returns no wallet attestation anchors when the feature is not configured', () => {
-    expect(
-      trustedCertificatesForVerification(validOptions(fixtures.root), {
-        type: 'oauth2ClientAttestation',
-        certificateChain: [fixtures.attacker],
-      }),
-    ).toBeUndefined()
-  })
-
-  it('returns only configured wallet attestation anchors', () => {
-    const options = validOptions(fixtures.root)
-    options.issuer!.walletAttestationCertificates = [fixtures.intermediate.toString('base64')]
-
-    expect(
-      trustedCertificatesForVerification(options, {
-        type: 'oauth2ClientAttestation',
-        certificateChain: [fixtures.attacker],
-      }),
-    ).toEqual(options.issuer!.walletAttestationCertificates)
-  })
-
-  it('accepts a self-signed development leaf only through its exact SHA-256 fingerprint', () => {
-    const options = validOptions(fixtures.root)
-    options.trust!.credentialIssuerCertificates = []
-    options.trust!.developmentCertificateFingerprints = [certificateFingerprint(fixtures.attacker)]
-
-    expect(
-      trustedCertificatesForVerification(options, {
-        type: 'credential',
-        certificateChain: [fixtures.attacker],
-      }),
-    ).toEqual([fixtures.attacker.toString('base64')])
-  })
-
-  it('rejects a different self-signed development fingerprint', () => {
-    const options = validOptions(fixtures.root)
-    options.trust!.credentialIssuerCertificates = []
-    options.trust!.developmentCertificateFingerprints = [certificateFingerprint(fixtures.root)]
-
-    expect(
-      trustedCertificatesForVerification(options, {
-        type: 'credential',
-        certificateChain: [fixtures.attacker],
-      }),
-    ).toBeUndefined()
-  })
-
-  it('uses configured credential roots before development pins', () => {
-    const options = validOptions(fixtures.root)
-    options.trust!.developmentCertificateFingerprints = [certificateFingerprint(fixtures.attacker)]
-
-    expect(
-      trustedCertificatesForVerification(options, {
-        type: 'credential',
-        certificateChain: [fixtures.attacker],
-      }),
-    ).toEqual(options.trust!.credentialIssuerCertificates)
-  })
-
-  it('returns no anchors for unrelated verification categories', () => {
-    expect(
-      trustedCertificatesForVerification(validOptions(fixtures.root), {
-        type: 'oauth2SecuredAuthorizationRequest',
-        certificateChain: [fixtures.attacker],
-      }),
-    ).toBeUndefined()
-  })
-
   it('encodes certificate fingerprints without certificate or key material', () => {
     expect(certificateFingerprint(fixtures.leaf)).toMatch(/^SHA256:[0-9a-f]{64}$/)
   })
 })
-
-function validOptions(root: X509Certificate): OpenId4VcPluginOptions {
-  return {
-    publicApiBaseUrl: 'https://agent.example',
-    issuer: {},
-    trust: {
-      resolverUrl: 'https://resolver.example',
-      timeoutMs: 5_000,
-      allowedDidWebHosts: ['issuer.example'],
-      credentialIssuerCertificates: [root.toString('base64')],
-    },
-    credentialConfigurations: [],
-  }
-}
 
 const options = (keyAttestationCertificates?: string[]): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
@@ -130,19 +28,16 @@ const options = (keyAttestationCertificates?: string[]): OpenId4VcPluginOptions 
 
 describe('key attestation trust', () => {
   it('anchors a key attestation on the configured roots', () => {
-    const trusted = trustedCertificatesForVerification(options(['wallet-provider-root']), {
-      type: 'openId4VciKeyAttestation',
-      certificateChain: [],
-    })
+    const trusted = trustedCertificatesForVerification(
+      options(['wallet-provider-root']),
+      'openId4VciKeyAttestation',
+    )
 
     expect(trusted).toEqual(['wallet-provider-root'])
   })
 
   it('refuses a key attestation when no root is configured', () => {
-    const trusted = trustedCertificatesForVerification(options(), {
-      type: 'openId4VciKeyAttestation',
-      certificateChain: [],
-    })
+    const trusted = trustedCertificatesForVerification(options(), 'openId4VciKeyAttestation')
 
     expect(trusted).toBeUndefined()
   })
@@ -150,7 +45,6 @@ describe('key attestation trust', () => {
 
 const DID = 'did:web:issuer.example'
 const DID_RESOLUTION_POLICY = { allowedWebHosts: ['issuer.example'], timeoutMs: 1_000 }
-const VTJSC_ID = 'https://agent.example/vt/employee.json'
 const LEAF_PUBLIC_JWK = {
   kty: LEAF_PRIVATE_JWK.kty,
   crv: LEAF_PRIVATE_JWK.crv,
@@ -445,266 +339,3 @@ describe('findBoundVerificationMethodId', () => {
     expect(resolve).not.toHaveBeenCalled()
   })
 })
-
-describe('blockingBindingVerdict', () => {
-  it('maps binding failures to fail-closed verdicts', () => {
-    expect(blockingBindingVerdict(DID, VTJSC_ID, 'unresolvable')).toMatchObject({
-      verdict: 'RESOLVER_UNAVAILABLE',
-      evidence: { authorized: null },
-    })
-    expect(blockingBindingVerdict(DID, VTJSC_ID, 'unbound')).toMatchObject({
-      verdict: 'UNTRUSTED',
-      evidence: { authorized: null },
-    })
-  })
-
-  it('does not query Verana after resolution returns a mismatched DID document', async () => {
-    const fetchImplementation = vi.fn() as unknown as typeof fetch
-    const trustClient = new TrustClient(
-      { resolverUrl: 'https://resolver.example/v1/trust', timeoutMs: 1_000 },
-      fetchImplementation,
-    )
-    const agent = agentResolving(async () => ({
-      didDocument: didDocument({
-        id: 'did:web:attacker.example',
-        assertionMethod: [verificationMethod(LEAF_PUBLIC_JWK)],
-      }),
-    }))
-    const binding = await verifyKeyBoundToDid(
-      agent,
-      DID,
-      LEAF_PUBLIC_JWK,
-      ['assertionMethod'],
-      DID_RESOLUTION_POLICY,
-    )
-
-    const verdict =
-      binding === 'bound'
-        ? await trustClient.verdictFor('issuer', DID, VTJSC_ID)
-        : blockingBindingVerdict(DID, VTJSC_ID, binding)
-
-    expect(verdict.verdict).toBe('RESOLVER_UNAVAILABLE')
-    expect(fetchImplementation).not.toHaveBeenCalled()
-  })
-})
-
-const RESOLVER_URL = 'https://resolver.example/v1/trust'
-
-const response = (status: number, body?: unknown): Response =>
-  new Response(body === undefined ? null : JSON.stringify(body), {
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-    status,
-  })
-
-const clientWith = (fetchImplementation: typeof fetch, resolverUrl = RESOLVER_URL) =>
-  new TrustClient({ resolverUrl, timeoutMs: 1_000 }, fetchImplementation)
-
-afterEach(() => {
-  vi.restoreAllMocks()
-  vi.useRealTimers()
-})
-
-describe('computeVerdict', () => {
-  it.each<[TrustResolution, boolean | null, string]>([
-    [{ status: 'unreachable' }, null, 'RESOLVER_UNAVAILABLE'],
-    [{ status: 'not_found' }, null, 'UNTRUSTED'],
-    [{ status: 'ok', trustStatus: 'UNTRUSTED' }, false, 'UNTRUSTED'],
-    [{ status: 'ok', trustStatus: 'PARTIAL' }, true, 'UNTRUSTED'],
-    [{ status: 'ok', trustStatus: 'TRUSTED' }, null, 'RESOLVER_UNAVAILABLE'],
-    [{ status: 'ok', trustStatus: 'TRUSTED' }, false, 'TRUSTED_NOT_AUTHORIZED'],
-    [{ status: 'ok', trustStatus: 'TRUSTED' }, true, 'TRUSTED_AUTHORIZED'],
-  ])('maps %j and authorization %j to %s', (resolution, authorized, expected) => {
-    expect(computeVerdict(resolution, authorized)).toBe(expected)
-  })
-})
-
-describe('TrustClient', () => {
-  it('rejects resolver URL credentials before fetch or trust evidence can expose them', () => {
-    const fetchImplementation = vi.fn() as unknown as typeof fetch
-    const credentialedUrl = 'https://resolver-user:resolver-password@resolver.example/v1/trust'
-
-    expect(
-      () => new TrustClient({ resolverUrl: credentialedUrl, timeoutMs: 1_000 }, fetchImplementation),
-    ).toThrowError('resolver URL must not contain credentials')
-    expect(fetchImplementation).not.toHaveBeenCalled()
-  })
-
-  it.each([
-    'TRUSTED',
-    'PARTIAL',
-    'UNTRUSTED',
-  ] as const)('accepts only the declared %s trust status', async trustStatus => {
-    const fetchImplementation = vi.fn(async () => response(200, { trustStatus })) as unknown as typeof fetch
-
-    await expect(clientWith(fetchImplementation).resolve(DID)).resolves.toEqual({
-      status: 'ok',
-      trustStatus,
-    })
-  })
-
-  it.each([
-    ['404', vi.fn(async () => response(404)), 'UNTRUSTED'],
-    ['500', vi.fn(async () => response(500)), 'RESOLVER_UNAVAILABLE'],
-    [
-      'network error',
-      vi.fn(async () => {
-        throw new Error('ECONNREFUSED')
-      }),
-      'RESOLVER_UNAVAILABLE',
-    ],
-    ['invalid JSON', vi.fn(async () => new Response('{not-json', { status: 200 })), 'RESOLVER_UNAVAILABLE'],
-    [
-      'unknown trust status',
-      vi.fn(async () => response(200, { trustStatus: 'UNKNOWN' })),
-      'RESOLVER_UNAVAILABLE',
-    ],
-  ] as const)('fails closed on resolver %s', async (_case, fetchMock, expected) => {
-    const fetchImplementation = fetchMock as unknown as typeof fetch
-
-    await expect(clientWith(fetchImplementation).verdictFor('issuer', DID, VTJSC_ID)).resolves.toMatchObject({
-      verdict: expected,
-    })
-    expect(fetchMock).toHaveBeenCalledOnce()
-  })
-
-  it.each([
-    ['500', response(500)],
-    ['invalid JSON', new Response('{not-json', { status: 200 })],
-    ['non-boolean true string', response(200, { authorized: 'true' })],
-    ['non-boolean number', response(200, { authorized: 1 })],
-  ])('fails closed on authorization %s', async (_case, authorizationResponse) => {
-    const fetchImplementation = vi
-      .fn()
-      .mockResolvedValueOnce(response(200, { trustStatus: 'TRUSTED' }))
-      .mockResolvedValueOnce(authorizationResponse) as unknown as typeof fetch
-
-    await expect(clientWith(fetchImplementation).verdictFor('issuer', DID, VTJSC_ID)).resolves.toMatchObject({
-      verdict: 'RESOLVER_UNAVAILABLE',
-    })
-  })
-
-  it('maps an explicit authorization 404 to trusted but not authorized', async () => {
-    const fetchImplementation = vi
-      .fn()
-      .mockResolvedValueOnce(response(200, { trustStatus: 'TRUSTED' }))
-      .mockResolvedValueOnce(response(404)) as unknown as typeof fetch
-
-    await expect(clientWith(fetchImplementation).verdictFor('issuer', DID, VTJSC_ID)).resolves.toMatchObject({
-      verdict: 'TRUSTED_NOT_AUTHORIZED',
-    })
-  })
-
-  it.each([
-    'PARTIAL',
-    'UNTRUSTED',
-  ] as const)('does not query authorization after a %s resolution', async trustStatus => {
-    const fetchImplementation = vi.fn(async () => response(200, { trustStatus })) as unknown as typeof fetch
-
-    await expect(clientWith(fetchImplementation).verdictFor('issuer', DID, VTJSC_ID)).resolves.toMatchObject({
-      verdict: 'UNTRUSTED',
-    })
-    expect(fetchImplementation).toHaveBeenCalledOnce()
-  })
-
-  it('builds unambiguous endpoint URLs and encoded query parameters', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(response(200, { trustStatus: 'TRUSTED' }))
-      .mockResolvedValueOnce(response(200, { authorized: true }))
-    const fetchImplementation = fetchMock as unknown as typeof fetch
-    const did = 'did:web:issuer.example:user?version=1&active=true'
-    const vtjscId = 'https://agent.example/vt/employee.json?version=1&scope=all'
-
-    await clientWith(fetchImplementation, `${RESOLVER_URL}/?ignored=true`).verdictFor('issuer', did, vtjscId)
-
-    const resolveUrl = new URL(String(fetchMock.mock.calls[0][0]))
-    const authorizationUrl = new URL(String(fetchMock.mock.calls[1][0]))
-    expect(resolveUrl.pathname).toBe('/v1/trust/resolve')
-    expect(resolveUrl.searchParams.get('did')).toBe(did)
-    expect(resolveUrl.searchParams.has('ignored')).toBe(false)
-    expect(authorizationUrl.pathname).toBe('/v1/trust/issuer-authorization')
-    expect(authorizationUrl.searchParams.get('did')).toBe(did)
-    expect(authorizationUrl.searchParams.get('vtjscId')).toBe(vtjscId)
-  })
-
-  it('creates one AbortController per request and clears every timeout', async () => {
-    const signals: AbortSignal[] = []
-    const fetchImplementation = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-      signals.push(init?.signal as AbortSignal)
-      return signals.length === 1
-        ? response(200, { trustStatus: 'TRUSTED' })
-        : response(200, { authorized: true })
-    }) as unknown as typeof fetch
-    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
-
-    await expect(clientWith(fetchImplementation).verdictFor('issuer', DID, VTJSC_ID)).resolves.toMatchObject({
-      verdict: 'TRUSTED_AUTHORIZED',
-    })
-
-    expect(signals).toHaveLength(2)
-    expect(signals[0]).not.toBe(signals[1])
-    expect(signals.every(signal => signal instanceof AbortSignal && !signal.aborted)).toBe(true)
-    expect(clearTimeoutSpy).toHaveBeenCalledTimes(2)
-  })
-
-  it('treats an AbortError as resolver unavailable and clears its timeout', async () => {
-    const fetchImplementation = vi.fn(async () => {
-      throw abortError('request aborted')
-    }) as unknown as typeof fetch
-    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
-
-    await expect(clientWith(fetchImplementation).verdictFor('issuer', DID, VTJSC_ID)).resolves.toMatchObject({
-      verdict: 'RESOLVER_UNAVAILABLE',
-    })
-    expect(clearTimeoutSpy).toHaveBeenCalledOnce()
-  })
-
-  it('aborts a pending request after the configured timeout', async () => {
-    vi.useFakeTimers()
-    let requestSignal: AbortSignal | undefined
-    const fetchImplementation = vi.fn(
-      async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-        requestSignal = init?.signal as AbortSignal
-        return await new Promise((_resolve, reject) => {
-          requestSignal?.addEventListener('abort', () => reject(abortError('timed out')))
-        })
-      },
-    ) as unknown as typeof fetch
-    const verdictPromise = clientWith(fetchImplementation).verdictFor('issuer', DID, VTJSC_ID)
-
-    await vi.advanceTimersByTimeAsync(999)
-    expect(requestSignal?.aborted).toBe(false)
-    await vi.advanceTimersByTimeAsync(1)
-
-    await expect(verdictPromise).resolves.toMatchObject({ verdict: 'RESOLVER_UNAVAILABLE' })
-    expect(requestSignal?.aborted).toBe(true)
-  })
-
-  it('keeps the timeout active while parsing the response body', async () => {
-    vi.useFakeTimers()
-    let requestSignal: AbortSignal | undefined
-    const fetchImplementation = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-      requestSignal = init?.signal as AbortSignal
-      return {
-        ok: true,
-        status: 200,
-        json: async () =>
-          await new Promise((_resolve, reject) => {
-            requestSignal?.addEventListener('abort', () => reject(abortError('timed out')))
-          }),
-      } as Response
-    }) as unknown as typeof fetch
-
-    const verdictPromise = clientWith(fetchImplementation).verdictFor('issuer', DID, VTJSC_ID)
-    await vi.advanceTimersByTimeAsync(1_000)
-
-    expect(requestSignal?.aborted).toBe(true)
-    await expect(verdictPromise).resolves.toMatchObject({ verdict: 'RESOLVER_UNAVAILABLE' })
-  })
-})
-
-function abortError(message: string): Error {
-  const error = new Error(message)
-  error.name = 'AbortError'
-  return error
-}

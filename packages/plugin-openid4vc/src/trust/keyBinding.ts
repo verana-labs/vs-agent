@@ -1,4 +1,4 @@
-import type { KeyBindingResult, TrustVerdict } from './types'
+import type { KeyBindingResult } from './types'
 import type { BaseAgent, DidPurpose, VerificationMethod } from '@credo-ts/core'
 
 import { getPublicJwkFromVerificationMethod, Kms, tryParseDid } from '@credo-ts/core'
@@ -273,26 +273,5 @@ async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise
     return await Promise.race([operation, timeoutPromise])
   } finally {
     if (timeout) clearTimeout(timeout)
-  }
-}
-
-export function blockingBindingVerdict(
-  did: string | null,
-  jsonSchemaCredentialId: string | null,
-  binding: Exclude<KeyBindingResult, 'bound'>,
-): TrustVerdict {
-  return {
-    verdict: binding === 'unresolvable' ? 'RESOLVER_UNAVAILABLE' : 'UNTRUSTED',
-    evidence: {
-      did,
-      trustStatus: null,
-      jsonSchemaCredentialId,
-      authorized: null,
-      queries: [],
-      note:
-        binding === 'unresolvable'
-          ? 'the asserted DID could not be resolved for key binding'
-          : 'the certificate public key is not authorized by the asserted DID document',
-    },
   }
 }
