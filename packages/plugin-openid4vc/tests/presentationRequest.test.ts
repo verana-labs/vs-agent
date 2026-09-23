@@ -247,7 +247,6 @@ async function startWebvhVerifier() {
         alg: string
         kid: string
       },
-      // biome-ignore lint/suspicious/noExplicitAny: raw JWT payload probing
       payload: JSON.parse(Buffer.from(payloadPart, 'base64url').toString()) as any,
     }
   }

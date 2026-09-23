@@ -10,10 +10,14 @@ import { V2Openid4vcSigningCertificatesController } from '../controllers/admin/v
 export function OpenId4VcNestPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlugin {
   let issuerService: IssuerService | undefined
   let verifierService: VerifierService | undefined
-  const issuerFor = (agent: OpenId4VcAgent): IssuerService =>
-    (issuerService ??= new IssuerService(agent, options))
-  const verifierFor = (agent: OpenId4VcAgent): VerifierService =>
-    (verifierService ??= new VerifierService(agent, options))
+  const issuerFor = (agent: OpenId4VcAgent): IssuerService => {
+    issuerService ??= new IssuerService(agent, options)
+    return issuerService
+  }
+  const verifierFor = (agent: OpenId4VcAgent): VerifierService => {
+    verifierService ??= new VerifierService(agent, options)
+    return verifierService
+  }
 
   const sdkPlugin = setupOpenId4Vc(options, () => {
     if (!issuerService) throw new Error('OpenID4VC issuer service is not initialized')

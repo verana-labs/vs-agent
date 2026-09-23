@@ -84,12 +84,9 @@ export async function publishDevelopmentSigningKey(
   const did = agent.did
   if (!did) throw new Error('development signing key publication requires an agent DID')
 
-  let resolution
-  try {
-    resolution = await agent.dids.resolve(did)
-  } catch {
+  const resolution = await agent.dids.resolve(did).catch(() => {
     throw new Error('development signing key DID resolution failed')
-  }
+  })
   if (resolution.didResolutionMetadata?.error || !resolution.didDocument) {
     throw new Error('development signing key DID resolution failed')
   }
@@ -136,12 +133,9 @@ export async function publishDevelopmentSigningKey(
     ]
   }
 
-  let update
-  try {
-    update = await agent.dids.update({ did, didDocument })
-  } catch {
+  const update = await agent.dids.update({ did, didDocument }).catch(() => {
     throw new Error('development signing key DID update failed')
-  }
+  })
   if (update.didState.state !== 'finished') {
     throw new Error('development signing key DID update failed')
   }
