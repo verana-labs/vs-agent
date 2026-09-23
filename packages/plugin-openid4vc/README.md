@@ -6,9 +6,9 @@ operator sets `OID4VC_CONFIG_FILE_LOCATION`. Nothing else enables it.
 
 What it does:
 
-- pre-authorized OpenID4VCI issuance of `dc+sd-jwt` credentials, valid until they expire: v4
-  specifies no revocation for this format, so a credential carries no `status` claim and the
-  `ttlSeconds` of its offer is its only bound;
+- pre-authorized OpenID4VCI issuance of `dc+sd-jwt` credentials, valid until they expire: the
+  agent hosts no status list yet, so a credential carries no `status` claim and the `ttlSeconds`
+  of its offer is its only bound;
 - OpenID4VP requests in DCQL (`direct_post.jwt`, `x509_hash` or DID client identifier) or, for a
   wallet that predates DCQL, Presentation Exchange (`direct_post`);
 - the `/v2/openid4vc` Administration API scope: create an offer or a request, then list, read

@@ -195,14 +195,17 @@ The agent serves placeholder resources at `/vt/default/logo.svg`, `/vt/default/t
 ### OpenID4VC
 
 `OID4VC_CONFIG_FILE_LOCATION` is the only switch. It locates a JSON file that declares the
-issuer capability, the verifier capability, or both, the credential configurations, the
-verifier policies and the trust anchors, per
+issuer capability, the verifier capability, or both, per
 [[VSA-VTI-CFG-ENV-OID]](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-vti-cfg-env-oid-openid4vc).
+Each capability carries its signing key, and the issuer also carries the wallet and key
+attestation roots it trusts. The credential configurations, the verifier policies and the trust
+anchors are not read from this file yet, see
+[#711](https://github.com/verana-labs/vs-agent/issues/711).
+
 The location is a local path or an `https://` URL. The agent reads it once at startup, follows
 no redirect, refuses any other URL scheme, and refuses to start when it cannot read the file or
-the file is invalid. Mount it read-only, or serve it from a URL that only the agent reaches, and
-manage it as a secret: it can hold a private key. The file must not contain
-`publicApiBaseUrl`; the agent injects the value of `PUBLIC_API_BASE_URL`.
+the file is invalid, an unknown key at any depth included. Mount it read-only, or serve it from a
+URL that only the agent reaches, and manage it as a secret: it can hold a private key.
 
 The scope is documented in the Swagger UI under the `v2/openid4vc` tag and in the
 [operator documentation](../../packages/plugin-openid4vc/README.md), which also lists the
