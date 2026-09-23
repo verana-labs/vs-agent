@@ -246,6 +246,19 @@ export class VtFlowApi {
     return record
   }
 
+  public async startValidation(
+    vtFlowRecordId: string,
+    options: { comment?: string } = {},
+  ): Promise<VtFlowRecord> {
+    const { record, message } = await this.vtFlowService.startValidationForSession(
+      this.agentContext,
+      vtFlowRecordId,
+      options,
+    )
+    await this.dispatchMessage(record.connectionId, message, record)
+    return record
+  }
+
   public markValidated(vtFlowRecordId: string): Promise<VtFlowRecord> {
     return this.vtFlowService.markValidated(this.agentContext, vtFlowRecordId)
   }

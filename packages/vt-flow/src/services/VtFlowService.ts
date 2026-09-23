@@ -650,6 +650,28 @@ export class VtFlowService {
     return { record, message }
   }
 
+  /** `OOB_PENDING` => `VALIDATING`, with the `validating` message that tells the applicant the validator resumed. */
+  public async startValidationForSession(
+    agentContext: AgentContext,
+    recordId: string,
+    params: SendValidatingParams = {},
+  ): Promise<{ record: VtFlowRecord; message: ValidatingMessage }> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.assertState(VtFlowState.OobPending)
+
+    const message = new ValidatingMessage({ threadId: record.threadId, comment: params.comment })
+    if (params.comment) {
+      this.appendMessage(record, {
+        type: VtFlowMessageType.Validating,
+        text: params.comment,
+        at: new Date().toISOString(),
+      })
+    }
+    await this.updateState(agentContext, record, VtFlowState.Validating)
+    return { record, message }
+  }
+
   /** Validator-side states preceding `VALIDATED` => `VALIDATED`; call after `SetParticipantOPtoValidated` lands on-chain. */
   public async markValidated(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
