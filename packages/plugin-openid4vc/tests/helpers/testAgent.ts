@@ -31,7 +31,6 @@ import {
 import express from 'express'
 import { webcrypto } from 'node:crypto'
 
-import { validateOpenId4VcOptions } from '../../src/config'
 import { setupOpenId4Vc } from '../../src/sdk/setupOpenId4Vc'
 import { IssuerService } from '../../src/services/IssuerService'
 import { VerifierService } from '../../src/services/VerifierService'
@@ -276,7 +275,6 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
     const publicApiBaseUrl = serverUrl(server)
     await input.failureHooks?.beforeOptions?.(input.role)
     const options = input.options(publicApiBaseUrl)
-    validateOpenId4VcOptions(options)
     const sdkPlugin = setupOpenId4Vc(options, () => {
       if (!(service instanceof IssuerService)) throw new Error('OpenID4VC issuer service is not initialized')
       return service

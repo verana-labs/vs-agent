@@ -41,7 +41,6 @@ import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { validateOpenId4VcOptions } from '../src/config'
 import { setupOpenId4Vc } from '../src/sdk/setupOpenId4Vc'
 import {
   didFromValidatedCertificate,
@@ -769,7 +768,6 @@ async function createHarness(
   registry: MutableDidRegistry
 }> {
   const options = developmentOptions(role)
-  validateOpenId4VcOptions(options)
 
   let issuerService: IssuerService | undefined
   const sdkPlugin = setupOpenId4Vc(options, () => {
@@ -1039,7 +1037,6 @@ async function startWebvhVerifier() {
     },
     credentialConfigurations: [CONFIGURATION],
   }
-  validateOpenId4VcOptions(options)
   let issuerService: IssuerService | undefined
   const sdkPlugin = setupOpenId4Vc(options, () => {
     if (!issuerService) throw new Error('OpenID4VC issuer service is not initialized')

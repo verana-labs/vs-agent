@@ -5,8 +5,8 @@ export {
   OFFER_TTL_SECONDS_MAX,
   OFFER_TTL_SECONDS_MIN,
   parseOfferClaims,
+  parseOpenId4VcConfiguration,
   UnknownCredentialConfigurationError,
-  validateOpenId4VcOptions,
 } from './config'
 export { setupOpenId4Vc } from './sdk/setupOpenId4Vc'
 export type {
@@ -43,6 +43,7 @@ export type {
 export type { PresentationDecision } from './services/presentationVerification'
 export type { TrustEvidence, TrustVerdict, TrustVerdictName, VeranaTrustStatus } from './trust/types'
 export type {
+  OpenId4VcConfigurationFile,
   OpenId4VcConfiguredSigningMaterial,
   OpenId4VcCredentialConfiguration,
   OpenId4VcPluginOptions,

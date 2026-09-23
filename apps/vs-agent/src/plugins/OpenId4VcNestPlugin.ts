@@ -5,12 +5,7 @@ import type {
 } from '@verana-labs/vs-agent-plugin-openid4vc'
 import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
-import {
-  IssuerService,
-  setupOpenId4Vc,
-  validateOpenId4VcOptions,
-  VerifierService,
-} from '@verana-labs/vs-agent-plugin-openid4vc'
+import { IssuerService, setupOpenId4Vc, VerifierService } from '@verana-labs/vs-agent-plugin-openid4vc'
 
 import { V2Openid4vcCredentialExchangesController } from '../controllers/admin/v2/openid4vc/V2Openid4vcCredentialExchangesController'
 import { V2Openid4vcPresentationsController } from '../controllers/admin/v2/openid4vc/V2Openid4vcPresentationsController'
@@ -19,8 +14,6 @@ import { V2Openid4vcSigningCertificatesController } from '../controllers/admin/v
 type OpenId4VcAgent = OpenId4VcIssuerAgent & OpenId4VcVerifierAgent
 
 export function OpenId4VcNestPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlugin {
-  validateOpenId4VcOptions(options)
-
   let issuerService: IssuerService | undefined
   let verifierService: VerifierService | undefined
   const issuerFor = (agent: OpenId4VcAgent): IssuerService =>

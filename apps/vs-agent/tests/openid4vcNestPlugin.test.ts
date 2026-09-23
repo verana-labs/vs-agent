@@ -112,11 +112,4 @@ describe('OpenId4VcNestPlugin', () => {
       'invalid certificate',
     )
   })
-
-  it('refuses invalid options synchronously', () => {
-    const invalid = options()
-    invalid.publicApiBaseUrl = 'not-a-url'
-
-    expect(() => OpenId4VcNestPlugin(invalid)).toThrow('publicApiBaseUrl must be a valid URL')
-  })
 })

@@ -20,8 +20,7 @@ export interface OpenId4VcCredentialConfiguration {
   disclosureFrame: string[]
 }
 
-export interface OpenId4VcPluginOptions {
-  publicApiBaseUrl: string
+export interface OpenId4VcConfigurationFile {
   issuer?: {
     signing?: OpenId4VcSigningOptions
     walletAttestationCertificates?: string[]
@@ -30,5 +29,9 @@ export interface OpenId4VcPluginOptions {
   verifier?: {
     signing?: OpenId4VcSigningOptions
   }
+}
+
+export interface OpenId4VcPluginOptions extends OpenId4VcConfigurationFile {
+  publicApiBaseUrl: string
   credentialConfigurations: OpenId4VcCredentialConfiguration[]
 }

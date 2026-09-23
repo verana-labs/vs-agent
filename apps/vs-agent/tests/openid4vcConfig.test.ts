@@ -9,6 +9,8 @@ const publicApiBaseUrl = 'https://agent.example'
 
 const validConfig = () => ({ issuer: {}, verifier: {} })
 
+const signingMaterial = () => ({ certificateChain: ['MIIB-certificate'], privateJwk: { kty: 'EC' } })
+
 const readOptions = () => ({
   ...validConfig(),
   publicApiBaseUrl,
@@ -50,7 +52,7 @@ describe('OpenID4VC configuration file', () => {
     await writeFile(configPath, JSON.stringify({ ...validConfig(), [field]: [] }))
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      `unknown top-level field '${field}'`,
+      `unknown field '${field}'`,
     )
   })
 
@@ -67,7 +69,36 @@ describe('OpenID4VC configuration file', () => {
     await writeFile(configPath, JSON.stringify(config))
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      `contains unknown field '${capability}.${field}'`,
+      `unknown field '${capability}.${field}'`,
+    )
+  })
+
+  it.each([
+    ['issuer.signing.extra', { issuer: { signing: { configured: signingMaterial(), extra: 1 } } }],
+    [
+      'issuer.signing.configured.extra',
+      { issuer: { signing: { configured: { ...signingMaterial(), extra: 1 } } } },
+    ],
+    [
+      'verifier.signing.configured.extra',
+      { verifier: { signing: { configured: { ...signingMaterial(), extra: 1 } } } },
+    ],
+  ])('rejects the unknown nested field %s', async (field, config) => {
+    await writeFile(configPath, JSON.stringify(config))
+
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
+      `unknown field '${field}'`,
+    )
+  })
+
+  it('rejects a key attestation root that is not an X.509 certificate', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({ issuer: { keyAttestationCertificates: ['not-a-certificate'] } }),
+    )
+
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
+      'issuer.keyAttestationCertificates[0] must be a valid X.509 certificate',
     )
   })
 
@@ -79,7 +110,7 @@ describe('OpenID4VC configuration file', () => {
     await writeFile(configPath, JSON.stringify({ [capability]: value }))
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      `field '${capability}' must be a JSON object`,
+      `${capability} must be a JSON object`,
     )
   })
 
@@ -87,7 +118,7 @@ describe('OpenID4VC configuration file', () => {
     await writeFile(configPath, JSON.stringify({ issuer: { signing: null } }))
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      'issuer.signing must be an object',
+      'issuer.signing must be a JSON object',
     )
   })
 
@@ -95,7 +126,7 @@ describe('OpenID4VC configuration file', () => {
     await writeFile(configPath, JSON.stringify({ ...validConfig(), revocation: { enabled: true } }))
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      "unknown top-level field 'revocation'",
+      "unknown field 'revocation'",
     )
   })
 
@@ -106,7 +137,7 @@ describe('OpenID4VC configuration file', () => {
     )
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      'publicApiBaseUrl must not be set',
+      "unknown field 'publicApiBaseUrl'",
     )
   })
 
@@ -117,7 +148,7 @@ describe('OpenID4VC configuration file', () => {
     await writeFile(configPath, JSON.stringify(config))
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      `contains unknown field '${capability}.id'`,
+      `unknown field '${capability}.id'`,
     )
   })
 
@@ -128,7 +159,7 @@ describe('OpenID4VC configuration file', () => {
     const error = await readOpenId4VcOptions(configPath, publicApiBaseUrl).catch(value => value)
 
     expect(error).toBeInstanceOf(Error)
-    expect(error.message).toContain("unknown top-level field 'unexpected'")
+    expect(error.message).toContain("unknown field 'unexpected'")
     expect(error.message).not.toContain(secretValue)
   })
 
@@ -175,7 +206,7 @@ describe('OpenID4VC configuration file', () => {
     await writeFile(configPath, JSON.stringify(['not-an-object']))
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      'must contain a JSON object',
+      'the OpenID4VC configuration must be a JSON object',
     )
   })
 })

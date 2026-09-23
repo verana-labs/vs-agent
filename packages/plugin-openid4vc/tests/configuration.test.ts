@@ -10,7 +10,7 @@ import {
   parseOfferClaims,
   parseOfferIssuanceMetadata,
   parseOfferTtlSeconds,
-  validateOpenId4VcOptions,
+  parseOpenId4VcConfiguration,
 } from '../src/config'
 import {
   acceptDraftCredentialRequests,
@@ -43,97 +43,134 @@ const validOptions = (): OpenId4VcPluginOptions => ({
   ],
 })
 
-describe('validateOpenId4VcOptions', () => {
-  it('accepts a valid issuer and verifier configuration', () => {
-    expect(() => validateOpenId4VcOptions(validOptions())).not.toThrow()
+const configurationFile = () => ({ issuer: {}, verifier: {} })
+
+const signingMaterial = () => ({
+  certificateChain: ['MIIB-fixture-certificate'],
+  privateJwk: { kty: 'EC', crv: 'P-256' },
+})
+
+describe('parseOpenId4VcConfiguration', () => {
+  it('returns a file that configures both capabilities', () => {
+    const document = { issuer: { signing: { configured: signingMaterial() } }, verifier: {} }
+
+    expect(parseOpenId4VcConfiguration(document)).toBe(document)
   })
 
-  it('accepts a file that configures neither capability', () => {
-    const options = validOptions()
-    delete options.issuer
-    delete options.verifier
-
-    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
+  it.each([{}, { issuer: {} }, { verifier: {} }])('accepts %j', document => {
+    expect(() => parseOpenId4VcConfiguration(document)).not.toThrow()
   })
 
-  it('rejects a non-HTTPS public URL outside test mode', () => {
-    const options = validOptions()
-    options.publicApiBaseUrl = 'http://agent.example'
-    const previousNodeEnv = process.env.NODE_ENV
-    process.env.NODE_ENV = 'production'
+  it.each([null, 'issuer', 42, ['issuer']])('rejects the document %j', document => {
+    expect(() => parseOpenId4VcConfiguration(document)).toThrow(
+      'the OpenID4VC configuration must be a JSON object',
+    )
+  })
 
-    try {
-      expect(() => validateOpenId4VcOptions(options)).toThrow('publicApiBaseUrl')
-    } finally {
-      process.env.NODE_ENV = previousNodeEnv
+  it.each([
+    ['publicApiBaseUrl', { ...configurationFile(), publicApiBaseUrl: 'https://attacker.example' }],
+    ['trust', { ...configurationFile(), trust: {} }],
+    ['issuer.displayName', { issuer: { displayName: 'Issuer' } }],
+    ['issuer.signing.mode', { issuer: { signing: { configured: signingMaterial(), mode: 'configured' } } }],
+    [
+      'issuer.signing.configured.passphrase',
+      { issuer: { signing: { configured: { ...signingMaterial(), passphrase: 'secret' } } } },
+    ],
+    [
+      'verifier.signing.configured.passphrase',
+      { verifier: { signing: { configured: { ...signingMaterial(), passphrase: 'secret' } } } },
+    ],
+  ])('rejects the unknown field %s at any depth', (field, document) => {
+    expect(() => parseOpenId4VcConfiguration(document)).toThrow(`unknown field '${field}'`)
+  })
+
+  it.each([
+    ['issuer', { issuer: 'configured' }],
+    ['issuer.signing', { issuer: { signing: null } }],
+    ['verifier.signing', { verifier: { signing: [] } }],
+    ['issuer.signing.configured', { issuer: { signing: { configured: 'yes' } } }],
+  ])('rejects %s when it is not a JSON object', (field, document) => {
+    expect(() => parseOpenId4VcConfiguration(document)).toThrow(`${field} must be a JSON object`)
+  })
+
+  it.each([
+    ['issuer.signing.configured', { issuer: { signing: {} } }],
+    [
+      'issuer.signing.configured.privateJwk',
+      { issuer: { signing: { configured: { certificateChain: ['MIIB-fixture-certificate'] } } } },
+    ],
+    [
+      'verifier.signing.configured.certificateChain',
+      { verifier: { signing: { configured: { privateJwk: { kty: 'EC' } } } } },
+    ],
+  ])('requires %s', (field, document) => {
+    expect(() => parseOpenId4VcConfiguration(document)).toThrow(`${field} is required`)
+  })
+
+  it.each([[[]], [['']], [[' ']], [['chain', 7]]])('rejects the certificate chain %j', certificateChain => {
+    const document = { issuer: { signing: { configured: { certificateChain, privateJwk: {} } } } }
+
+    expect(() => parseOpenId4VcConfiguration(document)).toThrow(
+      'issuer.signing.configured.certificateChain must contain non-empty strings',
+    )
+  })
+
+  it('accepts attestation roots that parse as X.509 certificates', () => {
+    const root = fixtures.root.toString('base64')
+    const document = {
+      issuer: { walletAttestationCertificates: [root], keyAttestationCertificates: [root, root] },
     }
+
+    expect(() => parseOpenId4VcConfiguration(document)).not.toThrow()
   })
 
-  it('supports a public API base path', () => {
-    const options = validOptions()
-    options.publicApiBaseUrl = 'https://agent.example/public/base'
+  it.each([
+    'issuer.walletAttestationCertificates',
+    'issuer.keyAttestationCertificates',
+  ])('rejects a %s entry that is not an X.509 certificate', field => {
+    const list = [fixtures.root.toString('base64'), 'MIIB-private-attestation-material']
+    const document = { issuer: { [field.split('.')[1]]: list } }
 
-    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
+    expect(() => parseOpenId4VcConfiguration(document)).toThrow(
+      `${field}[1] must be a valid X.509 certificate`,
+    )
   })
 
-  it('rejects credentials in publicApiBaseUrl without exposing them', () => {
-    const username = 'private-url-username'
-    const password = 'private-url-password'
-    const options = validOptions()
-    options.publicApiBaseUrl = `https://${username}:${password}@agent.example/base`
+  it.each([
+    'issuer.walletAttestationCertificates',
+    'issuer.keyAttestationCertificates',
+  ])('rejects a %s that is not an array', field => {
+    const document = { issuer: { [field.split('.')[1]]: 'MIIB-fixture-certificate' } }
 
-    const error = catchValidationError(options)
-
-    expect(error.message).toContain('publicApiBaseUrl')
-    expect(String(error)).not.toContain(username)
-    expect(String(error)).not.toContain(password)
-    expect(JSON.stringify(error)).not.toContain(username)
-    expect(JSON.stringify(error)).not.toContain(password)
+    expect(() => parseOpenId4VcConfiguration(document)).toThrow(
+      `${field} must be an array of X.509 certificates`,
+    )
   })
 
-  it('accepts a capability that declares no signing mode', () => {
-    const options = validOptions()
-
-    expect(options.issuer!.signing).toBeUndefined()
-    expect(options.verifier!.signing).toBeUndefined()
-    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
-  })
-
-  it('rejects a signing block that declares no configured material', () => {
-    const options = validOptions()
-    options.issuer!.signing = {} as never
-
-    expect(() => validateOpenId4VcOptions(options)).toThrow('issuer.signing.configured is required')
-  })
-
-  it('accepts configured signing material', () => {
-    const options = validOptions()
-    options.issuer!.signing = {
-      configured: { certificateChain: ['MIIB-test-cert'], privateJwk: { kty: 'EC' } as never },
+  it('names the offending field without echoing private material', () => {
+    const privateValue = 'private-jwk-secret-value'
+    const certificateValue = 'private-certificate-value'
+    const document = {
+      issuer: { signing: { configured: { certificateChain: [certificateValue], privateJwk: privateValue } } },
     }
 
-    expect(() => validateOpenId4VcOptions(options)).not.toThrow()
-  })
+    const error = catchParseError(document)
 
-  it('rejects attestation certificates that are not non-empty strings', () => {
-    const walletAttestation = validOptions()
-    walletAttestation.issuer!.walletAttestationCertificates = ['']
-    expect(() => validateOpenId4VcOptions(walletAttestation)).toThrow('issuer.walletAttestationCertificates')
-
-    const keyAttestation = validOptions()
-    keyAttestation.issuer!.keyAttestationCertificates = [' ']
-    expect(() => validateOpenId4VcOptions(keyAttestation)).toThrow('issuer.keyAttestationCertificates')
+    expect(error.message).toContain('issuer.signing.configured.privateJwk must be a JSON object')
+    expect(String(error)).not.toContain(privateValue)
+    expect(String(error)).not.toContain(certificateValue)
+    expect(JSON.stringify(error)).not.toContain(privateValue)
   })
 })
 
-function catchValidationError(options: OpenId4VcPluginOptions): Error {
+function catchParseError(document: unknown): Error {
   try {
-    validateOpenId4VcOptions(options)
+    parseOpenId4VcConfiguration(document)
   } catch (error) {
     if (error instanceof Error) return error
   }
 
-  throw new Error('expected OpenID4VC option validation to fail')
+  throw new Error('expected the OpenID4VC configuration parser to fail')
 }
 
 describe('configuration lookups', () => {
@@ -432,24 +469,6 @@ describe('setupOpenId4Vc', () => {
     expect(response.body.client_attestation_signing_alg_values_supported).toEqual(['ES256'])
     expect(response.body.client_attestation_pop_signing_alg_values_supported).toEqual(['ES256'])
     expect(setup.modules.openId4Vc.config).toHaveProperty('issuer.walletAttestationsRequired', true)
-  })
-
-  it('rejects a malformed wallet-attestation root synchronously', async () => {
-    const options = setupOptions()
-    options.issuer!.walletAttestationCertificates = [
-      fixtures.root.toString('base64'),
-      'MIIB-private-attestation-material',
-    ]
-
-    expect(() =>
-      setupOpenId4Vc(options, () => ({
-        getSignedMetadataJwt: () => undefined,
-        getJwtVcIssuerMetadata: () => ({}),
-        mapCredentialRequest: () => {
-          throw new Error('not implemented')
-        },
-      })),
-    ).toThrowError(/^issuer\.walletAttestationCertificates\[1\] must be a valid X\.509 certificate$/)
   })
 
   it('mounts no type metadata, credential-offer or credential-exchange route', async () => {

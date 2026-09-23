@@ -1,6 +1,6 @@
 import type { OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../types'
 
-import { X509Certificate, X509Module } from '@credo-ts/core'
+import { X509Module } from '@credo-ts/core'
 import {
   OpenId4VcModule,
   type OpenId4VciCredentialRequestToCredentialMapper,
@@ -38,11 +38,7 @@ export function setupOpenId4Vc(
   options: OpenId4VcPluginOptions,
   getIssuerService?: () => OpenId4VcIssuerRequestMapper,
 ): OpenId4VcSdkPlugin {
-  const walletAttestationCertificates = options.issuer?.walletAttestationCertificates
-  const walletAttestationEnabled = Boolean(walletAttestationCertificates?.length)
-  if (walletAttestationCertificates) {
-    assertValidWalletAttestationCertificates(walletAttestationCertificates)
-  }
+  const walletAttestationEnabled = Boolean(options.issuer?.walletAttestationCertificates?.length)
 
   const app = express()
   app.use(advertiseDpopSupport)
@@ -112,16 +108,6 @@ function aliasBareWellKnownPath(app: Express, wellKnown: string, publicApiBaseUr
 
 function withoutTrailingSlash(path: string): string {
   return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path
-}
-
-function assertValidWalletAttestationCertificates(certificates: string[]): void {
-  certificates.forEach((certificate, index) => {
-    try {
-      X509Certificate.fromEncodedCertificate(certificate)
-    } catch {
-      throw new Error(`issuer.walletAttestationCertificates[${index}] must be a valid X.509 certificate`)
-    }
-  })
 }
 
 // Draft wallets predating OpenID4VCI 1.0 still send `format` alongside `vct` on the credential request, which Credo answers with `unsupported_credential_format`.
