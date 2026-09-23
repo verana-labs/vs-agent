@@ -26,6 +26,7 @@ import { ErrorEnvelopeFilter } from '../common'
 import {
   ADMIN_V2_TAGS,
   ENABLE_PUBLIC_API_SWAGGER,
+  OID4VC_CONFIG_FILE_LOCATION,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
   AGENT_MODE,
   DEFAULT_LOGO_SVG,
@@ -232,7 +233,10 @@ export function commonAppConfig(
     .setVersion('1.0')
 
   if (!publicApp) {
-    for (const [name, description] of Object.entries(ADMIN_V2_TAGS)) builder.addTag(name, description)
+    for (const [name, description] of Object.entries(ADMIN_V2_TAGS)) {
+      if (name === 'v2/openid4vc' && !OID4VC_CONFIG_FILE_LOCATION) continue
+      builder.addTag(name, description)
+    }
   }
 
   const document = SwaggerModule.createDocument(app, builder.build())

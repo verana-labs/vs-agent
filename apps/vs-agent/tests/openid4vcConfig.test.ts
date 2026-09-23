@@ -48,7 +48,7 @@ describe('OpenID4VC configuration file', () => {
     'trust',
     'credentialConfigurations',
     'verifierPolicies',
-  ])('rejects the %s block the spec no longer defines', async field => {
+  ])('rejects the %s block, which the spec does not define', async field => {
     await writeFile(configPath, JSON.stringify({ ...validConfig(), [field]: [] }))
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
