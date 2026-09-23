@@ -351,6 +351,21 @@ describe('VtFlowService.sendOobLinkForSession', () => {
   })
 })
 
+describe('VtFlowService.sendValidatingForSession', () => {
+  it('moves OOB_PENDING to VALIDATING and refuses any other state', async () => {
+    const pending = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.OobPending })
+    const { service } = makeService(pending)
+
+    const { record, message } = await service.sendValidatingForSession({} as never, pending.id)
+    expect(record.state).toBe(VtFlowState.Validating)
+    expect(message.threadId).toBe(pending.threadId)
+
+    await expect(service.sendValidatingForSession({} as never, pending.id)).rejects.toThrow(
+      /state 'VALIDATING'/,
+    )
+  })
+})
+
 describe('VtFlowService.notifyCredentialStateChange', () => {
   it('allows re-notifying a revocation from CRED_REVOKED', async () => {
     const revoked = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.CredRevoked })

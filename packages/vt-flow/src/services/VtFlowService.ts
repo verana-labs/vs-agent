@@ -562,7 +562,7 @@ export class VtFlowService {
     return { record, message }
   }
 
-  /** Build a `validating` informational message; no state change on the Validator side. */
+  /** `OOB_PENDING` => `VALIDATING`, with the `validating` that tells the applicant its out-of-band step is done. */
   public async sendValidatingForSession(
     agentContext: AgentContext,
     recordId: string,
@@ -570,12 +570,14 @@ export class VtFlowService {
   ): Promise<{ record: VtFlowRecord; message: ValidatingMessage }> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
+    record.assertState(VtFlowState.OobPending)
 
     const message = new ValidatingMessage({
       threadId: record.threadId,
       comment: params.comment,
     })
 
+    await this.updateState(agentContext, record, VtFlowState.Validating)
     return { record, message }
   }
 
