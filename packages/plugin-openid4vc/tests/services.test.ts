@@ -382,7 +382,7 @@ describe('IssuerService', () => {
       AGENT_DID,
       PUBLIC_JWK,
       ['assertionMethod'],
-      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000 },
+      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000, allowNonPublicHosts: true },
     )
     expect(api.getIssuerByIssuerId).toHaveBeenCalledOnce()
     expect(api.updateIssuerMetadata).toHaveBeenCalledOnce()
@@ -990,7 +990,7 @@ describe('VerifierService', () => {
       AGENT_DID,
       PUBLIC_JWK,
       ['authentication'],
-      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000 },
+      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000, allowNonPublicHosts: true },
     )
     expect(api.createVerifier).toHaveBeenCalledWith({ verifierId: 'verifier' })
     expect(api.updateVerifierMetadata).not.toHaveBeenCalled()

@@ -4,7 +4,11 @@ import type { BaseAgent, DidDocument, VerificationMethod } from '@credo-ts/core'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { certificateFingerprint, trustedCertificatesForVerification } from '../src/trust/CertificateTrust'
-import { findBoundVerificationMethodId, verifyKeyBoundToDid } from '../src/trust/keyBinding'
+import {
+  findBoundVerificationMethodId,
+  ownDidResolutionPolicy,
+  verifyKeyBoundToDid,
+} from '../src/trust/keyBinding'
 
 import { createCertificateFixtures, LEAF_PRIVATE_JWK, OTHER_PRIVATE_JWK } from './helpers/certificates'
 
@@ -212,6 +216,55 @@ describe('verifyKeyBoundToDid', () => {
       }),
     ).resolves.toBe('unresolvable')
     expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'did:web:localhost%3A3000',
+    'did:web:agent.local',
+    'did:web:service.internal',
+    'did:web:10.1.2.3',
+  ])('resolves the agent own DID %s although its host is not public', async did => {
+    const method = verificationMethod(LEAF_PUBLIC_JWK, `${did}#assertion`)
+    const resolve = vi.fn(async () => ({ didDocument: didDocument({ id: did, assertionMethod: [method] }) }))
+
+    await expect(
+      verifyKeyBoundToDid(
+        agentResolving(resolve),
+        did,
+        LEAF_PUBLIC_JWK,
+        ['assertionMethod'],
+        ownDidResolutionPolicy(did),
+      ),
+    ).resolves.toBe('bound')
+    expect(resolve).toHaveBeenCalledOnce()
+  })
+
+  it('still refuses a non-public peer DID the operator allowed explicitly', async () => {
+    const did = 'did:web:localhost%3A3000'
+    const resolve = vi.fn(async () => ({
+      didDocument: didDocument({ id: did, assertionMethod: [verificationMethod(LEAF_PUBLIC_JWK)] }),
+    }))
+
+    await expect(
+      verifyKeyBoundToDid(agentResolving(resolve), did, LEAF_PUBLIC_JWK, ['assertionMethod'], {
+        allowedWebHosts: ['localhost:3000'],
+        timeoutMs: 1_000,
+      }),
+    ).resolves.toBe('unresolvable')
+    expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it('binds the agent own DID policy to that DID host alone', () => {
+    expect(ownDidResolutionPolicy('did:web:agent.local')).toEqual({
+      allowedWebHosts: ['agent.local'],
+      timeoutMs: 5_000,
+      allowNonPublicHosts: true,
+    })
+    expect(ownDidResolutionPolicy('did:key:z6Mktest')).toEqual({
+      allowedWebHosts: [],
+      timeoutMs: 5_000,
+      allowNonPublicHosts: true,
+    })
   })
 
   it('rejects a public host outside the operator allowlist before its resolver can follow redirects', async () => {

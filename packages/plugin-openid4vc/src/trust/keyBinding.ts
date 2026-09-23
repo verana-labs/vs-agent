@@ -14,6 +14,7 @@ const NON_PUBLIC_IPS = createNonPublicIpBlockList()
 export interface DidResolutionPolicy {
   allowedWebHosts: string[]
   timeoutMs: number
+  allowNonPublicHosts?: boolean
 }
 
 export function ownDidResolutionPolicy(
@@ -21,7 +22,7 @@ export function ownDidResolutionPolicy(
   timeoutMs = DEFAULT_DID_RESOLUTION_TIMEOUT_MS,
 ): DidResolutionPolicy {
   const host = didWebHost(did)
-  return { allowedWebHosts: host ? [host] : [], timeoutMs }
+  return { allowedWebHosts: host ? [host] : [], timeoutMs, allowNonPublicHosts: true }
 }
 
 export async function verifyKeyBoundToDid(
@@ -183,7 +184,10 @@ function isResolutionAllowed(did: string, policy: DidResolutionPolicy): boolean 
   }
 
   const requestedHost = didWebHost(did)
-  if (!requestedHost || isNonPublicHost(new URL(`https://${requestedHost}`).hostname)) return false
+  if (!requestedHost) return false
+  if (!policy.allowNonPublicHosts && isNonPublicHost(new URL(`https://${requestedHost}`).hostname)) {
+    return false
+  }
 
   return policy.allowedWebHosts.some(allowedHost => canonicalHost(allowedHost) === requestedHost)
 }
