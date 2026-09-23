@@ -12,24 +12,23 @@ What it does:
 - OpenID4VP requests in DCQL (`direct_post.jwt`, `x509_hash` or DID client identifier) or, for a
   wallet that predates DCQL, Presentation Exchange (`direct_post`);
 - the `/v2/openid4vc` Administration API scope: create an offer or a request, then list, read
-  and delete;
-- a fail-closed trust decision before a presentation is accepted: certificate chain, DID key
-  binding, Verana resolver status and issuer authorization.
+  and delete.
 
 Out of scope, and not implied: W3C VCDM credentials, ISO mdoc, authorization-code issuance,
 wallet-attestation trust-list distribution, production PKI onboarding, formal conformance.
 
 ## Not wired up yet
 
-The configuration file the spec defines carries no credential configuration, no verifier policy
-and no trust setting, and the agent derives none of them yet. So `createCredentialOffer` and
-`createPresentationRequest` answer `404 UNKNOWN_ID` for every identifier, and reading a verified
-presentation answers the `RESOLVER_UNAVAILABLE` verdict. Four issues carry the rest:
+The configuration file the spec defines carries no credential type and no trust setting, and the
+agent derives none of them yet. So `createCredentialOffer` and `createPresentationRequest` answer
+`404 UNKNOWN_ID` for every `jsonSchemaCredentialId`, `createCredentialOffer` answers it for every
+`statusListId`, and reading a verified presentation answers the `RESOLVER_UNAVAILABLE` verdict.
+Four issues carry the rest:
 
 - [#710](https://github.com/verana-labs/vs-agent/issues/710): SD-JWT VC Type Metadata, served at
   the spec path `/vt/vct/{credentialSchemaId}`;
-- [#711](https://github.com/verana-labs/vs-agent/issues/711): credential configurations and
-  verifier policies read from the VPR, one per active issuer participant;
+- [#711](https://github.com/verana-labs/vs-agent/issues/711): credential types read from the VPR,
+  one per active issuer participant;
 - [#712](https://github.com/verana-labs/vs-agent/issues/712): the verifier trust decision on the
   eight steps the spec now defines, with no `trust` block anywhere;
 - [#713](https://github.com/verana-labs/vs-agent/issues/713): status lists.
@@ -103,13 +102,13 @@ answers in the v2 error envelope. Without `OID4VC_CONFIG_FILE_LOCATION`, every p
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `createCredentialOffer` | `POST /credential-offer` | `credentialConfigurationId`, `claims`, `ttlSeconds` (60 to 7776000). Returns `credentialExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`. Answers `UNKNOWN_ID` for every identifier until #711. |
-| `listCredentialExchanges` | `GET /credential-exchanges` | Filters `credentialConfigurationId`, `state`. Keyset pagination. |
-| `getCredentialExchange` | `GET /credential-exchanges/{credentialExchangeId}` | `credentialExchangeId`, `credentialConfigurationId`, `state`, `createdAt`, `updatedAt`, `expiresAt`, `errorMessage`. Never the claims, the offer URL or the pre-authorized code. |
+| `createCredentialOffer` | `POST /credential-offer` | `jsonSchemaCredentialId`, `claims`, `ttlSeconds` (60 to 7776000), optional `statusListId` and `statusListIndex` together. Returns `credentialExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`. Answers `UNKNOWN_ID` for every credential type until #711 and for every status list until #713. |
+| `listCredentialExchanges` | `GET /credential-exchanges` | Filters `jsonSchemaCredentialId`, `statusListId`, `state`. Keyset pagination. |
+| `getCredentialExchange` | `GET /credential-exchanges/{credentialExchangeId}` | `credentialExchangeId`, `jsonSchemaCredentialId`, `statusListId`, `statusListIndex`, `state`, `createdAt`, `updatedAt`, `expiresAt`, `errorMessage`. Never the claims, the offer URL or the pre-authorized code. |
 | `deleteCredentialExchange` | `DELETE /credential-exchanges/{credentialExchangeId}` | `204`. Deletes the record only, never a credential that a wallet holds. |
-| `createPresentationRequest` | `POST /presentation-request` | `policyId`, optional `queryLanguage` (`dcql`, `presentation_exchange`), optional `requestSigner` (`x5c`, `did`). Returns `proofExchangeId` and `url`. `404 UNKNOWN_ID`, `409 INVALID_STATE`. Answers `UNKNOWN_ID` for every identifier until #711. |
-| `listPresentations` | `GET /presentations` | Filters `policyId`, `state`. Keyset pagination. |
-| `getPresentation` | `GET /presentations/{proofExchangeId}` | Adds `cryptographicVerified`, `accepted`, `trust` and `credential` once the wallet answered. |
+| `createPresentationRequest` | `POST /presentation-request` | `jsonSchemaCredentialId`, optional `requestedClaims` (defaults to every claim of the type), optional `queryLanguage` (`dcql`, `presentation_exchange`), optional `requestSigner` (`x5c`, `did`). Returns `proofExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`, `409 INVALID_STATE`. Answers `UNKNOWN_ID` for every credential type until #711. |
+| `listPresentations` | `GET /presentations` | Filters `jsonSchemaCredentialId`, `state`. Keyset pagination. |
+| `getPresentation` | `GET /presentations/{proofExchangeId}` | Adds the stored `jsonSchemaCredentialId` and `requestedClaims` of the request, then `cryptographicVerified`, `accepted`, `trust` and `credential` once the wallet answered. |
 | `deletePresentation` | `DELETE /presentations/{proofExchangeId}` | `204`. |
 | `listSigningCertificates` | `GET /signing-certificates` | Bare array of `role`, `development`, `fingerprint`, `certificateChain`. Never a private key. |
 
@@ -118,10 +117,10 @@ Session states are credo's: `OfferCreated`, `OfferUriRetrieved`, `AuthorizationI
 `CredentialsPartiallyIssued`, `Completed`, `Error` for an issuance; `RequestCreated`,
 `RequestUriRetrieved`, `ResponseVerified`, `Error` for a verification.
 
-The trust decision of a presentation runs once, when the agent first reads a verified session,
-and is stored on the session; a `RESOLVER_UNAVAILABLE` verdict is not stored and is retried on
-the next read. A list never decides: it reports the stored decision, and a verified session that
-nobody read yet shows `cryptographicVerified: true` and `accepted: false` without `trust`.
+The agent stores `jsonSchemaCredentialId` and `requestedClaims` on the verification session when
+it creates the request, and never infers either from the response of the wallet. A list never
+decides: it reports the stored decision, and a verified session that nobody read yet shows
+`cryptographicVerified: true` and `accepted: false` without `trust`.
 
 ## Public endpoints
 
@@ -136,26 +135,16 @@ Admin API and the metadata return; it never builds a path itself.
 
 ## Trust decision
 
-Nothing configures the resolver URL, the allowed `did:web` hosts, the credential-issuer roots or
-the development fingerprints any more: the file rejects a `trust` block, and #712 rebuilds the
-decision without one. Until it lands, a verified presentation answers `RESOLVER_UNAVAILABLE` and
-is never accepted. What the code below does, once a resolver reaches it again, in this order:
+There is none yet. Nothing configures a resolver URL, allowed `did:web` hosts, credential-issuer
+roots or development fingerprints: the file rejects a `trust` block, and
+[#712](https://github.com/verana-labs/vs-agent/issues/712) builds the decision on the eight steps
+the spec now defines, on the indexer and on DID key binding, without one. Until it lands, a
+verified presentation answers `cryptographicVerified: true`, `accepted: false` and the verdict
+`RESOLVER_UNAVAILABLE`, and is never accepted.
 
-1. credo verifies the OpenID4VP response, the nonce, the audience, the holder binding, the SD-JWT
-   disclosure, the signature, the X.509 chain against the configured roots or an exact
-   development fingerprint, and the validity period: a credential without a numeric `exp`, past
-   its `exp`, or before its `nbf` fails here, and the session ends in `Error`;
-2. the issuer DID is read from a URI SAN of the validated certificate only;
-3. the DID is a well-formed `did:web` or `did:webvh` on `allowedDidWebHosts`, with no loopback,
-   private or link-local target, and the resolved document id equals the DID;
-4. the certificate key matches a verification method the DID Document authorizes under
-   `assertionMethod`;
-5. the Verana resolver returns `TRUSTED` for the issuer DID and authorizes it for the `vtjscId` of
-   the credential configuration;
-6. only the verdict `TRUSTED_AUTHORIZED` sets `accepted`.
-
-Any other outcome fails closed: `UNTRUSTED`, `TRUSTED_NOT_AUTHORIZED` or `RESOLVER_UNAVAILABLE`,
-with the evidence in `trust.evidence`.
+What the agent still enforces before that point: credo verifies the OpenID4VP response, the
+nonce, the audience, the holder binding, the SD-JWT disclosures and the signature, and the plugin
+fails a presented credential that carries no numeric `exp`. The session then ends in `Error`.
 
 ## Wallet accommodations
 
@@ -170,6 +159,7 @@ the code it changes, with a one-line note.
 
 `pnpm --filter @verana-labs/vs-agent-plugin-openid4vc exec vitest run` runs the unit tests and the
 in-process end-to-end tests, which start real credo agents for the issuer, the holder and the
-verifier and drive a pre-authorized issuance, a DCQL presentation, the four verdicts and response
-replay. No external wallet or conformance evidence is recorded here; see the Verana Playground for
-recorded wallet scenarios.
+verifier and drive a pre-authorized issuance through to a stored holder-bound credential. The
+presentation round trip comes back with #712, which gives the verifier a trust anchor for the
+credential it receives. No external wallet or conformance evidence is recorded here; see the
+Verana Playground for recorded wallet scenarios.
