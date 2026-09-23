@@ -184,12 +184,22 @@ export class VtFlowApi {
     return record
   }
 
-  public acceptOnboardingRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
-    return this.vtFlowService.acceptOnboardingRequest(this.agentContext, vtFlowRecordId)
+  public async acceptOnboardingRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    const { record, message } = await this.vtFlowService.acceptOnboardingRequest(
+      this.agentContext,
+      vtFlowRecordId,
+    )
+    await this.dispatchMessage(record.connectionId, message, record)
+    return record
   }
 
-  public acceptIssuanceRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
-    return this.vtFlowService.acceptIssuanceRequest(this.agentContext, vtFlowRecordId)
+  public async acceptIssuanceRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    const { record, message } = await this.vtFlowService.acceptIssuanceRequest(
+      this.agentContext,
+      vtFlowRecordId,
+    )
+    await this.dispatchMessage(record.connectionId, message, record)
+    return record
   }
 
   public async rejectRequest(options: ProblemReportDispatchOptions): Promise<VtFlowRecord> {

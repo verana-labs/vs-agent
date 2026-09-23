@@ -104,9 +104,7 @@ describe('vt-flow: applicant connection reuse', () => {
     })
     const validatorRecordId = (await validating).payload.vtFlowRecordId
 
-    const validatingProcessed = waitForEvent(applicantEvents, isProcessedMessage(VT_FLOW_VALIDATING_TYPE))
-    await validator.modules.vtFlow.sendValidating(validatorRecordId)
-    await validatingProcessed
+    await waitForEvent(applicantEvents, isProcessedMessage(VT_FLOW_VALIDATING_TYPE))
 
     const connection = await applicant.didcomm.connections.getById(record.connectionId)
     expect(connection.theirDid).toMatch(/^did:peer:/)

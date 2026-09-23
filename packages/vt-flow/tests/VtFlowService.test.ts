@@ -3,7 +3,7 @@ import { DidCommCredentialExchangeRepository } from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
 import { VtCredentialState, VtFlowRole, VtFlowState, VtFlowVariant } from '../src'
-import { IssuanceRequestMessage, OnboardingRequestMessage } from '../src/messages'
+import { IssuanceRequestMessage, OnboardingRequestMessage, ValidatingMessage } from '../src/messages'
 import { VtFlowRecord } from '../src/repository'
 import { VtFlowService } from '../src/services/VtFlowService'
 
@@ -26,6 +26,7 @@ function makeService(existing: VtFlowRecord | null, previousConnection: unknown 
   const repository = {
     findByParticipantSessionId: vi.fn().mockResolvedValue(existing),
     getById: vi.fn().mockResolvedValue(existing),
+    findByThreadId: vi.fn().mockResolvedValue(existing),
     save: vi.fn(),
     update: vi.fn(),
   }
@@ -296,6 +297,25 @@ describe('VtFlowService.reattachOnboardingProcessRecord', () => {
       }),
     ).rejects.toThrow(/cannot be re-attached/)
     expect(repository.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('VtFlowService.processReceiveValidating', () => {
+  it.each([
+    VtFlowState.OrSent,
+    VtFlowState.IrSent,
+    VtFlowState.OobPending,
+  ])('applicant moves from %s to VALIDATING', async state => {
+    const existing = makeRecord({ state })
+    const { service } = makeService(existing)
+
+    const record = await service.processReceiveValidating({
+      message: new ValidatingMessage({ threadId: existing.threadId }),
+      agentContext: {},
+      assertReadyConnection: () => undefined,
+    } as never)
+
+    expect(record.state).toBe(VtFlowState.Validating)
   })
 })
 

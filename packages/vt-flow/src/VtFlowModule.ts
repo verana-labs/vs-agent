@@ -223,7 +223,7 @@ export class VtFlowModule implements Module {
           service
             .getLogger()
             .debug(`[vt-flow] auto-accepting OR for ${record.id} (autoAcceptOnboardingRequest=true)`)
-          await service.acceptOnboardingRequest(agentContext, record.id)
+          await agentContext.dependencyManager.resolve(VtFlowApi).acceptOnboardingRequest(record.id)
           return
         }
 
@@ -235,7 +235,7 @@ export class VtFlowModule implements Module {
           service
             .getLogger()
             .debug(`[vt-flow] auto-accepting IR for ${record.id} (autoAcceptIssuanceRequest=true)`)
-          await service.acceptIssuanceRequest(agentContext, record.id)
+          await agentContext.dependencyManager.resolve(VtFlowApi).acceptIssuanceRequest(record.id)
           return
         }
 

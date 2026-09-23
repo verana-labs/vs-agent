@@ -349,7 +349,7 @@ export class VtFlowService {
     return record
   }
 
-  /** Applicant-side inbound `validating`; OnboardingProcess applicant transitions `OR_SENT => VALIDATING`. */
+  /** Applicant-side inbound `validating`; `OR_SENT`, `IR_SENT` or `OOB_PENDING` => `VALIDATING`. */
   public async processReceiveValidating(
     messageContext: DidCommInboundMessageContext<ValidatingMessage>,
   ): Promise<VtFlowRecord> {
@@ -363,8 +363,7 @@ export class VtFlowService {
 
     if (
       record.role === VtFlowRole.Applicant &&
-      record.variant === VtFlowVariant.OnboardingProcess &&
-      record.state === VtFlowState.OrSent
+      [VtFlowState.OrSent, VtFlowState.IrSent, VtFlowState.OobPending].includes(record.state)
     ) {
       await this.updateState(agentContext, record, VtFlowState.Validating)
     }
@@ -395,25 +394,31 @@ export class VtFlowService {
   }
 
   /** `AWAITING_OR => VALIDATING`; caller is expected to have verified participant/agent/wallet IDs on-chain. */
-  public async acceptOnboardingRequest(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
+  public async acceptOnboardingRequest(
+    agentContext: AgentContext,
+    recordId: string,
+  ): Promise<{ record: VtFlowRecord; message: ValidatingMessage }> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
     record.assertState(VtFlowState.AwaitingOr)
     record.assertVariant(VtFlowVariant.OnboardingProcess)
 
     await this.updateState(agentContext, record, VtFlowState.Validating)
-    return record
+    return { record, message: new ValidatingMessage({ threadId: record.threadId }) }
   }
 
   /** DirectIssuance: `AWAITING_IR => VALIDATING`; transient before `CRED_OFFERED`. */
-  public async acceptIssuanceRequest(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
+  public async acceptIssuanceRequest(
+    agentContext: AgentContext,
+    recordId: string,
+  ): Promise<{ record: VtFlowRecord; message: ValidatingMessage }> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
     record.assertState(VtFlowState.AwaitingIr)
     record.assertVariant(VtFlowVariant.DirectIssuance)
 
     await this.updateState(agentContext, record, VtFlowState.Validating)
-    return record
+    return { record, message: new ValidatingMessage({ threadId: record.threadId }) }
   }
 
   /** Reject with a problem-report; transitions to `TERMINATED_BY_{role}` and marks the connection as `TERMINATED`. */
