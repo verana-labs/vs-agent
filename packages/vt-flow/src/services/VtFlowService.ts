@@ -336,7 +336,7 @@ export class VtFlowService {
     return record
   }
 
-  /** Applicant-side inbound `oob-link`; transitions the session to `OOB_PENDING`. */
+  /** Applicant-side inbound `oob-link`; `OR_SENT`, `IR_SENT`, `VALIDATING` or `OOB_PENDING` => `OOB_PENDING`. */
   public async processReceiveOobLink(
     messageContext: DidCommInboundMessageContext<OobLinkMessage>,
   ): Promise<VtFlowRecord> {
@@ -345,6 +345,12 @@ export class VtFlowService {
 
     const record = await this.getByThreadId(agentContext, message.threadId)
     record.assertRole(VtFlowRole.Applicant)
+    record.assertState([
+      VtFlowState.OrSent,
+      VtFlowState.IrSent,
+      VtFlowState.Validating,
+      VtFlowState.OobPending,
+    ])
     await this.updateState(agentContext, record, VtFlowState.OobPending)
     return record
   }

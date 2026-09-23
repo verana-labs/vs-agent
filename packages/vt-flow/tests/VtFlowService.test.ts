@@ -3,7 +3,12 @@ import { DidCommCredentialExchangeRepository } from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
 import { VtCredentialState, VtFlowRole, VtFlowState, VtFlowVariant } from '../src'
-import { IssuanceRequestMessage, OnboardingRequestMessage, ValidatingMessage } from '../src/messages'
+import {
+  IssuanceRequestMessage,
+  OnboardingRequestMessage,
+  OobLinkMessage,
+  ValidatingMessage,
+} from '../src/messages'
 import { VtFlowRecord } from '../src/repository'
 import { VtFlowService } from '../src/services/VtFlowService'
 
@@ -316,6 +321,22 @@ describe('VtFlowService.processReceiveValidating', () => {
     } as never)
 
     expect(record.state).toBe(VtFlowState.Validating)
+  })
+})
+
+describe('VtFlowService.processReceiveOobLink', () => {
+  it('applicant refuses an oob-link once the flow is COMPLETED', async () => {
+    const existing = makeRecord()
+    const { service, repository } = makeService(existing)
+
+    await expect(
+      service.processReceiveOobLink({
+        message: new OobLinkMessage({ threadId: existing.threadId, url: 'https://x', description: 'd' }),
+        agentContext: {},
+        assertReadyConnection: () => undefined,
+      } as never),
+    ).rejects.toThrow(/state 'COMPLETED'/)
+    expect(repository.update).not.toHaveBeenCalled()
   })
 })
 
