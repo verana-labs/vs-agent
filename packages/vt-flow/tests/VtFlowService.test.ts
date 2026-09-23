@@ -1,5 +1,5 @@
 import { EventEmitter, utils } from '@credo-ts/core'
-import { DidCommCredentialExchangeRepository } from '@credo-ts/didcomm'
+import { DidCommCredentialExchangeRepository, WhoRetriesStatus } from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -90,13 +90,13 @@ const applicantParams = {
 }
 
 describe('VtFlowService inbound problem-report', () => {
-  function makeReport(code: string) {
-    const message = new VtFlowProblemReportMessage({ description: { code, en: 'because' } })
+  function makeReport(code: string, whoRetries?: WhoRetriesStatus) {
+    const message = new VtFlowProblemReportMessage({ description: { code, en: 'because' }, whoRetries })
     message.setThread({ threadId: 'thid-1' })
     return message
   }
 
-  async function receive(code: string, role: VtFlowRole) {
+  async function receive(code: string, role: VtFlowRole, options: { whoRetries?: WhoRetriesStatus } = {}) {
     const existing = makeRecord({ role, state: VtFlowState.Validating })
     const repository = {
       findByThreadId: vi.fn().mockResolvedValue(existing),
@@ -109,7 +109,7 @@ describe('VtFlowService inbound problem-report', () => {
       {} as never,
     )
     const record = await service.processReceiveProblemReport({
-      message: makeReport(code),
+      message: makeReport(code, options.whoRetries),
       agentContext: {},
     } as never)
     return record as VtFlowRecord
@@ -130,6 +130,27 @@ describe('VtFlowService inbound problem-report', () => {
     })
     await expect(receive(VtFlowErrorCode.SessionTerminated, VtFlowRole.Validator)).resolves.toMatchObject({
       state: VtFlowState.TerminatedByApplicant,
+    })
+  })
+
+  it('stays on validation-failed only when who_retries is you', async () => {
+    await expect(
+      receive(VtFlowErrorCode.ValidationFailed, VtFlowRole.Applicant, { whoRetries: WhoRetriesStatus.You }),
+    ).resolves.toMatchObject({ state: VtFlowState.Validating })
+    await expect(receive(VtFlowErrorCode.ValidationFailed, VtFlowRole.Applicant)).resolves.toMatchObject({
+      state: VtFlowState.Error,
+    })
+  })
+
+  it('moves to ERROR on internal-error only when it is fatal', async () => {
+    await expect(
+      receive(VtFlowErrorCode.InternalError, VtFlowRole.Applicant, { whoRetries: WhoRetriesStatus.You }),
+    ).resolves.toMatchObject({ state: VtFlowState.Validating })
+    await expect(
+      receive(VtFlowErrorCode.InternalError, VtFlowRole.Applicant, { whoRetries: WhoRetriesStatus.None }),
+    ).resolves.toMatchObject({ state: VtFlowState.Error })
+    await expect(receive(VtFlowErrorCode.InternalError, VtFlowRole.Applicant)).resolves.toMatchObject({
+      state: VtFlowState.Error,
     })
   })
 

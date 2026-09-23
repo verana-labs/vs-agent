@@ -10,6 +10,7 @@ import {
   DidCommConnectionRepository,
   DidCommCredentialExchangeRepository,
   DidCommCredentialState,
+  WhoRetriesStatus,
 } from '@credo-ts/didcomm'
 
 import { VtFlowModuleConfig, type VtFlowRequestPurpose } from '../VtFlowModuleConfig'
@@ -899,7 +900,7 @@ export class VtFlowService {
     })
     record.errorMessage = message.description?.en ?? code
 
-    const target = info && this.resolveErrorFlowState(info.flowState, record.role)
+    const target = info && this.resolveErrorFlowState(info.flowState, record.role, message.whoRetries)
     if (!target) {
       await this.updateRecord(agentContext, record)
       return record
@@ -913,8 +914,15 @@ export class VtFlowService {
   private resolveErrorFlowState(
     flowState: VtFlowErrorFlowState,
     receiverRole: VtFlowRole,
+    whoRetries: WhoRetriesStatus | undefined,
   ): VtFlowState | undefined {
     if (flowState === 'unchanged') return undefined
+    if (flowState === 'unchanged-when-you') {
+      return whoRetries === WhoRetriesStatus.You ? undefined : VtFlowState.Error
+    }
+    if (flowState === 'error-when-fatal') {
+      return !whoRetries || whoRetries === WhoRetriesStatus.None ? VtFlowState.Error : undefined
+    }
     if (flowState !== 'terminated-by-sender') return flowState
     return receiverRole === VtFlowRole.Applicant
       ? VtFlowState.TerminatedByValidator

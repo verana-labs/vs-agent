@@ -28,7 +28,12 @@ export type WhoRetries = 'you' | 'me' | 'both' | 'none'
 export type ErrorImpact = 'message' | 'thread' | 'connection'
 
 /** Flow State the receiving party moves to; `terminated-by-sender` resolves to `TERMINATED_BY_VALIDATOR` or `TERMINATED_BY_APPLICANT` from the sender's role. */
-export type VtFlowErrorFlowState = VtFlowState | 'unchanged' | 'terminated-by-sender'
+export type VtFlowErrorFlowState =
+  | VtFlowState
+  | 'unchanged'
+  | 'terminated-by-sender'
+  | 'unchanged-when-you'
+  | 'error-when-fatal'
 
 /** Per-code metadata mirroring the spec's Error Codes table; `retryable` is false when impact is `connection` or `whoRetries` is `none`. */
 export interface VtFlowErrorInfo {
@@ -103,7 +108,7 @@ export const VT_FLOW_ERROR_INFO: Readonly<Record<VtFlowErrorCode, VtFlowErrorInf
     whoRetries: 'you',
     impact: 'thread',
     retryable: true,
-    flowState: 'unchanged',
+    flowState: 'unchanged-when-you',
   },
   [VtFlowErrorCode.ValidationRefused]: {
     whoRetries: 'none',
@@ -139,7 +144,7 @@ export const VT_FLOW_ERROR_INFO: Readonly<Record<VtFlowErrorCode, VtFlowErrorInf
     whoRetries: 'none',
     impact: 'thread',
     retryable: false,
-    flowState: VtFlowState.Error,
+    flowState: 'error-when-fatal',
   },
 }
 
