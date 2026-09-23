@@ -14,7 +14,6 @@ export type { BaseDidCommPlugin, BaseDidCommPluginOptions } from './plugins/setu
 
 // DID utilities
 export { CachedWebDidResolver } from './did/CachedWebDidResolver'
-export { SafeWebVhDidResolver } from './did/SafeWebVhDidResolver'
 export { WebDidRegistrar } from './did/WebDidRegistrar'
 export { getLegacyDidDocument } from './did/legacyDidWeb'
 export {
