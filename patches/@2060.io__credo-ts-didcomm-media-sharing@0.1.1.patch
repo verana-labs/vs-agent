@@ -1,0 +1,73 @@
+diff --git a/build/index.d.mts b/build/index.d.mts
+index dc08de84255682390167560294e1604ae128079a..86162748aaff5b39b873593beb28e0722ad36844 100644
+--- a/build/index.d.mts
++++ b/build/index.d.mts
+@@ -1,4 +1,4 @@
+-import { AgentContext, BaseEvent, BaseRecord, DependencyManager, EventEmitter, Module, Query, QueryOptions, Repository, StorageService } from "@credo-ts/core";
++import { AgentContext, BaseEvent, BaseRecord, DependencyManager, EventEmitter, JsonValue, Module, Query, QueryOptions, Repository, StorageService } from "@credo-ts/core";
+ import * as _credo_ts_didcomm0 from "@credo-ts/didcomm";
+ import { DidCommConnectionRecord, DidCommConnectionService, DidCommInboundMessageContext, DidCommMessage, DidCommMessageHandler, DidCommMessageHandlerInboundMessage, DidCommMessageSender, DidCommOutboundMessageContext } from "@credo-ts/didcomm";
+ 
+@@ -31,7 +31,8 @@ interface CipheringInfo {
+ }
+ interface SharedMediaItemOptions {
+   id?: string;
+-  uri: string;
++  uri?: string;
++  json?: JsonValue;
+   mimeType: string;
+   description?: string;
+   byteCount?: number;
+@@ -41,7 +42,8 @@ interface SharedMediaItemOptions {
+ }
+ declare class SharedMediaItem {
+   id: string;
+-  uri: string;
++  uri?: string;
++  json?: JsonValue;
+   mimeType: string;
+   description?: string;
+   byteCount?: number;
+diff --git a/build/index.mjs b/build/index.mjs
+index 5dff6bdce0a904bad5b22288040302d627c7b058..776cac2efd8ba888cb28bcf1b3ed1434f6d36214 100644
+--- a/build/index.mjs
++++ b/build/index.mjs
+@@ -48,8 +48,10 @@ function __decorate(decorators, target, key, desc) {
+ var SharedMediaItem = class {
+ 	constructor(options) {
+ 		if (options) {
++			if ((options.uri === undefined) === (options.json === undefined)) throw new CredoError("A shared media item must carry either uri or json");
+ 			this.id = options.id ?? utils.uuid();
+ 			this.uri = options.uri;
++			this.json = options.json;
+ 			this.mimeType = options.mimeType;
+ 			this.description = options.description;
+ 			this.byteCount = options.byteCount;
+@@ -215,7 +217,7 @@ var DidCommShareMediaMessage = class DidCommShareMediaMessage extends DidCommMes
+ 				const item = options.items[i];
+ 				this.addAppendedAttachment(new DidCommAttachment({
+ 					id: i.toString(),
+-					data: { links: [item.uri] },
++					data: item.uri !== undefined ? { links: [item.uri] } : { json: item.json },
+ 					byteCount: item.byteCount,
+ 					filename: item.fileName,
+ 					description: item.description,
+@@ -338,13 +340,16 @@ let DidCommMediaSharingService = class DidCommMediaSharingService$1 {
+ 				const relatedAttachment = message.appendedAttachments?.find((attachment) => attachment.id === item.attachmentId);
+ 				if (!relatedAttachment) throw new CredoError(`No attachment found for shared item ${item.id}`);
+ 				if (!relatedAttachment.mimeType) throw new CredoError(`Missing MIME type for shared item ${item.id}`);
+-				if (!relatedAttachment.data.links || !relatedAttachment.data.links.length) throw new CredoError(`Missing URI for for shared item ${item.id}`);
++				const uri = relatedAttachment.data.links?.[0];
++				const json = relatedAttachment.data.json;
++				if (uri === undefined && json === undefined) continue;
+ 				items.push({
+ 					id: item.id,
+ 					ciphering: item.ciphering,
+ 					metadata: item.metadata,
+ 					mimeType: relatedAttachment.mimeType,
+-					uri: relatedAttachment.data.links[0],
++					uri,
++					json,
+ 					byteCount: relatedAttachment.byteCount,
+ 					description: relatedAttachment.description,
+ 					fileName: relatedAttachment.filename
