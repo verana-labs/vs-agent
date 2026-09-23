@@ -446,7 +446,6 @@ export interface VsAgentOptions {
   dependencies: AgentDependencies
   publicApiBaseUrl: string
   adminApiServiceEndpoint?: string
-  masterListCscaLocation?: string
   endpoints: string[]
   walletConfig: AskarModuleConfigStoreOptions
 }

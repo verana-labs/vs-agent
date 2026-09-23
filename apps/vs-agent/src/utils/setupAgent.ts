@@ -46,7 +46,6 @@ export const setupAgent = async ({
   logLevel,
   publicApiBaseUrl,
   parsedDid,
-  masterListCscaLocation,
   autoUpdateStorageOnStartup,
   veranaChain,
   indexer,
@@ -61,7 +60,6 @@ export const setupAgent = async ({
   logLevel?: LogLevel
   publicApiBaseUrl: string
   parsedDid?: ParsedDid
-  masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
   veranaChain?: VeranaChainService
   indexer: VeranaIndexerService
@@ -172,7 +170,6 @@ export const setupAgent = async ({
     did: publicDid,
     dependencies: agentDependencies,
     publicApiBaseUrl,
-    masterListCscaLocation,
     veranaChain,
     indexer,
     trustedEcosystemDids: TRUSTED_ECS_ECOSYSTEM_DIDS,

@@ -80,13 +80,14 @@ import {
   TRUSTED_ECS_ECOSYSTEM_DIDS,
 } from './config'
 import { readOpenId4VcOptions } from './config/openid4vc'
-import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
-import { OpenId4VcNestPlugin } from './plugins/OpenId4VcNestPlugin'
+import { MessagingPlugin, OpenId4VcNestPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
   derivePublicDidLocation,
+  initializeNestPlugins,
+  mountPublicPluginMiddleware,
   type PublicDidLocation,
   runWithRetries,
   type ServerConfig,
@@ -96,7 +97,6 @@ import {
   ecsServiceProfile,
   webhookEvent,
 } from './utils'
-import { initializeNestPlugins, mountPublicPluginMiddleware } from './utils/pluginLifecycle'
 
 const AGENT_LOG_LEVEL = resolveLogLevel(AGENT_LOG_LEVEL_NAME, DEFAULT_AGENT_LOG_LEVEL)
 const ADMIN_API_LOG_LEVEL = resolveLogLevel(ADMIN_API_LOG_LEVEL_NAME, DEFAULT_ADMIN_API_LOG_LEVEL)
@@ -389,7 +389,6 @@ const run = async () => {
     parsedDid,
     logLevel: AGENT_LOG_LEVEL,
     publicApiBaseUrl,
-    masterListCscaLocation: MRTD_MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
     veranaChain,
     authorizationService,
