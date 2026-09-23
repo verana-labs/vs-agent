@@ -188,6 +188,41 @@ describe('CertificateService', () => {
     ).rejects.toThrow('self-signed')
   })
 
+  it('accepts a configured issuer leaf whose URI SAN is the public API base URL', async () => {
+    const handle = await loadSigningCertificate(
+      createAgent(),
+      configuredSigning(fixtures.leafWithNonDidUriSan, fixtures.intermediate),
+      'https://issuer.example',
+      'issuer',
+    )
+
+    expect(handle.development).toBe(false)
+  })
+
+  it('refuses a configured issuer leaf that names neither the credential issuer nor its host', async () => {
+    await expect(
+      loadSigningCertificate(
+        createAgent(),
+        configuredSigning(fixtures.leaf, fixtures.intermediate),
+        'https://other.example/agent',
+        'issuer',
+      ),
+    ).rejects.toThrow(
+      "configured issuer certificate must carry 'https://other.example/agent' as a URI SAN or 'other.example' as a DNS SAN",
+    )
+  })
+
+  it('leaves the verifier certificate out of that rule, it signs no credential', async () => {
+    const handle = await loadSigningCertificate(
+      createAgent(),
+      configuredSigning(fixtures.leaf, fixtures.intermediate),
+      'https://other.example/agent',
+      'verifier',
+    )
+
+    expect(handle.development).toBe(false)
+  })
+
   it('reuses a matching configured KMS key by stable kid', async () => {
     const agent = createAgent()
     const signing = configuredSigning(fixtures.leaf, fixtures.intermediate)
@@ -562,7 +597,7 @@ function createAgent({
     didRepository,
     didRecord,
     did: undefined as string | undefined,
-    publicApiBaseUrl: undefined as string | undefined,
+    publicApiBaseUrl: 'https://issuer.example' as string | undefined,
   }
 
   return agent as unknown as typeof agent &

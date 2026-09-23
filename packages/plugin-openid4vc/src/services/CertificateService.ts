@@ -71,7 +71,7 @@ export async function loadSigningCertificate(
   role: SigningRole = 'issuer',
 ): Promise<SigningCertificateHandle> {
   if (signing) {
-    return await loadConfiguredSigningCertificate(agent, signing.configured)
+    return await loadConfiguredSigningCertificate(agent, signing.configured, publicApiBaseUrl, role)
   }
 
   return await loadDevelopmentSigningCertificate(agent, publicApiBaseUrl, role)
@@ -162,7 +162,7 @@ export async function publishDevelopmentSigningKey(
   }
 }
 
-// Credo reads the KMS key-id mapping on the DidRecord, never the published `kid`, and registrars like did:webvh don't maintain it on update, so it is written here directly (PR #540).
+// Credo reads the KMS key-id mapping on the DidRecord, never the published `kid`, and registrars like did:webvh don't maintain it on update, so it is written here directly.
 export async function ensureCreatedDidRecordKeyMapping(
   agent: Pick<DevelopmentDidAgent, 'dependencyManager'>,
   did: string,
@@ -191,6 +191,8 @@ export async function ensureCreatedDidRecordKeyMapping(
 async function loadConfiguredSigningCertificate(
   agent: CertificateAgent,
   configured: OpenId4VcSigningOptions['configured'],
+  publicApiBaseUrl: string | undefined,
+  role: SigningRole,
 ): Promise<SigningCertificateHandle> {
   if (configured.certificateChain.length === 0) {
     throw new Error('configured certificate chain must not be empty')
@@ -218,6 +220,7 @@ async function loadConfiguredSigningCertificate(
   if (certificate.subject === certificate.issuer) {
     throw new Error('configured leaf certificate must not be self-signed')
   }
+  if (role === 'issuer') assertCertificateSignsIssuedCredentials(certificate, publicApiBaseUrl)
 
   const privatePublicJwk = canonicalP256PublicJwk(configured.privateJwk)
   const certificatePublicJwk = canonicalP256PublicJwk(certificate.publicJwk.toJson())
@@ -335,6 +338,25 @@ export function assertCertificateChainUsable(chain: X509Certificate[], now = new
   }
 }
 
+// Credo matches the `iss` of an issued credential against the leaf SANs on both sign and verify, exactly: a wildcard or parent-domain SAN passes startup and then fails every redemption.
+function assertCertificateSignsIssuedCredentials(
+  certificate: X509Certificate,
+  publicApiBaseUrl: string | undefined,
+): void {
+  if (!publicApiBaseUrl) {
+    throw new Error('configured issuer certificate mode requires publicApiBaseUrl')
+  }
+
+  const hostname = hostnameFromPublicApiBaseUrl(publicApiBaseUrl)
+  if (certificate.sanUriNames.includes(publicApiBaseUrl) || certificate.sanDnsNames.includes(hostname)) {
+    return
+  }
+
+  throw new Error(
+    `configured issuer certificate must carry '${publicApiBaseUrl}' as a URI SAN or '${hostname}' as a DNS SAN`,
+  )
+}
+
 function assertDevelopmentCertificateIdentity(
   certificate: X509Certificate,
   expectedDid: string,
@@ -383,7 +405,7 @@ function hostnameFromPublicApiBaseUrl(publicApiBaseUrl: string): string {
     if (!hostname) throw new Error()
     return hostname
   } catch {
-    throw new Error('development certificate mode requires a valid publicApiBaseUrl')
+    throw new Error('certificate signing requires a valid publicApiBaseUrl')
   }
 }
 
