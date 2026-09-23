@@ -531,7 +531,7 @@ export class VtFlowService {
     return { record, problemReport }
   }
 
-  /** Build an `oob-link`; non-terminal records transition to `OOB_PENDING`. */
+  /** Build an `oob-link` from `VALIDATING` or `OOB_PENDING`; the flow moves to or stays in `OOB_PENDING`. */
   public async sendOobLinkForSession(
     agentContext: AgentContext,
     recordId: string,
@@ -539,12 +539,7 @@ export class VtFlowService {
   ): Promise<{ record: VtFlowRecord; message: OobLinkMessage }> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    record.assertState([
-      VtFlowState.AwaitingOr,
-      VtFlowState.AwaitingIr,
-      VtFlowState.Validating,
-      VtFlowState.OobPending,
-    ])
+    record.assertState([VtFlowState.Validating, VtFlowState.OobPending])
 
     const message = new OobLinkMessage({
       threadId: record.threadId,

@@ -297,6 +297,17 @@ describe('VtFlowService.reattachOnboardingProcessRecord', () => {
   })
 })
 
+describe('VtFlowService.sendOobLinkForSession', () => {
+  it('refuses a request the validator has not accepted yet', async () => {
+    const awaiting = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    const { service } = makeService(awaiting)
+
+    await expect(
+      service.sendOobLinkForSession({} as never, awaiting.id, { url: 'https://x', description: 'd' }),
+    ).rejects.toThrow(/Valid states: VALIDATING, OOB_PENDING\./)
+  })
+})
+
 describe('VtFlowService.notifyCredentialStateChange', () => {
   it('allows re-notifying a revocation from CRED_REVOKED', async () => {
     const revoked = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.CredRevoked })
