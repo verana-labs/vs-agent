@@ -255,7 +255,7 @@ export class VtFlowApi {
     options: OfferCredentialForSessionOptions,
   ): Promise<{ record: VtFlowRecord; credentialExchangeRecord: DidCommCredentialExchangeRecord }> {
     const record = await this.vtFlowService.getById(this.agentContext, options.vtFlowRecordId)
-    record.assertRole(VtFlowRole.Validator)
+    this.vtFlowService.assertCanOfferCredential(record)
 
     const connection = await this.connectionService.getById(this.agentContext, record.connectionId)
     connection.assertReady()

@@ -603,6 +603,17 @@ export class VtFlowService {
     return record
   }
 
+  /** Validator states that an `offer-credential` moves to `CRED_OFFERED`; from `COMPLETED` it starts a new subprotocol run. */
+  public assertCanOfferCredential(record: VtFlowRecord): void {
+    record.assertRole(VtFlowRole.Validator)
+    record.assertState([
+      VtFlowState.Validated,
+      VtFlowState.ValidatedPendingClaims,
+      VtFlowState.Completed,
+      ...(record.variant === VtFlowVariant.DirectIssuance ? [VtFlowState.Validating] : []),
+    ])
+  }
+
   /** Link a Credo exchange record to the session and transition to `CRED_OFFERED`. */
   public async attachCredentialExchangeRecord(
     agentContext: AgentContext,
@@ -612,14 +623,7 @@ export class VtFlowService {
     issuerParticipantId?: number,
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
-    record.assertRole(VtFlowRole.Validator)
-    record.assertState([
-      VtFlowState.Validated,
-      VtFlowState.ValidatedPendingClaims,
-      VtFlowState.Validating,
-      VtFlowState.OobPending,
-      VtFlowState.Completed,
-    ])
+    this.assertCanOfferCredential(record)
 
     record.credentialExchangeRecordId = credentialExchangeRecord.id
     if (credentialDigest) record.credentialDigest = credentialDigest
