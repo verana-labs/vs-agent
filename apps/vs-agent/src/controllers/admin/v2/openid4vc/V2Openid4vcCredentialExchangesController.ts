@@ -77,7 +77,7 @@ export class V2Openid4vcCredentialExchangesController {
       })
       return { credentialExchangeId: offer.issuanceSessionId, url: offer.credentialOffer }
     } catch (error) {
-      throw translate(error)
+      throw translateOffer(error)
     }
   }
 
@@ -159,7 +159,7 @@ export class V2Openid4vcCredentialExchangesController {
   }
 }
 
-function translate(error: unknown, credentialExchangeId?: string): unknown {
+function translate(error: unknown, credentialExchangeId: string): unknown {
   if (error instanceof UnknownIssuanceSessionError) {
     return new AdminApiError(
       AdminApiErrorCode.UnknownId,
@@ -167,6 +167,10 @@ function translate(error: unknown, credentialExchangeId?: string): unknown {
       `no credential exchange with id "${credentialExchangeId}"`,
     )
   }
+  return translateOffer(error)
+}
+
+function translateOffer(error: unknown): unknown {
   if (error instanceof UnknownCredentialConfigurationError || error instanceof UnknownStatusListError) {
     return new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, error.message)
   }

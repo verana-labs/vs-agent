@@ -81,7 +81,7 @@ export class V2Openid4vcPresentationsController {
       })
       return { proofExchangeId: request.verificationSessionId, url: request.authorizationRequest }
     } catch (error) {
-      throw translate(error)
+      throw translateRequest(error)
     }
   }
 
@@ -148,7 +148,7 @@ export class V2Openid4vcPresentationsController {
   }
 }
 
-function translate(error: unknown, proofExchangeId?: string): unknown {
+function translate(error: unknown, proofExchangeId: string): unknown {
   if (error instanceof UnknownVerificationSessionError) {
     return new AdminApiError(
       AdminApiErrorCode.UnknownId,
@@ -156,6 +156,10 @@ function translate(error: unknown, proofExchangeId?: string): unknown {
       `no presentation with id "${proofExchangeId}"`,
     )
   }
+  return translateRequest(error)
+}
+
+function translateRequest(error: unknown): unknown {
   if (error instanceof UnknownCredentialConfigurationError) {
     return new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, error.message)
   }
