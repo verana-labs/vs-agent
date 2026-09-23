@@ -1,9 +1,7 @@
-import type { OpenId4VcPluginOptions } from '../types'
-import type { BaseAgent } from '@credo-ts/core'
-import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
+import type { OpenId4VcAgent, OpenId4VcPluginOptions } from '../types'
 import type { OpenId4VcVerificationSessionRecord, OpenId4VcVerifierApi } from '@credo-ts/openid4vc'
 
-import { AgentContext, RecordNotFoundError } from '@credo-ts/core'
+import { RecordNotFoundError } from '@credo-ts/core'
 import {
   OpenId4VcVerificationSessionRepository,
   OpenId4VcVerificationSessionState,
@@ -41,19 +39,6 @@ type VerifierApi = Pick<
   | 'findVerificationSessionsByQuery'
   | 'deleteVerificationSessionById'
 >
-
-export type OpenId4VcVerifierAgent = Pick<
-  BaseAgent,
-  'dids' | 'genericRecords' | 'kms' | 'x509' | 'dependencyManager'
-> & {
-  did?: string
-  ecsClaims?: EcsClaims
-  modules: {
-    openId4Vc?: {
-      verifier?: VerifierApi
-    }
-  }
-}
 
 export type { OpenId4VcQueryLanguage } from './presentationRequest'
 
@@ -107,7 +92,7 @@ export class VerifierService {
   private initialized = false
 
   public constructor(
-    private readonly agent: OpenId4VcVerifierAgent,
+    private readonly agent: OpenId4VcAgent,
     private readonly options: OpenId4VcPluginOptions,
   ) {}
 
@@ -150,7 +135,7 @@ export class VerifierService {
 
     verificationSession.setTag(JSON_SCHEMA_CREDENTIAL_ID_TAG, jsonSchemaCredentialId)
     verificationSession.setTag(REQUESTED_CLAIMS_TAG, claims)
-    await this.sessionRepository().update(this.agentContext(), verificationSession)
+    await this.sessionRepository().update(this.agent.context, verificationSession)
 
     return {
       authorizationRequest,
@@ -230,11 +215,7 @@ export class VerifierService {
   }
 
   private sessionRepository(): OpenId4VcVerificationSessionRepository {
-    return this.agent.dependencyManager.resolve(OpenId4VcVerificationSessionRepository)
-  }
-
-  private agentContext(): AgentContext {
-    return this.agent.dependencyManager.resolve(AgentContext)
+    return this.agent.context.dependencyManager.resolve(OpenId4VcVerificationSessionRepository)
   }
 
   private async initialize(): Promise<void> {

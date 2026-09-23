@@ -1,8 +1,7 @@
-import type { OpenId4VcSigningOptions } from '../types'
-import type { BaseAgent, DidPurpose } from '@credo-ts/core'
+import type { OpenId4VcAgent, OpenId4VcSigningOptions } from '../types'
+import type { DidPurpose } from '@credo-ts/core'
 
 import {
-  AgentContext,
   DidDocument,
   DidRepository,
   Kms,
@@ -20,11 +19,6 @@ const DEVELOPMENT_CERTIFICATE_VALIDITY_MS = 365 * 24 * 60 * 60 * 1_000
 const DEVELOPMENT_RECORD_PREFIX = 'openid4vc-development-signing'
 const JSON_WEB_KEY_2020_CONTEXT = 'https://w3id.org/security/suites/jws-2020/v1'
 export type SigningRole = 'issuer' | 'verifier'
-
-type CertificateAgent = Pick<BaseAgent, 'genericRecords' | 'kms' | 'x509'> & {
-  did?: string
-  publicApiBaseUrl?: string
-}
 
 interface DevelopmentCertificateRecord {
   certificate: string
@@ -58,14 +52,8 @@ export interface SigningCertificateHandle {
   development: boolean
 }
 
-type DevelopmentDidAgent = {
-  did?: string
-  dids: Pick<BaseAgent['dids'], 'resolve' | 'update'>
-  dependencyManager: BaseAgent['dependencyManager']
-}
-
 export async function loadSigningCertificate(
-  agent: CertificateAgent,
+  agent: OpenId4VcAgent,
   signing: OpenId4VcSigningOptions | undefined,
   publicApiBaseUrl = agent.publicApiBaseUrl,
   role: SigningRole = 'issuer',
@@ -87,7 +75,7 @@ export function didFromValidatedCertificate(certificate: X509Certificate): strin
 }
 
 export async function publishDevelopmentSigningKey(
-  agent: DevelopmentDidAgent,
+  agent: OpenId4VcAgent,
   signingCertificate: SigningCertificateHandle,
   role: SigningRole,
 ): Promise<void> {
@@ -164,13 +152,13 @@ export async function publishDevelopmentSigningKey(
 
 // Credo reads the KMS key-id mapping on the DidRecord, never the published `kid`, and registrars like did:webvh don't maintain it on update, so it is written here directly.
 export async function ensureCreatedDidRecordKeyMapping(
-  agent: Pick<DevelopmentDidAgent, 'dependencyManager'>,
+  agent: Pick<OpenId4VcAgent, 'context'>,
   did: string,
   didDocumentRelativeKeyId: string,
   kmsKeyId: string,
 ): Promise<void> {
-  const agentContext = agent.dependencyManager.resolve(AgentContext)
-  const didRepository = agent.dependencyManager.resolve(DidRepository)
+  const agentContext = agent.context
+  const didRepository = agentContext.dependencyManager.resolve(DidRepository)
   const didRecord = await didRepository.findCreatedDid(agentContext, did)
   if (!didRecord) throw new Error('development signing key DID record was not found')
 
@@ -189,7 +177,7 @@ export async function ensureCreatedDidRecordKeyMapping(
 }
 
 async function loadConfiguredSigningCertificate(
-  agent: CertificateAgent,
+  agent: OpenId4VcAgent,
   configured: OpenId4VcSigningOptions['configured'],
   publicApiBaseUrl: string | undefined,
   role: SigningRole,
@@ -251,7 +239,7 @@ async function loadConfiguredSigningCertificate(
 }
 
 async function loadDevelopmentSigningCertificate(
-  agent: CertificateAgent,
+  agent: OpenId4VcAgent,
   publicApiBaseUrl?: string,
   role: SigningRole = 'issuer',
 ): Promise<SigningCertificateHandle> {

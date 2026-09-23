@@ -1,4 +1,5 @@
 import type {
+  OpenId4VcAgent,
   OpenId4VcCredentialConfiguration,
   OpenId4VcPluginOptions,
   OpenId4VcSigningOptions,
@@ -48,8 +49,8 @@ import {
   loadSigningCertificate,
   publishDevelopmentSigningKey,
 } from '../src/services/CertificateService'
-import { IssuerService, type OpenId4VcIssuerAgent } from '../src/services/IssuerService'
-import { VerifierService, type OpenId4VcVerifierAgent } from '../src/services/VerifierService'
+import { IssuerService } from '../src/services/IssuerService'
+import { VerifierService } from '../src/services/VerifierService'
 
 import { createCertificateFixtures, LEAF_PRIVATE_JWK, OTHER_PRIVATE_JWK } from './helpers/certificates'
 import { didDocumentWithKey, MapDidResolver } from './helpers/didResolver'
@@ -575,14 +576,13 @@ function createAgent({
     findCreatedDid: async () => didRecord,
     update: vi.fn(async () => undefined),
   }
-  const agentContext = {}
   const dependencyManager = {
     resolve: (token: unknown) => {
       if (token === DidRepository) return didRepository
-      if (token === AgentContext) return agentContext
       throw new Error('unexpected dependency requested in test')
     },
   }
+  const agentContext = { dependencyManager }
 
   const agent = {
     keys,
@@ -590,7 +590,7 @@ function createAgent({
     kms,
     genericRecords,
     x509,
-    dependencyManager,
+    context: agentContext,
     didRepository,
     didRecord,
     did: undefined as string | undefined,
@@ -818,7 +818,7 @@ async function createHarness(
   developmentAgents.push(agent)
 
   const initialize = async (): Promise<void> => {
-    const lifecycleAgent = agent as unknown as OpenId4VcIssuerAgent & OpenId4VcVerifierAgent
+    const lifecycleAgent = agent as unknown as OpenId4VcAgent
     if (options.issuer) {
       issuerService = new IssuerService(lifecycleAgent, options)
       await issuerService.ensureInitialized()
@@ -1119,10 +1119,7 @@ async function startWebvhVerifier() {
   didRecord.setTag('domain', 'verifier.example')
   await agent.dependencyManager.resolve(DidRepository).save(agent.context, didRecord)
 
-  const service = new VerifierService(
-    agent as unknown as OpenId4VcIssuerAgent & OpenId4VcVerifierAgent,
-    options,
-  )
+  const service = new VerifierService(agent as unknown as OpenId4VcAgent, options)
   await service.ensureInitialized()
 
   const fetchRequestJwt = async (authorizationRequest: string) => {

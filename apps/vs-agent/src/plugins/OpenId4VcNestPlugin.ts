@@ -1,8 +1,4 @@
-import type {
-  OpenId4VcIssuerAgent,
-  OpenId4VcPluginOptions,
-  OpenId4VcVerifierAgent,
-} from '@verana-labs/vs-agent-plugin-openid4vc'
+import type { OpenId4VcAgent, OpenId4VcPluginOptions } from '@verana-labs/vs-agent-plugin-openid4vc'
 import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import { IssuerService, setupOpenId4Vc, VerifierService } from '@verana-labs/vs-agent-plugin-openid4vc'
@@ -10,8 +6,6 @@ import { IssuerService, setupOpenId4Vc, VerifierService } from '@verana-labs/vs-
 import { V2Openid4vcCredentialExchangesController } from '../controllers/admin/v2/openid4vc/V2Openid4vcCredentialExchangesController'
 import { V2Openid4vcPresentationsController } from '../controllers/admin/v2/openid4vc/V2Openid4vcPresentationsController'
 import { V2Openid4vcSigningCertificatesController } from '../controllers/admin/v2/openid4vc/V2Openid4vcSigningCertificatesController'
-
-type OpenId4VcAgent = OpenId4VcIssuerAgent & OpenId4VcVerifierAgent
 
 export function OpenId4VcNestPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlugin {
   let issuerService: IssuerService | undefined
@@ -40,7 +34,7 @@ export function OpenId4VcNestPlugin(options: OpenId4VcPluginOptions): VsAgentNes
       { provide: VerifierService, useFactory: verifierFor, inject: ['VSAGENT'] },
     ],
     initialize: async agent => {
-      const openId4VcAgent = agent as unknown as OpenId4VcAgent
+      const openId4VcAgent = agent as OpenId4VcAgent
       await issuerFor(openId4VcAgent).ensureInitialized()
       await verifierFor(openId4VcAgent).ensureInitialized()
     },

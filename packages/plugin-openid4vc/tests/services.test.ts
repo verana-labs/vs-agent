@@ -1,6 +1,6 @@
 import type { OpenId4VcPluginOptions } from '../src/types'
 
-import { AgentContext, ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
+import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import {
   OpenId4VcIssuanceSessionRepository,
   OpenId4VcVerificationSessionRepository,
@@ -93,7 +93,6 @@ function issuanceSession(overrides: Record<string, unknown> = {}) {
   }
 }
 
-const AGENT_CONTEXT = Symbol('agent-context')
 const METADATA_PAYLOAD = {
   credential_issuer: 'https://agent.example/oid4vci/issuer',
   sub: 'https://agent.example/oid4vci/issuer',
@@ -122,11 +121,12 @@ function issuerAgent(
     genericRecords: { findById: async () => null, save: () => undefined, update: () => undefined },
     kms: {},
     x509: {},
-    dependencyManager: {
-      resolve: (token: unknown) => {
-        if (token === AgentContext) return AGENT_CONTEXT
-        if (token === OpenId4VcIssuanceSessionRepository) return issuanceSessionRepository
-        return jws
+    context: {
+      dependencyManager: {
+        resolve: (token: unknown) => {
+          if (token === OpenId4VcIssuanceSessionRepository) return issuanceSessionRepository
+          return jws
+        },
       },
     },
     modules: { openId4Vc: { issuer: api } },
@@ -275,11 +275,12 @@ describe('IssuerService', () => {
       }),
     })
     const jws = jwsService()
-    const service = new IssuerService(issuerAgent(api, AGENT_DID, jws) as never, issuerOptions())
+    const agent = issuerAgent(api, AGENT_DID, jws)
+    const service = new IssuerService(agent as never, issuerOptions())
 
     await service.ensureInitialized()
 
-    expect(jws.createJwsCompact).toHaveBeenCalledWith(AGENT_CONTEXT, {
+    expect(jws.createJwsCompact).toHaveBeenCalledWith(agent.context, {
       payload: Buffer.from(JSON.stringify(METADATA_PAYLOAD), 'utf8'),
       keyId: 'issuer-key',
       protectedHeaderOptions: {
@@ -886,11 +887,10 @@ function verifierAgent(
     genericRecords: {},
     kms: {},
     x509: {},
-    dependencyManager: {
-      resolve: (token: unknown) => {
-        if (token === OpenId4VcVerificationSessionRepository) return verificationSessionRepository
-        if (token === AgentContext) return {}
-        return {}
+    context: {
+      dependencyManager: {
+        resolve: (token: unknown) =>
+          token === OpenId4VcVerificationSessionRepository ? verificationSessionRepository : {},
       },
     },
     modules: { openId4Vc: { verifier: api } },

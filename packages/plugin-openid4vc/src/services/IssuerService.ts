@@ -1,6 +1,5 @@
-import type { OpenId4VcPluginOptions } from '../types'
-import type { BaseAgent, JwsProtectedHeaderOptions, Kms } from '@credo-ts/core'
-import type { EcsClaims } from '@verana-labs/vs-agent-sdk'
+import type { OpenId4VcAgent, OpenId4VcPluginOptions } from '../types'
+import type { JwsProtectedHeaderOptions, Kms } from '@credo-ts/core'
 import type {
   OpenId4VcIssuanceSessionRecord,
   OpenId4VcIssuanceSessionState,
@@ -9,7 +8,7 @@ import type {
   OpenId4VciCredentialRequestToCredentialMapper,
 } from '@credo-ts/openid4vc'
 
-import { AgentContext, ClaimFormat, JwsService, RecordNotFoundError } from '@credo-ts/core'
+import { ClaimFormat, JwsService, RecordNotFoundError } from '@credo-ts/core'
 import { OpenId4VcIssuanceSessionRepository } from '@credo-ts/openid4vc'
 
 import {
@@ -44,19 +43,6 @@ type IssuerApi = Pick<
   | 'getIssuerMetadata'
 >
 
-export type OpenId4VcIssuerAgent = Pick<
-  BaseAgent,
-  'dids' | 'genericRecords' | 'kms' | 'x509' | 'dependencyManager'
-> & {
-  did?: string
-  ecsClaims?: EcsClaims
-  modules: {
-    openId4Vc?: {
-      issuer?: IssuerApi
-    }
-  }
-}
-
 export interface OpenId4VcCreateOfferOptions {
   jsonSchemaCredentialId: string
   claims: unknown
@@ -89,7 +75,7 @@ export class IssuerService {
   private initialized = false
 
   public constructor(
-    private readonly agent: OpenId4VcIssuerAgent,
+    private readonly agent: OpenId4VcAgent,
     private readonly options: OpenId4VcPluginOptions,
   ) {}
 
@@ -161,8 +147,8 @@ export class IssuerService {
 
   public async listIssuanceSessions(): Promise<OpenId4VcIssuanceSessionSummary[]> {
     await this.ensureInitialized()
-    const repository = this.agent.dependencyManager.resolve(OpenId4VcIssuanceSessionRepository)
-    const agentContext = this.agent.dependencyManager.resolve(AgentContext)
+    const agentContext = this.agent.context
+    const repository = agentContext.dependencyManager.resolve(OpenId4VcIssuanceSessionRepository)
     const sessions = await repository.findByQuery(agentContext, { issuerId: ISSUER_CAPABILITY_ID })
     return sessions.map(summarizeIssuanceSession)
   }
@@ -300,9 +286,9 @@ export class IssuerService {
     if (!signedMetadataJwt) return undefined
 
     const [encodedHeader, encodedPayload] = signedMetadataJwt.split('.')
-    const agentContext = this.agent.dependencyManager.resolve(AgentContext)
+    const agentContext = this.agent.context
 
-    return await this.agent.dependencyManager.resolve(JwsService).createJwsCompact(agentContext, {
+    return await agentContext.dependencyManager.resolve(JwsService).createJwsCompact(agentContext, {
       payload: Buffer.from(encodedPayload, 'base64url'),
       keyId: signingCertificate.keyId,
       protectedHeaderOptions: {

@@ -1,4 +1,13 @@
-import type { Kms } from '@credo-ts/core'
+import type { Kms, X509Module } from '@credo-ts/core'
+import type { OpenId4VcModule } from '@credo-ts/openid4vc'
+import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+
+export type OpenId4VcVsAgentModules = BaseAgentModules & {
+  openId4Vc: OpenId4VcModule<null, null>
+  x509: X509Module
+}
+
+export type OpenId4VcAgent = VsAgent<OpenId4VcVsAgentModules>
 
 export interface OpenId4VcConfiguredSigningMaterial {
   certificateChain: string[]

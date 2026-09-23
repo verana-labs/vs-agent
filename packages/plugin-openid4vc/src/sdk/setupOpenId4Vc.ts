@@ -1,4 +1,8 @@
-import type { OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../types'
+import type {
+  OpenId4VcCredentialConfiguration,
+  OpenId4VcPluginOptions,
+  OpenId4VcVsAgentModules,
+} from '../types'
 
 import { X509Module } from '@credo-ts/core'
 import {
@@ -24,11 +28,7 @@ export interface OpenId4VcIssuerRequestMapper {
   getSignedMetadataJwt: () => string | undefined
 }
 
-export interface OpenId4VcAgentModules {
-  [key: string]: unknown
-  openId4Vc: OpenId4VcModule<null, null>
-  x509: X509Module
-}
+export type OpenId4VcAgentModules = Pick<OpenId4VcVsAgentModules, 'openId4Vc' | 'x509'>
 
 export interface OpenId4VcSdkPlugin {
   modules: OpenId4VcAgentModules

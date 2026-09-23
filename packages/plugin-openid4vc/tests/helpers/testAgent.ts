@@ -1,5 +1,4 @@
-import type { OpenId4VcIssuerAgent } from '../../src/services/IssuerService'
-import type { OpenId4VcVerifierAgent } from '../../src/services/VerifierService'
+import type { OpenId4VcAgent } from '../../src/types'
 import type { OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../../src/types'
 import type { AskarModuleConfigStoreOptions, AskarSqliteStorageConfig } from '@credo-ts/askar'
 import type { DidResolver, Kms, SdJwtVc, X509Certificate } from '@credo-ts/core'
@@ -254,10 +253,7 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
   did: string
   didResolver: DidResolver
   options: (publicApiBaseUrl: string) => OpenId4VcPluginOptions
-  createService: (
-    agent: OpenId4VcIssuerAgent & OpenId4VcVerifierAgent,
-    options: OpenId4VcPluginOptions,
-  ) => Service
+  createService: (agent: OpenId4VcAgent, options: OpenId4VcPluginOptions) => Service
   failureHooks?: TestAgentFailureHooks
 }): Promise<{
   agent: TestAgentWithOpenId4Vc
@@ -294,7 +290,7 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
     agent.did = input.did
     await agent.initialize()
     await input.failureHooks?.afterInitialize?.(input.role)
-    service = input.createService(agent as unknown as OpenId4VcIssuerAgent & OpenId4VcVerifierAgent, options)
+    service = input.createService(agent as unknown as OpenId4VcAgent, options)
     await service.ensureInitialized()
     return {
       agent,
