@@ -48,7 +48,7 @@ docker run --rm \
 `env-vars` carries the normal VS Agent settings, with an `https://` `PUBLIC_API_BASE_URL`. The
 JSON file must not contain `publicApiBaseUrl`; the agent injects the trusted value. The location
 can also be an `https://` URL, which the agent fetches once at startup without following a
-redirect. With Helm, put the JSON in `oid4vc.config`.
+redirect. With Helm, put the JSON in `openid4vc.config`.
 
 ## Configuration file
 
