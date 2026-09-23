@@ -1,5 +1,3 @@
-import type { OpenId4VcVerificationSessionSummary } from '@verana-labs/vs-agent-plugin-openid4vc'
-
 import {
   Body,
   Controller,
@@ -15,7 +13,6 @@ import {
   ValidationPipe,
 } from '@nestjs/common'
 import {
-  ApiBadRequestResponse,
   ApiBody,
   ApiConflictResponse,
   ApiCreatedResponse,
@@ -34,7 +31,7 @@ import {
   VerifierService,
 } from '@verana-labs/vs-agent-plugin-openid4vc'
 
-import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
+import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
 
 import {
   Openid4vcListPresentationsQueryDto,
@@ -43,6 +40,8 @@ import {
   Openid4vcPresentationRequestBodyDto,
   Openid4vcPresentationRequestResponseDto,
 } from './dto'
+import { toPresentationDto } from './mappers'
+
 const PROOF_EXCHANGE_ID = {
   name: 'proofExchangeId',
   type: String,
@@ -67,10 +66,6 @@ export class V2Openid4vcPresentationsController {
   @ApiCreatedResponse({
     description: 'The presentation request',
     type: Openid4vcPresentationRequestResponseDto,
-  })
-  @ApiBadRequestResponse({
-    description:
-      'The request body failed validation, or requestedClaims names a claim the type does not define',
   })
   @ApiNotFoundResponse({ description: 'The agent cannot resolve the credential type' })
   @ApiConflictResponse({ description: 'The DID does not publish the signing key' })
@@ -116,7 +111,7 @@ export class V2Openid4vcPresentationsController {
       createdAtKey,
     )
 
-    return { items: page.items.map(toRecordDto), nextCursor: page.nextCursor }
+    return mapPage(page, toPresentationDto)
   }
 
   @Get('presentations/:proofExchangeId')
@@ -132,7 +127,7 @@ export class V2Openid4vcPresentationsController {
     @Param('proofExchangeId') proofExchangeId: string,
   ): Promise<Openid4vcPresentationRecordDto> {
     try {
-      return toRecordDto(await this.verifierService.getVerificationSession(proofExchangeId))
+      return toPresentationDto(await this.verifierService.getVerificationSession(proofExchangeId))
     } catch (error) {
       throw translate(error, proofExchangeId)
     }
@@ -150,22 +145,6 @@ export class V2Openid4vcPresentationsController {
     } catch (error) {
       throw translate(error, proofExchangeId)
     }
-  }
-}
-
-function toRecordDto(session: OpenId4VcVerificationSessionSummary): Openid4vcPresentationRecordDto {
-  return {
-    proofExchangeId: session.id,
-    jsonSchemaCredentialId: session.jsonSchemaCredentialId,
-    requestedClaims: session.requestedClaims,
-    state: session.state,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-    errorMessage: session.errorMessage,
-    cryptographicVerified: session.cryptographicVerified,
-    accepted: session.accepted,
-    trust: session.trust,
-    credential: session.credential,
   }
 }
 

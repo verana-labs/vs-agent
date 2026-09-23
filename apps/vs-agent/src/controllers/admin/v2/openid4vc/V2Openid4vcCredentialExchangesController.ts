@@ -1,5 +1,3 @@
-import type { OpenId4VcIssuanceSessionSummary } from '@verana-labs/vs-agent-plugin-openid4vc'
-
 import {
   Body,
   Controller,
@@ -15,7 +13,6 @@ import {
   ValidationPipe,
 } from '@nestjs/common'
 import {
-  ApiBadRequestResponse,
   ApiBody,
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -33,7 +30,7 @@ import {
   UnknownStatusListError,
 } from '@verana-labs/vs-agent-plugin-openid4vc'
 
-import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
+import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
 
 import {
   Openid4vcCredentialExchangeRecordDto,
@@ -42,6 +39,8 @@ import {
   Openid4vcCredentialOfferResponseDto,
   Openid4vcListCredentialExchangesQueryDto,
 } from './dto'
+import { toCredentialExchangeDto } from './mappers'
+
 const CREDENTIAL_EXCHANGE_ID = {
   name: 'credentialExchangeId',
   type: String,
@@ -64,10 +63,6 @@ export class V2Openid4vcCredentialExchangesController {
   })
   @ApiBody({ type: Openid4vcCredentialOfferBodyDto })
   @ApiCreatedResponse({ description: 'The credential offer', type: Openid4vcCredentialOfferResponseDto })
-  @ApiBadRequestResponse({
-    description:
-      'Claims that do not match the type, a ttlSeconds outside its range, or only one of statusListId and statusListIndex',
-  })
   @ApiNotFoundResponse({ description: 'The agent cannot resolve the credential type or the status list' })
   public async createCredentialOffer(
     @Body() body: Openid4vcCredentialOfferBodyDto,
@@ -120,7 +115,7 @@ export class V2Openid4vcCredentialExchangesController {
       createdAtKey,
     )
 
-    return { items: page.items.map(toRecordDto), nextCursor: page.nextCursor }
+    return mapPage(page, toCredentialExchangeDto)
   }
 
   @Get('credential-exchanges/:credentialExchangeId')
@@ -138,7 +133,7 @@ export class V2Openid4vcCredentialExchangesController {
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<Openid4vcCredentialExchangeRecordDto> {
     try {
-      return toRecordDto(await this.issuerService.getIssuanceSession(credentialExchangeId))
+      return toCredentialExchangeDto(await this.issuerService.getIssuanceSession(credentialExchangeId))
     } catch (error) {
       throw translate(error, credentialExchangeId)
     }
@@ -161,20 +156,6 @@ export class V2Openid4vcCredentialExchangesController {
     } catch (error) {
       throw translate(error, credentialExchangeId)
     }
-  }
-}
-
-function toRecordDto(session: OpenId4VcIssuanceSessionSummary): Openid4vcCredentialExchangeRecordDto {
-  return {
-    credentialExchangeId: session.id,
-    jsonSchemaCredentialId: session.jsonSchemaCredentialId,
-    statusListId: session.statusListId,
-    statusListIndex: session.statusListIndex,
-    state: session.state,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-    expiresAt: session.expiresAt,
-    errorMessage: session.errorMessage,
   }
 }
 
