@@ -89,7 +89,8 @@ export class IssuerService {
   ) {}
 
   public ensureInitialized(): Promise<void> {
-    // A rejected initialization is not cached, so a transient boot-time failure retries instead of wedging the process until restart.
+    // A rejected initialization is not cached, so a transient boot-time failure retries instead of wedging
+    // the process until restart.
     this.initialization ??= this.initialize().catch(error => {
       this.initialization = undefined
       throw error
@@ -352,11 +353,13 @@ export class IssuerService {
         {
           format: 'dc+sd-jwt' as const,
           vct: configuration.vct,
-          // `scope` is optional per OID4VCI, but wwWallet's metadata schema requires it and fails resolution without one.
+          // `scope` is optional per OID4VCI, but wwWallet's metadata schema requires it and fails resolution
+          // without one.
           scope: configuration.id,
           cryptographic_binding_methods_supported: ['jwk'],
           credential_signing_alg_values_supported: ['ES256'],
-          // Only `jwt` is advertised here: swiyu models `proof_types_supported` as a closed `ProofType` enum and throws on any other member.
+          // Only `jwt` is advertised here: swiyu models `proof_types_supported` as a closed `ProofType` enum
+          // and throws on any other member.
           proof_types_supported: {
             jwt: { proof_signing_alg_values_supported: ['ES256'] },
           },

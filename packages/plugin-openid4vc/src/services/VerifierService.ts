@@ -335,7 +335,8 @@ export class VerifierService {
 
     const did = this.agent.did ?? null
 
-    // Presentation Exchange requests sign with the agent's Ed25519 authentication key: MOSIP's RequestSigningAlgorithm enum only has EdDSA.
+    // Presentation Exchange requests sign with the agent's Ed25519 authentication key: MOSIP's
+    // RequestSigningAlgorithm enum only has EdDSA.
     if (queryLanguage === 'presentation_exchange') {
       const ed25519DidUrl = await findEd25519VerificationMethodId(
         this.agent,

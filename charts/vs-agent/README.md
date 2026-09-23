@@ -53,6 +53,10 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 | `openid4vc.config`         | OpenID4VC configuration JSON, as a string. When set, the chart mounts it read-only and sets `OID4VC_CONFIG_FILE_LOCATION`, which enables the `/v2/openid4vc` scope and the public OpenID4VC endpoints. It is rendered into a ConfigMap, so it is for development signing only | `""` |
 | `openid4vc.existingSecret` | Name of a pre-existing Secret whose `openid4vc.json` key holds the same configuration. Mounted at the same path, and mutually exclusive with `openid4vc.config`: setting both fails the render. Use it whenever the configuration carries configured signing material | `""` |
 
+> The chart checksums `openid4vc.config` so that editing it rolls the deployment. It cannot do the
+> same for `openid4vc.existingSecret`, since Helm cannot read a Secret it does not own, so after
+> changing that Secret restart the deployment yourself.
+
 > **Breaking change:** the `oid4vc` values key is now `openid4vc`. Rename it in your own `values.yaml` before upgrading, otherwise the configuration is silently ignored. The environment variable the chart sets is still `OID4VC_CONFIG_FILE_LOCATION`, which the specification fixes, and the rendered resources are unchanged.
 
 ### Secrets Management

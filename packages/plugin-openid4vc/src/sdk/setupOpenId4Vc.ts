@@ -46,13 +46,16 @@ export function setupOpenId4Vc(
   if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
   app.use(accommodateOpenId4VciKt(Boolean(options.issuer?.keyAttestationCertificates?.length)))
   app.use(serveCertificateBoundIssuerMetadata(getIssuerService))
-  // Credo raises the body limits of its own routers (1 MB issuer, 5 MB verifier), and a parser registered on the same app before them decides first, so this one covers the issuer path alone and at the limit credo sets there.
+  // Credo raises the body limits of its own routers (1 MB issuer, 5 MB verifier), and a parser registered on
+  // the same app before them decides first, so this one covers the issuer path alone and at the limit credo
+  // sets there.
   app.use(
     new URL(`${options.publicApiBaseUrl}/oid4vci`).pathname,
     express.json({ limit: ISSUER_BODY_LIMIT }),
     acceptDraftCredentialRequests(options.credentialConfigurations),
   )
-  // RFC 8615 puts the issuer path after the well-known segment, so a holder whose issuer identifier carries a path requests `/.well-known/jwt-vc-issuer/oid4vci/<id>`, not just the bare form.
+  // RFC 8615 puts the issuer path after the well-known segment, so a holder whose issuer identifier carries a
+  // path requests `/.well-known/jwt-vc-issuer/oid4vci/<id>`, not just the bare form.
   app.get(['/.well-known/jwt-vc-issuer', '/.well-known/jwt-vc-issuer/*'], (_request, response, next) => {
     try {
       if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
@@ -87,7 +90,8 @@ export function setupOpenId4Vc(
       openId4Vc: new OpenId4VcModule(moduleOptions),
       x509: new X509Module({
         getTrustedCertificatesForVerification: (_agentContext, { verification }) => {
-          // Credo accepts an SD-JWT VC without `exp`, and this callback is the only hook inside its presentation verification.
+          // Credo accepts an SD-JWT VC without `exp`, and this callback is the only hook inside its
+          // presentation verification.
           if (verification.type === 'credential') assertCredentialExpires(verification.credential)
           return trustedCertificatesForVerification(options, verification.type)
         },
@@ -97,7 +101,8 @@ export function setupOpenId4Vc(
   }
 }
 
-// A credential carries `iss: publicApiBaseUrl`, and a wallet deriving the metadata URL from it the RFC 8615 way (wwWallet does) asks for the bare path, which credo only serves under the issuer-scoped route.
+// A credential carries `iss: publicApiBaseUrl`, and a wallet deriving the metadata URL from it the RFC 8615
+// way (wwWallet does) asks for the bare path, which credo only serves under the issuer-scoped route.
 function aliasBareWellKnownPath(app: Express, wellKnown: string, publicApiBaseUrl: string): void {
   const alias = withoutTrailingSlash(`${wellKnown}${new URL(publicApiBaseUrl).pathname}`)
   const issuerScopedPath = `${wellKnown}${withoutTrailingSlash(
@@ -116,7 +121,8 @@ function withoutTrailingSlash(path: string): string {
   return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path
 }
 
-// Draft wallets predating OpenID4VCI 1.0 still send `format` alongside `vct` on the credential request, which Credo answers with `unsupported_credential_format`.
+// Draft wallets predating OpenID4VCI 1.0 still send `format` alongside `vct` on the credential request, which
+// Credo answers with `unsupported_credential_format`.
 export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentialConfiguration[]) {
   return (request: Request, _response: Response, next: NextFunction): void => {
     const body: unknown = request.body
@@ -139,7 +145,8 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
   }
 }
 
-// openid4vci-kt (the EUDI reference wallet) sends `Accept: application/jwt; application/json` and requires `key_attestations_required` on every proof type, both outside what the spec mandates.
+// openid4vci-kt (the EUDI reference wallet) sends `Accept: application/jwt; application/json` and requires
+// `key_attestations_required` on every proof type, both outside what the spec mandates.
 export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
   return (request: Request, response: Response, next: NextFunction): void => {
     const accept = request.headers.accept
@@ -176,7 +183,8 @@ export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
   }
 }
 
-// NL Wallet's core rejects a metadata JWT signed with `kid` and no `x5c`, so this serves the copy IssuerService re-signs under both.
+// NL Wallet's core rejects a metadata JWT signed with `kid` and no `x5c`, so this serves the copy
+// IssuerService re-signs under both.
 export function serveCertificateBoundIssuerMetadata(getIssuerService?: () => OpenId4VcIssuerRequestMapper) {
   return (request: Request, response: Response, next: NextFunction): void => {
     if (
@@ -240,7 +248,8 @@ function withKeyAttestationRequirement(body: string, hasKeyAttestationAnchor: bo
   }
 }
 
-// wwWallet dereferences `dpop_signing_alg_values_supported` unconditionally and throws before rendering consent when Credo omits it.
+// wwWallet dereferences `dpop_signing_alg_values_supported` unconditionally and throws before rendering
+// consent when Credo omits it.
 function advertiseDpopSupport(request: Request, response: Response, next: NextFunction): void {
   if (request.method !== 'GET' || !isAuthorizationServerMetadataPath(request.path)) {
     next()

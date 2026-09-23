@@ -122,7 +122,7 @@ describe('OpenID4VC configuration file', () => {
     )
   })
 
-  it('refuses a file that still carries a revocation block', async () => {
+  it('refuses a file that carries a revocation block', async () => {
     await writeFile(configPath, JSON.stringify({ ...validConfig(), revocation: { enabled: true } }))
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(

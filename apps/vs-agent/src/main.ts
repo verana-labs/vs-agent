@@ -78,8 +78,8 @@ import {
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
+  readOpenId4VcOptions,
 } from './config'
-import { readOpenId4VcOptions } from './config/openid4vc'
 import { MessagingPlugin, OpenId4VcNestPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'

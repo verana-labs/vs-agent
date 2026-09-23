@@ -11,7 +11,8 @@ export function presentationQueryFor(
 ) {
   if (queryLanguage === 'presentation_exchange') {
     return {
-      // OpenID4VP v1 forbids Presentation Exchange, so this rail is minted on the last draft that still admits it.
+      // OpenID4VP v1 forbids Presentation Exchange, so this rail is minted on the last draft that still
+      // admits it.
       version: 'v1.draft21' as const,
       presentationExchange: { definition: presentationDefinitionFor(configuration, requestedClaims) },
     }

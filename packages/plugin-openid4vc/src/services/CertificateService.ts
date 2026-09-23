@@ -113,7 +113,8 @@ export async function publishDevelopmentSigningKey(
   }
 
   const didDocument = DidDocument.fromJSON(resolution.didDocument.toJSON())
-  // A resolver that doesn't recognise JsonWebKey2020 rejects the method without this context, so it is published alongside the type.
+  // A resolver that doesn't recognise JsonWebKey2020 rejects the method without this context, so it is
+  // published alongside the type.
   didDocument.context = [...new Set([...contextValues(didDocument.context), JSON_WEB_KEY_2020_CONTEXT])]
   didDocument.verificationMethod = [
     ...(didDocument.verificationMethod ?? []).filter(method => method.id !== methodId),
@@ -144,7 +145,8 @@ export async function publishDevelopmentSigningKey(
   }
 }
 
-// Credo reads the KMS key-id mapping on the DidRecord, never the published `kid`, and registrars like did:webvh don't maintain it on update, so it is written here directly.
+// Credo reads the KMS key-id mapping on the DidRecord, never the published `kid`, and registrars like
+// did:webvh don't maintain it on update, so it is written here directly.
 export async function ensureCreatedDidRecordKeyMapping(
   agent: Pick<OpenId4VcAgent, 'context'>,
   did: string,
@@ -320,7 +322,8 @@ export function assertCertificateChainUsable(chain: X509Certificate[], now = new
   }
 }
 
-// Credo matches the `iss` of an issued credential against the leaf SANs on both sign and verify, exactly: a wildcard or parent-domain SAN passes startup and then fails every redemption.
+// Credo matches the `iss` of an issued credential against the leaf SANs on both sign and verify, exactly: a
+// wildcard or parent-domain SAN passes startup and then fails every redemption.
 function assertCertificateSignsIssuedCredentials(
   certificate: X509Certificate,
   publicApiBaseUrl: string | undefined,
@@ -398,7 +401,8 @@ function parseDevelopmentRecord(content: Record<string, unknown>): DevelopmentCe
   return { certificate: content.certificate, keyId: content.keyId }
 }
 
-// HAIP forbids the trust anchor inside `x5c`, and NL Wallet enforces it, so a configured chain drops its self-signed root.
+// HAIP forbids the trust anchor inside `x5c`, and NL Wallet enforces it, so a configured chain drops its
+// self-signed root.
 export function x5cCertificateChain(signingCertificate: SigningCertificateHandle): X509Certificate[] {
   if (signingCertificate.development) return signingCertificate.chain
 

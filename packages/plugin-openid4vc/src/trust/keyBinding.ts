@@ -59,7 +59,8 @@ export async function findBoundVerificationMethodId(
   return lookup.result === 'bound' ? lookup.verificationMethodId : null
 }
 
-// MOSIP Inji's OpenID4VP library declares a RequestSigningAlgorithm enum whose only constant is EdDSA and rejects anything else before reading the request.
+// MOSIP Inji's OpenID4VP library declares a RequestSigningAlgorithm enum whose only constant is EdDSA and
+// rejects anything else before reading the request.
 export async function findEd25519VerificationMethodId(
   agent: DidResolverAgent,
   did: string | null,
