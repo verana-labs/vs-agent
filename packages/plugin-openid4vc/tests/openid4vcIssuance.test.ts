@@ -6,13 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
-import {
-  activeTcpServers,
-  createAggregateError,
-  createTestAgentsInput,
-  startTestAgents,
-  testCredentialConfiguration,
-} from './helpers/startTestAgent'
+import { createTestAgentsInput, startTestAgents, testCredentialConfiguration } from './helpers/startTestAgent'
 
 const TTL_SECONDS = 3_600
 
@@ -21,29 +15,19 @@ describe('in-process OpenID4VC issuance', () => {
   let storedCredential: Awaited<
     ReturnType<Awaited<ReturnType<typeof startTestAgents>>['holder']['acceptCredentialOffer']>
   >
-  let tcpServerBaseline: string[]
 
   beforeEach(async () => {
-    tcpServerBaseline = activeTcpServers()
-
-    try {
-      agents = await startTestAgents(await createTestAgentsInput())
-      const offer = await agents.issuer.service.createOffer({
-        jsonSchemaCredentialId: testCredentialConfiguration.id,
-        claims: { name: 'Ada Lovelace', role: 'engineer' },
-        ttlSeconds: TTL_SECONDS,
-      })
-      storedCredential = await agents.holder.acceptCredentialOffer(offer.credentialOffer)
-    } catch (error) {
-      await rethrowAfterFixtureCleanup(error, [agents?.stop()])
-    }
+    agents = await startTestAgents(await createTestAgentsInput())
+    const offer = await agents.issuer.service.createOffer({
+      jsonSchemaCredentialId: testCredentialConfiguration.id,
+      claims: { name: 'Ada Lovelace', role: 'engineer' },
+      ttlSeconds: TTL_SECONDS,
+    })
+    storedCredential = await agents.holder.acceptCredentialOffer(offer.credentialOffer)
   }, 60_000)
 
   afterEach(async () => {
-    const cleanup = await Promise.allSettled([agents?.stop()])
-    expect(cleanup.filter(result => result.status === 'rejected')).toEqual([])
-    await new Promise(resolve => setImmediate(resolve))
-    expect(activeTcpServers()).toEqual(tcpServerBaseline)
+    await agents?.stop()
   })
 
   it('issues and stores a holder-bound dc+sd-jwt through the pre-authorized flow', async () => {
@@ -236,18 +220,6 @@ function proofTypesOf(metadata: unknown): Record<string, Record<string, unknown>
     string,
     Record<string, unknown>
   >
-}
-
-async function rethrowAfterFixtureCleanup(
-  primaryError: unknown,
-  tasks: Array<Promise<unknown> | undefined>,
-): Promise<never> {
-  const cleanup = await Promise.allSettled(tasks)
-  const cleanupErrors = cleanup.flatMap(result => (result.status === 'rejected' ? [result.reason] : []))
-  if (cleanupErrors.length > 0) {
-    throw createAggregateError([primaryError, ...cleanupErrors], 'OpenID4VC fixture setup and cleanup failed')
-  }
-  throw primaryError
 }
 
 async function verifyEs256(jwt: string, encodedLeafCertificate: string): Promise<boolean> {

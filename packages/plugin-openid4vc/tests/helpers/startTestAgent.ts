@@ -44,8 +44,7 @@ import {
 import { didDocumentWithKey, FakeDidResolver } from './fakeDidResolver'
 
 type CertificateFixtures = Awaited<ReturnType<typeof createCertificateFixtures>>
-type AgentRole = 'issuer' | 'holder' | 'verifier'
-type PluginAgentRole = Exclude<AgentRole, 'holder'>
+type PluginAgentRole = 'issuer' | 'verifier'
 
 const ASKAR_STORE_KEY = 'DZ9hPqFWTPxemcGea72C1X1nusqk5wFNLq6QPjwXGqAa'
 const HOLDER_PUBLIC_API_BASE_URL = 'https://holder.example'
@@ -74,22 +73,6 @@ export interface TestHolderPresentation {
   authorizationResponsePayload: Record<string, unknown>
   serverResponse?: { status: number; body: unknown }
   ok: boolean
-}
-
-export interface TestAgentFailureHooks {
-  beforeOptions?: (role: PluginAgentRole) => void | Promise<void>
-  afterInitialize?: (role: AgentRole) => void | Promise<void>
-  afterCleanup?: (role: AgentRole) => void | Promise<void>
-}
-
-export class OpenId4VcTestStartupError extends Error {
-  public constructor(
-    public readonly cause: unknown,
-    public readonly cleanupErrors: unknown[],
-  ) {
-    super(errorMessage(cause))
-    this.name = 'OpenId4VcTestStartupError'
-  }
 }
 
 export interface OpenId4VcTestAgents {
@@ -187,42 +170,43 @@ export async function startTestAgents(input: {
   verifierDid: string
   credentialConfiguration: OpenId4VcCredentialConfiguration
   issuerTrust?: Partial<NonNullable<OpenId4VcPluginOptions['issuer']>>
-  failureHooks?: TestAgentFailureHooks
   logger?: BaseLogger
 }): Promise<OpenId4VcTestAgents> {
   const logger = input.logger ?? new ConsoleLogger(LogLevel.Off)
   const rootCertificate = input.certificates.root.toString('base64')
   const issuerCertificate = await createIssuerCertificate(input.certificates.intermediate, input.issuerDid)
-  const issuer = await startPluginAgent({
-    role: 'issuer',
-    did: input.issuerDid,
-    didResolver: input.didResolver,
-    options: publicApiBaseUrl => ({
-      publicApiBaseUrl,
-      issuer: {
-        signing: {
-          configured: {
-            certificateChain: [
-              issuerCertificate.toString('base64'),
-              input.certificates.intermediate.toString('base64'),
-            ],
-            privateJwk: LEAF_PRIVATE_JWK,
-          },
-        },
-        ...input.issuerTrust,
-      },
-      credentialConfigurations: [input.credentialConfiguration],
-    }),
-    createService: (agent, options) => new IssuerService(agent, options),
-    failureHooks: input.failureHooks,
-    logger,
-  })
+  const stops: Array<() => Promise<void>> = []
 
-  let holder: Awaited<ReturnType<typeof startHolderAgent>> | undefined
-  let verifier: Awaited<ReturnType<typeof startPluginAgent<VerifierService>>> | undefined
   try {
-    holder = await startHolderAgent(input.didResolver, rootCertificate, logger, input.failureHooks)
-    verifier = await startPluginAgent({
+    const issuer = await startPluginAgent({
+      role: 'issuer',
+      did: input.issuerDid,
+      didResolver: input.didResolver,
+      options: publicApiBaseUrl => ({
+        publicApiBaseUrl,
+        issuer: {
+          signing: {
+            configured: {
+              certificateChain: [
+                issuerCertificate.toString('base64'),
+                input.certificates.intermediate.toString('base64'),
+              ],
+              privateJwk: LEAF_PRIVATE_JWK,
+            },
+          },
+          ...input.issuerTrust,
+        },
+        credentialConfigurations: [input.credentialConfiguration],
+      }),
+      createService: (agent, options) => new IssuerService(agent, options),
+      logger,
+    })
+    stops.push(issuer.stop)
+
+    const holder = await startHolderAgent(input.didResolver, rootCertificate, logger)
+    stops.push(holder.stop)
+
+    const verifier = await startPluginAgent({
       role: 'verifier',
       did: input.verifierDid,
       didResolver: input.didResolver,
@@ -242,9 +226,9 @@ export async function startTestAgents(input: {
         credentialConfigurations: [input.credentialConfiguration],
       }),
       createService: (agent, options) => new VerifierService(agent, options),
-      failureHooks: input.failureHooks,
       logger,
     })
+    stops.push(verifier.stop)
 
     return {
       issuer,
@@ -252,11 +236,12 @@ export async function startTestAgents(input: {
       verifier,
       rootCertificate,
       stop: async () => {
-        await settleCleanup([verifier?.stop(), holder?.stop(), issuer.stop()])
+        await Promise.all(stops.map(stop => stop()))
       },
     }
   } catch (error) {
-    return await rethrowAfterCleanup(error, [verifier?.stop(), holder?.stop(), issuer.stop()])
+    await Promise.allSettled(stops.map(stop => stop()))
+    throw error
   }
 }
 
@@ -301,7 +286,6 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
   didResolver: DidResolver
   options: (publicApiBaseUrl: string) => OpenId4VcPluginOptions
   createService: (agent: OpenId4VcAgent, options: OpenId4VcPluginOptions) => Service
-  failureHooks?: TestAgentFailureHooks
   logger: BaseLogger
 }): Promise<{
   agent: OpenId4VcAgent
@@ -317,7 +301,6 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
   try {
     server = await listen(app)
     const publicApiBaseUrl = serverUrl(server)
-    await input.failureHooks?.beforeOptions?.(input.role)
     const options = input.options(publicApiBaseUrl)
     const sdkPlugin = setupOpenId4Vc(options, () => {
       if (!(service instanceof IssuerService)) throw new Error('OpenID4VC issuer service is not initialized')
@@ -334,7 +317,6 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
       did: input.did,
     })
     await agent.initialize()
-    await input.failureHooks?.afterInitialize?.(input.role)
     service = input.createService(agent, options)
     await service.ensureInitialized()
     return {
@@ -344,11 +326,8 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
       stop: createStop(agent, server),
     }
   } catch (error) {
-    return await rethrowAfterCleanup(
-      error,
-      [agent?.shutdown(), server ? closeServer(server) : undefined],
-      input.failureHooks?.afterCleanup ? () => input.failureHooks?.afterCleanup?.(input.role) : undefined,
-    )
+    await Promise.allSettled([agent?.shutdown(), server ? closeServer(server) : undefined])
+    throw error
   }
 }
 
@@ -356,7 +335,6 @@ async function startHolderAgent(
   didResolver: DidResolver,
   rootCertificate: string,
   logger: BaseLogger,
-  failureHooks?: TestAgentFailureHooks,
 ): Promise<OpenId4VcTestAgents['holder'] & { stop: () => Promise<void> }> {
   let agent: OpenId4VcAgent | undefined
   try {
@@ -373,13 +351,9 @@ async function startHolderAgent(
       logger,
     })
     await agent.initialize()
-    await failureHooks?.afterInitialize?.('holder')
   } catch (error) {
-    return await rethrowAfterCleanup(
-      error,
-      [agent?.shutdown()],
-      failureHooks?.afterCleanup ? () => failureHooks.afterCleanup?.('holder') : undefined,
-    )
+    await Promise.allSettled([agent?.shutdown()])
+    throw error
   }
 
   const holder = agent.modules.openId4Vc.holder
@@ -478,60 +452,8 @@ function createStop(agent: Agent, server?: Server): () => Promise<void> {
   return async () => {
     if (stopped) return
     stopped = true
-    await settleCleanup([agent.shutdown(), server ? closeServer(server) : undefined])
+    await Promise.all([agent.shutdown(), server ? closeServer(server) : undefined])
   }
-}
-
-async function settleCleanup(tasks: Array<Promise<unknown> | undefined>): Promise<void> {
-  const errors = await cleanupErrors(tasks)
-  if (errors.length > 0) throw createAggregateError(errors, 'OpenID4VC test cleanup failed')
-}
-
-async function rethrowAfterCleanup(
-  primaryError: unknown,
-  tasks: Array<Promise<unknown> | undefined>,
-  afterCleanup?: () => void | Promise<void>,
-): Promise<never> {
-  const errors = await cleanupErrors(tasks)
-  if (afterCleanup) {
-    try {
-      await afterCleanup()
-    } catch (error) {
-      errors.push(error)
-    }
-  }
-
-  const primary = primaryError instanceof OpenId4VcTestStartupError ? primaryError.cause : primaryError
-  const combinedErrors = [
-    ...(primaryError instanceof OpenId4VcTestStartupError ? primaryError.cleanupErrors : []),
-    ...errors,
-  ]
-  if (combinedErrors.length > 0) throw new OpenId4VcTestStartupError(primary, combinedErrors)
-  throw primaryError
-}
-
-async function cleanupErrors(tasks: Array<Promise<unknown> | undefined>): Promise<unknown[]> {
-  const results = await Promise.allSettled(tasks)
-  return results.flatMap(result => (result.status === 'rejected' ? [result.reason] : []))
-}
-
-export function activeTcpServers(): string[] {
-  const getActiveResourcesInfo = (process as NodeJS.Process & { getActiveResourcesInfo: () => string[] })
-    .getActiveResourcesInfo
-  return getActiveResourcesInfo.call(process).filter(resource => resource.includes('TCPSERVER'))
-}
-
-export function createAggregateError(errors: unknown[], message: string): Error {
-  const AggregateErrorConstructor = (
-    globalThis as typeof globalThis & {
-      AggregateError: new (errors: Iterable<unknown>, message?: string) => Error
-    }
-  ).AggregateError
-  return new AggregateErrorConstructor(errors, message)
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'OpenID4VC test agent startup failed'
 }
 
 async function closeServer(server: Server): Promise<void> {
