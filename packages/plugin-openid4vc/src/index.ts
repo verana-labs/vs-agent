@@ -14,11 +14,7 @@ export { V2Openid4vcPresentationsController } from './nestjs/V2Openid4vcPresenta
 export { V2Openid4vcSigningCertificatesController } from './nestjs/V2Openid4vcSigningCertificatesController'
 export { registerDidJwkResolver } from './sdk/didJwkResolver'
 export { setupOpenId4Vc } from './sdk/setupOpenId4Vc'
-export type {
-  OpenId4VcAgentModules,
-  OpenId4VcIssuerRequestMapper,
-  OpenId4VcSdkPlugin,
-} from './sdk/setupOpenId4Vc'
+export type { OpenId4VcIssuerRequestMapper, OpenId4VcSdkPlugin } from './sdk/setupOpenId4Vc'
 export type { SigningCertificateInfo, SigningRole } from './services/CertificateService'
 export { IssuerService } from './services/IssuerService'
 export type { OpenId4VcIssuanceSessionSummary, OpenId4VcOfferResult } from './services/IssuerService'

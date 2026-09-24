@@ -24,10 +24,8 @@ export interface OpenId4VcIssuerRequestMapper {
   getJwtVcIssuerMetadata: () => Record<string, unknown>
 }
 
-export type OpenId4VcAgentModules = Pick<OpenId4VcVsAgentModules, 'openId4Vc' | 'x509'>
-
 export interface OpenId4VcSdkPlugin {
-  modules: OpenId4VcAgentModules
+  modules: Pick<OpenId4VcVsAgentModules, 'openId4Vc' | 'x509'>
   publicMiddleware: Express
 }
 
