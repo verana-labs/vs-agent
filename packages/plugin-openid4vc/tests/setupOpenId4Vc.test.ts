@@ -319,102 +319,40 @@ describe('acceptDraftCredentialRequests', () => {
 
 const SINGLE_RANGE_ACCEPT = 'application/jwt; application/json'
 
-const metadata = (proofTypes: Record<string, unknown>) =>
-  JSON.stringify({
-    credential_issuer: 'https://issuer.example/oid4vci/demo-did',
-    credential_configurations_supported: {
-      'demo-credential': { format: 'dc+sd-jwt', proof_types_supported: proofTypes },
-    },
-  })
-
-const runMetadataRequest = (
-  accept: string | undefined,
-  body: string,
-  overrides: Partial<Request> = {},
-  hasAnchor = true,
-) => {
+const runMetadataRequest = (accept: string | undefined, overrides: Partial<Request> = {}) => {
   const request = {
     method: 'GET',
     path: '/oid4vci/demo-did/.well-known/openid-credential-issuer',
     headers: accept === undefined ? {} : { accept },
     ...overrides,
   } as unknown as Request
-  let sent: unknown
-  const response = {
-    send: (payload?: unknown) => {
-      sent = payload
-      return response
-    },
-  } as unknown as Response
   const next = vi.fn() as unknown as NextFunction
-  accommodateLegacyMetadataAccept(hasAnchor)(request, response, next)
-  response.send(body)
-  return { sent: sent as string, accept: request.headers.accept, next }
-}
-
-const proofTypesOf = (sent: string) =>
-  JSON.parse(sent).credential_configurations_supported['demo-credential'].proof_types_supported
-
-const jwtOnly = {
-  jwt: { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} },
+  accommodateLegacyMetadataAccept()(request, {} as Response, next)
+  return { accept: request.headers.accept, next }
 }
 
 describe('accommodateLegacyMetadataAccept', () => {
-  it('serves JSON and mirrors the jwt proof type onto attestation for a single-range accept', () => {
-    const { sent, accept, next } = runMetadataRequest(SINGLE_RANGE_ACCEPT, metadata(jwtOnly))
+  it('serves JSON to a client whose single accept range names both media types', () => {
+    const { accept, next } = runMetadataRequest(SINGLE_RANGE_ACCEPT)
 
-    const expected = { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} }
     expect(accept).toBe('application/json')
-    expect(proofTypesOf(sent)).toEqual({ jwt: expected, attestation: expected })
     expect(next).toHaveBeenCalledOnce()
   })
 
-  it('leaves every other client untouched, so a Credo holder still binds a plain jwk', () => {
-    const json = runMetadataRequest('application/json', metadata(jwtOnly))
-    const jwtOnlyClient = runMetadataRequest('application/jwt', metadata(jwtOnly))
-    const absent = runMetadataRequest(undefined, metadata(jwtOnly))
-
-    expect(proofTypesOf(json.sent)).toEqual(jwtOnly)
-    expect(jwtOnlyClient.accept).toBe('application/jwt')
-    expect(proofTypesOf(jwtOnlyClient.sent)).toEqual(jwtOnly)
-    expect(proofTypesOf(absent.sent)).toEqual(jwtOnly)
+  it('serves JSON on a correctly spelled multi-range accept', () => {
+    expect(runMetadataRequest('application/json, application/jwt').accept).toBe('application/json')
   })
 
-  it('never invents a proof type the issuer does not accept', () => {
-    const { sent } = runMetadataRequest(SINGLE_RANGE_ACCEPT, metadata(jwtOnly), {}, false)
-
-    expect(Object.keys(proofTypesOf(sent))).toEqual(['jwt'])
+  it('leaves a jwt-only, a json-only and an absent accept header untouched', () => {
+    expect(runMetadataRequest('application/jwt').accept).toBe('application/jwt')
+    expect(runMetadataRequest('application/json').accept).toBe('application/json')
+    expect(runMetadataRequest(undefined).accept).toBeUndefined()
   })
 
-  // A wallet modelling proof_types_supported as a closed enum throws while deserializing an
-  // `attestation` member it does not know, and the credential offer dies before it renders.
-  it('keeps attestation away from every client but the single-range accept header', () => {
-    const json = runMetadataRequest('application/json', metadata(jwtOnly))
-    const absent = runMetadataRequest(undefined, metadata(jwtOnly))
-
-    expect(Object.keys(proofTypesOf(json.sent))).toEqual(['jwt'])
-    expect(Object.keys(proofTypesOf(absent.sent))).toEqual(['jwt'])
-  })
-
-  it('serves plain metadata on a correctly spelled multi-range accept, without the payload change', () => {
-    const multiRange = runMetadataRequest('application/json, application/jwt', metadata(jwtOnly))
-
-    expect(multiRange.accept).toBe('application/json')
-    expect(Object.keys(proofTypesOf(multiRange.sent))).toEqual(['jwt'])
-  })
-
-  it('leaves other paths, unknown proof types and non-JSON bodies alone', () => {
-    expect(
-      runMetadataRequest(SINGLE_RANGE_ACCEPT, '{"plain":true}', { path: '/oid4vci/demo-did/credential' })
-        .sent,
-    ).toBe('{"plain":true}')
-    expect(
-      proofTypesOf(runMetadataRequest(SINGLE_RANGE_ACCEPT, metadata({ ldp_vp: {} }), {}, false).sent),
-    ).toEqual({
-      ldp_vp: {},
-    })
-    expect(runMetadataRequest(SINGLE_RANGE_ACCEPT, 'eyJhbGciOiJFUzI1NiJ9.e30.sig').sent).toBe(
-      'eyJhbGciOiJFUzI1NiJ9.e30.sig',
+  it('leaves another path and another method untouched', () => {
+    expect(runMetadataRequest(SINGLE_RANGE_ACCEPT, { path: '/oid4vci/demo-did/credential' }).accept).toBe(
+      SINGLE_RANGE_ACCEPT,
     )
+    expect(runMetadataRequest(SINGLE_RANGE_ACCEPT, { method: 'POST' }).accept).toBe(SINGLE_RANGE_ACCEPT)
   })
 })

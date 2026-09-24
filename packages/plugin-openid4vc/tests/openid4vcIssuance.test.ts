@@ -185,31 +185,25 @@ describe('OpenID4VC issuer metadata with attestation roots', () => {
     expect(metadata.token_endpoint_auth_methods_supported).toContain('attest_jwt_client_auth')
   }, 60_000)
 
-  it('requires a key attestation on the jwt proof type every wallet reads', async () => {
+  // [VSA-VTI-CFG-ENV-OID] ties `attestation` to the configured roots alone, with no client in the condition.
+  it.each([
+    'application/json',
+    'application/jwt; application/json',
+    'application/json, application/jwt',
+  ])('advertises both key-attested proof types to a client accepting %s', async accept => {
     const response = await fetch(`${metadataBaseUrl}/.well-known/openid-credential-issuer/oid4vci/issuer`, {
-      headers: { accept: 'application/json' },
+      headers: { accept },
     })
     const proofTypes = proofTypesOf(await response.json())
-
-    expect(Object.keys(proofTypes)).toEqual(['jwt'])
-    expect(proofTypes.jwt).toEqual({
+    const keyAttested = {
       proof_signing_alg_values_supported: ['ES256'],
       key_attestations_required: {},
-    })
-  }, 60_000)
-
-  it('adds the attestation proof type for the single-range accept header alone', async () => {
-    const response = await fetch(`${metadataBaseUrl}/.well-known/openid-credential-issuer/oid4vci/issuer`, {
-      headers: { accept: 'application/jwt; application/json' },
-    })
-    const proofTypes = proofTypesOf(await response.json())
+    }
 
     expect(response.headers.get('content-type')).toContain('application/json')
     expect(Object.keys(proofTypes).sort()).toEqual(['attestation', 'jwt'])
-    expect(proofTypes.attestation).toEqual({
-      proof_signing_alg_values_supported: ['ES256'],
-      key_attestations_required: {},
-    })
+    expect(proofTypes.jwt).toEqual(keyAttested)
+    expect(proofTypes.attestation).toEqual(keyAttested)
   }, 60_000)
 })
 

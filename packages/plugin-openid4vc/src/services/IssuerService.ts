@@ -352,13 +352,19 @@ export class IssuerService implements OnModuleInit {
           scope: configuration.id,
           cryptographic_binding_methods_supported: ['jwk'],
           credential_signing_alg_values_supported: ['ES256'],
-          // Only `jwt` is on the record: a wallet modelling `proof_types_supported` as a closed enum throws
-          // on any other member.
           proof_types_supported: {
             jwt: {
               proof_signing_alg_values_supported: ['ES256'],
               ...(keyAttestationsRequired ? { key_attestations_required: {} } : {}),
             },
+            ...(keyAttestationsRequired
+              ? {
+                  attestation: {
+                    proof_signing_alg_values_supported: ['ES256'],
+                    key_attestations_required: {},
+                  },
+                }
+              : {}),
           },
           credential_metadata: {
             display: [

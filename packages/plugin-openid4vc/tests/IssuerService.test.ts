@@ -211,7 +211,7 @@ describe('IssuerService', () => {
     expect(loadSigningCertificate).toHaveBeenCalledOnce()
   })
 
-  it('keeps attestation off the record even where a key-attestation root is configured', async () => {
+  it('puts attestation on the record wherever a key-attestation root is configured', async () => {
     const withRoot = issuerApi()
     withRoot.getIssuerByIssuerId.mockRejectedValue(
       new RecordNotFoundError('issuer not found', { recordType: 'OpenId4VcIssuerRecord' }),
@@ -224,14 +224,15 @@ describe('IssuerService', () => {
 
     const proofTypes =
       withRoot.createIssuer.mock.calls[0][0].credentialConfigurationsSupported.employee.proof_types_supported
-    // The record is what every wallet reads. `attestation` is added per-request for the legacy accept
-    // header only; on the record a closed ProofType enum throws on it and kills the offer.
-    expect(Object.keys(proofTypes).sort()).toEqual(['jwt'])
-    expect(proofTypes.attestation).toBeUndefined()
+    expect(Object.keys(proofTypes).sort()).toEqual(['attestation', 'jwt'])
+    expect(proofTypes.attestation).toEqual({
+      proof_signing_alg_values_supported: ['ES256'],
+      key_attestations_required: {},
+    })
     expect(proofTypes.jwt.key_attestations_required).toEqual({})
   })
 
-  it('leaves the key-attestation requirement off the record without a key-attestation root', async () => {
+  it('leaves attestation and the key-attestation requirement off without a root', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockRejectedValue(
       new RecordNotFoundError('issuer not found', { recordType: 'OpenId4VcIssuerRecord' }),
@@ -239,9 +240,10 @@ describe('IssuerService', () => {
 
     await new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink).ensureInitialized()
 
-    expect(
-      api.createIssuer.mock.calls[0][0].credentialConfigurationsSupported.employee.proof_types_supported.jwt,
-    ).toEqual({ proof_signing_alg_values_supported: ['ES256'] })
+    const proofTypes =
+      api.createIssuer.mock.calls[0][0].credentialConfigurationsSupported.employee.proof_types_supported
+    expect(Object.keys(proofTypes)).toEqual(['jwt'])
+    expect(proofTypes.jwt).toEqual({ proof_signing_alg_values_supported: ['ES256'] })
   })
 
   it('advertises the client attestation algorithms only with a wallet attestation root', async () => {

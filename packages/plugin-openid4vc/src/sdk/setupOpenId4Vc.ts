@@ -36,7 +36,7 @@ export function setupOpenId4Vc(
   const walletAttestationEnabled = Boolean(options.issuer?.walletAttestationCertificates?.length)
 
   const app = express()
-  app.use(accommodateLegacyMetadataAccept(Boolean(options.issuer?.keyAttestationCertificates?.length)))
+  app.use(accommodateLegacyMetadataAccept())
   // Credo raises the body limits of its own routers (1 MB issuer, 5 MB verifier), and a parser registered on
   // the same app before them decides first, so this one covers the issuer path alone and at the limit credo
   // sets there.
@@ -130,69 +130,22 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
 
 // `application/jwt; application/json` parses as a single `application/jwt` range with a parameter, so credo
 // would answer signed metadata to a client that reads JSON alone.
-export function accommodateLegacyMetadataAccept(hasKeyAttestationAnchor: boolean) {
-  return (request: Request, response: Response, next: NextFunction): void => {
+export function accommodateLegacyMetadataAccept() {
+  return (request: Request, _response: Response, next: NextFunction): void => {
     const accept = request.headers.accept
     const ranges = typeof accept === 'string' ? accept.split(',') : []
-    const isSingleRange = ranges.some(
-      range => range.includes('application/jwt') && range.includes('application/json'),
-    )
     const prefersPlainMetadata =
-      isSingleRange ||
+      ranges.some(range => range.includes('application/jwt') && range.includes('application/json')) ||
       (ranges.some(range => range.includes('application/jwt')) &&
         ranges.some(range => range.includes('application/json')))
 
     if (
-      request.method !== 'GET' ||
-      !request.path.includes('/.well-known/openid-credential-issuer') ||
-      !prefersPlainMetadata
+      request.method === 'GET' &&
+      request.path.includes('/.well-known/openid-credential-issuer') &&
+      prefersPlainMetadata
     ) {
-      next()
-      return
+      request.headers.accept = 'application/json'
     }
-
-    request.headers.accept = 'application/json'
-    if (!isSingleRange || !hasKeyAttestationAnchor) {
-      next()
-      return
-    }
-
-    const send = response.send.bind(response)
-    response.send = ((body?: unknown) =>
-      send(typeof body === 'string' ? withAttestationProofType(body) : body)) as Response['send']
     next()
-  }
-}
-
-// `attestation` stays off the issuer record because a wallet modelling `proof_types_supported` as a closed
-// enum throws on a member it does not know, which kills the offer before it renders.
-function withAttestationProofType(body: string): string {
-  try {
-    const metadata: unknown = JSON.parse(body)
-    if (!isRecord(metadata) || !isRecord(metadata.credential_configurations_supported)) return body
-
-    const configurations = Object.fromEntries(
-      Object.entries(metadata.credential_configurations_supported).map(([id, configuration]) => {
-        if (!isRecord(configuration) || !isRecord(configuration.proof_types_supported)) {
-          return [id, configuration]
-        }
-        const jwtProofType = configuration.proof_types_supported.jwt
-        if (!isRecord(jwtProofType)) return [id, configuration]
-
-        return [
-          id,
-          {
-            ...configuration,
-            proof_types_supported: {
-              ...configuration.proof_types_supported,
-              attestation: jwtProofType,
-            },
-          },
-        ]
-      }),
-    )
-    return JSON.stringify({ ...metadata, credential_configurations_supported: configurations })
-  } catch {
-    return body
   }
 }
