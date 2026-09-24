@@ -210,7 +210,7 @@ describe('VtFlowService inbound problem-report', () => {
   })
 })
 
-describe('VtFlowService startValidation', () => {
+describe('VtFlowService sendValidatingForSession from OOB_PENDING', () => {
   function makeValidatorService(state: VtFlowState) {
     const existing = makeRecord({ role: VtFlowRole.Validator, state })
     const repository = { getById: vi.fn().mockResolvedValue(existing), update: vi.fn() }

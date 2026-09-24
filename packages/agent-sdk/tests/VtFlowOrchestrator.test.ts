@@ -530,7 +530,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
       findById: vi.fn(async () => flowRecord),
       findAllByQuery: vi.fn(async () => []),
       acceptOnboardingRequest: vi.fn(async () => flowRecord),
-      startValidation: vi.fn(async () => flowRecord),
+      sendValidating: vi.fn(async () => flowRecord),
       markValidated: vi.fn(async () => {
         flowRecord = { ...flowRecord, state: 'VALIDATED' }
         return flowRecord

@@ -234,7 +234,7 @@ export class VtFlowApi {
     return record
   }
 
-  public async startValidation(
+  public async sendValidating(
     vtFlowRecordId: string,
     options: { comment?: string } = {},
   ): Promise<VtFlowRecord> {

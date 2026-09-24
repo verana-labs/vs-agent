@@ -364,7 +364,7 @@ export class VtFlowOrchestrator {
     await this.assertClaimsAndTerm(record, applicant, terms)
 
     if (record.state === VtFlowState.AwaitingOr) await vtFlowApi.acceptOnboardingRequest(record.id)
-    if (record.state === VtFlowState.OobPending) await vtFlowApi.startValidation(record.id)
+    if (record.state === VtFlowState.OobPending) await vtFlowApi.sendValidating(record.id)
 
     if (record.state === VtFlowState.ValidatedPendingClaims) return this.continueAfterValidated(record.id)
     if (entryValidated) {
@@ -396,7 +396,7 @@ export class VtFlowOrchestrator {
     this.assertClaims(schema.json_schema, connection.theirDid, record.claims)
 
     const vtFlowApi = this.resolveVtFlowApi()
-    if (record.state === VtFlowState.OobPending) await vtFlowApi.startValidation(record.id)
+    if (record.state === VtFlowState.OobPending) await vtFlowApi.sendValidating(record.id)
 
     const offer = await this.buildDirectIssuanceOffer(record.id)
     if (!offer) throw invalidState('the agent holds no active ISSUER participant for the schema of the flow')
