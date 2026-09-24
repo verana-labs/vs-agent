@@ -1,5 +1,6 @@
 import type { OpenId4VcAgent, OpenId4VcPluginOptions } from '../types'
 import type { Kms } from '@credo-ts/core'
+import type { OnModuleInit } from '@nestjs/common'
 import type {
   OpenId4VcIssuanceSessionRecord,
   OpenId4VcIssuanceSessionState,
@@ -9,6 +10,7 @@ import type {
 } from '@credo-ts/openid4vc'
 
 import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
+import { Inject, Injectable } from '@nestjs/common'
 import { OpenId4VcIssuanceSessionRepository } from '@credo-ts/openid4vc'
 import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
@@ -19,7 +21,9 @@ import {
   parseOfferIssuanceMetadata,
   parseOfferTtlSeconds,
 } from '../config'
+import { registerDidJwkResolver } from '../sdk/didJwkResolver'
 import { ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
+import { OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
 import {
@@ -31,6 +35,7 @@ import {
   type SigningCertificateInfo,
   x5cCertificateChain,
 } from './CertificateService'
+import { publishIssuerService } from './issuerHolder'
 
 type IssuerApi = Pick<
   OpenId4VcIssuerApi,
@@ -81,15 +86,21 @@ const STATUS_LIST_ID_TAG = 'statusListId'
 const DPOP_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
 const ATTESTATION_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
 
-export class IssuerService {
+@Injectable()
+export class IssuerService implements OnModuleInit {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
-  private initialized = false
 
   public constructor(
-    private readonly agent: OpenId4VcAgent,
-    private readonly options: OpenId4VcPluginOptions,
+    @Inject('VSAGENT') private readonly agent: OpenId4VcAgent,
+    @Inject(OPENID4VC_OPTIONS) private readonly options: OpenId4VcPluginOptions,
   ) {}
+
+  public async onModuleInit(): Promise<void> {
+    registerDidJwkResolver(this.agent)
+    publishIssuerService(this)
+    await this.ensureInitialized()
+  }
 
   public ensureInitialized(): Promise<void> {
     // A rejected initialization is not cached, so a transient boot-time failure retries instead of wedging
@@ -214,7 +225,6 @@ export class IssuerService {
   }
 
   public getJwtVcIssuerMetadata(): Record<string, unknown> {
-    this.assertInitialized()
     return {
       issuer: this.options.publicApiBaseUrl,
       jwks: { keys: [this.signingCertificateHandle().certificate.publicJwk.toJson()] },
@@ -222,7 +232,6 @@ export class IssuerService {
   }
 
   public mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper = async input => {
-    this.assertInitialized()
     const signingCertificate = this.signingCertificateHandle()
     const configuration = findCredentialConfiguration(this.options, input.credentialConfigurationId)
     if (!configuration) {
@@ -275,7 +284,7 @@ export class IssuerService {
     if (certificateDid !== agentDid) {
       throw new Error('OpenID4VC issuer certificate DID does not match the agent DID')
     }
-    await publishDevelopmentSigningKey(this.agent, signingCertificate, 'issuer')
+    const publishedMethodId = await publishDevelopmentSigningKey(this.agent, signingCertificate, 'issuer')
 
     const binding = await verifyKeyBoundToDid(
       this.agent,
@@ -294,7 +303,9 @@ export class IssuerService {
     await this.createOrUpdateIssuer(signingCertificate)
 
     this.signingCertificate = signingCertificate
-    this.initialized = true
+    this.agent.config.logger.info(
+      `[OpenID4VC] issuer signs with a ${signingCertificate.development ? 'development' : 'configured'} certificate${publishedMethodId ? `, published as ${publishedMethodId}` : ''}`,
+    )
   }
 
   private metadataSigner(signingCertificate: SigningCertificateHandle) {
@@ -389,12 +400,6 @@ export class IssuerService {
     const signingCertificate = this.signingCertificate
     if (!signingCertificate) throw new Error('OpenID4VC issuer service is not initialized')
     return signingCertificate
-  }
-
-  private assertInitialized(): void {
-    if (!this.initialized || !this.signingCertificate) {
-      throw new Error('OpenID4VC issuer service is not initialized')
-    }
   }
 }
 

@@ -68,6 +68,7 @@ function verifierApi() {
 }
 
 const verificationSessionRepository = { update: vi.fn() }
+const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
 
 function verifierAgent(
   api = verifierApi(),
@@ -77,6 +78,7 @@ function verifierAgent(
   return {
     did,
     ecsClaims,
+    config: { logger },
     dids: { resolve: () => undefined },
     genericRecords: {},
     kms: {},
@@ -155,6 +157,18 @@ describe('VerifierService', () => {
     vi.clearAllMocks()
     loadSigningCertificate.mockResolvedValue(verifierSigningHandle())
     verifyKeyBoundToDid.mockResolvedValue('bound')
+  })
+
+  it('initializes on the Nest module hook and logs the certificate mode', async () => {
+    const api = verifierApi()
+    api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
+    const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
+
+    await service.onModuleInit()
+    await service.onModuleInit()
+
+    expect(loadSigningCertificate).toHaveBeenCalledOnce()
+    expect(logger.info).toHaveBeenCalledWith('[OpenID4VC] verifier signs with a configured certificate')
   })
 
   it('initializes the verifier on the first certificate read', async () => {

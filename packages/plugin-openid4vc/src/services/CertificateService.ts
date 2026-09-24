@@ -74,13 +74,30 @@ export function didFromValidatedCertificate(certificate: X509Certificate): strin
   return did
 }
 
-export async function publishDevelopmentSigningKey(
+// Nest calls every onModuleInit hook of a module concurrently, and two capabilities publishing into one DID
+// document would each drop the verification method the other added.
+let didDocumentPublication: Promise<unknown> = Promise.resolve()
+
+export function publishDevelopmentSigningKey(
   agent: OpenId4VcAgent,
   signingCertificate: SigningCertificateHandle,
   role: SigningRole,
-): Promise<void> {
-  if (!signingCertificate.development) return
+): Promise<string | undefined> {
+  if (!signingCertificate.development) return Promise.resolve(undefined)
 
+  const publication = didDocumentPublication
+    .catch(() => undefined)
+    .then(() => publishSigningKeyToDidDocument(agent, signingCertificate, role))
+  didDocumentPublication = publication.catch(() => undefined)
+
+  return publication
+}
+
+async function publishSigningKeyToDidDocument(
+  agent: OpenId4VcAgent,
+  signingCertificate: SigningCertificateHandle,
+  role: SigningRole,
+): Promise<string> {
   const did = agent.did
   if (!did) throw new Error('development signing key publication requires an agent DID')
 
@@ -109,7 +126,7 @@ export async function publishDevelopmentSigningKey(
     purposes.every(published) &&
     contextValues(resolution.didDocument.context).includes(JSON_WEB_KEY_2020_CONTEXT)
   ) {
-    return
+    return methodId
   }
 
   const didDocument = DidDocument.fromJSON(resolution.didDocument.toJSON())
@@ -144,6 +161,8 @@ export async function publishDevelopmentSigningKey(
   if (update.didState.did !== did || update.didState.didDocument.id !== did) {
     throw new Error('development signing key DID update returned a different DID')
   }
+
+  return methodId
 }
 
 // Credo reads the KMS key-id mapping on the DidRecord, never the published `kid`, and registrars like

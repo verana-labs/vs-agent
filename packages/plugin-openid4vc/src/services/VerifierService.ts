@@ -1,7 +1,9 @@
 import type { OpenId4VcAgent, OpenId4VcPluginOptions } from '../types'
+import type { OnModuleInit } from '@nestjs/common'
 import type { OpenId4VcVerificationSessionRecord, OpenId4VcVerifierApi } from '@credo-ts/openid4vc'
 
 import { RecordNotFoundError } from '@credo-ts/core'
+import { Inject, Injectable } from '@nestjs/common'
 import {
   OpenId4VcVerificationSessionRepository,
   OpenId4VcVerificationSessionState,
@@ -14,6 +16,7 @@ import {
   ownDidResolutionPolicy,
   verifyKeyBoundToDid,
 } from '../trust/keyBinding'
+import { OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
 import {
@@ -98,15 +101,19 @@ export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
   errorMessage?: string
 }
 
-export class VerifierService {
+@Injectable()
+export class VerifierService implements OnModuleInit {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
-  private initialized = false
 
   public constructor(
-    private readonly agent: OpenId4VcAgent,
-    private readonly options: OpenId4VcPluginOptions,
+    @Inject('VSAGENT') private readonly agent: OpenId4VcAgent,
+    @Inject(OPENID4VC_OPTIONS) private readonly options: OpenId4VcPluginOptions,
   ) {}
+
+  public async onModuleInit(): Promise<void> {
+    await this.ensureInitialized()
+  }
 
   public ensureInitialized(): Promise<void> {
     this.initialization ??= this.initialize().catch(error => {
@@ -250,7 +257,7 @@ export class VerifierService {
     if (certificateDid !== agentDid) {
       throw new Error('OpenID4VC verifier certificate DID does not match the agent DID')
     }
-    await publishDevelopmentSigningKey(this.agent, signingCertificate, 'verifier')
+    const publishedMethodId = await publishDevelopmentSigningKey(this.agent, signingCertificate, 'verifier')
 
     const binding = await verifyKeyBoundToDid(
       this.agent,
@@ -268,7 +275,9 @@ export class VerifierService {
 
     await this.createOrUpdateVerifier()
     this.signingCertificate = signingCertificate
-    this.initialized = true
+    this.agent.config.logger.info(
+      `[OpenID4VC] verifier signs with a ${signingCertificate.development ? 'development' : 'configured'} certificate${publishedMethodId ? `, published as ${publishedMethodId}` : ''}`,
+    )
   }
 
   private async createOrUpdateVerifier(): Promise<void> {
@@ -328,10 +337,9 @@ export class VerifierService {
   }
 
   private signingCertificateHandle(): SigningCertificateHandle {
-    if (!this.initialized || !this.signingCertificate) {
-      throw new Error('OpenID4VC verifier service is not initialized')
-    }
-    return this.signingCertificate
+    const signingCertificate = this.signingCertificate
+    if (!signingCertificate) throw new Error('OpenID4VC verifier service is not initialized')
+    return signingCertificate
   }
 
   private async buildRequestSigner(override?: OpenId4VcRequestSigner) {

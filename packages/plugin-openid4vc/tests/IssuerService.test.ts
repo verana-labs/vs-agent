@@ -1,11 +1,12 @@
 import type { OpenId4VcPluginOptions } from '../src/types'
 
-import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
+import { ClaimFormat, JwkDidResolver, RecordNotFoundError } from '@credo-ts/core'
 import { OpenId4VcIssuanceSessionRepository, OpenId4VcIssuanceSessionState } from '@credo-ts/openid4vc'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
+import { requireIssuerService } from '../src/services/issuerHolder'
 import { IssuerService } from '../src/services/IssuerService'
 
 const { loadSigningCertificate, publishDevelopmentSigningKey, verifyKeyBoundToDid } = vi.hoisted(() => ({
@@ -67,6 +68,7 @@ function issuerApi() {
 }
 
 const issuanceSessionRepository = { findByQuery: vi.fn(), update: vi.fn() }
+const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
 
 function issuanceSession(overrides: Record<string, unknown> = {}) {
   const tags: Record<string, unknown> = { jsonSchemaCredentialId: 'employee' }
@@ -97,10 +99,15 @@ function issuerAgent(
   jws = jwsService(),
   ecsClaims?: { service?: Record<string, string | undefined> },
 ) {
+  const resolvers: unknown[] = []
   return {
     did,
     ecsClaims,
-    dids: { resolve: () => undefined },
+    config: { logger },
+    dids: {
+      resolve: () => undefined,
+      config: { resolvers, addResolver: (resolver: unknown) => resolvers.push(resolver) },
+    },
     genericRecords: { findById: async () => null, save: () => undefined, update: () => undefined },
     kms: {},
     x509: {},
@@ -164,6 +171,38 @@ describe('IssuerService', () => {
     loadSigningCertificate.mockResolvedValue(issuerSigningHandle())
     publishDevelopmentSigningKey.mockResolvedValue(undefined)
     verifyKeyBoundToDid.mockResolvedValue('bound')
+  })
+
+  it('initializes on the Nest module hook, and publishes the did:jwk resolver ahead of it', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const agent = issuerAgent(api)
+    const service = new IssuerService(agent as never, issuerOptions())
+
+    await service.onModuleInit()
+    await service.onModuleInit()
+
+    expect(agent.dids.config.resolvers).toHaveLength(1)
+    expect(agent.dids.config.resolvers[0]).toBeInstanceOf(JwkDidResolver)
+    expect(loadSigningCertificate).toHaveBeenCalledOnce()
+    expect(requireIssuerService()).toBe(service)
+    expect(service.getJwtVcIssuerMetadata()).toEqual({
+      issuer: 'https://agent.example',
+      jwks: { keys: [PUBLIC_JWK] },
+    })
+  })
+
+  it('logs the certificate mode and the published verification method at startup', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    loadSigningCertificate.mockResolvedValue({ ...issuerSigningHandle(), development: true })
+    publishDevelopmentSigningKey.mockResolvedValue(`${AGENT_DID}#openid4vc-development-issuer`)
+
+    await new IssuerService(issuerAgent(api) as never, issuerOptions()).ensureInitialized()
+
+    expect(logger.info).toHaveBeenCalledWith(
+      `[OpenID4VC] issuer signs with a development certificate, published as ${AGENT_DID}#openid4vc-development-issuer`,
+    )
   })
 
   it('initializes the issuer on the first certificate read', async () => {

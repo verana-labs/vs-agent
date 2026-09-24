@@ -40,6 +40,8 @@ export interface OpenId4VcConfigurationFile {
   }
 }
 
+export const OPENID4VC_OPTIONS = 'OPENID4VC_OPTIONS'
+
 export interface OpenId4VcPluginOptions extends OpenId4VcConfigurationFile {
   publicApiBaseUrl: string
   credentialConfigurations: OpenId4VcCredentialConfiguration[]
