@@ -57,7 +57,7 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 > same for `openid4vc.existingSecret`, since Helm cannot read a Secret it does not own, so after
 > changing that Secret restart the deployment yourself.
 
-> **Breaking change:** the `oid4vc` values key is now `openid4vc`. Rename it in your own `values.yaml` before upgrading, otherwise the configuration is silently ignored. The environment variable the chart sets is still `OID4VC_CONFIG_FILE_LOCATION`, which the specification fixes, and the rendered resources are unchanged.
+> **Breaking change:** the `oid4vc` values key is now `openid4vc`. Rename it in your own `values.yaml` before upgrading, otherwise the configuration is silently ignored. The ConfigMap, the volume and the mount path follow the same spelling, so an upgrade replaces them; the environment variable the chart sets is still `OID4VC_CONFIG_FILE_LOCATION`, which the specification fixes.
 
 ### Secrets Management
 

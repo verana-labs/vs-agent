@@ -234,7 +234,7 @@ spec:
             {{- end }}
             {{- if or .Values.openid4vc.config .Values.openid4vc.existingSecret }}
             - name: OID4VC_CONFIG_FILE_LOCATION
-              value: "/run/config/oid4vc/openid4vc.json"
+              value: "/run/config/openid4vc/openid4vc.json"
             {{- if .Values.openid4vc.config }}
             - name: OID4VC_CONFIG_CHECKSUM
               value: {{ sha256sum .Values.openid4vc.config | quote }}
@@ -275,8 +275,8 @@ spec:
             - name: {{ .Values.name }}-vsa-pv
               mountPath: /root/.afj
             {{- if or .Values.openid4vc.config .Values.openid4vc.existingSecret }}
-            - name: {{ .Values.name }}-oid4vc-config
-              mountPath: /run/config/oid4vc
+            - name: {{ .Values.name }}-openid4vc-config
+              mountPath: /run/config/openid4vc
               readOnly: true
             {{- end }}
         {{- if .Values.database.enabled }}
@@ -331,13 +331,13 @@ spec:
            persistentVolumeClaim:
              claimName: {{ .Values.name }}-vsa-pv
         {{- if .Values.openid4vc.existingSecret }}
-         - name: {{ .Values.name }}-oid4vc-config
+         - name: {{ .Values.name }}-openid4vc-config
            secret:
              secretName: {{ .Values.openid4vc.existingSecret }}
         {{- else if .Values.openid4vc.config }}
-         - name: {{ .Values.name }}-oid4vc-config
+         - name: {{ .Values.name }}-openid4vc-config
            configMap:
-             name: {{ .Values.name }}-oid4vc-config
+             name: {{ .Values.name }}-openid4vc-config
         {{- end }}
         {{- if .Values.database.enabled }}
          - name: {{ .Values.name }}-pg-pv-main
