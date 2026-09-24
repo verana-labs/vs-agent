@@ -19,6 +19,10 @@ beforeAll(async () => {
   fixtures = await createCertificateFixtures()
 })
 
+const noIssuerService = (): never => {
+  throw new Error('OpenID4VC issuer service is not initialized')
+}
+
 const setupOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   issuer: {},
@@ -50,7 +54,7 @@ describe('setupOpenId4Vc', () => {
     const empty = setupOptions()
     delete empty.issuer
     delete empty.verifier
-    const setup = setupOpenId4Vc(empty)
+    const setup = setupOpenId4Vc(empty, noIssuerService)
 
     expect(setup.modules.openId4Vc.config).toHaveProperty('issuer.baseUrl', 'https://agent.example/oid4vci')
     expect(setup.modules.openId4Vc.config).toHaveProperty('verifier.baseUrl', 'https://agent.example/oid4vp')
@@ -75,7 +79,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('fails the verification of a presented SD-JWT VC that carries no numeric exp', () => {
-    const setup = setupOpenId4Vc(setupOptions())
+    const setup = setupOpenId4Vc(setupOptions(), noIssuerService)
     const getTrustedCertificates = setup.modules.x509.config.getTrustedCertificatesForVerification
     const verify = (payload: Record<string, unknown>) =>
       getTrustedCertificates?.({} as never, {
@@ -131,11 +135,11 @@ describe('setupOpenId4Vc', () => {
     const options = setupOptions()
     options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]
 
-    expect(setupOpenId4Vc(setupOptions()).modules.openId4Vc.config).toHaveProperty(
+    expect(setupOpenId4Vc(setupOptions(), noIssuerService).modules.openId4Vc.config).toHaveProperty(
       'issuer.walletAttestationsRequired',
       false,
     )
-    expect(setupOpenId4Vc(options).modules.openId4Vc.config).toHaveProperty(
+    expect(setupOpenId4Vc(options, noIssuerService).modules.openId4Vc.config).toHaveProperty(
       'issuer.walletAttestationsRequired',
       true,
     )
@@ -162,7 +166,7 @@ describe('setupOpenId4Vc', () => {
     '/.well-known/openid-credential-issuer',
     '/.well-known/oauth-authorization-server',
   ])('serves %s at the bare path credo leaves unrouted', async wellKnown => {
-    const setup = setupOpenId4Vc(setupOptions())
+    const setup = setupOpenId4Vc(setupOptions(), noIssuerService)
     setup.publicMiddleware.get(`${wellKnown}/oid4vci/issuer`, (incoming, response) =>
       response.json({ credential_issuer: 'https://agent.example/oid4vci/issuer', query: incoming.query }),
     )
@@ -181,7 +185,7 @@ describe('setupOpenId4Vc', () => {
   it('aliases the bare well-known path under a public API base path', async () => {
     const options = setupOptions()
     options.publicApiBaseUrl = 'https://agent.example/public/base'
-    const setup = setupOpenId4Vc(options)
+    const setup = setupOpenId4Vc(options, noIssuerService)
     setup.publicMiddleware.get(
       '/.well-known/openid-credential-issuer/public/base/oid4vci/issuer',
       (_incoming, response) =>
@@ -197,7 +201,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   it('leaves a body on the verifier path to the limits credo sets on its own routers', async () => {
-    const setup = setupOpenId4Vc(setupOptions())
+    const setup = setupOpenId4Vc(setupOptions(), noIssuerService)
     let parsed: unknown = 'middleware was not reached'
     setup.publicMiddleware.post('/oid4vp/verifier/authorize', (incoming, response) => {
       parsed = incoming.body
@@ -218,7 +222,7 @@ describe('setupOpenId4Vc', () => {
   ])('parses a credential request of %s above the default 100 kB limit', async (baseUrl, path) => {
     const options = setupOptions()
     options.publicApiBaseUrl = baseUrl
-    const setup = setupOpenId4Vc(options)
+    const setup = setupOpenId4Vc(options, noIssuerService)
     setup.publicMiddleware.post(path, (incoming, response) =>
       response.json({ length: (incoming.body as { vct: string }).vct.length }),
     )

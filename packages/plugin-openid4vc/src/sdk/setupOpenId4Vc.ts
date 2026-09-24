@@ -33,7 +33,7 @@ export interface OpenId4VcSdkPlugin {
 
 export function setupOpenId4Vc(
   options: OpenId4VcPluginOptions,
-  getIssuerService?: () => OpenId4VcIssuerRequestMapper,
+  getIssuerService: () => OpenId4VcIssuerRequestMapper,
 ): OpenId4VcSdkPlugin {
   const walletAttestationEnabled = Boolean(options.issuer?.walletAttestationCertificates?.length)
 
@@ -51,7 +51,6 @@ export function setupOpenId4Vc(
   // path requests `/.well-known/jwt-vc-issuer/oid4vci/<id>`, not just the bare form.
   app.get(['/.well-known/jwt-vc-issuer', '/.well-known/jwt-vc-issuer/*'], (_request, response, next) => {
     try {
-      if (!getIssuerService) throw new Error('OpenID4VC issuer service is not initialized')
       response.json(getIssuerService().getJwtVcIssuerMetadata())
     } catch (error) {
       next(error)
@@ -67,13 +66,7 @@ export function setupOpenId4Vc(
     issuer: {
       baseUrl: `${options.publicApiBaseUrl}/oid4vci`,
       walletAttestationsRequired: walletAttestationEnabled,
-      credentialRequestToCredentialMapper: input => {
-        if (!getIssuerService) {
-          throw new Error('OpenID4VC issuer service is not initialized')
-        }
-
-        return getIssuerService().mapCredentialRequest(input)
-      },
+      credentialRequestToCredentialMapper: input => getIssuerService().mapCredentialRequest(input),
     },
     verifier: { baseUrl: `${options.publicApiBaseUrl}/oid4vp` },
   }
