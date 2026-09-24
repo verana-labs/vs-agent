@@ -1,4 +1,5 @@
 export * from './CredentialTypeService'
+export * from './DidcommInvitationsService'
 export * from './InvitationService'
 export * from './MessageService'
 export * from './RevocationRegistryService'

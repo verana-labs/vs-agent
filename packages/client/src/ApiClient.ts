@@ -2,6 +2,7 @@
 
 import {
   CredentialTypeService,
+  DidcommInvitationsService,
   InvitationService,
   MessageService,
   RevocationRegistryService,
@@ -10,33 +11,22 @@ import {
 import { ApiVersion } from './types'
 
 /**
- * `ApiClient` class for easy access to the available endpoints in the Agent Service.
- * This class simplifies the interaction with the service by providing methods
- * that map the required data and allow straightforward use of the endpoints.
- *
- * Each method corresponds to an HTTP POST endpoint with a specified route
- * within the Express structure. The `ApiClient` class is designed to handle
- * events and make requests efficiently.
- *
- * Usage:
- * Extend `ApiClient` in your project and implement specific handlers to
- * interact with the available services like message sending and credential management.
+ * `ApiClient` gives access to the Admin API of a VS Agent.
  *
  * Example:
  *
- * // Initialize ApiClient with the base URL and version
  * const apiClient = new ApiClient('http://localhost', ApiVersion.V1)
- *
- * // Example to query available credentials
  * await apiClient.credentialTypes.getAll()
+ * await apiClient.messages.send(message)
+ * await apiClient.didcomm.invitations.send({ connectionId, label })
  *
- * // Example to send a message
- * apiClient.messages.send(message: BaseMessage)
- *
- * The `ApiClient` class provides easy methods for interacting with:
- * - `messages`: Send and manage messages.
- * - `credentialTypes`: Query and manage credential types.
- * - `revocationRegistries`: Query and manage the revocation registry for credential definitions.
+ * Services:
+ * - `messages`: send v1 messages.
+ * - `credentialTypes`: create, import, export and list credential types.
+ * - `revocationRegistries`: create and list revocation registries.
+ * - `invitations`: create invitation codes.
+ * - `trustCredentials`: issue and revoke Verifiable Trust credentials.
+ * - `didcomm`: v2 DIDComm modules. `didcomm.invitations` sends an invitation on a connection.
  */
 export class ApiClient {
   public readonly messages: MessageService
@@ -44,6 +34,7 @@ export class ApiClient {
   public readonly revocationRegistries: RevocationRegistryService
   public readonly invitations: InvitationService
   public readonly trustCredentials: TrustCredentialService
+  public readonly didcomm: { invitations: DidcommInvitationsService }
 
   constructor(
     private baseURL: string,
@@ -54,5 +45,6 @@ export class ApiClient {
     this.credentialTypes = new CredentialTypeService(baseURL, version)
     this.revocationRegistries = new RevocationRegistryService(baseURL, version)
     this.trustCredentials = new TrustCredentialService(baseURL, version)
+    this.didcomm = { invitations: new DidcommInvitationsService(baseURL) }
   }
 }
