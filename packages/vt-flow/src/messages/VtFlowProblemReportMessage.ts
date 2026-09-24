@@ -2,10 +2,12 @@ import {
   DidCommProblemReportMessage,
   ImpactStatus,
   IsValidMessageType,
+  WhereStatus,
   WhoRetriesStatus,
   parseMessageType,
 } from '@credo-ts/didcomm'
 import { Transform, TransformationType } from 'class-transformer'
+import { IsOptional, IsString } from 'class-validator'
 
 import { VT_FLOW_PROBLEM_REPORT_TYPE } from './VtFlowProtocol'
 
@@ -31,4 +33,9 @@ export class VtFlowProblemReportMessage extends DidCommProblemReportMessage {
 
   @Transform(rfc0035Case)
   public impact?: ImpactStatus
+
+  // RFC 0035 where is a compound value such as 'you - agency', which Credo's WhereStatus enum rejects
+  @IsOptional()
+  @IsString()
+  public where?: WhereStatus
 }

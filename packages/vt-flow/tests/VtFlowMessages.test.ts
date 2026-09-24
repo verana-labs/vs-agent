@@ -283,4 +283,18 @@ describe('VtFlowProblemReportMessage', () => {
     expect(parsed.whoRetries).toBe(WhoRetriesStatus.You)
     expect(parsed.impact).toBe(ImpactStatus.Thread)
   })
+
+  it('reads an RFC 0035 where value', () => {
+    const parsed = JsonTransformer.fromJSON(
+      {
+        '@type': VT_FLOW_PROBLEM_REPORT_TYPE,
+        '@id': utils.uuid(),
+        description: { code: VtFlowErrorCode.InvalidClaims, en: 'Bad claims.' },
+        where: 'you - agency',
+      },
+      VtFlowProblemReportMessage,
+    )
+
+    expect(parsed.where).toBe('you - agency')
+  })
 })
