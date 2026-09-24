@@ -226,7 +226,7 @@ describe('VtFlowService startValidation', () => {
   it('moves OOB_PENDING to VALIDATING and records the comment it sends', async () => {
     const { service } = makeValidatorService(VtFlowState.OobPending)
 
-    const { record, message } = await service.startValidationForSession({} as never, 'rec', {
+    const { record, message } = await service.sendValidatingForSession({} as never, 'rec', {
       comment: 'Documents received',
     })
 
@@ -240,7 +240,7 @@ describe('VtFlowService startValidation', () => {
   it('refuses a flow that is not OOB_PENDING', async () => {
     const { service } = makeValidatorService(VtFlowState.Validating)
 
-    await expect(service.startValidationForSession({} as never, 'rec')).rejects.toThrow()
+    await expect(service.sendValidatingForSession({} as never, 'rec')).rejects.toThrow()
   })
 })
 
