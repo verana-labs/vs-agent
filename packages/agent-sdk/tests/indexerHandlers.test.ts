@@ -424,7 +424,9 @@ describe('vtFlowEvents', () => {
     const agent = {
       events: { on, emit: vi.fn() },
       context: { dependencyManager: { resolve: () => service } },
-      indexer: { findParticipant: vi.fn().mockResolvedValue({ role: 6, validatorParticipantId: 93 }) },
+      indexer: {
+        findParticipant: vi.fn().mockResolvedValue({ role: 6, validatorParticipantId: 93, schemaId: 12 }),
+      },
     }
     vtFlowEvents(agent as never, { debug: vi.fn(), warn: vi.fn() } as never)
     const [, listener] = on.mock.calls[0]
@@ -438,6 +440,7 @@ describe('vtFlowEvents', () => {
       ...latest,
       validatorParticipantId: '93',
       applicantParticipantRole: 6,
+      schemaId: '12',
     })
   })
 })

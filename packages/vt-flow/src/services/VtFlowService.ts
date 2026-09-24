@@ -45,6 +45,7 @@ export interface CreateOnboardingRequestParams {
   applicantParticipantId: string
   applicantParticipantRole?: number
   validatorParticipantId?: string
+  schemaId?: string
   agentParticipantId: string
   walletAgentParticipantId: string
   claims?: Record<string, unknown>
@@ -136,6 +137,7 @@ export class VtFlowService {
       applicantParticipantId: params.applicantParticipantId,
       applicantParticipantRole: params.applicantParticipantRole,
       validatorParticipantId: params.validatorParticipantId,
+      schemaId: params.schemaId,
       claims: params.claims,
     })
 
@@ -308,7 +310,7 @@ export class VtFlowService {
           `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
         )
       }
-      if (existing.schemaId !== message.schemaId) {
+      if (existing.variant !== VtFlowVariant.DirectIssuance || existing.schemaId !== message.schemaId) {
         throw new CredoError(
           `vt-flow: schema_id '${message.schemaId}' does not match the flow of participant_session_id '${message.participantSessionId}'`,
         )

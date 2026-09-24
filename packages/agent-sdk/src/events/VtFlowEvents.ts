@@ -57,5 +57,6 @@ async function recordApplicantEntry(agent: VsAgent, vtFlowRecordId: string): Pro
   const latest = await service.getById(agentContext, vtFlowRecordId)
   latest.validatorParticipantId = String(applicant.validatorParticipantId)
   latest.applicantParticipantRole = Number(applicant.role)
+  latest.schemaId = String(applicant.schemaId)
   await service.updateRecord(agentContext, latest)
 }

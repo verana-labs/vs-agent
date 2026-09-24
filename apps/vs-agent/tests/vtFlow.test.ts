@@ -125,6 +125,7 @@ describe('vt-flow: two-agent integration', () => {
     const applicantRecord = await applicant.modules.vtFlow.sendOnboardingRequest({
       connectionId: applicantConnection.id,
       applicantParticipantId: 'participant-42',
+      schemaId: '12',
       agentParticipantId: 'agent-participant-2',
       walletAgentParticipantId: 'wallet-agent-participant-2',
       claims: { role: 'issuer' },
@@ -143,6 +144,11 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.state).toBe(VtFlowState.Validated)
     expect(validatorRecord?.threadId).toBe(applicantRecord.threadId)
     expect(validatorRecord?.applicantParticipantId).toBe('participant-42')
+
+    const { VtFlowsService } = await import('../src/controllers/admin/vt-flow/VtFlowsService')
+    const flowsService = new VtFlowsService({ getAgent: async () => applicant } as never, undefined as never)
+    const bySchema = await flowsService.listFlowsPage({ schemaId: '12' })
+    expect(bySchema.items.map(flow => flow.id)).toEqual([applicantRecord.id])
   })
 
   it('onboarding-request: Applicant transitions OR_SENT -> VALIDATING on `validating`', async () => {

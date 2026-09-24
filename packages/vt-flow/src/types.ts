@@ -167,6 +167,7 @@ export interface SendOnboardingRequestOptions {
   applicantParticipantId: string
   applicantParticipantRole?: number
   validatorParticipantId?: string
+  schemaId?: string
   agentParticipantId: string
   walletAgentParticipantId: string
   claims?: Record<string, unknown>

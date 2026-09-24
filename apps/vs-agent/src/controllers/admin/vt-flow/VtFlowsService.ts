@@ -429,7 +429,7 @@ function toDto({ record, peerDid, connectionState }: ResolvedFlow): VtFlowRecord
       expiresAt: record.oobLink.expiresAt,
       at: record.oobLink.at,
     },
-    messages: record.messages?.map(message => ({
+    messages: (record.messages ?? []).map(message => ({
       type: message.type,
       text: message.text,
       at: message.at,

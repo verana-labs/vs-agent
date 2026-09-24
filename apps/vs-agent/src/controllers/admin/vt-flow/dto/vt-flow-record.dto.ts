@@ -29,8 +29,8 @@ export class VtFlowRecordDto {
   @ApiProperty({ required: false, type: Object })
   oobLink?: { url: string; description: string; expiresAt?: string; at: string }
 
-  @ApiProperty({ required: false, type: [Object] })
-  messages?: { type: string; text: string; at: string; url?: string }[]
+  @ApiProperty({ type: [Object] })
+  messages!: { type: string; text: string; at: string; url?: string }[]
 
   @ApiProperty({ enum: VtFlowPendingAction }) pendingAction!: VtFlowPendingAction
   @ApiProperty({ required: false, type: Object }) validation?: VtFlowValidation

@@ -13,7 +13,7 @@ import {
   VtFlowVariant,
 } from '../types'
 
-/** Indexed storage tags queryable through `VtFlowRepository`; the participant ids are OnboardingProcess-only and `schemaId` is DirectIssuance-only. */
+/** Indexed storage tags queryable through `VtFlowRepository`; the participant ids are OnboardingProcess-only. */
 export type DefaultVtFlowTags = {
   threadId: string
   participantSessionId: string

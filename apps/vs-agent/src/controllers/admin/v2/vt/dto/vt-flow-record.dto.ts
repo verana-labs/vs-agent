@@ -140,12 +140,12 @@ export class V2VtFlowRecordDto {
   })
   oobLink?: V2VtFlowOobLinkDto
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description:
       'Human-readable messages of the flow, in order. A validator lists what it sent, an applicant what it received.',
     type: [V2VtFlowMessageDto],
   })
-  messages?: V2VtFlowMessageDto[]
+  messages!: V2VtFlowMessageDto[]
 
   @ApiProperty({
     enum: VtFlowPendingAction,

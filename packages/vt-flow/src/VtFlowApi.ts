@@ -59,6 +59,7 @@ export class VtFlowApi {
       applicantParticipantId: options.applicantParticipantId,
       applicantParticipantRole: options.applicantParticipantRole,
       validatorParticipantId: options.validatorParticipantId,
+      schemaId: options.schemaId,
       agentParticipantId: options.agentParticipantId,
       walletAgentParticipantId: options.walletAgentParticipantId,
       claims: options.claims,

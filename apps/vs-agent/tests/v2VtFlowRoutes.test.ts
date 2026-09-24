@@ -125,6 +125,14 @@ describe('VtFlowsService v2 routes', () => {
     })
   })
 
+  it('lists a flow that has no messages with an empty messages array', async () => {
+    const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) })
+
+    const page = await service.listFlowsPage({})
+
+    expect(page.items[0].messages).toEqual([])
+  })
+
   it('reports NOT_CONNECTED while the connection of a live flow is not ready', async () => {
     const service = makeService(
       { findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) },

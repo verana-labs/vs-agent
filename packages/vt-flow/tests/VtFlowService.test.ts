@@ -234,6 +234,35 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(repository.update).not.toHaveBeenCalled()
   })
 
+  it('validator rejects an issuance-request that reuses the session of an onboarding flow', async () => {
+    const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validating, schemaId: '5' })
+    const { service, repository, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+    const message = new IssuanceRequestMessage({
+      schemaId: '5',
+      participantSessionId: 'sess-1',
+      agentParticipantId: '0',
+      walletAgentParticipantId: '0',
+    })
+    message.setThread({ threadId: message.id })
+    const context = {
+      message,
+      agentContext,
+      assertReadyConnection: () => ({
+        id: 'conn-new',
+        theirDid: 'did:web:agent-peer',
+        previousTheirDids: [],
+      }),
+    }
+
+    await expect(service.processReceiveIssuanceRequest(context as never)).rejects.toThrow(
+      /schema_id '5' does not match/,
+    )
+    expect(repository.update).not.toHaveBeenCalled()
+  })
+
   it('validator re-attach during the credential offer drops the exchange and steps back to Validated', async () => {
     const existing = makeRecord({
       role: VtFlowRole.Validator,
