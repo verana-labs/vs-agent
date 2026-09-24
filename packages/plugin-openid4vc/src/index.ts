@@ -25,14 +25,16 @@ export type { OpenId4VcIssuanceSessionSummary, OpenId4VcOfferResult } from './se
 export { OPENID4VC_REQUEST_SIGNERS, VerifierService } from './services/VerifierService'
 export type {
   OpenId4VcCreatePresentationRequestOptions,
-  OpenId4VcQueryLanguage,
   OpenId4VcRequestSigner,
   OpenId4VcVerificationRequest,
   OpenId4VcVerificationSessionSummary,
-  OpenId4VcVerifiedCredentialResult,
 } from './services/VerifierService'
 export { OPENID4VC_QUERY_LANGUAGES } from './services/presentationRequest'
-export type { PresentationDecision } from './services/presentationVerification'
+export type { OpenId4VcQueryLanguage } from './services/presentationRequest'
+export type {
+  OpenId4VcVerifiedCredentialResult,
+  PresentationDecision,
+} from './services/presentationVerification'
 export { TRUST_VERDICT_NAMES, VERANA_TRUST_STATUSES } from './trust/types'
 export type { TrustEvidence, TrustVerdict, TrustVerdictName, VeranaTrustStatus } from './trust/types'
 export { OPENID4VC_OPTIONS } from './types'

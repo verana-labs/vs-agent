@@ -52,6 +52,7 @@ import {
   ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
   ADMIN_API_PUBLIC_URL,
   ADMIN_API_TRUSTED_NETWORKS,
+  ADMIN_V2_TAGS,
   validateAdminApiConfig,
   DEFAULT_ADMIN_API_LOG_LEVEL,
   DEFAULT_AGENT_LOG_LEVEL,
@@ -101,6 +102,12 @@ import {
 
 const SELECTABLE_PLUGINS = ['messaging', 'chat', 'mrtd']
 
+const ADMIN_TAGS = Object.fromEntries(
+  Object.entries(ADMIN_V2_TAGS).filter(
+    ([name]) => name !== 'v2/openid4vc' || Boolean(OID4VC_CONFIG_FILE_LOCATION),
+  ),
+)
+
 const AGENT_LOG_LEVEL = resolveLogLevel(AGENT_LOG_LEVEL_NAME, DEFAULT_AGENT_LOG_LEVEL)
 const ADMIN_API_LOG_LEVEL = resolveLogLevel(ADMIN_API_LOG_LEVEL_NAME, DEFAULT_ADMIN_API_LOG_LEVEL)
 
@@ -121,7 +128,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
     { logger: nestLogLevels },
   )
   adminApp.use(restrictDocsToTrustedPeers(trustedNetworks))
-  commonAppConfig(adminApp, cors)
+  commonAppConfig(adminApp, cors, false, true, ADMIN_TAGS)
   await adminApp.listen(port)
 
   // PublicModule-specific config

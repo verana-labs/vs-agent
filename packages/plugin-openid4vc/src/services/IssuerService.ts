@@ -101,8 +101,6 @@ export class IssuerService implements OnModuleInit {
   }
 
   public ensureInitialized(): Promise<void> {
-    // A rejected initialization is not cached, so a transient boot-time failure retries instead of wedging
-    // the process until restart.
     this.initialization ??= this.initialize().catch(error => {
       this.initialization = undefined
       throw error
@@ -305,10 +303,6 @@ export class IssuerService implements OnModuleInit {
     )
   }
 
-  private metadataSigner(signingCertificate: SigningCertificateHandle) {
-    return { method: 'x5c' as const, x5c: x5cCertificateChain(signingCertificate) }
-  }
-
   private async createOrUpdateIssuer(signingCertificate: SigningCertificateHandle): Promise<void> {
     const display = serviceDisplay(this.agent)
     const metadata = {
@@ -332,7 +326,7 @@ export class IssuerService implements OnModuleInit {
           }
         : {}),
       credentialConfigurationsSupported: this.credentialConfigurationsSupported(),
-      metadataSigner: this.metadataSigner(signingCertificate),
+      metadataSigner: { method: 'x5c' as const, x5c: x5cCertificateChain(signingCertificate) },
     }
 
     try {

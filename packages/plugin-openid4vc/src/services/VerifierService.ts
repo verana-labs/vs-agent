@@ -38,8 +38,6 @@ type VerifierApi = Pick<
   | 'deleteVerificationSessionById'
 >
 
-export type { OpenId4VcQueryLanguage } from './presentationRequest'
-
 export interface OpenId4VcVerificationRequest {
   authorizationRequest: string
   verificationSessionId: string
@@ -60,8 +58,6 @@ export interface OpenId4VcCreatePresentationRequestOptions {
   queryLanguage?: OpenId4VcQueryLanguage
   requestSigner?: OpenId4VcRequestSigner
 }
-
-export type { OpenId4VcVerifiedCredentialResult } from './presentationVerification'
 
 const BAD_REQUEST = 400
 const NOT_FOUND = 404
@@ -179,7 +175,12 @@ export class VerifierService implements OnModuleInit {
       state: filters.state,
       [JSON_SCHEMA_CREDENTIAL_ID_TAG]: filters.jsonSchemaCredentialId,
     })
-    return sessions.map(session => this.summarizeKnown(session))
+    return sessions.map(session =>
+      this.toSummary(
+        session,
+        this.storedDecision(session) ?? { cryptographicVerified: true, accepted: false },
+      ),
+    )
   }
 
   public async deleteVerificationSession(id: string): Promise<void> {
@@ -189,14 +190,19 @@ export class VerifierService implements OnModuleInit {
   }
 
   private async findOwnedSession(id: string): Promise<OpenId4VcVerificationSessionRecord> {
-    const session = await this.getSession(id)
-    this.assertSessionOwnership(session, id)
+    let session: OpenId4VcVerificationSessionRecord
+    try {
+      session = await this.verifierApi().getVerificationSessionById(id)
+    } catch (error) {
+      if (error instanceof RecordNotFoundError) {
+        throw new AdminApiError(AdminApiErrorCode.UnknownId, NOT_FOUND, `no presentation with id "${id}"`)
+      }
+      throw error
+    }
+    if (session.verifierId !== VERIFIER_CAPABILITY_ID) {
+      throw new AdminApiError(AdminApiErrorCode.UnknownId, NOT_FOUND, `no presentation with id "${id}"`)
+    }
     return session
-  }
-
-  private summarizeKnown(session: OpenId4VcVerificationSessionRecord): OpenId4VcVerificationSessionSummary {
-    const decision = this.storedDecision(session) ?? { cryptographicVerified: true, accepted: false }
-    return this.toSummary(session, decision)
   }
 
   private toSummary(
@@ -298,31 +304,6 @@ export class VerifierService implements OnModuleInit {
     }
 
     await this.verifierApi().updateVerifierMetadata(metadata)
-  }
-
-  private async getSession(sessionId: string): Promise<OpenId4VcVerificationSessionRecord> {
-    try {
-      return await this.verifierApi().getVerificationSessionById(sessionId)
-    } catch (error) {
-      if (error instanceof RecordNotFoundError) {
-        throw new AdminApiError(
-          AdminApiErrorCode.UnknownId,
-          NOT_FOUND,
-          `no presentation with id "${sessionId}"`,
-        )
-      }
-      throw error
-    }
-  }
-
-  private assertSessionOwnership(session: OpenId4VcVerificationSessionRecord, sessionId: string): void {
-    if (session.verifierId !== VERIFIER_CAPABILITY_ID) {
-      throw new AdminApiError(
-        AdminApiErrorCode.UnknownId,
-        NOT_FOUND,
-        `no presentation with id "${sessionId}"`,
-      )
-    }
   }
 
   private verifierApi(): VerifierApi {
