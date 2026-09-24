@@ -17,6 +17,13 @@ const readOptions = () => ({
   credentialConfigurations: [],
 })
 
+const readError = async (location: string) => {
+  const { options, errors } = await readOpenId4VcOptions(location, publicApiBaseUrl)
+  expect(options).toBeUndefined()
+  expect(errors).toHaveLength(1)
+  return errors[0]
+}
+
 describe('OpenID4VC configuration file', () => {
   let fixtureDirectory: string
   let configPath: string
@@ -32,15 +39,18 @@ describe('OpenID4VC configuration file', () => {
   })
 
   it('reads and validates the file and injects the trusted public API base URL', async () => {
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).resolves.toEqual(readOptions())
+    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).resolves.toEqual({
+      options: readOptions(),
+      errors: [],
+    })
   })
 
   it('accepts an empty document and defaults the internal structures', async () => {
     await writeFile(configPath, JSON.stringify({}))
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).resolves.toEqual({
-      publicApiBaseUrl,
-      credentialConfigurations: [],
+      options: { publicApiBaseUrl, credentialConfigurations: [] },
+      errors: [],
     })
   })
 
@@ -51,9 +61,7 @@ describe('OpenID4VC configuration file', () => {
   ])('rejects the %s block, which the spec does not define', async field => {
     await writeFile(configPath, JSON.stringify({ ...validConfig(), [field]: [] }))
 
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      `unknown field '${field}'`,
-    )
+    expect(await readError(configPath)).toContain(`unknown field '${field}'`)
   })
 
   it.each([
@@ -68,9 +76,7 @@ describe('OpenID4VC configuration file', () => {
 
     await writeFile(configPath, JSON.stringify(config))
 
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      `unknown field '${capability}.${field}'`,
-    )
+    expect(await readError(configPath)).toContain(`unknown field '${capability}.${field}'`)
   })
 
   it.each([
@@ -86,9 +92,7 @@ describe('OpenID4VC configuration file', () => {
   ])('rejects the unknown nested field %s', async (field, config) => {
     await writeFile(configPath, JSON.stringify(config))
 
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      `unknown field '${field}'`,
-    )
+    expect(await readError(configPath)).toContain(`unknown field '${field}'`)
   })
 
   it('rejects a key attestation root that is not an X.509 certificate', async () => {
@@ -97,7 +101,7 @@ describe('OpenID4VC configuration file', () => {
       JSON.stringify({ issuer: { keyAttestationCertificates: ['not-a-certificate'] } }),
     )
 
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
+    expect(await readError(configPath)).toContain(
       'issuer.keyAttestationCertificates[0] must be a valid X.509 certificate',
     )
   })
@@ -109,25 +113,19 @@ describe('OpenID4VC configuration file', () => {
   ])('rejects a %s that is not an object: %j', async (capability, value) => {
     await writeFile(configPath, JSON.stringify({ [capability]: value }))
 
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      `${capability} must be a JSON object`,
-    )
+    expect(await readError(configPath)).toContain(`${capability} must be a JSON object`)
   })
 
   it('rejects a null signing block instead of dying while reading it', async () => {
     await writeFile(configPath, JSON.stringify({ issuer: { signing: null } }))
 
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      'issuer.signing must be a JSON object',
-    )
+    expect(await readError(configPath)).toContain('issuer.signing must be a JSON object')
   })
 
   it('refuses a file that carries a revocation block', async () => {
     await writeFile(configPath, JSON.stringify({ ...validConfig(), revocation: { enabled: true } }))
 
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      "unknown field 'revocation'",
-    )
+    expect(await readError(configPath)).toContain("unknown field 'revocation'")
   })
 
   it('rejects a public API base URL supplied by the file', async () => {
@@ -136,9 +134,7 @@ describe('OpenID4VC configuration file', () => {
       JSON.stringify({ ...validConfig(), publicApiBaseUrl: 'https://attacker.example' }),
     )
 
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      "unknown field 'publicApiBaseUrl'",
-    )
+    expect(await readError(configPath)).toContain("unknown field 'publicApiBaseUrl'")
   })
 
   it.each(['issuer', 'verifier'])('rejects a configured %s identifier segment', async capability => {
@@ -147,20 +143,17 @@ describe('OpenID4VC configuration file', () => {
 
     await writeFile(configPath, JSON.stringify(config))
 
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      `unknown field '${capability}.id'`,
-    )
+    expect(await readError(configPath)).toContain(`unknown field '${capability}.id'`)
   })
 
   it('rejects an unknown top-level key without echoing its value', async () => {
     const secretValue = 'unknown-field-secret-value'
     await writeFile(configPath, JSON.stringify({ ...validConfig(), unexpected: secretValue }))
 
-    const error = await readOpenId4VcOptions(configPath, publicApiBaseUrl).catch(value => value)
+    const error = await readError(configPath)
 
-    expect(error).toBeInstanceOf(Error)
-    expect(error.message).toContain("unknown field 'unexpected'")
-    expect(error.message).not.toContain(secretValue)
+    expect(error).toContain("unknown field 'unexpected'")
+    expect(error).not.toContain(secretValue)
   })
 
   it('does not echo private JWK or certificate values in validation errors', async () => {
@@ -172,21 +165,20 @@ describe('OpenID4VC configuration file', () => {
     }
     await writeFile(configPath, JSON.stringify(config))
 
-    const error = await readOpenId4VcOptions(configPath, publicApiBaseUrl).catch(value => value)
+    const error = await readError(configPath)
 
-    expect(error).toBeInstanceOf(Error)
-    expect(error.message).toContain('issuer.signing.configured.privateJwk')
-    expect(error.message).not.toContain(privateValue)
-    expect(error.message).not.toContain(certificateValue)
+    expect(error).toContain('issuer.signing.configured.privateJwk')
+    expect(error).not.toContain(privateValue)
+    expect(error).not.toContain(certificateValue)
   })
 
   it('reports a missing or unreadable file without system error details', async () => {
     const missingPath = join(fixtureDirectory, 'missing.json')
 
-    await expect(readOpenId4VcOptions(missingPath, publicApiBaseUrl)).rejects.toThrow(
+    expect(await readError(missingPath)).toContain(
       `Unable to read OpenID4VC configuration file '${missingPath}'`,
     )
-    await expect(readOpenId4VcOptions(fixtureDirectory, publicApiBaseUrl)).rejects.toThrow(
+    expect(await readError(fixtureDirectory)).toContain(
       `Unable to read OpenID4VC configuration file '${fixtureDirectory}'`,
     )
   })
@@ -195,19 +187,16 @@ describe('OpenID4VC configuration file', () => {
     const privateValue = 'malformed-private-jwk-value'
     await writeFile(configPath, `{"issuer":{"signing":{"privateJwk":"${privateValue}"}}`)
 
-    const error = await readOpenId4VcOptions(configPath, publicApiBaseUrl).catch(value => value)
+    const error = await readError(configPath)
 
-    expect(error).toBeInstanceOf(Error)
-    expect(error.message).toContain(`Invalid JSON in OpenID4VC configuration file '${configPath}'`)
-    expect(error.message).not.toContain(privateValue)
+    expect(error).toContain(`Invalid JSON in OpenID4VC configuration file '${configPath}'`)
+    expect(error).not.toContain(privateValue)
   })
 
   it('rejects a JSON document that is not an object', async () => {
     await writeFile(configPath, JSON.stringify(['not-an-object']))
 
-    await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).rejects.toThrow(
-      'the OpenID4VC configuration must be a JSON object',
-    )
+    expect(await readError(configPath)).toContain('the OpenID4VC configuration must be a JSON object')
   })
 })
 
@@ -225,7 +214,10 @@ describe('OpenID4VC configuration location', () => {
   it('fetches an https location once without following a redirect, then validates it', async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify(validConfig()), { status: 200 }))
 
-    await expect(readOpenId4VcOptions(location, publicApiBaseUrl)).resolves.toEqual(readOptions())
+    await expect(readOpenId4VcOptions(location, publicApiBaseUrl)).resolves.toEqual({
+      options: readOptions(),
+      errors: [],
+    })
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(fetchMock).toHaveBeenCalledWith(location, { redirect: 'manual', signal: expect.any(AbortSignal) })
   })
@@ -235,11 +227,10 @@ describe('OpenID4VC configuration location', () => {
       new Response(null, { status: 302, headers: { location: 'https://elsewhere.example/openid4vc.json' } }),
     )
 
-    const error = await readOpenId4VcOptions(location, publicApiBaseUrl).catch(value => value)
+    const error = await readError(location)
 
-    expect(error).toBeInstanceOf(Error)
-    expect(error.message).toContain("'https://config.example/openid4vc.json' answered with a redirect")
-    expect(error.message).not.toContain('query-secret-value')
+    expect(error).toContain("'https://config.example/openid4vc.json' answered with a redirect")
+    expect(error).not.toContain('query-secret-value')
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
@@ -247,7 +238,7 @@ describe('OpenID4VC configuration location', () => {
     'http://config.example/openid4vc.json',
     'file:///run/config/openid4vc.json',
   ])('refuses %s without reading it', async value => {
-    await expect(readOpenId4VcOptions(value, publicApiBaseUrl)).rejects.toThrow('must use https')
+    expect(await readError(value)).toContain('must use https')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

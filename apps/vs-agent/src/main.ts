@@ -241,6 +241,22 @@ const run = async () => {
   if (serviceClaims.minimumAgeRequired && !Number.isInteger(Number(serviceClaims.minimumAgeRequired))) {
     configErrors.push(`${ECS_CLAIMS_VARIABLES.service.minimumAgeRequired} must be an integer`)
   }
+  configErrors.push(
+    ...validateAdminApiConfig({
+      authMode: ADMIN_API_AUTH_MODE,
+      publicUrl: ADMIN_API_PUBLIC_URL,
+      allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
+      trustedNetworks: ADMIN_API_TRUSTED_NETWORKS,
+    }),
+  )
+
+  let openId4VcOptions: OpenId4VcPluginOptions | undefined
+  if (OID4VC_CONFIG_FILE_LOCATION && didLocation) {
+    const openId4Vc = await readOpenId4VcOptions(OID4VC_CONFIG_FILE_LOCATION, didLocation.normalizedBaseUrl)
+    openId4VcOptions = openId4Vc.options
+    configErrors.push(...openId4Vc.errors)
+  }
+
   if (configErrors.length > 0 || !didLocation) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
     process.exit(1)
@@ -256,27 +272,7 @@ const run = async () => {
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
-  const adminApiConfigErrors = validateAdminApiConfig({
-    authMode: ADMIN_API_AUTH_MODE,
-    publicUrl: ADMIN_API_PUBLIC_URL,
-    allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
-    trustedNetworks: ADMIN_API_TRUSTED_NETWORKS,
-  })
-  if (adminApiConfigErrors.length > 0) {
-    serverLogger.error(`Invalid configuration:\n- ${adminApiConfigErrors.join('\n- ')}`)
-    process.exit(1)
-  }
   const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE === 'corporation' ? ADMIN_API_PUBLIC_URL : undefined
-
-  let openId4VcOptions: OpenId4VcPluginOptions | undefined
-  if (OID4VC_CONFIG_FILE_LOCATION) {
-    try {
-      openId4VcOptions = await readOpenId4VcOptions(OID4VC_CONFIG_FILE_LOCATION, publicApiBaseUrl)
-    } catch (error) {
-      serverLogger.error(`Invalid configuration:\n- ${(error as Error).message}`)
-      process.exit(1)
-    }
-  }
 
   const unselectable = ENABLED_PLUGINS.filter(name => !SELECTABLE_PLUGINS.includes(name))
   if (unselectable.length > 0)

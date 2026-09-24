@@ -5,22 +5,36 @@ import { readFile } from 'fs/promises'
 
 const FETCH_TIMEOUT_MS = 10_000
 
+export interface OpenId4VcOptionsResult {
+  options?: OpenId4VcPluginOptions
+  errors: string[]
+}
+
 export async function readOpenId4VcOptions(
   location: string,
   publicApiBaseUrl: string,
-): Promise<OpenId4VcPluginOptions> {
+): Promise<OpenId4VcOptionsResult> {
   const url = parseAbsoluteUrl(location)
   const name = url ? `${url.protocol}//${url.host}${url.pathname}` : location
-  const contents = url ? await fetchConfiguration(url, name) : await readConfiguration(location)
 
-  let parsed: unknown
   try {
-    parsed = JSON.parse(contents)
+    const contents = url ? await fetchConfiguration(url, name) : await readConfiguration(location)
+    const parsed = parseConfiguration(contents, name)
+    return {
+      options: { ...parseOpenId4VcConfiguration(parsed), publicApiBaseUrl, credentialConfigurations: [] },
+      errors: [],
+    }
+  } catch (error) {
+    return { errors: [(error as Error).message] }
+  }
+}
+
+function parseConfiguration(contents: string, name: string): unknown {
+  try {
+    return JSON.parse(contents)
   } catch {
     throw new Error(`Invalid JSON in OpenID4VC configuration file '${name}'`)
   }
-
-  return { ...parseOpenId4VcConfiguration(parsed), publicApiBaseUrl, credentialConfigurations: [] }
 }
 
 async function readConfiguration(path: string): Promise<string> {
