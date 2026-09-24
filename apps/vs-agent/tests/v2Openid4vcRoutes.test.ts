@@ -9,10 +9,9 @@ import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { IssuerService, VerifierService } from '@verana-labs/vs-agent-plugin-openid4vc'
-import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
+import { AdminApiError, AdminApiErrorCode, encodeCursor, hashScope } from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
-import { encodeCursor, hashScope } from '../src/common/pagination/cursor'
 import {
   Openid4vcCredentialOfferBodyDto,
   Openid4vcListCredentialExchangesQueryDto,
