@@ -110,8 +110,7 @@ describe('setupOpenId4Vc', () => {
     expect(response.body.jwks.keys).toHaveLength(1)
   })
 
-  // RFC 8615 inserts the issuer path after the well-known segment; answering only the bare
-  // form made every wwWallet issuance show a metadata-fetch failure above the trust card.
+  // RFC 8615 inserts the issuer path after the well-known segment, so the bare form alone is not enough.
   it('serves the SD-JWT VC issuer metadata at the path-inserted well-known form', async () => {
     const setup = setupOpenId4Vc(setupOptions(), () => ({
       getJwtVcIssuerMetadata: () => ({ issuer: 'https://issuer.example', jwks: { keys: [] } }),

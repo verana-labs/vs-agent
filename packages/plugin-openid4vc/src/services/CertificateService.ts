@@ -402,8 +402,7 @@ function parseDevelopmentRecord(content: Record<string, unknown>): DevelopmentCe
   return { certificate: content.certificate, keyId: content.keyId }
 }
 
-// HAIP forbids the trust anchor inside `x5c`, and NL Wallet enforces it, so a configured chain drops its
-// self-signed root.
+// HAIP forbids the trust anchor inside `x5c`, so a configured chain drops its self-signed root.
 export function x5cCertificateChain(signingCertificate: SigningCertificateHandle): X509Certificate[] {
   if (signingCertificate.development) return signingCertificate.chain
 

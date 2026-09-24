@@ -102,8 +102,7 @@ describe('in-process OpenID4VC issuance', () => {
     expect(header).toMatchObject({ alg: 'ES256', typ: 'openidvci-issuer-metadata+jwt' })
     expect(header.x5c).toHaveLength(2)
     expect(header.x5c).not.toContain(agents.rootCertificate)
-    // NL Wallet reads x5c through serde_with Base64<Standard, Padded> into DER, so base64url or
-    // PEM armour would fail to deserialize before any signature check runs.
+    // RFC 7515 4.1.6 requires each x5c entry to be standard padded base64 of the DER certificate.
     expect(header.x5c.every((entry: string) => /^[A-Za-z0-9+/]+={0,2}$/.test(entry))).toBe(true)
     expect(header.x5c.every((entry: string) => entry.length % 4 === 0)).toBe(true)
     expect(header.x5c.every((entry: string) => Buffer.from(entry, 'base64')[0] === 0x30)).toBe(true)

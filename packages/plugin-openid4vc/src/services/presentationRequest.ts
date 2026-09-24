@@ -56,12 +56,12 @@ export function presentationDefinitionFor(
       {
         id: configuration.id,
         constraints: {
-          // 'preferred', not 'required': MOSIP rejects any other value; the verifier fails closed regardless.
+          // 'preferred': holders that can't enforce 'required' refuse it; the verifier re-checks the claims.
           limit_disclosure: 'preferred' as const,
           fields: [
             {
               path: ['$.vct'],
-              // pattern beside const: MOSIP requires filter.pattern, not const alone.
+              // pattern beside const: a filter engine matching only 'pattern' finds nothing on 'const' alone.
               filter: {
                 type: 'string' as const,
                 const: configuration.vct,
