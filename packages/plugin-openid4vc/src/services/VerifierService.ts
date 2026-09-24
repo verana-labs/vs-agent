@@ -11,7 +11,6 @@ import { findCredentialConfiguration, VERIFIER_CAPABILITY_ID } from '../config'
 import { OpenId4VcError, OpenId4VcErrorCode } from '../errors'
 import {
   findBoundVerificationMethodId,
-  findEd25519VerificationMethodId,
   ownDidResolutionPolicy,
   verifyKeyBoundToDid,
 } from '../trust/keyBinding'
@@ -76,7 +75,7 @@ const UNDECIDED_TRUST_DECISION: PresentationDecision = {
       jsonSchemaCredentialId: null,
       authorized: null,
       queries: [],
-      note: 'the agent does not decide OpenID4VP trust yet; issue #712 brings the decision',
+      note: 'the agent does not decide OpenID4VP trust yet',
     },
   },
 }
@@ -131,7 +130,7 @@ export class VerifierService {
     const { authorizationRequest, verificationSession } = await this.verifierApi().createAuthorizationRequest(
       {
         verifierId: VERIFIER_CAPABILITY_ID,
-        requestSigner: await this.buildRequestSigner(queryLanguage, requestSigner),
+        requestSigner: await this.buildRequestSigner(requestSigner),
         // JARM (direct_post.jwt) is DCQL-only: Presentation Exchange wallets can't build the JWE it needs.
         responseMode: queryLanguage === 'presentation_exchange' ? 'direct_post' : 'direct_post.jwt',
         ...presentationQueryFor(configuration, claims, queryLanguage),
@@ -323,7 +322,7 @@ export class VerifierService {
     return this.signingCertificate
   }
 
-  private async buildRequestSigner(queryLanguage: OpenId4VcQueryLanguage, override?: 'x5c' | 'did') {
+  private async buildRequestSigner(override?: 'x5c' | 'did') {
     const certificate = this.signingCertificateHandle()
     if (override !== 'did') {
       return {
@@ -334,18 +333,6 @@ export class VerifierService {
     }
 
     const did = this.agent.did ?? null
-
-    // Presentation Exchange requests sign with the agent's Ed25519 authentication key: MOSIP's
-    // RequestSigningAlgorithm enum only has EdDSA.
-    if (queryLanguage === 'presentation_exchange') {
-      const ed25519DidUrl = await findEd25519VerificationMethodId(
-        this.agent,
-        did,
-        ['authentication'],
-        ownDidResolutionPolicy(did ?? ''),
-      )
-      if (ed25519DidUrl) return { method: 'did' as const, didUrl: ed25519DidUrl }
-    }
 
     const didUrl = await findBoundVerificationMethodId(
       this.agent,

@@ -138,7 +138,8 @@ export async function publishDevelopmentSigningKey(
     throw new Error('development signing key DID update failed')
   })
   if (update.didState.state !== 'finished') {
-    throw new Error('development signing key DID update failed')
+    const reason = (update.didState as { reason?: string }).reason ?? 'unknown reason'
+    throw new Error(`development signing key DID update failed: ${reason}`)
   }
   if (update.didState.did !== did || update.didState.didDocument.id !== did) {
     throw new Error('development signing key DID update returned a different DID')

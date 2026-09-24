@@ -102,8 +102,8 @@ afterEach(async () => {
 })
 
 describe('presentation-exchange request signing for a webvh verifier', () => {
-  it('signs under the agent webvh DID with its Ed25519 authentication key', async () => {
-    const { service, fetchRequestJwt, ed25519MethodId } = await startWebvhVerifier()
+  it('signs under the agent webvh DID with the verifier certificate key', async () => {
+    const { service, fetchRequestJwt, certMethodId } = await startWebvhVerifier()
 
     const request = await service.createRequest({
       jsonSchemaCredentialId: testCredentialConfiguration.id,
@@ -113,8 +113,8 @@ describe('presentation-exchange request signing for a webvh verifier', () => {
     })
     const { header, payload } = await fetchRequestJwt(request.authorizationRequest)
 
-    expect(header.alg).toBe('EdDSA')
-    expect(header.kid).toBe(ed25519MethodId)
+    expect(header.alg).toBe('ES256')
+    expect(header.kid).toBe(certMethodId)
 
     const filter = payload.presentation_definition?.input_descriptors?.[0]?.constraints?.fields?.[0]
       ?.filter as { const?: string; pattern?: string } | undefined
@@ -228,7 +228,10 @@ async function startWebvhVerifier() {
     did: WEBVH_DID,
     role: DidDocumentRole.Created,
     didDocument: clone(didDocument),
-    keys: [{ didDocumentRelativeKeyId: `#${publicKeyMultibase}`, kmsKeyId: imported.keyId }],
+    keys: [
+      { didDocumentRelativeKeyId: `#${publicKeyMultibase}`, kmsKeyId: imported.keyId },
+      { didDocumentRelativeKeyId: '#certificate', kmsKeyId: OTHER_PRIVATE_JWK.kid as string },
+    ],
   })
   didRecord.setTag('domain', 'verifier.example')
   await agent.dependencyManager.resolve(DidRepository).save(agent.context, didRecord)
@@ -251,5 +254,5 @@ async function startWebvhVerifier() {
     }
   }
 
-  return { service, fetchRequestJwt, ed25519MethodId }
+  return { service, fetchRequestJwt, certMethodId }
 }
