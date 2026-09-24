@@ -7,6 +7,11 @@ export {
   parseOfferClaims,
   parseOpenId4VcConfiguration,
 } from './config'
+export { OpenId4VcPlugin } from './nestjs/OpenId4VcPlugin'
+export * from './nestjs/dto'
+export { V2Openid4vcCredentialExchangesController } from './nestjs/V2Openid4vcCredentialExchangesController'
+export { V2Openid4vcPresentationsController } from './nestjs/V2Openid4vcPresentationsController'
+export { V2Openid4vcSigningCertificatesController } from './nestjs/V2Openid4vcSigningCertificatesController'
 export { registerDidJwkResolver } from './sdk/didJwkResolver'
 export { setupOpenId4Vc } from './sdk/setupOpenId4Vc'
 export type {
@@ -15,7 +20,6 @@ export type {
   OpenId4VcSdkPlugin,
 } from './sdk/setupOpenId4Vc'
 export type { SigningCertificateInfo, SigningRole } from './services/CertificateService'
-export { requireIssuerService } from './services/issuerHolder'
 export { IssuerService } from './services/IssuerService'
 export type { OpenId4VcIssuanceSessionSummary, OpenId4VcOfferResult } from './services/IssuerService'
 export { OPENID4VC_REQUEST_SIGNERS, VerifierService } from './services/VerifierService'

@@ -23,9 +23,9 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { VerifierService } from '@verana-labs/vs-agent-plugin-openid4vc'
+import { createdAtKey, mapPage, Page, paginate } from '@verana-labs/vs-agent-sdk'
 
-import { createdAtKey, mapPage, Page, paginate } from '../../../../common'
+import { VerifierService } from '../services/VerifierService'
 
 import {
   Openid4vcListPresentationsQueryDto,

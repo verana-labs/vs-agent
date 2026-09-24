@@ -1,12 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import {
-  OFFER_TTL_SECONDS_MAX,
-  OFFER_TTL_SECONDS_MIN,
-  OpenId4VcIssuanceSessionState,
-} from '@verana-labs/vs-agent-plugin-openid4vc'
+import { OpenId4VcIssuanceSessionState } from '@credo-ts/openid4vc'
+import { PageDto, PaginationQueryDto } from '@verana-labs/vs-agent-sdk'
 import { IsEnum, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Max, Min } from 'class-validator'
 
-import { PageDto, PaginationQueryDto } from '../../../../../common'
+import { OFFER_TTL_SECONDS_MAX, OFFER_TTL_SECONDS_MIN } from '../../config'
 
 /** Request body of [VSA-ADM-OID-CE] createCredentialOffer. */
 export class Openid4vcCredentialOfferBodyDto {

@@ -8,19 +8,20 @@ import { validate } from 'class-validator'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { IssuerService, VerifierService } from '@verana-labs/vs-agent-plugin-openid4vc'
-import { AdminApiError, AdminApiErrorCode, encodeCursor, hashScope } from '@verana-labs/vs-agent-sdk'
-
-import { ErrorEnvelopeFilter } from '../src/common'
 import {
+  IssuerService,
   Openid4vcCredentialOfferBodyDto,
   Openid4vcListCredentialExchangesQueryDto,
   Openid4vcListPresentationsQueryDto,
   Openid4vcPresentationRequestBodyDto,
-} from '../src/controllers/admin/v2/openid4vc/dto'
-import { V2Openid4vcCredentialExchangesController } from '../src/controllers/admin/v2/openid4vc/V2Openid4vcCredentialExchangesController'
-import { V2Openid4vcPresentationsController } from '../src/controllers/admin/v2/openid4vc/V2Openid4vcPresentationsController'
-import { V2Openid4vcSigningCertificatesController } from '../src/controllers/admin/v2/openid4vc/V2Openid4vcSigningCertificatesController'
+  V2Openid4vcCredentialExchangesController,
+  V2Openid4vcPresentationsController,
+  V2Openid4vcSigningCertificatesController,
+  VerifierService,
+} from '@verana-labs/vs-agent-plugin-openid4vc'
+import { AdminApiError, AdminApiErrorCode, encodeCursor, hashScope } from '@verana-labs/vs-agent-sdk'
+
+import { ErrorEnvelopeFilter } from '../src/common'
 
 const AUTHORIZATION_REQUEST =
   'openid4vp://authorize?request_uri=https%3A%2F%2Fagent.test%2Foid4vp%2Fverifier%2Fauthorization-requests%2F1'

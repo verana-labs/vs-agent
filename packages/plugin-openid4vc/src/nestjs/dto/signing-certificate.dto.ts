@@ -1,4 +1,4 @@
-import type { SigningRole } from '@verana-labs/vs-agent-plugin-openid4vc'
+import type { SigningRole } from '../../services/CertificateService'
 
 import { ApiProperty } from '@nestjs/swagger'
 

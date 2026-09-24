@@ -1,21 +1,15 @@
-import type {
-  OpenId4VcQueryLanguage,
-  OpenId4VcRequestSigner,
-  TrustVerdictName,
-  VeranaTrustStatus,
-} from '@verana-labs/vs-agent-plugin-openid4vc'
+import type { OpenId4VcQueryLanguage } from '../../services/presentationRequest'
+import type { OpenId4VcRequestSigner } from '../../services/VerifierService'
+import type { TrustVerdictName, VeranaTrustStatus } from '../../trust/types'
 
+import { OpenId4VcVerificationSessionState } from '@credo-ts/openid4vc'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import {
-  OPENID4VC_QUERY_LANGUAGES,
-  OPENID4VC_REQUEST_SIGNERS,
-  OpenId4VcVerificationSessionState,
-  TRUST_VERDICT_NAMES,
-  VERANA_TRUST_STATUSES,
-} from '@verana-labs/vs-agent-plugin-openid4vc'
+import { PageDto, PaginationQueryDto } from '@verana-labs/vs-agent-sdk'
 import { ArrayUnique, IsArray, IsEnum, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
-import { PageDto, PaginationQueryDto } from '../../../../../common'
+import { OPENID4VC_QUERY_LANGUAGES } from '../../services/presentationRequest'
+import { OPENID4VC_REQUEST_SIGNERS } from '../../services/VerifierService'
+import { TRUST_VERDICT_NAMES, VERANA_TRUST_STATUSES } from '../../trust/types'
 
 /** Request body of [VSA-ADM-OID-PR] createPresentationRequest. */
 export class Openid4vcPresentationRequestBodyDto {

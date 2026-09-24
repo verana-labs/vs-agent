@@ -1,6 +1,7 @@
 import { Controller, Get, Inject } from '@nestjs/common'
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { IssuerService, VerifierService } from '@verana-labs/vs-agent-plugin-openid4vc'
+import { IssuerService } from '../services/IssuerService'
+import { VerifierService } from '../services/VerifierService'
 
 import { Openid4vcSigningCertificateDto } from './dto'
 

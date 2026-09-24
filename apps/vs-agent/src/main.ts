@@ -6,6 +6,7 @@ import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import { configureChainIndexers } from '@verana-labs/vs-agent-model'
+import { OpenId4VcPlugin } from '@verana-labs/vs-agent-plugin-openid4vc'
 import {
   AuthorizationService,
   HttpInboundTransport,
@@ -80,7 +81,7 @@ import {
   TRUSTED_ECS_ECOSYSTEM_DIDS,
   readOpenId4VcOptions,
 } from './config'
-import { MessagingPlugin, OpenId4VcNestPlugin, VtFlowNestPlugin } from './plugins'
+import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
@@ -306,7 +307,7 @@ const run = async () => {
     ...(mrtdModule
       ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MRTD_MASTER_LIST_CSCA_LOCATION })]
       : []),
-    ...(openId4VcOptions ? [OpenId4VcNestPlugin(openId4VcOptions)] : []),
+    ...(openId4VcOptions ? [OpenId4VcPlugin(openId4VcOptions)] : []),
     VtFlowNestPlugin,
   ]
 

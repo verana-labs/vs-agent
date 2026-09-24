@@ -1,7 +1,5 @@
-import type {
-  OpenId4VcIssuanceSessionSummary,
-  OpenId4VcVerificationSessionSummary,
-} from '@verana-labs/vs-agent-plugin-openid4vc'
+import type { OpenId4VcIssuanceSessionSummary } from '../services/IssuerService'
+import type { OpenId4VcVerificationSessionSummary } from '../services/VerifierService'
 
 import { Openid4vcCredentialExchangeRecordDto, Openid4vcPresentationRecordDto } from './dto'
 

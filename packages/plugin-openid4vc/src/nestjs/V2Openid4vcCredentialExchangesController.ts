@@ -22,9 +22,9 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { IssuerService } from '@verana-labs/vs-agent-plugin-openid4vc'
+import { createdAtKey, mapPage, Page, paginate } from '@verana-labs/vs-agent-sdk'
 
-import { createdAtKey, mapPage, Page, paginate } from '../../../../common'
+import { IssuerService } from '../services/IssuerService'
 
 import {
   Openid4vcCredentialExchangeRecordDto,
