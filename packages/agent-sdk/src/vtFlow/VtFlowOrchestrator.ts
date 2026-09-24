@@ -577,7 +577,12 @@ export class VtFlowOrchestrator {
           `the fee allowance has ${allowance.remaining}${FEE_DENOM} left`,
         )
       }
-      const corporation = BigInt((await chain.getAccountBalance(granter, FEE_DENOM)).amount)
+      let corporation: bigint
+      try {
+        corporation = BigInt((await chain.getAccountBalance(granter, FEE_DENOM)).amount)
+      } catch (error) {
+        return fail(VtFlowTxReason.TxFailed, errorMessage(error))
+      }
       if (corporation < amount) {
         return fail(
           VtFlowTxReason.InsufficientFundsCorporation,
@@ -585,7 +590,12 @@ export class VtFlowOrchestrator {
         )
       }
     } else {
-      const own = BigInt((await chain.getBalance(FEE_DENOM)).amount)
+      let own: bigint
+      try {
+        own = BigInt((await chain.getBalance(FEE_DENOM)).amount)
+      } catch (error) {
+        return fail(VtFlowTxReason.TxFailed, errorMessage(error))
+      }
       if (own < amount) {
         return fail(VtFlowTxReason.InsufficientFundsAgent, `the agent account holds ${own}${FEE_DENOM}`)
       }

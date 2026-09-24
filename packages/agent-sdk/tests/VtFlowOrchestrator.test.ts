@@ -637,6 +637,25 @@ describe('VtFlowOrchestrator validateFlow', () => {
     })
   })
 
+  it('records a failed pre-flight when a balance read fails', async () => {
+    const own = makeValidateAgent()
+    own.chain.getBalance.mockRejectedValue(new Error('rpc unavailable'))
+    await new VtFlowOrchestrator(own.agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    const granted = makeValidateAgent({ grant: { msgTypes: [SET_VALIDATED], withFeegrant: true } })
+    granted.chain.feeAllowance.mockResolvedValue({ unlimited: true } as never)
+    Object.assign(granted.chain, { getAccountBalance: vi.fn().mockRejectedValue(new Error('rpc unavailable')) })
+    await new VtFlowOrchestrator(granted.agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    for (const { chain, current } of [own, granted]) {
+      expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+      expect(current().state).toBe('VALIDATION_TX_FAILED')
+      expect(current().validation).toMatchObject({
+        tx: { status: 'FAILED', reason: 'TX_FAILED', error: 'rpc unavailable' },
+      })
+    }
+  })
+
   it('reports an expired feegrant before it simulates, since the simulation fails on it first', async () => {
     const { agent, chain, current } = makeValidateAgent({
       grant: { msgTypes: [SET_VALIDATED], withFeegrant: true },
