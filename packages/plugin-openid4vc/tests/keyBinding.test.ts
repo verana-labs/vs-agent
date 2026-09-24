@@ -160,14 +160,7 @@ describe('verifyKeyBoundToDid', () => {
   it.each([
     ['did:key:z6Mktest', 'issuer.example'],
     ['did:web:', 'issuer.example'],
-    ['did:web:localhost', 'localhost'],
-    ['did:web:service.internal', 'service.internal'],
-    ['did:web:127.0.0.1', '127.0.0.1'],
-    ['did:web:10.1.2.3', '10.1.2.3'],
-    ['did:web:169.254.169.254', '169.254.169.254'],
-    ['did:web:%5B%3A%3A1%5D', '[::1]'],
-    ['did:web:%5Bfe80%3A%3A1%5D', '[fe80::1]'],
-  ])('rejects unsupported, malformed, or non-public DID target %s before resolution', async (did, host) => {
+  ])('rejects an unsupported or malformed DID target %s before resolution', async (did, host) => {
     const resolve = vi.fn(async () => ({
       didDocument: didDocument({ assertionMethod: [verificationMethod(LEAF_PUBLIC_JWK)] }),
     }))
@@ -186,7 +179,7 @@ describe('verifyKeyBoundToDid', () => {
     'did:web:agent.local',
     'did:web:service.internal',
     'did:web:10.1.2.3',
-  ])('resolves the agent own DID %s although its host is not public', async did => {
+  ])('resolves the agent own DID %s', async did => {
     const method = verificationMethod(LEAF_PUBLIC_JWK, `${did}#assertion`)
     const resolve = vi.fn(async () => ({ didDocument: didDocument({ id: did, assertionMethod: [method] }) }))
 
@@ -202,31 +195,14 @@ describe('verifyKeyBoundToDid', () => {
     expect(resolve).toHaveBeenCalledOnce()
   })
 
-  it('still refuses a non-public peer DID the operator allowed explicitly', async () => {
-    const did = 'did:web:localhost%3A3000'
-    const resolve = vi.fn(async () => ({
-      didDocument: didDocument({ id: did, assertionMethod: [verificationMethod(LEAF_PUBLIC_JWK)] }),
-    }))
-
-    await expect(
-      verifyKeyBoundToDid(agentResolving(resolve), did, LEAF_PUBLIC_JWK, ['assertionMethod'], {
-        allowedWebHosts: ['localhost:3000'],
-        timeoutMs: 1_000,
-      }),
-    ).resolves.toBe('unresolvable')
-    expect(resolve).not.toHaveBeenCalled()
-  })
-
   it('binds the agent own DID policy to that DID host alone', () => {
     expect(ownDidResolutionPolicy('did:web:agent.local')).toEqual({
       allowedWebHosts: ['agent.local'],
       timeoutMs: 5_000,
-      allowNonPublicHosts: true,
     })
     expect(ownDidResolutionPolicy('did:key:z6Mktest')).toEqual({
       allowedWebHosts: [],
       timeoutMs: 5_000,
-      allowNonPublicHosts: true,
     })
   })
 

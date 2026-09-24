@@ -367,7 +367,7 @@ describe('IssuerService', () => {
       AGENT_DID,
       PUBLIC_JWK,
       ['assertionMethod'],
-      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000, allowNonPublicHosts: true },
+      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000 },
     )
     expect(api.getIssuerByIssuerId).toHaveBeenCalledOnce()
     expect(api.updateIssuerMetadata).toHaveBeenCalledOnce()

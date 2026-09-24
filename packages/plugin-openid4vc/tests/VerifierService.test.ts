@@ -175,7 +175,7 @@ describe('VerifierService', () => {
       AGENT_DID,
       PUBLIC_JWK,
       ['authentication'],
-      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000, allowNonPublicHosts: true },
+      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000 },
     )
     expect(api.createVerifier).toHaveBeenCalledWith({ verifierId: 'verifier' })
     expect(api.updateVerifierMetadata).not.toHaveBeenCalled()

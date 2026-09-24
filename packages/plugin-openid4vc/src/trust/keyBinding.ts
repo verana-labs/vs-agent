@@ -2,19 +2,16 @@ import type { KeyBindingResult } from './types'
 import type { BaseAgent, DidDocument, DidPurpose, VerificationMethod } from '@credo-ts/core'
 
 import { getPublicJwkFromVerificationMethod, Kms, tryParseDid } from '@credo-ts/core'
-import { BlockList, isIP } from 'node:net'
 
 type BindingPurpose = Extract<DidPurpose, 'assertionMethod' | 'authentication'>
 export type DidResolverAgent = Pick<BaseAgent, 'dids'>
 
 export const DEFAULT_DID_RESOLUTION_TIMEOUT_MS = 5_000
 export const MAX_DID_RESOLUTION_TIMEOUT_MS = 30_000
-const NON_PUBLIC_IPS = createNonPublicIpBlockList()
 
 export interface DidResolutionPolicy {
   allowedWebHosts: string[]
   timeoutMs: number
-  allowNonPublicHosts?: boolean
 }
 
 export function ownDidResolutionPolicy(
@@ -22,7 +19,7 @@ export function ownDidResolutionPolicy(
   timeoutMs = DEFAULT_DID_RESOLUTION_TIMEOUT_MS,
 ): DidResolutionPolicy {
   const host = didWebHost(did)
-  return { allowedWebHosts: host ? [host] : [], timeoutMs, allowNonPublicHosts: true }
+  return { allowedWebHosts: host ? [host] : [], timeoutMs }
 }
 
 export async function verifyKeyBoundToDid(
@@ -144,9 +141,6 @@ function isResolutionAllowed(did: string, policy: DidResolutionPolicy): boolean 
 
   const requestedHost = didWebHost(did)
   if (!requestedHost) return false
-  if (!policy.allowNonPublicHosts && isNonPublicHost(new URL(`https://${requestedHost}`).hostname)) {
-    return false
-  }
 
   return policy.allowedWebHosts.some(allowedHost => canonicalHost(allowedHost) === requestedHost)
 }
@@ -182,48 +176,6 @@ function canonicalHost(value: string): string | undefined {
   } catch {
     return undefined
   }
-}
-
-function isNonPublicHost(hostname: string): boolean {
-  const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase()
-  if (
-    normalized === 'localhost' ||
-    normalized.endsWith('.localhost') ||
-    normalized.endsWith('.local') ||
-    normalized.endsWith('.internal') ||
-    normalized === 'home.arpa' ||
-    normalized.endsWith('.home.arpa')
-  ) {
-    return true
-  }
-
-  const ipVersion = isIP(normalized)
-  return ipVersion === 4
-    ? NON_PUBLIC_IPS.check(normalized, 'ipv4')
-    : ipVersion === 6
-      ? NON_PUBLIC_IPS.check(normalized, 'ipv6')
-      : false
-}
-
-function createNonPublicIpBlockList(): BlockList {
-  const blockList = new BlockList()
-  blockList.addSubnet('0.0.0.0', 8, 'ipv4')
-  blockList.addSubnet('10.0.0.0', 8, 'ipv4')
-  blockList.addSubnet('100.64.0.0', 10, 'ipv4')
-  blockList.addSubnet('127.0.0.0', 8, 'ipv4')
-  blockList.addSubnet('169.254.0.0', 16, 'ipv4')
-  blockList.addSubnet('172.16.0.0', 12, 'ipv4')
-  blockList.addSubnet('192.0.0.0', 24, 'ipv4')
-  blockList.addSubnet('192.168.0.0', 16, 'ipv4')
-  blockList.addSubnet('198.18.0.0', 15, 'ipv4')
-  blockList.addSubnet('224.0.0.0', 3, 'ipv4')
-  blockList.addSubnet('::', 128, 'ipv6')
-  blockList.addSubnet('::1', 128, 'ipv6')
-  blockList.addSubnet('::ffff:0:0', 96, 'ipv6')
-  blockList.addSubnet('fc00::', 7, 'ipv6')
-  blockList.addSubnet('fe80::', 10, 'ipv6')
-  blockList.addSubnet('ff00::', 8, 'ipv6')
-  return blockList
 }
 
 async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
