@@ -215,20 +215,27 @@ describe('v2 openid4vc routes', () => {
       })
     })
 
-    it('filters by state, by credential type and by status list', async () => {
+    it('filters by state', async () => {
       const byState = await request(app.getHttpServer()).get(
         '/v2/openid4vc/credential-exchanges?state=Completed',
       )
-      expect(exchangeIds(byState.body)).toEqual(['ce-b'])
 
+      expect(exchangeIds(byState.body)).toEqual(['ce-b'])
+    })
+
+    it('filters by credential type', async () => {
       const byType = await request(app.getHttpServer()).get(
         '/v2/openid4vc/credential-exchanges?jsonSchemaCredentialId=badge',
       )
-      expect(exchangeIds(byType.body)).toEqual(['ce-c'])
 
+      expect(exchangeIds(byType.body)).toEqual(['ce-c'])
+    })
+
+    it('filters by status list', async () => {
       const byStatusList = await request(app.getHttpServer()).get(
         '/v2/openid4vc/credential-exchanges?statusListId=list-1',
       )
+
       expect(exchangeIds(byStatusList.body)).toEqual([])
       expect(issuerService.listIssuanceSessions).toHaveBeenLastCalledWith({
         jsonSchemaCredentialId: undefined,
@@ -314,7 +321,7 @@ describe('v2 openid4vc routes', () => {
       })
     })
 
-    it('maps an unknown type to UNKNOWN_ID and a claim error to INVALID_INPUT', async () => {
+    it('maps an unknown type to UNKNOWN_ID', async () => {
       issuerService.createOffer.mockRejectedValueOnce(
         new AdminApiError(
           AdminApiErrorCode.UnknownId,
@@ -322,21 +329,27 @@ describe('v2 openid4vc routes', () => {
           'no credential type with id "x"',
         ),
       )
+
       const unknown = await request(app.getHttpServer())
         .post('/v2/openid4vc/credential-offer')
         .send({ jsonSchemaCredentialId: 'x', claims: { name: 'Ada' }, ttlSeconds: 3600 })
+
       expect(unknown.status).toBe(404)
       expect(unknown.body.error).toEqual({
         code: 'UNKNOWN_ID',
         message: 'no credential type with id "x"',
       })
+    })
 
+    it('maps a claim error to INVALID_INPUT', async () => {
       issuerService.createOffer.mockRejectedValueOnce(
         new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, "unknown claim 'age'"),
       )
+
       const badClaims = await request(app.getHttpServer())
         .post('/v2/openid4vc/credential-offer')
         .send({ jsonSchemaCredentialId: 'employee', claims: { age: 3 }, ttlSeconds: 3600 })
+
       expect(badClaims.status).toBe(400)
       expect(badClaims.body.error).toEqual({ code: 'INVALID_INPUT', message: "unknown claim 'age'" })
     })
@@ -464,15 +477,19 @@ describe('v2 openid4vc routes', () => {
       expect(second.body.nextCursor).toBeNull()
     })
 
-    it('filters by credential type and by state', async () => {
+    it('filters by credential type', async () => {
       const byType = await request(app.getHttpServer()).get(
         '/v2/openid4vc/presentations?jsonSchemaCredentialId=badge',
       )
-      expect(proofIds(byType.body)).toEqual(['pe-c'])
 
+      expect(proofIds(byType.body)).toEqual(['pe-c'])
+    })
+
+    it('filters by state', async () => {
       const byState = await request(app.getHttpServer()).get(
         '/v2/openid4vc/presentations?state=ResponseVerified',
       )
+
       expect(proofIds(byState.body)).toEqual(['pe-b'])
       expect(verifierService.listVerificationSessions).toHaveBeenLastCalledWith({
         jsonSchemaCredentialId: undefined,
@@ -560,7 +577,9 @@ describe('v2 openid4vc routes', () => {
         queryLanguage: 'presentation_exchange',
         requestSigner: 'x5c',
       })
+    })
 
+    it('leaves the optional fields undefined when the caller sends none', async () => {
       const bare = await request(app.getHttpServer())
         .post('/v2/openid4vc/presentation-request')
         .send({ jsonSchemaCredentialId: 'employee' })
@@ -574,7 +593,7 @@ describe('v2 openid4vc routes', () => {
       })
     })
 
-    it('maps an unknown type to UNKNOWN_ID and a signer problem to INVALID_STATE', async () => {
+    it('maps an unknown type to UNKNOWN_ID', async () => {
       verifierService.createRequest.mockRejectedValueOnce(
         new AdminApiError(
           AdminApiErrorCode.UnknownId,
@@ -582,15 +601,19 @@ describe('v2 openid4vc routes', () => {
           'no credential type with id "x"',
         ),
       )
+
       const unknown = await request(app.getHttpServer())
         .post('/v2/openid4vc/presentation-request')
         .send({ jsonSchemaCredentialId: 'x' })
+
       expect(unknown.status).toBe(404)
       expect(unknown.body.error).toEqual({
         code: 'UNKNOWN_ID',
         message: 'no credential type with id "x"',
       })
+    })
 
+    it('maps a signer problem to INVALID_STATE', async () => {
       verifierService.createRequest.mockRejectedValueOnce(
         new AdminApiError(
           AdminApiErrorCode.InvalidState,
@@ -598,9 +621,11 @@ describe('v2 openid4vc routes', () => {
           'verifier is configured to sign requests with its DID, but the DID does not publish the signing key for authentication',
         ),
       )
+
       const unsigned = await request(app.getHttpServer())
         .post('/v2/openid4vc/presentation-request')
         .send({ jsonSchemaCredentialId: 'employee', requestSigner: 'did' })
+
       expect(unsigned.status).toBe(409)
       expect(unsigned.body.error.code).toBe('INVALID_STATE')
     })

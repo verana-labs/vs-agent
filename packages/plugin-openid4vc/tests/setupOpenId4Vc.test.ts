@@ -126,7 +126,7 @@ describe('setupOpenId4Vc', () => {
   })
 
   // Credo advertises `client_attestation_*` and derives `token_endpoint_auth_methods_supported` from the
-  // issuer record, which IssuerService fills from the same roots; openId4VcIssuance covers the served output.
+  // issuer record, which IssuerService fills from the same roots; openid4vcIssuance covers the served output.
   it('requires wallet attestations exactly when attestation roots are configured', () => {
     const options = setupOptions()
     options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]

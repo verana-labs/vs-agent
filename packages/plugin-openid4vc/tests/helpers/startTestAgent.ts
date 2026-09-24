@@ -3,14 +3,13 @@ import type { OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '.
 import type { AskarModuleConfigStoreOptions, AskarSqliteStorageConfig } from '@credo-ts/askar'
 import type { BaseLogger, DidResolver, Kms, SdJwtVc, X509Certificate } from '@credo-ts/core'
 import type { OpenId4VcHolderApi } from '@credo-ts/openid4vc'
+import type { Plugin } from '@verana-labs/vs-agent-sdk'
 import type { Server } from 'node:http'
 
-import { AskarModule } from '@credo-ts/askar'
 import {
   Agent,
   ConsoleLogger,
   DidDocument,
-  DidsModule,
   Kms as KmsApi,
   LogLevel,
   SdJwtVcRecord,
@@ -20,7 +19,6 @@ import {
 } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { OpenId4VcModule } from '@credo-ts/openid4vc'
-import { askar } from '@openwallet-foundation/askar-nodejs'
 import {
   BasicConstraintsExtension,
   KeyUsageFlags,
@@ -28,6 +26,7 @@ import {
   SubjectAlternativeNameExtension,
   X509CertificateGenerator,
 } from '@peculiar/x509'
+import { createVsAgent, setupBaseDidComm, VeranaIndexerService } from '@verana-labs/vs-agent-sdk'
 import express from 'express'
 import { webcrypto } from 'node:crypto'
 
@@ -49,6 +48,8 @@ type AgentRole = 'issuer' | 'holder' | 'verifier'
 type PluginAgentRole = Exclude<AgentRole, 'holder'>
 
 const ASKAR_STORE_KEY = 'DZ9hPqFWTPxemcGea72C1X1nusqk5wFNLq6QPjwXGqAa'
+const HOLDER_PUBLIC_API_BASE_URL = 'https://holder.example'
+const UNROUTABLE_INDEXER_BASE_URL = 'http://indexer.invalid'
 
 export const TEST_ISSUER_DID = 'did:web:issuer.example'
 export const TEST_VERIFIER_DID = 'did:web:verifier.example'
@@ -61,15 +62,6 @@ export const testCredentialConfiguration: OpenId4VcCredentialConfiguration = {
   vtjscId: 'https://credentials.example/vt/employee.json',
   claims: ['name', 'role'],
   disclosureFrame: ['name', 'role'],
-}
-
-interface TestAgentWithOpenId4Vc extends Agent {
-  did?: string
-  modules: Agent['modules'] & {
-    openId4Vc: {
-      holder: OpenId4VcHolderApi
-    }
-  }
 }
 
 export interface TestHolderCredential {
@@ -102,12 +94,12 @@ export class OpenId4VcTestStartupError extends Error {
 
 export interface OpenId4VcTestAgents {
   issuer: {
-    agent: TestAgentWithOpenId4Vc
+    agent: OpenId4VcAgent
     service: IssuerService
     publicApiBaseUrl: string
   }
   holder: {
-    agent: TestAgentWithOpenId4Vc
+    agent: OpenId4VcAgent
     acceptCredentialOffer: (credentialOffer: string) => Promise<TestHolderCredential>
     resolvePresentationRequest: (
       authorizationRequest: string,
@@ -118,7 +110,7 @@ export interface OpenId4VcTestAgents {
     ) => Promise<TestHolderPresentation>
   }
   verifier: {
-    agent: TestAgentWithOpenId4Vc
+    agent: OpenId4VcAgent
     service: VerifierService
     publicApiBaseUrl: string
   }
@@ -268,6 +260,41 @@ export async function startTestAgents(input: {
   }
 }
 
+function createTestVsAgent(input: {
+  storeName: string
+  publicApiBaseUrl: string
+  plugin: Plugin
+  didResolver: DidResolver
+  logger: BaseLogger
+  did?: string
+}): OpenId4VcAgent {
+  const walletConfig = getAskarStoreConfig(input.storeName)
+  const agent = createVsAgent({
+    plugins: [
+      setupBaseDidComm({
+        walletConfig,
+        publicApiBaseUrl: input.publicApiBaseUrl,
+        endpoints: [input.publicApiBaseUrl],
+      }),
+      input.plugin,
+    ],
+    config: { logger: input.logger, allowInsecureHttpUrls: true },
+    walletConfig,
+    did: input.did,
+    dependencies: agentDependencies,
+    publicApiBaseUrl: input.publicApiBaseUrl,
+    // Unroutable on purpose: a test that reaches the VPR fails loudly instead of talking to a real indexer.
+    indexer: new VeranaIndexerService({
+      baseUrl: UNROUTABLE_INDEXER_BASE_URL,
+      logger: input.logger,
+    }),
+  }) as unknown as OpenId4VcAgent
+
+  // Credo resolves with the first resolver claiming the method, so the fixture has to come first.
+  agent.dids.config.resolvers.unshift(input.didResolver)
+  return agent
+}
+
 async function startPluginAgent<Service extends IssuerService | VerifierService>(input: {
   role: PluginAgentRole
   did: string
@@ -277,14 +304,14 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
   failureHooks?: TestAgentFailureHooks
   logger: BaseLogger
 }): Promise<{
-  agent: TestAgentWithOpenId4Vc
+  agent: OpenId4VcAgent
   service: Service
   publicApiBaseUrl: string
   stop: () => Promise<void>
 }> {
   const app = express()
   let server: Server | undefined
-  let agent: TestAgentWithOpenId4Vc | undefined
+  let agent: OpenId4VcAgent | undefined
   let service: Service | undefined
 
   try {
@@ -298,19 +325,17 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
     })
     app.use(sdkPlugin.publicMiddleware)
 
-    agent = new Agent({
-      config: { logger: input.logger, allowInsecureHttpUrls: true },
-      dependencies: agentDependencies,
-      modules: {
-        askar: new AskarModule({ askar, store: getAskarStoreConfig(`openid4vc-${input.role}`) }),
-        dids: new DidsModule({ resolvers: [input.didResolver] }),
-        ...sdkPlugin.modules,
-      },
-    }) as unknown as TestAgentWithOpenId4Vc
-    agent.did = input.did
+    agent = createTestVsAgent({
+      storeName: `openid4vc-${input.role}`,
+      publicApiBaseUrl,
+      plugin: sdkPlugin,
+      didResolver: input.didResolver,
+      logger: input.logger,
+      did: input.did,
+    })
     await agent.initialize()
     await input.failureHooks?.afterInitialize?.(input.role)
-    service = input.createService(agent as unknown as OpenId4VcAgent, options)
+    service = input.createService(agent, options)
     await service.ensureInitialized()
     return {
       agent,
@@ -333,18 +358,20 @@ async function startHolderAgent(
   logger: BaseLogger,
   failureHooks?: TestAgentFailureHooks,
 ): Promise<OpenId4VcTestAgents['holder'] & { stop: () => Promise<void> }> {
-  let agent: TestAgentWithOpenId4Vc | undefined
+  let agent: OpenId4VcAgent | undefined
   try {
-    agent = new Agent({
-      config: { logger, allowInsecureHttpUrls: true },
-      dependencies: agentDependencies,
-      modules: {
-        askar: new AskarModule({ askar, store: getAskarStoreConfig('openid4vc-holder') }),
-        dids: new DidsModule({ resolvers: [didResolver] }),
-        openId4Vc: new OpenId4VcModule(),
-        x509: new X509Module({ trustedCertificates: [rootCertificate] }),
+    agent = createTestVsAgent({
+      storeName: 'openid4vc-holder',
+      publicApiBaseUrl: HOLDER_PUBLIC_API_BASE_URL,
+      plugin: {
+        modules: {
+          openId4Vc: new OpenId4VcModule(),
+          x509: new X509Module({ trustedCertificates: [rootCertificate] }),
+        },
       },
-    }) as unknown as TestAgentWithOpenId4Vc
+      didResolver,
+      logger,
+    })
     await agent.initialize()
     await failureHooks?.afterInitialize?.('holder')
   } catch (error) {
