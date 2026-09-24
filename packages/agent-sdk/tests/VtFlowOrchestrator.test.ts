@@ -792,6 +792,28 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(offerCredentialForSession).not.toHaveBeenCalled()
   })
 
+  it('refuses to leave OOB_PENDING while the flow connection is not ESTABLISHED', async () => {
+    const onboarding = makeValidateAgent({ state: 'OOB_PENDING' })
+    const findById = vi.fn(async () => ({ isReady: false }))
+    Object.assign(onboarding.agent, { didcomm: { connections: { findById } } })
+    const direct = makeDirectIssuance({ name: 'Acme' })
+    direct.current().state = 'OOB_PENDING'
+
+    for (const orchestrator of [new VtFlowOrchestrator(onboarding.agent as never), direct.orchestrator]) {
+      await expect(orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })).rejects.toMatchObject({
+        code: 'INVALID_STATE',
+        status: 409,
+      })
+    }
+    expect(onboarding.vtFlowApi.sendValidating).not.toHaveBeenCalled()
+    expect(direct.vtFlowApi.sendValidating).not.toHaveBeenCalled()
+    expect(direct.offerCredentialForSession).not.toHaveBeenCalled()
+
+    findById.mockResolvedValue({ isReady: true })
+    await new VtFlowOrchestrator(onboarding.agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+    expect(onboarding.vtFlowApi.sendValidating).toHaveBeenCalledWith('rec-v')
+  })
+
   it('reads the entry before recording a transaction that was not found', async () => {
     const { agent, vtFlowApi, current } = makeValidateAgent({
       state: 'VALIDATION_TX_SUBMITTED',

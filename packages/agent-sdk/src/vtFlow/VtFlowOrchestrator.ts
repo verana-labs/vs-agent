@@ -364,7 +364,7 @@ export class VtFlowOrchestrator {
     await this.assertClaimsAndTerm(record, applicant, terms)
 
     if (record.state === VtFlowState.AwaitingOr) await vtFlowApi.acceptOnboardingRequest(record.id)
-    if (record.state === VtFlowState.OobPending) await vtFlowApi.sendValidating(record.id)
+    if (record.state === VtFlowState.OobPending) await this.sendValidating(record)
 
     if (record.state === VtFlowState.ValidatedPendingClaims) return this.continueAfterValidated(record.id)
     if (entryValidated) {
@@ -396,7 +396,7 @@ export class VtFlowOrchestrator {
     this.assertClaims(schema.json_schema, connection.theirDid, record.claims)
 
     const vtFlowApi = this.resolveVtFlowApi()
-    if (record.state === VtFlowState.OobPending) await vtFlowApi.sendValidating(record.id)
+    if (record.state === VtFlowState.OobPending) await this.sendValidating(record)
 
     const offer = await this.buildDirectIssuanceOffer(record.id)
     if (!offer) throw invalidState('the agent holds no active ISSUER participant for the schema of the flow')
@@ -405,6 +405,13 @@ export class VtFlowOrchestrator {
       ...offer,
     })
     return offered
+  }
+
+  // [VSA-ADM-VT-FL-START]: checked before the flow moves, as a failed send would leave it in VALIDATING
+  private async sendValidating(record: VtFlowRecord): Promise<void> {
+    const connection = await this.agent.didcomm.connections.findById(record.connectionId)
+    if (!connection?.isReady) throw invalidState('the flow connection is not ESTABLISHED')
+    await this.resolveVtFlowApi().sendValidating(record.id)
   }
 
   private assertClaims(jsonSchema: string, subjectDid: string, claims?: Record<string, unknown>): void {
