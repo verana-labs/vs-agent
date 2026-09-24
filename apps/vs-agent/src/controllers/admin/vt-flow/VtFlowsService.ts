@@ -220,7 +220,7 @@ export class VtFlowsService {
 
     const record = await this.findRecordBySession(this.resolveVtFlowApi(agent), participantSessionId)
     const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
-    const validated = await orchestrator.validateFlow({ vtFlowRecordId: record.id, ...input })
+    const validated = await orchestrator.validateFlow({ ...input, vtFlowRecordId: record.id })
     return toDto(await resolveFlow(agent, validated))
   }
 
