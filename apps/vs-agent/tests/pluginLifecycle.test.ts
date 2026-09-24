@@ -1,10 +1,7 @@
-import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
-
 import { describe, expect, it, vi } from 'vitest'
 
 import {
   credoPluginsFromNestPlugins,
-  initializeNestPlugins,
   mountPublicPluginMiddleware,
   nestPluginContributions,
   registerNestPluginEvents,
@@ -25,14 +22,6 @@ describe('plugin lifecycle', () => {
     ])
     expect(use).toHaveBeenCalledOnce()
     expect(use).toHaveBeenCalledWith(middleware)
-  })
-
-  it('awaits initialization and propagates failure', async () => {
-    const initialize = vi.fn().mockRejectedValue(new Error('invalid certificate'))
-    const plugins: VsAgentNestPlugin[] = [{ name: 'broken', initialize }]
-    await expect(initializeNestPlugins(plugins, {} as never, {} as never)).rejects.toThrow(
-      'invalid certificate',
-    )
   })
 
   it('registers the events of every plugin that declares them', () => {

@@ -42,7 +42,6 @@ describe('OpenId4VcPlugin', () => {
     expect(plugin.credoPlugin?.modules).toHaveProperty('openId4Vc')
     expect(plugin.credoPlugin?.modules).toHaveProperty('x509')
     expect(typeof plugin.publicMiddleware).toBe('function')
-    expect(plugin.initialize).toBeUndefined()
   })
 
   it('serves the well-known issuer metadata of the issuer that registered itself', async () => {

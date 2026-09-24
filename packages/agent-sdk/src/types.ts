@@ -27,8 +27,6 @@ export interface DidcommModule {
 export interface VsAgentNestPlugin {
   name: string
   credoPlugin?: Plugin
-  // Public metadata routes are synchronous, so a plugin whose service initializes lazily must warm it here.
-  initialize?: (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => Promise<void>
   // Credo's OpenId4VcModule serves its wallet-facing routes from an Express app, not from Nest controllers.
   publicMiddleware?: (
     request: IncomingMessage,

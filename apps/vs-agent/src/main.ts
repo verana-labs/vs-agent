@@ -87,7 +87,6 @@ import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
   derivePublicDidLocation,
-  initializeNestPlugins,
   mountPublicPluginMiddleware,
   type PublicDidLocation,
   registerNestPluginEvents,
@@ -417,7 +416,6 @@ const run = async () => {
     nestPlugins,
     bootstrapState,
   }
-  await initializeNestPlugins(nestPlugins, agent, serverLogger)
   const { httpServer, webSocketServer } = await startServers(agent, conf)
 
   if (agent.did) {

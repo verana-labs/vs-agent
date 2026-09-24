@@ -22,14 +22,6 @@ export const mountPublicPluginMiddleware = (
   }
 }
 
-export const initializeNestPlugins = async (
-  plugins: VsAgentNestPlugin[],
-  agent: VsAgent<BaseAgentModules>,
-  logger: BaseLogger,
-): Promise<void> => {
-  for (const plugin of plugins) await plugin.initialize?.(agent, logger)
-}
-
 export const registerNestPluginEvents = (
   plugins: VsAgentNestPlugin[],
   agent: VsAgent<BaseAgentModules>,
