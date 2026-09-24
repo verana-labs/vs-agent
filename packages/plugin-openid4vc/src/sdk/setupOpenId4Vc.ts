@@ -123,9 +123,8 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
 
     const configuration = configurations.find(candidate => candidate.vct === body.vct)
     if (configuration) {
-      delete body.format
-      delete body.vct
-      body.credential_configuration_id = configuration.id
+      const { format: _format, vct: _vct, ...rest } = body
+      request.body = { ...rest, credential_configuration_id: configuration.id }
     }
     next()
   }
