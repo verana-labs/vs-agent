@@ -42,6 +42,7 @@ import {
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
 import { DIDCOMM_MODULES } from './utils/didcommModules'
+import { nestPluginContributions } from './utils/pluginLifecycle'
 
 @Module({})
 export class VsAgentModule {
@@ -57,6 +58,7 @@ export class VsAgentModule {
     } = {},
   ): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
+    const pluginParts = nestPluginContributions(nestPlugins)
     const bootstrapState = options.bootstrapState ?? new BootstrapState()
     const trustedNetworks =
       options.trustedNetworks ?? parseTrustedNetworks(DEFAULT_ADMIN_API_TRUSTED_NETWORKS)
@@ -104,7 +106,7 @@ export class VsAgentModule {
       },
       {
         provide: 'DIDCOMM_MODULES',
-        useValue: [...DIDCOMM_MODULES, ...nestPlugins.flatMap(p => p.didcommModules ?? [])],
+        useValue: [...DIDCOMM_MODULES, ...pluginParts.didcommModules],
       },
       VsAgentService,
       UrlShorteningService,
@@ -114,12 +116,10 @@ export class VsAgentModule {
       InvitationsService,
     ]
 
-    // Collect all handler classes declared by plugins and create ONE aggregate provider.
-    const allHandlerClasses = nestPlugins.flatMap(p => p.messageHandlers ?? [])
     const handlersProvider = {
       provide: MESSAGE_HANDLERS,
       useFactory: (...handlers: any[]) => handlers,
-      inject: allHandlerClasses,
+      inject: pluginParts.messageHandlers,
     }
 
     const securityProviders = [
@@ -132,14 +132,9 @@ export class VsAgentModule {
 
     return {
       module: VsAgentModule,
-      imports: nestPlugins.flatMap(p => p.imports ?? []),
-      controllers: [...baseControllers, ...v2Controllers, ...nestPlugins.flatMap(p => p.controllers ?? [])],
-      providers: [
-        ...baseProviders,
-        ...securityProviders,
-        ...nestPlugins.flatMap(p => p.providers ?? []),
-        handlersProvider,
-      ],
+      imports: pluginParts.imports,
+      controllers: [...baseControllers, ...v2Controllers, ...pluginParts.controllers],
+      providers: [...baseProviders, ...securityProviders, ...pluginParts.providers, handlersProvider],
       exports: [VsAgentService],
     }
   }

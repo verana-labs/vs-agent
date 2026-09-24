@@ -5,6 +5,14 @@ import type { Express } from 'express'
 export const credoPluginsFromNestPlugins = (plugins: VsAgentNestPlugin[]) =>
   plugins.flatMap(plugin => (plugin.credoPlugin ? [plugin.credoPlugin] : []))
 
+export const nestPluginContributions = (plugins: VsAgentNestPlugin[]) => ({
+  imports: plugins.flatMap(plugin => plugin.imports ?? []),
+  controllers: plugins.flatMap(plugin => plugin.controllers ?? []),
+  providers: plugins.flatMap(plugin => plugin.providers ?? []),
+  messageHandlers: plugins.flatMap(plugin => plugin.messageHandlers ?? []),
+  didcommModules: plugins.flatMap(plugin => plugin.didcommModules ?? []),
+})
+
 export const mountPublicPluginMiddleware = (
   app: Pick<Express, 'use'>,
   plugins: VsAgentNestPlugin[],
@@ -20,4 +28,12 @@ export const initializeNestPlugins = async (
   logger: BaseLogger,
 ): Promise<void> => {
   for (const plugin of plugins) await plugin.initialize?.(agent, logger)
+}
+
+export const registerNestPluginEvents = (
+  plugins: VsAgentNestPlugin[],
+  agent: VsAgent<BaseAgentModules>,
+  logger: BaseLogger,
+): void => {
+  for (const plugin of plugins) plugin.registerEvents?.(agent, logger)
 }

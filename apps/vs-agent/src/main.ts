@@ -89,6 +89,7 @@ import {
   initializeNestPlugins,
   mountPublicPluginMiddleware,
   type PublicDidLocation,
+  registerNestPluginEvents,
   runWithRetries,
   type ServerConfig,
   setupAgent,
@@ -438,10 +439,7 @@ const run = async () => {
     webhookEvent(agent, { url: EVENTS_WEBHOOK_URL, apiKey: EVENTS_WEBHOOK_API_KEY }, serverLogger)
   }
 
-  // Register plugin events after agent is initialized
-  for (const plugin of nestPlugins) {
-    plugin.registerEvents?.(agent, conf.logger)
-  }
+  registerNestPluginEvents(nestPlugins, agent, conf.logger)
 
   // Connect to Verana indexer for on-chain notifications
   if (VERANA_INDEXER_BASE_URL) {
