@@ -10,13 +10,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import {
   IssuerService,
-  Openid4vcCredentialOfferBodyDto,
-  Openid4vcListCredentialExchangesQueryDto,
-  Openid4vcListPresentationsQueryDto,
-  Openid4vcPresentationRequestBodyDto,
-  V2Openid4vcCredentialExchangesController,
-  V2Openid4vcPresentationsController,
-  V2Openid4vcSigningCertificatesController,
+  OpenId4VcCreateCredentialOfferBodyDto,
+  OpenId4VcListCredentialExchangesQueryDto,
+  OpenId4VcListPresentationsQueryDto,
+  OpenId4VcCreatePresentationRequestBodyDto,
+  V2OpenId4VcCredentialExchangesController,
+  V2OpenId4VcPresentationsController,
+  V2OpenId4VcSigningCertificatesController,
   VerifierService,
 } from '@verana-labs/vs-agent-plugin-openid4vc'
 import { AdminApiError, AdminApiErrorCode, encodeCursor, hashScope } from '@verana-labs/vs-agent-sdk'
@@ -143,9 +143,9 @@ describe('v2 openid4vc routes', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [
-        V2Openid4vcCredentialExchangesController,
-        V2Openid4vcPresentationsController,
-        V2Openid4vcSigningCertificatesController,
+        V2OpenId4VcCredentialExchangesController,
+        V2OpenId4VcPresentationsController,
+        V2OpenId4VcSigningCertificatesController,
       ],
       providers: [
         { provide: IssuerService, useValue: issuerService },
@@ -251,7 +251,7 @@ describe('v2 openid4vc routes', () => {
 
     it('refuses an unknown state filter', async () => {
       const errors = await validate(
-        plainToInstance(Openid4vcListCredentialExchangesQueryDto, { state: 'Done' }),
+        plainToInstance(OpenId4VcListCredentialExchangesQueryDto, { state: 'Done' }),
       )
       expect(errors.map(error => error.property)).toEqual(['state'])
     })
@@ -380,12 +380,12 @@ describe('v2 openid4vc routes', () => {
 
     it('validates the offer body and refuses fields the specification does not define', async () => {
       const missing = await validate(
-        plainToInstance(Openid4vcCredentialOfferBodyDto, { jsonSchemaCredentialId: 'employee' }),
+        plainToInstance(OpenId4VcCreateCredentialOfferBodyDto, { jsonSchemaCredentialId: 'employee' }),
       )
       expect(missing.map(error => error.property)).toEqual(['claims', 'ttlSeconds'])
 
       const outOfRange = await validate(
-        plainToInstance(Openid4vcCredentialOfferBodyDto, {
+        plainToInstance(OpenId4VcCreateCredentialOfferBodyDto, {
           jsonSchemaCredentialId: 'employee',
           claims: { name: 'Ada' },
           ttlSeconds: 5,
@@ -394,7 +394,7 @@ describe('v2 openid4vc routes', () => {
       expect(outOfRange.map(error => error.property)).toEqual(['ttlSeconds'])
 
       const statusList = await validate(
-        plainToInstance(Openid4vcCredentialOfferBodyDto, {
+        plainToInstance(OpenId4VcCreateCredentialOfferBodyDto, {
           jsonSchemaCredentialId: 'employee',
           claims: { name: 'Ada' },
           ttlSeconds: 3600,
@@ -406,7 +406,7 @@ describe('v2 openid4vc routes', () => {
       expect(statusList).toEqual([])
 
       const extra = await validate(
-        plainToInstance(Openid4vcCredentialOfferBodyDto, {
+        plainToInstance(OpenId4VcCreateCredentialOfferBodyDto, {
           jsonSchemaCredentialId: 'employee',
           claims: { name: 'Ada' },
           ttlSeconds: 3600,
@@ -503,7 +503,7 @@ describe('v2 openid4vc routes', () => {
     })
 
     it('refuses an unknown state filter', async () => {
-      const errors = await validate(plainToInstance(Openid4vcListPresentationsQueryDto, { state: 'Done' }))
+      const errors = await validate(plainToInstance(OpenId4VcListPresentationsQueryDto, { state: 'Done' }))
       expect(errors.map(error => error.property)).toEqual(['state'])
     })
   })
@@ -650,7 +650,7 @@ describe('v2 openid4vc routes', () => {
 
     it('validates the request body and refuses fields the specification does not define', async () => {
       const badLanguage = await validate(
-        plainToInstance(Openid4vcPresentationRequestBodyDto, {
+        plainToInstance(OpenId4VcCreatePresentationRequestBodyDto, {
           jsonSchemaCredentialId: 'employee',
           queryLanguage: 'sql',
         }),
@@ -658,7 +658,7 @@ describe('v2 openid4vc routes', () => {
       expect(badLanguage.map(error => error.property)).toEqual(['queryLanguage'])
 
       const duplicateClaims = await validate(
-        plainToInstance(Openid4vcPresentationRequestBodyDto, {
+        plainToInstance(OpenId4VcCreatePresentationRequestBodyDto, {
           jsonSchemaCredentialId: 'employee',
           requestedClaims: ['name', 'name'],
         }),
@@ -666,7 +666,7 @@ describe('v2 openid4vc routes', () => {
       expect(duplicateClaims.map(error => error.property)).toEqual(['requestedClaims'])
 
       const extra = await validate(
-        plainToInstance(Openid4vcPresentationRequestBodyDto, {
+        plainToInstance(OpenId4VcCreatePresentationRequestBodyDto, {
           jsonSchemaCredentialId: 'employee',
           responseMode: 'direct_post',
         }),
@@ -674,7 +674,7 @@ describe('v2 openid4vc routes', () => {
       )
       expect(extra.map(error => error.property)).toEqual(['responseMode'])
 
-      const empty = await validate(plainToInstance(Openid4vcPresentationRequestBodyDto, {}))
+      const empty = await validate(plainToInstance(OpenId4VcCreatePresentationRequestBodyDto, {}))
       expect(empty.map(error => error.property)).toEqual(['jsonSchemaCredentialId'])
     })
   })

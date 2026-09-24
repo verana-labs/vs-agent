@@ -1,11 +1,11 @@
 import type { OpenId4VcIssuanceSessionSummary } from '../services/IssuerService'
 import type { OpenId4VcVerificationSessionSummary } from '../services/VerifierService'
 
-import { Openid4vcCredentialExchangeRecordDto, Openid4vcPresentationRecordDto } from './dto'
+import { OpenId4VcCredentialExchangeRecordDto, OpenId4VcPresentationRecordDto } from './dto'
 
 export function toCredentialExchangeDto(
   session: OpenId4VcIssuanceSessionSummary,
-): Openid4vcCredentialExchangeRecordDto {
+): OpenId4VcCredentialExchangeRecordDto {
   return {
     credentialExchangeId: session.id,
     jsonSchemaCredentialId: session.jsonSchemaCredentialId,
@@ -21,7 +21,7 @@ export function toCredentialExchangeDto(
 
 export function toPresentationDto(
   session: OpenId4VcVerificationSessionSummary,
-): Openid4vcPresentationRecordDto {
+): OpenId4VcPresentationRecordDto {
   return {
     proofExchangeId: session.id,
     jsonSchemaCredentialId: session.jsonSchemaCredentialId,

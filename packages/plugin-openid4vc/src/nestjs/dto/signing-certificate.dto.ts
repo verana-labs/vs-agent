@@ -3,7 +3,7 @@ import type { SigningRole } from '../../services/CertificateService'
 import { ApiProperty } from '@nestjs/swagger'
 
 /** One entry of [VSA-ADM-OID-CS] listSigningCertificates. */
-export class Openid4vcSigningCertificateDto {
+export class OpenId4VcSigningCertificateDto {
   @ApiProperty({
     enum: ['issuer', 'verifier'],
     description: 'The capability that signs with this certificate',

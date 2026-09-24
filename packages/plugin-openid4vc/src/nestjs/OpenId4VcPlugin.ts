@@ -8,9 +8,9 @@ import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 
 import { setupOpenId4Vc } from '../sdk/setupOpenId4Vc'
 
-import { V2Openid4vcCredentialExchangesController } from './V2Openid4vcCredentialExchangesController'
-import { V2Openid4vcPresentationsController } from './V2Openid4vcPresentationsController'
-import { V2Openid4vcSigningCertificatesController } from './V2Openid4vcSigningCertificatesController'
+import { V2OpenId4VcCredentialExchangesController } from './V2OpenId4VcCredentialExchangesController'
+import { V2OpenId4VcPresentationsController } from './V2OpenId4VcPresentationsController'
+import { V2OpenId4VcSigningCertificatesController } from './V2OpenId4VcSigningCertificatesController'
 
 export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlugin {
   let issuerService: OpenId4VcIssuerRequestMapper | undefined
@@ -27,9 +27,9 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlu
     credoPlugin: sdkPlugin,
     publicMiddleware: sdkPlugin.publicMiddleware,
     controllers: [
-      V2Openid4vcCredentialExchangesController,
-      V2Openid4vcPresentationsController,
-      V2Openid4vcSigningCertificatesController,
+      V2OpenId4VcCredentialExchangesController,
+      V2OpenId4VcPresentationsController,
+      V2OpenId4VcSigningCertificatesController,
     ],
     providers: [
       { provide: OPENID4VC_OPTIONS, useValue: options },

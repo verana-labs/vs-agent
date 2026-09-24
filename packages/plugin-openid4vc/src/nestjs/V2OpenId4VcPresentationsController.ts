@@ -28,11 +28,11 @@ import { createdAtKey, mapPage, Page, paginate } from '@verana-labs/vs-agent-sdk
 import { VerifierService } from '../services/VerifierService'
 
 import {
-  Openid4vcListPresentationsQueryDto,
-  Openid4vcPresentationRecordDto,
-  Openid4vcPresentationRecordPageDto,
-  Openid4vcPresentationRequestBodyDto,
-  Openid4vcPresentationRequestResponseDto,
+  OpenId4VcListPresentationsQueryDto,
+  OpenId4VcPresentationRecordDto,
+  OpenId4VcPresentationRecordPageDto,
+  OpenId4VcCreatePresentationRequestBodyDto,
+  OpenId4VcPresentationRequestResponseDto,
 } from './dto'
 import { toPresentationDto } from './mappers'
 
@@ -47,7 +47,7 @@ import { toPresentationDto } from './mappers'
 @ApiTags('v2/openid4vc')
 @Controller({ path: 'openid4vc', version: '2' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
-export class V2Openid4vcPresentationsController {
+export class V2OpenId4VcPresentationsController {
   public constructor(@Inject(VerifierService) private readonly verifierService: VerifierService) {}
 
   @Post('presentation-request')
@@ -57,7 +57,7 @@ export class V2Openid4vcPresentationsController {
       'Creates an OpenID4VP authorization request for one credential type, and for the claims of that type the caller asks the wallet to disclose.',
   })
   @ApiBody({
-    type: Openid4vcPresentationRequestBodyDto,
+    type: OpenId4VcCreatePresentationRequestBodyDto,
     examples: {
       everyClaim: {
         summary: 'Every claim of the type',
@@ -76,13 +76,13 @@ export class V2Openid4vcPresentationsController {
   })
   @ApiCreatedResponse({
     description: 'The presentation request',
-    type: Openid4vcPresentationRequestResponseDto,
+    type: OpenId4VcPresentationRequestResponseDto,
   })
   @ApiNotFoundResponse({ description: 'The agent cannot resolve the credential type' })
   @ApiConflictResponse({ description: 'The DID does not publish the signing key' })
   public async createPresentationRequest(
-    @Body() body: Openid4vcPresentationRequestBodyDto,
-  ): Promise<Openid4vcPresentationRequestResponseDto> {
+    @Body() body: OpenId4VcCreatePresentationRequestBodyDto,
+  ): Promise<OpenId4VcPresentationRequestResponseDto> {
     const request = await this.verifierService.createRequest({
       jsonSchemaCredentialId: body.jsonSchemaCredentialId,
       requestedClaims: body.requestedClaims,
@@ -97,10 +97,10 @@ export class V2Openid4vcPresentationsController {
     summary: 'List presentations',
     description: 'Returns the OpenID4VP verification sessions that the agent created.',
   })
-  @ApiOkResponse({ description: 'A page of presentation records', type: Openid4vcPresentationRecordPageDto })
+  @ApiOkResponse({ description: 'A page of presentation records', type: OpenId4VcPresentationRecordPageDto })
   public async listPresentations(
-    @Query() query: Openid4vcListPresentationsQueryDto,
-  ): Promise<Page<Openid4vcPresentationRecordDto>> {
+    @Query() query: OpenId4VcListPresentationsQueryDto,
+  ): Promise<Page<OpenId4VcPresentationRecordDto>> {
     const filters = { jsonSchemaCredentialId: query.jsonSchemaCredentialId, state: query.state }
     const sessions = await this.verifierService.listVerificationSessions(filters)
 
@@ -121,11 +121,11 @@ export class V2Openid4vcPresentationsController {
     description: 'Identifier of the verification session',
     example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
   })
-  @ApiOkResponse({ description: 'The presentation record', type: Openid4vcPresentationRecordDto })
+  @ApiOkResponse({ description: 'The presentation record', type: OpenId4VcPresentationRecordDto })
   @ApiNotFoundResponse({ description: 'No presentation with the given id' })
   public async getPresentation(
     @Param('proofExchangeId') proofExchangeId: string,
-  ): Promise<Openid4vcPresentationRecordDto> {
+  ): Promise<OpenId4VcPresentationRecordDto> {
     return toPresentationDto(await this.verifierService.getVerificationSession(proofExchangeId))
   }
 

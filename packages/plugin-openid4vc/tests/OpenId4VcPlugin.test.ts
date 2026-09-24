@@ -9,9 +9,9 @@ import { VerifierService } from '../src/services/VerifierService'
 import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../src/types'
 
 import { OpenId4VcPlugin } from '../src/nestjs/OpenId4VcPlugin'
-import { V2Openid4vcCredentialExchangesController } from '../src/nestjs/V2Openid4vcCredentialExchangesController'
-import { V2Openid4vcPresentationsController } from '../src/nestjs/V2Openid4vcPresentationsController'
-import { V2Openid4vcSigningCertificatesController } from '../src/nestjs/V2Openid4vcSigningCertificatesController'
+import { V2OpenId4VcCredentialExchangesController } from '../src/nestjs/V2OpenId4VcCredentialExchangesController'
+import { V2OpenId4VcPresentationsController } from '../src/nestjs/V2OpenId4VcPresentationsController'
+import { V2OpenId4VcSigningCertificatesController } from '../src/nestjs/V2OpenId4VcSigningCertificatesController'
 
 const options = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
@@ -24,9 +24,9 @@ const issuerSinkOf = (plugin: VsAgentNestPlugin): OpenId4VcIssuerSink =>
 describe('OpenId4VcPlugin', () => {
   it('registers the three v2 controllers', () => {
     expect(OpenId4VcPlugin(options()).controllers).toEqual([
-      V2Openid4vcCredentialExchangesController,
-      V2Openid4vcPresentationsController,
-      V2Openid4vcSigningCertificatesController,
+      V2OpenId4VcCredentialExchangesController,
+      V2OpenId4VcPresentationsController,
+      V2OpenId4VcSigningCertificatesController,
     ])
   })
 

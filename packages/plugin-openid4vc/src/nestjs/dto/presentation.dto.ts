@@ -12,7 +12,7 @@ import { OPENID4VC_REQUEST_SIGNERS } from '../../services/VerifierService'
 import { TRUST_VERDICT_NAMES, VERANA_TRUST_STATUSES } from '../../trust/types'
 
 /** Request body of [VSA-ADM-OID-PR] createPresentationRequest. */
-export class Openid4vcPresentationRequestBodyDto {
+export class OpenId4VcCreatePresentationRequestBodyDto {
   @ApiProperty({
     description:
       'Credential type the request asks for. The agent derives no credential type yet, so every identifier answers UNKNOWN_ID.',
@@ -55,7 +55,7 @@ export class Openid4vcPresentationRequestBodyDto {
 }
 
 /** Response of [VSA-ADM-OID-PR] createPresentationRequest. */
-export class Openid4vcPresentationRequestResponseDto {
+export class OpenId4VcPresentationRequestResponseDto {
   @ApiProperty({
     description: 'Identifier of the verification session, for later tracking',
     example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
@@ -71,7 +71,7 @@ export class Openid4vcPresentationRequestResponseDto {
 }
 
 /** Query of [VSA-ADM-OID-PR] listPresentations. */
-export class Openid4vcListPresentationsQueryDto extends PaginationQueryDto {
+export class OpenId4VcListPresentationsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Filter by credential type', example: 'employee' })
   @IsOptional()
   @IsString()
@@ -88,7 +88,7 @@ export class Openid4vcListPresentationsQueryDto extends PaginationQueryDto {
 }
 
 /** What the agent read from the resolver to reach a trust verdict on a presentation. */
-export class Openid4vcTrustEvidenceDto {
+export class OpenId4VcTrustEvidenceDto {
   @ApiProperty({ type: String, nullable: true, description: 'DID of the issuer, read from the certificate' })
   did!: string | null
 
@@ -117,16 +117,16 @@ export class Openid4vcTrustEvidenceDto {
 }
 
 /** The trust verdict on a presentation, on the record of [VSA-ADM-OID-PR] getPresentation. */
-export class Openid4vcTrustVerdictDto {
+export class OpenId4VcTrustVerdictDto {
   @ApiProperty({ enum: TRUST_VERDICT_NAMES, description: 'The trust verdict' })
   verdict!: TrustVerdictName
 
-  @ApiProperty({ type: Openid4vcTrustEvidenceDto, description: 'The basis of the verdict' })
-  evidence!: Openid4vcTrustEvidenceDto
+  @ApiProperty({ type: OpenId4VcTrustEvidenceDto, description: 'The basis of the verdict' })
+  evidence!: OpenId4VcTrustEvidenceDto
 }
 
 /** The credential a wallet presented, on the record of [VSA-ADM-OID-PR] getPresentation. */
-export class Openid4vcPresentedCredentialDto {
+export class OpenId4VcPresentedCredentialDto {
   @ApiProperty({
     description: 'SD-JWT VC type of the presented credential',
     example: 'https://agent.example/oid4vc/vct/employee',
@@ -143,7 +143,7 @@ export class Openid4vcPresentedCredentialDto {
 }
 
 /** A presentation record, as returned by listPresentations and getPresentation. */
-export class Openid4vcPresentationRecordDto {
+export class OpenId4VcPresentationRecordDto {
   @ApiProperty({
     description: 'Identifier of the verification session',
     example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
@@ -181,16 +181,16 @@ export class Openid4vcPresentationRecordDto {
   accepted!: boolean
 
   @ApiPropertyOptional({
-    type: Openid4vcTrustVerdictDto,
+    type: OpenId4VcTrustVerdictDto,
     description: 'The trust verdict, once the agent verified the response',
   })
-  trust?: Openid4vcTrustVerdictDto
+  trust?: OpenId4VcTrustVerdictDto
 
   @ApiPropertyOptional({
-    type: Openid4vcPresentedCredentialDto,
+    type: OpenId4VcPresentedCredentialDto,
     description: 'The presented credential, once verified',
   })
-  credential?: Openid4vcPresentedCredentialDto
+  credential?: OpenId4VcPresentedCredentialDto
 }
 
-export const Openid4vcPresentationRecordPageDto = PageDto(Openid4vcPresentationRecordDto)
+export const OpenId4VcPresentationRecordPageDto = PageDto(OpenId4VcPresentationRecordDto)

@@ -6,7 +6,7 @@ import { IsEnum, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Max, Min } f
 import { OFFER_TTL_SECONDS_MAX, OFFER_TTL_SECONDS_MIN } from '../../config'
 
 /** Request body of [VSA-ADM-OID-CE] createCredentialOffer. */
-export class Openid4vcCredentialOfferBodyDto {
+export class OpenId4VcCreateCredentialOfferBodyDto {
   @ApiProperty({
     description:
       'Credential type of the offer. The agent derives no credential type yet, so every identifier answers UNKNOWN_ID.',
@@ -62,7 +62,7 @@ export class Openid4vcCredentialOfferBodyDto {
 }
 
 /** Response of [VSA-ADM-OID-CE] createCredentialOffer. */
-export class Openid4vcCredentialOfferResponseDto {
+export class OpenId4VcCredentialOfferResponseDto {
   @ApiProperty({
     description: 'Identifier of the issuance session, for later tracking',
     example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
@@ -78,7 +78,7 @@ export class Openid4vcCredentialOfferResponseDto {
 }
 
 /** Query of [VSA-ADM-OID-CE] listCredentialExchanges. */
-export class Openid4vcListCredentialExchangesQueryDto extends PaginationQueryDto {
+export class OpenId4VcListCredentialExchangesQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Filter by credential type', example: 'employee' })
   @IsOptional()
   @IsString()
@@ -101,7 +101,7 @@ export class Openid4vcListCredentialExchangesQueryDto extends PaginationQueryDto
 }
 
 /** A credential exchange record, as returned by listCredentialExchanges and getCredentialExchange. */
-export class Openid4vcCredentialExchangeRecordDto {
+export class OpenId4VcCredentialExchangeRecordDto {
   @ApiProperty({
     description: 'Identifier of the issuance session',
     example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
@@ -140,4 +140,4 @@ export class Openid4vcCredentialExchangeRecordDto {
   errorMessage?: string
 }
 
-export const Openid4vcCredentialExchangeRecordPageDto = PageDto(Openid4vcCredentialExchangeRecordDto)
+export const OpenId4VcCredentialExchangeRecordPageDto = PageDto(OpenId4VcCredentialExchangeRecordDto)

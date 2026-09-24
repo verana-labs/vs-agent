@@ -27,11 +27,11 @@ import { createdAtKey, mapPage, Page, paginate } from '@verana-labs/vs-agent-sdk
 import { IssuerService } from '../services/IssuerService'
 
 import {
-  Openid4vcCredentialExchangeRecordDto,
-  Openid4vcCredentialExchangeRecordPageDto,
-  Openid4vcCredentialOfferBodyDto,
-  Openid4vcCredentialOfferResponseDto,
-  Openid4vcListCredentialExchangesQueryDto,
+  OpenId4VcCredentialExchangeRecordDto,
+  OpenId4VcCredentialExchangeRecordPageDto,
+  OpenId4VcCreateCredentialOfferBodyDto,
+  OpenId4VcCredentialOfferResponseDto,
+  OpenId4VcListCredentialExchangesQueryDto,
 } from './dto'
 import { toCredentialExchangeDto } from './mappers'
 
@@ -46,7 +46,7 @@ import { toCredentialExchangeDto } from './mappers'
 @ApiTags('v2/openid4vc')
 @Controller({ path: 'openid4vc', version: '2' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
-export class V2Openid4vcCredentialExchangesController {
+export class V2OpenId4VcCredentialExchangesController {
   public constructor(@Inject(IssuerService) private readonly issuerService: IssuerService) {}
 
   @Post('credential-offer')
@@ -56,7 +56,7 @@ export class V2Openid4vcCredentialExchangesController {
       'Creates a pre-authorized OpenID4VCI credential offer for one credential configuration. The credential expires after ttlSeconds.',
   })
   @ApiBody({
-    type: Openid4vcCredentialOfferBodyDto,
+    type: OpenId4VcCreateCredentialOfferBodyDto,
     examples: {
       employee: {
         summary: 'Employee credential',
@@ -78,11 +78,11 @@ export class V2Openid4vcCredentialExchangesController {
       },
     },
   })
-  @ApiCreatedResponse({ description: 'The credential offer', type: Openid4vcCredentialOfferResponseDto })
+  @ApiCreatedResponse({ description: 'The credential offer', type: OpenId4VcCredentialOfferResponseDto })
   @ApiNotFoundResponse({ description: 'The agent cannot resolve the credential type or the status list' })
   public async createCredentialOffer(
-    @Body() body: Openid4vcCredentialOfferBodyDto,
-  ): Promise<Openid4vcCredentialOfferResponseDto> {
+    @Body() body: OpenId4VcCreateCredentialOfferBodyDto,
+  ): Promise<OpenId4VcCredentialOfferResponseDto> {
     const offer = await this.issuerService.createOffer({
       jsonSchemaCredentialId: body.jsonSchemaCredentialId,
       claims: body.claims,
@@ -100,11 +100,11 @@ export class V2Openid4vcCredentialExchangesController {
   })
   @ApiOkResponse({
     description: 'A page of credential exchange records',
-    type: Openid4vcCredentialExchangeRecordPageDto,
+    type: OpenId4VcCredentialExchangeRecordPageDto,
   })
   public async listCredentialExchanges(
-    @Query() query: Openid4vcListCredentialExchangesQueryDto,
-  ): Promise<Page<Openid4vcCredentialExchangeRecordDto>> {
+    @Query() query: OpenId4VcListCredentialExchangesQueryDto,
+  ): Promise<Page<OpenId4VcCredentialExchangeRecordDto>> {
     const filters = {
       jsonSchemaCredentialId: query.jsonSchemaCredentialId,
       statusListId: query.statusListId,
@@ -135,12 +135,12 @@ export class V2Openid4vcCredentialExchangesController {
   })
   @ApiOkResponse({
     description: 'The credential exchange record',
-    type: Openid4vcCredentialExchangeRecordDto,
+    type: OpenId4VcCredentialExchangeRecordDto,
   })
   @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
   public async getCredentialExchange(
     @Param('credentialExchangeId') credentialExchangeId: string,
-  ): Promise<Openid4vcCredentialExchangeRecordDto> {
+  ): Promise<OpenId4VcCredentialExchangeRecordDto> {
     return toCredentialExchangeDto(await this.issuerService.getIssuanceSession(credentialExchangeId))
   }
 
