@@ -21,7 +21,7 @@ export enum VtFlowErrorCode {
   InternalError = 'vt-flow.internal-error',
 }
 
-/** RFC 0035 `who_retries`; wire form is lowercase but Credo emits UPPER-CASE on the wire. */
+/** RFC 0035 `who_retries`; wire form is lowercase. */
 export type WhoRetries = 'you' | 'me' | 'both' | 'none'
 
 /** RFC 0035 `impact`; same casing note as `WhoRetries`. */

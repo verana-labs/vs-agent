@@ -1,4 +1,4 @@
-import { EventEmitter, utils } from '@credo-ts/core'
+import { EventEmitter, JsonTransformer, utils } from '@credo-ts/core'
 import { DidCommCredentialExchangeRepository, WhoRetriesStatus } from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -17,6 +17,7 @@ import {
   IssuanceRequestMessage,
   OnboardingRequestMessage,
   OobLinkMessage,
+  VT_FLOW_PROBLEM_REPORT_TYPE,
   ValidatingMessage,
   VtFlowProblemReportMessage,
 } from '../src/messages'
@@ -90,16 +91,23 @@ const applicantParams = {
 }
 
 describe('VtFlowService inbound problem-report', () => {
-  function makeReport(code: string, whoRetries?: WhoRetriesStatus) {
-    const message = new VtFlowProblemReportMessage({ description: { code, en: 'because' }, whoRetries })
-    message.setThread({ threadId: 'thid-1' })
-    return message
+  function makeReport(code: string, whoRetries?: string) {
+    return JsonTransformer.fromJSON(
+      {
+        '@type': VT_FLOW_PROBLEM_REPORT_TYPE,
+        '@id': utils.uuid(),
+        '~thread': { thid: utils.uuid() },
+        description: { code, en: 'because' },
+        who_retries: whoRetries,
+      },
+      VtFlowProblemReportMessage,
+    )
   }
 
   async function receive(
     code: string,
     role: VtFlowRole,
-    options: { whoRetries?: WhoRetriesStatus; state?: VtFlowState } = {},
+    options: { whoRetries?: string; state?: VtFlowState } = {},
   ) {
     const existing = makeRecord({ role, state: options.state ?? VtFlowState.Validating })
     const repository = {
@@ -158,6 +166,15 @@ describe('VtFlowService inbound problem-report', () => {
     await expect(receive(VtFlowErrorCode.InternalError, VtFlowRole.Applicant)).resolves.toMatchObject({
       state: VtFlowState.Error,
     })
+  })
+
+  it('reads the lower case who_retries of the wire', async () => {
+    await expect(
+      receive(VtFlowErrorCode.ValidationFailed, VtFlowRole.Applicant, { whoRetries: 'you' }),
+    ).resolves.toMatchObject({ state: VtFlowState.Validating })
+    await expect(
+      receive(VtFlowErrorCode.InternalError, VtFlowRole.Applicant, { whoRetries: 'none' }),
+    ).resolves.toMatchObject({ state: VtFlowState.Error })
   })
 
   it('leaves a flow in a terminal state untouched', async () => {

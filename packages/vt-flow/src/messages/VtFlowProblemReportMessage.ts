@@ -1,6 +1,19 @@
-import { DidCommProblemReportMessage, IsValidMessageType, parseMessageType } from '@credo-ts/didcomm'
+import {
+  DidCommProblemReportMessage,
+  ImpactStatus,
+  IsValidMessageType,
+  WhoRetriesStatus,
+  parseMessageType,
+} from '@credo-ts/didcomm'
+import { Transform, TransformationType } from 'class-transformer'
 
 import { VT_FLOW_PROBLEM_REPORT_TYPE } from './VtFlowProtocol'
+
+// RFC 0035 values are lower case on the wire, while Credo's enums and their IsEnum checks are upper case.
+function rfc0035Case({ value, type }: { value: unknown; type: TransformationType }): unknown {
+  if (typeof value !== 'string') return value
+  return type === TransformationType.CLASS_TO_PLAIN ? value.toLowerCase() : value.toUpperCase()
+}
 
 /**
  * Spec `problem-report (adopted)`. Credo's base class is typed
@@ -12,4 +25,10 @@ export class VtFlowProblemReportMessage extends DidCommProblemReportMessage {
 
   @IsValidMessageType(VtFlowProblemReportMessage.type)
   public readonly type = VtFlowProblemReportMessage.type.messageTypeUri
+
+  @Transform(rfc0035Case)
+  public whoRetries?: WhoRetriesStatus
+
+  @Transform(rfc0035Case)
+  public impact?: ImpactStatus
 }
