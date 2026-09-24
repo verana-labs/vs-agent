@@ -57,6 +57,25 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 > same for `openid4vc.existingSecret`, since Helm cannot read a Secret it does not own, so after
 > changing that Secret restart the deployment yourself.
 
+`openid4vc.config` is the file content as a string, which `--set` cannot carry: `--set
+openid4vc.config='{}'` fails the render with `expected string; got []interface {}`, because Helm
+parses the braces as a list, and `--set-string` splits the JSON on its commas. Pass it in a values
+file, as a block scalar:
+
+```yaml
+openid4vc:
+  config: |
+    {
+      "issuer": { "signing": { "configured": { "certificateChain": ["..."], "privateJwk": {} } } }
+    }
+```
+
+or read it straight off disk with `--set-file`, which takes the content verbatim:
+
+```bash
+helm upgrade --install vs-agent ./charts/vs-agent --set-file openid4vc.config=./openid4vc.json
+```
+
 ### Secrets Management
 
 This chart does not create Kubernetes Secrets. Sensitive values must be stored in a pre-existing Secret (created manually, via External Secrets Operator, Vault, Sealed Secrets, etc.) and referenced through `extraEnv[].valueFrom`.
