@@ -1,3 +1,4 @@
+import type { SendInvitationOptions, SendInvitationResult } from '@verana-labs/vs-agent-model'
 import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 import type { JsonValue } from '@credo-ts/core'
 
@@ -15,20 +16,6 @@ import { connectionOf, ecsServiceClaims, PARENT_CONNECTION_TAG, sendMessage } fr
 import { VsAgentService } from '../../../../services/VsAgentService'
 
 const invitationMediaType = 'application/didcomm-plain+json'
-
-export interface SendInvitationOptions {
-  connectionId: string
-  did?: string
-  label?: string
-  imageUrl?: string
-  goal?: string
-  goalCode?: string
-}
-
-export interface SendInvitationResult {
-  id: string
-  outOfBandId?: string
-}
 
 @Injectable()
 export class InvitationsService {

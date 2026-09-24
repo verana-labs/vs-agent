@@ -867,7 +867,7 @@ The three invitation codes above start a flow with an agent that holds no connec
 - a **sub-connection** to this agent, related to the connection that carried the invitation. In a wallet it is a separate contact, with its own label and image.
 - a **referral** to another service that publishes a DID, for example a verifier. The agent creates no record for it, and the connection the peer opens belongs to the other service.
 
-The agent sends the invitation in the envelope of the connection. On a DIDComm v1 connection it sends an Out-of-Band 1.1 invitation message. On a DIDComm v2 connection it sends the Out-of-Band 2.0 invitation as an `_oob` URL (`<PUBLIC_API_BASE_URL>?_oob=...`) in a basic message. A sub-connection uses the same version as the invitation; the `didcommVersion` and `useLegacyDid` parameters of the invitation codes do not apply.
+The agent sends the invitation in the envelope of the connection. On a DIDComm v1 connection it sends an Out-of-Band 1.1 invitation message. On a DIDComm v2 connection it sends a share-media message that carries the Out-of-Band 2.0 invitation in an attachment of media type `application/didcomm-plain+json`. A sub-connection uses the same version as the invitation; the `didcommVersion` and `useLegacyDid` parameters of the invitation codes do not apply.
 
 The request body:
 
@@ -877,7 +877,7 @@ The request body:
 - `imageUrl` (optional): URL of an image the peer shows for the invitation.
 - `goal` and `goalCode` (optional): the `goal` and `goal_code` of the invitation.
 
-`label` and `imageUrl` are fields of an Out-of-Band 1.1 invitation only: the agent omits them on a v2 connection.
+`label` and `imageUrl` are fields of an Out-of-Band 1.1 invitation only. On a v2 connection the invitation carries neither, and the share-media message carries them instead: `label` as its `description` and as the `metadata.title` of its item, `imageUrl` as the `metadata.icon` of that item.
 
 A sub-connection invitation:
 
@@ -911,8 +911,44 @@ Response (HTTP `201`):
 }
 ```
 
-- `id`: identifier of the sent message. On a v1 connection it is the id of the Out-of-Band 1.1 message; on a v2 connection it is the id of the basic message record that carries the invitation URL.
+- `id`: identifier of the sent message. On a v1 connection it is the id of the Out-of-Band 1.1 message; on a v2 connection it is the id of the share-media message that carries the invitation.
 - `outOfBandId`: identifier of the single-use Out-of-Band record the agent created for a sub-connection. Absent for a referral.
+
+On a v2 connection the peer receives the invitation in the attachment of the share-media message:
+
+```json
+{
+  "id": "b6a2f0d4-7c1e-4f6a-9d2b-0f3c5e8a1b7d",
+  "type": "https://didcomm.org/media-sharing/1.0/share-media",
+  "from": "did:peer:…",
+  "to": ["did:peer:…"],
+  "body": {
+    "description": "Support",
+    "sent_time": "2026-09-23T10:15:00.000Z",
+    "items": [
+      {
+        "@id": "c4f1a9e2-3b7d-4e5f-8a6c-1d2e3f4a5b6c",
+        "attachment_id": "0",
+        "metadata": { "title": "Support", "icon": "https://example.com/support.png" }
+      }
+    ]
+  },
+  "attachments": [
+    {
+      "id": "0",
+      "media_type": "application/didcomm-plain+json",
+      "data": {
+        "json": {
+          "type": "https://didcomm.org/out-of-band/2.0/invitation",
+          "id": "9c3b7a1e-2d4f-4a8b-9e0c-5f6a7b8c9d0e",
+          "from": "did:peer:…",
+          "body": { "goal": "Open a support chat", "goal_code": "support-chat", "accept": ["didcomm/v2"] }
+        }
+      }
+    }
+  ]
+}
+```
 
 The request fails with `404` (`UNKNOWN_ID`) when no connection has the given `connectionId`.
 
