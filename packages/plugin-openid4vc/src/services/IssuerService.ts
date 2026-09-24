@@ -67,6 +67,8 @@ export interface OpenId4VcOfferResult {
 export interface OpenId4VcIssuanceSessionSummary {
   id: string
   jsonSchemaCredentialId: string
+  statusListId?: string
+  statusListIndex?: number
   state: OpenId4VcIssuanceSessionState
   createdAt: Date
   updatedAt: Date
@@ -79,6 +81,7 @@ const NOT_FOUND = 404
 
 const JSON_SCHEMA_CREDENTIAL_ID_TAG = 'jsonSchemaCredentialId'
 const STATUS_LIST_ID_TAG = 'statusListId'
+const STATUS_LIST_INDEX_TAG = 'statusListIndex'
 const DPOP_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
 const ATTESTATION_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
 
@@ -130,6 +133,8 @@ export class IssuerService implements OnModuleInit {
         'statusListId and statusListIndex must be both present or both absent',
       )
     }
+    // #713 hosts the first status list; until it lands there is none to register on, so naming one is an
+    // unknown id rather than a credential that silently carries no status.
     if (statusListId !== undefined) {
       throw new AdminApiError(
         AdminApiErrorCode.UnknownId,
@@ -160,6 +165,11 @@ export class IssuerService implements OnModuleInit {
     })
 
     issuanceSession.setTag(JSON_SCHEMA_CREDENTIAL_ID_TAG, configuration.id)
+    if (statusListId !== undefined) {
+      issuanceSession.setTag(STATUS_LIST_ID_TAG, statusListId)
+      // A credo record tag holds no number.
+      issuanceSession.setTag(STATUS_LIST_INDEX_TAG, String(statusListIndex))
+    }
     await this.sessionRepository().update(this.agent.context, issuanceSession)
 
     return { credentialOffer, issuanceSessionId: issuanceSession.id }
@@ -400,9 +410,13 @@ export class IssuerService implements OnModuleInit {
 
 function summarizeIssuanceSession(session: OpenId4VcIssuanceSessionRecord): OpenId4VcIssuanceSessionSummary {
   const jsonSchemaCredentialId = session.getTag(JSON_SCHEMA_CREDENTIAL_ID_TAG)
+  const statusListId = session.getTag(STATUS_LIST_ID_TAG)
+  const statusListIndex = session.getTag(STATUS_LIST_INDEX_TAG)
   return {
     id: session.id,
     jsonSchemaCredentialId: typeof jsonSchemaCredentialId === 'string' ? jsonSchemaCredentialId : '',
+    ...(typeof statusListId === 'string' ? { statusListId } : {}),
+    ...(typeof statusListIndex === 'string' ? { statusListIndex: Number(statusListIndex) } : {}),
     state: session.state,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt ?? session.createdAt,
