@@ -644,7 +644,9 @@ describe('VtFlowOrchestrator validateFlow', () => {
 
     const granted = makeValidateAgent({ grant: { msgTypes: [SET_VALIDATED], withFeegrant: true } })
     granted.chain.feeAllowance.mockResolvedValue({ unlimited: true } as never)
-    Object.assign(granted.chain, { getAccountBalance: vi.fn().mockRejectedValue(new Error('rpc unavailable')) })
+    Object.assign(granted.chain, {
+      getAccountBalance: vi.fn().mockRejectedValue(new Error('rpc unavailable')),
+    })
     await new VtFlowOrchestrator(granted.agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
 
     for (const { chain, current } of [own, granted]) {
