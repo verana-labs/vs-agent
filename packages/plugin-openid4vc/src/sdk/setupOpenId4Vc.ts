@@ -18,14 +18,10 @@ import { trustedCertificatesForVerification } from '../trust/CertificateTrust'
 import { isRecord } from '../utils/isRecord'
 
 const ISSUER_BODY_LIMIT = '1mb'
-const ATTESTATION_AUTH_METHOD = 'attest_jwt_client_auth'
-const ATTESTATION_ALGORITHMS = ['ES256']
-const DPOP_ALGORITHMS = ['ES256']
 
 export interface OpenId4VcIssuerRequestMapper {
   mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper
   getJwtVcIssuerMetadata: () => Record<string, unknown>
-  getSignedMetadataJwt: () => string | undefined
 }
 
 export type OpenId4VcAgentModules = Pick<OpenId4VcVsAgentModules, 'openId4Vc' | 'x509'>
@@ -42,10 +38,7 @@ export function setupOpenId4Vc(
   const walletAttestationEnabled = Boolean(options.issuer?.walletAttestationCertificates?.length)
 
   const app = express()
-  app.use(advertiseDpopSupport)
-  if (walletAttestationEnabled) app.use(advertiseWalletAttestationMetadata)
-  app.use(accommodateOpenId4VciKt(Boolean(options.issuer?.keyAttestationCertificates?.length)))
-  app.use(serveCertificateBoundIssuerMetadata(getIssuerService))
+  app.use(accommodateLegacyMetadataAccept(Boolean(options.issuer?.keyAttestationCertificates?.length)))
   // Credo raises the body limits of its own routers (1 MB issuer, 5 MB verifier), and a parser registered on
   // the same app before them decides first, so this one covers the issuer path alone and at the limit credo
   // sets there.
@@ -102,7 +95,7 @@ export function setupOpenId4Vc(
 }
 
 // A credential carries `iss: publicApiBaseUrl`, and a wallet deriving the metadata URL from it the RFC 8615
-// way (wwWallet does) asks for the bare path, which credo only serves under the issuer-scoped route.
+// way asks for the bare path, which credo only serves under the issuer-scoped route.
 function aliasBareWellKnownPath(app: Express, wellKnown: string, publicApiBaseUrl: string): void {
   const alias = withoutTrailingSlash(`${wellKnown}${new URL(publicApiBaseUrl).pathname}`)
   const issuerScopedPath = `${wellKnown}${withoutTrailingSlash(
@@ -145,17 +138,17 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
   }
 }
 
-// openid4vci-kt (the EUDI reference wallet) sends `Accept: application/jwt; application/json` and requires
-// `key_attestations_required` on every proof type, both outside what the spec mandates.
-export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
+// `application/jwt; application/json` parses as a single `application/jwt` range with a parameter, so credo
+// would answer signed metadata to a client that reads JSON alone.
+export function accommodateLegacyMetadataAccept(hasKeyAttestationAnchor: boolean) {
   return (request: Request, response: Response, next: NextFunction): void => {
     const accept = request.headers.accept
     const ranges = typeof accept === 'string' ? accept.split(',') : []
-    const isOpenId4VciKt = ranges.some(
+    const isSingleRange = ranges.some(
       range => range.includes('application/jwt') && range.includes('application/json'),
     )
     const prefersPlainMetadata =
-      isOpenId4VciKt ||
+      isSingleRange ||
       (ranges.some(range => range.includes('application/jwt')) &&
         ranges.some(range => range.includes('application/json')))
 
@@ -169,52 +162,21 @@ export function accommodateOpenId4VciKt(hasKeyAttestationAnchor: boolean) {
     }
 
     request.headers.accept = 'application/json'
-    if (!isOpenId4VciKt) {
+    if (!isSingleRange || !hasKeyAttestationAnchor) {
       next()
       return
     }
 
     const send = response.send.bind(response)
     response.send = ((body?: unknown) =>
-      send(
-        typeof body === 'string' ? withKeyAttestationRequirement(body, hasKeyAttestationAnchor) : body,
-      )) as Response['send']
+      send(typeof body === 'string' ? withAttestationProofType(body) : body)) as Response['send']
     next()
   }
 }
 
-// NL Wallet's core rejects a metadata JWT signed with `kid` and no `x5c`, so this serves the copy
-// IssuerService re-signs under both.
-export function serveCertificateBoundIssuerMetadata(getIssuerService?: () => OpenId4VcIssuerRequestMapper) {
-  return (request: Request, response: Response, next: NextFunction): void => {
-    if (
-      request.method !== 'GET' ||
-      !request.path.includes('/.well-known/openid-credential-issuer') ||
-      !acceptsSignedMetadataOnly(request.headers.accept)
-    ) {
-      next()
-      return
-    }
-
-    const signedMetadataJwt = getIssuerService?.().getSignedMetadataJwt()
-    if (!signedMetadataJwt) {
-      next()
-      return
-    }
-
-    response.type('application/jwt').status(200).send(signedMetadataJwt)
-  }
-}
-
-function acceptsSignedMetadataOnly(accept: string | string[] | undefined): boolean {
-  const ranges = typeof accept === 'string' ? accept.split(',') : []
-  return (
-    ranges.some(range => range.includes('application/jwt')) &&
-    !ranges.some(range => range.includes('application/json'))
-  )
-}
-
-function withKeyAttestationRequirement(body: string, hasKeyAttestationAnchor: boolean): string {
+// `attestation` stays off the issuer record because a wallet modelling `proof_types_supported` as a closed
+// enum throws on a member it does not know, which kills the offer before it renders.
+function withAttestationProofType(body: string): string {
   try {
     const metadata: unknown = JSON.parse(body)
     if (!isRecord(metadata) || !isRecord(metadata.credential_configurations_supported)) return body
@@ -224,92 +186,23 @@ function withKeyAttestationRequirement(body: string, hasKeyAttestationAnchor: bo
         if (!isRecord(configuration) || !isRecord(configuration.proof_types_supported)) {
           return [id, configuration]
         }
-        const advertised = hasKeyAttestationAnchor
-          ? {
+        const jwtProofType = configuration.proof_types_supported.jwt
+        if (!isRecord(jwtProofType)) return [id, configuration]
+
+        return [
+          id,
+          {
+            ...configuration,
+            proof_types_supported: {
               ...configuration.proof_types_supported,
-              attestation: { proof_signing_alg_values_supported: ['ES256'] },
-            }
-          : configuration.proof_types_supported
-        const proofTypes = Object.fromEntries(
-          Object.entries(advertised).map(([type, meta]) =>
-            isRecord(meta) &&
-            !('key_attestations_required' in meta) &&
-            (type === 'jwt' || type === 'attestation')
-              ? [type, { ...meta, key_attestations_required: {} }]
-              : [type, meta],
-          ),
-        )
-        return [id, { ...configuration, proof_types_supported: proofTypes }]
+              attestation: jwtProofType,
+            },
+          },
+        ]
       }),
     )
     return JSON.stringify({ ...metadata, credential_configurations_supported: configurations })
   } catch {
     return body
   }
-}
-
-// wwWallet dereferences `dpop_signing_alg_values_supported` unconditionally and throws before rendering
-// consent when Credo omits it.
-function advertiseDpopSupport(request: Request, response: Response, next: NextFunction): void {
-  if (request.method !== 'GET' || !isAuthorizationServerMetadataPath(request.path)) {
-    next()
-    return
-  }
-
-  const send = response.send.bind(response)
-  response.send = ((body?: unknown) =>
-    send(typeof body === 'string' ? withDpopAlgorithms(body) : body)) as Response['send']
-  next()
-}
-
-function withDpopAlgorithms(body: string): string {
-  try {
-    const metadata: unknown = JSON.parse(body)
-    if (!isRecord(metadata) || metadata.dpop_signing_alg_values_supported) return body
-    return JSON.stringify({ ...metadata, dpop_signing_alg_values_supported: DPOP_ALGORITHMS })
-  } catch {
-    return body
-  }
-}
-
-function advertiseWalletAttestationMetadata(request: Request, response: Response, next: NextFunction): void {
-  if (request.method !== 'GET' || !isAuthorizationServerMetadataPath(request.path)) {
-    next()
-    return
-  }
-
-  const send = response.send.bind(response)
-  response.send = ((body?: unknown) =>
-    send(typeof body === 'string' ? withWalletAttestationMetadata(body) : body)) as Response['send']
-  next()
-}
-
-function withWalletAttestationMetadata(body: string): string {
-  try {
-    const metadata: unknown = JSON.parse(body)
-    if (!isRecord(metadata)) return body
-
-    const methods = Array.isArray(metadata.token_endpoint_auth_methods_supported)
-      ? metadata.token_endpoint_auth_methods_supported.filter(
-          (method): method is string => typeof method === 'string',
-        )
-      : []
-    if (!methods.includes(ATTESTATION_AUTH_METHOD)) methods.push(ATTESTATION_AUTH_METHOD)
-
-    return JSON.stringify({
-      ...metadata,
-      token_endpoint_auth_methods_supported: methods,
-      client_attestation_signing_alg_values_supported: ATTESTATION_ALGORITHMS,
-      client_attestation_pop_signing_alg_values_supported: ATTESTATION_ALGORITHMS,
-    })
-  } catch {
-    return body
-  }
-}
-
-function isAuthorizationServerMetadataPath(path: string): boolean {
-  return (
-    path.startsWith('/.well-known/oauth-authorization-server/') ||
-    path.endsWith('/.well-known/oauth-authorization-server')
-  )
 }

@@ -6,8 +6,8 @@ import request from 'supertest'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
+  accommodateLegacyMetadataAccept,
   acceptDraftCredentialRequests,
-  accommodateOpenId4VciKt,
   setupOpenId4Vc,
 } from '../src/sdk/setupOpenId4Vc'
 
@@ -29,14 +29,12 @@ const setupOptions = (): OpenId4VcPluginOptions => ({
 describe('setupOpenId4Vc', () => {
   it('creates a fresh non-global Express application for every setup', () => {
     const first = setupOpenId4Vc(setupOptions(), () => ({
-      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
     }))
     const second = setupOpenId4Vc(setupOptions(), () => ({
-      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -60,7 +58,6 @@ describe('setupOpenId4Vc', () => {
 
   it('never anchors a presented credential on the peer-provided chain', async () => {
     const setup = setupOpenId4Vc(setupOptions(), () => ({
-      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -97,7 +94,6 @@ describe('setupOpenId4Vc', () => {
 
   it('serves the SD-JWT VC issuer metadata that x5c-anchoring holders resolve', async () => {
     const setup = setupOpenId4Vc(setupOptions(), () => ({
-      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({
         issuer: 'https://issuer.example',
         jwks: { keys: [{ kty: 'EC', crv: 'P-256' }] },
@@ -118,7 +114,6 @@ describe('setupOpenId4Vc', () => {
   // form made every wwWallet issuance show a metadata-fetch failure above the trust card.
   it('serves the SD-JWT VC issuer metadata at the path-inserted well-known form', async () => {
     const setup = setupOpenId4Vc(setupOptions(), () => ({
-      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({ issuer: 'https://issuer.example', jwks: { keys: [] } }),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -131,112 +126,24 @@ describe('setupOpenId4Vc', () => {
     expect(response.body.issuer).toBe('https://issuer.example')
   })
 
-  const withSignedMetadata = (signedMetadataJwt: string | undefined) =>
-    setupOpenId4Vc(setupOptions(), () => ({
-      getSignedMetadataJwt: () => signedMetadataJwt,
-      getJwtVcIssuerMetadata: () => ({}),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
-
-  it.each([
-    '/.well-known/openid-credential-issuer/oid4vci/issuer',
-    '/oid4vci/issuer/.well-known/openid-credential-issuer',
-  ])('serves the certificate-bound signed metadata at %s', async path => {
-    const setup = withSignedMetadata('header.payload.signature')
-
-    const response = await request(setup.publicMiddleware).get(path).set('accept', 'application/jwt')
-
-    expect(response.status).toBe(200)
-    expect(response.headers['content-type']).toContain('application/jwt')
-    expect(response.text).toBe('header.payload.signature')
-  })
-
-  // Every client that reads JSON is served JSON, so the signed JWT only ever reaches a client
-  // asking for it alone. Answering the others would hand swiyu a JWT it cannot verify.
-  it.each([
-    'application/json, application/jwt',
-    'application/jwt; application/json',
-    'application/json',
-  ])('leaves %s to the plain metadata endpoint', async accept => {
-    const setup = withSignedMetadata('header.payload.signature')
-
-    const response = await request(setup.publicMiddleware)
-      .get('/.well-known/openid-credential-issuer/oid4vci/issuer')
-      .set('accept', accept)
-
-    expect(response.status).toBe(404)
-  })
-
-  it('falls through when no signed metadata exists or the path is not issuer metadata', async () => {
-    const absent = await request(withSignedMetadata(undefined).publicMiddleware)
-      .get('/.well-known/openid-credential-issuer/oid4vci/issuer')
-      .set('accept', 'application/jwt')
-    const otherPath = await request(withSignedMetadata('header.payload.signature').publicMiddleware)
-      .get('/oid4vci/issuer/credential')
-      .set('accept', 'application/jwt')
-    const noAccept = await request(withSignedMetadata('header.payload.signature').publicMiddleware).get(
-      '/.well-known/openid-credential-issuer/oid4vci/issuer',
-    )
-
-    expect(absent.status).toBe(404)
-    expect(otherPath.status).toBe(404)
-    expect(noAccept.status).toBe(404)
-  })
-
-  it('does not advertise wallet attestation metadata without attestation roots', async () => {
-    const options = setupOptions()
-    const setup = setupOpenId4Vc(options, () => ({
-      getSignedMetadataJwt: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
-    setup.publicMiddleware.get(
-      '/.well-known/oauth-authorization-server/oid4vci/issuer',
-      (_request, response) => response.json({ token_endpoint_auth_methods_supported: ['none'] }),
-    )
-
-    const response = await request(setup.publicMiddleware).get(
-      '/.well-known/oauth-authorization-server/oid4vci/issuer',
-    )
-
-    expect(response.body.token_endpoint_auth_methods_supported).toEqual(['none'])
-    expect(response.body.client_attestation_signing_alg_values_supported).toBeUndefined()
-    expect(response.body.client_attestation_pop_signing_alg_values_supported).toBeUndefined()
-    expect(setup.modules.openId4Vc.config).toHaveProperty('issuer.walletAttestationsRequired', false)
-  })
-
-  it('advertises wallet attestation as soon as attestation roots are configured', async () => {
+  // Credo advertises `client_attestation_*` and derives `token_endpoint_auth_methods_supported` from the
+  // issuer record, which IssuerService fills from the same roots; openId4VcIssuance covers the served output.
+  it('requires wallet attestations exactly when attestation roots are configured', () => {
     const options = setupOptions()
     options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]
-    const setup = setupOpenId4Vc(options, () => ({
-      getSignedMetadataJwt: () => undefined,
-      getJwtVcIssuerMetadata: () => ({}),
-      mapCredentialRequest: () => {
-        throw new Error('not implemented')
-      },
-    }))
-    setup.publicMiddleware.get(
-      '/.well-known/oauth-authorization-server/oid4vci/issuer',
-      (_request, response) => response.json({ token_endpoint_auth_methods_supported: ['none'] }),
-    )
 
-    const response = await request(setup.publicMiddleware).get(
-      '/.well-known/oauth-authorization-server/oid4vci/issuer',
+    expect(setupOpenId4Vc(setupOptions()).modules.openId4Vc.config).toHaveProperty(
+      'issuer.walletAttestationsRequired',
+      false,
     )
-
-    expect(response.body.token_endpoint_auth_methods_supported).toEqual(['none', 'attest_jwt_client_auth'])
-    expect(response.body.client_attestation_signing_alg_values_supported).toEqual(['ES256'])
-    expect(response.body.client_attestation_pop_signing_alg_values_supported).toEqual(['ES256'])
-    expect(setup.modules.openId4Vc.config).toHaveProperty('issuer.walletAttestationsRequired', true)
+    expect(setupOpenId4Vc(options).modules.openId4Vc.config).toHaveProperty(
+      'issuer.walletAttestationsRequired',
+      true,
+    )
   })
 
   it('mounts no type metadata, credential-offer or credential-exchange route', async () => {
     const setup = setupOpenId4Vc(setupOptions(), () => ({
-      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -327,7 +234,6 @@ describe('setupOpenId4Vc', () => {
 
   it('does not mount verifier presentation or holder routes on the public middleware', async () => {
     const setup = setupOpenId4Vc(setupOptions(), () => ({
-      getSignedMetadataJwt: () => undefined,
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
@@ -408,7 +314,7 @@ describe('acceptDraftCredentialRequests', () => {
   })
 })
 
-const OPENID4VCI_KT_ACCEPT = 'application/jwt; application/json'
+const SINGLE_RANGE_ACCEPT = 'application/jwt; application/json'
 
 const metadata = (proofTypes: Record<string, unknown>) =>
   JSON.stringify({
@@ -438,7 +344,7 @@ const runMetadataRequest = (
     },
   } as unknown as Response
   const next = vi.fn() as unknown as NextFunction
-  accommodateOpenId4VciKt(hasAnchor)(request, response, next)
+  accommodateLegacyMetadataAccept(hasAnchor)(request, response, next)
   response.send(body)
   return { sent: sent as string, accept: request.headers.accept, next }
 }
@@ -446,11 +352,13 @@ const runMetadataRequest = (
 const proofTypesOf = (sent: string) =>
   JSON.parse(sent).credential_configurations_supported['demo-credential'].proof_types_supported
 
-const jwtOnly = { jwt: { proof_signing_alg_values_supported: ['ES256'] } }
+const jwtOnly = {
+  jwt: { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} },
+}
 
-describe('accommodateOpenId4VciKt', () => {
-  it('serves JSON and an unconstrained key-attestation requirement to openid4vci-kt', () => {
-    const { sent, accept, next } = runMetadataRequest(OPENID4VCI_KT_ACCEPT, metadata(jwtOnly))
+describe('accommodateLegacyMetadataAccept', () => {
+  it('serves JSON and mirrors the jwt proof type onto attestation for a single-range accept', () => {
+    const { sent, accept, next } = runMetadataRequest(SINGLE_RANGE_ACCEPT, metadata(jwtOnly))
 
     const expected = { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: {} }
     expect(accept).toBe('application/json')
@@ -470,14 +378,14 @@ describe('accommodateOpenId4VciKt', () => {
   })
 
   it('never invents a proof type the issuer does not accept', () => {
-    const { sent } = runMetadataRequest(OPENID4VCI_KT_ACCEPT, metadata(jwtOnly), {}, false)
+    const { sent } = runMetadataRequest(SINGLE_RANGE_ACCEPT, metadata(jwtOnly), {}, false)
 
     expect(Object.keys(proofTypesOf(sent))).toEqual(['jwt'])
   })
 
-  // swiyu models proof_types_supported as a closed enum, so an `attestation` member it does not
-  // know makes it throw while deserializing and the credential offer dies before it renders.
-  it('keeps attestation away from every client but openid4vci-kt', () => {
+  // A wallet modelling proof_types_supported as a closed enum throws while deserializing an
+  // `attestation` member it does not know, and the credential offer dies before it renders.
+  it('keeps attestation away from every client but the single-range accept header', () => {
     const json = runMetadataRequest('application/json', metadata(jwtOnly))
     const absent = runMetadataRequest(undefined, metadata(jwtOnly))
 
@@ -486,23 +394,23 @@ describe('accommodateOpenId4VciKt', () => {
   })
 
   it('serves plain metadata on a correctly spelled multi-range accept, without the payload change', () => {
-    const swiyu = runMetadataRequest('application/json, application/jwt', metadata(jwtOnly))
+    const multiRange = runMetadataRequest('application/json, application/jwt', metadata(jwtOnly))
 
-    expect(swiyu.accept).toBe('application/json')
-    expect(Object.keys(proofTypesOf(swiyu.sent))).toEqual(['jwt'])
+    expect(multiRange.accept).toBe('application/json')
+    expect(Object.keys(proofTypesOf(multiRange.sent))).toEqual(['jwt'])
   })
 
   it('leaves other paths, unknown proof types and non-JSON bodies alone', () => {
     expect(
-      runMetadataRequest(OPENID4VCI_KT_ACCEPT, '{"plain":true}', { path: '/oid4vci/demo-did/credential' })
+      runMetadataRequest(SINGLE_RANGE_ACCEPT, '{"plain":true}', { path: '/oid4vci/demo-did/credential' })
         .sent,
     ).toBe('{"plain":true}')
     expect(
-      proofTypesOf(runMetadataRequest(OPENID4VCI_KT_ACCEPT, metadata({ ldp_vp: {} }), {}, false).sent),
+      proofTypesOf(runMetadataRequest(SINGLE_RANGE_ACCEPT, metadata({ ldp_vp: {} }), {}, false).sent),
     ).toEqual({
       ldp_vp: {},
     })
-    expect(runMetadataRequest(OPENID4VCI_KT_ACCEPT, 'eyJhbGciOiJFUzI1NiJ9.e30.sig').sent).toBe(
+    expect(runMetadataRequest(SINGLE_RANGE_ACCEPT, 'eyJhbGciOiJFUzI1NiJ9.e30.sig').sent).toBe(
       'eyJhbGciOiJFUzI1NiJ9.e30.sig',
     )
   })

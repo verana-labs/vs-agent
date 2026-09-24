@@ -194,6 +194,7 @@ export async function startTestAgents(input: {
   issuerDid: string
   verifierDid: string
   credentialConfiguration: OpenId4VcCredentialConfiguration
+  issuerTrust?: Partial<NonNullable<OpenId4VcPluginOptions['issuer']>>
   failureHooks?: TestAgentFailureHooks
   logger?: BaseLogger
 }): Promise<OpenId4VcTestAgents> {
@@ -216,6 +217,7 @@ export async function startTestAgents(input: {
             privateJwk: LEAF_PRIVATE_JWK,
           },
         },
+        ...input.issuerTrust,
       },
       credentialConfigurations: [input.credentialConfiguration],
     }),

@@ -1,5 +1,5 @@
 import type { OpenId4VcAgent, OpenId4VcPluginOptions } from '../types'
-import type { JwsProtectedHeaderOptions, Kms } from '@credo-ts/core'
+import type { Kms } from '@credo-ts/core'
 import type {
   OpenId4VcIssuanceSessionRecord,
   OpenId4VcIssuanceSessionState,
@@ -8,7 +8,7 @@ import type {
   OpenId4VciCredentialRequestToCredentialMapper,
 } from '@credo-ts/openid4vc'
 
-import { ClaimFormat, JwsService, RecordNotFoundError } from '@credo-ts/core'
+import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import { OpenId4VcIssuanceSessionRepository } from '@credo-ts/openid4vc'
 
 import {
@@ -40,7 +40,6 @@ type IssuerApi = Pick<
   | 'createCredentialOffer'
   | 'getIssuanceSessionById'
   | 'deleteIssuanceSessionById'
-  | 'getIssuerMetadata'
 >
 
 export interface OpenId4VcCreateOfferOptions {
@@ -76,11 +75,12 @@ export interface OpenId4VcIssuanceSessionSummary {
 
 const JSON_SCHEMA_CREDENTIAL_ID_TAG = 'jsonSchemaCredentialId'
 const STATUS_LIST_ID_TAG = 'statusListId'
+const DPOP_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
+const ATTESTATION_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
 
 export class IssuerService {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
-  private signedMetadataJwt?: string
   private initialized = false
 
   public constructor(
@@ -212,10 +212,6 @@ export class IssuerService {
     }
   }
 
-  public getSignedMetadataJwt(): string | undefined {
-    return this.signedMetadataJwt
-  }
-
   public mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper = async input => {
     this.assertInitialized()
     const signingCertificate = this.signingCertificateHandle()
@@ -287,7 +283,6 @@ export class IssuerService {
     }
 
     await this.createOrUpdateIssuer(signingCertificate)
-    this.signedMetadataJwt = await this.buildCertificateBoundSignedMetadata(signingCertificate)
 
     this.signingCertificate = signingCertificate
     this.initialized = true
@@ -295,25 +290,6 @@ export class IssuerService {
 
   private metadataSigner(signingCertificate: SigningCertificateHandle) {
     return { method: 'x5c' as const, x5c: x5cCertificateChain(signingCertificate) }
-  }
-
-  private async buildCertificateBoundSignedMetadata(
-    signingCertificate: SigningCertificateHandle,
-  ): Promise<string | undefined> {
-    const { signedMetadataJwt } = await this.issuerApi().getIssuerMetadata(ISSUER_CAPABILITY_ID)
-    if (!signedMetadataJwt) return undefined
-
-    const [encodedHeader, encodedPayload] = signedMetadataJwt.split('.')
-    const agentContext = this.agent.context
-
-    return await agentContext.dependencyManager.resolve(JwsService).createJwsCompact(agentContext, {
-      payload: Buffer.from(encodedPayload, 'base64url'),
-      keyId: signingCertificate.keyId,
-      protectedHeaderOptions: {
-        ...parseProtectedHeader(encodedHeader),
-        x5c: x5cCertificateChain(signingCertificate).map(certificate => certificate.toString('base64')),
-      },
-    })
   }
 
   private async createOrUpdateIssuer(signingCertificate: SigningCertificateHandle): Promise<void> {
@@ -329,6 +305,13 @@ export class IssuerService {
                 ...(display.logoUri ? { logo: { uri: display.logoUri } } : {}),
               },
             ],
+          }
+        : {}),
+      dpopSigningAlgValuesSupported: DPOP_ALGORITHMS,
+      ...(this.options.issuer?.walletAttestationCertificates?.length
+        ? {
+            clientAttestationSigningAlgValuesSupported: ATTESTATION_ALGORITHMS,
+            clientAttestationPopSigningAlgValuesSupported: ATTESTATION_ALGORITHMS,
           }
         : {}),
       credentialConfigurationsSupported: this.credentialConfigurationsSupported(),
@@ -347,21 +330,26 @@ export class IssuerService {
   }
 
   private credentialConfigurationsSupported(): OpenId4VciCredentialConfigurationsSupportedWithFormats {
+    const keyAttestationsRequired = Boolean(this.options.issuer?.keyAttestationCertificates?.length)
+
     return Object.fromEntries(
       this.options.credentialConfigurations.map(configuration => [
         configuration.id,
         {
           format: 'dc+sd-jwt' as const,
           vct: configuration.vct,
-          // `scope` is optional per OID4VCI, but wwWallet's metadata schema requires it and fails resolution
+          // `scope` is optional per OID4VCI, but a wallet whose metadata schema requires it fails resolution
           // without one.
           scope: configuration.id,
           cryptographic_binding_methods_supported: ['jwk'],
           credential_signing_alg_values_supported: ['ES256'],
-          // Only `jwt` is advertised here: swiyu models `proof_types_supported` as a closed `ProofType` enum
-          // and throws on any other member.
+          // Only `jwt` is on the record: a wallet modelling `proof_types_supported` as a closed enum throws
+          // on any other member.
           proof_types_supported: {
-            jwt: { proof_signing_alg_values_supported: ['ES256'] },
+            jwt: {
+              proof_signing_alg_values_supported: ['ES256'],
+              ...(keyAttestationsRequired ? { key_attestations_required: {} } : {}),
+            },
           },
           credential_metadata: {
             display: [
@@ -412,23 +400,4 @@ function summarizeIssuanceSession(session: OpenId4VcIssuanceSessionRecord): Open
     ...(session.expiresAt ? { expiresAt: session.expiresAt } : {}),
     ...(session.errorMessage ? { errorMessage: session.errorMessage } : {}),
   }
-}
-
-function parseProtectedHeader(encoded: string): JwsProtectedHeaderOptions {
-  let header: unknown
-  try {
-    header = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'))
-  } catch {
-    throw new Error('signed issuer metadata carries an unreadable protected header')
-  }
-  if (header === null || typeof header !== 'object' || Array.isArray(header)) {
-    throw new Error('signed issuer metadata carries an unreadable protected header')
-  }
-
-  const { alg } = header as { alg?: unknown }
-  if (typeof alg !== 'string') {
-    throw new Error('signed issuer metadata carries no signature algorithm')
-  }
-
-  return { ...(header as Record<string, unknown>), alg: alg as Kms.KnownJwaSignatureAlgorithm }
 }

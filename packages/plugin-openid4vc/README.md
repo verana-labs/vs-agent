@@ -61,7 +61,7 @@ itself.
 | --- | --- |
 | `issuer` | OPTIONAL. Holds `signing`, `walletAttestationCertificates` and `keyAttestationCertificates`, each OPTIONAL. |
 | `issuer.walletAttestationCertificates` | X.509 roots of the accepted wallet providers. When non-empty, the agent requires a wallet attestation. |
-| `issuer.keyAttestationCertificates` | Roots for OpenID4VCI key attestations. Absent, the `attestation` proof type is neither advertised nor accepted. |
+| `issuer.keyAttestationCertificates` | Roots for OpenID4VCI key attestations. When non-empty, the issuer metadata requires a key attestation on every proof. Absent, the `attestation` proof type is neither advertised nor accepted. |
 | `verifier` | OPTIONAL. Holds an OPTIONAL `signing`. |
 
 The identifier segment of each capability is fixed: `issuer` and `verifier`, so the public paths
