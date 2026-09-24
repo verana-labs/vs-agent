@@ -8,6 +8,7 @@ export {
   parseOpenId4VcConfiguration,
 } from './config'
 export { OpenId4VcError, OpenId4VcErrorCode } from './errors'
+export { registerDidJwkResolver } from './sdk/didJwkResolver'
 export { setupOpenId4Vc } from './sdk/setupOpenId4Vc'
 export type {
   OpenId4VcAgentModules,

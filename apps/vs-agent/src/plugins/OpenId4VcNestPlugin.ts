@@ -1,7 +1,12 @@
 import type { OpenId4VcAgent, OpenId4VcPluginOptions } from '@verana-labs/vs-agent-plugin-openid4vc'
 import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
-import { IssuerService, setupOpenId4Vc, VerifierService } from '@verana-labs/vs-agent-plugin-openid4vc'
+import {
+  IssuerService,
+  registerDidJwkResolver,
+  setupOpenId4Vc,
+  VerifierService,
+} from '@verana-labs/vs-agent-plugin-openid4vc'
 
 import { V2Openid4vcCredentialExchangesController } from '../controllers/admin/v2/openid4vc/V2Openid4vcCredentialExchangesController'
 import { V2Openid4vcPresentationsController } from '../controllers/admin/v2/openid4vc/V2Openid4vcPresentationsController'
@@ -39,6 +44,7 @@ export function OpenId4VcNestPlugin(options: OpenId4VcPluginOptions): VsAgentNes
     ],
     initialize: async agent => {
       const openId4VcAgent = agent as OpenId4VcAgent
+      registerDidJwkResolver(openId4VcAgent)
       await issuerFor(openId4VcAgent).ensureInitialized()
       await verifierFor(openId4VcAgent).ensureInitialized()
     },

@@ -6,7 +6,7 @@ import {
   AnonCredsModule,
 } from '@credo-ts/anoncreds'
 import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
-import { DidsModule, JwkDidResolver, W3cCredentialsModule } from '@credo-ts/core'
+import { DidsModule, W3cCredentialsModule } from '@credo-ts/core'
 import {
   DidCommAutoAcceptCredential,
   DidCommAutoAcceptProof,
@@ -100,7 +100,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
         ],
       }),
       dids: new DidsModule({
-        resolvers: [new CachedWebDidResolver(), new WebVhDidResolver(), new JwkDidResolver()],
+        resolvers: [new CachedWebDidResolver(), new WebVhDidResolver()],
         registrars: [new WebDidRegistrar(), new WebVhDidRegistrar()],
       }),
       w3cCredentials: new W3cCredentialsModule({
