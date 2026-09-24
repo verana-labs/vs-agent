@@ -101,11 +101,13 @@ async function publishSigningKeyToDidDocument(
   const did = agent.did
   if (!did) throw new Error('development signing key publication requires an agent DID')
 
-  const resolution = await agent.dids.resolve(did).catch(() => {
-    throw new Error('development signing key DID resolution failed')
+  const resolution = await agent.dids.resolve(did).catch((error: unknown) => {
+    throw new Error(`development signing key DID resolution failed: ${errorMessage(error)}`)
   })
   if (resolution.didResolutionMetadata?.error || !resolution.didDocument) {
-    throw new Error('development signing key DID resolution failed')
+    throw new Error(
+      `development signing key DID resolution failed: ${resolution.didResolutionMetadata?.error ?? 'no DID document'}`,
+    )
   }
   if (resolution.didDocument.id !== did) {
     throw new Error('development signing key DID resolution returned a different DID')
@@ -151,8 +153,8 @@ async function publishSigningKeyToDidDocument(
     ]
   }
 
-  const update = await agent.dids.update({ did, didDocument }).catch(() => {
-    throw new Error('development signing key DID update failed')
+  const update = await agent.dids.update({ did, didDocument }).catch((error: unknown) => {
+    throw new Error(`development signing key DID update failed: ${errorMessage(error)}`)
   })
   if (update.didState.state !== 'finished') {
     const reason = (update.didState as { reason?: string }).reason ?? 'unknown reason'
@@ -394,6 +396,10 @@ function equalPublicJwk(left: Kms.KmsJwkPublicEc, right: Kms.KmsJwkPublicEc): bo
 function contextValues(context: string | string[] | undefined): string[] {
   if (!context) return []
   return Array.isArray(context) ? context : [context]
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function equalVerificationMethodJwk(method: VerificationMethod, expected: Kms.KmsJwkPublicEc): boolean {

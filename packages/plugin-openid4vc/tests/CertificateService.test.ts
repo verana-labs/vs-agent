@@ -592,12 +592,15 @@ class MutableDidRegistry {
   public readonly allowsLocalDidRecord = false
   public updateCount = 0
   public failUpdate = false
+  public throwOnUpdate = false
+  public throwOnResolve = false
   public returnWrongDidFromResolution = false
   public returnWrongDidFromUpdate = false
 
   public constructor(private readonly documents: Map<string, DidDocument>) {}
 
   public async resolve(_agentContext: AgentContext, did: string): Promise<DidResolutionResult> {
+    if (this.throwOnResolve) throw new Error('registrar refused the resolution')
     const stored = this.documents.get(did)
     if (!stored) {
       return {
@@ -614,6 +617,7 @@ class MutableDidRegistry {
 
   public async update(agentContext: AgentContext, options: DidUpdateOptions): Promise<DidUpdateResult> {
     this.updateCount += 1
+    if (this.throwOnUpdate) throw new Error('registrar rejected the DID document')
     if (this.failUpdate) {
       return {
         didState: { state: 'failed', reason: 'deliberate DID update failure' },
@@ -746,7 +750,27 @@ describe('development signing DID publication', () => {
     const { initialize, registry } = await createHarness('issuer', DID_WEB)
     registry.failUpdate = true
 
-    await expect(initialize()).rejects.toThrow('development signing key DID update failed')
+    await expect(initialize()).rejects.toThrow(
+      'development signing key DID update failed: deliberate DID update failure',
+    )
+  })
+
+  it('surfaces the registrar error when the DID update rejects', async () => {
+    const { initialize, registry } = await createHarness('issuer', DID_WEB)
+    registry.throwOnUpdate = true
+
+    await expect(initialize()).rejects.toThrow(
+      'development signing key DID update failed: registrar rejected the DID document',
+    )
+  })
+
+  it('surfaces the resolver error when the DID resolution rejects', async () => {
+    const { initialize, registry } = await createHarness('issuer', DID_WEB)
+    registry.throwOnResolve = true
+
+    await expect(initialize()).rejects.toThrow(
+      'development signing key DID resolution failed: registrar refused the resolution',
+    )
   })
 
   it('fails closed when resolution returns a different DID document', async () => {
