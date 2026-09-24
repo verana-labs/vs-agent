@@ -36,7 +36,7 @@ export function setupOpenId4Vc(
   const walletAttestationEnabled = Boolean(options.issuer?.walletAttestationCertificates?.length)
 
   const app = express()
-  app.use(accommodateLegacyMetadataAccept())
+  app.use(accommodateLegacyMetadataAccept)
   // Credo raises the body limits of its own routers (1 MB issuer, 5 MB verifier), and a parser registered on
   // the same app before them decides first, so this one covers the issuer path alone and at the limit credo
   // sets there.
@@ -130,22 +130,23 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
 
 // `application/jwt; application/json` parses as a single `application/jwt` range with a parameter, so credo
 // would answer signed metadata to a client that reads JSON alone.
-export function accommodateLegacyMetadataAccept() {
-  return (request: Request, _response: Response, next: NextFunction): void => {
-    const accept = request.headers.accept
-    const ranges = typeof accept === 'string' ? accept.split(',') : []
-    const prefersPlainMetadata =
-      ranges.some(range => range.includes('application/jwt') && range.includes('application/json')) ||
-      (ranges.some(range => range.includes('application/jwt')) &&
-        ranges.some(range => range.includes('application/json')))
+export function accommodateLegacyMetadataAccept(
+  request: Request,
+  _response: Response,
+  next: NextFunction,
+): void {
+  const accept = request.headers.accept
+  const ranges = typeof accept === 'string' ? accept.split(',') : []
+  const prefersPlainMetadata =
+    ranges.some(range => range.includes('application/jwt')) &&
+    ranges.some(range => range.includes('application/json'))
 
-    if (
-      request.method === 'GET' &&
-      request.path.includes('/.well-known/openid-credential-issuer') &&
-      prefersPlainMetadata
-    ) {
-      request.headers.accept = 'application/json'
-    }
-    next()
+  if (
+    request.method === 'GET' &&
+    request.path.includes('/.well-known/openid-credential-issuer') &&
+    prefersPlainMetadata
+  ) {
+    request.headers.accept = 'application/json'
   }
+  next()
 }

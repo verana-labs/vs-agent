@@ -198,9 +198,9 @@ The agent serves placeholder resources at `/vt/default/logo.svg`, `/vt/default/t
 issuer capability, the verifier capability, or both, per
 [[VSA-VTI-CFG-ENV-OID]](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-vti-cfg-env-oid-openid4vc).
 Each capability carries its signing key, and the issuer also carries the wallet and key
-attestation roots it trusts. The credential configurations and the trust anchors never come from
-this file: the spec derives the credential types from the VPR and the verifier trust decision from
-the indexer. Neither is derived yet, see
+attestation roots it trusts. The credential configurations and the verifier trust decision never come
+from this file: the spec derives the credential types from the VPR and the trust decision from the
+indexer. Neither is derived yet, see
 [#711](https://github.com/verana-labs/vs-agent/issues/711).
 
 The location is a local path or an `https://` URL. The agent reads it once at startup, follows

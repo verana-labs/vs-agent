@@ -327,7 +327,7 @@ const runMetadataRequest = (accept: string | undefined, overrides: Partial<Reque
     ...overrides,
   } as unknown as Request
   const next = vi.fn() as unknown as NextFunction
-  accommodateLegacyMetadataAccept()(request, {} as Response, next)
+  accommodateLegacyMetadataAccept(request, {} as Response, next)
   return { accept: request.headers.accept, next }
 }
 
