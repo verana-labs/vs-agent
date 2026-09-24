@@ -1,6 +1,6 @@
 import type { OpenId4VcPluginOptions } from '../src/types'
 
-import { ClaimFormat, JwkDidResolver, RecordNotFoundError } from '@credo-ts/core'
+import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import { OpenId4VcIssuanceSessionRepository, OpenId4VcIssuanceSessionState } from '@credo-ts/openid4vc'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -100,15 +100,11 @@ function issuerAgent(
   jws = jwsService(),
   ecsClaims?: { service?: Record<string, string | undefined> },
 ) {
-  const resolvers: unknown[] = []
   return {
     did,
     ecsClaims,
     config: { logger },
-    dids: {
-      resolve: () => undefined,
-      config: { resolvers, addResolver: (resolver: unknown) => resolvers.push(resolver) },
-    },
+    dids: { resolve: () => undefined },
     genericRecords: { findById: async () => null, save: () => undefined, update: () => undefined },
     kms: {},
     x509: {},
@@ -174,17 +170,14 @@ describe('IssuerService', () => {
     verifyKeyBoundToDid.mockResolvedValue('bound')
   })
 
-  it('initializes on the Nest module hook, and publishes the did:jwk resolver ahead of it', async () => {
+  it('initializes once on the Nest module hook and publishes itself to the SDK plugin', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
-    const agent = issuerAgent(api)
-    const service = new IssuerService(agent as never, issuerOptions(), issuerSink)
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
 
     await service.onModuleInit()
     await service.onModuleInit()
 
-    expect(agent.dids.config.resolvers).toHaveLength(1)
-    expect(agent.dids.config.resolvers[0]).toBeInstanceOf(JwkDidResolver)
     expect(loadSigningCertificate).toHaveBeenCalledOnce()
     expect(issuerSink).toHaveBeenCalledWith(service)
     expect(service.getJwtVcIssuerMetadata()).toEqual({

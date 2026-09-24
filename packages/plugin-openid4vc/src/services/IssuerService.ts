@@ -21,7 +21,6 @@ import {
   parseOfferIssuanceMetadata,
   parseOfferTtlSeconds,
 } from '../config'
-import { registerDidJwkResolver } from '../sdk/didJwkResolver'
 import { verifyKeyBoundToDid } from '../trust/keyBinding'
 import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
@@ -95,7 +94,6 @@ export class IssuerService implements OnModuleInit {
   ) {}
 
   public async onModuleInit(): Promise<void> {
-    registerDidJwkResolver(this.agent)
     this.publishIssuerService(this)
     await this.ensureInitialized()
   }
