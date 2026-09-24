@@ -68,8 +68,6 @@ export interface OpenId4VcOfferResult {
 export interface OpenId4VcIssuanceSessionSummary {
   id: string
   jsonSchemaCredentialId: string
-  statusListId?: string
-  statusListIndex?: number
   state: OpenId4VcIssuanceSessionState
   createdAt: Date
   updatedAt: Date

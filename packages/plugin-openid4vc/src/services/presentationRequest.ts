@@ -39,8 +39,8 @@ function escapeForFilterPattern(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-export function presentationDefinitionFor(
-  configuration: { id: string; vct: string },
+function presentationDefinitionFor(
+  configuration: OpenId4VcCredentialConfiguration,
   requestedClaims: string[],
 ) {
   return {

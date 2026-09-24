@@ -9,8 +9,6 @@ export function toCredentialExchangeDto(
   return {
     credentialExchangeId: session.id,
     jsonSchemaCredentialId: session.jsonSchemaCredentialId,
-    statusListId: session.statusListId,
-    statusListIndex: session.statusListIndex,
     state: session.state,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,

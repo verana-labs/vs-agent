@@ -167,7 +167,7 @@ async function publishSigningKeyToDidDocument(
 
 // Credo reads the KMS key-id mapping on the DidRecord, never the published `kid`, and registrars like
 // did:webvh don't maintain it on update, so it is written here directly.
-export async function ensureCreatedDidRecordKeyMapping(
+async function ensureCreatedDidRecordKeyMapping(
   agent: Pick<OpenId4VcAgent, 'context'>,
   did: string,
   didDocumentRelativeKeyId: string,
@@ -331,7 +331,7 @@ async function loadDevelopmentSigningCertificate(
   return { certificate, chain: [certificate], keyId, development: true }
 }
 
-export function assertCertificateChainUsable(chain: X509Certificate[], now = new Date()): void {
+function assertCertificateChainUsable(chain: X509Certificate[], now = new Date()): void {
   for (const certificate of chain) {
     if (certificate.data.notAfter.getTime() < now.getTime()) {
       throw new Error('certificate chain contains an expired certificate')
