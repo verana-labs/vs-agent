@@ -692,6 +692,46 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(vtFlowApi.markValidated).toHaveBeenCalledWith('rec-v')
   })
 
+  function makeHolderRenewal(state: string) {
+    const setup = makeValidateAgent({
+      state,
+      applicant: { role: 'HOLDER', op_state: 'VALIDATED', effective_from: past },
+    })
+    setup.current().credentialExchangeRecordId = 'cx-previous-round'
+    setup.agent.indexer.findParticipant.mockResolvedValue({
+      id: 94,
+      role: 6,
+      did: 'did:web:applicant',
+    } as never)
+    const orchestrator = new VtFlowOrchestrator(setup.agent as never)
+    const offer = vi.fn(async () => setup.current())
+    ;(orchestrator as unknown as { offerOnboardingCredential: unknown }).offerOnboardingCredential = offer
+    return { ...setup, orchestrator, offer }
+  }
+
+  it('offers the updated credential of a HOLDER renewal once its transaction lands', async () => {
+    const { orchestrator, vtFlowApi, chain, offer } = makeHolderRenewal('VALIDATION_TX_SUBMITTED')
+    await vtFlowApi.recordValidation('rec-v', {
+      decidedAt: new Date().toISOString(),
+      submission: 'AGENT',
+      tx: { hash: 'AB12', status: 'SUBMITTED' },
+    })
+    chain.findTx.mockResolvedValue({ code: 0, height: 7, rawLog: '' } as never)
+
+    await orchestrator.resolveValidationTx('rec-v')
+
+    expect(offer).toHaveBeenCalledWith(expect.objectContaining({ vtFlowRecordId: 'rec-v' }))
+  })
+
+  it('resumes a HOLDER renewal whose entry is already VALIDATED into issuance', async () => {
+    const { orchestrator, chain, offer } = makeHolderRenewal('VALIDATION_TX_SUBMITTED')
+
+    await orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(offer).toHaveBeenCalledWith(expect.objectContaining({ vtFlowRecordId: 'rec-v' }))
+  })
+
   function makeDirectIssuance(claims: Record<string, unknown>) {
     const setup = makeValidateAgent({ claims })
     const record = setup.current()

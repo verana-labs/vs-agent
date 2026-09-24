@@ -435,13 +435,7 @@ export class VtFlowOrchestrator {
       VtFlowState.Validated,
     ]
     if (accepted.includes(record.state)) return
-    if (
-      entryValidated &&
-      acceptedOnceValidated.includes(record.state) &&
-      !record.credentialExchangeRecordId
-    ) {
-      return
-    }
+    if (entryValidated && acceptedOnceValidated.includes(record.state)) return
     throw invalidState(`the flow is '${record.state}', which validate does not accept`)
   }
 
@@ -686,7 +680,9 @@ export class VtFlowOrchestrator {
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(recordId)
     if (!record) throw new Error(`vt-flow record ${recordId} not found`)
-    if (record.credentialExchangeRecordId) return record
+    if (record.state !== VtFlowState.Validated && record.state !== VtFlowState.ValidatedPendingClaims) {
+      return record
+    }
 
     const participant = await this.agent.indexer.findParticipant(Number(record.applicantParticipantId))
     if (!participant) throw new Error(`Applicant participant ${record.applicantParticipantId} not found`)
