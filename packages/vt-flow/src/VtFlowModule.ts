@@ -251,9 +251,12 @@ export class VtFlowModule implements Module {
           return
         }
 
+        // The validator itself moves a flow out of OOB_PENDING, and validateFlow then offers
         const readyToOffer =
           (record.variant === VtFlowVariant.OnboardingProcess && payload.state === VtFlowState.Validated) ||
-          (record.variant === VtFlowVariant.DirectIssuance && payload.state === VtFlowState.Validating)
+          (record.variant === VtFlowVariant.DirectIssuance &&
+            payload.state === VtFlowState.Validating &&
+            payload.previousState !== VtFlowState.OobPending)
         if (readyToOffer && config.autoOfferCredential && config.buildCredentialOffer) {
           service
             .getLogger()
