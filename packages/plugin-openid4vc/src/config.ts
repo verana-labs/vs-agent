@@ -14,66 +14,70 @@ export const VERIFIER_CAPABILITY_ID = 'verifier'
 export const OFFER_TTL_SECONDS_MIN = 60
 export const OFFER_TTL_SECONDS_MAX = 7_776_000
 
-type LeafRule = (value: unknown, path: string) => void
-interface ShapeRule {
-  [field: string]: ShapeRule | LeafRule
-}
-
-const SIGNING_SHAPE: ShapeRule = {
-  configured: { certificateChain: assertNonEmptyStringArray, privateJwk: assertJsonObject },
-}
-
-const CONFIGURATION_SHAPE: ShapeRule = {
-  issuer: {
-    signing: SIGNING_SHAPE,
-    walletAttestationCertificates: assertX509Certificates,
-    keyAttestationCertificates: assertX509Certificates,
-  },
-  verifier: { signing: SIGNING_SHAPE },
-}
-
-const REQUIRED_FIELDS = new Set([
-  'issuer.signing.configured',
-  'issuer.signing.configured.certificateChain',
-  'issuer.signing.configured.privateJwk',
-  'verifier.signing.configured',
-  'verifier.signing.configured.certificateChain',
-  'verifier.signing.configured.privateJwk',
-])
-
 /** [VSA-VTI-CFG-ENV-OID] Validation of the OpenID4VC configuration file. */
 export function parseOpenId4VcConfiguration(document: unknown): OpenId4VcConfigurationFile {
-  assertShape(document, CONFIGURATION_SHAPE, '')
+  const configuration = assertJsonObject(document, '')
+  for (const field of Object.keys(configuration)) {
+    if (field === 'issuer') parseIssuer(configuration.issuer, field)
+    else if (field === 'verifier') parseVerifier(configuration.verifier, field)
+    else throw unknownField(field)
+  }
+
   return document as OpenId4VcConfigurationFile
 }
 
-function assertShape(value: unknown, shape: ShapeRule, path: string): void {
+function parseIssuer(value: unknown, path: string): void {
+  const issuer = assertJsonObject(value, path)
+  for (const field of Object.keys(issuer)) {
+    const fieldPath = `${path}.${field}`
+    if (field === 'signing') parseSigning(issuer.signing, fieldPath)
+    else if (field === 'walletAttestationCertificates' || field === 'keyAttestationCertificates') {
+      assertX509Certificates(issuer[field], fieldPath)
+    } else throw unknownField(fieldPath)
+  }
+}
+
+function parseVerifier(value: unknown, path: string): void {
+  const verifier = assertJsonObject(value, path)
+  for (const field of Object.keys(verifier)) {
+    const fieldPath = `${path}.${field}`
+    if (field !== 'signing') throw unknownField(fieldPath)
+    parseSigning(verifier.signing, fieldPath)
+  }
+}
+
+function parseSigning(value: unknown, path: string): void {
+  const signing = assertJsonObject(value, path)
+  const configuredPath = `${path}.configured`
+  if (!('configured' in signing)) throw new Error(`${configuredPath} is required`)
+  for (const field of Object.keys(signing)) {
+    if (field !== 'configured') throw unknownField(`${path}.${field}`)
+  }
+
+  const configured = assertJsonObject(signing.configured, configuredPath)
+  for (const field of ['certificateChain', 'privateJwk']) {
+    if (!(field in configured)) throw new Error(`${configuredPath}.${field} is required`)
+  }
+  for (const field of Object.keys(configured)) {
+    if (field !== 'certificateChain' && field !== 'privateJwk') {
+      throw unknownField(`${configuredPath}.${field}`)
+    }
+  }
+
+  assertNonEmptyStringArray(configured.certificateChain, `${configuredPath}.certificateChain`)
+  assertJsonObject(configured.privateJwk, `${configuredPath}.privateJwk`)
+}
+
+function unknownField(path: string): Error {
+  return new Error(`the OpenID4VC configuration contains an unknown field '${path}'`)
+}
+
+function assertJsonObject(value: unknown, path: string): Record<string, unknown> {
   if (!isRecord(value)) {
     throw new Error(`${path || 'the OpenID4VC configuration'} must be a JSON object`)
   }
 
-  for (const field of Object.keys(shape)) {
-    const fieldPath = path ? `${path}.${field}` : field
-    if (REQUIRED_FIELDS.has(fieldPath) && !(field in value)) {
-      throw new Error(`${fieldPath} is required`)
-    }
-  }
-
-  for (const [field, child] of Object.entries(value)) {
-    const fieldPath = path ? `${path}.${field}` : field
-    const rule = Object.prototype.hasOwnProperty.call(shape, field) ? shape[field] : undefined
-    if (!rule) {
-      throw new Error(`the OpenID4VC configuration contains an unknown field '${fieldPath}'`)
-    }
-    if (typeof rule === 'function') rule(child, fieldPath)
-    else assertShape(child, rule, fieldPath)
-  }
-}
-
-function assertJsonObject(value: unknown, path: string): void {
-  if (!isRecord(value)) {
-    throw new Error(`${path} must be a JSON object`)
-  }
+  return value
 }
 
 function assertNonEmptyStringArray(value: unknown, path: string): void {
