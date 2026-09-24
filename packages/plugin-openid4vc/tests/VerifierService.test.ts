@@ -7,7 +7,8 @@ import {
 } from '@credo-ts/openid4vc'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { OpenId4VcErrorCode } from '../src/errors'
+import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
+
 import { VerifierService } from '../src/services/VerifierService'
 
 const { findBoundVerificationMethodId, loadSigningCertificate, verifyKeyBoundToDid } = vi.hoisted(() => ({
@@ -93,6 +94,7 @@ function verifierAgent(
 const signingLeaf = {
   sanUriNames: [AGENT_DID],
   publicJwk: { toJson: () => PUBLIC_JWK },
+  rawCertificate: Buffer.from('signing-leaf'),
 }
 const signingRoot = { subject: 'root' }
 
@@ -153,6 +155,18 @@ describe('VerifierService', () => {
     vi.clearAllMocks()
     loadSigningCertificate.mockResolvedValue(verifierSigningHandle())
     verifyKeyBoundToDid.mockResolvedValue('bound')
+  })
+
+  it('initializes the verifier on the first certificate read', async () => {
+    const api = verifierApi()
+    api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
+    const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
+
+    await expect(service.getCertificateInfo()).resolves.toMatchObject({
+      role: 'verifier',
+      development: false,
+    })
+    expect(loadSigningCertificate).toHaveBeenCalledOnce()
   })
 
   it('creates the configured verifier after authentication key binding succeeds', async () => {
@@ -310,7 +324,7 @@ describe('VerifierService', () => {
     await service.ensureInitialized()
 
     await expect(service.createRequest({ jsonSchemaCredentialId: 'unknown' })).rejects.toMatchObject({
-      code: OpenId4VcErrorCode.UnknownCredentialType,
+      code: AdminApiErrorCode.UnknownId,
     })
     await expect(service.createRequest({ jsonSchemaCredentialId: 'unknown' })).rejects.toThrow(
       'no credential type with id "unknown"',
@@ -353,7 +367,7 @@ describe('VerifierService', () => {
 
     await expect(
       service.createRequest({ jsonSchemaCredentialId: 'employee', requestedClaims }),
-    ).rejects.toMatchObject({ code: OpenId4VcErrorCode.InvalidPresentationRequest })
+    ).rejects.toMatchObject({ code: AdminApiErrorCode.InvalidInput })
     await expect(
       service.createRequest({ jsonSchemaCredentialId: 'employee', requestedClaims }),
     ).rejects.toThrow(message)
@@ -385,7 +399,7 @@ describe('VerifierService', () => {
     const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
 
     await expect(service.getVerificationSession('missing')).rejects.toMatchObject({
-      code: OpenId4VcErrorCode.UnknownVerificationSession,
+      code: AdminApiErrorCode.UnknownId,
     })
   })
 
@@ -395,7 +409,7 @@ describe('VerifierService', () => {
     const service = new VerifierService(verifierAgent(api) as never, verifierOptions())
 
     await expect(service.getVerificationSession('session-id')).rejects.toMatchObject({
-      code: OpenId4VcErrorCode.UnknownVerificationSession,
+      code: AdminApiErrorCode.UnknownId,
     })
   })
 
@@ -570,7 +584,7 @@ describe('VerifierService', () => {
 
       api.getVerificationSessionById.mockResolvedValueOnce(verificationSession({ verifierId: 'other' }))
       await expect(service.deleteVerificationSession('session-1')).rejects.toMatchObject({
-        code: OpenId4VcErrorCode.UnknownVerificationSession,
+        code: AdminApiErrorCode.UnknownId,
       })
       expect(api.deleteVerificationSessionById).toHaveBeenCalledTimes(1)
     })
@@ -609,7 +623,7 @@ describe('VerifierService', () => {
           queryLanguage: 'dcql',
           requestSigner: 'did',
         }),
-      ).rejects.toMatchObject({ code: OpenId4VcErrorCode.RequestSigningKeyNotPublished })
+      ).rejects.toMatchObject({ code: AdminApiErrorCode.InvalidState })
     })
   })
 

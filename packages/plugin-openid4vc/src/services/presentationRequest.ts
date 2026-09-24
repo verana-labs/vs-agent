@@ -2,7 +2,9 @@ import type { OpenId4VcCredentialConfiguration } from '../types'
 
 const PRESENTATION_ALGORITHMS = ['ES256'] as const
 
-export type OpenId4VcQueryLanguage = 'dcql' | 'presentation_exchange'
+export const OPENID4VC_QUERY_LANGUAGES = ['dcql', 'presentation_exchange'] as const
+
+export type OpenId4VcQueryLanguage = (typeof OPENID4VC_QUERY_LANGUAGES)[number]
 
 export function presentationQueryFor(
   configuration: OpenId4VcCredentialConfiguration,

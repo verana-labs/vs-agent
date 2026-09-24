@@ -4,7 +4,7 @@ import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
-import { OpenId4VcErrorCode } from '../src/errors'
+import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
 import {
   activeTcpServers,
@@ -83,7 +83,7 @@ describe('in-process OpenID4VC issuance', () => {
 
     await agents.issuer.service.deleteIssuanceSession(offer.issuanceSessionId)
     await expect(agents.issuer.service.getIssuanceSession(offer.issuanceSessionId)).rejects.toMatchObject({
-      code: OpenId4VcErrorCode.UnknownIssuanceSession,
+      code: AdminApiErrorCode.UnknownId,
     })
   }, 60_000)
 

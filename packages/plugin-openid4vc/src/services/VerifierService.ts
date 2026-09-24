@@ -6,9 +6,9 @@ import {
   OpenId4VcVerificationSessionRepository,
   OpenId4VcVerificationSessionState,
 } from '@credo-ts/openid4vc'
+import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
 import { findCredentialConfiguration, VERIFIER_CAPABILITY_ID } from '../config'
-import { OpenId4VcError, OpenId4VcErrorCode } from '../errors'
 import {
   findBoundVerificationMethodId,
   ownDidResolutionPolicy,
@@ -51,14 +51,22 @@ export interface OpenId4VcVerificationSessionFilters {
   state?: OpenId4VcVerificationSessionState
 }
 
+export const OPENID4VC_REQUEST_SIGNERS = ['x5c', 'did'] as const
+
+export type OpenId4VcRequestSigner = (typeof OPENID4VC_REQUEST_SIGNERS)[number]
+
 export interface OpenId4VcCreatePresentationRequestOptions {
   jsonSchemaCredentialId: string
   requestedClaims?: string[]
   queryLanguage?: OpenId4VcQueryLanguage
-  requestSigner?: 'x5c' | 'did'
+  requestSigner?: OpenId4VcRequestSigner
 }
 
 export type { OpenId4VcVerifiedCredentialResult } from './presentationVerification'
+
+const BAD_REQUEST = 400
+const NOT_FOUND = 404
+const CONFLICT = 409
 
 const JSON_SCHEMA_CREDENTIAL_ID_TAG = 'jsonSchemaCredentialId'
 const REQUESTED_CLAIMS_TAG = 'requestedClaims'
@@ -118,8 +126,9 @@ export class VerifierService {
 
     const configuration = findCredentialConfiguration(this.options, jsonSchemaCredentialId)
     if (!configuration) {
-      throw new OpenId4VcError(
-        OpenId4VcErrorCode.UnknownCredentialType,
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        NOT_FOUND,
         `no credential type with id "${jsonSchemaCredentialId}"`,
       )
     }
@@ -147,7 +156,8 @@ export class VerifierService {
     }
   }
 
-  public getCertificateInfo(): SigningCertificateInfo {
+  public async getCertificateInfo(): Promise<SigningCertificateInfo> {
+    await this.ensureInitialized()
     return signingCertificateInfo('verifier', this.signingCertificateHandle())
   }
 
@@ -291,9 +301,10 @@ export class VerifierService {
       return await this.verifierApi().getVerificationSessionById(sessionId)
     } catch (error) {
       if (error instanceof RecordNotFoundError) {
-        throw new OpenId4VcError(
-          OpenId4VcErrorCode.UnknownVerificationSession,
-          `no verification session with id "${sessionId}"`,
+        throw new AdminApiError(
+          AdminApiErrorCode.UnknownId,
+          NOT_FOUND,
+          `no presentation with id "${sessionId}"`,
         )
       }
       throw error
@@ -302,9 +313,10 @@ export class VerifierService {
 
   private assertSessionOwnership(session: OpenId4VcVerificationSessionRecord, sessionId: string): void {
     if (session.verifierId !== VERIFIER_CAPABILITY_ID) {
-      throw new OpenId4VcError(
-        OpenId4VcErrorCode.UnknownVerificationSession,
-        `no verification session with id "${sessionId}"`,
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        NOT_FOUND,
+        `no presentation with id "${sessionId}"`,
       )
     }
   }
@@ -322,7 +334,7 @@ export class VerifierService {
     return this.signingCertificate
   }
 
-  private async buildRequestSigner(override?: 'x5c' | 'did') {
+  private async buildRequestSigner(override?: OpenId4VcRequestSigner) {
     const certificate = this.signingCertificateHandle()
     if (override !== 'did') {
       return {
@@ -342,8 +354,9 @@ export class VerifierService {
       ownDidResolutionPolicy(did ?? ''),
     )
     if (!didUrl) {
-      throw new OpenId4VcError(
-        OpenId4VcErrorCode.RequestSigningKeyNotPublished,
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidState,
+        CONFLICT,
         'verifier is configured to sign requests with its DID, but the DID does not publish the signing key for authentication',
       )
     }
@@ -354,14 +367,15 @@ export class VerifierService {
 
 function assertRequestedClaims(requestedClaims: string[], configuredClaims: string[]): void {
   if (new Set(requestedClaims).size !== requestedClaims.length) {
-    throw new OpenId4VcError(
-      OpenId4VcErrorCode.InvalidPresentationRequest,
+    throw new AdminApiError(
+      AdminApiErrorCode.InvalidInput,
+      BAD_REQUEST,
       'requestedClaims must not contain a duplicate',
     )
   }
 
   const unknownClaim = requestedClaims.find(claim => !configuredClaims.includes(claim))
   if (unknownClaim) {
-    throw new OpenId4VcError(OpenId4VcErrorCode.InvalidPresentationRequest, `unknown claim '${unknownClaim}'`)
+    throw new AdminApiError(AdminApiErrorCode.InvalidInput, BAD_REQUEST, `unknown claim '${unknownClaim}'`)
   }
 }

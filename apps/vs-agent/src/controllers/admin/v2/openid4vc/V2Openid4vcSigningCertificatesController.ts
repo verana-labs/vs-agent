@@ -4,7 +4,14 @@ import { IssuerService, VerifierService } from '@verana-labs/vs-agent-plugin-ope
 
 import { Openid4vcSigningCertificateDto } from './dto'
 
-/** [VSA-ADM-OID-CS] Signing certificates of the two OpenID4VC capabilities. */
+/**
+ * This controller has the signing certificates of the two OpenID4VC capabilities of this agent.
+ * Refer to [VSA-ADM-OID-CS].
+ *
+ * The issuer signs the credentials it mints and the verifier signs the requests it sends, each
+ * with its own certificate. An operator reads the public certificate of a capability here to pin
+ * its fingerprint on a peer.
+ */
 @ApiTags('v2/openid4vc')
 @Controller({ path: 'openid4vc', version: '2' })
 export class V2Openid4vcSigningCertificatesController {
@@ -21,8 +28,6 @@ export class V2Openid4vcSigningCertificatesController {
   })
   @ApiOkResponse({ description: 'The signing certificates', type: [Openid4vcSigningCertificateDto] })
   public async listSigningCertificates(): Promise<Openid4vcSigningCertificateDto[]> {
-    await this.issuerService.ensureInitialized()
-    await this.verifierService.ensureInitialized()
-    return [this.issuerService.getCertificateInfo(), this.verifierService.getCertificateInfo()]
+    return Promise.all([this.issuerService.getCertificateInfo(), this.verifierService.getCertificateInfo()])
   }
 }

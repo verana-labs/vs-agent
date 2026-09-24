@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 
-import { ValidationPipe, VersioningType } from '@nestjs/common'
+import { HttpStatus, ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
 import { plainToInstance } from 'class-transformer'
@@ -8,12 +8,8 @@ import { validate } from 'class-validator'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  IssuerService,
-  OpenId4VcError,
-  OpenId4VcErrorCode,
-  VerifierService,
-} from '@verana-labs/vs-agent-plugin-openid4vc'
+import { IssuerService, VerifierService } from '@verana-labs/vs-agent-plugin-openid4vc'
+import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
 import { encodeCursor, hashScope } from '../src/common/pagination/cursor'
@@ -110,8 +106,7 @@ function matchesFilters(session: Record<string, unknown>, filters: SessionFilter
 }
 
 const issuerService = {
-  ensureInitialized: vi.fn().mockResolvedValue(undefined),
-  getCertificateInfo: () => issuerCertificate,
+  getCertificateInfo: vi.fn(async () => issuerCertificate),
   listIssuanceSessions: vi.fn(async (filters: SessionFilters = {}) =>
     issuanceSessions.filter(session => matchesFilters(session, filters)),
   ),
@@ -121,8 +116,7 @@ const issuerService = {
 }
 
 const verifierService = {
-  ensureInitialized: vi.fn().mockResolvedValue(undefined),
-  getCertificateInfo: () => verifierCertificate,
+  getCertificateInfo: vi.fn(async () => verifierCertificate),
   listVerificationSessions: vi.fn(async (filters: SessionFilters = {}) =>
     verificationSessions.filter(session => matchesFilters(session, filters)),
   ),
@@ -283,7 +277,11 @@ describe('v2 openid4vc routes', () => {
 
     it('answers UNKNOWN_ID for an unknown credential exchange', async () => {
       issuerService.getIssuanceSession.mockRejectedValue(
-        new OpenId4VcError(OpenId4VcErrorCode.UnknownIssuanceSession, 'no issuance session with id "nope"'),
+        new AdminApiError(
+          AdminApiErrorCode.UnknownId,
+          HttpStatus.NOT_FOUND,
+          'no credential exchange with id "nope"',
+        ),
       )
 
       const missing = await request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges/nope')
@@ -318,7 +316,11 @@ describe('v2 openid4vc routes', () => {
 
     it('maps an unknown type to UNKNOWN_ID and a claim error to INVALID_INPUT', async () => {
       issuerService.createOffer.mockRejectedValueOnce(
-        new OpenId4VcError(OpenId4VcErrorCode.UnknownCredentialType, 'no credential type with id "x"'),
+        new AdminApiError(
+          AdminApiErrorCode.UnknownId,
+          HttpStatus.NOT_FOUND,
+          'no credential type with id "x"',
+        ),
       )
       const unknown = await request(app.getHttpServer())
         .post('/v2/openid4vc/credential-offer')
@@ -330,7 +332,7 @@ describe('v2 openid4vc routes', () => {
       })
 
       issuerService.createOffer.mockRejectedValueOnce(
-        new OpenId4VcError(OpenId4VcErrorCode.InvalidCredentialOffer, "unknown claim 'age'"),
+        new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, "unknown claim 'age'"),
       )
       const badClaims = await request(app.getHttpServer())
         .post('/v2/openid4vc/credential-offer')
@@ -341,7 +343,7 @@ describe('v2 openid4vc routes', () => {
 
     it('maps an unknown status list to UNKNOWN_ID', async () => {
       issuerService.createOffer.mockRejectedValueOnce(
-        new OpenId4VcError(OpenId4VcErrorCode.UnknownStatusList, 'no status list with id "x"'),
+        new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, 'no status list with id "x"'),
       )
 
       const response = await request(app.getHttpServer())
@@ -397,10 +399,11 @@ describe('v2 openid4vc routes', () => {
       expect(extra.map(error => error.property)).toEqual(['revocable'])
     })
 
-    it('refuses half a status list pair at the service, which the controller maps to INVALID_INPUT', async () => {
+    it('answers INVALID_INPUT when the service refuses half a status list pair', async () => {
       issuerService.createOffer.mockRejectedValueOnce(
-        new OpenId4VcError(
-          OpenId4VcErrorCode.InvalidCredentialOffer,
+        new AdminApiError(
+          AdminApiErrorCode.InvalidInput,
+          HttpStatus.BAD_REQUEST,
           'statusListId and statusListIndex must be both present or both absent',
         ),
       )
@@ -430,7 +433,11 @@ describe('v2 openid4vc routes', () => {
 
     it('answers UNKNOWN_ID when deleting an unknown credential exchange', async () => {
       issuerService.deleteIssuanceSession.mockRejectedValue(
-        new OpenId4VcError(OpenId4VcErrorCode.UnknownIssuanceSession, 'no issuance session with id "nope"'),
+        new AdminApiError(
+          AdminApiErrorCode.UnknownId,
+          HttpStatus.NOT_FOUND,
+          'no credential exchange with id "nope"',
+        ),
       )
 
       const missing = await request(app.getHttpServer()).delete('/v2/openid4vc/credential-exchanges/nope')
@@ -520,9 +527,10 @@ describe('v2 openid4vc routes', () => {
 
     it('answers UNKNOWN_ID for an unknown presentation', async () => {
       verifierService.getVerificationSession.mockRejectedValue(
-        new OpenId4VcError(
-          OpenId4VcErrorCode.UnknownVerificationSession,
-          'no verification session with id "nope"',
+        new AdminApiError(
+          AdminApiErrorCode.UnknownId,
+          HttpStatus.NOT_FOUND,
+          'no presentation with id "nope"',
         ),
       )
 
@@ -568,7 +576,11 @@ describe('v2 openid4vc routes', () => {
 
     it('maps an unknown type to UNKNOWN_ID and a signer problem to INVALID_STATE', async () => {
       verifierService.createRequest.mockRejectedValueOnce(
-        new OpenId4VcError(OpenId4VcErrorCode.UnknownCredentialType, 'no credential type with id "x"'),
+        new AdminApiError(
+          AdminApiErrorCode.UnknownId,
+          HttpStatus.NOT_FOUND,
+          'no credential type with id "x"',
+        ),
       )
       const unknown = await request(app.getHttpServer())
         .post('/v2/openid4vc/presentation-request')
@@ -580,8 +592,9 @@ describe('v2 openid4vc routes', () => {
       })
 
       verifierService.createRequest.mockRejectedValueOnce(
-        new OpenId4VcError(
-          OpenId4VcErrorCode.RequestSigningKeyNotPublished,
+        new AdminApiError(
+          AdminApiErrorCode.InvalidState,
+          HttpStatus.CONFLICT,
           'verifier is configured to sign requests with its DID, but the DID does not publish the signing key for authentication',
         ),
       )
@@ -594,7 +607,7 @@ describe('v2 openid4vc routes', () => {
 
     it('maps a rejected requestedClaims to INVALID_INPUT', async () => {
       verifierService.createRequest.mockRejectedValueOnce(
-        new OpenId4VcError(OpenId4VcErrorCode.InvalidPresentationRequest, "unknown claim 'admin'"),
+        new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, "unknown claim 'admin'"),
       )
 
       const response = await request(app.getHttpServer())
@@ -647,9 +660,10 @@ describe('v2 openid4vc routes', () => {
 
     it('answers UNKNOWN_ID when deleting an unknown presentation', async () => {
       verifierService.deleteVerificationSession.mockRejectedValue(
-        new OpenId4VcError(
-          OpenId4VcErrorCode.UnknownVerificationSession,
-          'no verification session with id "nope"',
+        new AdminApiError(
+          AdminApiErrorCode.UnknownId,
+          HttpStatus.NOT_FOUND,
+          'no presentation with id "nope"',
         ),
       )
 
@@ -666,8 +680,8 @@ describe('v2 openid4vc routes', () => {
 
       expect(response.status).toBe(200)
       expect(response.body).toEqual([issuerCertificate, verifierCertificate])
-      expect(issuerService.ensureInitialized).toHaveBeenCalledOnce()
-      expect(verifierService.ensureInitialized).toHaveBeenCalledOnce()
+      expect(issuerService.getCertificateInfo).toHaveBeenCalledOnce()
+      expect(verifierService.getCertificateInfo).toHaveBeenCalledOnce()
     })
 
     it('ignores pagination parameters on this bounded collection', async () => {

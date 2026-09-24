@@ -1,20 +1,21 @@
-import type { TrustVerdictName, VeranaTrustStatus } from '@verana-labs/vs-agent-plugin-openid4vc'
+import type {
+  OpenId4VcQueryLanguage,
+  OpenId4VcRequestSigner,
+  TrustVerdictName,
+  VeranaTrustStatus,
+} from '@verana-labs/vs-agent-plugin-openid4vc'
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { OpenId4VcVerificationSessionState } from '@verana-labs/vs-agent-plugin-openid4vc'
+import {
+  OPENID4VC_QUERY_LANGUAGES,
+  OPENID4VC_REQUEST_SIGNERS,
+  OpenId4VcVerificationSessionState,
+  TRUST_VERDICT_NAMES,
+  VERANA_TRUST_STATUSES,
+} from '@verana-labs/vs-agent-plugin-openid4vc'
 import { ArrayUnique, IsArray, IsEnum, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 import { PageDto, PaginationQueryDto } from '../../../../../common'
-
-const QUERY_LANGUAGES = ['dcql', 'presentation_exchange'] as const
-const REQUEST_SIGNERS = ['x5c', 'did'] as const
-const VERDICTS = [
-  'TRUSTED_AUTHORIZED',
-  'TRUSTED_NOT_AUTHORIZED',
-  'UNTRUSTED',
-  'RESOLVER_UNAVAILABLE',
-] as const
-const TRUST_STATUSES = ['TRUSTED', 'PARTIAL', 'UNTRUSTED'] as const
 
 /** Request body of [VSA-ADM-OID-PR] createPresentationRequest. */
 export class Openid4vcPresentationRequestBodyDto {
@@ -41,22 +42,22 @@ export class Openid4vcPresentationRequestBodyDto {
   requestedClaims?: string[]
 
   @ApiPropertyOptional({
-    enum: QUERY_LANGUAGES,
+    enum: OPENID4VC_QUERY_LANGUAGES,
     description:
       'Query language of the request. Defaults to dcql; presentation_exchange serves a wallet that never implemented DCQL.',
   })
   @IsOptional()
-  @IsIn(QUERY_LANGUAGES)
-  queryLanguage?: (typeof QUERY_LANGUAGES)[number]
+  @IsIn(OPENID4VC_QUERY_LANGUAGES)
+  queryLanguage?: OpenId4VcQueryLanguage
 
   @ApiPropertyOptional({
-    enum: REQUEST_SIGNERS,
+    enum: OPENID4VC_REQUEST_SIGNERS,
     description:
       'Signer of this request only. x5c yields an x509_hash client identifier for a wallet that cannot resolve a DID.',
   })
   @IsOptional()
-  @IsIn(REQUEST_SIGNERS)
-  requestSigner?: (typeof REQUEST_SIGNERS)[number]
+  @IsIn(OPENID4VC_REQUEST_SIGNERS)
+  requestSigner?: OpenId4VcRequestSigner
 }
 
 /** Response of [VSA-ADM-OID-PR] createPresentationRequest. */
@@ -97,7 +98,11 @@ export class Openid4vcTrustEvidenceDto {
   @ApiProperty({ type: String, nullable: true, description: 'DID of the issuer, read from the certificate' })
   did!: string | null
 
-  @ApiProperty({ enum: TRUST_STATUSES, nullable: true, description: 'Trust status the resolver returned' })
+  @ApiProperty({
+    enum: VERANA_TRUST_STATUSES,
+    nullable: true,
+    description: 'Trust status the resolver returned',
+  })
   trustStatus!: VeranaTrustStatus | null
 
   @ApiProperty({ type: String, nullable: true, description: 'Credential type of the request' })
@@ -119,7 +124,7 @@ export class Openid4vcTrustEvidenceDto {
 
 /** The trust verdict on a presentation, on the record of [VSA-ADM-OID-PR] getPresentation. */
 export class Openid4vcTrustVerdictDto {
-  @ApiProperty({ enum: VERDICTS, description: 'The trust verdict' })
+  @ApiProperty({ enum: TRUST_VERDICT_NAMES, description: 'The trust verdict' })
   verdict!: TrustVerdictName
 
   @ApiProperty({ type: Openid4vcTrustEvidenceDto, description: 'The basis of the verdict' })

@@ -22,9 +22,9 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { IssuerService, OpenId4VcError, OpenId4VcErrorCode } from '@verana-labs/vs-agent-plugin-openid4vc'
+import { IssuerService } from '@verana-labs/vs-agent-plugin-openid4vc'
 
-import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
+import { createdAtKey, mapPage, Page, paginate } from '../../../../common'
 
 import {
   Openid4vcCredentialExchangeRecordDto,
@@ -35,14 +35,14 @@ import {
 } from './dto'
 import { toCredentialExchangeDto } from './mappers'
 
-const CREDENTIAL_EXCHANGE_ID = {
-  name: 'credentialExchangeId',
-  type: String,
-  description: 'Identifier of the issuance session',
-  example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
-}
-
-/** [VSA-ADM-OID-CE] Credential exchanges of the OpenID4VC issuer capability. */
+/**
+ * This controller has the credential exchanges of this agent on OpenID4VCI.
+ * Refer to [VSA-ADM-OID-CE].
+ *
+ * `createCredentialOffer` mints a pre-authorized offer for one credential configuration. The
+ * wallet redeems that offer on the issuer endpoints of the agent, and the read methods show the
+ * issuance session that the agent tracks for it. The offer expires after `ttlSeconds`.
+ */
 @ApiTags('v2/openid4vc')
 @Controller({ path: 'openid4vc', version: '2' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
@@ -55,24 +55,42 @@ export class V2Openid4vcCredentialExchangesController {
     description:
       'Creates a pre-authorized OpenID4VCI credential offer for one credential configuration. The credential expires after ttlSeconds.',
   })
-  @ApiBody({ type: Openid4vcCredentialOfferBodyDto })
+  @ApiBody({
+    type: Openid4vcCredentialOfferBodyDto,
+    examples: {
+      employee: {
+        summary: 'Employee credential',
+        value: {
+          jsonSchemaCredentialId: 'employee',
+          claims: { name: 'Ada Lovelace', role: 'engineer' },
+          ttlSeconds: 3600,
+        },
+      },
+      statusList: {
+        summary: 'Credential registered on a status list',
+        value: {
+          jsonSchemaCredentialId: 'employee',
+          claims: { name: 'Ada Lovelace', role: 'engineer' },
+          ttlSeconds: 7776000,
+          statusListId: 'list-1',
+          statusListIndex: 42,
+        },
+      },
+    },
+  })
   @ApiCreatedResponse({ description: 'The credential offer', type: Openid4vcCredentialOfferResponseDto })
   @ApiNotFoundResponse({ description: 'The agent cannot resolve the credential type or the status list' })
   public async createCredentialOffer(
     @Body() body: Openid4vcCredentialOfferBodyDto,
   ): Promise<Openid4vcCredentialOfferResponseDto> {
-    try {
-      const offer = await this.issuerService.createOffer({
-        jsonSchemaCredentialId: body.jsonSchemaCredentialId,
-        claims: body.claims,
-        ttlSeconds: body.ttlSeconds,
-        statusListId: body.statusListId,
-        statusListIndex: body.statusListIndex,
-      })
-      return { credentialExchangeId: offer.issuanceSessionId, url: offer.credentialOffer }
-    } catch (error) {
-      throw translateOffer(error)
-    }
+    const offer = await this.issuerService.createOffer({
+      jsonSchemaCredentialId: body.jsonSchemaCredentialId,
+      claims: body.claims,
+      ttlSeconds: body.ttlSeconds,
+      statusListId: body.statusListId,
+      statusListIndex: body.statusListIndex,
+    })
+    return { credentialExchangeId: offer.issuanceSessionId, url: offer.credentialOffer }
   }
 
   @Get('credential-exchanges')
@@ -109,7 +127,12 @@ export class V2Openid4vcCredentialExchangesController {
     summary: 'Get a credential exchange',
     description: 'Retrieves one issuance session by identifier.',
   })
-  @ApiParam(CREDENTIAL_EXCHANGE_ID)
+  @ApiParam({
+    name: 'credentialExchangeId',
+    type: String,
+    description: 'Identifier of the issuance session',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
   @ApiOkResponse({
     description: 'The credential exchange record',
     type: Openid4vcCredentialExchangeRecordDto,
@@ -118,11 +141,7 @@ export class V2Openid4vcCredentialExchangesController {
   public async getCredentialExchange(
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<Openid4vcCredentialExchangeRecordDto> {
-    try {
-      return toCredentialExchangeDto(await this.issuerService.getIssuanceSession(credentialExchangeId))
-    } catch (error) {
-      throw translate(error, credentialExchangeId)
-    }
+    return toCredentialExchangeDto(await this.issuerService.getIssuanceSession(credentialExchangeId))
   }
 
   @Delete('credential-exchanges/:credentialExchangeId')
@@ -131,41 +150,17 @@ export class V2Openid4vcCredentialExchangesController {
     summary: 'Delete a credential exchange',
     description: 'Deletes an issuance session record. It does not delete a credential that a wallet holds.',
   })
-  @ApiParam(CREDENTIAL_EXCHANGE_ID)
+  @ApiParam({
+    name: 'credentialExchangeId',
+    type: String,
+    description: 'Identifier of the issuance session',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
   @ApiNoContentResponse({ description: 'The credential exchange record is deleted' })
   @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
   public async deleteCredentialExchange(
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<void> {
-    try {
-      await this.issuerService.deleteIssuanceSession(credentialExchangeId)
-    } catch (error) {
-      throw translate(error, credentialExchangeId)
-    }
-  }
-}
-
-function translate(error: unknown, credentialExchangeId: string): unknown {
-  if (error instanceof OpenId4VcError && error.code === OpenId4VcErrorCode.UnknownIssuanceSession) {
-    return new AdminApiError(
-      AdminApiErrorCode.UnknownId,
-      HttpStatus.NOT_FOUND,
-      `no credential exchange with id "${credentialExchangeId}"`,
-    )
-  }
-  return translateOffer(error)
-}
-
-function translateOffer(error: unknown): unknown {
-  if (!(error instanceof OpenId4VcError)) return error
-
-  switch (error.code) {
-    case OpenId4VcErrorCode.UnknownCredentialType:
-    case OpenId4VcErrorCode.UnknownStatusList:
-      return new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, error.message)
-    case OpenId4VcErrorCode.InvalidCredentialOffer:
-      return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, error.message)
-    default:
-      return error
+    await this.issuerService.deleteIssuanceSession(credentialExchangeId)
   }
 }

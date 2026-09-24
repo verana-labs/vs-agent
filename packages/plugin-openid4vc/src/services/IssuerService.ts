@@ -10,6 +10,7 @@ import type {
 
 import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import { OpenId4VcIssuanceSessionRepository } from '@credo-ts/openid4vc'
+import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
 import {
   findCredentialConfiguration,
@@ -18,7 +19,6 @@ import {
   parseOfferIssuanceMetadata,
   parseOfferTtlSeconds,
 } from '../config'
-import { OpenId4VcError, OpenId4VcErrorCode } from '../errors'
 import { ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
@@ -73,6 +73,9 @@ export interface OpenId4VcIssuanceSessionSummary {
   errorMessage?: string
 }
 
+const BAD_REQUEST = 400
+const NOT_FOUND = 404
+
 const JSON_SCHEMA_CREDENTIAL_ID_TAG = 'jsonSchemaCredentialId'
 const STATUS_LIST_ID_TAG = 'statusListId'
 const DPOP_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
@@ -108,21 +111,24 @@ export class IssuerService {
     await this.ensureInitialized()
     const configuration = findCredentialConfiguration(this.options, jsonSchemaCredentialId)
     if (!configuration) {
-      throw new OpenId4VcError(
-        OpenId4VcErrorCode.UnknownCredentialType,
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        NOT_FOUND,
         `no credential type with id "${jsonSchemaCredentialId}"`,
       )
     }
 
     if ((statusListId === undefined) !== (statusListIndex === undefined)) {
-      throw new OpenId4VcError(
-        OpenId4VcErrorCode.InvalidCredentialOffer,
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidInput,
+        BAD_REQUEST,
         'statusListId and statusListIndex must be both present or both absent',
       )
     }
     if (statusListId !== undefined) {
-      throw new OpenId4VcError(
-        OpenId4VcErrorCode.UnknownStatusList,
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        NOT_FOUND,
         `no status list with id "${statusListId}"`,
       )
     }
@@ -134,8 +140,9 @@ export class IssuerService {
         ttlSeconds: parseOfferTtlSeconds(ttlSeconds),
       }
     } catch (error) {
-      throw new OpenId4VcError(
-        OpenId4VcErrorCode.InvalidCredentialOffer,
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidInput,
+        BAD_REQUEST,
         error instanceof Error ? error.message : 'invalid credential offer',
       )
     }
@@ -183,24 +190,26 @@ export class IssuerService {
       session = await this.issuerApi().getIssuanceSessionById(id)
     } catch (error) {
       if (error instanceof RecordNotFoundError) {
-        throw new OpenId4VcError(
-          OpenId4VcErrorCode.UnknownIssuanceSession,
-          `no issuance session with id "${id}"`,
+        throw new AdminApiError(
+          AdminApiErrorCode.UnknownId,
+          NOT_FOUND,
+          `no credential exchange with id "${id}"`,
         )
       }
       throw error
     }
     if (session.issuerId !== ISSUER_CAPABILITY_ID) {
-      throw new OpenId4VcError(
-        OpenId4VcErrorCode.UnknownIssuanceSession,
-        `no issuance session with id "${id}"`,
+      throw new AdminApiError(
+        AdminApiErrorCode.UnknownId,
+        NOT_FOUND,
+        `no credential exchange with id "${id}"`,
       )
     }
     return session
   }
 
-  public getCertificateInfo(): SigningCertificateInfo {
-    this.assertInitialized()
+  public async getCertificateInfo(): Promise<SigningCertificateInfo> {
+    await this.ensureInitialized()
     return signingCertificateInfo('issuer', this.signingCertificateHandle())
   }
 

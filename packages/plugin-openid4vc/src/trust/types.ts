@@ -1,10 +1,15 @@
-export type TrustVerdictName =
-  | 'TRUSTED_AUTHORIZED'
-  | 'TRUSTED_NOT_AUTHORIZED'
-  | 'UNTRUSTED'
-  | 'RESOLVER_UNAVAILABLE'
+export const TRUST_VERDICT_NAMES = [
+  'TRUSTED_AUTHORIZED',
+  'TRUSTED_NOT_AUTHORIZED',
+  'UNTRUSTED',
+  'RESOLVER_UNAVAILABLE',
+] as const
 
-export type VeranaTrustStatus = 'TRUSTED' | 'PARTIAL' | 'UNTRUSTED'
+export type TrustVerdictName = (typeof TRUST_VERDICT_NAMES)[number]
+
+export const VERANA_TRUST_STATUSES = ['TRUSTED', 'PARTIAL', 'UNTRUSTED'] as const
+
+export type VeranaTrustStatus = (typeof VERANA_TRUST_STATUSES)[number]
 
 export type KeyBindingResult = 'bound' | 'unbound' | 'unresolvable'
 

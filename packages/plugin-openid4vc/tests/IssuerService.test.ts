@@ -4,7 +4,8 @@ import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import { OpenId4VcIssuanceSessionRepository, OpenId4VcIssuanceSessionState } from '@credo-ts/openid4vc'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { OpenId4VcErrorCode } from '../src/errors'
+import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
+
 import { IssuerService } from '../src/services/IssuerService'
 
 const { loadSigningCertificate, publishDevelopmentSigningKey, verifyKeyBoundToDid } = vi.hoisted(() => ({
@@ -118,6 +119,7 @@ function issuerAgent(
 const leafCertificate = {
   sanUriNames: [AGENT_DID],
   publicJwk: { toJson: () => PUBLIC_JWK },
+  rawCertificate: Buffer.from('leaf-certificate'),
   toString: () => 'leaf-certificate',
 }
 const rootCertificate = {
@@ -162,6 +164,18 @@ describe('IssuerService', () => {
     loadSigningCertificate.mockResolvedValue(issuerSigningHandle())
     publishDevelopmentSigningKey.mockResolvedValue(undefined)
     verifyKeyBoundToDid.mockResolvedValue('bound')
+  })
+
+  it('initializes the issuer on the first certificate read', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+
+    await expect(service.getCertificateInfo()).resolves.toMatchObject({
+      role: 'issuer',
+      development: false,
+    })
+    expect(loadSigningCertificate).toHaveBeenCalledOnce()
   })
 
   it('keeps attestation off the record even where a key-attestation root is configured', async () => {
@@ -651,12 +665,12 @@ describe('IssuerService', () => {
         new RecordNotFoundError('missing', { recordType: 'session' }),
       )
       await expect(service.getIssuanceSession('missing')).rejects.toMatchObject({
-        code: OpenId4VcErrorCode.UnknownIssuanceSession,
+        code: AdminApiErrorCode.UnknownId,
       })
 
       api.getIssuanceSessionById.mockResolvedValueOnce(issuanceSession({ issuerId: 'other-issuer' }))
       await expect(service.getIssuanceSession('session-1')).rejects.toMatchObject({
-        code: OpenId4VcErrorCode.UnknownIssuanceSession,
+        code: AdminApiErrorCode.UnknownId,
       })
     })
 
@@ -699,7 +713,7 @@ describe('IssuerService', () => {
 
       api.getIssuanceSessionById.mockResolvedValueOnce(issuanceSession({ issuerId: 'other-issuer' }))
       await expect(service.deleteIssuanceSession('session-1')).rejects.toMatchObject({
-        code: OpenId4VcErrorCode.UnknownIssuanceSession,
+        code: AdminApiErrorCode.UnknownId,
       })
       expect(api.deleteIssuanceSessionById).toHaveBeenCalledTimes(1)
     })
@@ -709,14 +723,14 @@ describe('IssuerService', () => {
       const offer = { jsonSchemaCredentialId: 'employee', claims: { name: 'Ada' }, ttlSeconds: 3_600 }
 
       await expect(service.createOffer({ ...offer, statusListIndex: 0 })).rejects.toMatchObject({
-        code: OpenId4VcErrorCode.InvalidCredentialOffer,
+        code: AdminApiErrorCode.InvalidInput,
       })
       await expect(service.createOffer({ ...offer, statusListId: 'list-1' })).rejects.toMatchObject({
-        code: OpenId4VcErrorCode.InvalidCredentialOffer,
+        code: AdminApiErrorCode.InvalidInput,
       })
       await expect(
         service.createOffer({ ...offer, statusListId: 'list-1', statusListIndex: 0 }),
-      ).rejects.toMatchObject({ code: OpenId4VcErrorCode.UnknownStatusList })
+      ).rejects.toMatchObject({ code: AdminApiErrorCode.UnknownId })
     })
 
     it('rejects an offer for an unknown credential configuration with a dedicated error', async () => {
@@ -727,7 +741,7 @@ describe('IssuerService', () => {
           claims: { name: 'Ada', role: 'engineer' },
           ttlSeconds: 3_600,
         }),
-      ).rejects.toMatchObject({ code: OpenId4VcErrorCode.UnknownCredentialType })
+      ).rejects.toMatchObject({ code: AdminApiErrorCode.UnknownId })
     })
   })
 
