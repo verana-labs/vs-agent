@@ -27,7 +27,8 @@ export interface ConnectionRecord {
   alias?: string
   threadId?: string
   imageUrl?: string
-  outOfBandId?: string
+  outOfBandId: string | null
+  parentConnectionId: string | null
   invitationDid?: string
   didcommVersion?: DidCommVersion
   mediatorId?: string
@@ -39,6 +40,7 @@ export interface ConnectionRecord {
 
 export interface ListConnectionsQuery extends PaginationQuery {
   outOfBandId?: string
+  parentConnectionId?: string
   state?: DidExchangeState
   role?: DidExchangeRole
   did?: string
@@ -47,6 +49,20 @@ export interface ListConnectionsQuery extends PaginationQuery {
   invitationDid?: string
   didcommVersion?: DidCommVersion
   mediatorId?: string
+}
+
+export interface SendInvitationBody {
+  connectionId: string
+  did?: string
+  label?: string
+  imageUrl?: string
+  goal?: string
+  goalCode?: string
+}
+
+export interface SendInvitationResponse {
+  id: string
+  outOfBandId?: string
 }
 
 export interface SendBasicMessageBody {

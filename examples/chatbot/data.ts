@@ -10,6 +10,7 @@ export const helpMessage = [
   '/context: refresh context menu',
   '/link <url> [title] [desc] [icon] [openingMode]: send a link',
   '/media [url] [desc]: send an image',
+  '/invitation [label] [imageUrl] [did]: send an invitation to open a new connection',
   '/profile [name] [image] [icon]: send the bot profile',
   '/call [wsUrl] [roomId]: offer a call',
   '/mrz: request the MRZ of a passport',

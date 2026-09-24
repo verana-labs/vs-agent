@@ -76,8 +76,6 @@ The event set is open. `EventEnvelope` covers the types the agent emits today an
 
 The spec lists these, main does not serve them yet:
 
-- `sendInvitation` (`POST /didcomm/invitations`), lands with [verana-labs/vs-agent#716](https://github.com/verana-labs/vs-agent/pull/716)
 - `deleteCredentialExchange` (`DELETE /didcomm/credential-exchanges/{id}`)
 - every OpenID4VC method under `/openid4vc`
 - `connectionId` on `createPresentationRequest` and `createCredentialOffer`, both mint an out-of-band invitation and reject the field
-- `parentConnectionId` on connection records and the `listConnections` filter

@@ -25,6 +25,8 @@ function connectionEvent(
       state,
       previousState,
       role: 'responder',
+      outOfBandId: null,
+      parentConnectionId: null,
       createdAt: timestamp,
       updatedAt: timestamp,
     },

@@ -43,6 +43,7 @@ Menu options: Home, World Cup poll, Rocky quotes, Issue credential, Request proo
 | `/context` | Resends the context menu |
 | `/link <url> [title] [desc] [icon] [openingMode]` | Shares a link |
 | `/media [url] [desc]` | Shares an image, `bunny.jpeg` by default |
+| `/invitation [label] [imageUrl] [did]` | Sends an invitation on the chat connection. Without `did` it opens a sub-connection to the bot, with `did` it refers the wallet to that service |
 | `/profile [name] [image] [icon]` | Sends the bot profile |
 | `/call [wsUrl] [roomId]` | Offers a call, creating a WebRTC room when no arguments are given |
 | `/mrz` | Requests the MRZ of a passport. When the wallet answers, the bot requests the eMRTD data. The eMRTD request is not threaded under the MRZ exchange, the v2 API has no parent thread field |
@@ -53,7 +54,7 @@ Menu options: Home, World Cup poll, Rocky quotes, Issue credential, Request proo
 | `/help` | The command list |
 | `/terminate` | Deletes the connection record on the agent. No hangup is sent |
 
-Not ported from v1: `/invitation` (`sendInvitation` is not on main yet, see [verana-labs/vs-agent#716](https://github.com/verana-labs/vs-agent/pull/716)) and the `viewed` receipt after every inbound message (the basic message event carries no DIDComm message id).
+Not ported from v1: the `viewed` receipt after every inbound message (the basic message event carries no DIDComm message id).
 
 ## Files
 

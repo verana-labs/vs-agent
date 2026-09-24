@@ -277,6 +277,9 @@ const handleText = async (connectionId: string, content: string): Promise<void> 
         ],
       })
     }
+  } else if (content.startsWith('/invitation')) {
+    const [, label, imageUrl, did] = content.split(' ')
+    await client.didcomm.sendInvitation({ connectionId, label, imageUrl, did })
   } else if (content.startsWith('/profile')) {
     const [, displayName, image, icon] = content.split(' ')
     await client.didcomm.sendProfile({

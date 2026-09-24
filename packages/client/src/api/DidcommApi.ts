@@ -20,6 +20,8 @@ import {
   RequestMrtdBody,
   RequestProfileBody,
   SendBasicMessageBody,
+  SendInvitationBody,
+  SendInvitationResponse,
   SendMenuBody,
   SendProfileBody,
   SendQuestionBody,
@@ -48,7 +50,9 @@ export class DidcommApi {
     return this.http.request('DELETE', `/didcomm/connections/${encodeURIComponent(connectionId)}`)
   }
 
-  // sendInvitation [VSA-ADM-DC-INV-SEND] lands with verana-labs/vs-agent#716
+  public sendInvitation(body: SendInvitationBody): Promise<SendInvitationResponse> {
+    return this.http.request('POST', '/didcomm/invitations', { body })
+  }
 
   public sendBasicMessage(body: SendBasicMessageBody): Promise<SentMessage> {
     return this.http.request('POST', '/didcomm/basic-messages', { body })
