@@ -13,9 +13,11 @@ import {
   V2DidcommConnectionsController,
   V2DidcommController,
   V2DidcommCredentialExchangesController,
+  V2DidcommInvitationsController,
   V2DidcommPresentationsController,
   V2Openid4vcController,
   V2VtServiceEndpointsController,
+  InvitationsService,
 } from './controllers'
 import { BOOTSTRAP_STATE, BootstrapState } from './common'
 import {
@@ -56,6 +58,7 @@ export class VsAgentModule {
       V2DidcommPresentationsController,
       V2DidcommConnectionsController,
       V2DidcommCredentialExchangesController,
+      V2DidcommInvitationsController,
       V2Openid4vcController,
       V2AnoncredsController,
       V2AnoncredsCredentialDefinitionsController,
@@ -84,6 +87,7 @@ export class VsAgentModule {
       UrlShorteningService,
       CredentialTypesService,
       ServiceEndpointsService,
+      InvitationsService,
     ]
 
     const securityProviders = [

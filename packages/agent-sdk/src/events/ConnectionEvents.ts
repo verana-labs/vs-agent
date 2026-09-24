@@ -1,6 +1,6 @@
 import type { VsAgent } from '../agent/VsAgent'
 import type { BaseLogger } from '@credo-ts/core'
-import type { DidCommFeatureQueryOptions } from '@credo-ts/didcomm'
+import type { DidCommConnectionRecord, DidCommFeatureQueryOptions } from '@credo-ts/didcomm'
 
 import {
   DidCommConnectionDidRotatedEvent,
@@ -20,6 +20,43 @@ import {
 
 import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 
+// TODO: Fix single-use invitations for DIDComm v2 in Credo, then remove this function.
+// In Credo, multiUseInvitation: false only sets reusable: false on the OOB record. It does not
+// refuse a second connection from a v2 invitation, because v2 has no handshake.
+async function discardExtraConnection(
+  agent: VsAgent<any>,
+  record: DidCommConnectionRecord,
+  logger: BaseLogger,
+): Promise<boolean> {
+  if (!record.outOfBandId || record.didcommVersion !== 'v2') return false
+
+  const outOfBandRecord = await agent.didcomm.oob.findById(record.outOfBandId)
+  if (!outOfBandRecord || outOfBandRecord.reusable) return false
+
+  const siblings = await agent.didcomm.connections.findAllByOutOfBandId(record.outOfBandId)
+  if (siblings.length < 2) return false
+
+  const accepted: DidCommConnectionRecord = siblings.reduce(
+    (oldest: DidCommConnectionRecord, candidate: DidCommConnectionRecord) =>
+      candidate.createdAt < oldest.createdAt ||
+      (candidate.createdAt.getTime() === oldest.createdAt.getTime() && candidate.id < oldest.id)
+        ? candidate
+        : oldest,
+  )
+  if (accepted.id === record.id) return false
+
+  logger.warn(
+    `[connection-events] connection ${record.id} is a second use of the single-use invitation ${record.outOfBandId}; closing it`,
+  )
+  try {
+    await agent.didcomm.connections.hangup({ connectionId: record.id })
+  } catch (error) {
+    logger.warn(`[connection-events] hangup of ${record.id} failed: ${(error as Error).message}`)
+  }
+  await agent.didcomm.connections.deleteById(record.id)
+  return true
+}
+
 export const connectionEvents = async (
   agent: VsAgent<any>,
   config: { discoveryOptions?: DidCommFeatureQueryOptions[]; logger: BaseLogger },
@@ -37,18 +74,7 @@ export const connectionEvents = async (
       try {
         const record = payload.connectionRecord
 
-        if (record.outOfBandId && !record.getTag('parentConnectionId')) {
-          const outOfBandRecord = await agent.didcomm.oob.findById(record.outOfBandId)
-          const parentConnectionId = outOfBandRecord?.getTag('parentConnectionId') as string
-
-          // Tag connection with its parent
-          if (parentConnectionId) {
-            record.setTag('parentConnectionId', parentConnectionId)
-            await agent.context.dependencyManager
-              .resolve(DidCommConnectionRepository)
-              .update(agent.context, record)
-          }
-        }
+        if (await discardExtraConnection(agent, record, config.logger)) return
 
         if (record.state === DidCommDidExchangeState.Completed) {
           if (config.discoveryOptions)

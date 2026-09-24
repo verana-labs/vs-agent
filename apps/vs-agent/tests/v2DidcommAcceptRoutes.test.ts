@@ -1,3 +1,4 @@
+import type { JsonObject } from '@credo-ts/core'
 import type { INestApplication } from '@nestjs/common'
 import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
@@ -5,9 +6,13 @@ import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 // itself into the shared module on import.
 import '@hyperledger/anoncreds-nodejs'
 
+import { DidCommMediaSharingService } from '@2060.io/credo-ts-didcomm-media-sharing'
 import { LogLevel } from '@credo-ts/core'
 import {
+  DidCommHandshakeProtocol,
   DidCommMessageSender,
+  DidCommOutOfBandInvitation,
+  DidCommOutOfBandInvitationV2,
   DidCommPresentationV2AckMessage,
   DidCommPresentationV2ProblemReportMessage,
   DidCommProofEventTypes,
@@ -35,7 +40,7 @@ import {
 import { VsAgentModule } from '../src/admin.module'
 import { ErrorEnvelopeFilter } from '../src/common'
 import { PublicModule } from '../src/public.module'
-import { TsLogger } from '../src/utils'
+import { TsLogger, webhookEvent } from '../src/utils'
 
 import { issueVtjscFrom, mockResponses, startAgent } from './__mocks__'
 import { FakeDidResolver } from './__mocks__/fakeDidResolver'
@@ -163,11 +168,17 @@ const claims = [
 
 const faberMessages = new Subject<SubjectMessage>()
 const aliceMessages = new Subject<SubjectMessage>()
-const subjectMap = { 'rxjs:faber': faberMessages, 'rxjs:alice': aliceMessages }
+const charlieMessages = new Subject<SubjectMessage>()
+const subjectMap = {
+  'rxjs:faber': faberMessages,
+  'rxjs:alice': aliceMessages,
+  'rxjs:charlie': charlieMessages,
+}
 
 describe('v2 didcomm accept routes, over two agents', () => {
   let faberAgent: VsAgent<BaseAgentModules>
   let aliceAgent: VsAgent<BaseAgentModules>
+  let charlieAgent: VsAgent<BaseAgentModules>
   let faberApp: INestApplication
   let aliceApp: INestApplication
   let credentialDefinitionId: string
@@ -192,9 +203,16 @@ describe('v2 didcomm accept routes, over two agents', () => {
     await aliceAgent.initialize()
     aliceApp = await startAdminApi(aliceAgent)
 
+    charlieAgent = await startAgent({ label: 'Charlie', domain: 'charlie', veranaChain })
+    charlieAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(charlieMessages))
+    charlieAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+    charlieAgent.dids.config.resolvers.unshift(resolver)
+    await charlieAgent.initialize()
+
     // Neither DID is published on a reachable host, so each agent resolves the other from memory.
     await resolver.registerAgent(faberAgent)
     await resolver.registerAgent(aliceAgent)
+    await resolver.registerAgent(charlieAgent)
 
     JSON_SCHEMA_CREDENTIAL_ID = await publishVtjsc(faberAgent, 'https://faber')
     const ecosystemDid = faberAgent.did
@@ -238,6 +256,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     await aliceApp?.close()
     await faberAgent?.shutdown()
     await aliceAgent?.shutdown()
+    await charlieAgent?.shutdown()
     vi.restoreAllMocks()
   })
 
@@ -765,4 +784,296 @@ describe('v2 didcomm accept routes, over two agents', () => {
     expect(abandoned.body.errorMessage).toContain('e.p.trust-resolution-unavailable')
     expect(abandoned.body.errorMessage).toContain('records no CredentialSchema')
   }, 120_000)
+
+  describe('the invitations module, over an established connection', () => {
+    const faberDid = () => faberAgent.did as string
+    const charlieDid = () => charlieAgent.did as string
+
+    const untilConnection = async (agent: VsAgent<BaseAgentModules>, query: Record<string, string>) => {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const [record] = await agent.didcomm.connections.findAllByQuery(query)
+        if (record) return record
+        await new Promise(resolve => setTimeout(resolve, 250))
+      }
+      throw new Error(`no connection of the referred agent matches ${JSON.stringify(query)}`)
+    }
+
+    const untilFaberConnection = async (query: Record<string, string>) => {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const [record] = await faberAgent.didcomm.connections.findAllByQuery(query)
+        if (record) return record
+        await new Promise(resolve => setTimeout(resolve, 250))
+      }
+      throw new Error(`Faber has no connection matching ${JSON.stringify(query)}`)
+    }
+
+    let v2Parent: { id: string }
+    let aliceV2Parent: { id: string }
+
+    const webhookUrl = 'http://webhook.test/events'
+    const webhookFetch = vi.fn()
+
+    const firstConnectionEvent = (outOfBandId: string) =>
+      vi.waitFor(() => {
+        const event = webhookFetch.mock.calls
+          .map(([, init]) => JSON.parse((init as RequestInit).body as string))
+          .find(
+            body =>
+              body.type === 'didcomm.connections.state-updated' && body.data.outOfBandId === outOfBandId,
+          )
+        expect(event).toBeDefined()
+        return event.data
+      })
+
+    const aliceReceives = async (invitation: DidCommOutOfBandInvitation) => {
+      const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitation(invitation, {
+        label: 'Alice',
+      })
+      if (!connectionRecord) throw new Error('Alice did not open a connection from the invitation')
+      return connectionRecord
+    }
+
+    beforeAll(async () => {
+      const baseFetch = global.fetch
+      vi.stubGlobal('fetch', (...args: Parameters<typeof fetch>) => {
+        if (String(args[0]).startsWith(webhookUrl)) {
+          webhookFetch(...args)
+          return Promise.resolve(new Response(null, { status: 200 }))
+        }
+        return baseFetch(...args)
+      })
+      webhookEvent(faberAgent, { url: webhookUrl }, new TsLogger(LogLevel.Off, 'Faber'))
+
+      const record = await faberAgent.didcomm.oob.createInvitation({
+        didCommVersion: 'v2',
+        ourDid: faberDid(),
+      })
+      aliceV2Parent = await aliceReceives(record.outOfBandInvitation)
+      await aliceAgent.didcomm.basicMessages.sendMessage(aliceV2Parent.id, 'hello')
+      v2Parent = await untilFaberConnection({ outOfBandId: record.id })
+    }, 60_000)
+
+    afterAll(() => vi.unstubAllGlobals())
+
+    const aliceMediaSharing = () =>
+      aliceAgent.dependencyManager.resolve(DidCommMediaSharingService) as DidCommMediaSharingService
+
+    const aliceSharedMedia = async () =>
+      aliceMediaSharing().findAllByQuery(aliceAgent.context, { connectionId: aliceV2Parent.id })
+
+    const aliceKnownShares = async () => new Set((await aliceSharedMedia()).map(record => record.id))
+
+    /**
+     * Faber sends the invitation in the attachment of a share-media message. Alice reads it from
+     * the media sharing record that the agent makes for that message.
+     */
+    const untilAliceReceivesInvitation = async (known: Set<string>) => {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const record = (await aliceSharedMedia()).find(shared => !known.has(shared.id))
+        if (record) {
+          expect(record.items).toHaveLength(1)
+          const [item] = record.items ?? []
+          expect(item.mimeType).toBe('application/didcomm-plain+json')
+          expect(item.uri).toBeUndefined()
+          return { record, invitation: DidCommOutOfBandInvitationV2.fromJson(item.json as JsonObject) }
+        }
+        await new Promise(resolve => setTimeout(resolve, 250))
+      }
+      throw new Error('Alice received no invitation on the v2 connection')
+    }
+
+    const connectFromUrl = async (
+      agent: VsAgent<BaseAgentModules>,
+      name: string,
+      url: string,
+      greeting: string,
+    ) => {
+      const { connectionRecord } = await agent.didcomm.oob.receiveInvitationFromUrl(url, { label: name })
+      if (!connectionRecord) throw new Error(`${name} opened no connection`)
+      await agent.didcomm.basicMessages.sendMessage(connectionRecord.id, greeting)
+      return connectionRecord
+    }
+
+    /**
+     * The inviter closes a connection with a rotation to nothing. Therefore the peer keeps the
+     * record, but without the DID of the inviter.
+     */
+    const untilTerminated = async (agent: VsAgent<BaseAgentModules>, name: string, connectionId: string) => {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const record = await agent.didcomm.connections.findById(connectionId)
+        if (record && record.theirDid === undefined) return record
+        await new Promise(resolve => setTimeout(resolve, 250))
+      }
+      throw new Error(`${name} keeps connection ${connectionId} open`)
+    }
+
+    const sentBy = async (app: () => request.SuperTest<request.Test>, body: Record<string, unknown>) => {
+      const sendMessage = vi.spyOn(faberAgent.dependencyManager.resolve(DidCommMessageSender), 'sendMessage')
+      try {
+        const response = await app().post('/v2/didcomm/invitations').send(body)
+        return { response, message: sendMessage.mock.calls.at(-1)?.[0].message }
+      } finally {
+        sendMessage.mockRestore()
+      }
+    }
+
+    it('opens a sub-connection over a v2 connection from the attachment of a share-media message', async () => {
+      const parent = v2Parent
+      const oobCount = (await faberAgent.didcomm.oob.getAll()).length
+      const known = await aliceKnownShares()
+
+      const response = await faber().post('/v2/didcomm/invitations').send({
+        connectionId: parent.id,
+        label: 'Support',
+        imageUrl: 'https://faber.example/support.png',
+        goal: 'Open a support chat',
+      })
+
+      expect(response.status).toBe(201)
+      expect(response.body.outOfBandId).toBeDefined()
+      expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount + 1)
+
+      const { record, invitation } = await untilAliceReceivesInvitation(known)
+      expect(record.description).toBe('Support')
+      expect(record.items?.[0].metadata).toEqual({
+        title: 'Support',
+        icon: 'https://faber.example/support.png',
+      })
+
+      expect(invitation.from).toMatch(/^did:peer:/)
+      expect(invitation.from).not.toBe(faberDid())
+      expect(invitation.body).toEqual({ goal: 'Open a support chat', accept: ['didcomm/v2'] })
+
+      const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitationFromUrl(
+        invitation.toUrl({ domain: 'https://alice' }),
+        { label: 'Alice' },
+      )
+      if (!connectionRecord) throw new Error('Alice did not open a connection from the invitation')
+      await aliceAgent.didcomm.basicMessages.sendMessage(connectionRecord.id, 'hello over the sub-connection')
+
+      const child = await untilFaberConnection({ outOfBandId: response.body.outOfBandId })
+      expect(child.id).not.toBe(parent.id)
+      expect(child.getTag('parentConnectionId')).toBe(parent.id)
+
+      const fetched = await faber().get(`/v2/didcomm/connections/${child.id}`)
+      expect(fetched.body).toMatchObject({
+        outOfBandId: response.body.outOfBandId,
+        parentConnectionId: parent.id,
+      })
+
+      const firstEvent = await firstConnectionEvent(response.body.outOfBandId)
+      expect(firstEvent).toMatchObject({ parentConnectionId: parent.id, previousState: null })
+
+      const listed = await faber().get(`/v2/didcomm/connections?outOfBandId=${response.body.outOfBandId}`)
+      expect(listed.body.items.map((item: { id: string }) => item.id)).toEqual([child.id])
+    }, 120_000)
+
+    it('opens a sub-connection over a v1 connection with an OOB 1.1 invitation that carries the label', async () => {
+      const v1 = await faberAgent.didcomm.oob.createInvitation({
+        didCommVersion: 'v1',
+        handshakeProtocols: [DidCommHandshakeProtocol.DidExchange],
+      })
+      const aliceParent = await aliceReceives(v1.outOfBandInvitation)
+      const parent = await untilFaberConnection({ outOfBandId: v1.id, state: 'completed' })
+      await aliceAgent.didcomm.connections.returnWhenIsConnected(aliceParent.id)
+
+      const { response, message } = await sentBy(faber, {
+        connectionId: parent.id,
+        label: 'Support',
+        imageUrl: 'https://faber.example/support.png',
+      })
+
+      expect(response.status).toBe(201)
+      expect(message).toBeInstanceOf(DidCommOutOfBandInvitation)
+      const invitation = message as DidCommOutOfBandInvitation
+      expect(invitation.v2Invitation).toBeUndefined()
+      expect(invitation.id).toBe(response.body.id)
+      expect(invitation.label).toBe('Support')
+      expect(invitation.imageUrl).toBe('https://faber.example/support.png')
+      expect(invitation.getServices()).not.toContain(faberDid())
+
+      const aliceChild = await aliceReceives(invitation)
+      await aliceAgent.didcomm.connections.returnWhenIsConnected(aliceChild.id)
+
+      const child = await untilFaberConnection({ outOfBandId: response.body.outOfBandId, state: 'completed' })
+      expect(child.id).not.toBe(parent.id)
+      expect(child.getTag('parentConnectionId')).toBe(parent.id)
+
+      const firstEvent = await firstConnectionEvent(response.body.outOfBandId)
+      expect(firstEvent).toMatchObject({ id: child.id, parentConnectionId: parent.id })
+
+      const deleted = await faber().delete(`/v2/didcomm/connections/${parent.id}`)
+      expect(deleted.status).toBe(204)
+      expect((await faber().get(`/v2/didcomm/connections/${parent.id}`)).status).toBe(404)
+
+      const children = await faber().get(`/v2/didcomm/connections?parentConnectionId=${parent.id}`)
+      expect(children.body.items).toHaveLength(1)
+      expect(children.body.items[0]).toMatchObject({ id: child.id, parentConnectionId: parent.id })
+    }, 120_000)
+
+    it('accepts one connection only from a single-use invitation', async () => {
+      const known = await aliceKnownShares()
+
+      const response = await faber().post('/v2/didcomm/invitations').send({ connectionId: v2Parent.id })
+      expect(response.status).toBe(201)
+
+      const { invitation } = await untilAliceReceivesInvitation(known)
+      const url = invitation.toUrl({ domain: 'https://alice' })
+
+      const accepted = await connectFromUrl(aliceAgent, 'Alice', url, 'the first use')
+      const child = await untilFaberConnection({ outOfBandId: response.body.outOfBandId })
+      expect(child.getTag('parentConnectionId')).toBe(v2Parent.id)
+
+      const refused = await connectFromUrl(charlieAgent, 'Charlie', url, 'the second use')
+
+      const terminated = await untilTerminated(charlieAgent, 'Charlie', refused.id)
+      expect(terminated.previousTheirDids?.length).toBeGreaterThan(0)
+
+      const surviving = await faberAgent.didcomm.connections.findAllByOutOfBandId(response.body.outOfBandId)
+      expect(surviving.map(record => record.id)).toEqual([child.id])
+      expect(accepted.theirDid).toBeDefined()
+    }, 120_000)
+
+    it('refers the peer to another DID without creating a record', async () => {
+      const parent = v2Parent
+      const oobCount = (await faberAgent.didcomm.oob.getAll()).length
+      const known = await aliceKnownShares()
+
+      const response = await faber().post('/v2/didcomm/invitations').send({
+        connectionId: parent.id,
+        did: charlieDid(),
+        goalCode: 'verify',
+      })
+
+      expect(response.status).toBe(201)
+      expect(response.body).toEqual({ id: expect.any(String) })
+      expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount)
+
+      const { record, invitation } = await untilAliceReceivesInvitation(known)
+      expect(record.description).toBeUndefined()
+      expect(invitation.from).toBe(charlieDid())
+      expect(invitation.toV2Plaintext().body).toEqual({ goal_code: 'verify', accept: ['didcomm/v2'] })
+
+      const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitationFromUrl(
+        invitation.toUrl({ domain: 'https://alice' }),
+        { label: 'Alice' },
+      )
+      if (!connectionRecord) throw new Error('Alice did not open a connection to the referred agent')
+      await aliceAgent.didcomm.basicMessages.sendMessage(connectionRecord.id, 'hello from the referral')
+
+      const aliceDid = connectionRecord.did
+      if (!aliceDid) throw new Error('Alice opened the connection without a DID of her own')
+
+      const referred = await untilConnection(charlieAgent, { theirDid: aliceDid })
+      expect(referred.outOfBandId).toBeUndefined()
+      expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount)
+    }, 120_000)
+
+    it('reports an unknown connection as UNKNOWN_ID', async () => {
+      const response = await faber().post('/v2/didcomm/invitations').send({ connectionId: 'nope' })
+
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
+    })
+  })
 })

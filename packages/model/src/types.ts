@@ -1,7 +1,10 @@
 import { JsonObject } from '@credo-ts/core'
 import {
+  DidCommDidExchangeRole,
+  DidCommDidExchangeState,
   DidCommHandshakeProtocol,
   DidCommProofState,
+  DidCommVersion,
   OutOfBandDidCommService,
   ReceiveOutOfBandInvitationConfig,
 } from '@credo-ts/didcomm'
@@ -105,6 +108,41 @@ export interface CreatePresentationRequestResult {
 
 export interface CreateInvitationResult {
   url: string
+}
+
+export interface SendInvitationOptions {
+  connectionId: string
+  did?: string
+  label?: string
+  imageUrl?: string
+  goal?: string
+  goalCode?: string
+}
+
+export interface SendInvitationResult {
+  id: string
+  outOfBandId?: string
+}
+
+export interface ConnectionRecord {
+  id: string
+  state: DidCommDidExchangeState
+  role: DidCommDidExchangeRole
+  did?: string
+  theirDid?: string
+  theirLabel?: string
+  alias?: string
+  threadId?: string
+  imageUrl?: string
+  outOfBandId: string | null
+  parentConnectionId: string | null
+  invitationDid?: string
+  didcommVersion?: DidCommVersion
+  mediatorId?: string
+  previousDids?: string[]
+  previousTheirDids?: string[]
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface PresentationData {
