@@ -556,6 +556,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
       corporation: 'verana1corp',
       setParticipantOPToValidatedMsg: vi.fn(params => ({ typeUrl: SET_VALIDATED, value: params })),
       estimateFee: vi.fn(async () => ({ amount: [{ denom: 'uvna', amount: '500' }], gas: '200000' })),
+      feeAllowance: vi.fn(async () => undefined),
       broadcastWithoutWaiting: vi.fn(async () => 'AB12'),
       getBalance: vi.fn(async () => ({ denom: 'uvna', amount: options.balance ?? '1000' })),
       findTx: vi.fn(async () => undefined),
@@ -634,6 +635,18 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(current().validation).toMatchObject({
       tx: { status: 'FAILED', reason: 'INSUFFICIENT_FUNDS_AGENT' },
     })
+  })
+
+  it('reports an expired feegrant before it simulates, since the simulation fails on it first', async () => {
+    const { agent, chain, current } = makeValidateAgent({
+      grant: { msgTypes: [SET_VALIDATED], withFeegrant: true },
+    })
+    chain.estimateFee.mockRejectedValue(new Error('fee-grant not found'))
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(chain.estimateFee).not.toHaveBeenCalled()
+    expect(current().validation).toMatchObject({ tx: { status: 'FAILED', reason: 'FEEGRANT_EXPIRED' } })
   })
 
   it('refuses claims that do not fit the schema, with the violations, and records nothing', async () => {

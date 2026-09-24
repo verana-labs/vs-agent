@@ -563,6 +563,11 @@ export class VtFlowOrchestrator {
       opSummaryDigest: validation.opSummaryDigest,
     })
 
+    const allowance = granter ? await chain.feeAllowance(granter, FEE_DENOM) : undefined
+    if (granter && !allowance) {
+      return fail(VtFlowTxReason.FeegrantExpired, 'the Corporation grants the agent no active fee allowance')
+    }
+
     let fee: StdFee
     try {
       fee = await chain.estimateFee([message], granter)
@@ -571,14 +576,7 @@ export class VtFlowOrchestrator {
     }
     const amount = BigInt(fee.amount.find(coin => coin.denom === FEE_DENOM)?.amount ?? '0')
 
-    if (granter) {
-      const allowance = await chain.feeAllowance(granter, FEE_DENOM)
-      if (!allowance) {
-        return fail(
-          VtFlowTxReason.FeegrantExpired,
-          'the Corporation grants the agent no active fee allowance',
-        )
-      }
+    if (granter && allowance) {
       if (!allowance.unlimited && allowance.remaining < amount) {
         return fail(
           VtFlowTxReason.FeegrantExhausted,
