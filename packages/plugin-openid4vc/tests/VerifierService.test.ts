@@ -198,13 +198,9 @@ describe('VerifierService', () => {
       'https://agent.example',
       'verifier',
     )
-    expect(verifyKeyBoundToDid).toHaveBeenCalledWith(
-      expect.anything(),
-      AGENT_DID,
-      PUBLIC_JWK,
-      ['authentication'],
-      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000 },
-    )
+    expect(verifyKeyBoundToDid).toHaveBeenCalledWith(expect.anything(), AGENT_DID, PUBLIC_JWK, [
+      'authentication',
+    ])
     expect(api.createVerifier).toHaveBeenCalledWith({ verifierId: 'verifier' })
     expect(api.updateVerifierMetadata).not.toHaveBeenCalled()
   })

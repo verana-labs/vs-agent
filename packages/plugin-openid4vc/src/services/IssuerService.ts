@@ -22,7 +22,7 @@ import {
   parseOfferTtlSeconds,
 } from '../config'
 import { registerDidJwkResolver } from '../sdk/didJwkResolver'
-import { ownDidResolutionPolicy, verifyKeyBoundToDid } from '../trust/keyBinding'
+import { verifyKeyBoundToDid } from '../trust/keyBinding'
 import { OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
@@ -291,7 +291,6 @@ export class IssuerService implements OnModuleInit {
       agentDid,
       signingCertificate.certificate.publicJwk.toJson(),
       ['assertionMethod'],
-      ownDidResolutionPolicy(agentDid),
     )
     if (binding === 'unresolvable') {
       throw new Error('OpenID4VC issuer DID could not be resolved for assertionMethod key binding')

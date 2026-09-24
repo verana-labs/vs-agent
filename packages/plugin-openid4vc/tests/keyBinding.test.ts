@@ -2,16 +2,11 @@ import type { BaseAgent, DidDocument, VerificationMethod } from '@credo-ts/core'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import {
-  findBoundVerificationMethodId,
-  ownDidResolutionPolicy,
-  verifyKeyBoundToDid,
-} from '../src/trust/keyBinding'
+import { findBoundVerificationMethodId, verifyKeyBoundToDid } from '../src/trust/keyBinding'
 
 import { LEAF_PRIVATE_JWK, OTHER_PRIVATE_JWK } from './helpers/certificates'
 
 const DID = 'did:web:issuer.example'
-const DID_RESOLUTION_POLICY = { allowedWebHosts: ['issuer.example'], timeoutMs: 1_000 }
 const LEAF_PUBLIC_JWK = {
   kty: LEAF_PRIVATE_JWK.kty,
   crv: LEAF_PRIVATE_JWK.crv,
@@ -70,9 +65,7 @@ describe('verifyKeyBoundToDid', () => {
       didDocument: didDocument({ assertionMethod: [verificationMethod(methodJwk)] }),
     }))
 
-    await expect(
-      verifyKeyBoundToDid(agent, DID, certificateJwk, ['assertionMethod'], DID_RESOLUTION_POLICY),
-    ).resolves.toBe('bound')
+    await expect(verifyKeyBoundToDid(agent, DID, certificateJwk, ['assertionMethod'])).resolves.toBe('bound')
   })
 
   it('accepts a dereferenced assertionMethod key', async () => {
@@ -84,9 +77,7 @@ describe('verifyKeyBoundToDid', () => {
       }),
     }))
 
-    await expect(
-      verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'], DID_RESOLUTION_POLICY),
-    ).resolves.toBe('bound')
+    await expect(verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'])).resolves.toBe('bound')
   })
 
   it('rejects a trusted DID asserted by an attacker certificate', async () => {
@@ -94,9 +85,9 @@ describe('verifyKeyBoundToDid', () => {
       didDocument: didDocument({ assertionMethod: [verificationMethod(LEAF_PUBLIC_JWK)] }),
     }))
 
-    await expect(
-      verifyKeyBoundToDid(agent, DID, OTHER_PUBLIC_JWK, ['assertionMethod'], DID_RESOLUTION_POLICY),
-    ).resolves.toBe('unbound')
+    await expect(verifyKeyBoundToDid(agent, DID, OTHER_PUBLIC_JWK, ['assertionMethod'])).resolves.toBe(
+      'unbound',
+    )
   })
 
   it('rejects a key present only under authentication for issuer binding', async () => {
@@ -104,12 +95,10 @@ describe('verifyKeyBoundToDid', () => {
       didDocument: didDocument({ authentication: [verificationMethod(LEAF_PUBLIC_JWK)] }),
     }))
 
-    await expect(
-      verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'], DID_RESOLUTION_POLICY),
-    ).resolves.toBe('unbound')
-    await expect(
-      verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['authentication'], DID_RESOLUTION_POLICY),
-    ).resolves.toBe('bound')
+    await expect(verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'])).resolves.toBe(
+      'unbound',
+    )
+    await expect(verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['authentication'])).resolves.toBe('bound')
   })
 
   it('rejects a dangling assertionMethod reference', async () => {
@@ -117,9 +106,9 @@ describe('verifyKeyBoundToDid', () => {
       didDocument: didDocument({ assertionMethod: [`${DID}#missing`] }),
     }))
 
-    await expect(
-      verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'], DID_RESOLUTION_POLICY),
-    ).resolves.toBe('unbound')
+    await expect(verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'])).resolves.toBe(
+      'unbound',
+    )
   })
 
   it('fails closed when DID resolution throws or returns no document', async () => {
@@ -128,12 +117,12 @@ describe('verifyKeyBoundToDid', () => {
     })
     const emptyAgent = agentResolving(async () => ({ didDocument: null }))
 
-    await expect(
-      verifyKeyBoundToDid(throwingAgent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'], DID_RESOLUTION_POLICY),
-    ).resolves.toBe('unresolvable')
-    await expect(
-      verifyKeyBoundToDid(emptyAgent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'], DID_RESOLUTION_POLICY),
-    ).resolves.toBe('unresolvable')
+    await expect(verifyKeyBoundToDid(throwingAgent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'])).resolves.toBe(
+      'unresolvable',
+    )
+    await expect(verifyKeyBoundToDid(emptyAgent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'])).resolves.toBe(
+      'unresolvable',
+    )
   })
 
   it('fails closed for a missing DID or malformed certificate key', async () => {
@@ -142,34 +131,25 @@ describe('verifyKeyBoundToDid', () => {
     }))
     const agent = agentResolving(resolve)
 
+    await expect(verifyKeyBoundToDid(agent, null, LEAF_PUBLIC_JWK, ['assertionMethod'])).resolves.toBe(
+      'unbound',
+    )
     await expect(
-      verifyKeyBoundToDid(agent, null, LEAF_PUBLIC_JWK, ['assertionMethod'], DID_RESOLUTION_POLICY),
-    ).resolves.toBe('unbound')
-    await expect(
-      verifyKeyBoundToDid(
-        agent,
-        DID,
-        { kty: 'EC', crv: 'P-256' },
-        ['assertionMethod'],
-        DID_RESOLUTION_POLICY,
-      ),
+      verifyKeyBoundToDid(agent, DID, { kty: 'EC', crv: 'P-256' }, ['assertionMethod']),
     ).resolves.toBe('unbound')
     expect(resolve).not.toHaveBeenCalled()
   })
 
   it.each([
-    ['did:key:z6Mktest', 'issuer.example'],
-    ['did:web:', 'issuer.example'],
-  ])('rejects an unsupported or malformed DID target %s before resolution', async (did, host) => {
+    'did:key:z6Mktest',
+    'did:web:',
+  ])('rejects an unsupported or malformed DID target %s before resolution', async did => {
     const resolve = vi.fn(async () => ({
       didDocument: didDocument({ assertionMethod: [verificationMethod(LEAF_PUBLIC_JWK)] }),
     }))
 
     await expect(
-      verifyKeyBoundToDid(agentResolving(resolve), did, LEAF_PUBLIC_JWK, ['assertionMethod'], {
-        allowedWebHosts: [host],
-        timeoutMs: 1_000,
-      }),
+      verifyKeyBoundToDid(agentResolving(resolve), did, LEAF_PUBLIC_JWK, ['assertionMethod']),
     ).resolves.toBe('unresolvable')
     expect(resolve).not.toHaveBeenCalled()
   })
@@ -184,43 +164,9 @@ describe('verifyKeyBoundToDid', () => {
     const resolve = vi.fn(async () => ({ didDocument: didDocument({ id: did, assertionMethod: [method] }) }))
 
     await expect(
-      verifyKeyBoundToDid(
-        agentResolving(resolve),
-        did,
-        LEAF_PUBLIC_JWK,
-        ['assertionMethod'],
-        ownDidResolutionPolicy(did),
-      ),
+      verifyKeyBoundToDid(agentResolving(resolve), did, LEAF_PUBLIC_JWK, ['assertionMethod']),
     ).resolves.toBe('bound')
     expect(resolve).toHaveBeenCalledOnce()
-  })
-
-  it('binds the agent own DID policy to that DID host alone', () => {
-    expect(ownDidResolutionPolicy('did:web:agent.local')).toEqual({
-      allowedWebHosts: ['agent.local'],
-      timeoutMs: 5_000,
-    })
-    expect(ownDidResolutionPolicy('did:key:z6Mktest')).toEqual({
-      allowedWebHosts: [],
-      timeoutMs: 5_000,
-    })
-  })
-
-  it('rejects a public host outside the operator allowlist before its resolver can follow redirects', async () => {
-    const resolve = vi.fn(async () => ({
-      didDocument: didDocument({ assertionMethod: [verificationMethod(LEAF_PUBLIC_JWK)] }),
-    }))
-
-    await expect(
-      verifyKeyBoundToDid(
-        agentResolving(resolve),
-        'did:web:redirector.example',
-        LEAF_PUBLIC_JWK,
-        ['assertionMethod'],
-        DID_RESOLUTION_POLICY,
-      ),
-    ).resolves.toBe('unresolvable')
-    expect(resolve).not.toHaveBeenCalled()
   })
 
   it('bypasses and does not persist DID resolver cache entries for key binding', async () => {
@@ -229,55 +175,33 @@ describe('verifyKeyBoundToDid', () => {
     }))
 
     await expect(
-      verifyKeyBoundToDid(
-        agentResolving(resolve),
-        DID,
-        LEAF_PUBLIC_JWK,
-        ['assertionMethod'],
-        DID_RESOLUTION_POLICY,
-      ),
+      verifyKeyBoundToDid(agentResolving(resolve), DID, LEAF_PUBLIC_JWK, ['assertionMethod']),
     ).resolves.toBe('bound')
 
     expect(resolve).toHaveBeenCalledWith(DID, { useCache: false, persistInCache: false })
   })
 
-  it('bounds DID resolution by the configured timeout', async () => {
-    const agent = agentResolving(
-      async () =>
-        await new Promise(resolve => {
-          setTimeout(
-            () =>
-              resolve({
-                didDocument: didDocument({
-                  assertionMethod: [verificationMethod(LEAF_PUBLIC_JWK)],
-                }),
-              }),
-            50,
-          )
-        }),
-    )
+  it('bounds DID resolution by a timeout', async () => {
+    vi.useFakeTimers()
+    const agent = agentResolving(async () => await new Promise(() => {}))
 
-    await expect(
-      verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'], {
-        ...DID_RESOLUTION_POLICY,
-        timeoutMs: 1,
-      }),
-    ).resolves.toBe('unresolvable')
+    const binding = verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'])
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    await expect(binding).resolves.toBe('unresolvable')
+    vi.useRealTimers()
   })
 
-  it('supports an explicitly allowed did:webvh host', async () => {
+  it('supports a did:webvh host', async () => {
     const webVhDid = 'did:webvh:QmFixtureScid:issuer.example'
     const method = verificationMethod(LEAF_PUBLIC_JWK, `${webVhDid}#assertion`)
     const agent = agentResolving(async () => ({
       didDocument: didDocument({ id: webVhDid, assertionMethod: [method] }),
     }))
 
-    await expect(
-      verifyKeyBoundToDid(agent, webVhDid, LEAF_PUBLIC_JWK, ['assertionMethod'], {
-        allowedWebHosts: ['issuer.example'],
-        timeoutMs: 1_000,
-      }),
-    ).resolves.toBe('bound')
+    await expect(verifyKeyBoundToDid(agent, webVhDid, LEAF_PUBLIC_JWK, ['assertionMethod'])).resolves.toBe(
+      'bound',
+    )
   })
 
   it('rejects a resolved DID document whose ID differs from the requested DID', async () => {
@@ -288,9 +212,9 @@ describe('verifyKeyBoundToDid', () => {
       }),
     }))
 
-    await expect(
-      verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'], DID_RESOLUTION_POLICY),
-    ).resolves.toBe('unresolvable')
+    await expect(verifyKeyBoundToDid(agent, DID, LEAF_PUBLIC_JWK, ['assertionMethod'])).resolves.toBe(
+      'unresolvable',
+    )
   })
 })
 
@@ -301,7 +225,7 @@ describe('findBoundVerificationMethodId', () => {
     }))
 
     await expect(
-      findBoundVerificationMethodId(agent, DID, LEAF_PUBLIC_JWK, ['authentication'], DID_RESOLUTION_POLICY),
+      findBoundVerificationMethodId(agent, DID, LEAF_PUBLIC_JWK, ['authentication']),
     ).resolves.toBe(`${DID}#auth`)
   })
 
@@ -311,22 +235,16 @@ describe('findBoundVerificationMethodId', () => {
     }))
 
     await expect(
-      findBoundVerificationMethodId(agent, DID, LEAF_PUBLIC_JWK, ['authentication'], DID_RESOLUTION_POLICY),
+      findBoundVerificationMethodId(agent, DID, LEAF_PUBLIC_JWK, ['authentication']),
     ).resolves.toBeNull()
   })
 
-  it('returns null for a host outside the resolution policy without resolving', async () => {
+  it('returns null for a DID method that never resolves, without resolving', async () => {
     const resolve = vi.fn()
     const agent = agentResolving(resolve)
 
     await expect(
-      findBoundVerificationMethodId(
-        agent,
-        'did:web:attacker.example',
-        LEAF_PUBLIC_JWK,
-        ['authentication'],
-        DID_RESOLUTION_POLICY,
-      ),
+      findBoundVerificationMethodId(agent, 'did:key:z6Mktest', LEAF_PUBLIC_JWK, ['authentication']),
     ).resolves.toBeNull()
     expect(resolve).not.toHaveBeenCalled()
   })

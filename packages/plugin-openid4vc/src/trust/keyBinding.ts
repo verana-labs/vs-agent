@@ -6,36 +6,15 @@ import { getPublicJwkFromVerificationMethod, Kms, tryParseDid } from '@credo-ts/
 type BindingPurpose = Extract<DidPurpose, 'assertionMethod' | 'authentication'>
 export type DidResolverAgent = Pick<BaseAgent, 'dids'>
 
-export const DEFAULT_DID_RESOLUTION_TIMEOUT_MS = 5_000
-export const MAX_DID_RESOLUTION_TIMEOUT_MS = 30_000
-
-export interface DidResolutionPolicy {
-  allowedWebHosts: string[]
-  timeoutMs: number
-}
-
-export function ownDidResolutionPolicy(
-  did: string,
-  timeoutMs = DEFAULT_DID_RESOLUTION_TIMEOUT_MS,
-): DidResolutionPolicy {
-  const host = didWebHost(did)
-  return { allowedWebHosts: host ? [host] : [], timeoutMs }
-}
+const DID_RESOLUTION_TIMEOUT_MS = 5_000
 
 export async function verifyKeyBoundToDid(
   agent: DidResolverAgent,
   did: string | null,
   certificatePublicJwk: unknown,
   purposes: BindingPurpose[],
-  resolutionPolicy: DidResolutionPolicy,
 ): Promise<KeyBindingResult> {
-  const lookup = await lookupBoundVerificationMethod(
-    agent,
-    did,
-    certificatePublicJwk,
-    purposes,
-    resolutionPolicy,
-  )
+  const lookup = await lookupBoundVerificationMethod(agent, did, certificatePublicJwk, purposes)
   return lookup.result
 }
 
@@ -44,15 +23,8 @@ export async function findBoundVerificationMethodId(
   did: string | null,
   certificatePublicJwk: unknown,
   purposes: BindingPurpose[],
-  resolutionPolicy: DidResolutionPolicy,
 ): Promise<string | null> {
-  const lookup = await lookupBoundVerificationMethod(
-    agent,
-    did,
-    certificatePublicJwk,
-    purposes,
-    resolutionPolicy,
-  )
+  const lookup = await lookupBoundVerificationMethod(agent, did, certificatePublicJwk, purposes)
   return lookup.result === 'bound' ? lookup.verificationMethodId : null
 }
 
@@ -65,7 +37,6 @@ async function lookupBoundVerificationMethod(
   did: string | null,
   certificatePublicJwk: unknown,
   purposes: BindingPurpose[],
-  resolutionPolicy: DidResolutionPolicy,
 ): Promise<BoundKeyLookup> {
   if (!did) return { result: 'unbound' }
 
@@ -76,7 +47,7 @@ async function lookupBoundVerificationMethod(
     return { result: 'unbound' }
   }
 
-  const didDocument = await resolveDidDocument(agent, did, resolutionPolicy)
+  const didDocument = await resolveDidDocument(agent, did)
   if (!didDocument) return { result: 'unresolvable' }
 
   for (const verificationMethod of verificationMethodsForPurposes(didDocument, purposes)) {
@@ -90,17 +61,13 @@ async function lookupBoundVerificationMethod(
   return { result: 'unbound' }
 }
 
-async function resolveDidDocument(
-  agent: DidResolverAgent,
-  did: string,
-  policy: DidResolutionPolicy,
-): Promise<DidDocument | null> {
-  if (!isResolutionAllowed(did, policy)) return null
+async function resolveDidDocument(agent: DidResolverAgent, did: string): Promise<DidDocument | null> {
+  if (!didWebHost(did)) return null
 
   try {
     const resolution = await withTimeout(
       agent.dids.resolve(did, { useCache: false, persistInCache: false }),
-      policy.timeoutMs,
+      DID_RESOLUTION_TIMEOUT_MS,
     )
     if (resolution.didResolutionMetadata?.error || !resolution.didDocument) return null
     if (resolution.didDocument.id !== did) return null
@@ -127,22 +94,6 @@ function* verificationMethodsForPurposes(
       yield verificationMethod
     }
   }
-}
-
-function isResolutionAllowed(did: string, policy: DidResolutionPolicy): boolean {
-  if (
-    !Number.isInteger(policy.timeoutMs) ||
-    policy.timeoutMs <= 0 ||
-    policy.timeoutMs > MAX_DID_RESOLUTION_TIMEOUT_MS ||
-    !Array.isArray(policy.allowedWebHosts)
-  ) {
-    return false
-  }
-
-  const requestedHost = didWebHost(did)
-  if (!requestedHost) return false
-
-  return policy.allowedWebHosts.some(allowedHost => canonicalHost(allowedHost) === requestedHost)
 }
 
 function didWebHost(did: string): string | undefined {

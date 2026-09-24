@@ -350,13 +350,9 @@ describe('IssuerService', () => {
       'https://agent.example',
       'issuer',
     )
-    expect(verifyKeyBoundToDid).toHaveBeenCalledWith(
-      expect.anything(),
-      AGENT_DID,
-      PUBLIC_JWK,
-      ['assertionMethod'],
-      { allowedWebHosts: ['agent.example'], timeoutMs: 5_000 },
-    )
+    expect(verifyKeyBoundToDid).toHaveBeenCalledWith(expect.anything(), AGENT_DID, PUBLIC_JWK, [
+      'assertionMethod',
+    ])
     expect(api.getIssuerByIssuerId).toHaveBeenCalledOnce()
     expect(api.updateIssuerMetadata).toHaveBeenCalledOnce()
     expect(api.createIssuer).not.toHaveBeenCalled()

@@ -11,11 +11,7 @@ import {
 import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
 import { findCredentialConfiguration, VERIFIER_CAPABILITY_ID } from '../config'
-import {
-  findBoundVerificationMethodId,
-  ownDidResolutionPolicy,
-  verifyKeyBoundToDid,
-} from '../trust/keyBinding'
+import { findBoundVerificationMethodId, verifyKeyBoundToDid } from '../trust/keyBinding'
 import { OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
@@ -264,7 +260,6 @@ export class VerifierService implements OnModuleInit {
       agentDid,
       signingCertificate.certificate.publicJwk.toJson(),
       ['authentication'],
-      ownDidResolutionPolicy(agentDid),
     )
     if (binding === 'unresolvable') {
       throw new Error('OpenID4VC verifier DID could not be resolved for authentication key binding')
@@ -359,7 +354,6 @@ export class VerifierService implements OnModuleInit {
       did,
       certificate.certificate.publicJwk.toJson(),
       ['authentication'],
-      ownDidResolutionPolicy(did ?? ''),
     )
     if (!didUrl) {
       throw new AdminApiError(
