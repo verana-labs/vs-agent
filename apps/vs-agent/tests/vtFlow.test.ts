@@ -547,7 +547,7 @@ describe('vt-flow: Direct Issuance validated after an out-of-band step', () => {
             createW3cV2Credential({
               id: `${validator.did}#${utils.uuid()}`,
               type: ['VerifiableCredential', 'VerifiableTrustCredential'],
-              issuer: validator.did!,
+              issuer: String(validator.did),
               credentialSubject: { id: applicant.did, name: 'Acme' },
             }),
           ),
