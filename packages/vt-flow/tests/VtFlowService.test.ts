@@ -1,8 +1,16 @@
-import { utils } from '@credo-ts/core'
+import { EventEmitter, utils } from '@credo-ts/core'
 import { DidCommCredentialExchangeRepository } from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
-import { VtCredentialState, VtFlowRole, VtFlowState, VtFlowVariant } from '../src'
+import {
+  VtCredentialState,
+  VtFlowEventTypes,
+  VtFlowModule,
+  VtFlowModuleConfig,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowVariant,
+} from '../src'
 import {
   IssuanceRequestMessage,
   OnboardingRequestMessage,
@@ -508,5 +516,39 @@ describe('VtFlowService VS-CONN-VS gate', () => {
       expect.objectContaining({ purpose: { participantId: '42' } }),
     )
     expect(repository.save).toHaveBeenCalled()
+  })
+})
+
+describe('VtFlowModule state listeners', () => {
+  it('log a record read that fails after shutdown instead of rejecting', async () => {
+    const listeners: Array<(event: unknown) => Promise<void>> = []
+    const logger = { debug: vi.fn(), error: vi.fn() }
+    const service = new VtFlowService(
+      { findById: vi.fn().mockRejectedValue(new Error('Invalid store handle')) } as never,
+      {} as never,
+      logger as never,
+      new VtFlowModuleConfig({ onCompleted: vi.fn(), onCredentialRevoked: vi.fn() }),
+    )
+    const eventEmitter = {
+      on: (type: string, listener: (event: unknown) => Promise<void>) => {
+        if (type === VtFlowEventTypes.VtFlowStateChanged) listeners.push(listener)
+      },
+    }
+    const registry = { registerMessageHandlers: vi.fn(), register: vi.fn() }
+    const agentContext = {
+      dependencyManager: {
+        resolve: (token: unknown) =>
+          token === VtFlowService ? service : token === EventEmitter ? eventEmitter : registry,
+      },
+    }
+    await new VtFlowModule().initialize(agentContext as never)
+
+    const events = [VtFlowState.Completed, VtFlowState.CredRevoked].map(state => ({
+      payload: { vtFlowRecordId: 'flow-1', state, previousState: VtFlowState.Validating },
+    }))
+    await Promise.all(events.flatMap(event => listeners.map(listener => listener(event))))
+
+    expect(listeners).toHaveLength(3)
+    expect(logger.error).toHaveBeenCalledTimes(4)
   })
 })
