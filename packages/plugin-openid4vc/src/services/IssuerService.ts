@@ -1,4 +1,4 @@
-import type { OpenId4VcAgent, OpenId4VcPluginOptions } from '../types'
+import type { OpenId4VcAgent, OpenId4VcIssuerSink, OpenId4VcPluginOptions } from '../types'
 import type { Kms } from '@credo-ts/core'
 import type { OnModuleInit } from '@nestjs/common'
 import type {
@@ -23,7 +23,7 @@ import {
 } from '../config'
 import { registerDidJwkResolver } from '../sdk/didJwkResolver'
 import { verifyKeyBoundToDid } from '../trust/keyBinding'
-import { OPENID4VC_OPTIONS } from '../types'
+import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
 import {
@@ -35,7 +35,6 @@ import {
   type SigningCertificateInfo,
   x5cCertificateChain,
 } from './CertificateService'
-import { publishIssuerService } from './issuerHolder'
 
 type IssuerApi = Pick<
   OpenId4VcIssuerApi,
@@ -94,11 +93,12 @@ export class IssuerService implements OnModuleInit {
   public constructor(
     @Inject('VSAGENT') private readonly agent: OpenId4VcAgent,
     @Inject(OPENID4VC_OPTIONS) private readonly options: OpenId4VcPluginOptions,
+    @Inject(OPENID4VC_ISSUER_SINK) private readonly publishIssuerService: OpenId4VcIssuerSink,
   ) {}
 
   public async onModuleInit(): Promise<void> {
     registerDidJwkResolver(this.agent)
-    publishIssuerService(this)
+    this.publishIssuerService(this)
     await this.ensureInitialized()
   }
 

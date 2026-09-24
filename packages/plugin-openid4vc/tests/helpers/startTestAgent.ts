@@ -198,7 +198,7 @@ export async function startTestAgents(input: {
         },
         credentialConfigurations: [input.credentialConfiguration],
       }),
-      createService: (agent, options) => new IssuerService(agent, options),
+      createService: (agent, options) => new IssuerService(agent, options, () => {}),
       logger,
     })
     stops.push(issuer.stop)

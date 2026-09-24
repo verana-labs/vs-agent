@@ -6,7 +6,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
-import { requireIssuerService } from '../src/services/issuerHolder'
 import { IssuerService } from '../src/services/IssuerService'
 
 const { loadSigningCertificate, publishDevelopmentSigningKey, verifyKeyBoundToDid } = vi.hoisted(() => ({
@@ -24,6 +23,8 @@ vi.mock('../src/trust/keyBinding', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/trust/keyBinding')>()),
   verifyKeyBoundToDid,
 }))
+
+const issuerSink = vi.fn()
 
 const AGENT_DID = 'did:web:agent.example'
 const PUBLIC_JWK = {
@@ -160,7 +161,7 @@ async function initializedIssuer(
   const configured = issuerOptions()
   if (overrides.issuer && configured.issuer) Object.assign(configured.issuer, overrides.issuer)
 
-  const service = new IssuerService(issuerAgent(api) as never, configured)
+  const service = new IssuerService(issuerAgent(api) as never, configured, issuerSink)
   await service.ensureInitialized()
   return { service, api }
 }
@@ -177,7 +178,7 @@ describe('IssuerService', () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
     const agent = issuerAgent(api)
-    const service = new IssuerService(agent as never, issuerOptions())
+    const service = new IssuerService(agent as never, issuerOptions(), issuerSink)
 
     await service.onModuleInit()
     await service.onModuleInit()
@@ -185,7 +186,7 @@ describe('IssuerService', () => {
     expect(agent.dids.config.resolvers).toHaveLength(1)
     expect(agent.dids.config.resolvers[0]).toBeInstanceOf(JwkDidResolver)
     expect(loadSigningCertificate).toHaveBeenCalledOnce()
-    expect(requireIssuerService()).toBe(service)
+    expect(issuerSink).toHaveBeenCalledWith(service)
     expect(service.getJwtVcIssuerMetadata()).toEqual({
       issuer: 'https://agent.example',
       jwks: { keys: [PUBLIC_JWK] },
@@ -198,7 +199,7 @@ describe('IssuerService', () => {
     loadSigningCertificate.mockResolvedValue({ ...issuerSigningHandle(), development: true })
     publishDevelopmentSigningKey.mockResolvedValue(`${AGENT_DID}#openid4vc-development-issuer`)
 
-    await new IssuerService(issuerAgent(api) as never, issuerOptions()).ensureInitialized()
+    await new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink).ensureInitialized()
 
     expect(logger.info).toHaveBeenCalledWith(
       `[OpenID4VC] issuer signs with a development certificate, published as ${AGENT_DID}#openid4vc-development-issuer`,
@@ -208,7 +209,7 @@ describe('IssuerService', () => {
   it('initializes the issuer on the first certificate read', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
 
     await expect(service.getCertificateInfo()).resolves.toMatchObject({
       role: 'issuer',
@@ -226,7 +227,7 @@ describe('IssuerService', () => {
     if (!configured.issuer) throw new Error('issuer options missing')
     configured.issuer.keyAttestationCertificates = ['wallet-provider-root']
 
-    await new IssuerService(issuerAgent(withRoot) as never, configured).ensureInitialized()
+    await new IssuerService(issuerAgent(withRoot) as never, configured, issuerSink).ensureInitialized()
 
     const proofTypes =
       withRoot.createIssuer.mock.calls[0][0].credentialConfigurationsSupported.employee.proof_types_supported
@@ -243,7 +244,7 @@ describe('IssuerService', () => {
       new RecordNotFoundError('issuer not found', { recordType: 'OpenId4VcIssuerRecord' }),
     )
 
-    await new IssuerService(issuerAgent(api) as never, issuerOptions()).ensureInitialized()
+    await new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink).ensureInitialized()
 
     expect(
       api.createIssuer.mock.calls[0][0].credentialConfigurationsSupported.employee.proof_types_supported.jwt,
@@ -258,7 +259,7 @@ describe('IssuerService', () => {
     configured.issuer.walletAttestationCertificates = ['wallet-provider-root']
     const { api } = await initializedIssuer()
 
-    await new IssuerService(issuerAgent(withRoot) as never, configured).ensureInitialized()
+    await new IssuerService(issuerAgent(withRoot) as never, configured, issuerSink).ensureInitialized()
 
     expect(withRoot.updateIssuerMetadata).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -278,7 +279,7 @@ describe('IssuerService', () => {
     api.getIssuerByIssuerId.mockRejectedValue(
       new RecordNotFoundError('issuer not found', { recordType: 'OpenId4VcIssuerRecord' }),
     )
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
 
     await service.ensureInitialized()
 
@@ -323,7 +324,7 @@ describe('IssuerService', () => {
     api.getIssuerByIssuerId.mockRejectedValue(
       new RecordNotFoundError('issuer not found', { recordType: 'OpenId4VcIssuerRecord' }),
     )
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
 
     await service.ensureInitialized()
 
@@ -340,7 +341,7 @@ describe('IssuerService', () => {
   it('updates an existing configured issuer and initializes only once under concurrency', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
 
     await Promise.all([service.ensureInitialized(), service.ensureInitialized(), service.ensureInitialized()])
 
@@ -361,7 +362,7 @@ describe('IssuerService', () => {
   it('retries initialization after a failed first attempt', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
     loadSigningCertificate.mockRejectedValueOnce(new Error('storage not ready'))
 
     await expect(service.ensureInitialized()).rejects.toThrow('storage not ready')
@@ -372,7 +373,7 @@ describe('IssuerService', () => {
 
   it('requires an agent DID before loading signing material', async () => {
     const agentWithoutDid = { ...issuerAgent(), did: undefined }
-    const service = new IssuerService(agentWithoutDid as never, issuerOptions())
+    const service = new IssuerService(agentWithoutDid as never, issuerOptions(), issuerSink)
 
     await expect(service.ensureInitialized()).rejects.toThrow('agent DID')
     expect(loadSigningCertificate).not.toHaveBeenCalled()
@@ -383,7 +384,7 @@ describe('IssuerService', () => {
       ...issuerSigningHandle(),
       certificate: { ...leafCertificate, sanUriNames: ['did:example:attacker'] },
     })
-    const service = new IssuerService(issuerAgent() as never, issuerOptions())
+    const service = new IssuerService(issuerAgent() as never, issuerOptions(), issuerSink)
 
     await expect(service.ensureInitialized()).rejects.toThrow('does not match the agent DID')
     expect(verifyKeyBoundToDid).not.toHaveBeenCalled()
@@ -394,7 +395,7 @@ describe('IssuerService', () => {
     ['unbound', 'assertionMethod'],
   ] as const)('fails initialization for %s DID key binding', async (binding, message) => {
     verifyKeyBoundToDid.mockResolvedValue(binding)
-    const service = new IssuerService(issuerAgent() as never, issuerOptions())
+    const service = new IssuerService(issuerAgent() as never, issuerOptions(), issuerSink)
 
     await expect(service.ensureInitialized()).rejects.toThrow(message)
   })
@@ -402,14 +403,14 @@ describe('IssuerService', () => {
   it('does not treat an issuer lookup failure as a missing issuer', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockRejectedValue(new Error('storage unavailable'))
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
 
     await expect(service.ensureInitialized()).rejects.toThrow('storage unavailable')
     expect(api.createIssuer).not.toHaveBeenCalled()
   })
 
   it('fails credential mapping clearly before initialization', async () => {
-    const service = new IssuerService(issuerAgent() as never, issuerOptions())
+    const service = new IssuerService(issuerAgent() as never, issuerOptions(), issuerSink)
 
     await expect(
       service.mapCredentialRequest({ credentialConfigurationId: 'employee' } as never),
@@ -423,7 +424,7 @@ describe('IssuerService', () => {
       credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
       issuanceSession: issuanceSession({ id: 'session-1' }),
     })
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
     loadSigningCertificate.mockRejectedValueOnce(new Error('storage not ready'))
 
     await expect(service.ensureInitialized()).rejects.toThrow('storage not ready')
@@ -451,7 +452,7 @@ describe('IssuerService', () => {
         expiresAt: new Date('2026-07-21T10:05:00.000Z'),
       }),
     })
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
     await service.ensureInitialized()
 
     const result = await service.createOffer({
@@ -483,7 +484,7 @@ describe('IssuerService', () => {
       credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
       issuanceSession: issuanceSession({ id: 'session-id' }),
     })
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
     await service.ensureInitialized()
 
     await service.createOffer({
@@ -507,7 +508,7 @@ describe('IssuerService', () => {
   ])('rejects invalid offer claims %#', async (claims, message) => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
     await service.ensureInitialized()
 
     await expect(
@@ -519,7 +520,7 @@ describe('IssuerService', () => {
   it.each([59, 7_776_001, '3600', undefined])('rejects an offer lifetime of %s', async ttlSeconds => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
     await service.ensureInitialized()
 
     await expect(
@@ -533,7 +534,7 @@ describe('IssuerService', () => {
     vi.setSystemTime(new Date('2026-07-21T12:00:00.000Z'))
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
     await service.ensureInitialized()
 
     const mapped = await service.mapCredentialRequest({
@@ -581,7 +582,7 @@ describe('IssuerService', () => {
     unsafeOptions.credentialConfigurations[0].claims.push('exp')
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
-    const service = new IssuerService(issuerAgent(api) as never, unsafeOptions)
+    const service = new IssuerService(issuerAgent(api) as never, unsafeOptions, issuerSink)
     await service.ensureInitialized()
 
     const mapped = await service.mapCredentialRequest({
@@ -608,7 +609,7 @@ describe('IssuerService', () => {
   it('preserves a verified DID holder binding supplied by Credo', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
     await service.ensureInitialized()
 
     const mapped = await service.mapCredentialRequest({
@@ -637,7 +638,7 @@ describe('IssuerService', () => {
   ])('rejects invalid issuance metadata %#', async (issuanceMetadata, message) => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
     await service.ensureInitialized()
 
     await expect(
@@ -662,7 +663,7 @@ describe('IssuerService', () => {
         credentialOfferPayload: { credential_configuration_ids: ['employee'], grants: { secret: true } },
       }),
     )
-    const service = new IssuerService(issuerAgent(api) as never, issuerOptions())
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
     await service.ensureInitialized()
 
     await expect(service.getIssuanceSession('session-id')).resolves.toEqual({
@@ -789,6 +790,7 @@ describe('IssuerService', () => {
       await new IssuerService(
         issuerAgent(api, AGENT_DID, jwsService(), ecsClaims) as never,
         issuerOptions(),
+        issuerSink,
       ).ensureInitialized()
 
       expect(api.createIssuer).toHaveBeenCalledWith(
@@ -805,6 +807,7 @@ describe('IssuerService', () => {
       await new IssuerService(
         issuerAgent(api, AGENT_DID, jwsService(), { service: {} }) as never,
         issuerOptions(),
+        issuerSink,
       ).ensureInitialized()
 
       expect(api.createIssuer.mock.calls[0][0]).not.toHaveProperty('display')
@@ -817,6 +820,7 @@ describe('IssuerService', () => {
       await new IssuerService(
         issuerAgent(api, AGENT_DID, jwsService(), { service: { name: 'Verana Demo' } }) as never,
         issuerOptions(),
+        issuerSink,
       ).ensureInitialized()
 
       expect(api.createIssuer).toHaveBeenCalledWith(

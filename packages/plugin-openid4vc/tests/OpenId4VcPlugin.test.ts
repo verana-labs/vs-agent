@@ -1,12 +1,12 @@
-import type { OpenId4VcPluginOptions } from '../src/types'
+import type { OpenId4VcIssuerSink, OpenId4VcPluginOptions } from '../src/types'
+import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 
-import { publishIssuerService } from '../src/services/issuerHolder'
 import { IssuerService } from '../src/services/IssuerService'
 import { VerifierService } from '../src/services/VerifierService'
-import { OPENID4VC_OPTIONS } from '../src/types'
+import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../src/types'
 
 import { OpenId4VcPlugin } from '../src/nestjs/OpenId4VcPlugin'
 import { V2Openid4vcCredentialExchangesController } from '../src/nestjs/V2Openid4vcCredentialExchangesController'
@@ -18,6 +18,9 @@ const options = (): OpenId4VcPluginOptions => ({
   credentialConfigurations: [],
 })
 
+const issuerSinkOf = (plugin: VsAgentNestPlugin): OpenId4VcIssuerSink =>
+  plugin.providers?.find(provider => provider.provide === OPENID4VC_ISSUER_SINK).useValue
+
 describe('OpenId4VcPlugin', () => {
   it('registers the three v2 controllers', () => {
     expect(OpenId4VcPlugin(options()).controllers).toEqual([
@@ -27,9 +30,10 @@ describe('OpenId4VcPlugin', () => {
     ])
   })
 
-  it('hands Nest the options and both services from a file that declares no capability', () => {
+  it('hands Nest the options, the issuer sink and both services', () => {
     expect(OpenId4VcPlugin(options()).providers).toEqual([
       { provide: OPENID4VC_OPTIONS, useValue: options() },
+      { provide: OPENID4VC_ISSUER_SINK, useValue: expect.any(Function) },
       IssuerService,
       VerifierService,
     ])
@@ -45,11 +49,12 @@ describe('OpenId4VcPlugin', () => {
   })
 
   it('serves the well-known issuer metadata of the issuer that registered itself', async () => {
-    const middleware = OpenId4VcPlugin(options()).publicMiddleware as never
+    const plugin = OpenId4VcPlugin(options())
+    const middleware = plugin.publicMiddleware as never
 
     expect((await request(middleware).get('/.well-known/jwt-vc-issuer')).status).toBe(500)
 
-    publishIssuerService({ getJwtVcIssuerMetadata: () => ({ issuer: 'https://agent.example' }) } as never)
+    issuerSinkOf(plugin)({ getJwtVcIssuerMetadata: () => ({ issuer: 'https://agent.example' }) } as never)
     const served = await request(middleware).get('/.well-known/jwt-vc-issuer')
 
     expect(served.status).toBe(200)

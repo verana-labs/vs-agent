@@ -1,10 +1,10 @@
-import type { OpenId4VcPluginOptions } from '../types'
+import type { OpenId4VcIssuerSink, OpenId4VcPluginOptions } from '../types'
+import type { OpenId4VcIssuerRequestMapper } from '../sdk/setupOpenId4Vc'
 import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
-import { requireIssuerService } from '../services/issuerHolder'
 import { IssuerService } from '../services/IssuerService'
 import { VerifierService } from '../services/VerifierService'
-import { OPENID4VC_OPTIONS } from '../types'
+import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 
 import { setupOpenId4Vc } from '../sdk/setupOpenId4Vc'
 
@@ -13,7 +13,14 @@ import { V2Openid4vcPresentationsController } from './V2Openid4vcPresentationsCo
 import { V2Openid4vcSigningCertificatesController } from './V2Openid4vcSigningCertificatesController'
 
 export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlugin {
-  const sdkPlugin = setupOpenId4Vc(options, requireIssuerService)
+  let issuerService: OpenId4VcIssuerRequestMapper | undefined
+  const sdkPlugin = setupOpenId4Vc(options, () => {
+    if (!issuerService) throw new Error('OpenID4VC issuer service is not initialized')
+    return issuerService
+  })
+  const publishIssuerService: OpenId4VcIssuerSink = service => {
+    issuerService = service
+  }
 
   return {
     name: 'openid4vc',
@@ -24,6 +31,11 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlu
       V2Openid4vcPresentationsController,
       V2Openid4vcSigningCertificatesController,
     ],
-    providers: [{ provide: OPENID4VC_OPTIONS, useValue: options }, IssuerService, VerifierService],
+    providers: [
+      { provide: OPENID4VC_OPTIONS, useValue: options },
+      { provide: OPENID4VC_ISSUER_SINK, useValue: publishIssuerService },
+      IssuerService,
+      VerifierService,
+    ],
   }
 }

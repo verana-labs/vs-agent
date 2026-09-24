@@ -796,7 +796,7 @@ async function createHarness(
   const initialize = async (): Promise<void> => {
     const lifecycleAgent = agent as unknown as OpenId4VcAgent
     if (options.issuer) {
-      issuerService = new IssuerService(lifecycleAgent, options)
+      issuerService = new IssuerService(lifecycleAgent, options, () => {})
       await issuerService.ensureInitialized()
     }
     if (options.verifier) {

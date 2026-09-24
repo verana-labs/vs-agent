@@ -1,3 +1,4 @@
+import type { OpenId4VcIssuerRequestMapper } from './sdk/setupOpenId4Vc'
 import type { Kms, X509Module } from '@credo-ts/core'
 import type { OpenId4VcModule } from '@credo-ts/openid4vc'
 import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
@@ -41,6 +42,9 @@ export interface OpenId4VcConfigurationFile {
 }
 
 export const OPENID4VC_OPTIONS = 'OPENID4VC_OPTIONS'
+export const OPENID4VC_ISSUER_SINK = 'OPENID4VC_ISSUER_SINK'
+
+export type OpenId4VcIssuerSink = (service: OpenId4VcIssuerRequestMapper) => void
 
 export interface OpenId4VcPluginOptions extends OpenId4VcConfigurationFile {
   publicApiBaseUrl: string
