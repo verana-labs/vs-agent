@@ -107,7 +107,6 @@ export class V2OpenId4VcCredentialExchangesController {
   ): Promise<Page<OpenId4VcCredentialExchangeRecordDto>> {
     const filters = {
       jsonSchemaCredentialId: query.jsonSchemaCredentialId,
-      statusListId: query.statusListId,
       state: query.state,
     }
     const sessions = await this.issuerService.listIssuanceSessions(filters)

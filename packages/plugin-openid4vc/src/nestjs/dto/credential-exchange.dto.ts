@@ -85,12 +85,6 @@ export class OpenId4VcListCredentialExchangesQueryDto extends PaginationQueryDto
   @IsNotEmpty()
   jsonSchemaCredentialId?: string
 
-  @ApiPropertyOptional({ description: 'Filter by the status list the offer named', example: 'list-1' })
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  statusListId?: string
-
   @ApiPropertyOptional({
     enum: OpenId4VcIssuanceSessionState,
     description: 'Filter by issuance session state',
@@ -110,19 +104,6 @@ export class OpenId4VcCredentialExchangeRecordDto {
 
   @ApiProperty({ description: 'Credential type of the offer', example: 'employee' })
   jsonSchemaCredentialId!: string
-
-  @ApiPropertyOptional({
-    description: 'Status list the credential is registered on. Present only when the offer set it.',
-    example: 'list-1',
-  })
-  statusListId?: string
-
-  @ApiPropertyOptional({
-    type: Number,
-    description: 'Index of the credential on that status list. Present only when the offer set it.',
-    example: 42,
-  })
-  statusListIndex?: number
 
   @ApiProperty({ enum: OpenId4VcIssuanceSessionState, description: 'State of the issuance session' })
   state!: OpenId4VcIssuanceSessionState

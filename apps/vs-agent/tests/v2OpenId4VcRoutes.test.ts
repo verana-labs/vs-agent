@@ -68,11 +68,7 @@ function verificationSession(id: string, createdAt: string, overrides: Record<st
 const issuanceSessions = [
   issuanceSession('ce-a', '2026-01-01T00:00:00.000Z'),
   issuanceSession('ce-b', '2026-01-01T00:01:00.000Z', { state: 'Completed' }),
-  issuanceSession('ce-c', '2026-01-01T00:02:00.000Z', {
-    jsonSchemaCredentialId: 'badge',
-    statusListId: 'list-1',
-    statusListIndex: 42,
-  }),
+  issuanceSession('ce-c', '2026-01-01T00:02:00.000Z', { jsonSchemaCredentialId: 'badge' }),
 ]
 
 const verificationSessions = [
@@ -233,20 +229,6 @@ describe('v2 openid4vc routes', () => {
       )
 
       expect(exchangeIds(byType.body)).toEqual(['ce-c'])
-    })
-
-    it('filters by status list and reports the list and the index it matched on', async () => {
-      const byStatusList = await request(app.getHttpServer()).get(
-        '/v2/openid4vc/credential-exchanges?statusListId=list-1',
-      )
-
-      expect(exchangeIds(byStatusList.body)).toEqual(['ce-c'])
-      expect(byStatusList.body.items[0]).toMatchObject({ statusListId: 'list-1', statusListIndex: 42 })
-      expect(issuerService.listIssuanceSessions).toHaveBeenLastCalledWith({
-        jsonSchemaCredentialId: undefined,
-        statusListId: 'list-1',
-        state: undefined,
-      })
     })
 
     it('refuses an unknown state filter', async () => {

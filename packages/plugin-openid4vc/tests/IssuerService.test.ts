@@ -71,8 +71,8 @@ function issuerApi() {
 const issuanceSessionRepository = { findByQuery: vi.fn(), update: vi.fn() }
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
 
-function issuanceSession(overrides: Record<string, unknown> = {}, extraTags: Record<string, unknown> = {}) {
-  const tags: Record<string, unknown> = { jsonSchemaCredentialId: 'employee', ...extraTags }
+function issuanceSession(overrides: Record<string, unknown> = {}) {
+  const tags: Record<string, unknown> = { jsonSchemaCredentialId: 'employee' }
   return {
     id: 'session-1',
     issuerId: 'issuer',
@@ -690,28 +690,6 @@ describe('IssuerService', () => {
       })
     })
 
-    it('reports the status list and the numeric index a session is tagged with', async () => {
-      const { service, api } = await initializedIssuer()
-      api.getIssuanceSessionById.mockResolvedValue(
-        issuanceSession({}, { statusListId: 'list-1', statusListIndex: '42' }),
-      )
-      issuanceSessionRepository.findByQuery.mockResolvedValue([
-        issuanceSession({}, { statusListId: 'list-1', statusListIndex: '42' }),
-      ])
-
-      await expect(service.getIssuanceSession('session-1')).resolves.toMatchObject({
-        statusListId: 'list-1',
-        statusListIndex: 42,
-      })
-      await expect(service.listIssuanceSessions({ statusListId: 'list-1' })).resolves.toEqual([
-        expect.objectContaining({ statusListId: 'list-1', statusListIndex: 42 }),
-      ])
-      expect(issuanceSessionRepository.findByQuery).toHaveBeenLastCalledWith(expect.anything(), {
-        issuerId: 'issuer',
-        statusListId: 'list-1',
-      })
-    })
-
     it('reports an unknown or foreign session as unknown', async () => {
       const { service, api } = await initializedIssuer()
       api.getIssuanceSessionById.mockRejectedValueOnce(
@@ -746,14 +724,12 @@ describe('IssuerService', () => {
 
       await service.listIssuanceSessions({
         jsonSchemaCredentialId: 'badge',
-        statusListId: 'list-1',
         state: OpenId4VcIssuanceSessionState.Completed,
       })
 
       expect(issuanceSessionRepository.findByQuery).toHaveBeenLastCalledWith(expect.anything(), {
         issuerId: 'issuer',
         jsonSchemaCredentialId: 'badge',
-        statusListId: 'list-1',
         state: 'Completed',
       })
     })
