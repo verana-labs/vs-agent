@@ -35,11 +35,10 @@ export type VtFlowErrorFlowState =
   | 'unchanged-when-you'
   | 'error-when-fatal'
 
-/** Per-code metadata mirroring the spec's Error Codes table; `retryable` is false when impact is `connection` or `whoRetries` is `none`. */
+/** Per-code metadata mirroring the spec's Error Codes table. */
 export interface VtFlowErrorInfo {
   whoRetries: WhoRetries
   impact: ErrorImpact
-  retryable: boolean
   flowState: VtFlowErrorFlowState
 }
 
@@ -47,103 +46,86 @@ export const VT_FLOW_ERROR_INFO: Readonly<Record<VtFlowErrorCode, VtFlowErrorInf
   [VtFlowErrorCode.OrRequired]: {
     whoRetries: 'you',
     impact: 'thread',
-    retryable: true,
     flowState: 'unchanged',
   },
   [VtFlowErrorCode.IrRequired]: {
     whoRetries: 'you',
     impact: 'thread',
-    retryable: true,
     flowState: 'unchanged',
   },
   [VtFlowErrorCode.UnsupportedMessage]: {
     whoRetries: 'none',
     impact: 'connection',
-    retryable: false,
     flowState: VtFlowState.Error,
   },
   [VtFlowErrorCode.InvalidParticipantId]: {
     whoRetries: 'you',
     impact: 'thread',
-    retryable: true,
     flowState: 'unchanged',
   },
   [VtFlowErrorCode.InvalidSchemaId]: {
     whoRetries: 'you',
     impact: 'thread',
-    retryable: true,
     flowState: 'unchanged',
   },
   [VtFlowErrorCode.InvalidAgentParticipantId]: {
     whoRetries: 'you',
     impact: 'thread',
-    retryable: true,
     flowState: 'unchanged',
   },
   [VtFlowErrorCode.InvalidWalletAgentParticipantId]: {
     whoRetries: 'you',
     impact: 'thread',
-    retryable: true,
     flowState: 'unchanged',
   },
   [VtFlowErrorCode.InvalidClaims]: {
     whoRetries: 'you',
     impact: 'thread',
-    retryable: true,
     flowState: 'unchanged',
   },
   [VtFlowErrorCode.InvalidParticipantSessionId]: {
     whoRetries: 'you',
     impact: 'thread',
-    retryable: true,
     flowState: 'unchanged',
   },
   [VtFlowErrorCode.NotAVerifiableService]: {
     whoRetries: 'none',
     impact: 'connection',
-    retryable: false,
     flowState: VtFlowState.Error,
   },
   [VtFlowErrorCode.ValidationFailed]: {
     whoRetries: 'you',
     impact: 'thread',
-    retryable: true,
     flowState: 'unchanged-when-you',
   },
   [VtFlowErrorCode.ValidationRefused]: {
     whoRetries: 'none',
     impact: 'connection',
-    retryable: false,
     flowState: VtFlowState.TerminatedByValidator,
   },
   [VtFlowErrorCode.OobExpired]: {
     whoRetries: 'none',
     impact: 'connection',
-    retryable: false,
     flowState: VtFlowState.TerminatedByValidator,
   },
   [VtFlowErrorCode.SessionTerminated]: {
     whoRetries: 'none',
     impact: 'connection',
-    retryable: false,
     flowState: 'terminated-by-sender',
   },
   [VtFlowErrorCode.ParticipantRevoked]: {
     whoRetries: 'none',
     impact: 'connection',
-    retryable: false,
     flowState: VtFlowState.ParticipantRevoked,
   },
   [VtFlowErrorCode.ParticipantSlashed]: {
     whoRetries: 'none',
     impact: 'connection',
-    retryable: false,
     flowState: VtFlowState.ParticipantSlashed,
   },
   [VtFlowErrorCode.InternalError]: {
     whoRetries: 'none',
     impact: 'thread',
-    retryable: false,
     flowState: 'error-when-fatal',
   },
 }
