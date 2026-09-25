@@ -1,6 +1,12 @@
 import { CredoError } from '@credo-ts/core'
 import { ConflictException } from '@nestjs/common'
-import { VtCredentialState, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  VtFlowErrorCode,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowVariant,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { HOLDER_PARTICIPANT_TYPE } from '@verana-labs/vs-agent-sdk'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AdminApiError, AdminApiErrorCode } from '../src/common'
@@ -13,6 +19,9 @@ function flowRecord(id: string, createdAtMs: number, state: VtFlowState = VtFlow
     participantSessionId: `sess-${id}`,
     connectionId: 'conn-1',
     role: VtFlowRole.Validator,
+    variant: VtFlowVariant.OnboardingProcess,
+    applicantParticipantId: '42',
+    applicantParticipantRole: HOLDER_PARTICIPANT_TYPE,
     state,
     createdAt: new Date(createdAtMs),
     assertState(expected: VtFlowState | VtFlowState[]) {
@@ -25,9 +34,8 @@ function flowRecord(id: string, createdAtMs: number, state: VtFlowState = VtFlow
 function makeService(
   vtFlowApi: Record<string, unknown>,
   options: {
-    credential?: unknown
-    credentialTypesService?: Record<string, unknown>
     connection?: { isReady: boolean; theirDid?: string; previousTheirDids: string[] } | null
+    applicantOpState?: string
   } = {},
 ) {
   const connection =
@@ -36,15 +44,12 @@ function makeService(
       : options.connection
   const agent = {
     dependencyManager: { resolve: () => vtFlowApi },
-    didcomm: {
-      connections: { findById: vi.fn().mockResolvedValue(connection) },
-      credentials: { findById: vi.fn().mockResolvedValue(options.credential ?? null) },
+    didcomm: { connections: { findById: vi.fn().mockResolvedValue(connection) } },
+    indexer: {
+      getParticipant: vi.fn().mockResolvedValue({ op_state: options.applicantOpState ?? 'PENDING' }),
     },
   }
-  return new VtFlowsService(
-    { getAgent: async () => agent } as never,
-    (options.credentialTypesService ?? {}) as never,
-  )
+  return new VtFlowsService({ getAgent: async () => agent } as never)
 }
 
 describe('VtFlowsService v2 routes', () => {
@@ -173,7 +178,7 @@ describe('VtFlowsService v2 routes', () => {
     const findById = vi.fn().mockResolvedValue(null)
     const vtFlowApi = { findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]), findById }
     const agent = { veranaChain: {}, dependencyManager: { resolve: () => vtFlowApi } }
-    const service = new VtFlowsService({ getAgent: async () => agent } as never, {} as never)
+    const service = new VtFlowsService({ getAgent: async () => agent } as never)
 
     await expect(service.validateFlow('sess-a', { vtFlowRecordId: 'b' } as never)).rejects.toMatchObject({
       code: AdminApiErrorCode.UnknownId,
@@ -181,50 +186,128 @@ describe('VtFlowsService v2 routes', () => {
     expect(findById).toHaveBeenCalledWith('a')
   })
 
-  it('revokes an AnonCreds credential through its registry before notifying the applicant', async () => {
-    const completed = flowRecord('a', 1000, VtFlowState.Completed)
-    ;(completed as Record<string, unknown>).credentialExchangeRecordId = 'cred-ex-1'
-    const tags: Record<string, unknown> = {
-      anonCredsRevocationRegistryId: 'rev-reg-1',
-      anonCredsCredentialRevocationId: '7',
-    }
-    const notifyCredentialStateChange = vi.fn().mockResolvedValue(completed)
-    const revokeCredential = vi.fn().mockResolvedValue(undefined)
-    const service = makeService(
-      { findAllByQuery: vi.fn().mockResolvedValue([completed]), notifyCredentialStateChange },
-      {
-        credential: { getTag: (name: string) => tags[name] },
-        credentialTypesService: { revokeCredential },
-      },
-    )
+  it('sends the oob-link description and expiry to the applicant', async () => {
+    const sendOobLink = vi.fn().mockResolvedValue(flowRecord('a', 1000, VtFlowState.OobPending))
+    const service = makeService({
+      findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]),
+      sendOobLink,
+    })
 
-    await service.revokeFlowCredential('sess-a', 'fraud')
+    await service.sendOobLink('sess-a', 'https://collect.example/form', 'Upload', '2026-10-01T00:00:00Z')
 
-    expect(revokeCredential).toHaveBeenCalledWith(expect.anything(), 'rev-reg-1', 7)
-    expect(notifyCredentialStateChange).toHaveBeenCalledWith({
+    expect(sendOobLink).toHaveBeenCalledWith({
       vtFlowRecordId: 'a',
-      state: VtCredentialState.Revoked,
-      reason: 'fraud',
+      url: 'https://collect.example/form',
+      description: 'Upload',
+      expiresTime: new Date('2026-10-01T00:00:00Z'),
     })
   })
 
-  it('rejects revocation of a credential without registry coordinates as UNSUPPORTED_FORMAT', async () => {
-    const completed = flowRecord('a', 1000, VtFlowState.Completed)
-    ;(completed as Record<string, unknown>).credentialExchangeRecordId = 'cred-ex-1'
-    const service = makeService(
-      { findAllByQuery: vi.fn().mockResolvedValue([completed]) },
-      { credential: { getTag: () => undefined } },
-    )
+  it('starts validation with the comment, and refuses it with 409 on a connection that is not ESTABLISHED', async () => {
+    const sendValidating = vi.fn().mockResolvedValue(flowRecord('a', 1000))
+    const records = vi.fn().mockResolvedValue([flowRecord('a', 1000, VtFlowState.OobPending)])
 
-    const rejection = expect(service.revokeFlowCredential('sess-a')).rejects
-    await rejection.toBeInstanceOf(AdminApiError)
-    await rejection.toMatchObject({ code: 'UNSUPPORTED_FORMAT', status: 400 })
+    const flow = await makeService({ findAllByQuery: records, sendValidating }).startValidation(
+      'sess-a',
+      'Thanks',
+    )
+    expect(sendValidating).toHaveBeenCalledWith('a', { comment: 'Thanks' })
+    expect(flow.state).toBe(VtFlowState.Validating)
+
+    sendValidating.mockClear()
+    const notConnected = makeService(
+      { findAllByQuery: records, sendValidating },
+      { connection: { isReady: false, previousTheirDids: [] } },
+    )
+    await expect(notConnected.startValidation('sess-a')).rejects.toThrow(ConflictException)
+    expect(sendValidating).not.toHaveBeenCalled()
   })
 
-  it('refuses revocation with 409 when the flow has no issued credential', async () => {
-    const validating = flowRecord('a', 1000, VtFlowState.Validating)
-    const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([validating]) })
+  it('edits the claims only in the accepted states, per [VSA-ADM-VT-FL-EDIT]', async () => {
+    const updateClaims = vi.fn(async (id: string) => flowRecord(id, 1000))
+    const awaitingOr = makeService({
+      findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000, VtFlowState.AwaitingOr)]),
+      updateClaims,
+    })
+    await expect(awaitingOr.editCredentialClaims('sess-a', { name: 'Acme' })).rejects.toThrow(
+      ConflictException,
+    )
+    expect(updateClaims).not.toHaveBeenCalled()
 
-    await expect(service.revokeFlowCredential('sess-a')).rejects.toThrow(ConflictException)
+    const awaitingTx = makeService({
+      findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000, VtFlowState.AwaitingValidationTx)]),
+      updateClaims,
+    })
+    await awaitingTx.editCredentialClaims('sess-a', { name: 'Acme' })
+    expect(updateClaims).toHaveBeenCalledWith('a', { name: 'Acme' })
+  })
+
+  it('refuses a claim edit with NO_CREDENTIAL_FOR_ROLE when the applicant role is not HOLDER', async () => {
+    const issuer = { ...flowRecord('a', 1000), applicantParticipantRole: 3 }
+    const updateClaims = vi.fn()
+    const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([issuer]), updateClaims })
+
+    await expect(service.editCredentialClaims('sess-a', {})).rejects.toMatchObject({
+      code: AdminApiErrorCode.NoCredentialForRole,
+      status: 409,
+    })
+    expect(updateClaims).not.toHaveBeenCalled()
+  })
+
+  it('rejects a flow with a problem-report, vt-flow.validation-refused by default', async () => {
+    const terminateSessionAsValidator = vi
+      .fn()
+      .mockResolvedValue(flowRecord('a', 1000, VtFlowState.TerminatedByValidator))
+    const service = makeService({
+      findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]),
+      terminateSessionAsValidator,
+    })
+
+    const flow = await service.rejectFlow('sess-a', { description: 'Documents do not match' })
+
+    expect(terminateSessionAsValidator).toHaveBeenCalledWith({
+      vtFlowRecordId: 'a',
+      code: VtFlowErrorCode.ValidationRefused,
+      enDescription: 'Documents do not match',
+    })
+    expect(flow).toMatchObject({ state: VtFlowState.TerminatedByValidator, connectionState: 'TERMINATED' })
+  })
+
+  it('refuses a reject in VALIDATION_TX_SUBMITTED, from VALIDATED on, and outside the Direct Issuance states', async () => {
+    const terminateSessionAsValidator = vi.fn()
+    const rejectIn = (record: ReturnType<typeof flowRecord>) =>
+      makeService({
+        findAllByQuery: vi.fn().mockResolvedValue([record]),
+        terminateSessionAsValidator,
+      }).rejectFlow('sess-a', { description: 'no' })
+
+    for (const state of [VtFlowState.ValidationTxSubmitted, VtFlowState.Validated, VtFlowState.CredOffered]) {
+      await expect(rejectIn(flowRecord('a', 1000, state))).rejects.toThrow(ConflictException)
+    }
+    const directIssuance = {
+      ...flowRecord('a', 1000, VtFlowState.AwaitingValidationTx),
+      variant: VtFlowVariant.DirectIssuance,
+    }
+    await expect(rejectIn(directIssuance)).rejects.toThrow(ConflictException)
+    expect(terminateSessionAsValidator).not.toHaveBeenCalled()
+  })
+
+  it('moves the flow to VALIDATED and refuses the reject when the applicant entry is already VALIDATED', async () => {
+    const record = flowRecord('a', 1000, VtFlowState.ValidationTxFailed)
+    const markValidated = vi.fn().mockResolvedValue(record)
+    const terminateSessionAsValidator = vi.fn()
+    const service = makeService(
+      {
+        findAllByQuery: vi.fn().mockResolvedValue([record]),
+        findById: vi.fn().mockResolvedValue(record),
+        markValidated,
+        terminateSessionAsValidator,
+      },
+      { applicantOpState: 'VALIDATED' },
+    )
+
+    await expect(service.rejectFlow('sess-a', { description: 'no' })).rejects.toThrow(ConflictException)
+    expect(markValidated).toHaveBeenCalledWith('a')
+    expect(terminateSessionAsValidator).not.toHaveBeenCalled()
   })
 })

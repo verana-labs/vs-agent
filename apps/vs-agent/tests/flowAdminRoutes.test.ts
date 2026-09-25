@@ -28,7 +28,7 @@ function makeService(
     dependencyManager: { resolve: () => vtFlowApi },
     didcomm: { connections: { findById: vi.fn().mockResolvedValue(connection) } },
   }
-  return new VtFlowsService({ getAgent: async () => agent } as never, undefined as never)
+  return new VtFlowsService({ getAgent: async () => agent } as never)
 }
 
 describe('VtFlowsService pendingAction', () => {

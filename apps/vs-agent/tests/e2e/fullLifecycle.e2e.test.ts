@@ -358,10 +358,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       await validatorAwaitingOr
 
       const { VtFlowsService } = await import('../../src/controllers/admin/vt-flow/VtFlowsService')
-      const flowsService = new VtFlowsService(
-        { getAgent: async () => validator } as never,
-        undefined as never,
-      )
+      const flowsService = new VtFlowsService({ getAgent: async () => validator } as never)
 
       const applicantCompleted = waitForEvent(
         applicantEvents,

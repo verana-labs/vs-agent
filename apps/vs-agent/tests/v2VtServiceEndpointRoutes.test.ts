@@ -3,6 +3,8 @@ import type { INestApplication } from '@nestjs/common'
 import { ConflictException, NotFoundException, ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
+import { plainToInstance } from 'class-transformer'
+import { validate } from 'class-validator'
 import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -17,6 +19,7 @@ import { V2VtServiceEndpointsController } from '../src/controllers/admin/v2/vt/V
 import { V1TrustController } from '../src/controllers/admin/verifiable/V1TrustController'
 import { TrustService } from '../src/controllers/admin/verifiable/TrustService'
 import { VtFlowsService } from '../src/controllers/admin/vt-flow/VtFlowsService'
+import { RejectFlowDto, SendOobLinkV2Dto } from '../src/controllers/admin/vt-flow/dto/flow-requests.dto'
 
 const entries = [
   { id: 'did:web:agent.test#a2a', type: 'A2A', serviceEndpoint: 'https://a2a.agent.test' },
@@ -37,7 +40,8 @@ const vtFlowsService = {
   validateFlow: vi.fn(),
   editCredentialClaims: vi.fn(),
   sendOobLink: vi.fn(),
-  revokeFlowCredential: vi.fn(),
+  startValidation: vi.fn(),
+  rejectFlow: vi.fn(),
 }
 
 const trustService = {
@@ -157,6 +161,79 @@ describe('v2 vt routes', () => {
       .send({ url: 'https://x' })
     expect(conflict.status).toBe(409)
     expect(conflict.body.error.code).toBe('INVALID_STATE')
+  })
+
+  it('passes the oob-link fields of [VSA-ADM-VT-FL-SEND] to the service', async () => {
+    vtFlowsService.sendOobLink.mockResolvedValue({ id: 'a', state: 'OOB_PENDING' })
+
+    const sent = await request(app.getHttpServer())
+      .post('/v2/vt/flows/sess-1/oob-link')
+      .send({ url: 'https://collect.example/form', description: 'Upload', expiresAt: '2026-10-01T00:00:00Z' })
+
+    expect(sent.status).toBe(200)
+    expect(vtFlowsService.sendOobLink).toHaveBeenCalledWith(
+      'sess-1',
+      'https://collect.example/form',
+      'Upload',
+      '2026-10-01T00:00:00Z',
+    )
+  })
+
+  // The vitest transform writes no `design:paramtypes`, so the ValidationPipe skips the body here.
+  it('needs an absolute https url and a description in the oob-link body', async () => {
+    const refused = async (body: object) =>
+      (await validate(plainToInstance(SendOobLinkV2Dto, body))).map(error => error.property)
+
+    expect(await refused({ url: 'https://collect.example/form', description: 'Upload' })).toEqual([])
+    expect(await refused({ url: 'http://collect.example/form', description: 'Upload' })).toEqual(['url'])
+    expect(await refused({ url: 'collect.example/form', description: 'Upload' })).toEqual(['url'])
+    expect(await refused({ url: 'https://collect.example/form' })).toEqual(['description'])
+  })
+
+  it('serves start-validation with its comment', async () => {
+    vtFlowsService.startValidation.mockResolvedValue({ id: 'a', state: 'VALIDATING' })
+
+    const response = await request(app.getHttpServer())
+      .post('/v2/vt/flows/sess-1/start-validation')
+      .send({ comment: 'Thanks' })
+
+    expect(response.status).toBe(200)
+    expect(response.body.flowState).toBe('VALIDATING')
+    expect(vtFlowsService.startValidation).toHaveBeenCalledWith('sess-1', 'Thanks')
+  })
+
+  it('serves reject with its body', async () => {
+    vtFlowsService.rejectFlow.mockResolvedValue({ id: 'a', state: 'TERMINATED_BY_VALIDATOR' })
+
+    const rejected = await request(app.getHttpServer())
+      .post('/v2/vt/flows/sess-1/reject')
+      .send({ code: 'vt-flow.oob-expired', description: 'The link expired' })
+
+    expect(rejected.status).toBe(200)
+    expect(rejected.body.flowState).toBe('TERMINATED_BY_VALIDATOR')
+    expect(vtFlowsService.rejectFlow).toHaveBeenCalledWith('sess-1', {
+      code: 'vt-flow.oob-expired',
+      description: 'The link expired',
+    })
+  })
+
+  it('takes only the reject codes that end the flow as TERMINATED_BY_VALIDATOR, per [VSA-ADM-VT-FL-REJECT-3]', async () => {
+    const refused = async (body: object) =>
+      (await validate(plainToInstance(RejectFlowDto, body))).map(error => error.property)
+
+    for (const code of ['vt-flow.validation-refused', 'vt-flow.session-terminated', 'vt-flow.oob-expired']) {
+      expect(await refused({ code, description: 'no' })).toEqual([])
+    }
+    expect(await refused({ description: 'no' })).toEqual([])
+    expect(await refused({ code: 'vt-flow.invalid-claims', description: 'no' })).toEqual(['code'])
+    expect(await refused({ code: 'vt-flow.internal-error', description: 'no' })).toEqual(['code'])
+    expect(await refused({ code: 'vt-flow.oob-expired' })).toEqual(['description'])
+  })
+
+  it('no longer serves revoke-credential on a flow', async () => {
+    const response = await request(app.getHttpServer()).post('/v2/vt/flows/sess-1/revoke-credential').send({})
+
+    expect(response.status).toBe(404)
   })
 
   it('serves one flow on the get-by-id route and envelopes an unknown session as UNKNOWN_ID', async () => {
