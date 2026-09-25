@@ -892,6 +892,36 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(current()).toMatchObject({ state: 'VALIDATED', validation: { tx: { status: 'SUBMITTED' } } })
   })
 
+  it('leaves a flow whose role receives no credential in VALIDATED', async () => {
+    const { agent, vtFlowApi } = makeValidateAgent({ state: 'VALIDATED' })
+
+    const record = await new VtFlowOrchestrator(agent as never).continueAfterValidated('rec-v')
+
+    expect(record.state).toBe('VALIDATED')
+    expect(vtFlowApi.markCompleted).not.toHaveBeenCalled()
+  })
+
+  it('holds a HOLDER flow whose claims fail the schema in VALIDATED_PENDING_CLAIMS and names each claim', async () => {
+    const { agent, vtFlowApi } = makeValidateAgent({ state: 'VALIDATED', claims: { name: 7 } })
+    agent.indexer.findParticipant.mockResolvedValue({
+      id: 94,
+      role: 6,
+      schemaId: 22,
+      did: 'did:web:applicant',
+    } as never)
+    const markPendingClaims = vi.fn(async () => ({ state: 'VALIDATED_PENDING_CLAIMS' }))
+    Object.assign(vtFlowApi, { markPendingClaims })
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+    const offer = vi.fn()
+    ;(orchestrator as unknown as { offerOnboardingCredential: unknown }).offerOnboardingCredential = offer
+
+    await orchestrator.continueAfterValidated('rec-v')
+
+    expect(markPendingClaims).toHaveBeenCalledWith('rec-v')
+    expect(offer).not.toHaveBeenCalled()
+    expect(agent.config.logger.error).toHaveBeenCalledWith(expect.stringContaining('/name must be string'))
+  })
+
   it('repeats the anchoring of a credential only while its issuance transaction is FAILED', async () => {
     const { agent, vtFlowApi, current } = makeValidateAgent({ state: 'CRED_OFFERED' })
     const issueCredentialForSession = vi.fn(async () => ({ record: current() }))

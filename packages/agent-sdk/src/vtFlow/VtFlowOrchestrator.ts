@@ -771,7 +771,20 @@ export class VtFlowOrchestrator {
 
     const participant = await this.agent.indexer.findParticipant(Number(record.applicantParticipantId))
     if (!participant) throw new Error(`Applicant participant ${record.applicantParticipantId} not found`)
-    if (Number(participant.role) !== HOLDER_PARTICIPANT_TYPE) return this.completeOnboardingProcess(recordId)
+    if (Number(participant.role) !== HOLDER_PARTICIPANT_TYPE) return record
+
+    const schema = await this.agent.indexer.getCredentialSchema(participant.schemaId)
+    const violations = schemaViolations(JSON.parse(schema.json_schema), {
+      id: participant.did,
+      ...(record.claims ?? {}),
+    })
+    if (violations.length > 0) {
+      this.agent.config.logger.error(
+        `[vt-flow] not offering the credential of flow ${recordId}: its claims do not satisfy the ` +
+          `json_schema of schema ${participant.schemaId}: ${violations.map(v => `${v.path} ${v.message}`.trim()).join(', ')}`,
+      )
+      return record.state === VtFlowState.Validated ? vtFlowApi.markPendingClaims(recordId) : record
+    }
     return this.offerOnboardingCredential({ vtFlowRecordId: recordId, participant })
   }
 

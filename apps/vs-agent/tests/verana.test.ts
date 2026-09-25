@@ -137,6 +137,7 @@ describe('verana: indexer notifications', () => {
 
   it('emits an indexer-notification and runs the default handler for the activity', async () => {
     const record = await driveValidatorToValidating()
+    vi.spyOn(validator.indexer, 'getParticipant').mockResolvedValue({ validation_fees: 0 } as never)
     const service = new IndexerWebSocketService({ indexerUrl: 'http://localhost:1', agent: validator })
     const notified = waitForEvent(validatorEvents, isIndexerNotificationEvent(MSG))
     const validated = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validated))

@@ -7,8 +7,11 @@ import {
   VtFlowRole,
   VtFlowService,
   VtFlowState,
+  VtFlowSubmission,
+  VtFlowTxStatus,
   VtFlowValidatedFromStates,
   isVtFlowTerminalState,
+  type VtFlowValidation,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
@@ -206,16 +209,48 @@ export async function reconcileVtFlowRecordsForParticipant(
   }
 }
 
-export async function markVtFlowRecordsValidated(agent: VsAgent, participantId: string): Promise<void> {
+/** [VSA-VTI-FLOW-OP-ISSUE]: the validator side of the `SetParticipantOPtoValidated` notification. */
+export async function markVtFlowRecordsValidated(
+  agent: VsAgent,
+  participantId: string,
+  tx: { hash: string; height: number; timestamp: string },
+): Promise<void> {
   await reconcileVtFlowRecordsForParticipant(
     agent,
     participantId,
     async (record, service, agentContext) => {
-      if (record.role !== VtFlowRole.Validator || !VtFlowValidatedFromStates.has(record.state)) {
+      // rejectFlow ended the flow after validateFlow recorded a decision, so with the transaction in flight
+      const rejectedInFlight = record.state === VtFlowState.TerminatedByValidator && !!record.validation
+      if (
+        record.role !== VtFlowRole.Validator ||
+        !(VtFlowValidatedFromStates.has(record.state) || rejectedInFlight)
+      ) {
         return null
       }
-      await service.markValidated(agentContext, record.id)
-      if (record.validation) await new VtFlowOrchestrator(agent).continueAfterValidated(record.id)
+      const entry = await agent.indexer.getParticipant(participantId)
+      const agentTx = record.validation?.tx?.hash === tx.hash ? record.validation.tx : undefined
+      const validation: VtFlowValidation = {
+        ...record.validation,
+        decidedAt: record.validation?.decidedAt ?? tx.timestamp,
+        submission: agentTx ? VtFlowSubmission.Agent : VtFlowSubmission.Operator,
+        validationFees: entry.validation_fees,
+        issuanceFees: entry.issuance_fees,
+        verificationFees: entry.verification_fees,
+        issuanceFeeDiscount: entry.issuance_fee_discount,
+        verificationFeeDiscount: entry.verification_fee_discount,
+        effectiveUntil: entry.effective_until ?? undefined,
+        ...(agentTx && {
+          tx: {
+            hash: agentTx.hash,
+            submittedAt: agentTx.submittedAt,
+            height: tx.height,
+            status: VtFlowTxStatus.Succeeded,
+          },
+        }),
+      }
+      await service.recordValidation(agentContext, record.id, validation, VtFlowState.Validated)
+      // the connection stays TERMINATED, so issuance waits for the applicant to reconnect
+      if (!rejectedInFlight) await new VtFlowOrchestrator(agent).continueAfterValidated(record.id)
       return 'VALIDATED'
     },
     'Failed to markValidated',
@@ -223,12 +258,8 @@ export async function markVtFlowRecordsValidated(agent: VsAgent, participantId: 
 }
 
 /**
- * Close the onboarding records of a participant that receives no credential.
- *
- * Only a HOLDER takes part in a credential exchange, and the exchange is what moves a record to
- * COMPLETED. An ISSUER, a VERIFIER or a grantor is finished the moment the chain records
- * SetParticipantOPToValidated, so without this both sides would sit at OR_SENT and VALIDATED for
- * ever. The applicant reaches its own record here, because it watches the same chain event.
+ * The applicant side of an onboarding process that issues no credential: its flow reaches VALIDATED,
+ * the terminal state for a role other than HOLDER ([VSA-VTI-FLOW-OP-ISSUE-2]).
  */
 export async function completeVtFlowRecordsWithoutCredential(
   agent: VsAgent,
@@ -241,11 +272,12 @@ export async function completeVtFlowRecordsWithoutCredential(
     agent,
     participantId,
     async (record, service, agentContext) => {
-      if (record.state === VtFlowState.Completed || isVtFlowTerminalState(record.state)) return null
-      await service.markCompleted(agentContext, record.id)
-      return 'COMPLETED'
+      const running = [VtFlowState.OrSent, VtFlowState.Validating, VtFlowState.OobPending]
+      if (record.role !== VtFlowRole.Applicant || !running.includes(record.state)) return null
+      await service.updateState(agentContext, record, VtFlowState.Validated)
+      return 'VALIDATED'
     },
-    'Failed to mark COMPLETED',
+    'Failed to mark VALIDATED',
   )
 }
 
