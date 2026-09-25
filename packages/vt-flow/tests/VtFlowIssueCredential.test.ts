@@ -1,7 +1,20 @@
-import { DidCommCredentialState } from '@credo-ts/didcomm'
+import { EventEmitter } from '@credo-ts/core'
+import {
+  DidCommAutoAcceptCredential,
+  DidCommCredentialEventTypes,
+  type DidCommCredentialExchangeRecord,
+  DidCommCredentialState,
+  DidCommCredentialV2Protocol,
+  DidCommCredentialsApi,
+  DidCommCredentialsModuleConfig,
+  DidCommDataIntegrityCredentialFormatService,
+  DidCommMessageRepository,
+  DidCommRequestCredentialV2Message,
+} from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
 import { VtFlowApi } from '../src/VtFlowApi'
+import { VtFlowModule } from '../src/VtFlowModule'
 import { VtFlowModuleConfig, type VtFlowModuleConfigOptions } from '../src/VtFlowModuleConfig'
 import { VtFlowErrorCode } from '../src/errors'
 import { VtFlowRecord } from '../src/repository'
@@ -197,8 +210,112 @@ describe('acceptCredentialOffer', () => {
     expect(credentialsApi.acceptOffer).toHaveBeenCalledWith({
       credentialExchangeRecordId: 'cx-1',
       credentialFormats: { dataIntegrity: { dataModelVersion: '2.0' } },
+      autoAcceptCredential: DidCommAutoAcceptCredential.Never,
     })
     expect(credentialsApi.declineOffer).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['verifies it', async () => true, 1],
+    ['refuses it', async () => false, 0],
+    ['throws', async () => Promise.reject(new Error('digest not anchored')), 0],
+  ])('leaves the credential unaccepted until the verifyCredential hook %s', async (_, verdict, accepts) => {
+    let release!: () => void
+    const released = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const exchange = { id: 'cx-1', parentThreadId: 'flow-thid' } as DidCommCredentialExchangeRecord
+    const record = {
+      id: 'flow-1',
+      role: VtFlowRole.Applicant,
+      credentialExchangeRecordId: 'cx-1',
+      assertRole: () => undefined,
+    }
+    const config = new VtFlowModuleConfig({ verifyCredential: () => released.then(verdict) })
+    const service = new VtFlowService(
+      { getById: async () => record, findByThreadId: async () => record } as never,
+      {} as never,
+      { debug: vi.fn(), error: vi.fn() } as never,
+      config,
+    )
+    const credentialsApi = {
+      findOfferMessage: async () =>
+        offerOf([DI_OFFER], { data_model_versions_supported: ['2.0'], binding_required: false }),
+      acceptOffer: vi.fn(async (options: { autoAcceptCredential?: DidCommAutoAcceptCredential }) => {
+        exchange.autoAcceptCredential = options.autoAcceptCredential
+      }),
+      acceptCredential: vi.fn(async () => undefined),
+    }
+    const message = (format: string) => ({
+      formats: [{ format, attachmentId: format }],
+      requestAttachments: [{ id: format }],
+      credentialAttachments: [{ id: format }],
+    })
+    const listeners: Array<(event: unknown) => Promise<void>> = []
+    const dependencies = new Map<unknown, unknown>([
+      [VtFlowService, service],
+      [DidCommCredentialsApi, credentialsApi],
+      [
+        EventEmitter,
+        {
+          on: (type: string, listener: (event: unknown) => Promise<void>) => {
+            if (type === DidCommCredentialEventTypes.DidCommCredentialStateChanged) listeners.push(listener)
+          },
+        },
+      ],
+      [
+        DidCommCredentialsModuleConfig,
+        new DidCommCredentialsModuleConfig({
+          autoAcceptCredentials: DidCommAutoAcceptCredential.ContentApproved,
+          credentialProtocols: [],
+        }),
+      ],
+      [
+        DidCommMessageRepository,
+        {
+          findAgentMessage: async (_: unknown, { messageClass }: { messageClass: unknown }) =>
+            messageClass === DidCommRequestCredentialV2Message
+              ? message('didcomm/w3c-di-vc-request@v0.1')
+              : null,
+        },
+      ],
+    ])
+    const agentContext = {
+      dependencyManager: {
+        resolve: (token: unknown) =>
+          dependencies.get(token) ?? { registerMessageHandlers: vi.fn(), register: vi.fn() },
+      },
+    }
+    await new VtFlowModule().initialize(agentContext as never)
+    const api = new VtFlowApi(
+      service,
+      {} as never,
+      {} as never,
+      agentContext as never,
+      config,
+      {} as never,
+      {} as never,
+    )
+
+    await api.acceptCredentialOffer('flow-1')
+    exchange.state = DidCommCredentialState.CredentialReceived
+    const received = Promise.all(
+      listeners.map(listener => listener({ payload: { credentialExchangeRecord: exchange } })),
+    )
+
+    const protocol = new DidCommCredentialV2Protocol({
+      credentialFormats: [new DidCommDataIntegrityCredentialFormatService()],
+    })
+    const credoAccepts = await protocol.shouldAutoRespondToCredential(agentContext as never, {
+      credentialExchangeRecord: exchange,
+      credentialMessage: message('didcomm/w3c-di-vc@v0.1') as never,
+    })
+    expect(credoAccepts).toBe(false)
+    expect(credentialsApi.acceptCredential).not.toHaveBeenCalled()
+
+    release()
+    await received
+    expect(credentialsApi.acceptCredential).toHaveBeenCalledTimes(accepts)
   })
 
   it.each([

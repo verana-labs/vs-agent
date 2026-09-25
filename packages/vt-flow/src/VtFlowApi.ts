@@ -182,6 +182,8 @@ export class VtFlowApi {
     await credentialsApi.acceptOffer({
       credentialExchangeRecordId,
       credentialFormats: { dataIntegrity: { dataModelVersion: '2.0' } },
+      // [VSA-VTI-FLOW-VERIFY-VT]: the verifyCredential hook accepts the credential, not Credo on receipt
+      autoAcceptCredential: DidCommAutoAcceptCredential.Never,
     })
     return record
   }
