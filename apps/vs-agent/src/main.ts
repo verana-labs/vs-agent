@@ -1,9 +1,12 @@
 import 'reflect-metadata'
 
+import type { OpenId4VcPluginOptions } from '@verana-labs/vs-agent-plugin-openid4vc'
+
 import { parseDid, utils } from '@credo-ts/core'
 import { NestFactory } from '@nestjs/core'
 import { KdfMethod } from '@openwallet-foundation/askar-nodejs'
 import { configureChainIndexers } from '@verana-labs/vs-agent-model'
+import { OpenId4VcPlugin } from '@verana-labs/vs-agent-plugin-openid4vc'
 import {
   AuthorizationService,
   HttpInboundTransport,
@@ -49,6 +52,7 @@ import {
   ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
   ADMIN_API_PUBLIC_URL,
   ADMIN_API_TRUSTED_NETWORKS,
+  ADMIN_V2_TAGS,
   validateAdminApiConfig,
   DEFAULT_ADMIN_API_LOG_LEVEL,
   DEFAULT_AGENT_LOG_LEVEL,
@@ -62,6 +66,7 @@ import {
   PUBLIC_API_BASE_URL,
   USE_CORS,
   MRTD_MASTER_LIST_CSCA_LOCATION,
+  OID4VC_CONFIG_FILE_LOCATION,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
   VERANA_INDEXER_BASE_URL,
   VERANA_ACCOUNT_MNEMONIC,
@@ -75,6 +80,7 @@ import {
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
+  readOpenId4VcOptions,
 } from './config'
 import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
@@ -82,7 +88,9 @@ import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
   derivePublicDidLocation,
+  mountPublicPluginMiddleware,
   type PublicDidLocation,
+  registerNestPluginEvents,
   runWithRetries,
   type ServerConfig,
   setupAgent,
@@ -91,6 +99,14 @@ import {
   ecsServiceProfile,
   webhookEvent,
 } from './utils'
+
+const SELECTABLE_PLUGINS = ['messaging', 'chat', 'mrtd']
+
+const ADMIN_TAGS = Object.fromEntries(
+  Object.entries(ADMIN_V2_TAGS).filter(
+    ([name]) => name !== 'v2/openid4vc' || Boolean(OID4VC_CONFIG_FILE_LOCATION),
+  ),
+)
 
 const AGENT_LOG_LEVEL = resolveLogLevel(AGENT_LOG_LEVEL_NAME, DEFAULT_AGENT_LOG_LEVEL)
 const ADMIN_API_LOG_LEVEL = resolveLogLevel(ADMIN_API_LOG_LEVEL_NAME, DEFAULT_ADMIN_API_LOG_LEVEL)
@@ -112,7 +128,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
     { logger: nestLogLevels },
   )
   adminApp.use(restrictDocsToTrustedPeers(trustedNetworks))
-  commonAppConfig(adminApp, cors)
+  commonAppConfig(adminApp, cors, false, true, ADMIN_TAGS)
   await adminApp.listen(port)
 
   // PublicModule-specific config
@@ -120,6 +136,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
     logger: nestLogLevels,
   })
   commonAppConfig(publicApp, cors, true)
+  mountPublicPluginMiddleware(publicApp.getHttpAdapter().getInstance(), nestPlugins)
 
   publicApp.use(express.static(path.join(__dirname, '../../public')))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
@@ -232,6 +249,22 @@ const run = async () => {
   if (serviceClaims.minimumAgeRequired && !Number.isInteger(Number(serviceClaims.minimumAgeRequired))) {
     configErrors.push(`${ECS_CLAIMS_VARIABLES.service.minimumAgeRequired} must be an integer`)
   }
+  configErrors.push(
+    ...validateAdminApiConfig({
+      authMode: ADMIN_API_AUTH_MODE,
+      publicUrl: ADMIN_API_PUBLIC_URL,
+      allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
+      trustedNetworks: ADMIN_API_TRUSTED_NETWORKS,
+    }),
+  )
+
+  let openId4VcOptions: OpenId4VcPluginOptions | undefined
+  if (OID4VC_CONFIG_FILE_LOCATION && didLocation) {
+    const openId4Vc = await readOpenId4VcOptions(OID4VC_CONFIG_FILE_LOCATION, didLocation.normalizedBaseUrl)
+    openId4VcOptions = openId4Vc.options
+    configErrors.push(...openId4Vc.errors)
+  }
+
   if (configErrors.length > 0 || !didLocation) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
     process.exit(1)
@@ -247,17 +280,13 @@ const run = async () => {
 
   serverLogger.info(`endpoints: ${endpoints} publicApiBaseUrl ${publicApiBaseUrl}`)
 
-  const adminApiConfigErrors = validateAdminApiConfig({
-    authMode: ADMIN_API_AUTH_MODE,
-    publicUrl: ADMIN_API_PUBLIC_URL,
-    allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
-    trustedNetworks: ADMIN_API_TRUSTED_NETWORKS,
-  })
-  if (adminApiConfigErrors.length > 0) {
-    serverLogger.error(`Invalid configuration:\n- ${adminApiConfigErrors.join('\n- ')}`)
-    process.exit(1)
-  }
   const adminApiServiceEndpoint = ADMIN_API_AUTH_MODE === 'corporation' ? ADMIN_API_PUBLIC_URL : undefined
+
+  const unselectable = ENABLED_PLUGINS.filter(name => !SELECTABLE_PLUGINS.includes(name))
+  if (unselectable.length > 0)
+    serverLogger.warn(
+      `VS_AGENT_PLUGINS names ${unselectable.join(', ')}, which this image does not bundle as a selectable plugin, so it is skipped. Supported values are ${SELECTABLE_PLUGINS.join(', ')}; openid4vc is built in and enabled by OID4VC_CONFIG_FILE_LOCATION.`,
+    )
 
   // Dynamically load optional plugin packages.
   const optImport = (name: string): Promise<any> => import(name).catch(() => null)
@@ -284,6 +313,7 @@ const run = async () => {
     ...(mrtdModule
       ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MRTD_MASTER_LIST_CSCA_LOCATION })]
       : []),
+    ...(openId4VcOptions ? [OpenId4VcPlugin(openId4VcOptions)] : []),
     VtFlowNestPlugin,
   ]
 
@@ -371,11 +401,11 @@ const run = async () => {
     parsedDid,
     logLevel: AGENT_LOG_LEVEL,
     publicApiBaseUrl,
-    masterListCscaLocation: MRTD_MASTER_LIST_CSCA_LOCATION,
     autoUpdateStorageOnStartup: AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
     veranaChain,
     authorizationService,
     adminApiServiceEndpoint,
+    nestPlugins,
   })
 
   const bootstrapState = new BootstrapState()
@@ -415,10 +445,7 @@ const run = async () => {
     webhookEvent(agent, { url: EVENTS_WEBHOOK_URL, apiKey: EVENTS_WEBHOOK_API_KEY }, serverLogger)
   }
 
-  // Register plugin events after agent is initialized
-  for (const plugin of nestPlugins) {
-    plugin.registerEvents?.(agent, conf.logger)
-  }
+  registerNestPluginEvents(nestPlugins, agent, conf.logger)
 
   // Connect to Verana indexer for on-chain notifications
   if (VERANA_INDEXER_BASE_URL) {

@@ -38,6 +38,12 @@ const CHAT_PATHS = [
   '/v2/didcomm/question-answer',
 ]
 const MRTD_PATH = '/v2/didcomm/mrtd/request-mrz'
+const OPENID4VC_ROUTES: Array<{ method: 'get' | 'post'; path: string }> = [
+  { method: 'post', path: '/v2/openid4vc/credential-offer' },
+  { method: 'get', path: '/v2/openid4vc/credential-exchanges' },
+  { method: 'get', path: '/v2/openid4vc/presentations/abc' },
+  { method: 'get', path: '/v2/openid4vc/signing-certificates' },
+]
 
 describe('extension module routes exist only when the plugin does', () => {
   let app: INestApplication | undefined
@@ -69,6 +75,19 @@ describe('extension module routes exist only when the plugin does', () => {
     for (const path of [...CHAT_PATHS, MRTD_PATH]) {
       const response = await request(app.getHttpServer()).post(path).send({})
       expect({ path, status: response.status }).toEqual({ path, status: 404 })
+    }
+  })
+
+  it('answers 404 in the error envelope on every openid4vc route when no plugin is registered', async () => {
+    app = await appWith([])
+
+    for (const { method, path } of OPENID4VC_ROUTES) {
+      const response = await request(app.getHttpServer())[method](path).send({})
+      expect({ path, status: response.status, code: response.body.error?.code }).toEqual({
+        path,
+        status: 404,
+        code: 'UNKNOWN_ID',
+      })
     }
   })
 })

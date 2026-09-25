@@ -12,6 +12,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json tsconf
 COPY packages/model/package.json packages/model/package.json
 COPY packages/agent-sdk/package.json packages/agent-sdk/package.json
 COPY packages/plugin-chat/package.json packages/plugin-chat/package.json
+COPY packages/plugin-openid4vc/package.json packages/plugin-openid4vc/package.json
 COPY packages/vt-flow/package.json packages/vt-flow/package.json
 COPY apps/vs-agent/package.json apps/vs-agent/package.json
 COPY apps/vs-agent-ui/package.json apps/vs-agent-ui/package.json
@@ -25,6 +26,8 @@ COPY packages/agent-sdk/src packages/agent-sdk/src
 COPY packages/agent-sdk/tsconfig.json packages/agent-sdk/tsconfig.build.json packages/agent-sdk/
 COPY packages/plugin-chat/src packages/plugin-chat/src
 COPY packages/plugin-chat/tsconfig.build.json packages/plugin-chat/
+COPY packages/plugin-openid4vc/src packages/plugin-openid4vc/src
+COPY packages/plugin-openid4vc/tsconfig.json packages/plugin-openid4vc/tsconfig.build.json packages/plugin-openid4vc/
 COPY packages/vt-flow/src packages/vt-flow/src
 COPY packages/vt-flow/tsconfig.json packages/vt-flow/tsconfig.build.json packages/vt-flow/
 COPY apps/vs-agent/src apps/vs-agent/src
@@ -36,6 +39,7 @@ RUN pnpm --filter @verana-labs/vs-agent-model build && \
     pnpm --filter @verana-labs/credo-ts-didcomm-vt-flow build && \
     pnpm --filter @verana-labs/vs-agent-sdk build && \
     pnpm --filter @verana-labs/vs-agent-plugin-chat build && \
+    pnpm --filter @verana-labs/vs-agent-plugin-openid4vc build && \
     pnpm --filter @verana-labs/vs-agent-ui build && \
     pnpm --filter @verana-labs/vs-agent build
 
@@ -51,6 +55,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json tsconf
 COPY packages/model/package.json packages/model/package.json
 COPY packages/agent-sdk/package.json packages/agent-sdk/package.json
 COPY packages/plugin-chat/package.json packages/plugin-chat/package.json
+COPY packages/plugin-openid4vc/package.json packages/plugin-openid4vc/package.json
 COPY packages/plugin-mrtd/package.json packages/plugin-mrtd/package.json
 COPY packages/vt-flow/package.json packages/vt-flow/package.json
 COPY apps/vs-agent/package.json apps/vs-agent/package.json
@@ -64,6 +69,8 @@ COPY packages/agent-sdk/src ./packages/agent-sdk/src
 COPY packages/agent-sdk/tsconfig.json ./packages/agent-sdk/tsconfig.build.json packages/agent-sdk/
 COPY packages/plugin-chat/src ./packages/plugin-chat/src
 COPY packages/plugin-chat/tsconfig.build.json ./packages/plugin-chat/
+COPY packages/plugin-openid4vc/src packages/plugin-openid4vc/src
+COPY packages/plugin-openid4vc/tsconfig.json packages/plugin-openid4vc/tsconfig.build.json packages/plugin-openid4vc/
 COPY packages/plugin-mrtd/src ./packages/plugin-mrtd/src
 COPY packages/plugin-mrtd/tsconfig.json ./packages/plugin-mrtd/tsconfig.build.json packages/plugin-mrtd/
 COPY packages/vt-flow/src ./packages/vt-flow/src
@@ -77,6 +84,7 @@ RUN pnpm --filter @verana-labs/vs-agent-model build && \
     pnpm --filter @verana-labs/credo-ts-didcomm-vt-flow build && \
     pnpm --filter @verana-labs/vs-agent-sdk build && \
     pnpm --filter @verana-labs/vs-agent-plugin-chat build && \
+    pnpm --filter @verana-labs/vs-agent-plugin-openid4vc build && \
     pnpm --filter @verana-labs/vs-agent-plugin-mrtd build && \
     pnpm --filter @verana-labs/vs-agent-ui build && \
     pnpm --filter @verana-labs/vs-agent build
@@ -98,6 +106,9 @@ COPY --from=build-vs-agent /www/packages/agent-sdk/node_modules ./packages/agent
 COPY --from=build-vs-agent /www/packages/plugin-chat/package.json ./packages/plugin-chat/package.json
 COPY --from=build-vs-agent /www/packages/plugin-chat/build ./packages/plugin-chat/build
 COPY --from=build-vs-agent /www/packages/plugin-chat/node_modules ./packages/plugin-chat/node_modules
+COPY --from=build-vs-agent /www/packages/plugin-openid4vc/package.json ./packages/plugin-openid4vc/package.json
+COPY --from=build-vs-agent /www/packages/plugin-openid4vc/build ./packages/plugin-openid4vc/build
+COPY --from=build-vs-agent /www/packages/plugin-openid4vc/node_modules ./packages/plugin-openid4vc/node_modules
 COPY --from=build-vs-agent /www/packages/vt-flow/package.json ./packages/vt-flow/package.json
 COPY --from=build-vs-agent /www/packages/vt-flow/build ./packages/vt-flow/build
 COPY --from=build-vs-agent /www/apps/vs-agent/node_modules ./apps/vs-agent/node_modules
@@ -123,6 +134,9 @@ COPY --from=build-mrtd /www/packages/agent-sdk/node_modules ./packages/agent-sdk
 COPY --from=build-mrtd /www/packages/plugin-chat/package.json ./packages/plugin-chat/package.json
 COPY --from=build-mrtd /www/packages/plugin-chat/build ./packages/plugin-chat/build
 COPY --from=build-mrtd /www/packages/plugin-chat/node_modules ./packages/plugin-chat/node_modules
+COPY --from=build-mrtd /www/packages/plugin-openid4vc/package.json ./packages/plugin-openid4vc/package.json
+COPY --from=build-mrtd /www/packages/plugin-openid4vc/build ./packages/plugin-openid4vc/build
+COPY --from=build-mrtd /www/packages/plugin-openid4vc/node_modules ./packages/plugin-openid4vc/node_modules
 COPY --from=build-mrtd /www/packages/plugin-mrtd/package.json ./packages/plugin-mrtd/package.json
 COPY --from=build-mrtd /www/packages/plugin-mrtd/build ./packages/plugin-mrtd/build
 COPY --from=build-mrtd /www/packages/plugin-mrtd/node_modules ./packages/plugin-mrtd/node_modules

@@ -73,6 +73,7 @@
     "@types/qrcode": "^1.5.0",
     "@verana-labs/verre": "0.4.2-dev.1",
     "@verana-labs/vs-agent-model": "workspace:*",
+    "@verana-labs/vs-agent-plugin-openid4vc": "workspace:*",
     "@verana-labs/vs-agent-sdk": "workspace:*",
     "bull": "^4.16.2",
     "credo-ts-didweb-anoncreds": "0.0.2-alpha.5",

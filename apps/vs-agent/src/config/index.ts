@@ -1,4 +1,5 @@
 export * from './adminApiConfig'
 export * from './constants'
+export * from './openid4vc'
 export * from './runtimeConfig'
 export * from './supersededVars'

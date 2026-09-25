@@ -10,5 +10,6 @@ catalog:
   '@credo-ts/core': 0.7.1-pr-2704-20260909134930
   '@credo-ts/didcomm': 0.7.1-pr-2704-20260909134930
   '@credo-ts/node': 0.7.1-pr-2704-20260909134930
+  '@credo-ts/openid4vc': 0.7.1-pr-2704-20260909134930
   '@credo-ts/question-answer': 0.7.1-pr-2704-20260909134930
   '@credo-ts/webvh': 0.7.1-pr-2704-20260909134930

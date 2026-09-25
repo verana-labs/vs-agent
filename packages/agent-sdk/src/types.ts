@@ -1,5 +1,6 @@
 import type { BaseAgentModules, VsAgent } from './agent/VsAgent'
 import type { IBaseMessage, MessageType } from '@verana-labs/vs-agent-model'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { BaseLogger } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
@@ -26,6 +27,12 @@ export interface DidcommModule {
 export interface VsAgentNestPlugin {
   name: string
   credoPlugin?: Plugin
+  // Credo's OpenId4VcModule serves its wallet-facing routes from an Express app, not from Nest controllers.
+  publicMiddleware?: (
+    request: IncomingMessage,
+    response: ServerResponse,
+    next: (error?: unknown) => void,
+  ) => void
   controllers?: (new (...args: any[]) => any)[]
   providers?: any[]
   messageHandlers?: (new (...args: any[]) => MessageHandler)[]
