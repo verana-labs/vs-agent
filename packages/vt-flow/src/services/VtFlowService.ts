@@ -274,6 +274,8 @@ export class VtFlowService {
       if (isVtFlowRenewable(existing)) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
         existing.oobLink = undefined
+        existing.validation = undefined
+        existing.issuance = undefined
         await this.updateState(agentContext, existing, VtFlowState.AwaitingOr)
       } else if (existing.state === VtFlowState.CredOffered) {
         await this.releaseCredentialExchange(agentContext, existing)
