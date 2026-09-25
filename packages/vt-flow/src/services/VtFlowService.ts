@@ -47,6 +47,7 @@ import {
   VtFlowValidatedFromStates,
   VtFlowVariant,
   type VtFlowStateChangedEvent,
+  isVtFlowRenewable,
   isVtFlowTerminalState,
 } from '../types'
 
@@ -124,7 +125,7 @@ export class VtFlowService {
       VtFlowRole.Applicant,
     )
     if (existing) {
-      if (existing.state !== VtFlowState.Completed && existing.state !== VtFlowState.CredRevoked) {
+      if (!isVtFlowRenewable(existing)) {
         throw new CredoError(
           `vt-flow: participant_session_id '${params.participantSessionId}' already belongs to a flow in state ${existing.state}; use a new session id`,
         )
@@ -270,7 +271,7 @@ export class VtFlowService {
         if (message.claims) existing.claims = message.claims
         if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
       }
-      if (existing.state === VtFlowState.Completed || existing.state === VtFlowState.CredRevoked) {
+      if (isVtFlowRenewable(existing)) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
         existing.oobLink = undefined
         await this.updateState(agentContext, existing, VtFlowState.AwaitingOr)

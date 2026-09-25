@@ -11,6 +11,7 @@ export {
   VtFlowTxStatus,
   VtFlowValidatedFromStates,
   VtFlowVariant,
+  isVtFlowRenewable,
   isVtFlowTerminalState,
 } from './types'
 export type {
