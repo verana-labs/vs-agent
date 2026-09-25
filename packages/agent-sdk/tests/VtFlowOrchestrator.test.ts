@@ -257,6 +257,18 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
     expect(agent.didcomm.oob.receiveImplicitInvitation).not.toHaveBeenCalled()
   })
 
+  it('renews a flow left in VALIDATED for a role other than HOLDER instead of treating it as running', async () => {
+    const { agent, vtFlowApi } = makeAgent(openConnection)
+    vtFlowApi.findAllByQuery.mockResolvedValue([{ ...runningFlow('VALIDATED'), applicantParticipantRole: 1 }])
+
+    await new VtFlowOrchestrator(agent as never).startOnboardingProcess({ applicantParticipantId: 5 })
+
+    expect(vtFlowApi.sendOnboardingRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionId: 'conn-old', participantSessionId: 'sess-old' }),
+    )
+    expect(vtFlowApi.resendOnboardingRequest).not.toHaveBeenCalled()
+  })
+
   it('reconnects and resends the request of a running flow whose connection is gone', async () => {
     const { agent, vtFlowApi } = makeAgent(null)
     vtFlowApi.findAllByQuery.mockResolvedValue([runningFlow('VALIDATING')])

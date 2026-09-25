@@ -17,6 +17,7 @@ import {
   VtFlowTxReason,
   VtFlowTxStatus,
   VtFlowVariant,
+  isVtFlowRenewable,
   isVtFlowTerminalState,
   type VtFlowEcsIssuanceExemptionContext,
   type VtFlowValidation,
@@ -194,10 +195,7 @@ export class VtFlowOrchestrator {
       .filter(record => !isVtFlowTerminalState(record.state))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
-    const running =
-      latest !== undefined &&
-      latest.state !== VtFlowState.Completed &&
-      latest.state !== VtFlowState.CredRevoked
+    const running = latest !== undefined && !isVtFlowRenewable(latest)
 
     let connectionId: string | undefined
     if (latest) {
