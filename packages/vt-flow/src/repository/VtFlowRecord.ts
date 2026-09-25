@@ -105,6 +105,8 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
   public proofsAttach?: DidCommAttachment[]
   public credentialDigest?: string
   public errorMessage?: string
+  /** Outlives TERMINATED_BY_VALIDATOR when a validation in flight lands, until the applicant re-attaches ([VSA-ADM-VT-FL-REJECT-2]) */
+  public connectionTerminated?: boolean
 
   public constructor(props: VtFlowStorageProps) {
     super()

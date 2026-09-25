@@ -648,6 +648,30 @@ describe('VtFlowService.terminateByValidator', () => {
       expect.objectContaining({ type: VtFlowMessageType.ProblemReport, text: 'Documents do not match' }),
     ])
   })
+
+  it('keeps the connection terminated when a validation in flight lands, until the applicant re-attaches', async () => {
+    const pending = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingValidationTx })
+    const { service, agentContext } = makeService(pending, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+
+    await service.terminateByValidator({} as never, pending.id)
+    expect(pending.connectionTerminated).toBe(true)
+
+    await service.recordValidation(
+      {} as never,
+      pending.id,
+      { decidedAt: '2026-09-25T09:00:00Z', submission: VtFlowSubmission.Operator },
+      VtFlowState.Validated,
+    )
+    expect(pending.state).toBe(VtFlowState.Validated)
+    expect(pending.connectionTerminated).toBe(true)
+
+    await service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+    expect(pending.connectionId).toBe('conn-new')
+    expect(pending.connectionTerminated).toBeUndefined()
+  })
 })
 
 describe('VtFlowService.notifyCredentialStateChange', () => {

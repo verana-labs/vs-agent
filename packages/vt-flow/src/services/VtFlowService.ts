@@ -267,6 +267,7 @@ export class VtFlowService {
       }
       await this.assertSamePeer(agentContext, existing, connection)
       existing.connectionId = connection.id
+      existing.connectionTerminated = undefined
       if (existing.threadId !== message.threadId) {
         existing.threadId = message.threadId
         if (message.claims) existing.claims = message.claims
@@ -569,6 +570,7 @@ export class VtFlowService {
       text: problemReport.description.en,
       at: new Date().toISOString(),
     })
+    record.connectionTerminated = true
 
     await this.updateState(agentContext, record, VtFlowState.TerminatedByValidator)
 

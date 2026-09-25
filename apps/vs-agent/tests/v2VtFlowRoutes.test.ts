@@ -166,6 +166,19 @@ describe('VtFlowsService v2 routes', () => {
     })
   })
 
+  it('reports TERMINATED for a rejected flow that its validation in flight moved to VALIDATED', async () => {
+    const service = makeService({
+      findAllByQuery: vi
+        .fn()
+        .mockResolvedValue([{ ...flowRecord('a', 1000, VtFlowState.Validated), connectionTerminated: true }]),
+    })
+
+    await expect(service.getFlow('sess-a')).resolves.toMatchObject({
+      flowState: VtFlowState.Validated,
+      connectionState: 'TERMINATED',
+    })
+  })
+
   it('rejects an unknown participant session with UNKNOWN_ID and status 404', async () => {
     const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([]) })
 

@@ -359,13 +359,14 @@ function pendingActionOf(record: VtFlowRecord): VtFlowPendingAction {
 
 /**
  * Gives the Connection State of one flow, per [VSA-VTI-FLOW-STATE] Flow State. A flow in a
- * terminal state is TERMINATED, and so is a flow whose connection no longer exists.
+ * terminal state is TERMINATED, and so is a flow the validator terminated until the applicant
+ * re-attaches it ([VSA-ADM-VT-FL-REJECT-2]), and a flow whose connection no longer exists.
  */
 function connectionStateOf(
   record: VtFlowRecord,
   connection: DidCommConnectionRecord | null | undefined,
 ): VtConnectionState {
-  if (isVtFlowTerminalState(record.state) || !connection) return 'TERMINATED'
+  if (isVtFlowTerminalState(record.state) || record.connectionTerminated || !connection) return 'TERMINATED'
   return connection.isReady ? 'ESTABLISHED' : 'NOT_CONNECTED'
 }
 
