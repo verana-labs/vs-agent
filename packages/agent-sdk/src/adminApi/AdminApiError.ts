@@ -1,4 +1,4 @@
-import { AnonCredsTrustError, AnonCredsTrustErrorReason } from '../blockchain'
+import { AnonCredsTrustError, AnonCredsTrustErrorReason } from '../blockchain/AnonCredsTrustService'
 
 const BAD_REQUEST = 400
 const NOT_FOUND = 404
@@ -12,6 +12,7 @@ export enum AdminApiErrorCode {
   Forbidden = 'FORBIDDEN',
   UnknownId = 'UNKNOWN_ID',
   InvalidState = 'INVALID_STATE',
+  InvalidClaims = 'INVALID_CLAIMS',
   NoCompatibleCredentials = 'NO_COMPATIBLE_CREDENTIALS',
   InvalidPackage = 'INVALID_PACKAGE',
   UnsupportedFormat = 'UNSUPPORTED_FORMAT',
@@ -27,6 +28,7 @@ export class AdminApiError extends Error {
     public readonly code: string,
     public readonly status: number,
     message: string,
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message)
     this.name = 'AdminApiError'

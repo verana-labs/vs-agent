@@ -17,6 +17,7 @@ import {
   SendOobLinkDto,
   V2VtFlowRecordDto,
   V2VtFlowRecordPageDto,
+  ValidateFlowDto,
 } from './dto'
 
 @ApiTags('v2/vt')
@@ -90,9 +91,11 @@ export class V2VtFlowsController {
   @Post(':participantSessionId/validate')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Validate a request and offer the credential',
+    summary: 'Record the validation decision of a flow',
     description:
-      'Validator action. Marks the applicant validated and offers the credential over Issue Credential V2. The credential schema is derived from the flow state.',
+      'Validator action. Checks the claim set, records the fee terms, and submits SetParticipantOPtoValidated ' +
+      'under the agent VS operator authorization, or leaves it to an operator of the Corporation. ' +
+      'A transaction failure is not an error: the flow reports it in validation.tx.',
   })
   @ApiParam({ name: 'participantSessionId', type: String })
   @ApiOkResponse({ type: V2VtFlowRecordDto })
@@ -100,8 +103,9 @@ export class V2VtFlowsController {
   @ApiConflictResponse()
   public async validateFlow(
     @Param('participantSessionId') participantSessionId: string,
+    @Body() body: ValidateFlowDto,
   ): Promise<V2VtFlowRecordDto> {
-    return toV2Dto(await this.service.validateAndOfferCredential(participantSessionId))
+    return toV2Dto(await this.service.validateFlow(participantSessionId, body))
   }
 
   @Post(':participantSessionId/revoke-credential')

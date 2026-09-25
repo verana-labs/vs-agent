@@ -43,6 +43,13 @@ class V2DidcommFixtureController {
     )
   }
 
+  @Post('flows/validate')
+  validateFlow(): never {
+    throw new AdminApiError(AdminApiErrorCode.InvalidClaims, 422, 'the claims do not fit the schema', {
+      violations: [{ path: '/name', message: 'is required' }],
+    })
+  }
+
   // esbuild drops the design:type metadata that the global pipe infers from, so the
   // expected type is named here instead.
   @Post('send-message')
@@ -136,6 +143,21 @@ describe('v2 error envelope', () => {
     expect(response.body).toEqual({
       error: { code: 'INVALID_CURSOR', message: 'the cursor is malformed' },
     })
+  })
+
+  it('carries the details a method defines, and only then', async () => {
+    const withDetails = await request(app.getHttpServer()).post('/v2/didcomm/flows/validate')
+    expect(withDetails.status).toBe(422)
+    expect(withDetails.body).toEqual({
+      error: {
+        code: 'INVALID_CLAIMS',
+        message: 'the claims do not fit the schema',
+        details: { violations: [{ path: '/name', message: 'is required' }] },
+      },
+    })
+
+    const without = await request(app.getHttpServer()).get('/v2/didcomm/connections?cursor=zzz')
+    expect(without.body.error).not.toHaveProperty('details')
   })
 
   it('envelopes what the validation pipe rejects', async () => {

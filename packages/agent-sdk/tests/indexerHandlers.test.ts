@@ -25,6 +25,7 @@ import {
 } from '../src/blockchain/handlers/stateMutations'
 import { IndexerActivity, VeranaSyncState } from '../src/blockchain/types'
 import { vtFlowEvents } from '../src/events/VtFlowEvents'
+import { VtFlowOrchestrator } from '../src/vtFlow'
 
 function emptyState(): VeranaSyncState {
   return { lastBlockHeight: 0, ecosystems: {}, credentialSchemas: {}, participants: {} }
@@ -334,6 +335,35 @@ describe('markVtFlowRecordsValidated', () => {
 
     expect(markValidated).toHaveBeenCalledTimes(1)
     expect(markValidated).toHaveBeenCalledWith(expect.anything(), 'validator')
+  })
+
+  it('continues into issuance a flow that validateFlow submitted', async () => {
+    const records = [
+      {
+        id: 'submitted',
+        role: VtFlowRole.Validator,
+        state: VtFlowState.ValidationTxSubmitted,
+        validation: { submission: 'AGENT' },
+      },
+      { id: 'legacy', role: VtFlowRole.Validator, state: VtFlowState.Validating },
+    ]
+    const continueAfterValidated = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
+      .mockResolvedValue({} as never)
+    const agent = {
+      context: {
+        dependencyManager: {
+          resolve: () => ({ findAllByQuery: vi.fn().mockResolvedValue(records), markValidated: vi.fn() }),
+        },
+      },
+      config: { logger: { info: vi.fn(), error: vi.fn() } },
+    }
+
+    await markVtFlowRecordsValidated(agent as never, '7')
+
+    expect(continueAfterValidated).toHaveBeenCalledTimes(1)
+    expect(continueAfterValidated).toHaveBeenCalledWith('submitted')
+    continueAfterValidated.mockRestore()
   })
 })
 

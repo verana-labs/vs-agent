@@ -247,6 +247,18 @@ describe('VtFlowsService v2 routes', () => {
     await expect(service.sendOobLink('sess-a', 'https://x')).rejects.toThrow(ConflictException)
   })
 
+  it('validates the flow that the path names, whatever the body carries', async () => {
+    const findById = vi.fn().mockResolvedValue(null)
+    const vtFlowApi = { findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]), findById }
+    const agent = { veranaChain: {}, dependencyManager: { resolve: () => vtFlowApi } }
+    const service = new VtFlowsService({ getAgent: async () => agent } as never, {} as never)
+
+    await expect(service.validateFlow('sess-a', { vtFlowRecordId: 'b' } as never)).rejects.toMatchObject({
+      code: AdminApiErrorCode.UnknownId,
+    })
+    expect(findById).toHaveBeenCalledWith('a')
+  })
+
   it('revokes an AnonCreds credential through its registry before notifying the applicant', async () => {
     const completed = flowRecord('a', 1000, VtFlowState.Completed)
     ;(completed as Record<string, unknown>).credentialExchangeRecordId = 'cred-ex-1'

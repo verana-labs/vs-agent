@@ -159,6 +159,7 @@ export interface CredentialSchemaDto {
   digest_algorithm: string
   issuer_onboarding_mode?: string
   verifier_onboarding_mode?: string
+  holder_validation_validity_period?: number
   archived: string | null
   created: string
   modified: string
@@ -193,10 +194,16 @@ export interface ParticipantDto {
   op_state?: string
   revoked: string | null
   slashed: string | null
-  effective_until?: string
+  effective_from?: string | null
+  effective_until?: string | null
   modified: string
   validator_participant_id?: number | null
   op_summary_digest?: string
+  validation_fees?: number
+  issuance_fees?: number
+  verification_fees?: number
+  issuance_fee_discount?: number
+  verification_fee_discount?: number
 }
 
 export interface CorporationDto {
