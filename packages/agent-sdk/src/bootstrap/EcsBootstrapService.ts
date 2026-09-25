@@ -119,9 +119,7 @@ export class EcsBootstrapService {
       }
       if (!record.credentialExchangeRecordId) continue
       try {
-        await this.agent.didcomm.credentials.acceptOffer({
-          credentialExchangeRecordId: record.credentialExchangeRecordId,
-        })
+        await api.acceptCredentialOffer(record.id)
         this.logger.info(`[EcsBootstrap] re-accepted the pending credential offer for flow ${record.id}`)
       } catch (error) {
         this.logger.warn(
