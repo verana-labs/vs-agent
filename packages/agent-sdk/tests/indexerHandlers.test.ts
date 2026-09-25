@@ -1,4 +1,4 @@
-import { VtFlowRole, VtFlowService, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { VtFlowRole, VtFlowService, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { describe, expect, it, vi } from 'vitest'
 
 // the withdrawal republishes the self-issued default, which would otherwise sign and fetch
@@ -18,11 +18,13 @@ import {
 } from '../src/blockchain/handlers/defaultHandlers'
 import {
   applyStateMutation,
+  markVtFlowRecordsValidated,
   reconcileVtFlowRecordsOnCancel,
   removeHolderTrustCredentialIfRevoked,
   removeSelfIssuedEcsCredentialsIfIssuerRevoked,
 } from '../src/blockchain/handlers/stateMutations'
 import { IndexerActivity, VeranaSyncState } from '../src/blockchain/types'
+import { vtFlowEvents } from '../src/events/VtFlowEvents'
 
 function emptyState(): VeranaSyncState {
   return { lastBlockHeight: 0, ecosystems: {}, credentialSchemas: {}, participants: {} }
@@ -311,6 +313,30 @@ describe('applyStateMutation', () => {
   })
 })
 
+describe('markVtFlowRecordsValidated', () => {
+  it('moves only the running validator flows of the participant', async () => {
+    const records = [
+      { id: 'applicant', role: VtFlowRole.Applicant, state: VtFlowState.Validating },
+      { id: 'validator', role: VtFlowRole.Validator, state: VtFlowState.Validating },
+      { id: 'terminated', role: VtFlowRole.Validator, state: VtFlowState.TerminatedByValidator },
+    ]
+    const markValidated = vi.fn().mockResolvedValue(undefined)
+    const agent = {
+      context: {
+        dependencyManager: {
+          resolve: () => ({ findAllByQuery: vi.fn().mockResolvedValue(records), markValidated }),
+        },
+      },
+      config: { logger: { info: vi.fn(), error: vi.fn() } },
+    }
+
+    await markVtFlowRecordsValidated(agent as never, '7')
+
+    expect(markValidated).toHaveBeenCalledTimes(1)
+    expect(markValidated).toHaveBeenCalledWith(expect.anything(), 'validator')
+  })
+})
+
 describe('reconcileVtFlowRecordsOnCancel', () => {
   function makeCancelAgent(opState: number | undefined, records: Record<string, unknown>[]) {
     const updateState = vi.fn().mockResolvedValue(undefined)
@@ -377,5 +403,56 @@ describe('reconcileVtFlowRecordsOnCancel', () => {
     await reconcileVtFlowRecordsOnCancel(agent as never, '7')
 
     expect(updateState).toHaveBeenCalledWith(expect.anything(), record, VtFlowState.TerminatedByApplicant)
+  })
+})
+
+describe('vtFlowEvents', () => {
+  it('records the applicant entry on the next state change after the indexer failed', async () => {
+    const record = {
+      role: VtFlowRole.Validator,
+      variant: VtFlowVariant.OnboardingProcess,
+      state: VtFlowState.AwaitingOr,
+      applicantParticipantId: '94',
+    }
+    const latest = { ...record, state: VtFlowState.Validating }
+    const service = {
+      findById: vi.fn().mockResolvedValue(record),
+      getById: vi.fn().mockResolvedValue(latest),
+      updateRecord: vi.fn().mockResolvedValue(undefined),
+    }
+    const on = vi.fn()
+    const agent = {
+      events: { on, emit: vi.fn() },
+      context: { dependencyManager: { resolve: () => service } },
+      indexer: {
+        findParticipant: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('indexer down'))
+          .mockResolvedValue({ role: 6, validatorParticipantId: 93, schemaId: 12 }),
+      },
+    }
+    vtFlowEvents(agent as never, { debug: vi.fn(), warn: vi.fn() } as never)
+    const [, listener] = on.mock.calls[0]
+
+    await listener({
+      payload: { vtFlowRecordId: 'rec-v', state: VtFlowState.AwaitingOr, previousState: null },
+    })
+    expect(service.updateRecord).not.toHaveBeenCalled()
+
+    await listener({
+      payload: {
+        vtFlowRecordId: 'rec-v',
+        state: VtFlowState.Validating,
+        previousState: VtFlowState.AwaitingOr,
+      },
+    })
+
+    expect(agent.indexer.findParticipant).toHaveBeenCalledWith('94')
+    expect(service.updateRecord).toHaveBeenCalledWith(agent.context, {
+      ...latest,
+      validatorParticipantId: '93',
+      applicantParticipantRole: 6,
+      schemaId: '12',
+    })
   })
 })

@@ -1,5 +1,5 @@
 import { JsonTransformer, utils } from '@credo-ts/core'
-import { DidCommAttachment } from '@credo-ts/didcomm'
+import { DidCommAttachment, ImpactStatus, WhoRetriesStatus } from '@credo-ts/didcomm'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -14,7 +14,10 @@ import {
   VT_FLOW_VALIDATING_TYPE,
   ValidatingMessage,
   VtCredentialState,
+  VtFlowErrorCode,
+  buildVtFlowProblemReport,
 } from '../src'
+import { VT_FLOW_PROBLEM_REPORT_TYPE, VtFlowProblemReportMessage } from '../src/messages'
 
 const PARTICIPANT_SESSION_ID = utils.uuid()
 
@@ -249,5 +252,49 @@ describe('CredentialStateChangeMessage', () => {
 
     const parsed = JsonTransformer.fromJSON(json, CredentialStateChangeMessage)
     expect(parsed.state).toBe('REACTIVATED')
+  })
+})
+
+describe('VtFlowProblemReportMessage', () => {
+  it('sends who_retries and impact in lower case', () => {
+    const json = JsonTransformer.toJSON(
+      buildVtFlowProblemReport({ code: VtFlowErrorCode.NotAVerifiableService, threadId: utils.uuid() }),
+    ) as Record<string, unknown>
+
+    expect(json.who_retries).toBe('none')
+    expect(json.impact).toBe('connection')
+  })
+
+  it.each([
+    ['you', 'thread'],
+    ['YOU', 'THREAD'],
+  ])('reads who_retries %s and impact %s', (whoRetries, impact) => {
+    const parsed = JsonTransformer.fromJSON(
+      {
+        '@type': VT_FLOW_PROBLEM_REPORT_TYPE,
+        '@id': utils.uuid(),
+        description: { code: VtFlowErrorCode.InvalidClaims, en: 'Bad claims.' },
+        who_retries: whoRetries,
+        impact,
+      },
+      VtFlowProblemReportMessage,
+    )
+
+    expect(parsed.whoRetries).toBe(WhoRetriesStatus.You)
+    expect(parsed.impact).toBe(ImpactStatus.Thread)
+  })
+
+  it('reads an RFC 0035 where value', () => {
+    const parsed = JsonTransformer.fromJSON(
+      {
+        '@type': VT_FLOW_PROBLEM_REPORT_TYPE,
+        '@id': utils.uuid(),
+        description: { code: VtFlowErrorCode.InvalidClaims, en: 'Bad claims.' },
+        where: 'you - agency',
+      },
+      VtFlowProblemReportMessage,
+    )
+
+    expect(parsed.where).toBe('you - agency')
   })
 })

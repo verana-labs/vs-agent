@@ -1,6 +1,12 @@
 import { CredoError } from '@credo-ts/core'
 import { ConflictException, NotFoundException } from '@nestjs/common'
-import { VtCredentialState, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  VtCredentialState,
+  VtFlowPendingAction,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowTxStatus,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AdminApiError, AdminApiErrorCode } from '../src/common'
@@ -47,6 +53,47 @@ function makeService(
   )
 }
 
+describe('VtFlowsService pendingAction', () => {
+  async function pendingActionFor(overrides: Record<string, unknown>) {
+    const service = makeService({
+      findAllByQuery: vi.fn().mockResolvedValue([{ ...flowRecord('a', 1000), ...overrides }]),
+    })
+    const page = await service.listFlowsPage({})
+    return page.items[0].pendingAction
+  }
+
+  it('hands an expired oob-link back to the validator', async () => {
+    const link = { url: 'https://collect.example/form', description: 'Upload', at: new Date(0).toISOString() }
+
+    await expect(
+      pendingActionFor({
+        state: VtFlowState.OobPending,
+        oobLink: { ...link, expiresAt: new Date(Date.now() + 60_000).toISOString() },
+      }),
+    ).resolves.toBe(VtFlowPendingAction.Applicant)
+
+    await expect(
+      pendingActionFor({
+        state: VtFlowState.OobPending,
+        oobLink: { ...link, expiresAt: new Date(Date.now() - 60_000).toISOString() },
+      }),
+    ).resolves.toBe(VtFlowPendingAction.Validator)
+  })
+
+  it('hands CRED_OFFERED back to the validator when the anchoring transaction failed', async () => {
+    await expect(pendingActionFor({ state: VtFlowState.CredOffered })).resolves.toBe(
+      VtFlowPendingAction.Agent,
+    )
+
+    await expect(
+      pendingActionFor({
+        state: VtFlowState.CredOffered,
+        issuance: { tx: { status: VtFlowTxStatus.Failed } },
+      }),
+    ).resolves.toBe(VtFlowPendingAction.Validator)
+  })
+})
+
 describe('VtFlowsService v2 routes', () => {
   it('maps the camelCase v2 filters onto record tags', async () => {
     const findAllByQuery = vi.fn().mockResolvedValue([])
@@ -55,7 +102,8 @@ describe('VtFlowsService v2 routes', () => {
     await service.listFlowsPage({
       role: VtFlowRole.Validator,
       flowState: VtFlowState.Validating,
-      participantId: '42',
+      applicantParticipantId: '42',
+      validatorParticipantId: '7',
       schemaId: '5',
       participantSessionId: 'sess-1',
     })
@@ -63,7 +111,8 @@ describe('VtFlowsService v2 routes', () => {
     expect(findAllByQuery).toHaveBeenCalledWith({
       role: VtFlowRole.Validator,
       flowState: VtFlowState.Validating,
-      participantId: '42',
+      applicantParticipantId: '42',
+      validatorParticipantId: '7',
       schemaId: '5',
       participantSessionId: 'sess-1',
     })
@@ -136,6 +185,14 @@ describe('VtFlowsService v2 routes', () => {
       flowState: VtFlowState.Validating,
       connectionState: 'ESTABLISHED',
     })
+  })
+
+  it('lists a flow that has no messages with an empty messages array', async () => {
+    const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) })
+
+    const page = await service.listFlowsPage({})
+
+    expect(page.items[0].messages).toEqual([])
   })
 
   it('reports NOT_CONNECTED while the connection of a live flow is not ready', async () => {

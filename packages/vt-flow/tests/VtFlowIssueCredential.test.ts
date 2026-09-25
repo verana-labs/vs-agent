@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { VtFlowApi } from '../src/VtFlowApi'
 import { VtFlowModuleConfig, type VtFlowModuleConfigOptions } from '../src/VtFlowModuleConfig'
 import { VtFlowErrorCode } from '../src/errors'
+import { VtFlowRecord } from '../src/repository'
 import { VtFlowService } from '../src/services'
-import { VtFlowRole, VtFlowState } from '../src/types'
+import { VtFlowRole, VtFlowState, VtFlowVariant } from '../src/types'
 
 const SIGNED_CREDENTIAL = { id: 'urn:uuid:vtc-1', proof: { proofValue: 'zSIG' } }
 
@@ -76,6 +77,37 @@ describe('issueCredentialForSession', () => {
     expect(seenCredential).toEqual(SIGNED_CREDENTIAL)
     expect(setCredentialDigest).toHaveBeenCalledWith(expect.anything(), 'flow-1', 'anchored-digest')
     expect(sendMessage).not.toHaveBeenCalled()
+  })
+})
+
+describe('offerCredentialForSession', () => {
+  it('refuses an Onboarding Process flow in VALIDATING before it creates the offer', async () => {
+    const record = new VtFlowRecord({
+      threadId: 'thid-1',
+      participantSessionId: 'sess-1',
+      connectionId: 'conn-1',
+      role: VtFlowRole.Validator,
+      state: VtFlowState.Validating,
+      variant: VtFlowVariant.OnboardingProcess,
+      agentParticipantId: '0',
+      walletAgentParticipantId: '0',
+    })
+    const createOffer = vi.fn()
+    const config = new VtFlowModuleConfig({})
+    const api = new VtFlowApi(
+      new VtFlowService({ getById: async () => record } as never, {} as never, {} as never, config),
+      {} as never,
+      {} as never,
+      {} as never,
+      config,
+      { credentialProtocols: [{ version: 'v2', createOffer }] } as never,
+      {} as never,
+    )
+
+    await expect(
+      api.offerCredentialForSession({ vtFlowRecordId: record.id, credentialFormats: {} as never }),
+    ).rejects.toThrow(/state 'VALIDATING'/)
+    expect(createOffer).not.toHaveBeenCalled()
   })
 })
 

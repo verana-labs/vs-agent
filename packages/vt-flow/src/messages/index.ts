@@ -5,6 +5,7 @@ export {
   VT_FLOW_OOB_LINK_TYPE,
   VT_FLOW_VALIDATING_TYPE,
   VT_FLOW_CREDENTIAL_STATE_CHANGE_TYPE,
+  VT_FLOW_PROBLEM_REPORT_TYPE,
 } from './VtFlowProtocol'
 
 export { OnboardingRequestMessage } from './OnboardingRequestMessage'
@@ -21,3 +22,5 @@ export type { ValidatingMessageOptions } from './ValidatingMessage'
 
 export { CredentialStateChangeMessage, VtCredentialState } from './CredentialStateChangeMessage'
 export type { CredentialStateChangeMessageOptions } from './CredentialStateChangeMessage'
+
+export { VtFlowProblemReportMessage } from './VtFlowProblemReportMessage'

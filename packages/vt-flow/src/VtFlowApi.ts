@@ -56,7 +56,10 @@ export class VtFlowApi {
     const { message, record } = await this.vtFlowService.createOnboardingProcessRecord(this.agentContext, {
       connectionId: options.connectionId,
       participantSessionId,
-      participantId: options.participantId,
+      applicantParticipantId: options.applicantParticipantId,
+      applicantParticipantRole: options.applicantParticipantRole,
+      validatorParticipantId: options.validatorParticipantId,
+      schemaId: options.schemaId,
       agentParticipantId: options.agentParticipantId,
       walletAgentParticipantId: options.walletAgentParticipantId,
       claims: options.claims,
@@ -184,12 +187,22 @@ export class VtFlowApi {
     return record
   }
 
-  public acceptOnboardingRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
-    return this.vtFlowService.acceptOnboardingRequest(this.agentContext, vtFlowRecordId)
+  public async acceptOnboardingRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    const { record, message } = await this.vtFlowService.acceptOnboardingRequest(
+      this.agentContext,
+      vtFlowRecordId,
+    )
+    await this.dispatchMessage(record.connectionId, message, record)
+    return record
   }
 
-  public acceptIssuanceRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
-    return this.vtFlowService.acceptIssuanceRequest(this.agentContext, vtFlowRecordId)
+  public async acceptIssuanceRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    const { record, message } = await this.vtFlowService.acceptIssuanceRequest(
+      this.agentContext,
+      vtFlowRecordId,
+    )
+    await this.dispatchMessage(record.connectionId, message, record)
+    return record
   }
 
   public async rejectRequest(options: ProblemReportDispatchOptions): Promise<VtFlowRecord> {
@@ -245,7 +258,7 @@ export class VtFlowApi {
     options: OfferCredentialForSessionOptions,
   ): Promise<{ record: VtFlowRecord; credentialExchangeRecord: DidCommCredentialExchangeRecord }> {
     const record = await this.vtFlowService.getById(this.agentContext, options.vtFlowRecordId)
-    record.assertRole(VtFlowRole.Validator)
+    this.vtFlowService.assertCanOfferCredential(record)
 
     const connection = await this.connectionService.getById(this.agentContext, record.connectionId)
     connection.assertReady()

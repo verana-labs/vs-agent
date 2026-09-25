@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  VtFlowPendingAction,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowVariant,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
 
 import { PageDto } from '../../../../../common'
 
@@ -9,6 +14,46 @@ import { PageDto } from '../../../../../common'
 export const VT_CONNECTION_STATES = ['NOT_CONNECTED', 'ESTABLISHED', 'TERMINATED'] as const
 
 export type VtConnectionState = (typeof VT_CONNECTION_STATES)[number]
+
+export class V2VtFlowOobLinkDto {
+  @ApiProperty() url!: string
+  @ApiProperty() description!: string
+  @ApiPropertyOptional({ description: 'expires_time of the message, when the sender set one.' })
+  expiresAt?: string
+  @ApiProperty({ description: 'When the agent sent or received the message.' }) at!: string
+}
+
+export class V2VtFlowTxDto {
+  @ApiPropertyOptional() hash?: string
+  @ApiPropertyOptional() height?: number
+  @ApiProperty({ enum: ['SUBMITTED', 'SUCCEEDED', 'FAILED'] }) status!: string
+  @ApiPropertyOptional({ description: 'Set when the transaction failed.' }) reason?: string
+  @ApiPropertyOptional({ description: 'Raw node or chain message.' }) error?: string
+}
+
+export class V2VtFlowValidationDto {
+  @ApiProperty() decidedAt!: string
+  @ApiProperty({ enum: ['AGENT', 'OPERATOR'] }) submission!: string
+  @ApiPropertyOptional() validationFees?: number
+  @ApiPropertyOptional() issuanceFees?: number
+  @ApiPropertyOptional() verificationFees?: number
+  @ApiPropertyOptional({ description: 'Decimal between 0 and 1.' }) issuanceFeeDiscount?: number
+  @ApiPropertyOptional({ description: 'Decimal between 0 and 1.' }) verificationFeeDiscount?: number
+  @ApiPropertyOptional() effectiveUntil?: string
+  @ApiPropertyOptional() opSummaryDigest?: string
+  @ApiPropertyOptional({ type: V2VtFlowTxDto }) tx?: V2VtFlowTxDto
+}
+
+export class V2VtFlowIssuanceDto {
+  @ApiPropertyOptional({ type: V2VtFlowTxDto }) tx?: V2VtFlowTxDto
+}
+
+export class V2VtFlowMessageDto {
+  @ApiProperty({ enum: ['oob-link', 'validating', 'problem-report'] }) type!: string
+  @ApiProperty() text!: string
+  @ApiProperty() at!: string
+  @ApiPropertyOptional({ description: 'Set for an oob-link only.' }) url?: string
+}
 
 /**
  * One credential acquisition flow record of [VSA-ADM-VT-FL-LIST] listFlows.
@@ -62,11 +107,14 @@ export class V2VtFlowRecordDto {
   peerDid?: string
 
   @ApiPropertyOptional({
-    description:
-      'Participant identifier of the remote peer: the validator when the agent is the applicant, ' +
-      'the applicant when the agent is the validator.',
+    description: 'Participant identifier of the applicant entry being onboarded.',
   })
-  participantId?: string
+  applicantParticipantId?: string
+
+  @ApiPropertyOptional({
+    description: 'Participant identifier of the validator entry the applicant is onboarding under.',
+  })
+  validatorParticipantId?: string
 
   @ApiPropertyOptional({
     description: 'Credential schema identifier of the flow.',
@@ -86,9 +134,36 @@ export class V2VtFlowRecordDto {
   proofs?: unknown[]
 
   @ApiPropertyOptional({
-    description: 'URL of the outstanding OOB_LINK message, when one exists.',
+    description:
+      'The outstanding oob-link, when one exists. Cleared on every transition out of OOB_PENDING. ' +
+      'An expired link stays on the record until then and pendingAction reports it.',
   })
-  oobLinkUrl?: string
+  oobLink?: V2VtFlowOobLinkDto
+
+  @ApiProperty({
+    description:
+      'Human-readable messages of the flow, in order. A validator lists what it sent, an applicant what it received.',
+    type: [V2VtFlowMessageDto],
+  })
+  messages!: V2VtFlowMessageDto[]
+
+  @ApiProperty({
+    enum: VtFlowPendingAction,
+    description: 'The party that must act for the flow to progress.',
+  })
+  pendingAction!: VtFlowPendingAction
+
+  @ApiPropertyOptional({
+    description: 'Validation decision of an Onboarding Process flow, set by validateFlow.',
+    type: V2VtFlowValidationDto,
+  })
+  validation?: V2VtFlowValidationDto
+
+  @ApiPropertyOptional({
+    description: 'Outcome of the transaction that anchors the issued credential.',
+    type: V2VtFlowIssuanceDto,
+  })
+  issuance?: V2VtFlowIssuanceDto
 
   @ApiPropertyOptional({
     description: 'Identifier of the credential exchange of the offered credential.',

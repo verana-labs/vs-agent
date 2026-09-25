@@ -7,6 +7,7 @@ import {
   VtFlowRole,
   VtFlowService,
   VtFlowState,
+  VtFlowValidatedFromStates,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { classifyEcsSchema } from '@verana-labs/vs-agent-model'
@@ -186,7 +187,7 @@ export async function reconcileVtFlowRecordsForParticipant(
 ): Promise<void> {
   const agentContext = agent.context
   const service = agentContext.dependencyManager.resolve(VtFlowService)
-  const records = await service.findAllByQuery(agentContext, { participantId })
+  const records = await service.findAllByQuery(agentContext, { applicantParticipantId: participantId })
 
   for (const record of records) {
     try {
@@ -210,7 +211,7 @@ export async function markVtFlowRecordsValidated(agent: VsAgent, participantId: 
     agent,
     participantId,
     async (record, service, agentContext) => {
-      if (record.state !== VtFlowState.Validating && record.state !== VtFlowState.OobPending) {
+      if (record.role !== VtFlowRole.Validator || !VtFlowValidatedFromStates.has(record.state)) {
         return null
       }
       await service.markValidated(agentContext, record.id)
@@ -310,7 +311,7 @@ export async function removeHolderTrustCredentialIfRevoked(
 
   const agentContext = agent.context
   const service = agentContext.dependencyManager.resolve(VtFlowService)
-  const records = await service.findAllByQuery(agentContext, { participantId })
+  const records = await service.findAllByQuery(agentContext, { applicantParticipantId: participantId })
   for (const record of records) {
     if (record.role !== VtFlowRole.Applicant || !record.credentialExchangeRecordId) continue
     try {

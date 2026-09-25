@@ -14,9 +14,11 @@ import {
 import {
   VtCredentialState,
   VtFlowApi,
+  VtFlowPendingAction,
   VtFlowRecord,
   VtFlowRole,
   VtFlowState,
+  VtFlowTxStatus,
   VtFlowVariant,
   isVtFlowTerminalState,
   peerAnchorDid,
@@ -51,7 +53,8 @@ export class VtFlowsService {
           connectionState: query.connectionState,
           flowState: query.flowState,
           peerDid: query.peerDid,
-          participantId: query.participantId,
+          applicantParticipantId: query.applicantParticipantId,
+          validatorParticipantId: query.validatorParticipantId,
           schemaId: query.schemaId,
           participantSessionId: query.participantSessionId,
         },
@@ -80,17 +83,14 @@ export class VtFlowsService {
   private async collectFlows(query: FlowFilters): Promise<ResolvedFlow[]> {
     const agent = await this.agentService.getAgent()
     const vtFlowApi = this.resolveVtFlowApi(agent)
-    const validatorScope = query.role === VtFlowRole.Applicant && query.participantId
-    let records = await vtFlowApi.findAllByQuery({
+    const records = await vtFlowApi.findAllByQuery({
       ...(query.role && { role: query.role }),
       ...(query.flowState && { flowState: query.flowState }),
-      ...(query.participantId && !validatorScope && { participantId: query.participantId }),
+      ...(query.applicantParticipantId && { applicantParticipantId: query.applicantParticipantId }),
+      ...(query.validatorParticipantId && { validatorParticipantId: query.validatorParticipantId }),
       ...(query.schemaId && { schemaId: query.schemaId }),
       ...(query.participantSessionId && { participantSessionId: query.participantSessionId }),
     })
-    if (validatorScope) {
-      records = await this.filterByValidatorParticipant(agent, records, query.participantId!)
-    }
 
     const connectionIds = [...new Set(records.map(record => record.connectionId))]
     const connections = new Map(
@@ -172,28 +172,6 @@ export class VtFlowsService {
     await this.credentialTypesService.revokeCredential(agent, registryId, Number(revocationId))
   }
 
-  private async filterByValidatorParticipant(
-    agent: VsAgent,
-    records: VtFlowRecord[],
-    validatorParticipantId: string,
-  ): Promise<VtFlowRecord[]> {
-    this.requireChain(agent)
-    const validatorByApplicant = new Map<string, string | undefined>()
-    const kept: VtFlowRecord[] = []
-    for (const record of records) {
-      if (!record.participantId) continue
-      if (!validatorByApplicant.has(record.participantId)) {
-        const participant = await agent.indexer.findParticipant(record.participantId).catch(() => undefined)
-        validatorByApplicant.set(
-          record.participantId,
-          participant?.validatorParticipantId ? String(participant.validatorParticipantId) : undefined,
-        )
-      }
-      if (validatorByApplicant.get(record.participantId) === validatorParticipantId) kept.push(record)
-    }
-    return kept
-  }
-
   private async mutateFlow(
     participantSessionId: string,
     action: (ctx: { agent: VsAgent; vtFlowApi: VtFlowApi; record: VtFlowRecord }) => Promise<VtFlowRecord>,
@@ -239,11 +217,13 @@ export class VtFlowsService {
           `'${VtFlowState.Validated}' with no credential exchange`,
       )
     }
-    if (!record.participantId) throw new ConflictException('Record has no participantId')
+    if (!record.applicantParticipantId) throw new ConflictException('Record has no applicantParticipantId')
 
-    const applicant = await agent.indexer.getParticipant(Number(record.participantId))
+    const applicant = await agent.indexer.getParticipant(Number(record.applicantParticipantId))
     if (!applicant)
-      throw new BadRequestException(`Applicant participant ${record.participantId} not found on indexer`)
+      throw new BadRequestException(
+        `Applicant participant ${record.applicantParticipantId} not found on indexer`,
+      )
     if (applicant.schema_id == null) throw new BadRequestException('Applicant participant has no schema_id')
 
     const orchestrator = new VtFlowOrchestrator(agent, {
@@ -322,9 +302,65 @@ interface FlowFilters {
   connectionState?: VtConnectionState
   flowState?: VtFlowState
   peerDid?: string
-  participantId?: string
+  applicantParticipantId?: string
+  validatorParticipantId?: string
   schemaId?: string
   participantSessionId?: string
+}
+
+const AGENT_STATES: ReadonlySet<VtFlowState> = new Set([
+  VtFlowState.OrSent,
+  VtFlowState.IrSent,
+  VtFlowState.AwaitingOr,
+  VtFlowState.AwaitingIr,
+])
+
+const VALIDATOR_STATES: ReadonlySet<VtFlowState> = new Set([
+  VtFlowState.Validating,
+  VtFlowState.AwaitingValidationTx,
+  VtFlowState.ValidationTxFailed,
+  VtFlowState.ValidatedPendingClaims,
+])
+
+/**
+ * Gives the party that must act for a flow to progress, per the [VSA-ADM-VT-FL-LIST] pendingAction
+ * table. An expired oob-link hands OOB_PENDING back to the validator, and a failed issuance
+ * anchoring hands CRED_OFFERED back to it so the operator can re-anchor.
+ */
+function pendingActionOf(record: VtFlowRecord): VtFlowPendingAction {
+  const { state, role } = record
+  if (isVtFlowTerminalState(state)) return VtFlowPendingAction.None
+
+  if (state === VtFlowState.AwaitingOp) {
+    return role === VtFlowRole.Applicant ? VtFlowPendingAction.Applicant : VtFlowPendingAction.None
+  }
+  if (AGENT_STATES.has(state)) return VtFlowPendingAction.Agent
+  if (state === VtFlowState.OobPending) {
+    const expiresAt = record.oobLink?.expiresAt
+    const expired = expiresAt !== undefined && Date.parse(expiresAt) <= Date.now()
+    return expired ? VtFlowPendingAction.Validator : VtFlowPendingAction.Applicant
+  }
+  if (VALIDATOR_STATES.has(state)) {
+    if (state !== VtFlowState.Validating && role === VtFlowRole.Applicant) {
+      return VtFlowPendingAction.None
+    }
+    return VtFlowPendingAction.Validator
+  }
+  if (state === VtFlowState.ValidationTxSubmitted) {
+    return role === VtFlowRole.Applicant ? VtFlowPendingAction.None : VtFlowPendingAction.Chain
+  }
+  if (state === VtFlowState.Validated) {
+    return record.applicantParticipantRole === HOLDER_PARTICIPANT_TYPE
+      ? VtFlowPendingAction.Agent
+      : VtFlowPendingAction.None
+  }
+  if (state === VtFlowState.CredOffered) {
+    const anchoringFailed = record.issuance?.tx?.status === VtFlowTxStatus.Failed
+    return role === VtFlowRole.Validator && anchoringFailed
+      ? VtFlowPendingAction.Validator
+      : VtFlowPendingAction.Agent
+  }
+  return VtFlowPendingAction.None
 }
 
 /**
@@ -364,7 +400,21 @@ function toDto({ record, peerDid, connectionState }: ResolvedFlow): VtFlowRecord
   return {
     peerDid,
     connectionState,
-    oobLinkUrl: record.oobLinkUrl,
+    oobLink: record.oobLink && {
+      url: record.oobLink.url,
+      description: record.oobLink.description,
+      expiresAt: record.oobLink.expiresAt,
+      at: record.oobLink.at,
+    },
+    messages: (record.messages ?? []).map(message => ({
+      type: message.type,
+      text: message.text,
+      at: message.at,
+      url: message.url,
+    })),
+    pendingAction: pendingActionOf(record),
+    validation: record.validation,
+    issuance: record.issuance,
     proofs: record.proofsAttach,
     credentialDigest: record.credentialDigest,
     id: record.id,
@@ -376,7 +426,8 @@ function toDto({ record, peerDid, connectionState }: ResolvedFlow): VtFlowRecord
     state: record.state,
     agentParticipantId: record.agentParticipantId,
     walletAgentParticipantId: record.walletAgentParticipantId,
-    participantId: record.participantId,
+    applicantParticipantId: record.applicantParticipantId,
+    validatorParticipantId: record.validatorParticipantId,
     schemaId: record.schemaId,
     claims: record.claims,
     credentialExchangeRecordId: record.credentialExchangeRecordId,

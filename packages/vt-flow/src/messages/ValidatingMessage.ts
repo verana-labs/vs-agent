@@ -9,7 +9,7 @@ export interface ValidatingMessageOptions {
   comment?: string
 }
 
-/** Spec `validating`; informational Validator status update sent while validation is in progress. */
+/** Spec `validating`; moves the flow to `VALIDATING`, sent when the Validator accepts a request and after an out-of-band step. */
 export class ValidatingMessage extends DidCommMessage {
   public constructor(options: ValidatingMessageOptions) {
     super()

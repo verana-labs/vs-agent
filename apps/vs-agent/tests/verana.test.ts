@@ -71,7 +71,7 @@ describe('verana: indexer notifications', () => {
 
     await applicant.modules.vtFlow.sendOnboardingRequest({
       connectionId: applicantConnection.id,
-      participantId: PARTICIPANT_ID,
+      applicantParticipantId: PARTICIPANT_ID,
       agentParticipantId: 'agent-participant-100',
       walletAgentParticipantId: 'wallet-agent-participant-100',
     })
