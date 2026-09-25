@@ -560,6 +560,11 @@ export class VtFlowService {
     })
 
     record.errorMessage = params.enDescription ?? code
+    this.appendMessage(record, {
+      type: VtFlowMessageType.ProblemReport,
+      text: problemReport.description.en,
+      at: new Date().toISOString(),
+    })
 
     await this.updateState(agentContext, record, VtFlowState.TerminatedByValidator)
 
@@ -789,7 +794,16 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    record.assertState([VtFlowState.AwaitingOr, VtFlowState.Validating, VtFlowState.CredRevoked])
+    record.assertState([
+      VtFlowState.AwaitingOr,
+      VtFlowState.OobPending,
+      VtFlowState.Validating,
+      VtFlowState.AwaitingValidationTx,
+      VtFlowState.ValidationTxSubmitted,
+      VtFlowState.ValidationTxFailed,
+      VtFlowState.ValidatedPendingClaims,
+      VtFlowState.CredRevoked,
+    ])
     record.claims = claims
     await this.updateRecord(agentContext, record)
     return record
