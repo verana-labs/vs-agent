@@ -902,7 +902,6 @@ export class VtFlowService {
         at: new Date().toISOString(),
       })
     }
-    record.errorMessage = message.description?.en ?? code
 
     const target =
       info &&
@@ -916,6 +915,7 @@ export class VtFlowService {
       return record
     }
 
+    record.errorMessage = message.description?.en ?? code
     await this.updateState(agentContext, record, target)
     return record
   }

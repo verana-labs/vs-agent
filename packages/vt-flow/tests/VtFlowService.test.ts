@@ -198,6 +198,7 @@ describe('VtFlowService inbound problem-report', () => {
 
     expect(record.state).toBe(VtFlowState.Validating)
     expect(record.messages).toHaveLength(1)
+    expect(record.errorMessage).toBeUndefined()
   })
 
   it('moves an unknown code nowhere and still records it', async () => {
@@ -205,6 +206,7 @@ describe('VtFlowService inbound problem-report', () => {
 
     expect(record.state).toBe(VtFlowState.Validating)
     expect(record.messages).toHaveLength(1)
+    expect(record.errorMessage).toBeUndefined()
   })
 })
 
