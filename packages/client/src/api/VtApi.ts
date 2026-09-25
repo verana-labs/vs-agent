@@ -9,6 +9,7 @@ import {
   SendOobLinkBody,
   ServiceEndpoint,
   UpdateServiceEndpointBody,
+  ValidateFlowBody,
   VtFlowRecord,
 } from '../types'
 
@@ -36,8 +37,10 @@ export class VtApi {
     })
   }
 
-  public validateFlow(participantSessionId: string): Promise<VtFlowRecord> {
-    return this.http.request('POST', `/vt/flows/${encodeURIComponent(participantSessionId)}/validate`)
+  public validateFlow(participantSessionId: string, body?: ValidateFlowBody): Promise<VtFlowRecord> {
+    return this.http.request('POST', `/vt/flows/${encodeURIComponent(participantSessionId)}/validate`, {
+      body,
+    })
   }
 
   public revokeFlowCredential(

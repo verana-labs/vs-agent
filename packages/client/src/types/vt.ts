@@ -18,6 +18,7 @@ export interface VtFlowMessage {
 
 export interface VtFlowTx {
   hash?: string
+  submittedAt?: string
   height?: number
   status: 'SUBMITTED' | 'SUCCEEDED' | 'FAILED'
   reason?: string
@@ -86,6 +87,16 @@ export interface EditClaimsBody {
 export interface SendOobLinkBody {
   url: string
   message?: string
+}
+
+export interface ValidateFlowBody {
+  validationFees?: number
+  issuanceFees?: number
+  verificationFees?: number
+  issuanceFeeDiscount?: number
+  verificationFeeDiscount?: number
+  effectiveUntil?: string
+  opSummaryDigest?: string
 }
 
 export interface RevokeFlowCredentialBody {
