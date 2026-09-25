@@ -495,6 +495,17 @@ export class VtFlowService {
   }> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
+    record.assertState([
+      VtFlowState.AwaitingOr,
+      VtFlowState.AwaitingIr,
+      VtFlowState.Validating,
+      VtFlowState.OobPending,
+      VtFlowState.AwaitingValidationTx,
+      VtFlowState.ValidationTxFailed,
+      // VtFlowModule ends the flow here when auto-issue fails, until verana-labs/vs-agent#738
+      VtFlowState.CredOffered,
+      VtFlowState.Completed,
+    ])
 
     const code = params.code ?? VtFlowErrorCode.SessionTerminated
     const problemReport = buildVtFlowProblemReport({

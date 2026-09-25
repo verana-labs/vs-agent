@@ -379,6 +379,23 @@ describe('VtFlowService.sendValidatingForSession', () => {
   })
 })
 
+describe('VtFlowService.terminateByValidator', () => {
+  it('refuses a flow whose validation transaction is in flight and closes a COMPLETED one', async () => {
+    const submitted = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.ValidationTxSubmitted })
+    const { service, repository } = makeService(submitted)
+
+    await expect(service.terminateByValidator({} as never, submitted.id)).rejects.toThrow(
+      /state 'VALIDATION_TX_SUBMITTED'/,
+    )
+    expect(repository.update).not.toHaveBeenCalled()
+
+    const completed = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Completed })
+    repository.getById.mockResolvedValue(completed)
+    const { record } = await service.terminateByValidator({} as never, completed.id)
+    expect(record.state).toBe(VtFlowState.TerminatedByValidator)
+  })
+})
+
 describe('VtFlowService.notifyCredentialStateChange', () => {
   it('allows re-notifying a revocation from CRED_REVOKED', async () => {
     const revoked = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.CredRevoked })
