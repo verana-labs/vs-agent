@@ -161,6 +161,65 @@ describe('offerCredentialForSession', () => {
   })
 })
 
+describe('acceptCredentialOffer', () => {
+  const DI_OFFER = 'didcomm/w3c-di-vc-offer@v0.1'
+  const offerOf = (formats: string[], data: Record<string, unknown>) => ({
+    formats: formats.map((format, index) => ({ attachmentId: `att-${index}`, format })),
+    getOfferAttachmentById: () => ({ getDataAsJson: () => data }),
+  })
+
+  const buildApplicantApi = (offer: unknown) => {
+    const credentialsApi = {
+      findOfferMessage: vi.fn(async () => offer),
+      acceptOffer: vi.fn(async () => undefined),
+      declineOffer: vi.fn(async () => undefined),
+    }
+    const record = { id: 'flow-1', credentialExchangeRecordId: 'cx-1', assertRole: () => undefined }
+    const api = new VtFlowApi(
+      { getById: async () => record } as never,
+      {} as never,
+      {} as never,
+      { dependencyManager: { resolve: () => credentialsApi } } as never,
+      new VtFlowModuleConfig({}),
+      {} as never,
+      {} as never,
+    )
+    return { api, credentialsApi }
+  }
+
+  it('requests data model 2.0 even when the offer lists another version first', async () => {
+    const { api, credentialsApi } = buildApplicantApi(
+      offerOf([DI_OFFER], { data_model_versions_supported: ['1.1', '2.0'], binding_required: false }),
+    )
+
+    await api.acceptCredentialOffer('flow-1')
+
+    expect(credentialsApi.acceptOffer).toHaveBeenCalledWith({
+      credentialExchangeRecordId: 'cx-1',
+      credentialFormats: { dataIntegrity: { dataModelVersion: '2.0' } },
+    })
+    expect(credentialsApi.declineOffer).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['another attachment format', ['anoncreds/credential-offer@v1.0'], ['2.0'], false],
+    ['a second attachment format', [DI_OFFER, 'anoncreds/credential-offer@v1.0'], ['2.0'], false],
+    ['another data model version', [DI_OFFER], ['1.1'], false],
+    ['a required binding', [DI_OFFER], ['2.0'], true],
+  ])('answers an offer with %s with a problem report and no request', async (_, formats, versions, binding) => {
+    const { api, credentialsApi } = buildApplicantApi(
+      offerOf(formats, { data_model_versions_supported: versions, binding_required: binding }),
+    )
+
+    await api.acceptCredentialOffer('flow-1')
+
+    expect(credentialsApi.declineOffer).toHaveBeenCalledWith(
+      expect.objectContaining({ credentialExchangeRecordId: 'cx-1', sendProblemReport: true }),
+    )
+    expect(credentialsApi.acceptOffer).not.toHaveBeenCalled()
+  })
+})
+
 describe('terminateByValidator', () => {
   it('lands in TERMINATED_BY_VALIDATOR and emits a problem report', async () => {
     const record = {

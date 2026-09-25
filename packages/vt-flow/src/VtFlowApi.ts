@@ -17,6 +17,7 @@ import type {
   DidCommCredentialProtocol,
   DidCommDataIntegrityAcceptRequestFormat,
   DidCommMessage,
+  DidCommOfferCredentialV2Message,
 } from '@credo-ts/didcomm'
 
 import { AgentContext, CredoError, injectable, utils } from '@credo-ts/core'
@@ -35,6 +36,8 @@ import { VtFlowModuleConfig } from './VtFlowModuleConfig'
 import { VtFlowErrorCode } from './errors'
 import { VtFlowService } from './services'
 import { VtFlowRole, VtFlowState, VtFlowTxStatus } from './types'
+
+const DATA_INTEGRITY_OFFER_FORMAT = 'didcomm/w3c-di-vc-offer@v0.1'
 
 /** Public API for vt-flow; each method performs a single state transition so callers can gate each one on its own on-chain work. */
 @injectable()
@@ -137,6 +140,48 @@ export class VtFlowApi {
     const credentialsApi = this.agentContext.dependencyManager.resolve(DidCommCredentialsApi)
     await credentialsApi.acceptCredential({
       credentialExchangeRecordId: record.credentialExchangeRecordId,
+    })
+    return record
+  }
+
+  /** [VSA-VTI-FLOW-FMT-2]: requests only a data model 2.0 credential with no binding proof. */
+  public async acceptCredentialOffer(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    const record = await this.vtFlowService.getById(this.agentContext, vtFlowRecordId)
+    record.assertRole(VtFlowRole.Applicant)
+    const credentialExchangeRecordId = record.credentialExchangeRecordId
+    if (!credentialExchangeRecordId) {
+      throw new CredoError(`VtFlow record '${record.id}' has no linked credentialExchangeRecordId`)
+    }
+
+    const credentialsApi = this.agentContext.dependencyManager.resolve(DidCommCredentialsApi)
+    const offer = (await credentialsApi.findOfferMessage(
+      credentialExchangeRecordId,
+    )) as DidCommOfferCredentialV2Message | null
+    const [format] = offer?.formats ?? []
+    const data =
+      format &&
+      offer?.getOfferAttachmentById(format.attachmentId)?.getDataAsJson<{
+        data_model_versions_supported?: string[]
+        binding_required?: boolean
+      }>()
+    const conformant =
+      offer?.formats.length === 1 &&
+      format.format === DATA_INTEGRITY_OFFER_FORMAT &&
+      data?.data_model_versions_supported?.includes('2.0') &&
+      !data.binding_required
+
+    if (!conformant) {
+      await credentialsApi.declineOffer({
+        credentialExchangeRecordId,
+        sendProblemReport: true,
+        problemReportDescription: `The offer must be ${DATA_INTEGRITY_OFFER_FORMAT} for VC Data Model 2.0 with no binding`,
+      })
+      return record
+    }
+
+    await credentialsApi.acceptOffer({
+      credentialExchangeRecordId,
+      credentialFormats: { dataIntegrity: { dataModelVersion: '2.0' } },
     })
     return record
   }

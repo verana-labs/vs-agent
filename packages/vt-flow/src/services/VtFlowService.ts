@@ -873,6 +873,7 @@ export class VtFlowService {
         }
         break
       case DidCommCredentialState.Abandoned:
+      case DidCommCredentialState.Declined:
         if (record.state !== VtFlowState.Error) {
           record.errorMessage = record.errorMessage ?? 'Subprotocol abandoned'
           await this.updateState(agentContext, record, VtFlowState.Error)
