@@ -629,6 +629,13 @@ export class VtFlowService {
       comment: params.comment,
     })
 
+    if (params.comment) {
+      this.appendMessage(record, {
+        type: VtFlowMessageType.Validating,
+        text: params.comment,
+        at: new Date().toISOString(),
+      })
+    }
     await this.updateState(agentContext, record, VtFlowState.Validating)
     return { record, message }
   }

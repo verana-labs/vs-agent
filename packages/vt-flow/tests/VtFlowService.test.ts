@@ -398,9 +398,14 @@ describe('VtFlowService.sendValidatingForSession', () => {
     })
     const { service } = makeService(pending)
 
-    const { record, message } = await service.sendValidatingForSession({} as never, pending.id)
+    const { record, message } = await service.sendValidatingForSession({} as never, pending.id, {
+      comment: 'Documents received',
+    })
     expect(record.state).toBe(VtFlowState.Validating)
     expect(record.oobLink).toBeUndefined()
+    expect(record.messages).toEqual([
+      expect.objectContaining({ type: VtFlowMessageType.Validating, text: 'Documents received' }),
+    ])
     expect(message.threadId).toBe(pending.threadId)
 
     await expect(service.sendValidatingForSession({} as never, pending.id)).rejects.toThrow(
