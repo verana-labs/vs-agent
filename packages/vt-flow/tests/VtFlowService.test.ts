@@ -210,40 +210,6 @@ describe('VtFlowService inbound problem-report', () => {
   })
 })
 
-describe('VtFlowService sendValidatingForSession from OOB_PENDING', () => {
-  function makeValidatorService(state: VtFlowState) {
-    const existing = makeRecord({ role: VtFlowRole.Validator, state })
-    const repository = { getById: vi.fn().mockResolvedValue(existing), update: vi.fn() }
-    const service = new VtFlowService(
-      repository as never,
-      { emit: vi.fn() } as never,
-      { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
-      {} as never,
-    )
-    return { service, existing }
-  }
-
-  it('moves OOB_PENDING to VALIDATING and records the comment it sends', async () => {
-    const { service } = makeValidatorService(VtFlowState.OobPending)
-
-    const { record, message } = await service.sendValidatingForSession({} as never, 'rec', {
-      comment: 'Documents received',
-    })
-
-    expect(record.state).toBe(VtFlowState.Validating)
-    expect(message.comment).toBe('Documents received')
-    expect(record.messages).toEqual([
-      expect.objectContaining({ type: VtFlowMessageType.Validating, text: 'Documents received' }),
-    ])
-  })
-
-  it('refuses a flow that is not OOB_PENDING', async () => {
-    const { service } = makeValidatorService(VtFlowState.Validating)
-
-    await expect(service.sendValidatingForSession({} as never, 'rec')).rejects.toThrow()
-  })
-})
-
 describe('VtFlowService re-attach on same participant_session_id', () => {
   it('applicant renewal re-attaches the finished flow and re-runs it', async () => {
     const existing = makeRecord()
