@@ -7,6 +7,7 @@ import type {
   ResendOnboardingRequestOptions,
   SendOnboardingRequestOptions,
   SendOobLinkOptions,
+  VtFlowValidation,
 } from './types'
 import type { Query, QueryOptions } from '@credo-ts/core'
 import type {
@@ -244,6 +245,14 @@ export class VtFlowApi {
     )
     await this.dispatchMessage(record.connectionId, message, record)
     return record
+  }
+
+  public recordValidation(
+    vtFlowRecordId: string,
+    validation: VtFlowValidation,
+    state?: VtFlowState,
+  ): Promise<VtFlowRecord> {
+    return this.vtFlowService.recordValidation(this.agentContext, vtFlowRecordId, validation, state)
   }
 
   public markValidated(vtFlowRecordId: string): Promise<VtFlowRecord> {

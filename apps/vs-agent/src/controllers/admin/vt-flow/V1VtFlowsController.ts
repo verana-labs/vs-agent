@@ -77,7 +77,7 @@ export class V1VtFlowsController {
   @ApiOkResponse({ type: VtFlowRecordDto })
   @ApiNotFoundResponse()
   public validate(@Param('participantSessionId') participantSessionId: string): Promise<VtFlowRecordDto> {
-    return this.service.validateAndOfferCredential(participantSessionId)
+    return this.service.validateFlow(participantSessionId, {})
   }
 
   @Post(':participantSessionId/revoke-credential')

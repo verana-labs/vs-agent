@@ -1,6 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger'
 import { VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { IsEnum, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, IsUrl } from 'class-validator'
+import {
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsISO8601,
+  IsNotEmpty,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUrl,
+} from 'class-validator'
 
 import { PaginationQueryDto } from '../../../../common'
 import { VT_CONNECTION_STATES, type VtConnectionState } from '../../v2/vt/dto'
@@ -107,4 +118,55 @@ export class RevokeFlowCredentialDto {
   @IsOptional()
   @IsString()
   reason?: string
+}
+
+export class ValidateFlowDto {
+  @ApiProperty({
+    required: false,
+    description: 'Non-negative integer, in the unit of the schema pricing asset.',
+  })
+  @IsOptional()
+  @IsInt()
+  validationFees?: number
+
+  @ApiProperty({
+    required: false,
+    description: 'Non-negative integer, in the unit of the schema pricing asset.',
+  })
+  @IsOptional()
+  @IsInt()
+  issuanceFees?: number
+
+  @ApiProperty({
+    required: false,
+    description: 'Non-negative integer, in the unit of the schema pricing asset.',
+  })
+  @IsOptional()
+  @IsInt()
+  verificationFees?: number
+
+  @ApiProperty({ required: false, description: 'Decimal between 0 and 1.' })
+  @IsOptional()
+  @IsNumber()
+  issuanceFeeDiscount?: number
+
+  @ApiProperty({ required: false, description: 'Decimal between 0 and 1.' })
+  @IsOptional()
+  @IsNumber()
+  verificationFeeDiscount?: number
+
+  @ApiProperty({
+    required: false,
+    description:
+      'effective_until of the entry. When absent the VPR uses the expiration of the onboarding process, ' +
+      'or no limit when the validity period of the role is 0.',
+  })
+  @IsOptional()
+  @IsISO8601()
+  effectiveUntil?: string
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  opSummaryDigest?: string
 }

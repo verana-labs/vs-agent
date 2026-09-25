@@ -290,6 +290,7 @@ export class VeranaTestChain {
       vsOperator?: string
       vsOperatorAuthzMsgTypes?: string[]
       vsOperatorAuthzWithFeegrant?: boolean
+      vsOperatorAuthzFeeSpendLimit?: { denom: string; amount: string }[]
     },
   ): Promise<{ participantId: number; txHash: string }> {
     const msg = {
@@ -303,6 +304,7 @@ export class VeranaTestChain {
         vsOperator: params.vsOperator ?? '',
         vsOperatorAuthzMsgTypes: params.vsOperator ? (params.vsOperatorAuthzMsgTypes ?? [PP_SESSION]) : [],
         vsOperatorAuthzWithFeegrant: params.vsOperatorAuthzWithFeegrant ?? false,
+        vsOperatorAuthzFeeSpendLimit: params.vsOperatorAuthzFeeSpendLimit ?? [],
       }),
     }
     // The root validator has a future effective_from; retry until it is ACTIVE.

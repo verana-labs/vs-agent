@@ -172,23 +172,28 @@ export async function getClaims(
   return claims
 }
 
+export interface SchemaViolation {
+  path: string
+  message: string
+}
+
+export function schemaViolations(
+  ecsSchema: AnySchemaObject,
+  credentialSubject: Record<string, any>,
+): SchemaViolation[] {
+  const validate = ajv.compile(ecsSchema.properties?.credentialSubject)
+  if (validate(credentialSubject)) return []
+  return (validate.errors ?? []).map(e => ({ path: e.instancePath, message: e.message ?? e.keyword }))
+}
+
 /**
  * Validate a validateSchema object against the corresponding AJV schema.
  * Throws an Error if the schema is missing or validation fails.
  */
 export function validateSchema(ecsSchema: AnySchemaObject, credentialSubject: Record<string, any>): void {
-  const validate = ajv.compile(ecsSchema.properties?.credentialSubject)
-  const isValid = validate(credentialSubject)
-
-  if (!isValid) {
-    const errorDetails = validate.errors?.map(e => ({
-      message: e.message,
-      path: e.instancePath,
-      keyword: e.keyword,
-      params: e.params,
-    }))
-
-    throw new Error(`Invalid claims for ${ecsSchema.$id}: ${JSON.stringify(errorDetails, null, 2)}`)
+  const violations = schemaViolations(ecsSchema, credentialSubject)
+  if (violations.length > 0) {
+    throw new Error(`Invalid claims for ${ecsSchema.$id}: ${JSON.stringify(violations, null, 2)}`)
   }
 }
 

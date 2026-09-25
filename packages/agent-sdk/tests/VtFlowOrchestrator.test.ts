@@ -502,3 +502,381 @@ describe('VtFlowOrchestrator.allowEcsIssuanceExemption', () => {
     expect(indexer.getParticipant).toHaveBeenCalledWith(42)
   })
 })
+
+describe('VtFlowOrchestrator validateFlow', () => {
+  const SET_VALIDATED = '/verana.pp.v1.MsgSetParticipantOPToValidated'
+  const now = Date.now()
+  const past = new Date(now - 86_400_000).toISOString()
+
+  function makeValidateAgent(
+    options: {
+      state?: string
+      applicant?: Record<string, unknown>
+      grant?: { msgTypes: string[]; withFeegrant: boolean } | null
+      balance?: string
+      claims?: Record<string, unknown>
+      jsonSchema?: Record<string, unknown>
+    } = {},
+  ) {
+    let flowRecord: Record<string, unknown> = {
+      id: 'rec-v',
+      role: VtFlowRole.Validator,
+      variant: 'onboarding-process',
+      state: options.state ?? 'VALIDATING',
+      applicantParticipantId: '94',
+      claims: options.claims ?? { name: 'Acme' },
+    }
+    const vtFlowApi = {
+      findById: vi.fn(async () => flowRecord),
+      findAllByQuery: vi.fn(async () => []),
+      acceptOnboardingRequest: vi.fn(async () => flowRecord),
+      sendValidating: vi.fn(async () => flowRecord),
+      markValidated: vi.fn(async () => {
+        flowRecord = { ...flowRecord, state: 'VALIDATED' }
+        return flowRecord
+      }),
+      markCompleted: vi.fn(async () => ({ ...flowRecord, state: 'COMPLETED' })),
+      recordValidation: vi.fn(async (_id: string, validation: unknown, state?: string) => {
+        flowRecord = { ...flowRecord, validation, ...(state && { state }) }
+        return flowRecord
+      }),
+    }
+    const applicant = {
+      id: 94,
+      role: 'ISSUER',
+      schema_id: 22,
+      did: 'did:web:applicant',
+      op_state: 'PENDING',
+      effective_from: null,
+      validator_participant_id: 93,
+      ...options.applicant,
+    }
+    const validator = { id: 93, effective_from: past, effective_until: null, revoked: null, slashed: null }
+    const chain = {
+      corporation: 'verana1corp',
+      setParticipantOPToValidatedMsg: vi.fn(params => ({ typeUrl: SET_VALIDATED, value: params })),
+      estimateFee: vi.fn(async () => ({ amount: [{ denom: 'uvna', amount: '500' }], gas: '200000' })),
+      feeAllowance: vi.fn(async () => undefined),
+      broadcastWithoutWaiting: vi.fn(async () => 'AB12'),
+      getBalance: vi.fn(async () => ({ denom: 'uvna', amount: options.balance ?? '1000' })),
+      findTx: vi.fn(async () => undefined),
+    }
+    const agent = {
+      did: 'did:web:validator',
+      config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
+      dependencyManager: { resolve: () => vtFlowApi },
+      veranaChain: chain,
+      authorizationService:
+        options.grant === null
+          ? undefined
+          : {
+              refreshForOperator: vi.fn(async () => undefined),
+              getVsOperatorAuthorizationRecord: vi.fn(
+                () => options.grant ?? { msgTypes: [SET_VALIDATED], withFeegrant: false },
+              ),
+            },
+      indexer: {
+        getParticipant: vi.fn(async (id: string | number) => (Number(id) === 93 ? validator : applicant)),
+        findParticipant: vi.fn(async () => ({ id: 94, role: 1, did: 'did:web:applicant' })),
+        getCredentialSchema: vi.fn(async () => ({
+          json_schema: JSON.stringify(
+            options.jsonSchema ?? {
+              properties: {
+                credentialSubject: {
+                  type: 'object',
+                  required: ['id', 'name'],
+                  properties: { id: { type: 'string' }, name: { type: 'string' } },
+                },
+              },
+            },
+          ),
+          holder_validation_validity_period: 365,
+        })),
+      },
+    }
+    return { agent, vtFlowApi, chain, current: () => flowRecord }
+  }
+
+  it('hands the transaction to an operator when the agent holds no grant for it', async () => {
+    const { agent, chain, current } = makeValidateAgent({ grant: { msgTypes: [], withFeegrant: false } })
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v', validationFees: 5 })
+
+    expect(current().state).toBe('AWAITING_VALIDATION_TX')
+    expect(current().validation).toMatchObject({ submission: 'OPERATOR', validationFees: 5 })
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+  })
+
+  it('broadcasts under its grant and returns before the transaction lands', async () => {
+    const { agent, chain, current } = makeValidateAgent()
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({
+      vtFlowRecordId: 'rec-v',
+      issuanceFeeDiscount: 0.25,
+    })
+
+    expect(chain.setParticipantOPToValidatedMsg).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 94, issuanceFeeDiscount: 2500 }),
+    )
+    expect(current().state).toBe('VALIDATION_TX_SUBMITTED')
+    expect(current().validation).toMatchObject({
+      submission: 'AGENT',
+      tx: { hash: 'AB12', status: 'SUBMITTED' },
+    })
+  })
+
+  it('records a failed pre-flight without broadcasting', async () => {
+    const { agent, chain, current } = makeValidateAgent({ balance: '100' })
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(current().state).toBe('VALIDATION_TX_FAILED')
+    expect(current().validation).toMatchObject({
+      tx: { status: 'FAILED', reason: 'INSUFFICIENT_FUNDS_AGENT' },
+    })
+  })
+
+  it('records a failed simulation as a pre-flight error', async () => {
+    const { agent, chain, current } = makeValidateAgent()
+    chain.estimateFee.mockRejectedValue(new Error('out of gas'))
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(current()).toMatchObject({
+      state: 'VALIDATION_TX_FAILED',
+      validation: { tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR', error: 'out of gas' } },
+    })
+  })
+
+  it('records a failed pre-flight when a balance read fails', async () => {
+    const own = makeValidateAgent()
+    own.chain.getBalance.mockRejectedValue(new Error('rpc unavailable'))
+    await new VtFlowOrchestrator(own.agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    const granted = makeValidateAgent({ grant: { msgTypes: [SET_VALIDATED], withFeegrant: true } })
+    granted.chain.feeAllowance.mockResolvedValue({ unlimited: true } as never)
+    Object.assign(granted.chain, {
+      getAccountBalance: vi.fn().mockRejectedValue(new Error('rpc unavailable')),
+    })
+    await new VtFlowOrchestrator(granted.agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    for (const { chain, current } of [own, granted]) {
+      expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+      expect(current().state).toBe('VALIDATION_TX_FAILED')
+      expect(current().validation).toMatchObject({
+        tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR', error: 'rpc unavailable' },
+      })
+    }
+  })
+
+  it('records a failed pre-flight when the allowance read fails', async () => {
+    const { agent, chain, current } = makeValidateAgent({
+      grant: { msgTypes: [SET_VALIDATED], withFeegrant: true },
+    })
+    chain.feeAllowance.mockRejectedValue(new Error('rpc unavailable'))
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(chain.estimateFee).not.toHaveBeenCalled()
+    expect(current()).toMatchObject({
+      state: 'VALIDATION_TX_FAILED',
+      validation: { tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR', error: 'rpc unavailable' } },
+    })
+  })
+
+  it('reports an expired feegrant before it simulates, since the simulation fails on it first', async () => {
+    const { agent, chain, current } = makeValidateAgent({
+      grant: { msgTypes: [SET_VALIDATED], withFeegrant: true },
+    })
+    chain.estimateFee.mockRejectedValue(new Error('fee-grant not found'))
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(chain.estimateFee).not.toHaveBeenCalled()
+    expect(current().validation).toMatchObject({ tx: { status: 'FAILED', reason: 'FEEGRANT_EXPIRED' } })
+  })
+
+  it('refuses claims that do not fit the schema, with the violations, and records nothing', async () => {
+    const { agent, vtFlowApi } = makeValidateAgent({ applicant: { role: 'HOLDER' }, claims: {} })
+
+    const failure = await new VtFlowOrchestrator(agent as never)
+      .validateFlow({ vtFlowRecordId: 'rec-v' })
+      .catch(error => error)
+
+    expect(failure).toMatchObject({
+      code: 'INVALID_CLAIMS',
+      status: 422,
+      details: { violations: [expect.objectContaining({ message: expect.stringContaining('name') })] },
+    })
+    expect(vtFlowApi.recordValidation).not.toHaveBeenCalled()
+  })
+
+  it('keeps the agreed terms on a renewal and refuses a different one', async () => {
+    const renewal = { effective_from: past, validation_fees: 7, issuance_fee_discount: 0.1235 }
+
+    const refused = makeValidateAgent({ applicant: renewal })
+    await expect(
+      new VtFlowOrchestrator(refused.agent as never).validateFlow({
+        vtFlowRecordId: 'rec-v',
+        validationFees: 8,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+
+    const kept = makeValidateAgent({ applicant: renewal })
+    await new VtFlowOrchestrator(kept.agent as never).validateFlow({
+      vtFlowRecordId: 'rec-v',
+      issuanceFeeDiscount: 0.12345,
+    })
+    expect(kept.current().validation).toMatchObject({ validationFees: 7, issuanceFeeDiscount: 0.1235 })
+  })
+
+  it('skips the submission when the entry is already VALIDATED on chain', async () => {
+    const { agent, chain, vtFlowApi } = makeValidateAgent({ applicant: { op_state: 'VALIDATED' } })
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(vtFlowApi.markValidated).toHaveBeenCalledWith('rec-v')
+  })
+
+  function makeHolderRenewal(state: string) {
+    const setup = makeValidateAgent({
+      state,
+      applicant: { role: 'HOLDER', op_state: 'VALIDATED', effective_from: past },
+    })
+    setup.current().credentialExchangeRecordId = 'cx-previous-round'
+    setup.agent.indexer.findParticipant.mockResolvedValue({
+      id: 94,
+      role: 6,
+      did: 'did:web:applicant',
+    } as never)
+    const orchestrator = new VtFlowOrchestrator(setup.agent as never)
+    const offer = vi.fn(async () => setup.current())
+    ;(orchestrator as unknown as { offerOnboardingCredential: unknown }).offerOnboardingCredential = offer
+    return { ...setup, orchestrator, offer }
+  }
+
+  it('offers the updated credential of a HOLDER renewal once its transaction lands', async () => {
+    const { orchestrator, vtFlowApi, chain, offer } = makeHolderRenewal('VALIDATION_TX_SUBMITTED')
+    await vtFlowApi.recordValidation('rec-v', {
+      decidedAt: new Date().toISOString(),
+      submission: 'AGENT',
+      tx: { hash: 'AB12', status: 'SUBMITTED' },
+    })
+    chain.findTx.mockResolvedValue({ code: 0, height: 7, rawLog: '' } as never)
+
+    await orchestrator.resolveValidationTx('rec-v')
+
+    expect(offer).toHaveBeenCalledWith(expect.objectContaining({ vtFlowRecordId: 'rec-v' }))
+  })
+
+  it('resumes a HOLDER renewal whose entry is already VALIDATED into issuance', async () => {
+    const { orchestrator, chain, offer } = makeHolderRenewal('VALIDATION_TX_SUBMITTED')
+
+    await orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(offer).toHaveBeenCalledWith(expect.objectContaining({ vtFlowRecordId: 'rec-v' }))
+  })
+
+  function makeDirectIssuance(claims: Record<string, unknown>) {
+    const setup = makeValidateAgent({ claims })
+    const record = setup.current()
+    record.variant = 'direct-issuance'
+    record.schemaId = '22'
+    record.connectionId = 'conn-1'
+    const offerCredentialForSession = vi.fn(async () => ({ record: { ...record, state: 'CRED_OFFERED' } }))
+    Object.assign(setup.vtFlowApi, { offerCredentialForSession })
+    Object.assign(setup.agent, {
+      didcomm: { connections: { findById: vi.fn(async () => ({ theirDid: 'did:web:holder' })) } },
+    })
+    const orchestrator = new VtFlowOrchestrator(setup.agent as never)
+    ;(orchestrator as unknown as { buildDirectIssuanceOffer: unknown }).buildDirectIssuanceOffer = vi.fn(
+      async () => ({ credentialFormats: {}, issuerParticipantId: 93 }),
+    )
+    return { ...setup, orchestrator, offerCredentialForSession }
+  }
+
+  it('offers a Direct Issuance credential without any chain transaction', async () => {
+    const { orchestrator, chain, offerCredentialForSession } = makeDirectIssuance({ name: 'Acme' })
+
+    const offered = await orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(offered.state).toBe('CRED_OFFERED')
+    expect(offerCredentialForSession).toHaveBeenCalledWith(
+      expect.objectContaining({ vtFlowRecordId: 'rec-v', issuerParticipantId: 93 }),
+    )
+    expect(chain.estimateFee).not.toHaveBeenCalled()
+  })
+
+  it('refuses Direct Issuance claims that do not fit the schema before offering', async () => {
+    const { orchestrator, offerCredentialForSession } = makeDirectIssuance({})
+
+    await expect(orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })).rejects.toMatchObject({
+      code: 'INVALID_CLAIMS',
+    })
+    expect(offerCredentialForSession).not.toHaveBeenCalled()
+  })
+
+  it('refuses to leave OOB_PENDING while the flow connection is not ESTABLISHED', async () => {
+    const onboarding = makeValidateAgent({ state: 'OOB_PENDING' })
+    const findById = vi.fn(async () => ({ isReady: false }))
+    Object.assign(onboarding.agent, { didcomm: { connections: { findById } } })
+    const direct = makeDirectIssuance({ name: 'Acme' })
+    direct.current().state = 'OOB_PENDING'
+
+    for (const orchestrator of [new VtFlowOrchestrator(onboarding.agent as never), direct.orchestrator]) {
+      await expect(orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })).rejects.toMatchObject({
+        code: 'INVALID_STATE',
+        status: 409,
+      })
+    }
+    expect(onboarding.vtFlowApi.sendValidating).not.toHaveBeenCalled()
+    expect(direct.vtFlowApi.sendValidating).not.toHaveBeenCalled()
+    expect(direct.offerCredentialForSession).not.toHaveBeenCalled()
+
+    findById.mockResolvedValue({ isReady: true })
+    await new VtFlowOrchestrator(onboarding.agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+    expect(onboarding.vtFlowApi.sendValidating).toHaveBeenCalledWith('rec-v')
+  })
+
+  it('reads the entry before recording a transaction that was not found', async () => {
+    const { agent, vtFlowApi, current } = makeValidateAgent({
+      state: 'VALIDATION_TX_SUBMITTED',
+      applicant: { op_state: 'VALIDATED' },
+    })
+    await vtFlowApi.recordValidation('rec-v', {
+      decidedAt: new Date(now - 120_000).toISOString(),
+      submission: 'AGENT',
+      tx: { hash: 'AB12', status: 'SUBMITTED' },
+    })
+
+    await new VtFlowOrchestrator(agent as never).resolveValidationTx('rec-v')
+
+    expect(vtFlowApi.markValidated).toHaveBeenCalledWith('rec-v')
+    expect(current().state).toBe('VALIDATED')
+  })
+
+  it('counts the 60 seconds from the broadcast, not from the decision', async () => {
+    const { agent, vtFlowApi, chain, current } = makeValidateAgent({ state: 'VALIDATION_TX_SUBMITTED' })
+    await vtFlowApi.recordValidation('rec-v', {
+      decidedAt: new Date(now - 120_000).toISOString(),
+      submission: 'AGENT',
+      tx: { hash: 'AB12', status: 'SUBMITTED', submittedAt: new Date().toISOString() },
+    })
+    chain.findTx.mockImplementation(async () => {
+      current().state = 'VALIDATED'
+      return undefined
+    })
+
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const resolving = new VtFlowOrchestrator(agent as never).resolveValidationTx('rec-v')
+    await vi.runAllTimersAsync()
+    await resolving
+    vi.useRealTimers()
+
+    expect(current()).toMatchObject({ state: 'VALIDATED', validation: { tx: { status: 'SUBMITTED' } } })
+  })
+})

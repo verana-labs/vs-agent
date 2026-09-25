@@ -1,7 +1,17 @@
-import { LogLevel } from '@credo-ts/core'
+import { LogLevel, utils } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
-import { VtFlowRole, VtFlowState, VtFlowVariant } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { VtFlowOrchestrator, type VsAgent } from '@verana-labs/vs-agent-sdk'
+import {
+  type VtFlowCredentialOfferPayload,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowVariant,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  createW3cV2Credential,
+  toOfferedCredentialJson,
+  VtFlowOrchestrator,
+  type VsAgent,
+} from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -512,4 +522,104 @@ describe('vt-flow: VS-CONN-VS trust gate', () => {
       .find(isVtFlowStateChangedEvent(VtFlowState.Validating))
     expect(validatingEvent).toBeUndefined()
   })
+})
+
+describe('vt-flow: Direct Issuance validated after an out-of-band step', () => {
+  let applicant: VsAgent<any>
+  let validator: VsAgent<any>
+
+  afterEach(async () => {
+    await applicant?.shutdown()
+    await validator?.shutdown()
+    vi.restoreAllMocks()
+  })
+
+  it('offers the credential once, from validateFlow, when the validator auto-offers', async () => {
+    const sharedResolver = new FakeDidResolver()
+    const subjectMap = {
+      'rxjs:applicant': new Subject<SubjectMessage>(),
+      'rxjs:validator': new Subject<SubjectMessage>(),
+    }
+    const offer = async (): Promise<VtFlowCredentialOfferPayload> => ({
+      credentialFormats: {
+        dataIntegrity: {
+          credential: toOfferedCredentialJson(
+            createW3cV2Credential({
+              id: `${validator.did}#${utils.uuid()}`,
+              type: ['VerifiableCredential', 'VerifiableTrustCredential'],
+              issuer: String(validator.did),
+              credentialSubject: { id: applicant.did, name: 'Acme' },
+            }),
+          ),
+          bindingRequired: false,
+        },
+      },
+      issuerParticipantId: 93,
+    })
+    const buildCredentialOffer = vi.fn(async (): Promise<VtFlowCredentialOfferPayload | null> => null)
+
+    applicant = await startAgent({ label: 'Applicant', domain: 'applicant', vtFlowOptions: {} })
+    validator = await startAgent({
+      label: 'Validator',
+      domain: 'validator',
+      vtFlowOptions: { autoAcceptIssuanceRequest: true, autoOfferCredential: true, buildCredentialOffer },
+      veranaChain: {} as never,
+      indexer: {
+        getCredentialSchema: async () => ({
+          json_schema: JSON.stringify({
+            properties: { credentialSubject: { type: 'object', properties: { name: { type: 'string' } } } },
+          }),
+        }),
+      } as never,
+    })
+    for (const [agent, domain] of [
+      [applicant, 'applicant'],
+      [validator, 'validator'],
+    ] as const) {
+      agent.didcomm.registerInboundTransport(new SubjectInboundTransport(subjectMap[`rxjs:${domain}`]))
+      agent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+      agent.dids.config.resolvers.unshift(sharedResolver)
+      await agent.initialize()
+      await sharedResolver.registerAgent(agent)
+    }
+    const validatorEvents = vi.spyOn(validator.events, 'emit')
+    const applicantEvents = vi.spyOn(applicant.events, 'emit')
+
+    const { connectionRecord } = await applicant.didcomm.oob.receiveImplicitInvitation({
+      did: validator.did,
+      label: 'Applicant',
+      didCommVersion: 'v2',
+      ourDid: applicant.did,
+    })
+    if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
+    const connection = await applicant.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
+
+    const validating = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+    await applicant.modules.vtFlow.sendIssuanceRequest({
+      connectionId: connection.id,
+      schemaId: '22',
+      agentParticipantId: '0',
+      walletAgentParticipantId: '0',
+      claims: { name: 'Acme' },
+    })
+    const flowId = (await validating).payload.vtFlowRecordId
+    await vi.waitFor(() => expect(buildCredentialOffer).toHaveBeenCalledTimes(1))
+
+    const oobPending = waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.OobPending))
+    await validator.modules.vtFlow.sendOobLink({
+      vtFlowRecordId: flowId,
+      url: 'https://collect.example/form',
+      description: 'complete the form',
+    })
+    await oobPending
+
+    buildCredentialOffer.mockImplementation(offer)
+    const orchestrator = new VtFlowOrchestrator(validator)
+    ;(orchestrator as unknown as { buildDirectIssuanceOffer: unknown }).buildDirectIssuanceOffer = offer
+    const offered = await orchestrator.validateFlow({ vtFlowRecordId: flowId })
+
+    expect(offered.state).toBe(VtFlowState.CredOffered)
+    expect(buildCredentialOffer).toHaveBeenCalledTimes(1)
+    expect(await validator.didcomm.credentials.getAll()).toHaveLength(1)
+  }, 60_000)
 })

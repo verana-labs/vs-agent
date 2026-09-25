@@ -215,6 +215,7 @@ export async function markVtFlowRecordsValidated(agent: VsAgent, participantId: 
         return null
       }
       await service.markValidated(agentContext, record.id)
+      if (record.validation) await new VtFlowOrchestrator(agent).continueAfterValidated(record.id)
       return 'VALIDATED'
     },
     'Failed to markValidated',

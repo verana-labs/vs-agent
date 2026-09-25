@@ -99,6 +99,7 @@ export enum VtFlowTxReason {
   FeegrantExhausted = 'FEEGRANT_EXHAUSTED',
   FeegrantExpired = 'FEEGRANT_EXPIRED',
   AuthorizationExpired = 'AUTHORIZATION_EXPIRED',
+  PreflightError = 'PREFLIGHT_ERROR',
   BroadcastError = 'BROADCAST_ERROR',
   TxFailed = 'TX_FAILED',
   TxNotFound = 'TX_NOT_FOUND',
@@ -113,6 +114,7 @@ export enum VtFlowTxStatus {
 /** Outcome of a flow transaction; `height` and `reason` appear once the chain resolved it. */
 export interface VtFlowTx {
   hash?: string
+  submittedAt?: string
   height?: number
   status: VtFlowTxStatus
   reason?: VtFlowTxReason
