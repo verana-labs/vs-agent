@@ -370,6 +370,8 @@ export class VtFlowOrchestrator {
     const applicant = await this.agent.indexer.getParticipant(record.applicantParticipantId)
     const entryValidated = applicant.op_state === 'VALIDATED'
     this.assertValidateState(record, entryValidated)
+    if (record.connectionTerminated)
+      throw invalidState('the flow connection is TERMINATED until the applicant reconnects')
 
     const terms = this.validationTerms(input, applicant, record)
     await this.assertClaimsAndTerm(record, applicant, terms)

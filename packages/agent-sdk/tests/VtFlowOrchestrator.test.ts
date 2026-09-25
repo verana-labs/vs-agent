@@ -793,6 +793,21 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(offer).toHaveBeenCalledWith(expect.objectContaining({ vtFlowRecordId: 'rec-v' }))
   })
 
+  it('holds the issuance of a VALIDATED flow with a TERMINATED connection until the applicant reconnects', async () => {
+    const { orchestrator, current, offer } = makeHolderRenewal('VALIDATED')
+    current().connectionTerminated = true
+
+    await expect(orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })).rejects.toMatchObject({
+      code: 'INVALID_STATE',
+      status: 409,
+    })
+    expect(offer).not.toHaveBeenCalled()
+
+    current().connectionTerminated = undefined
+    await orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })
+    expect(offer).toHaveBeenCalledWith(expect.objectContaining({ vtFlowRecordId: 'rec-v' }))
+  })
+
   function makeDirectIssuance(claims: Record<string, unknown>) {
     const setup = makeValidateAgent({ claims })
     const record = setup.current()
