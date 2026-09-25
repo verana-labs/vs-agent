@@ -6,7 +6,7 @@ import {
   VtFlowState,
   VtFlowVariant,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { HOLDER_PARTICIPANT_TYPE } from '@verana-labs/vs-agent-sdk'
+import { HOLDER_PARTICIPANT_TYPE, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AdminApiError, AdminApiErrorCode } from '../src/common'
@@ -296,18 +296,18 @@ describe('VtFlowsService v2 routes', () => {
     const record = flowRecord('a', 1000, VtFlowState.ValidationTxFailed)
     const markValidated = vi.fn().mockResolvedValue(record)
     const terminateSessionAsValidator = vi.fn()
+    const continueAfterValidated = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
+      .mockResolvedValue(record as never)
     const service = makeService(
-      {
-        findAllByQuery: vi.fn().mockResolvedValue([record]),
-        findById: vi.fn().mockResolvedValue(record),
-        markValidated,
-        terminateSessionAsValidator,
-      },
+      { findAllByQuery: vi.fn().mockResolvedValue([record]), markValidated, terminateSessionAsValidator },
       { applicantOpState: 'VALIDATED' },
     )
 
     await expect(service.rejectFlow('sess-a', { description: 'no' })).rejects.toThrow(ConflictException)
     expect(markValidated).toHaveBeenCalledWith('a')
+    expect(continueAfterValidated).toHaveBeenCalledWith('a')
     expect(terminateSessionAsValidator).not.toHaveBeenCalled()
+    continueAfterValidated.mockRestore()
   })
 })
