@@ -39,6 +39,7 @@ import { VtFlowRecord, VtFlowRepository } from '../repository'
 import { peerAnchorDid } from '../utils'
 import {
   VtFlowEventTypes,
+  type VtFlowIssuance,
   type VtFlowMessage,
   type VtFlowValidation,
   VtFlowMessageType,
@@ -672,6 +673,28 @@ export class VtFlowService {
     record.validation = validation
     if (state) await this.updateState(agentContext, record, state)
     else await this.updateRecord(agentContext, record)
+    return record
+  }
+
+  /** Record the outcome of the `CreateOrUpdateParticipantSession` transaction that anchors the issued credential. */
+  public async recordIssuance(
+    agentContext: AgentContext,
+    recordId: string,
+    issuance: VtFlowIssuance,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.issuance = issuance
+    await this.updateRecord(agentContext, record)
+    return record
+  }
+
+  /** `VALIDATED` => `VALIDATED_PENDING_CLAIMS`, when the claims fail the schema at offer time ([VSA-VTI-FLOW-OP-ISSUE-4]). */
+  public async markPendingClaims(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.assertState(VtFlowState.Validated)
+    await this.updateState(agentContext, record, VtFlowState.ValidatedPendingClaims)
     return record
   }
 

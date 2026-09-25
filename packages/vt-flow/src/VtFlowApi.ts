@@ -23,6 +23,7 @@ import {
   DidCommAutoAcceptCredential,
   DidCommConnectionService,
   DidCommCredentialExchangeRepository,
+  DidCommCredentialState,
   DidCommCredentialsApi,
   DidCommCredentialsModuleConfig,
   DidCommMessageSender,
@@ -32,7 +33,7 @@ import {
 import { VtFlowModuleConfig } from './VtFlowModuleConfig'
 import { VtFlowErrorCode } from './errors'
 import { VtFlowService } from './services'
-import { VtFlowRole, VtFlowState } from './types'
+import { VtFlowRole, VtFlowState, VtFlowTxStatus } from './types'
 
 /** Public API for vt-flow; each method performs a single state transition so callers can gate each one on its own on-chain work. */
 @injectable()
@@ -259,6 +260,10 @@ export class VtFlowApi {
     return this.vtFlowService.markValidated(this.agentContext, vtFlowRecordId)
   }
 
+  public markPendingClaims(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    return this.vtFlowService.markPendingClaims(this.agentContext, vtFlowRecordId)
+  }
+
   public markCompleted(vtFlowRecordId: string): Promise<VtFlowRecord> {
     return this.vtFlowService.markCompleted(this.agentContext, vtFlowRecordId)
   }
@@ -351,14 +356,26 @@ export class VtFlowApi {
       : undefined
     connectionRecord?.assertReady()
 
+    // a credential signed by an earlier call whose anchoring failed is delivered as it was signed
+    const reissue = credentialExchangeRecord.state === DidCommCredentialState.CredentialIssued
+    const storedMessage = reissue
+      ? await protocol.findCredentialMessage(this.agentContext, credentialExchangeRecord.id)
+      : null
+    if (reissue && !storedMessage) {
+      throw new CredoError(`Credential exchange '${credentialExchangeRecord.id}' has no issued credential`)
+    }
     // unlike DidCommCredentialsApi.acceptRequest, this signs without sending
-    const { message } = await protocol.acceptRequest(this.agentContext, {
-      credentialExchangeRecord,
-      comment: options.comment,
-      credentialFormats: options.credentialFormats ?? {
-        dataIntegrity: { cryptosuite: this.config.dataIntegrityCryptosuite },
-      },
-    })
+    const message =
+      storedMessage ??
+      (
+        await protocol.acceptRequest(this.agentContext, {
+          credentialExchangeRecord,
+          comment: options.comment,
+          credentialFormats: options.credentialFormats ?? {
+            dataIntegrity: { cryptosuite: this.config.dataIntegrityCryptosuite },
+          },
+        })
+      ).message
 
     const hook = this.config.onBeforeCredentialIssued
     if (hook) {
@@ -377,6 +394,15 @@ export class VtFlowApi {
         credentialExchangeRecord,
         credential,
       })
+      if (result?.issuance) {
+        await this.vtFlowService.recordIssuance(this.agentContext, record.id, result.issuance)
+      }
+      if (result?.issuance?.tx?.status === VtFlowTxStatus.Failed) {
+        return {
+          record: await this.vtFlowService.getById(this.agentContext, record.id),
+          credentialExchangeRecord,
+        }
+      }
       if (result?.credentialDigest) {
         await this.vtFlowService.setCredentialDigest(this.agentContext, record.id, result.credentialDigest)
       }

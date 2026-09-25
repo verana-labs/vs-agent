@@ -12,6 +12,7 @@ import {
   VtFlowRole,
   VtFlowState,
   VtFlowSubmission,
+  VtFlowTxReason,
   VtFlowTxStatus,
   VtFlowVariant,
 } from '../src'
@@ -696,6 +697,33 @@ describe('VtFlowService.sendOobLinkForSession', () => {
       }),
     )
     expect(eventEmitter.emit).not.toHaveBeenCalled()
+  })
+})
+
+describe('VtFlowService issuance after validation', () => {
+  it('moves VALIDATED to VALIDATED_PENDING_CLAIMS and refuses any other state', async () => {
+    const validated = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validated })
+    const { service } = makeService(validated)
+
+    const record = await service.markPendingClaims({} as never, validated.id)
+    expect(record.state).toBe(VtFlowState.ValidatedPendingClaims)
+
+    await expect(service.markPendingClaims({} as never, validated.id)).rejects.toThrow(
+      /state 'VALIDATED_PENDING_CLAIMS'/,
+    )
+  })
+
+  it('records the anchoring outcome and keeps the flow in CRED_OFFERED', async () => {
+    const offered = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.CredOffered })
+    const { service, repository } = makeService(offered)
+    const issuance = { tx: { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.TxFailed, error: 'out' } }
+
+    await service.recordIssuance({} as never, offered.id, issuance)
+
+    expect(repository.update).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ state: VtFlowState.CredOffered, issuance }),
+    )
   })
 })
 
