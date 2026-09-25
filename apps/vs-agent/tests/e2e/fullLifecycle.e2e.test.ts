@@ -621,7 +621,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       const parentFlow = await until(async () => {
         const [flow] = await parentVtFlowApi.findAllByQuery({
           role: VtFlowRole.Validator,
-          participantId: String(childHolder.id),
+          applicantParticipantId: String(childHolder.id),
         })
         return flow?.state === VtFlowState.AwaitingOr ? flow : undefined
       })
