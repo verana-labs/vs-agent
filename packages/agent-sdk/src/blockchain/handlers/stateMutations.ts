@@ -7,6 +7,7 @@ import {
   VtFlowRole,
   VtFlowService,
   VtFlowState,
+  VtFlowValidatedFromStates,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { classifyEcsSchema } from '@verana-labs/vs-agent-model'
@@ -210,7 +211,7 @@ export async function markVtFlowRecordsValidated(agent: VsAgent, participantId: 
     agent,
     participantId,
     async (record, service, agentContext) => {
-      if (record.state !== VtFlowState.Validating && record.state !== VtFlowState.OobPending) {
+      if (record.role !== VtFlowRole.Validator || !VtFlowValidatedFromStates.has(record.state)) {
         return null
       }
       await service.markValidated(agentContext, record.id)

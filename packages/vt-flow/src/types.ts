@@ -15,7 +15,7 @@ export enum VtFlowVariant {
   DirectIssuance = 'direct-issuance',
 }
 
-/** 16 Flow States covering both variants (AWAITING_*, *_SENT, OOB_PENDING, VALIDATING, VALIDATED, CRED_OFFERED, COMPLETED, CRED_REVOKED, TERMINATED_BY_*, ERROR, PARTICIPANT_REVOKED, PARTICIPANT_SLASHED). */
+/** 20 Flow States covering both variants (AWAITING_*, *_SENT, OOB_PENDING, VALIDATING, VALIDATION_TX_*, VALIDATED, VALIDATED_PENDING_CLAIMS, CRED_OFFERED, COMPLETED, CRED_REVOKED, TERMINATED_BY_*, ERROR, PARTICIPANT_REVOKED, PARTICIPANT_SLASHED). */
 export enum VtFlowState {
   AwaitingOp = 'AWAITING_OP',
   OrSent = 'OR_SENT',
@@ -24,7 +24,11 @@ export enum VtFlowState {
   AwaitingIr = 'AWAITING_IR',
   OobPending = 'OOB_PENDING',
   Validating = 'VALIDATING',
+  AwaitingValidationTx = 'AWAITING_VALIDATION_TX',
+  ValidationTxSubmitted = 'VALIDATION_TX_SUBMITTED',
+  ValidationTxFailed = 'VALIDATION_TX_FAILED',
   Validated = 'VALIDATED',
+  ValidatedPendingClaims = 'VALIDATED_PENDING_CLAIMS',
   CredOffered = 'CRED_OFFERED',
   Completed = 'COMPLETED',
   CredRevoked = 'CRED_REVOKED',
@@ -42,6 +46,15 @@ export const VtFlowTerminalStates: ReadonlySet<VtFlowState> = new Set([
   VtFlowState.Error,
   VtFlowState.ParticipantRevoked,
   VtFlowState.ParticipantSlashed,
+])
+
+/** Validator states that `SetParticipantOPtoValidated` on-chain moves to `VALIDATED` ([VSA-VTI-FLOW-OP-ISSUE]). */
+export const VtFlowValidatedFromStates: ReadonlySet<VtFlowState> = new Set([
+  VtFlowState.Validating,
+  VtFlowState.OobPending,
+  VtFlowState.AwaitingValidationTx,
+  VtFlowState.ValidationTxSubmitted,
+  VtFlowState.ValidationTxFailed,
 ])
 
 export function isVtFlowTerminalState(state: VtFlowState): boolean {

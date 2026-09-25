@@ -165,10 +165,6 @@ describe('vt-flow: two-agent integration', () => {
     const validatorRecord = await validator.modules.vtFlow.findById(validatedEvent.payload.vtFlowRecordId)
     expect(validatorRecord).not.toBeNull()
 
-    await validator.modules.vtFlow.sendValidating(validatorRecord!.id, {
-      comment: 'Validating applicant documentation.',
-    })
-
     await applicantValidating
     const updatedApplicant = await applicant.modules.vtFlow.findByThreadId(applicantRecord.threadId)
     expect(updatedApplicant?.state).toBe(VtFlowState.Validating)
@@ -301,7 +297,7 @@ describe('vt-flow: two-agent integration', () => {
       vi.stubGlobal('fetch', baseFetch)
     }
   }, 30_000)
-  it('sendValidating rotates the Validator DID from webvh to peer', async () => {
+  it('the validating sent on acceptance rotates the Validator DID from webvh to peer', async () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
     await applicant.modules.vtFlow.sendIssuanceRequest({
@@ -314,8 +310,6 @@ describe('vt-flow: two-agent integration', () => {
     const validatingEvent = await validatingReached
     const validatorRecord = await validator.modules.vtFlow.getById(validatingEvent.payload.vtFlowRecordId)
     const webvhDid = validator.did
-
-    await validator.modules.vtFlow.sendValidating(validatorRecord.id)
 
     await waitForEvent(applicantEvents, (ev: unknown): ev is unknown => {
       const e = ev as any
@@ -340,6 +334,8 @@ describe('vt-flow: two-agent integration', () => {
     const validatingEvent = await validatingReached
     const validatorRecord = await validator.modules.vtFlow.getById(validatingEvent.payload.vtFlowRecordId)
     const applicantWebvhDid = applicant.did
+    // the connection update of the inbound validating would otherwise race the rotation
+    await waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
 
     const validatorConnBefore = await validator.didcomm.connections.getById(validatorRecord.connectionId)
     expect(validatorConnBefore.theirDid).toBe(applicantWebvhDid)
@@ -455,7 +451,6 @@ describe('vt-flow: VS-CONN-VS trust gate', () => {
     expect(resolveDID).toHaveBeenCalledWith(applicant.did)
 
     const webvhDid = validator.did
-    await validator.modules.vtFlow.sendValidating(validatorRecord!.id)
 
     await waitForEvent(applicantEvents, (ev: unknown): ev is unknown => {
       const e = ev as any

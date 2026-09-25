@@ -150,10 +150,10 @@ export class VtFlowModule implements Module {
       const config = service.getModuleConfig()
       if (!config.onCompleted) return
 
-      const record = await service.findById(agentContext, payload.vtFlowRecordId)
-      if (!record || !record.credentialExchangeRecordId) return
-
       try {
+        const record = await service.findById(agentContext, payload.vtFlowRecordId)
+        if (!record || !record.credentialExchangeRecordId) return
+
         const credentialRepository = agentContext.dependencyManager.resolve(
           DidCommCredentialExchangeRepository,
         )
@@ -176,10 +176,10 @@ export class VtFlowModule implements Module {
       const config = service.getModuleConfig()
       if (!config.onCredentialRevoked) return
 
-      const record = await service.findById(agentContext, payload.vtFlowRecordId)
-      if (!record || record.role !== VtFlowRole.Applicant) return
-
       try {
+        const record = await service.findById(agentContext, payload.vtFlowRecordId)
+        if (!record || record.role !== VtFlowRole.Applicant) return
+
         await config.onCredentialRevoked({ agentContext, record })
       } catch (error) {
         service
@@ -191,10 +191,10 @@ export class VtFlowModule implements Module {
     eventEmitter.on<VtFlowStateChangedEvent>(VtFlowEventTypes.VtFlowStateChanged, async ({ payload }) => {
       const config = service.getModuleConfig()
 
-      const record = await service.findById(agentContext, payload.vtFlowRecordId)
-      if (!record) return
-
       try {
+        const record = await service.findById(agentContext, payload.vtFlowRecordId)
+        if (!record) return
+
         if (
           record.role === VtFlowRole.Applicant &&
           payload.state === VtFlowState.CredOffered &&
@@ -223,7 +223,7 @@ export class VtFlowModule implements Module {
           service
             .getLogger()
             .debug(`[vt-flow] auto-accepting OR for ${record.id} (autoAcceptOnboardingRequest=true)`)
-          await service.acceptOnboardingRequest(agentContext, record.id)
+          await agentContext.dependencyManager.resolve(VtFlowApi).acceptOnboardingRequest(record.id)
           return
         }
 
@@ -235,7 +235,7 @@ export class VtFlowModule implements Module {
           service
             .getLogger()
             .debug(`[vt-flow] auto-accepting IR for ${record.id} (autoAcceptIssuanceRequest=true)`)
-          await service.acceptIssuanceRequest(agentContext, record.id)
+          await agentContext.dependencyManager.resolve(VtFlowApi).acceptIssuanceRequest(record.id)
           return
         }
 
@@ -265,7 +265,7 @@ export class VtFlowModule implements Module {
       } catch (error) {
         service
           .getLogger()
-          .error(`[vt-flow] auto-chain threw for ${record.id}`, error as Record<string, unknown>)
+          .error(`[vt-flow] auto-chain threw for ${payload.vtFlowRecordId}`, error as Record<string, unknown>)
       }
     })
   }

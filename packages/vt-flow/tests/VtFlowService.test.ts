@@ -1,9 +1,22 @@
-import { utils } from '@credo-ts/core'
+import { EventEmitter, utils } from '@credo-ts/core'
 import { DidCommCredentialExchangeRepository } from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
-import { VtCredentialState, VtFlowRole, VtFlowState, VtFlowVariant } from '../src'
-import { IssuanceRequestMessage, OnboardingRequestMessage } from '../src/messages'
+import {
+  VtCredentialState,
+  VtFlowEventTypes,
+  VtFlowModule,
+  VtFlowModuleConfig,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowVariant,
+} from '../src'
+import {
+  IssuanceRequestMessage,
+  OnboardingRequestMessage,
+  OobLinkMessage,
+  ValidatingMessage,
+} from '../src/messages'
 import { VtFlowRecord } from '../src/repository'
 import { VtFlowService } from '../src/services/VtFlowService'
 
@@ -26,6 +39,7 @@ function makeService(existing: VtFlowRecord | null, previousConnection: unknown 
   const repository = {
     findByParticipantSessionId: vi.fn().mockResolvedValue(existing),
     getById: vi.fn().mockResolvedValue(existing),
+    findByThreadId: vi.fn().mockResolvedValue(existing),
     save: vi.fn(),
     update: vi.fn(),
   }
@@ -109,6 +123,20 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(record.state).toBe(VtFlowState.AwaitingOr)
     expect(record.connectionId).toBe('conn-new')
     expect(repository.save).not.toHaveBeenCalled()
+  })
+
+  it('validator keeps a flow in VALIDATED when the applicant resends its request', async () => {
+    const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validated })
+    const { service, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+    const context = makeMessageContext(agentContext)
+    context.message.setThread({ threadId: existing.threadId })
+
+    const record = await service.processReceiveOnboardingRequest(context as never)
+
+    expect(record.state).toBe(VtFlowState.Validated)
   })
 
   it('validator rejects a session id colliding with a terminated flow', async () => {
@@ -285,6 +313,89 @@ describe('VtFlowService.reattachOnboardingProcessRecord', () => {
   })
 })
 
+describe('VtFlowService.processReceiveValidating', () => {
+  it.each([
+    VtFlowState.OrSent,
+    VtFlowState.IrSent,
+    VtFlowState.OobPending,
+  ])('applicant moves from %s to VALIDATING', async state => {
+    const existing = makeRecord({ state })
+    const { service } = makeService(existing)
+
+    const record = await service.processReceiveValidating({
+      message: new ValidatingMessage({ threadId: existing.threadId }),
+      agentContext: {},
+      assertReadyConnection: () => undefined,
+    } as never)
+
+    expect(record.state).toBe(VtFlowState.Validating)
+  })
+})
+
+describe('VtFlowService.processReceiveOobLink', () => {
+  it('applicant refuses an oob-link once the flow is COMPLETED', async () => {
+    const existing = makeRecord()
+    const { service, repository } = makeService(existing)
+
+    await expect(
+      service.processReceiveOobLink({
+        message: new OobLinkMessage({ threadId: existing.threadId, url: 'https://x', description: 'd' }),
+        agentContext: {},
+        assertReadyConnection: () => undefined,
+      } as never),
+    ).rejects.toThrow(/state 'COMPLETED'/)
+    expect(repository.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('VtFlowService.sendOobLinkForSession', () => {
+  it('refuses a request the validator has not accepted yet', async () => {
+    const awaiting = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    const { service } = makeService(awaiting)
+
+    await expect(
+      service.sendOobLinkForSession({} as never, awaiting.id, { url: 'https://x', description: 'd' }),
+    ).rejects.toThrow(/Valid states: VALIDATING, OOB_PENDING\./)
+  })
+})
+
+describe('VtFlowService.sendValidatingForSession', () => {
+  it('moves OOB_PENDING to VALIDATING and refuses any other state', async () => {
+    const pending = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.OobPending,
+      oobLinkUrl: 'https://x',
+    })
+    const { service } = makeService(pending)
+
+    const { record, message } = await service.sendValidatingForSession({} as never, pending.id)
+    expect(record.state).toBe(VtFlowState.Validating)
+    expect(record.oobLinkUrl).toBeUndefined()
+    expect(message.threadId).toBe(pending.threadId)
+
+    await expect(service.sendValidatingForSession({} as never, pending.id)).rejects.toThrow(
+      /state 'VALIDATING'/,
+    )
+  })
+})
+
+describe('VtFlowService.terminateByValidator', () => {
+  it('refuses a flow whose validation transaction is in flight and closes a COMPLETED one', async () => {
+    const submitted = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.ValidationTxSubmitted })
+    const { service, repository } = makeService(submitted)
+
+    await expect(service.terminateByValidator({} as never, submitted.id)).rejects.toThrow(
+      /state 'VALIDATION_TX_SUBMITTED'/,
+    )
+    expect(repository.update).not.toHaveBeenCalled()
+
+    const completed = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Completed })
+    repository.getById.mockResolvedValue(completed)
+    const { record } = await service.terminateByValidator({} as never, completed.id)
+    expect(record.state).toBe(VtFlowState.TerminatedByValidator)
+  })
+})
+
 describe('VtFlowService.notifyCredentialStateChange', () => {
   it('allows re-notifying a revocation from CRED_REVOKED', async () => {
     const revoked = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.CredRevoked })
@@ -427,5 +538,39 @@ describe('VtFlowService VS-CONN-VS gate', () => {
       expect.objectContaining({ purpose: { participantId: '42' } }),
     )
     expect(repository.save).toHaveBeenCalled()
+  })
+})
+
+describe('VtFlowModule state listeners', () => {
+  it('log a record read that fails after shutdown instead of rejecting', async () => {
+    const listeners: Array<(event: unknown) => Promise<void>> = []
+    const logger = { debug: vi.fn(), error: vi.fn() }
+    const service = new VtFlowService(
+      { findById: vi.fn().mockRejectedValue(new Error('Invalid store handle')) } as never,
+      {} as never,
+      logger as never,
+      new VtFlowModuleConfig({ onCompleted: vi.fn(), onCredentialRevoked: vi.fn() }),
+    )
+    const eventEmitter = {
+      on: (type: string, listener: (event: unknown) => Promise<void>) => {
+        if (type === VtFlowEventTypes.VtFlowStateChanged) listeners.push(listener)
+      },
+    }
+    const registry = { registerMessageHandlers: vi.fn(), register: vi.fn() }
+    const agentContext = {
+      dependencyManager: {
+        resolve: (token: unknown) =>
+          token === VtFlowService ? service : token === EventEmitter ? eventEmitter : registry,
+      },
+    }
+    await new VtFlowModule().initialize(agentContext as never)
+
+    const events = [VtFlowState.Completed, VtFlowState.CredRevoked].map(state => ({
+      payload: { vtFlowRecordId: 'flow-1', state, previousState: VtFlowState.Validating },
+    }))
+    await Promise.all(events.flatMap(event => listeners.map(listener => listener(event))))
+
+    expect(listeners).toHaveLength(3)
+    expect(logger.error).toHaveBeenCalledTimes(4)
   })
 })
