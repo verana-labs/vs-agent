@@ -61,10 +61,9 @@ export function isVtFlowTerminalState(state: VtFlowState): boolean {
   return VtFlowTerminalStates.has(state)
 }
 
-// the VPR ParticipantRole value of HOLDER
 const HOLDER_PARTICIPANT_ROLE = 6
 
-/** A finished onboarding flow that a renewal re-enters: `COMPLETED`, or `VALIDATED` for a role other than HOLDER ([VSA-VTI-FLOW-OP-RENEW] step 3). */
+/** A renewal re-enters a flow in `COMPLETED` or `CRED_REVOKED`, or in `VALIDATED` for a role other than HOLDER ([VSA-VTI-FLOW-OP-RENEW] step 3). */
 export function isVtFlowRenewable(record: {
   state: VtFlowState
   applicantParticipantRole?: number
