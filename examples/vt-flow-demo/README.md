@@ -103,7 +103,7 @@ The applicant resolves as `not-trusted` at that point — it has not onboarded y
 [vt-flow] VS-CONN-VS rejected 'did:webvh:...:agent-applicant.demo': verified=true outcome=not-trusted
 ```
 
-It accepts the request anyway, under the [VS-CONN-VS] ECS issuance exemption: the applicant owns a `PENDING` Participant entry that names the validator as its validator, on an ECS schema of the ecosystem in `TRUSTED_ECS_ECOSYSTEM_DIDS`. The flow lands in `AWAITING_OR` on the validator and `OR_SENT` on the applicant. The exemption is one-way: the applicant still requires the validator to resolve as `verified`, which is why the ecosystem agent has to publish its VTJSCs first.
+It accepts the request anyway, under the [VS-CONN-VS] ECS issuance exemption: the applicant owns a `PENDING` Participant entry that names the validator as its validator, on an ECS schema of the ecosystem in `TRUSTED_ECS_ECOSYSTEM_DIDS`. It then sends `validating`, so the flow is `VALIDATING` on both sides. The exemption is one-way: the applicant still requires the validator to resolve as `verified`, which is why the ecosystem agent has to publish its VTJSCs first.
 
 ### Drive the flow
 
