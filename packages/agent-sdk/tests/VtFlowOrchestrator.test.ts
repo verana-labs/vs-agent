@@ -891,4 +891,96 @@ describe('VtFlowOrchestrator validateFlow', () => {
 
     expect(current()).toMatchObject({ state: 'VALIDATED', validation: { tx: { status: 'SUBMITTED' } } })
   })
+
+  it('repeats the anchoring of a credential only while its issuance transaction is FAILED', async () => {
+    const { agent, vtFlowApi, current } = makeValidateAgent({ state: 'CRED_OFFERED' })
+    const issueCredentialForSession = vi.fn(async () => ({ record: current() }))
+    Object.assign(vtFlowApi, { issueCredentialForSession })
+    current().credentialExchangeRecordId = 'cx-1'
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+
+    await expect(orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })).rejects.toMatchObject({
+      code: 'INVALID_STATE',
+    })
+
+    current().issuance = { tx: { status: 'FAILED', reason: 'TX_FAILED' } }
+    await orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(issueCredentialForSession).toHaveBeenCalledTimes(1)
+    expect(issueCredentialForSession).toHaveBeenCalledWith({
+      vtFlowRecordId: 'rec-v',
+      credentialExchangeRecordId: 'cx-1',
+    })
+  })
+})
+
+describe('VtFlowOrchestrator.onCredentialIssued', () => {
+  const signed = { '@context': ['https://www.w3.org/ns/credentials/v2'] }
+
+  function makeAnchorAgent(balance = '1000') {
+    const chain = {
+      corporation: 'verana1corp',
+      createOrUpdateParticipantSessionMsg: vi.fn(params => ({ typeUrl: 'session', value: params })),
+      estimateFee: vi.fn(async () => ({ amount: [{ denom: 'uvna', amount: '500' }], gas: '200000' })),
+      getBalance: vi.fn(async () => ({ denom: 'uvna', amount: balance })),
+      broadcastWithoutWaiting: vi.fn(async () => 'CD34'),
+      findTx: vi.fn(async () => ({ code: 0, height: 12, rawLog: '' })),
+    }
+    const record = { id: 'rec-v', participantSessionId: 'sess-1', issuerParticipantId: 93 }
+    const agent = {
+      dependencyManager: { resolve: () => ({ findById: async () => record }) },
+      indexer: {
+        getParticipant: async () => ({ schema_id: 22 }),
+        getCredentialSchema: async () => ({ digest_algorithm: 'sha384', json_schema: '{}' }),
+      },
+      veranaChain: chain,
+    }
+    return { orchestrator: new VtFlowOrchestrator(agent as never), chain }
+  }
+
+  it('returns the anchoring transaction once it is included', async () => {
+    const { orchestrator, chain } = makeAnchorAgent()
+
+    const { credentialDigest, issuance } = await orchestrator.onCredentialIssued('rec-v', signed)
+
+    expect(chain.createOrUpdateParticipantSessionMsg).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'sess-1', issuerParticipantId: 93, digest: credentialDigest }),
+    )
+    expect(issuance.tx).toMatchObject({ hash: 'CD34', height: 12, status: 'SUCCEEDED' })
+  })
+
+  it('lets the Corporation pay the anchoring when the grant of the issuer entry has with_feegrant', async () => {
+    const { orchestrator, chain } = makeAnchorAgent()
+    const getVsOperatorAuthorizationRecord = vi.fn(() => ({ withFeegrant: true }))
+    Object.assign(chain, {
+      feeAllowance: vi.fn(async () => ({ unlimited: true })),
+      getAccountBalance: vi.fn(async () => ({ denom: 'uvna', amount: '1000' })),
+    })
+    Object.assign((orchestrator as unknown as { agent: object }).agent, {
+      authorizationService: { getVsOperatorAuthorizationRecord },
+    })
+
+    await orchestrator.onCredentialIssued('rec-v', signed)
+
+    expect(getVsOperatorAuthorizationRecord).toHaveBeenCalledWith(93)
+    expect(chain.estimateFee).toHaveBeenCalledWith(expect.anything(), 'verana1corp')
+  })
+
+  it('returns a failed anchoring instead of throwing', async () => {
+    const broke = makeAnchorAgent('100')
+    const preflight = await broke.orchestrator.onCredentialIssued('rec-v', signed)
+    expect(preflight.issuance.tx).toMatchObject({ status: 'FAILED', reason: 'INSUFFICIENT_FUNDS_AGENT' })
+    expect(broke.chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+
+    const rejected = makeAnchorAgent()
+    rejected.chain.findTx.mockResolvedValue({ code: 5, height: 13, rawLog: 'digest exists' })
+    const included = await rejected.orchestrator.onCredentialIssued('rec-v', signed)
+    expect(included.issuance.tx).toMatchObject({
+      hash: 'CD34',
+      height: 13,
+      status: 'FAILED',
+      reason: 'TX_FAILED',
+      error: 'digest exists',
+    })
+  })
 })

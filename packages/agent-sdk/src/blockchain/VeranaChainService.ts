@@ -325,23 +325,26 @@ export class VeranaChainService {
     return { txHash: result.transactionHash }
   }
 
+  createOrUpdateParticipantSessionMsg(params: CreateOrUpdateParticipantSessionParams): EncodeObject {
+    return {
+      typeUrl: veranaTypeUrls.MsgCreateOrUpdateParticipantSession,
+      value: MsgCreateOrUpdateParticipantSession.fromPartial({
+        corporation: this.corporationAddress,
+        operator: this.operatorAddress,
+        id: params.id,
+        issuerParticipantId: params.issuerParticipantId,
+        verifierParticipantId: params.verifierParticipantId,
+        agentParticipantId: params.agentParticipantId,
+        walletAgentParticipantId: params.walletAgentParticipantId,
+        digest: params.digest,
+      }),
+    }
+  }
+
   async createOrUpdateParticipantSession(
     params: CreateOrUpdateParticipantSessionParams,
   ): Promise<{ txHash: string }> {
-    const value = MsgCreateOrUpdateParticipantSession.fromPartial({
-      corporation: this.corporationAddress,
-      operator: this.operatorAddress,
-      id: params.id,
-      issuerParticipantId: params.issuerParticipantId,
-      verifierParticipantId: params.verifierParticipantId,
-      agentParticipantId: params.agentParticipantId,
-      walletAgentParticipantId: params.walletAgentParticipantId,
-      digest: params.digest,
-    })
-    const result = await this.broadcastMsg({
-      typeUrl: veranaTypeUrls.MsgCreateOrUpdateParticipantSession,
-      value,
-    })
+    const result = await this.broadcastMsg(this.createOrUpdateParticipantSessionMsg(params))
     return { txHash: result.transactionHash }
   }
 
