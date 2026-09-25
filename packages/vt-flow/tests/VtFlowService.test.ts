@@ -1,5 +1,5 @@
-import { EventEmitter, utils } from '@credo-ts/core'
-import { DidCommCredentialExchangeRepository } from '@credo-ts/didcomm'
+import { EventEmitter, JsonTransformer, utils } from '@credo-ts/core'
+import { DidCommCredentialExchangeRepository, WhoRetriesStatus } from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -12,11 +12,14 @@ import {
   VtFlowState,
   VtFlowVariant,
 } from '../src'
+import { VtFlowErrorCode } from '../src/errors'
 import {
   IssuanceRequestMessage,
   OnboardingRequestMessage,
   OobLinkMessage,
+  VT_FLOW_PROBLEM_REPORT_TYPE,
   ValidatingMessage,
+  VtFlowProblemReportMessage,
 } from '../src/messages'
 import { VtFlowRecord } from '../src/repository'
 import { VtFlowService } from '../src/services/VtFlowService'
@@ -86,6 +89,126 @@ const applicantParams = {
   agentParticipantId: '0',
   walletAgentParticipantId: '0',
 }
+
+describe('VtFlowService inbound problem-report', () => {
+  function makeReport(code: string, whoRetries?: string) {
+    return JsonTransformer.fromJSON(
+      {
+        '@type': VT_FLOW_PROBLEM_REPORT_TYPE,
+        '@id': utils.uuid(),
+        '~thread': { thid: utils.uuid() },
+        description: { code, en: 'because' },
+        who_retries: whoRetries,
+      },
+      VtFlowProblemReportMessage,
+    )
+  }
+
+  async function receive(
+    code: string,
+    role: VtFlowRole,
+    options: { whoRetries?: string; state?: VtFlowState } = {},
+  ) {
+    const existing = makeRecord({ role, state: options.state ?? VtFlowState.Validating })
+    const repository = {
+      findByThreadId: vi.fn().mockResolvedValue(existing),
+      update: vi.fn(),
+    }
+    const service = new VtFlowService(
+      repository as never,
+      { emit: vi.fn() } as never,
+      { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+      {} as never,
+    )
+    const record = await service.processReceiveProblemReport({
+      message: makeReport(code, options.whoRetries),
+      agentContext: {},
+    } as never)
+    return record as VtFlowRecord
+  }
+
+  it('terminates the applicant on a refused validation and records the message', async () => {
+    const record = await receive(VtFlowErrorCode.ValidationRefused, VtFlowRole.Applicant)
+
+    expect(record.state).toBe(VtFlowState.TerminatedByValidator)
+    expect(record.messages).toEqual([
+      expect.objectContaining({ type: VtFlowMessageType.ProblemReport, text: 'because' }),
+    ])
+  })
+
+  it('resolves session-terminated from the role of the sender', async () => {
+    await expect(receive(VtFlowErrorCode.SessionTerminated, VtFlowRole.Applicant)).resolves.toMatchObject({
+      state: VtFlowState.TerminatedByValidator,
+    })
+    await expect(receive(VtFlowErrorCode.SessionTerminated, VtFlowRole.Validator)).resolves.toMatchObject({
+      state: VtFlowState.TerminatedByApplicant,
+      messages: undefined,
+      errorMessage: 'because',
+    })
+  })
+
+  it('stays on validation-failed only when who_retries is you', async () => {
+    await expect(
+      receive(VtFlowErrorCode.ValidationFailed, VtFlowRole.Applicant, { whoRetries: WhoRetriesStatus.You }),
+    ).resolves.toMatchObject({ state: VtFlowState.Validating })
+    await expect(
+      receive(VtFlowErrorCode.ValidationFailed, VtFlowRole.Applicant, { whoRetries: WhoRetriesStatus.None }),
+    ).resolves.toMatchObject({ state: VtFlowState.Error })
+  })
+
+  it('falls back to the registry who_retries when the wire carries none', async () => {
+    await expect(receive(VtFlowErrorCode.ValidationFailed, VtFlowRole.Applicant)).resolves.toMatchObject({
+      state: VtFlowState.Validating,
+    })
+  })
+
+  it('moves to ERROR on internal-error only when it is fatal', async () => {
+    await expect(
+      receive(VtFlowErrorCode.InternalError, VtFlowRole.Applicant, { whoRetries: WhoRetriesStatus.You }),
+    ).resolves.toMatchObject({ state: VtFlowState.Validating })
+    await expect(
+      receive(VtFlowErrorCode.InternalError, VtFlowRole.Applicant, { whoRetries: WhoRetriesStatus.None }),
+    ).resolves.toMatchObject({ state: VtFlowState.Error })
+    await expect(receive(VtFlowErrorCode.InternalError, VtFlowRole.Applicant)).resolves.toMatchObject({
+      state: VtFlowState.Error,
+    })
+  })
+
+  it('reads the lower case who_retries of the wire', async () => {
+    await expect(
+      receive(VtFlowErrorCode.ValidationFailed, VtFlowRole.Applicant, { whoRetries: 'you' }),
+    ).resolves.toMatchObject({ state: VtFlowState.Validating })
+    await expect(
+      receive(VtFlowErrorCode.InternalError, VtFlowRole.Applicant, { whoRetries: 'none' }),
+    ).resolves.toMatchObject({ state: VtFlowState.Error })
+  })
+
+  it('leaves a flow in a terminal state untouched', async () => {
+    const record = await receive(VtFlowErrorCode.ValidationRefused, VtFlowRole.Applicant, {
+      state: VtFlowState.TerminatedByApplicant,
+    })
+
+    expect(record.state).toBe(VtFlowState.TerminatedByApplicant)
+    expect(record.messages).toBeUndefined()
+    expect(record.errorMessage).toBeUndefined()
+  })
+
+  it('leaves the flow where it is on a retryable code', async () => {
+    const record = await receive(VtFlowErrorCode.InvalidClaims, VtFlowRole.Applicant)
+
+    expect(record.state).toBe(VtFlowState.Validating)
+    expect(record.messages).toHaveLength(1)
+    expect(record.errorMessage).toBeUndefined()
+  })
+
+  it('moves an unknown code nowhere and still records it', async () => {
+    const record = await receive('vt-flow.not-a-real-code', VtFlowRole.Applicant)
+
+    expect(record.state).toBe(VtFlowState.Validating)
+    expect(record.messages).toHaveLength(1)
+    expect(record.errorMessage).toBeUndefined()
+  })
+})
 
 describe('VtFlowService re-attach on same participant_session_id', () => {
   it('applicant renewal re-attaches the finished flow and re-runs it', async () => {

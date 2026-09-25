@@ -1,4 +1,6 @@
-import { DidCommProblemReportMessage, ImpactStatus, WhoRetriesStatus } from '@credo-ts/didcomm'
+import { ImpactStatus, WhoRetriesStatus } from '@credo-ts/didcomm'
+
+import { VtFlowProblemReportMessage } from '../messages/VtFlowProblemReportMessage'
 
 import { VT_FLOW_ERROR_INFO, VtFlowErrorCode } from './VtFlowErrorCode'
 
@@ -12,7 +14,7 @@ export interface BuildVtFlowProblemReportOptions {
   impact?: ImpactStatus
 }
 
-const whoRetriesMap: Record<'you' | 'me' | 'both' | 'none', WhoRetriesStatus> = {
+export const whoRetriesMap: Record<'you' | 'me' | 'both' | 'none', WhoRetriesStatus> = {
   you: WhoRetriesStatus.You,
   me: WhoRetriesStatus.Me,
   both: WhoRetriesStatus.Both,
@@ -28,10 +30,10 @@ const impactMap: Record<'message' | 'thread' | 'connection', ImpactStatus> = {
 /** Build a problem-report with a `VtFlowErrorCode` description and `who_retries`/`impact` pulled from `VT_FLOW_ERROR_INFO`; caller drives dispatch and terminal-state transition. */
 export function buildVtFlowProblemReport(
   options: BuildVtFlowProblemReportOptions,
-): DidCommProblemReportMessage {
+): VtFlowProblemReportMessage {
   const info = VT_FLOW_ERROR_INFO[options.code]
 
-  const message = new DidCommProblemReportMessage({
+  const message = new VtFlowProblemReportMessage({
     description: {
       code: options.code,
       en: options.enDescription ?? defaultEnglishDescription(options.code),
