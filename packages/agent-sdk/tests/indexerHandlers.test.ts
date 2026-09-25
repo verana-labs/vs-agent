@@ -407,7 +407,7 @@ describe('reconcileVtFlowRecordsOnCancel', () => {
 })
 
 describe('vtFlowEvents', () => {
-  it('records the applicant entry on a validator onboarding record that enters AWAITING_OR', async () => {
+  it('records the applicant entry on the next state change after the indexer failed', async () => {
     const record = {
       role: VtFlowRole.Validator,
       variant: VtFlowVariant.OnboardingProcess,
@@ -425,7 +425,10 @@ describe('vtFlowEvents', () => {
       events: { on, emit: vi.fn() },
       context: { dependencyManager: { resolve: () => service } },
       indexer: {
-        findParticipant: vi.fn().mockResolvedValue({ role: 6, validatorParticipantId: 93, schemaId: 12 }),
+        findParticipant: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('indexer down'))
+          .mockResolvedValue({ role: 6, validatorParticipantId: 93, schemaId: 12 }),
       },
     }
     vtFlowEvents(agent as never, { debug: vi.fn(), warn: vi.fn() } as never)
@@ -433,6 +436,15 @@ describe('vtFlowEvents', () => {
 
     await listener({
       payload: { vtFlowRecordId: 'rec-v', state: VtFlowState.AwaitingOr, previousState: null },
+    })
+    expect(service.updateRecord).not.toHaveBeenCalled()
+
+    await listener({
+      payload: {
+        vtFlowRecordId: 'rec-v',
+        state: VtFlowState.Validating,
+        previousState: VtFlowState.AwaitingOr,
+      },
     })
 
     expect(agent.indexer.findParticipant).toHaveBeenCalledWith('94')

@@ -5,7 +5,6 @@ import {
   VtFlowEventTypes,
   VtFlowRole,
   VtFlowService,
-  VtFlowState,
   type VtFlowStateChangedEvent,
   VtFlowVariant,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
@@ -26,7 +25,6 @@ export const vtFlowEvents = (agent: VsAgent, logger: BaseLogger) => {
       }),
     )
 
-    if (payload.state !== VtFlowState.AwaitingOr) return
     try {
       await recordApplicantEntry(agent, payload.vtFlowRecordId)
     } catch (error) {
