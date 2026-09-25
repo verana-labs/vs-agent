@@ -14,7 +14,7 @@ function makeRecord(overrides: Partial<ConstructorParameters<typeof VtFlowRecord
     variant: VtFlowVariant.OnboardingProcess,
     agentParticipantId: 'agent-participant-1',
     walletAgentParticipantId: 'wallet-agent-participant-1',
-    participantId: 'participant-42',
+    applicantParticipantId: 'participant-42',
     ...overrides,
   })
 }
@@ -36,7 +36,7 @@ describe('VtFlowRecord', () => {
     expect(record.variant).toBe(VtFlowVariant.OnboardingProcess)
     expect(record.agentParticipantId).toBe('agent-participant-1')
     expect(record.walletAgentParticipantId).toBe('wallet-agent-participant-1')
-    expect(record.participantId).toBe('participant-42')
+    expect(record.applicantParticipantId).toBe('participant-42')
     expect(record.claims).toEqual({ country: 'FR' })
     expect(record.subprotocolThid).toBe('sub-thid-xyz')
     expect(record.credentialExchangeRecordId).toBe('cred-xchg-1')
@@ -70,7 +70,7 @@ describe('VtFlowRecord', () => {
       expect(tags.role).toBe(VtFlowRole.Applicant)
       expect(tags.flowState).toBe(VtFlowState.OrSent)
       expect(tags.flowVariant).toBe(VtFlowVariant.OnboardingProcess)
-      expect(tags.participantId).toBe('participant-42')
+      expect(tags.applicantParticipantId).toBe('participant-42')
       expect(tags.schemaId).toBeUndefined()
       expect(tags.credentialExchangeRecordId).toBe('cred-xchg-99')
       expect(tags.subprotocolThid).toBe('sub-thid-99')
@@ -79,19 +79,19 @@ describe('VtFlowRecord', () => {
     it('surfaces variant-specific identifiers correctly', () => {
       const onboarding = makeRecord({
         variant: VtFlowVariant.OnboardingProcess,
-        participantId: 'participant-abc',
+        applicantParticipantId: 'participant-abc',
         schemaId: undefined,
       })
-      expect(onboarding.getTags().participantId).toBe('participant-abc')
+      expect(onboarding.getTags().applicantParticipantId).toBe('participant-abc')
       expect(onboarding.getTags().schemaId).toBeUndefined()
 
       const direct = makeRecord({
         variant: VtFlowVariant.DirectIssuance,
         state: VtFlowState.IrSent,
-        participantId: undefined,
+        applicantParticipantId: undefined,
         schemaId: 'vpr:schema:xyz',
       })
-      expect(direct.getTags().participantId).toBeUndefined()
+      expect(direct.getTags().applicantParticipantId).toBeUndefined()
       expect(direct.getTags().schemaId).toBe('vpr:schema:xyz')
     })
 

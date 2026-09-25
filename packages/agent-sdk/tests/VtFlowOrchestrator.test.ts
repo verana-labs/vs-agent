@@ -113,6 +113,7 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
     did: 'did:web:agent',
     role: 1,
     validatorParticipantId: 9,
+    schemaId: 12,
     opState: ValidationState.VALIDATED,
   }
   const validator = { id: 9, did: 'did:web:validator' }
@@ -190,6 +191,14 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
     expect(vtFlowApi.sendOnboardingRequest).toHaveBeenCalledWith(
       expect.objectContaining({ connectionId: 'conn-old', participantSessionId: 'sess-old' }),
     )
+  })
+
+  it('records the schema of the applicant entry on the flow', async () => {
+    const { agent, vtFlowApi } = makeAgent(openConnection)
+
+    await new VtFlowOrchestrator(agent as never).startOnboardingProcess({ applicantParticipantId: 5 })
+
+    expect(vtFlowApi.sendOnboardingRequest).toHaveBeenCalledWith(expect.objectContaining({ schemaId: '12' }))
   })
 
   it('reuses the open connection after the validator rotated to a did:peer', async () => {
@@ -282,7 +291,7 @@ describe('VtFlowOrchestrator onboarding validation', () => {
     role: VtFlowRole.Validator,
     variant: 'onboarding-process',
     state: 'AWAITING_OR',
-    participantId: '94',
+    applicantParticipantId: '94',
     claims: {},
   }
 

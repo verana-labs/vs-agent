@@ -124,7 +124,8 @@ describe('vt-flow: two-agent integration', () => {
 
     const applicantRecord = await applicant.modules.vtFlow.sendOnboardingRequest({
       connectionId: applicantConnection.id,
-      participantId: 'participant-42',
+      applicantParticipantId: 'participant-42',
+      schemaId: '12',
       agentParticipantId: 'agent-participant-2',
       walletAgentParticipantId: 'wallet-agent-participant-2',
       claims: { role: 'issuer' },
@@ -133,7 +134,7 @@ describe('vt-flow: two-agent integration', () => {
     expect(applicantRecord.role).toBe(VtFlowRole.Applicant)
     expect(applicantRecord.variant).toBe(VtFlowVariant.OnboardingProcess)
     expect(applicantRecord.state).toBe(VtFlowState.OrSent)
-    expect(applicantRecord.participantId).toBe('participant-42')
+    expect(applicantRecord.applicantParticipantId).toBe('participant-42')
 
     const validatedEvent = await validatedReached
     const validatorRecord = await validator.modules.vtFlow.findById(validatedEvent.payload.vtFlowRecordId)
@@ -142,7 +143,12 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.variant).toBe(VtFlowVariant.OnboardingProcess)
     expect(validatorRecord?.state).toBe(VtFlowState.Validated)
     expect(validatorRecord?.threadId).toBe(applicantRecord.threadId)
-    expect(validatorRecord?.participantId).toBe('participant-42')
+    expect(validatorRecord?.applicantParticipantId).toBe('participant-42')
+
+    const { VtFlowsService } = await import('../src/controllers/admin/vt-flow/VtFlowsService')
+    const flowsService = new VtFlowsService({ getAgent: async () => applicant } as never, undefined as never)
+    const bySchema = await flowsService.listFlowsPage({ schemaId: '12' })
+    expect(bySchema.items.map(flow => flow.id)).toEqual([applicantRecord.id])
   })
 
   it('onboarding-request: Applicant transitions OR_SENT -> VALIDATING on `validating`', async () => {
@@ -155,7 +161,7 @@ describe('vt-flow: two-agent integration', () => {
 
     const applicantRecord = await applicant.modules.vtFlow.sendOnboardingRequest({
       connectionId: applicantConnection.id,
-      participantId: 'participant-77',
+      applicantParticipantId: 'participant-77',
       agentParticipantId: 'agent-participant-77',
       walletAgentParticipantId: 'wallet-agent-participant-77',
     })
@@ -201,12 +207,12 @@ describe('vt-flow: two-agent integration', () => {
       isVtFlowStateChangedEvent(VtFlowState.OobPending),
     )
     const sent = await flowsService.sendOobLink(psid, 'https://collect.example/form', 'complete the form')
-    expect(sent.oobLinkUrl).toBe('https://collect.example/form')
+    expect(sent.oobLink?.url).toBe('https://collect.example/form')
     expect(sent.state).toBe(VtFlowState.OobPending)
     await applicantOobPending
 
     const resent = await flowsService.sendOobLink(psid, 'https://collect.example/form-v2')
-    expect(resent.oobLinkUrl).toBe('https://collect.example/form-v2')
+    expect(resent.oobLink?.url).toBe('https://collect.example/form-v2')
     expect(resent.state).toBe(VtFlowState.OobPending)
   })
 

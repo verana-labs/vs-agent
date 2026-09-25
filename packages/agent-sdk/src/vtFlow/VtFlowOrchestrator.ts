@@ -123,7 +123,7 @@ export class VtFlowOrchestrator {
     const vtFlowApi = this.resolveVtFlowApi()
     const [latest] = (
       await vtFlowApi.findAllByQuery({
-        participantId: String(holderParticipant.id),
+        applicantParticipantId: String(holderParticipant.id),
         role: VtFlowRole.Applicant,
         flowVariant: VtFlowVariant.OnboardingProcess,
       })
@@ -164,7 +164,10 @@ export class VtFlowOrchestrator {
     return vtFlowApi.sendOnboardingRequest({
       connectionId,
       participantSessionId: input.participantSessionId ?? latest?.participantSessionId ?? utils.uuid(),
-      participantId: String(holderParticipant.id),
+      applicantParticipantId: String(holderParticipant.id),
+      applicantParticipantRole: Number(holderParticipant.role),
+      validatorParticipantId: String(holderParticipant.validatorParticipantId),
+      schemaId: String(holderParticipant.schemaId),
       agentParticipantId: String(this.options.agentParticipantId ?? 0),
       walletAgentParticipantId: String(this.options.walletAgentParticipantId ?? 0),
       claims: input.claims,
@@ -204,9 +207,9 @@ export class VtFlowOrchestrator {
           `'${VtFlowState.Validated}' with no credential exchange`,
       )
     }
-    if (!record.participantId) throw new Error('Record has no participantId')
+    if (!record.applicantParticipantId) throw new Error('Record has no applicantParticipantId')
 
-    const participantId = Number(record.participantId)
+    const participantId = Number(record.applicantParticipantId)
     const participant = await this.agent.indexer.findParticipant(participantId)
     if (!participant) throw new Error(`Applicant participant ${participantId} not found on chain`)
     if (!participant.did) throw new Error('Applicant participant has no DID')
@@ -242,10 +245,10 @@ export class VtFlowOrchestrator {
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(input.vtFlowRecordId)
     if (!record) throw new Error(`vt-flow record ${input.vtFlowRecordId} not found`)
-    if (!record.participantId) throw new Error('Record has no participantId')
+    if (!record.applicantParticipantId) throw new Error('Record has no applicantParticipantId')
 
     const participant =
-      input.participant ?? (await this.agent.indexer.findParticipant(Number(record.participantId)))
+      input.participant ?? (await this.agent.indexer.findParticipant(Number(record.applicantParticipantId)))
     if (!participant?.did) throw new Error('Applicant participant has no DID')
 
     const unsignedCredentialJson =
@@ -500,8 +503,8 @@ export class VtFlowOrchestrator {
   private async triggerResolver(record: VtFlowRecord): Promise<void> {
     const chain = this.agent.veranaChain
     if (!chain || !chain.autoTriggerResolverEnabled) return
-    if (record.participantId == null) return
-    await chain.triggerResolver(Number(record.participantId))
+    if (record.applicantParticipantId == null) return
+    await chain.triggerResolver(Number(record.applicantParticipantId))
   }
 
   /** The signed credential as the issuer attached it, which is the exact JSON its digest covers. */

@@ -281,7 +281,7 @@ describe('EcsBootstrapService standalone', () => {
     mocks.vtFlowApi.findAllByQuery.mockResolvedValue([
       {
         id: 'flow-1',
-        participantId: '9',
+        applicantParticipantId: '9',
         connectionId: 'conn-gone',
         credentialExchangeRecordId: 'cred-ex-1',
       },
@@ -347,7 +347,7 @@ describe('EcsBootstrapService onboarding resume', () => {
     const mocks = makeMocks()
     onlyOwnPending(mocks)
     mocks.vtFlowApi.findAllByQuery.mockImplementation(async (query: Record<string, unknown>) =>
-      query.participantId === '42' ? [{ id: 'flow-1', state, createdAt: new Date() }] : [],
+      query.applicantParticipantId === '42' ? [{ id: 'flow-1', state, createdAt: new Date() }] : [],
     )
 
     await makeService(mocks).run()

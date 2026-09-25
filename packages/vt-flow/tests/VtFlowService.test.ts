@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   VtCredentialState,
   VtFlowEventTypes,
+  VtFlowMessageType,
   VtFlowModule,
   VtFlowModuleConfig,
   VtFlowRole,
@@ -30,7 +31,7 @@ function makeRecord(overrides: Partial<ConstructorParameters<typeof VtFlowRecord
     variant: VtFlowVariant.OnboardingProcess,
     agentParticipantId: '0',
     walletAgentParticipantId: '0',
-    participantId: '42',
+    applicantParticipantId: '42',
     ...overrides,
   })
 }
@@ -60,7 +61,7 @@ function makeService(existing: VtFlowRecord | null, previousConnection: unknown 
     logger as never,
     config as never,
   )
-  return { service, repository, agentContext, exchangeRepository }
+  return { service, repository, agentContext, exchangeRepository, eventEmitter }
 }
 
 function makeMessageContext(agentContext: unknown, theirDid = 'did:web:agent-peer') {
@@ -81,7 +82,7 @@ function makeMessageContext(agentContext: unknown, theirDid = 'did:web:agent-pee
 const applicantParams = {
   connectionId: 'conn-new',
   participantSessionId: 'sess-1',
-  participantId: '42',
+  applicantParticipantId: '42',
   agentParticipantId: '0',
   walletAgentParticipantId: '0',
 }
@@ -185,7 +186,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     const existing = makeRecord({
       role: VtFlowRole.Validator,
       state: VtFlowState.Validating,
-      participantId: '43',
+      applicantParticipantId: '43',
     })
     const { service, repository, agentContext } = makeService(existing, {
       id: 'conn-old',
@@ -203,7 +204,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
       role: VtFlowRole.Validator,
       state: VtFlowState.Validating,
       variant: VtFlowVariant.DirectIssuance,
-      participantId: undefined,
+      applicantParticipantId: undefined,
       schemaId: '5',
     })
     const { service, repository, agentContext } = makeService(existing, {
@@ -229,6 +230,35 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
 
     await expect(service.processReceiveIssuanceRequest(context as never)).rejects.toThrow(
       /schema_id '6' does not match/,
+    )
+    expect(repository.update).not.toHaveBeenCalled()
+  })
+
+  it('validator rejects an issuance-request that reuses the session of an onboarding flow', async () => {
+    const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validating, schemaId: '5' })
+    const { service, repository, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+    const message = new IssuanceRequestMessage({
+      schemaId: '5',
+      participantSessionId: 'sess-1',
+      agentParticipantId: '0',
+      walletAgentParticipantId: '0',
+    })
+    message.setThread({ threadId: message.id })
+    const context = {
+      message,
+      agentContext,
+      assertReadyConnection: () => ({
+        id: 'conn-new',
+        theirDid: 'did:web:agent-peer',
+        previousTheirDids: [],
+      }),
+    }
+
+    await expect(service.processReceiveIssuanceRequest(context as never)).rejects.toThrow(
+      /schema_id '5' does not match/,
     )
     expect(repository.update).not.toHaveBeenCalled()
   })
@@ -364,13 +394,18 @@ describe('VtFlowService.sendValidatingForSession', () => {
     const pending = makeRecord({
       role: VtFlowRole.Validator,
       state: VtFlowState.OobPending,
-      oobLinkUrl: 'https://x',
+      oobLink: { url: 'https://x', description: 'd', at: new Date().toISOString() },
     })
     const { service } = makeService(pending)
 
-    const { record, message } = await service.sendValidatingForSession({} as never, pending.id)
+    const { record, message } = await service.sendValidatingForSession({} as never, pending.id, {
+      comment: 'Documents received',
+    })
     expect(record.state).toBe(VtFlowState.Validating)
-    expect(record.oobLinkUrl).toBeUndefined()
+    expect(record.oobLink).toBeUndefined()
+    expect(record.messages).toEqual([
+      expect.objectContaining({ type: VtFlowMessageType.Validating, text: 'Documents received' }),
+    ])
     expect(message.threadId).toBe(pending.threadId)
 
     await expect(service.sendValidatingForSession({} as never, pending.id)).rejects.toThrow(
@@ -406,6 +441,43 @@ describe('VtFlowService.notifyCredentialStateChange', () => {
       subprotocolThid: 'sub-1',
     })
     expect(record.state).toBe(VtFlowState.CredRevoked)
+  })
+})
+
+describe('VtFlowService.sendOobLinkForSession', () => {
+  it('stores a resent link in OOB_PENDING without a state event', async () => {
+    const pending = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.OobPending,
+      oobLink: { url: 'https://a.example', description: 'A', at: '2026-01-01T00:00:00.000Z' },
+      messages: [
+        {
+          type: VtFlowMessageType.OobLink,
+          text: 'A',
+          at: '2026-01-01T00:00:00.000Z',
+          url: 'https://a.example',
+        },
+      ],
+    })
+    const { service, repository, eventEmitter } = makeService(pending)
+
+    await service.sendOobLinkForSession({} as never, pending.id, {
+      url: 'https://b.example',
+      description: 'B',
+    })
+
+    expect(repository.update).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        state: VtFlowState.OobPending,
+        oobLink: expect.objectContaining({ url: 'https://b.example', description: 'B' }),
+        messages: [
+          expect.objectContaining({ url: 'https://a.example' }),
+          expect.objectContaining({ type: VtFlowMessageType.OobLink, text: 'B', url: 'https://b.example' }),
+        ],
+      }),
+    )
+    expect(eventEmitter.emit).not.toHaveBeenCalled()
   })
 })
 

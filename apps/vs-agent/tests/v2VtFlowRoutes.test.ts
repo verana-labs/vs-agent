@@ -55,7 +55,8 @@ describe('VtFlowsService v2 routes', () => {
     await service.listFlowsPage({
       role: VtFlowRole.Validator,
       flowState: VtFlowState.Validating,
-      participantId: '42',
+      applicantParticipantId: '42',
+      validatorParticipantId: '7',
       schemaId: '5',
       participantSessionId: 'sess-1',
     })
@@ -63,7 +64,8 @@ describe('VtFlowsService v2 routes', () => {
     expect(findAllByQuery).toHaveBeenCalledWith({
       role: VtFlowRole.Validator,
       flowState: VtFlowState.Validating,
-      participantId: '42',
+      applicantParticipantId: '42',
+      validatorParticipantId: '7',
       schemaId: '5',
       participantSessionId: 'sess-1',
     })
@@ -121,6 +123,14 @@ describe('VtFlowsService v2 routes', () => {
       flowState: VtFlowState.Validating,
       connectionState: 'ESTABLISHED',
     })
+  })
+
+  it('lists a flow that has no messages with an empty messages array', async () => {
+    const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) })
+
+    const page = await service.listFlowsPage({})
+
+    expect(page.items[0].messages).toEqual([])
   })
 
   it('reports NOT_CONNECTED while the connection of a live flow is not ready', async () => {

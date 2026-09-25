@@ -56,7 +56,10 @@ export class VtFlowApi {
     const { message, record } = await this.vtFlowService.createOnboardingProcessRecord(this.agentContext, {
       connectionId: options.connectionId,
       participantSessionId,
-      participantId: options.participantId,
+      applicantParticipantId: options.applicantParticipantId,
+      applicantParticipantRole: options.applicantParticipantRole,
+      validatorParticipantId: options.validatorParticipantId,
+      schemaId: options.schemaId,
       agentParticipantId: options.agentParticipantId,
       walletAgentParticipantId: options.walletAgentParticipantId,
       claims: options.claims,

@@ -29,6 +29,8 @@ import { VtFlowRecord, VtFlowRepository } from '../repository'
 import { peerAnchorDid } from '../utils'
 import {
   VtFlowEventTypes,
+  type VtFlowMessage,
+  VtFlowMessageType,
   VtFlowRole,
   VtFlowState,
   VtFlowValidatedFromStates,
@@ -40,7 +42,10 @@ import {
 export interface CreateOnboardingRequestParams {
   connectionId: string
   participantSessionId: string
-  participantId: string
+  applicantParticipantId: string
+  applicantParticipantRole?: number
+  validatorParticipantId?: string
+  schemaId?: string
   agentParticipantId: string
   walletAgentParticipantId: string
   claims?: Record<string, unknown>
@@ -94,7 +99,7 @@ export class VtFlowService {
     params: CreateOnboardingRequestParams,
   ): Promise<{ message: OnboardingRequestMessage; record: VtFlowRecord }> {
     const message = new OnboardingRequestMessage({
-      participantId: params.participantId,
+      participantId: params.applicantParticipantId,
       participantSessionId: params.participantSessionId,
       agentParticipantId: params.agentParticipantId,
       walletAgentParticipantId: params.walletAgentParticipantId,
@@ -129,7 +134,10 @@ export class VtFlowService {
       variant: VtFlowVariant.OnboardingProcess,
       agentParticipantId: params.agentParticipantId,
       walletAgentParticipantId: params.walletAgentParticipantId,
-      participantId: params.participantId,
+      applicantParticipantId: params.applicantParticipantId,
+      applicantParticipantRole: params.applicantParticipantRole,
+      validatorParticipantId: params.validatorParticipantId,
+      schemaId: params.schemaId,
       claims: params.claims,
     })
 
@@ -184,10 +192,11 @@ export class VtFlowService {
     ) {
       throw new CredoError(`vt-flow: flow '${record.id}' in state ${record.state} cannot be re-attached`)
     }
-    if (!record.participantId) throw new CredoError(`vt-flow: flow '${record.id}' has no participant_id`)
+    if (!record.applicantParticipantId)
+      throw new CredoError(`vt-flow: flow '${record.id}' has no participant_id`)
 
     const message = new OnboardingRequestMessage({
-      participantId: record.participantId,
+      participantId: record.applicantParticipantId,
       participantSessionId: record.participantSessionId,
       agentParticipantId: record.agentParticipantId,
       walletAgentParticipantId: record.walletAgentParticipantId,
@@ -238,7 +247,7 @@ export class VtFlowService {
           `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
         )
       }
-      if (existing.participantId !== message.participantId) {
+      if (existing.applicantParticipantId !== message.participantId) {
         throw new CredoError(
           `vt-flow: participant_id '${message.participantId}' does not match the flow of participant_session_id '${message.participantSessionId}'`,
         )
@@ -252,7 +261,7 @@ export class VtFlowService {
       }
       if (existing.state === VtFlowState.Completed || existing.state === VtFlowState.CredRevoked) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
-        existing.oobLinkUrl = undefined
+        existing.oobLink = undefined
         await this.updateState(agentContext, existing, VtFlowState.AwaitingOr)
       } else if (existing.state === VtFlowState.CredOffered) {
         await this.releaseCredentialExchange(agentContext, existing)
@@ -272,7 +281,7 @@ export class VtFlowService {
       variant: VtFlowVariant.OnboardingProcess,
       agentParticipantId: message.agentParticipantId,
       walletAgentParticipantId: message.walletAgentParticipantId,
-      participantId: message.participantId,
+      applicantParticipantId: message.participantId,
       claims: message.claims,
       proofsAttach: message.proofsAttach,
     })
@@ -301,7 +310,7 @@ export class VtFlowService {
           `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
         )
       }
-      if (existing.schemaId !== message.schemaId) {
+      if (existing.variant !== VtFlowVariant.DirectIssuance || existing.schemaId !== message.schemaId) {
         throw new CredoError(
           `vt-flow: schema_id '${message.schemaId}' does not match the flow of participant_session_id '${message.participantSessionId}'`,
         )
@@ -351,6 +360,18 @@ export class VtFlowService {
       VtFlowState.Validating,
       VtFlowState.OobPending,
     ])
+    record.oobLink = {
+      url: message.url,
+      description: message.description,
+      expiresAt: message.expiresTime?.toISOString(),
+      at: new Date().toISOString(),
+    }
+    this.appendMessage(record, {
+      type: VtFlowMessageType.OobLink,
+      text: message.description,
+      at: record.oobLink.at,
+      url: message.url,
+    })
     await this.updateState(agentContext, record, VtFlowState.OobPending)
     return record
   }
@@ -366,6 +387,15 @@ export class VtFlowService {
     this.logger.debug(
       `[vt-flow] validating received for session ${record.threadId}: ${message.comment ?? '(no comment)'}`,
     )
+
+    if (record.role === VtFlowRole.Applicant && message.comment) {
+      this.appendMessage(record, {
+        type: VtFlowMessageType.Validating,
+        text: message.comment,
+        at: new Date().toISOString(),
+      })
+      await this.updateRecord(agentContext, record)
+    }
 
     if (
       record.role === VtFlowRole.Applicant &&
@@ -567,7 +597,18 @@ export class VtFlowService {
       expiresTime: params.expiresTime,
     })
 
-    record.oobLinkUrl = params.url
+    record.oobLink = {
+      url: params.url,
+      description: params.description,
+      expiresAt: params.expiresTime?.toISOString(),
+      at: new Date().toISOString(),
+    }
+    this.appendMessage(record, {
+      type: VtFlowMessageType.OobLink,
+      text: params.description,
+      at: record.oobLink.at,
+      url: params.url,
+    })
     await this.updateState(agentContext, record, VtFlowState.OobPending)
 
     return { record, message }
@@ -588,6 +629,13 @@ export class VtFlowService {
       comment: params.comment,
     })
 
+    if (params.comment) {
+      this.appendMessage(record, {
+        type: VtFlowMessageType.Validating,
+        text: params.comment,
+        at: new Date().toISOString(),
+      })
+    }
     await this.updateState(agentContext, record, VtFlowState.Validating)
     return { record, message }
   }
@@ -807,14 +855,22 @@ export class VtFlowService {
     newState: VtFlowState,
   ): Promise<void> {
     const previousState = record.state
-    if (previousState === newState) return
+    if (previousState === newState) {
+      await this.repository.update(agentContext, record)
+      return
+    }
 
-    if (previousState === VtFlowState.OobPending) record.oobLinkUrl = undefined
+    if (previousState === VtFlowState.OobPending) record.oobLink = undefined
 
     record.state = newState
     await this.repository.update(agentContext, record)
 
     this.emitStateChanged(agentContext, record, previousState)
+  }
+
+  /** Append to `messages[]`, which a validator fills with what it sent and an applicant with what it received. */
+  public appendMessage(record: VtFlowRecord, message: VtFlowMessage): void {
+    record.messages = [...(record.messages ?? []), message]
   }
 
   /** Persist record changes without state-transition semantics (no event emitted). */
