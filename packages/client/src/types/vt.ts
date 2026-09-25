@@ -1,5 +1,42 @@
 import { PaginationQuery, VtConnectionState, VtFlowRole, VtFlowState, VtFlowVariant } from './common'
 
+export type VtFlowPendingAction = 'APPLICANT' | 'VALIDATOR' | 'AGENT' | 'CHAIN' | 'NONE'
+
+export interface VtFlowOobLink {
+  url: string
+  description: string
+  expiresAt?: string
+  at: string
+}
+
+export interface VtFlowMessage {
+  type: 'oob-link' | 'validating' | 'problem-report'
+  text: string
+  at: string
+  url?: string
+}
+
+export interface VtFlowTx {
+  hash?: string
+  height?: number
+  status: 'SUBMITTED' | 'SUCCEEDED' | 'FAILED'
+  reason?: string
+  error?: string
+}
+
+export interface VtFlowValidation {
+  decidedAt: string
+  submission: 'AGENT' | 'OPERATOR'
+  validationFees?: number
+  issuanceFees?: number
+  verificationFees?: number
+  issuanceFeeDiscount?: number
+  verificationFeeDiscount?: number
+  effectiveUntil?: string
+  opSummaryDigest?: string
+  tx?: VtFlowTx
+}
+
 export interface VtFlowRecord {
   id: string
   participantSessionId: string
@@ -12,11 +49,16 @@ export interface VtFlowRecord {
   agentParticipantId: string
   walletAgentParticipantId: string
   peerDid?: string
-  participantId?: string
+  applicantParticipantId?: string
+  validatorParticipantId?: string
   schemaId?: string
   claims?: Record<string, unknown>
   proofs?: unknown[]
-  oobLinkUrl?: string
+  oobLink?: VtFlowOobLink
+  messages: VtFlowMessage[]
+  pendingAction: VtFlowPendingAction
+  validation?: VtFlowValidation
+  issuance?: { tx?: VtFlowTx }
   credentialExchangeRecordId?: string
   credentialDigest?: string
   subprotocolThid?: string
@@ -31,7 +73,8 @@ export interface ListFlowsQuery extends PaginationQuery {
   connectionState?: VtConnectionState
   flowState?: VtFlowState
   peerDid?: string
-  participantId?: string
+  applicantParticipantId?: string
+  validatorParticipantId?: string
   schemaId?: string
   participantSessionId?: string
 }
