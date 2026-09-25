@@ -25,6 +25,7 @@ export class V2VtFlowOobLinkDto {
 
 export class V2VtFlowTxDto {
   @ApiPropertyOptional() hash?: string
+  @ApiPropertyOptional() submittedAt?: string
   @ApiPropertyOptional() height?: number
   @ApiProperty({ enum: ['SUBMITTED', 'SUCCEEDED', 'FAILED'] }) status!: string
   @ApiPropertyOptional({ description: 'Set when the transaction failed.' }) reason?: string

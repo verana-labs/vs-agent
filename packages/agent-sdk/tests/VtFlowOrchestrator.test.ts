@@ -830,4 +830,25 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(vtFlowApi.markValidated).toHaveBeenCalledWith('rec-v')
     expect(current().state).toBe('VALIDATED')
   })
+
+  it('counts the 60 seconds from the broadcast, not from the decision', async () => {
+    const { agent, vtFlowApi, chain, current } = makeValidateAgent({ state: 'VALIDATION_TX_SUBMITTED' })
+    await vtFlowApi.recordValidation('rec-v', {
+      decidedAt: new Date(now - 120_000).toISOString(),
+      submission: 'AGENT',
+      tx: { hash: 'AB12', status: 'SUBMITTED', submittedAt: new Date().toISOString() },
+    })
+    chain.findTx.mockImplementation(async () => {
+      current().state = 'VALIDATED'
+      return undefined
+    })
+
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const resolving = new VtFlowOrchestrator(agent as never).resolveValidationTx('rec-v')
+    await vi.runAllTimersAsync()
+    await resolving
+    vi.useRealTimers()
+
+    expect(current()).toMatchObject({ state: 'VALIDATED', validation: { tx: { status: 'SUBMITTED' } } })
+  })
 })

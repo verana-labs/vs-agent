@@ -113,6 +113,7 @@ export enum VtFlowTxStatus {
 /** Outcome of a flow transaction; `height` and `reason` appear once the chain resolved it. */
 export interface VtFlowTx {
   hash?: string
+  submittedAt?: string
   height?: number
   status: VtFlowTxStatus
   reason?: VtFlowTxReason

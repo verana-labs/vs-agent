@@ -617,7 +617,10 @@ export class VtFlowOrchestrator {
 
     const submitted = await vtFlowApi.recordValidation(
       recordId,
-      { ...validation, tx: { hash, status: VtFlowTxStatus.Submitted } },
+      {
+        ...validation,
+        tx: { hash, submittedAt: new Date().toISOString(), status: VtFlowTxStatus.Submitted },
+      },
       VtFlowState.ValidationTxSubmitted,
     )
     void this.resolveValidationTx(recordId).catch(error =>
@@ -644,7 +647,7 @@ export class VtFlowOrchestrator {
       if (tx && tx.code === 0) {
         await vtFlowApi.recordValidation(recordId, {
           ...validation,
-          tx: { hash, height: tx.height, status: VtFlowTxStatus.Succeeded },
+          tx: { ...validation.tx, height: tx.height, status: VtFlowTxStatus.Succeeded },
         })
         await vtFlowApi.markValidated(recordId)
         await this.continueAfterValidated(recordId)
@@ -653,7 +656,8 @@ export class VtFlowOrchestrator {
       if (tx)
         return this.failUnlessValidated(record, validation, VtFlowTxReason.TxFailed, tx.rawLog, tx.height)
 
-      if (Date.now() - Date.parse(validation.decidedAt) >= TX_LOOKUP_TIMEOUT_MS) {
+      const submittedAt = validation.tx?.submittedAt ?? validation.decidedAt
+      if (Date.now() - Date.parse(submittedAt) >= TX_LOOKUP_TIMEOUT_MS) {
         return this.failUnlessValidated(
           record,
           validation,
@@ -687,7 +691,7 @@ export class VtFlowOrchestrator {
       record.id,
       {
         ...validation,
-        tx: { hash: validation.tx?.hash, height, status: VtFlowTxStatus.Failed, reason, error },
+        tx: { ...validation.tx, height, status: VtFlowTxStatus.Failed, reason, error },
       },
       VtFlowState.ValidationTxFailed,
     )
