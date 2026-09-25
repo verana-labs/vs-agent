@@ -50,6 +50,31 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 | `trustedEcsEcosystemDids`  | Comma-separated ECS ecosystem DIDs. Required when `agentMode` is `standalone` | `""` |
 | `delegatedParentVsDid`     | DID of the parent Verifiable Service. Required when `agentMode` is `delegated` | `""` |
 | `extraEnv`                 | Additional environment variables for the agent   | `[]`                            |
+| `openid4vc.config`         | OpenID4VC configuration JSON, as a string. When set, the chart mounts it read-only and sets `OID4VC_CONFIG_FILE_LOCATION`, which enables the `/v2/openid4vc` scope and the public OpenID4VC endpoints. It is rendered into a ConfigMap, so it is for development signing only | `""` |
+| `openid4vc.existingSecret` | Name of a pre-existing Secret whose `openid4vc.json` key holds the same configuration. Mounted at the same path, and mutually exclusive with `openid4vc.config`: setting both fails the render. Use it whenever the configuration carries configured signing material | `""` |
+
+> The chart checksums `openid4vc.config` so that editing it rolls the deployment. It cannot do the
+> same for `openid4vc.existingSecret`, since Helm cannot read a Secret it does not own, so after
+> changing that Secret restart the deployment yourself.
+
+`openid4vc.config` is the file content as a string, which `--set` cannot carry: `--set
+openid4vc.config='{}'` fails the render with `expected string; got []interface {}`, because Helm
+parses the braces as a list, and `--set-string` splits the JSON on its commas. Pass it in a values
+file, as a block scalar:
+
+```yaml
+openid4vc:
+  config: |
+    {
+      "issuer": { "signing": { "configured": { "certificateChain": ["..."], "privateJwk": {} } } }
+    }
+```
+
+or read it straight off disk with `--set-file`, which takes the content verbatim:
+
+```bash
+helm upgrade --install vs-agent ./charts/vs-agent --set-file openid4vc.config=./openid4vc.json
+```
 
 ### Secrets Management
 

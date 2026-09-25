@@ -133,7 +133,7 @@ export const ADMIN_V2_TAGS: Record<string, string> = {
   'v2/auth': v2ScopeTag('Exchanges an account signature for a bearer token.'),
   'v2/agent': 'Identifies the agent and reports its state to an orchestrator.',
   'v2/didcomm': 'Operates on the wire-level DIDComm state of the agent.',
-  'v2/openid4vc': v2ScopeTag('Operates on the OpenID4VC state of the agent.'),
+  'v2/openid4vc': 'Operates on the OpenID4VC state of the agent.',
   'v2/anoncreds': 'Manages the AnonCreds artifacts of the agent.',
   'v2/vt': 'Manages the Verifiable Trust state of the agent.',
 }
@@ -155,6 +155,7 @@ export const REVOCATION_REGISTRY_DEFAULT_CAPACITY = 1000
 
 // Utils params
 export const MRTD_MASTER_LIST_CSCA_LOCATION = process.env.MRTD_MASTER_LIST_CSCA_LOCATION
+export const OID4VC_CONFIG_FILE_LOCATION = process.env.OID4VC_CONFIG_FILE_LOCATION
 
 //Storage update configuration sqlite
 export const AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP =

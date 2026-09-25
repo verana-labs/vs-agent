@@ -15,7 +15,6 @@ import {
   V2DidcommCredentialExchangesController,
   V2DidcommInvitationsController,
   V2DidcommPresentationsController,
-  V2Openid4vcController,
   V2VtServiceEndpointsController,
   InvitationsService,
 } from './controllers'
@@ -31,6 +30,7 @@ import { CredentialTypesService } from './services/CredentialTypesService'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
 import { DIDCOMM_MODULES } from './utils/didcommModules'
+import { nestPluginContributions } from './utils/pluginLifecycle'
 
 @Module({})
 export class VsAgentModule {
@@ -46,6 +46,7 @@ export class VsAgentModule {
     } = {},
   ): DynamicModule {
     const agentRef = { get: () => agent, toJSON: () => 'VsAgent' }
+    const pluginParts = nestPluginContributions(nestPlugins)
     const bootstrapState = options.bootstrapState ?? new BootstrapState()
     const trustedNetworks =
       options.trustedNetworks ?? parseTrustedNetworks(DEFAULT_ADMIN_API_TRUSTED_NETWORKS)
@@ -59,7 +60,6 @@ export class VsAgentModule {
       V2DidcommConnectionsController,
       V2DidcommCredentialExchangesController,
       V2DidcommInvitationsController,
-      V2Openid4vcController,
       V2AnoncredsController,
       V2AnoncredsCredentialDefinitionsController,
       V2AnoncredsRevocationRegistriesController,
@@ -81,7 +81,7 @@ export class VsAgentModule {
       },
       {
         provide: 'DIDCOMM_MODULES',
-        useValue: [...DIDCOMM_MODULES, ...nestPlugins.flatMap(p => p.didcommModules ?? [])],
+        useValue: [...DIDCOMM_MODULES, ...pluginParts.didcommModules],
       },
       VsAgentService,
       UrlShorteningService,
@@ -100,9 +100,9 @@ export class VsAgentModule {
 
     return {
       module: VsAgentModule,
-      imports: nestPlugins.flatMap(p => p.imports ?? []),
-      controllers: [...v2Controllers, ...nestPlugins.flatMap(p => p.controllers ?? [])],
-      providers: [...baseProviders, ...securityProviders, ...nestPlugins.flatMap(p => p.providers ?? [])],
+      imports: pluginParts.imports,
+      controllers: [...v2Controllers, ...pluginParts.controllers],
+      providers: [...baseProviders, ...securityProviders, ...pluginParts.providers],
       exports: [VsAgentService],
     }
   }

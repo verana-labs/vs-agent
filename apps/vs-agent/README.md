@@ -86,6 +86,7 @@ These are variables that are updated only on specific use cases.
 | MRTD_MASTER_LIST_CSCA_LOCATION              | **Enables the eMRTD verification module**. Location (URL or absolute path) of the CSCA Master List in **LDIF** format When set, VS Agent loads trust anchors at startup and activates ePassport verification capabilities.                       | none                     |
 | AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP   | Toggle automatic storage migration on startup. If true, the agent runs migrations and attempts to make a backup of the wallet on startup                                                                                                         | false                    |
 | AGENT_BACKUP_BEFORE_STORAGE_UPDATE     | Toggle backup before storage update. If true, the agent creates a backup of the wallet using Askar's export before performing storage migrations                                                                                                 | false                    |
+| OID4VC_CONFIG_FILE_LOCATION            | **Enables OpenID4VC**. Location of the OpenID4VC JSON configuration file: a local path, or an `https://` URL that the agent fetches once at startup, following no redirect. When set, the agent refuses to start when it cannot read or validate the file, serves the `/v2/openid4vc` Admin API scope and the public OpenID4VCI and OpenID4VP endpoints. When unset, every `/v2/openid4vc` path answers 404. See [OpenID4VC](#openid4vc).            | none                     |
 | VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. Set by the Docker image in production, only override in development. See [Plugin system](#plugin-system) for available values.                                                               | `chat`                   |
 
 > **Note about Key derivation method**: By default, we use the strongest ARGON2I_MOD, but since this is the slowest one as well, depending on the security infrastructure you have, you might want to not derive the key at all (use RAW). However, in versions of VS Agent we are going to deprecate this setting, so we recommend to keep the default setting to make migration process easier.
@@ -186,7 +187,25 @@ defined in [[VSA-VTI-CFG-ENV-ECS]](https://github.com/verana-labs/verana-spec/bl
 The agent serves placeholder resources at `/vt/default/logo.svg`, `/vt/default/terms.html` and
 `/vt/default/privacy.html`, which an operator may point the `*_URI` variables at.
 
+### OpenID4VC
 
+`OID4VC_CONFIG_FILE_LOCATION` is the only switch. It locates a JSON file that declares the
+issuer capability, the verifier capability, or both, per
+[[VSA-VTI-CFG-ENV-OID]](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-vti-cfg-env-oid-openid4vc).
+Each capability carries its signing key, and the issuer also carries the wallet and key
+attestation roots it trusts. The credential configurations and the verifier trust decision never come
+from this file: the spec derives the credential types from the VPR and the trust decision from the
+indexer. Neither is derived yet, see
+[#711](https://github.com/verana-labs/vs-agent/issues/711).
+
+The location is a local path or an `https://` URL. The agent reads it once at startup, follows
+no redirect, refuses any other URL scheme, and refuses to start when it cannot read the file or
+the file is invalid, an unknown key at any depth included. Mount it read-only, or serve it from a
+URL that only the agent reaches, and manage it as a secret: it can hold a private key.
+
+The scope is documented in the Swagger UI under the `v2/openid4vc` tag and in the
+[operator documentation](../../packages/plugin-openid4vc/README.md), which also lists the
+public endpoints and the trust decision.
 
 ### eMRTD (ePassport) verification
 
@@ -236,6 +255,7 @@ VS Agent uses an opt-in plugin architecture. Each plugin is an independent packa
 | ----------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
 | `chat`      | `@verana-labs/vs-agent-plugin-chat` | Chat protocols: text messages, media, reactions, receipts, calls, action menus, user profile. |
 | `mrtd`      | `@verana-labs/vs-agent-plugin-mrtd` | eMRTD / ePassport verification. Requires the `vs-agent-mrtd` Docker image.                    |
+| `openid4vc` | `@verana-labs/vs-agent-plugin-openid4vc` | OpenID4VCI issuer and OpenID4VP verifier. Always installed; enabled by `OID4VC_CONFIG_FILE_LOCATION`, not by `VS_AGENT_PLUGINS`. |
 
 ### Selecting plugins
 
@@ -252,7 +272,7 @@ VS_AGENT_PLUGINS=
 VS_AGENT_PLUGINS=chat,mrtd
 ```
 
-> In production, `VS_AGENT_PLUGINS` is pre-configured by the Docker image, override it only in development environments. Using a value that references a plugin not bundled in the current image will result in a startup warning and the plugin being skipped.
+> In production, `VS_AGENT_PLUGINS` is pre-configured by the Docker image, override it only in development environments. Any name outside `chat` and `mrtd`, whether unknown or not bundled in the current image, results in a startup warning and is skipped. That includes `openid4vc`, which is built in and enabled by `OID4VC_CONFIG_FILE_LOCATION`.
 
 ### Optional dependencies
 
@@ -309,10 +329,14 @@ docker build --target vs-agent-mrtd -t vs-agent-mrtd -f apps/vs-agent/Dockerfile
 
 #### Running a container
 
+Add the two OpenID4VC lines only when the agent issues or verifies over OpenID4VC.
+
 ```bash
 docker run \
   -e PUBLIC_API_BASE_URL=https://myagent.example.com \
   -e EVENTS_WEBHOOK_URL=http://my-backend:5000/events \
+  -e OID4VC_CONFIG_FILE_LOCATION=/run/config/openid4vc.json \
+  -v "$PWD/openid4vc.json:/run/config/openid4vc.json:ro" \
   -p 3000:3000 -p 3001:3001 \
   vs-agent
 ```

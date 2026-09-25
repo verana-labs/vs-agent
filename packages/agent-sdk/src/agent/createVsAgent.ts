@@ -29,7 +29,6 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
   did?: string
   publicApiBaseUrl: string
   adminApiServiceEndpoint?: string
-  masterListCscaLocation?: string
   autoUpdateStorageOnStartup?: boolean
   dependencies: AgentDependencies
   logLevel?: LogLevel

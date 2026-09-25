@@ -1,6 +1,7 @@
 export * from './ServerConfig'
 export * from './didLocation'
 export * from './logger'
+export * from './pluginLifecycle'
 export * from './runWithRetries'
 export * from './setupAgent'
 export * from './userProfileDefaults'

@@ -16,6 +16,7 @@ overrides:
   '@credo-ts/core': 0.7.1-pr-2704-20260909134930
   '@credo-ts/didcomm': 0.7.1-pr-2704-20260909134930
   '@credo-ts/node': 0.7.1-pr-2704-20260909134930
+  '@credo-ts/openid4vc': 0.7.1-pr-2704-20260909134930
   '@credo-ts/question-answer': 0.7.1-pr-2704-20260909134930
   '@credo-ts/webvh': 0.7.1-pr-2704-20260909134930
 
@@ -121,6 +122,9 @@ importers:
       '@verana-labs/vs-agent-model':
         specifier: workspace:*
         version: link:../../packages/model
+      '@verana-labs/vs-agent-plugin-openid4vc':
+        specifier: workspace:*
+        version: link:../../packages/plugin-openid4vc
       '@verana-labs/vs-agent-sdk':
         specifier: workspace:*
         version: link:../../packages/agent-sdk
@@ -449,6 +453,12 @@ importers:
       '@hyperledger/anoncreds-nodejs':
         specifier: 0.4.0
         version: 0.4.0
+      '@nestjs/common':
+        specifier: ^10.0.0
+        version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/swagger':
+        specifier: ^8.0.7
+        version: 8.1.1(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)
       '@openwallet-foundation/askar-nodejs':
         specifier: ^0.6.0
         version: 0.6.0
@@ -473,6 +483,12 @@ importers:
       axios:
         specifier: ^1.7.9
         version: 1.9.0
+      class-transformer:
+        specifier: 0.5.1
+        version: 0.5.1
+      class-validator:
+        specifier: 0.14.1
+        version: 0.14.1
       credo-ts-didweb-anoncreds:
         specifier: 0.0.2-alpha.5
         version: 0.0.2-alpha.5(@credo-ts/anoncreds@0.7.1-pr-2704-20260909134930(patch_hash=ijmi26kj6iz2qljpkx7ut5x2dq)(@hyperledger/anoncreds-shared@0.4.0)(typescript@5.8.3))(@credo-ts/core@0.7.1-pr-2704-20260909134930(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3))
@@ -649,6 +665,43 @@ importers:
       mrz:
         specifier: ^4.2.0
         version: 4.2.1
+
+  packages/plugin-openid4vc:
+    dependencies:
+      '@credo-ts/core':
+        specifier: 0.7.1-pr-2704-20260909134930
+        version: 0.7.1-pr-2704-20260909134930(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
+      '@credo-ts/openid4vc':
+        specifier: 0.7.1-pr-2704-20260909134930
+        version: 0.7.1-pr-2704-20260909134930(typescript@5.8.3)
+      '@nestjs/common':
+        specifier: ^10.0.0
+        version: 10.4.18(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/swagger':
+        specifier: ^8.0.7
+        version: 8.1.1(@nestjs/common@10.4.18(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.18)(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)
+      '@verana-labs/vs-agent-sdk':
+        specifier: workspace:*
+        version: link:../agent-sdk
+      class-transformer:
+        specifier: 0.5.1
+        version: 0.5.1
+      class-validator:
+        specifier: 0.14.1
+        version: 0.14.1
+      express:
+        specifier: ^4.18.1
+        version: 4.21.2
+    devDependencies:
+      '@credo-ts/askar':
+        specifier: 0.7.1-pr-2704-20260909134930
+        version: 0.7.1-pr-2704-20260909134930(@openwallet-foundation/askar-shared@0.6.0)(typescript@5.8.3)
+      '@credo-ts/node':
+        specifier: 0.7.1-pr-2704-20260909134930
+        version: 0.7.1-pr-2704-20260909134930(typescript@5.8.3)
+      '@openwallet-foundation/askar-nodejs':
+        specifier: ^0.6.0
+        version: 0.6.0
 
   packages/vt-flow:
     dependencies:
@@ -985,6 +1038,9 @@ packages:
   '@credo-ts/node@0.7.1-pr-2704-20260909134930':
     resolution: {integrity: sha512-wvmbctbls26Tp57rfLtj46agYQIz378yZaBbsjDkiljtdSH321jUg/stH3OvPjWGmBujscutWuXaOKi0OF9FiQ==}
     engines: {node: '>=20.19'}
+
+  '@credo-ts/openid4vc@0.7.1-pr-2704-20260909134930':
+    resolution: {integrity: sha512-Na5XMy/zVYe5V8dAd174ECDss0gts35JHbf1rDx66L90qKGXcssF98S3YN6OfJOmIfcmcBzrGYyBbkfpONy8PQ==}
 
   '@credo-ts/question-answer@0.7.1-pr-2704-20260909134930':
     resolution: {integrity: sha512-J2i0gk3wmn7bSGYmfnHnHd076F/aa1HTgbmwmYq/SE68EIk3GtY3ZAnhwVlJkmoH0pDtBIAHsE41Xg0KJK5ZAQ==}
@@ -1713,6 +1769,18 @@ packages:
     resolution: {integrity: sha512-um0xL3fO7Mf4fDxcqx9KryrB7zgRM5JSlvGN5AGkP6JLM5XEKyjeAiPbNxdXVXQ16isuAhYpvP88NgL2BGd6aA==}
     engines: {node: '>=8.0.0', npm: '>=5.0.0'}
     hasBin: true
+
+  '@openid4vc/oauth2@0.5.5':
+    resolution: {integrity: sha512-2EtJznMPk4M1sJD9nBIvIi2Rl5GC+T7YOrpizMEwB5Q592agAGXfQWwv5KapkuTG8mlbWk3z8VLBtwlAwMvhUg==}
+
+  '@openid4vc/openid4vci@0.5.5':
+    resolution: {integrity: sha512-h+Ylxf+B/7+lXPP2CA7dxYl9oG/HX+n8QGGzrPRbJCE1Cx/mRTguavkX8GBRhltZ2zQVQr+F0JSjupgMow181g==}
+
+  '@openid4vc/openid4vp@0.5.5':
+    resolution: {integrity: sha512-JHJWFwNnmfhWI/tl2JBOvCC1OmVXKvXiqmX+9LmYYV3BDcX41udijoluh2LV0sMsj0Ag4P+XATwPZNe9im3XBA==}
+
+  '@openid4vc/utils@0.5.5':
+    resolution: {integrity: sha512-3vao4GiufkbFM4V7jL6GBvsdjo2434VXj9uXCUmwstifq64PclVgIj7rVqzgF0WxliNcaJ1aVGAEuBNEQVqIpQ==}
 
   '@openwallet-foundation/askar-nodejs@0.6.0':
     resolution: {integrity: sha512-PNIftXrE64oxjPaq4c8QEZCuhf21jpeMqjwPwDPZsfUnx1DlVIWYQQIJI2ZPAaXl2EUs6ldNqrwHMjVUC4xW+Q==}
@@ -5731,6 +5799,23 @@ snapshots:
       - typescript
       - utf-8-validate
 
+  '@credo-ts/openid4vc@0.7.1-pr-2704-20260909134930(typescript@5.8.3)':
+    dependencies:
+      '@credo-ts/core': 0.7.1-pr-2704-20260909134930(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
+      '@openid4vc/oauth2': 0.5.5
+      '@openid4vc/openid4vci': 0.5.5
+      '@openid4vc/openid4vp': 0.5.5
+      '@openid4vc/utils': 0.5.5
+      '@types/express': 5.0.6
+      class-transformer: 0.5.1
+      express: 5.2.1
+      rxjs: 7.8.2
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - typescript
+
   '@credo-ts/question-answer@0.7.1-pr-2704-20260909134930(typescript@5.8.3)':
     dependencies:
       '@credo-ts/core': 0.7.1-pr-2704-20260909134930(patch_hash=b2rlqmwyi22cgecutzvl624tma)(typescript@5.8.3)
@@ -6453,6 +6538,29 @@ snapshots:
       node-fetch: 2.7.0
     transitivePeerDependencies:
       - encoding
+
+  '@openid4vc/oauth2@0.5.5':
+    dependencies:
+      '@openid4vc/utils': 0.5.5
+      zod: 4.4.3
+
+  '@openid4vc/openid4vci@0.5.5':
+    dependencies:
+      '@openid4vc/oauth2': 0.5.5
+      '@openid4vc/utils': 0.5.5
+      zod: 4.4.3
+
+  '@openid4vc/openid4vp@0.5.5':
+    dependencies:
+      '@openid4vc/oauth2': 0.5.5
+      '@openid4vc/utils': 0.5.5
+      zod: 4.4.3
+
+  '@openid4vc/utils@0.5.5':
+    dependencies:
+      buffer: 6.0.3
+      zod: 4.4.3
+      zod-validation-error: 5.0.0(zod@4.4.3)
 
   '@openwallet-foundation/askar-nodejs@0.6.0':
     dependencies:
