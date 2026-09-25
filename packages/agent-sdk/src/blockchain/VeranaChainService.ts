@@ -300,7 +300,11 @@ export class VeranaChainService {
   async feeAllowance(granter: string, denom = 'uvna'): Promise<FeeAllowance | undefined> {
     const response = await this.queryClient.feegrant
       .allowance(granter, this.operatorAddress)
-      .catch(() => undefined)
+      .catch((error: unknown) => {
+        // verana-node v0.10.1 answers a missing grant with "fee-grant not found".
+        if (error instanceof Error && error.message.includes('fee-grant not found')) return undefined
+        throw error
+      })
     return feeAllowanceOf(response?.allowance?.allowance, denom)
   }
 

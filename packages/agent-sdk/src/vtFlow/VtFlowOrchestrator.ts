@@ -35,6 +35,7 @@ import {
   ParticipantState,
   ValidationState,
 } from '../blockchain/types'
+import type { FeeAllowance } from '../blockchain/VeranaChainService'
 import {
   HOLDER_PARTICIPANT_TYPE,
   ISSUER_GRANTOR_PARTICIPANT_TYPE,
@@ -564,7 +565,12 @@ export class VtFlowOrchestrator {
       opSummaryDigest: validation.opSummaryDigest,
     })
 
-    const allowance = granter ? await chain.feeAllowance(granter, FEE_DENOM) : undefined
+    let allowance: FeeAllowance | undefined
+    try {
+      allowance = granter ? await chain.feeAllowance(granter, FEE_DENOM) : undefined
+    } catch (error) {
+      return fail(VtFlowTxReason.PreflightError, errorMessage(error))
+    }
     if (granter && !allowance) {
       return fail(VtFlowTxReason.FeegrantExpired, 'the Corporation grants the agent no active fee allowance')
     }
@@ -573,7 +579,7 @@ export class VtFlowOrchestrator {
     try {
       fee = await chain.estimateFee([message], granter)
     } catch (error) {
-      return fail(VtFlowTxReason.BroadcastError, errorMessage(error))
+      return fail(VtFlowTxReason.PreflightError, errorMessage(error))
     }
     const amount = BigInt(fee.amount.find(coin => coin.denom === FEE_DENOM)?.amount ?? '0')
 
@@ -588,7 +594,7 @@ export class VtFlowOrchestrator {
       try {
         corporation = BigInt((await chain.getAccountBalance(granter, FEE_DENOM)).amount)
       } catch (error) {
-        return fail(VtFlowTxReason.TxFailed, errorMessage(error))
+        return fail(VtFlowTxReason.PreflightError, errorMessage(error))
       }
       if (corporation < amount) {
         return fail(
@@ -601,7 +607,7 @@ export class VtFlowOrchestrator {
       try {
         own = BigInt((await chain.getBalance(FEE_DENOM)).amount)
       } catch (error) {
-        return fail(VtFlowTxReason.TxFailed, errorMessage(error))
+        return fail(VtFlowTxReason.PreflightError, errorMessage(error))
       }
       if (own < amount) {
         return fail(VtFlowTxReason.InsufficientFundsAgent, `the agent account holds ${own}${FEE_DENOM}`)

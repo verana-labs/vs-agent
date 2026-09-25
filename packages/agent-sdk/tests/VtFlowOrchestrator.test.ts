@@ -637,7 +637,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
     })
   })
 
-  it('records a failed simulation as a broadcast error', async () => {
+  it('records a failed simulation as a pre-flight error', async () => {
     const { agent, chain, current } = makeValidateAgent()
     chain.estimateFee.mockRejectedValue(new Error('out of gas'))
 
@@ -646,7 +646,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
     expect(current()).toMatchObject({
       state: 'VALIDATION_TX_FAILED',
-      validation: { tx: { status: 'FAILED', reason: 'BROADCAST_ERROR', error: 'out of gas' } },
+      validation: { tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR', error: 'out of gas' } },
     })
   })
 
@@ -666,9 +666,24 @@ describe('VtFlowOrchestrator validateFlow', () => {
       expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
       expect(current().state).toBe('VALIDATION_TX_FAILED')
       expect(current().validation).toMatchObject({
-        tx: { status: 'FAILED', reason: 'TX_FAILED', error: 'rpc unavailable' },
+        tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR', error: 'rpc unavailable' },
       })
     }
+  })
+
+  it('records a failed pre-flight when the allowance read fails', async () => {
+    const { agent, chain, current } = makeValidateAgent({
+      grant: { msgTypes: [SET_VALIDATED], withFeegrant: true },
+    })
+    chain.feeAllowance.mockRejectedValue(new Error('rpc unavailable'))
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(chain.estimateFee).not.toHaveBeenCalled()
+    expect(current()).toMatchObject({
+      state: 'VALIDATION_TX_FAILED',
+      validation: { tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR', error: 'rpc unavailable' } },
+    })
   })
 
   it('reports an expired feegrant before it simulates, since the simulation fails on it first', async () => {

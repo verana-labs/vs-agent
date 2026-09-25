@@ -99,6 +99,7 @@ export enum VtFlowTxReason {
   FeegrantExhausted = 'FEEGRANT_EXHAUSTED',
   FeegrantExpired = 'FEEGRANT_EXPIRED',
   AuthorizationExpired = 'AUTHORIZATION_EXPIRED',
+  PreflightError = 'PREFLIGHT_ERROR',
   BroadcastError = 'BROADCAST_ERROR',
   TxFailed = 'TX_FAILED',
   TxNotFound = 'TX_NOT_FOUND',

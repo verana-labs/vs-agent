@@ -3,9 +3,9 @@ import {
   BasicAllowance,
   PeriodicAllowance,
 } from 'cosmjs-types/cosmos/feegrant/v1beta1/feegrant'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { feeAllowanceOf } from '../src/blockchain/VeranaChainService'
+import { VeranaChainService, feeAllowanceOf } from '../src/blockchain/VeranaChainService'
 
 const NOW = Date.parse('2026-09-23T12:00:00Z')
 const at = (iso: string) => ({ seconds: BigInt(Date.parse(iso) / 1000), nanos: 0 })
@@ -88,5 +88,23 @@ describe('feeAllowanceOf', () => {
     )
 
     expect(feeAllowanceOf(allowance, 'uvna', NOW)).toEqual({ unlimited: false, remaining: BigInt(90) })
+  })
+})
+
+describe('VeranaChainService.feeAllowance', () => {
+  it('reads a missing grant as none, and throws when the allowance could not be read', async () => {
+    const allowance = vi.fn()
+    const chain = new VeranaChainService({} as never)
+    Object.assign(chain, { operatorAddress: 'verana1agent', queryClient: { feegrant: { allowance } } })
+
+    allowance.mockRejectedValueOnce(
+      new Error(
+        'Query failed with (6): rpc error: code = Internal desc = fee-grant not found: not found: unknown request',
+      ),
+    )
+    await expect(chain.feeAllowance('verana1corp')).resolves.toBeUndefined()
+
+    allowance.mockRejectedValueOnce(new TypeError('fetch failed'))
+    await expect(chain.feeAllowance('verana1corp')).rejects.toThrow('fetch failed')
   })
 })
