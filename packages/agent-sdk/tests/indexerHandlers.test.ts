@@ -313,10 +313,11 @@ describe('applyStateMutation', () => {
 })
 
 describe('markVtFlowRecordsValidated', () => {
-  it('moves only the validator flows of the participant', async () => {
+  it('moves only the running validator flows of the participant', async () => {
     const records = [
       { id: 'applicant', role: VtFlowRole.Applicant, state: VtFlowState.Validating },
       { id: 'validator', role: VtFlowRole.Validator, state: VtFlowState.Validating },
+      { id: 'terminated', role: VtFlowRole.Validator, state: VtFlowState.TerminatedByValidator },
     ]
     const markValidated = vi.fn().mockResolvedValue(undefined)
     const agent = {

@@ -55,7 +55,6 @@ export const VtFlowValidatedFromStates: ReadonlySet<VtFlowState> = new Set([
   VtFlowState.AwaitingValidationTx,
   VtFlowState.ValidationTxSubmitted,
   VtFlowState.ValidationTxFailed,
-  VtFlowState.TerminatedByValidator,
 ])
 
 export function isVtFlowTerminalState(state: VtFlowState): boolean {
