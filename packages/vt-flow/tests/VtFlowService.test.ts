@@ -151,8 +151,14 @@ describe('VtFlowService inbound problem-report', () => {
     await expect(
       receive(VtFlowErrorCode.ValidationFailed, VtFlowRole.Applicant, { whoRetries: WhoRetriesStatus.You }),
     ).resolves.toMatchObject({ state: VtFlowState.Validating })
+    await expect(
+      receive(VtFlowErrorCode.ValidationFailed, VtFlowRole.Applicant, { whoRetries: WhoRetriesStatus.None }),
+    ).resolves.toMatchObject({ state: VtFlowState.Error })
+  })
+
+  it('falls back to the registry who_retries when the wire carries none', async () => {
     await expect(receive(VtFlowErrorCode.ValidationFailed, VtFlowRole.Applicant)).resolves.toMatchObject({
-      state: VtFlowState.Error,
+      state: VtFlowState.Validating,
     })
   })
 

@@ -14,7 +14,7 @@ export interface BuildVtFlowProblemReportOptions {
   impact?: ImpactStatus
 }
 
-const whoRetriesMap: Record<'you' | 'me' | 'both' | 'none', WhoRetriesStatus> = {
+export const whoRetriesMap: Record<'you' | 'me' | 'both' | 'none', WhoRetriesStatus> = {
   you: WhoRetriesStatus.You,
   me: WhoRetriesStatus.Me,
   both: WhoRetriesStatus.Both,
