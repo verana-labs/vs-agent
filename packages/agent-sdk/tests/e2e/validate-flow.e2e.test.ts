@@ -49,6 +49,7 @@ function makeFlowStore() {
     acceptOnboardingRequest: async (id: string) => set(id, { state: VtFlowState.Validating }),
     sendValidating: async (id: string) => set(id, { state: VtFlowState.Validating }),
     markValidated: async (id: string) => set(id, { state: VtFlowState.Validated }),
+    markPendingClaims: async (id: string) => set(id, { state: VtFlowState.ValidatedPendingClaims }),
     markCompleted: async (id: string) => set(id, { state: VtFlowState.Completed }),
     recordValidation: async (id: string, validation: unknown, state?: string) =>
       set(id, { validation, ...(state && { state }) }),
@@ -354,6 +355,7 @@ describe('validateFlow against the real chain and indexer', () => {
         id: 'flow-dup',
         state: VtFlowState.ValidationTxSubmitted,
         applicantParticipantId: String(applicant),
+        claims: { name: 'Acme' },
         validation: {
           decidedAt: new Date().toISOString(),
           submission: 'AGENT',
