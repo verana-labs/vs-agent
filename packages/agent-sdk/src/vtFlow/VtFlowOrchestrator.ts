@@ -573,7 +573,7 @@ export class VtFlowOrchestrator {
     try {
       fee = await chain.estimateFee([message], granter)
     } catch (error) {
-      return fail(VtFlowTxReason.TxFailed, errorMessage(error))
+      return fail(VtFlowTxReason.BroadcastError, errorMessage(error))
     }
     const amount = BigInt(fee.amount.find(coin => coin.denom === FEE_DENOM)?.amount ?? '0')
 

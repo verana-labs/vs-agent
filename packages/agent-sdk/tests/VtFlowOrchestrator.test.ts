@@ -637,6 +637,19 @@ describe('VtFlowOrchestrator validateFlow', () => {
     })
   })
 
+  it('records a failed simulation as a broadcast error', async () => {
+    const { agent, chain, current } = makeValidateAgent()
+    chain.estimateFee.mockRejectedValue(new Error('out of gas'))
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(current()).toMatchObject({
+      state: 'VALIDATION_TX_FAILED',
+      validation: { tx: { status: 'FAILED', reason: 'BROADCAST_ERROR', error: 'out of gas' } },
+    })
+  })
+
   it('records a failed pre-flight when a balance read fails', async () => {
     const own = makeValidateAgent()
     own.chain.getBalance.mockRejectedValue(new Error('rpc unavailable'))

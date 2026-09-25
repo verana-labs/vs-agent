@@ -281,7 +281,7 @@ describe('validateFlow against the real chain and indexer', () => {
       expect(returned.state, JSON.stringify(returned.validation)).toBe(VtFlowState.ValidationTxFailed)
       expect(returned.validation).toMatchObject({ submission: 'AGENT', tx: { status: 'FAILED' } })
       expect((returned.validation as { tx: { reason: string } }).tx.reason).toMatch(
-        /^(INSUFFICIENT_FUNDS_AGENT|TX_FAILED)$/,
+        /^(INSUFFICIENT_FUNDS_AGENT|BROADCAST_ERROR)$/,
       )
       expect(await opState(applicant)).toBe('PENDING')
     },
