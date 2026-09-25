@@ -95,6 +95,7 @@ RUN --mount=type=bind,source=scripts/docker-cleanup.sh,target=/tmp/cleanup.sh sh
 FROM node:22.19-slim AS vs-agent
 WORKDIR /www
 ENV RUN_MODE="docker"
+ENV NODE_ENV=production
 ENV VS_AGENT_PLUGINS=messaging,chat
 
 COPY --from=build-vs-agent /www/node_modules ./node_modules
@@ -123,6 +124,7 @@ CMD ["node", "apps/vs-agent/build/src/main"]
 FROM node:22.19-slim AS vs-agent-mrtd
 WORKDIR /www
 ENV RUN_MODE="docker"
+ENV NODE_ENV=production
 ENV VS_AGENT_PLUGINS=messaging,chat,mrtd
 
 COPY --from=build-mrtd /www/node_modules ./node_modules
