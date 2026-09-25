@@ -67,6 +67,7 @@ function makeMocks() {
   const vtFlowApi = {
     findAllByQuery: vi.fn().mockResolvedValue([]),
     sendIssuanceRequest: vi.fn().mockResolvedValue({ id: 'rec-1' }),
+    acceptCredentialOffer: vi.fn().mockResolvedValue(undefined),
   }
   const agent = {
     did: 'did:web:agent',
@@ -97,7 +98,6 @@ function makeMocks() {
         returnWhenIsConnected: vi.fn().mockResolvedValue({ id: 'conn-1' }),
         deleteById: vi.fn().mockResolvedValue(undefined),
       },
-      credentials: { acceptOffer: vi.fn().mockResolvedValue(undefined) },
     },
   }
   return { agent, chain, indexer, vtFlowApi, eventHandlers }
@@ -264,10 +264,8 @@ describe('EcsBootstrapService standalone', () => {
       flowState: VtFlowState.CredOffered,
       role: VtFlowRole.Applicant,
     })
-    expect(mocks.agent.didcomm.credentials.acceptOffer).toHaveBeenCalledTimes(1)
-    expect(mocks.agent.didcomm.credentials.acceptOffer).toHaveBeenCalledWith({
-      credentialExchangeRecordId: 'cred-ex-1',
-    })
+    expect(mocks.vtFlowApi.acceptCredentialOffer).toHaveBeenCalledTimes(1)
+    expect(mocks.vtFlowApi.acceptCredentialOffer).toHaveBeenCalledWith('flow-1')
   })
 
   it('reconnects a CRED_OFFERED flow whose connection is gone instead of accepting the stale offer', async () => {
@@ -291,7 +289,7 @@ describe('EcsBootstrapService standalone', () => {
     await makeService(mocks).run()
 
     expect(startOnboardingProcess).toHaveBeenCalledWith({ applicantParticipantId: 9 })
-    expect(mocks.agent.didcomm.credentials.acceptOffer).not.toHaveBeenCalled()
+    expect(mocks.vtFlowApi.acceptCredentialOffer).not.toHaveBeenCalled()
   })
 })
 
