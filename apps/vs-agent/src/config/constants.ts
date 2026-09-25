@@ -74,9 +74,6 @@ export const keyDerivationMethodMap: {
   RAW: KdfMethod.Raw,
 }
 
-export const REDIS_HOST = process.env.REDIS_HOST
-export const REDIS_PASSWORD = process.env.REDIS_PASSWORD
-
 // Dev/debugging settings
 export const AGENT_LOG_LEVEL_NAME = logLevelName(process.env.AGENT_LOG_LEVEL, DEFAULT_AGENT_LOG_LEVEL)
 export const ADMIN_API_LOG_LEVEL_NAME = logLevelName(
@@ -200,17 +197,8 @@ export const ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS = (
   .map(s => s.trim())
   .filter(Boolean)
 
-// Active plugins: comma-separated list of plugin names.
-// Available:
-//   'messaging' — base V1MessageController + credential/proof handlers (always required)
-//   'chat'      — chat Credo modules + chat message handlers
-//   'mrtd'      — eMRTD Credo module + MRTD message handlers
-//
-// In production this value is set by the Docker image (VS_AGENT_PLUGINS env in Dockerfile).
-// Only override it in development environments.
-export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'messaging,chat')
+// Active plugins, comma-separated: 'chat' and 'mrtd'. The Docker image sets it, override it only in development.
+export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'chat')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean)
-
-if (!ENABLED_PLUGINS.includes('messaging')) ENABLED_PLUGINS.unshift('messaging')

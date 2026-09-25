@@ -10,7 +10,7 @@ import {
 
 import { AdminApiError, AdminApiErrorCode } from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
-import { CredentialTypesService } from '../../credentials'
+import { CredentialTypesService } from '../../../../services/CredentialTypesService'
 
 import { RevokeCredentialBodyDto, RevokeCredentialResponseDto } from './dto'
 

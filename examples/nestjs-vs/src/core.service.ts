@@ -1,31 +1,24 @@
-import {
-  ApiClient,
-  ApiVersion,
-  BaseMessage,
-  ContextualMenuItem,
-  ContextualMenuSelectMessage,
-  ContextualMenuUpdateMessage,
-  CredentialReceptionMessage,
-  CredentialService,
-  EventHandler,
-  MediaMessage,
-  MenuSelectMessage,
-  ProfileMessage,
-  TextMessage,
-} from '@verana-labs/vs-agent-nestjs-client'
-import { EMrtdDataSubmitMessage, MrzDataSubmitMessage } from '@verana-labs/vs-agent-plugin-mrtd'
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
-import { SessionEntity } from './models'
-import { JsonTransformer } from '@credo-ts/core'
-import { Cmd, StateStep } from './common'
-import { Repository } from 'typeorm'
-import { InjectRepository } from '@nestjs/typeorm'
-import { I18nService } from 'nestjs-i18n'
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { InjectRepository } from '@nestjs/typeorm'
+import {
+  ActionMenuOption,
+  ApiClient,
+  CredentialService,
+  EventEnvelope,
+  EventHandler,
+  isEventEnvelope,
+  UnknownEventEnvelope,
+  VS_AGENT_CLIENT,
+} from '@verana-labs/vs-agent-nestjs-client'
+import { I18nService } from 'nestjs-i18n'
+import { Repository } from 'typeorm'
+
+import { Cmd, StateStep } from './common'
+import { SessionEntity } from './models'
 
 @Injectable()
 export class CoreService implements EventHandler, OnModuleInit {
-  private readonly apiClient: ApiClient
   private readonly logger = new Logger(CoreService.name)
 
   constructor(
@@ -34,74 +27,61 @@ export class CoreService implements EventHandler, OnModuleInit {
     private readonly i18n: I18nService,
     private readonly configService: ConfigService,
     private readonly credentialService: CredentialService,
-  ) {
-    const baseUrl = configService.get<string>('appConfig.vsAgentAdminUrl')
-    this.apiClient = new ApiClient(baseUrl, ApiVersion.V1)
-  }
+    @Inject(VS_AGENT_CLIENT) private readonly client: ApiClient,
+  ) {}
 
-  async onModuleInit() {
-    await this.credentialService.createType('demo dts', '1.0', ['fullName', 'issuanceDate'], {
+  async onModuleInit(): Promise<void> {
+    const jsonSchemaCredentialId = this.configService.get<string>('appConfig.jsonSchemaCredentialId')
+    if (!jsonSchemaCredentialId) {
+      this.logger.warn('JSON_SCHEMA_CREDENTIAL_ID is not set, credential issuance is disabled')
+      return
+    }
+    await this.credentialService.createCredentialDefinition(jsonSchemaCredentialId, {
       supportRevocation: true,
       maximumCredentialNumber: 5,
     })
   }
 
-  /**
-   * Handles incoming messages and manages the input flow.
-   * Routes the message to the appropriate handler based on its type.
-   *
-   * @param message - The incoming message to process.
-   */
-  async inputMessage(message: BaseMessage): Promise<void> {
-    let content = null
-    let inMsg = null
-    let session: SessionEntity = null
+  async onEvent(envelope: EventEnvelope | UnknownEventEnvelope): Promise<void> {
+    if (!isEventEnvelope(envelope)) return
+    const event = envelope
+    switch (event.type) {
+      case 'didcomm.basic-messages.message-received':
+      case 'didcomm.action-menu.perform-received':
+      case 'didcomm.user-profile.profile-received':
+      case 'didcomm.media-sharing.share-media-received':
+      case 'didcomm.mrtd.mrz-data-received':
+      case 'didcomm.mrtd.emrtd-data-received':
+      case 'didcomm.mrtd.problem-report-received':
+        break
+      default:
+        return
+    }
+
+    this.logger.debug(`onEvent: ${JSON.stringify(event)}`)
+    let content: string = null
+    const session = await this.handleSession(event.data.connectionId)
 
     try {
-      this.logger.debug('inputMessage: ' + JSON.stringify(message))
-
-      session = await this.handleSession(message.connectionId)
-
-      switch (message.type) {
-        case TextMessage.type:
-          content = JsonTransformer.fromJSON(message, TextMessage)
+      switch (event.type) {
+        case 'didcomm.basic-messages.message-received':
+          content = event.data.content.trim() || null
           break
-        case ContextualMenuSelectMessage.type:
-          inMsg = JsonTransformer.fromJSON(message, ContextualMenuSelectMessage)
-          await this.handleContextualAction(inMsg.selectionId, session)
+        case 'didcomm.action-menu.perform-received':
+          await this.handleContextualAction(event.data.name, session)
           break
-        case MenuSelectMessage.type:
-          inMsg = message as MenuSelectMessage
-          session = await this.handleMenuselection(inMsg.menuItems?.[0]?.id, session)
-          break
-        case MediaMessage.type:
-          inMsg = JsonTransformer.fromJSON(message, MediaMessage)
-          content = 'media'
-          break
-        case ProfileMessage.type:
-          inMsg = JsonTransformer.fromJSON(message, ProfileMessage)
-          session.lang = inMsg.preferredLanguage
+        case 'didcomm.user-profile.profile-received':
+          session.lang = event.data.profile.preferredLanguage
           await this.welcomeMessage(session.connectionId)
           break
-        case MrzDataSubmitMessage.type:
-          content = JsonTransformer.fromJSON(message, MrzDataSubmitMessage)
-          break
-        case EMrtdDataSubmitMessage.type:
-          content = JsonTransformer.fromJSON(message, EMrtdDataSubmitMessage)
-          break
-        case CredentialReceptionMessage.type:
-          content = JsonTransformer.fromJSON(message, CredentialReceptionMessage)
+        case 'didcomm.media-sharing.share-media-received':
+          content = 'media'
           break
         default:
-          break
-      }
-
-      if (content != null) {
-        if (typeof content === 'string') content = content.trim()
-        if (content.length === 0) content = null
+          this.logger.log(`${event.type}: ${JSON.stringify(event.data)}`)
       }
     } catch (error) {
-      this.logger.error(`inputMessage: ${error}`)
+      this.logger.error(`onEvent: ${error}`)
     }
     await this.handleStateInput(content, session)
   }
@@ -148,20 +128,8 @@ export class CoreService implements EventHandler, OnModuleInit {
     await this.sendText(connectionId, 'WELCOME', lang)
   }
 
-  /**
-   * Sends a text message to a specific connection.
-   *
-   * @param connectionId - Identifier of the target connection.
-   * @param text - The content of the message.
-   * @param lang - The language of the message.
-   */
-  private async sendText(connectionId: string, text: string, lang: string) {
-    await this.apiClient.messages.send(
-      new TextMessage({
-        connectionId: connectionId,
-        content: this.getText(text, lang),
-      }),
-    )
+  private async sendText(connectionId: string, text: string, lang: string): Promise<void> {
+    await this.client.didcomm.sendBasicMessage({ connectionId, content: this.getText(text, lang) })
   }
 
   /**
@@ -174,13 +142,6 @@ export class CoreService implements EventHandler, OnModuleInit {
     return this.i18n.t(`msg.${text}`, { lang: lang })
   }
 
-  /**
-   * Processes actions related to `ContextualMenuSelectMessage` messages.
-   * Updates the session based on the selected option.
-   *
-   * @param selectionId - Identifier of the user's selection.
-   * @param session - The current session associated with the message.
-   */
   private async handleContextualAction(selectionId: string, session: SessionEntity): Promise<SessionEntity> {
     switch (session.state) {
       case StateStep.START:
@@ -190,9 +151,14 @@ export class CoreService implements EventHandler, OnModuleInit {
             issuanceDate: new Date().toISOString().split('T')[0],
           }
 
-          await this.credentialService.issue(session.connectionId, claims, {
+          const offer = await this.credentialService.issue(claims, {
+            connectionId: session.connectionId,
             refId: claims.fullName,
             revokeIfAlreadyIssued: true,
+          })
+          await this.client.didcomm.sendBasicMessage({
+            connectionId: session.connectionId,
+            content: offer.shortUrl,
           })
         }
         if (selectionId === Cmd.REVOKE) {
@@ -218,21 +184,6 @@ export class CoreService implements EventHandler, OnModuleInit {
       this.logger.error('handleStateInput: ' + error)
     }
     return await this.sendContextualMenu(session)
-  }
-
-  /**
-   * Handles the user's selected option in a `MenuSelectMessage`.
-   * Updates the session to reflect the selected action.
-   *
-   * @param id - Identifier of the selected menu option.
-   * @param session - The current session associated with the message.
-   */
-  async handleMenuselection(id: string, session: SessionEntity): Promise<SessionEntity> {
-    switch (session.state) {
-      default:
-        break
-    }
-    return await this.sessionRepository.save(session)
   }
 
   /**
@@ -282,36 +233,23 @@ export class CoreService implements EventHandler, OnModuleInit {
     return await this.sessionRepository.save(session)
   }
 
-  // send special flows
   private async sendContextualMenu(session: SessionEntity): Promise<SessionEntity> {
-    const item: ContextualMenuItem[] = []
+    const options: ActionMenuOption[] = []
     switch (session.state) {
       case StateStep.START:
-        item.push(
-          new ContextualMenuItem({
-            id: Cmd.CREDENTIAL,
-            title: this.getText('CMD.CREDENTIAL', session.lang),
-          }),
-        )
-        item.push(
-          new ContextualMenuItem({
-            id: Cmd.REVOKE,
-            title: this.getText('CMD.REVOKE', session.lang),
-          }),
+        options.push(
+          { name: Cmd.CREDENTIAL, title: this.getText('CMD.CREDENTIAL', session.lang), description: '' },
+          { name: Cmd.REVOKE, title: this.getText('CMD.REVOKE', session.lang), description: '' },
         )
         break
       default:
         break
     }
 
-    await this.apiClient.messages.send(
-      new ContextualMenuUpdateMessage({
-        title: this.getText('ROOT_TITLE', session.lang),
-        connectionId: session.connectionId,
-        options: item,
-        timestamp: new Date(),
-      }),
-    )
+    await this.client.didcomm.sendMenu({
+      connectionId: session.connectionId,
+      menu: { title: this.getText('ROOT_TITLE', session.lang), description: '', options },
+    })
     return await this.sessionRepository.save(session)
   }
 }

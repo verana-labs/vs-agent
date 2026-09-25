@@ -3,7 +3,6 @@ import type { VsAgent, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import { chatEvents } from '../events/ChatEvents'
 import { registerDidcommModuleEvents } from '../events/didcommModuleEvents'
-import { ChatMessageHandler } from '../handlers/ChatMessageHandler'
 import { setupChatProtocols } from '../sdk/setupChatProtocols'
 
 import { CHAT_DIDCOMM_MODULES } from './didcommModules'
@@ -33,8 +32,7 @@ export const ChatPlugin = (options?: ChatPluginOptions): VsAgentNestPlugin => ({
     V2DidcommQuestionAnswerController,
   ],
   didcommModules: [...CHAT_DIDCOMM_MODULES],
-  providers: [ChatMessageHandler, { provide: DEFAULT_PROFILE, useValue: options?.defaultProfile }],
-  messageHandlers: [ChatMessageHandler],
+  providers: [{ provide: DEFAULT_PROFILE, useValue: options?.defaultProfile }],
   registerEvents: (agent, config) => {
     chatEvents(agent as VsAgent<ChatAgentModules>, config)
     registerDidcommModuleEvents(agent)

@@ -9,7 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { AdminApiError, AdminApiErrorCode, ErrorEnvelopeFilter } from '../src/common'
 import { REVOCATION_REGISTRY_DEFAULT_CAPACITY } from '../src/config/constants'
-import { CredentialTypesService } from '../src/controllers/admin/credentials'
+import { CredentialTypesService } from '../src/services'
 import { V2AnoncredsRevocationRegistriesController } from '../src/controllers/admin/v2/anoncreds/V2AnoncredsRevocationRegistriesController'
 import {
   CreateRevocationRegistryBodyDto,

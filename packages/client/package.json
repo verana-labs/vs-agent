@@ -22,19 +22,7 @@
     "version": "pnpm version --allow-same-version",
     "test": "vitest"
   },
-  "dependencies": {
-    "@verana-labs/vs-agent-model": "workspace:*",
-    "class-transformer": "0.5.1",
-    "class-validator": "0.14.1",
-    "express": "^4.18.1",
-    "tslog": "^4.8.2"
-  },
-  "devDependencies": {
-    "@nestjs/common": "^10.0.0",
-    "@types/express": "^4.17.13",
-    "ts-node-dev": "^2.0.0"
-  },
-  "peerDependencies": {
-    "@credo-ts/core": "catalog:"
+  "engines": {
+    "node": ">=18"
   }
 }

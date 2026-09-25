@@ -45,7 +45,7 @@ image:
   repository: ""
   tag: ""
 
-# DB and Redis configuration
+# DB configuration
 database:
   enabled: false
   existingSecret: ""   # name of a pre-existing Secret containing POSTGRES_PASSWORD
@@ -67,20 +67,6 @@ openid4vc:
   config: "" # openid4vc.json content as a string
   # name of a Secret holding openid4vc.json; use it for configured signing material instead of config
   existingSecret: ""
-
-redis:
-  enabled: false
-  image: "redis:alpine"      # Redis container image (pin a tag for reproducible deploys)
-  maxmemory: "80mb"          # Redis memory cap; set "" for unlimited (Redis default)
-  maxmemoryPolicy: noeviction # applied only when maxmemory is set
-  extraArgs: []              # additional redis-server flags, e.g. ["--save", ""]
-  resources:
-    requests:
-      cpu: 25m
-      memory: 64Mi
-    limits:
-      cpu: 100m
-      memory: 128Mi
 
 # Enable cors for the VS Agent
 ingress:

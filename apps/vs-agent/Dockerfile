@@ -2,7 +2,7 @@ FROM node:22.19-slim AS base
 ENV COREPACK_INTEGRITY_KEYS=0
 RUN corepack enable && corepack prepare pnpm@9.15.3 --activate
 
-# Build: vs-agent (messaging + chat)
+# Build: vs-agent (chat)
 FROM base AS build-vs-agent
 WORKDIR /www
 ENV RUN_MODE="docker"
@@ -91,12 +91,12 @@ RUN pnpm --filter @verana-labs/vs-agent-model build && \
 
 RUN --mount=type=bind,source=scripts/docker-cleanup.sh,target=/tmp/cleanup.sh sh /tmp/cleanup.sh
 
-# Final: vs-agent (messaging + chat)
+# Final: vs-agent (chat)
 FROM node:22.19-slim AS vs-agent
 WORKDIR /www
 ENV RUN_MODE="docker"
 ENV NODE_ENV=production
-ENV VS_AGENT_PLUGINS=messaging,chat
+ENV VS_AGENT_PLUGINS=chat
 
 COPY --from=build-vs-agent /www/node_modules ./node_modules
 COPY --from=build-vs-agent /www/packages/model/package.json ./packages/model/package.json
@@ -125,7 +125,7 @@ FROM node:22.19-slim AS vs-agent-mrtd
 WORKDIR /www
 ENV RUN_MODE="docker"
 ENV NODE_ENV=production
-ENV VS_AGENT_PLUGINS=messaging,chat,mrtd
+ENV VS_AGENT_PLUGINS=chat,mrtd
 
 COPY --from=build-mrtd /www/node_modules ./node_modules
 COPY --from=build-mrtd /www/packages/model/package.json ./packages/model/package.json
