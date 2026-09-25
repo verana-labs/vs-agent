@@ -693,7 +693,7 @@ export class VtFlowOrchestrator {
     )
   }
 
-  private async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {
+  async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(recordId)
     if (!record) throw new Error(`vt-flow record ${recordId} not found`)
