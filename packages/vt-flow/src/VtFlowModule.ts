@@ -208,10 +208,7 @@ export class VtFlowModule implements Module {
             .debug(
               `[vt-flow] auto-accepting credential offer for ${record.id} (autoAcceptCredentialOffer=true)`,
             )
-          const credentialsApi = agentContext.dependencyManager.resolve(DidCommCredentialsApi)
-          await credentialsApi.acceptOffer({
-            credentialExchangeRecordId: record.credentialExchangeRecordId,
-          })
+          await agentContext.dependencyManager.resolve(VtFlowApi).acceptCredentialOffer(record.id)
           return
         }
 
