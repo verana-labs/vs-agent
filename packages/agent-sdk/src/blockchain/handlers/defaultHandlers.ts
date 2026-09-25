@@ -1,6 +1,6 @@
 import { IndexerEventHandler, IndexerHandlerRegistry } from './IndexerHandlerRegistry'
 import {
-  completeVtFlowRecordsWithoutCredential,
+  markApplicantVtFlowRecordsValidated,
   markVtFlowRecordsValidated,
   publishVtjscIfOwner,
   removeHolderTrustCredentialIfRevoked,
@@ -103,7 +103,7 @@ export const defaultHandlers: IndexerEventHandler[] = [
         height: ctx.blockHeight,
         timestamp: activity.timestamp,
       })
-      await completeVtFlowRecordsWithoutCredential(ctx.agent, String(activity.entity_id))
+      await markApplicantVtFlowRecordsValidated(ctx.agent, String(activity.entity_id))
     },
   },
   {

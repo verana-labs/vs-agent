@@ -18,7 +18,7 @@ import {
 } from '../src/blockchain/handlers/defaultHandlers'
 import {
   applyStateMutation,
-  completeVtFlowRecordsWithoutCredential,
+  markApplicantVtFlowRecordsValidated,
   markVtFlowRecordsValidated,
   reconcileVtFlowRecordsOnCancel,
   removeHolderTrustCredentialIfRevoked,
@@ -464,15 +464,16 @@ describe('markVtFlowRecordsValidated', () => {
   })
 })
 
-describe('completeVtFlowRecordsWithoutCredential', () => {
-  it('leaves the applicant flow of a role other than HOLDER in VALIDATED, its terminal state', async () => {
+describe('markApplicantVtFlowRecordsValidated', () => {
+  it('moves the running applicant flow to VALIDATED for a HOLDER too, and leaves the others', async () => {
     const records = [
       { id: 'applicant', role: VtFlowRole.Applicant, state: VtFlowState.Validating },
+      { id: 'offered', role: VtFlowRole.Applicant, state: VtFlowState.CredOffered },
       { id: 'validator', role: VtFlowRole.Validator, state: VtFlowState.Validated },
     ]
     const updateState = vi.fn().mockResolvedValue(undefined)
     const agent = {
-      indexer: { findParticipant: vi.fn().mockResolvedValue({ role: 1 }) },
+      indexer: { findParticipant: vi.fn().mockResolvedValue({ role: 6 }) },
       context: {
         dependencyManager: {
           resolve: () => ({ findAllByQuery: vi.fn().mockResolvedValue(records), updateState }),
@@ -481,7 +482,7 @@ describe('completeVtFlowRecordsWithoutCredential', () => {
       config: { logger: { info: vi.fn(), error: vi.fn() } },
     }
 
-    await completeVtFlowRecordsWithoutCredential(agent as never, '7')
+    await markApplicantVtFlowRecordsValidated(agent as never, '7')
 
     expect(updateState).toHaveBeenCalledTimes(1)
     expect(updateState).toHaveBeenCalledWith(expect.anything(), records[0], VtFlowState.Validated)

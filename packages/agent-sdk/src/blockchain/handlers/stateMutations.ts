@@ -257,17 +257,11 @@ export async function markVtFlowRecordsValidated(
   )
 }
 
-/**
- * The applicant side of an onboarding process that issues no credential: its flow reaches VALIDATED,
- * the terminal state for a role other than HOLDER ([VSA-VTI-FLOW-OP-ISSUE-2]).
- */
-export async function completeVtFlowRecordsWithoutCredential(
+/** Applicant side: VALIDATED is terminal for a role other than HOLDER, and a HOLDER flow waits there for the offer ([VSA-VTI-FLOW-OP-ISSUE-2]). */
+export async function markApplicantVtFlowRecordsValidated(
   agent: VsAgent,
   participantId: string,
 ): Promise<void> {
-  const participant = await agent.indexer.findParticipant(participantId).catch(() => undefined)
-  if (!participant || participant.role === HOLDER_PARTICIPANT_TYPE) return
-
   await reconcileVtFlowRecordsForParticipant(
     agent,
     participantId,
