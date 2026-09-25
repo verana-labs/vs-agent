@@ -1,7 +1,8 @@
 import type { VsAgent } from '../src/agent/VsAgent'
 import type { VeranaIndexerService } from '../src/blockchain'
 
-import { VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { DidCommCredentialState } from '@credo-ts/didcomm'
+import { VtFlowModuleConfig, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ParticipantRole, ParticipantState } from '../src/blockchain'
@@ -69,6 +70,7 @@ function makeMocks() {
     sendIssuanceRequest: vi.fn().mockResolvedValue({ id: 'rec-1' }),
     acceptCredentialOffer: vi.fn().mockResolvedValue(undefined),
   }
+  const verifyCredential = vi.fn().mockResolvedValue(true)
   const agent = {
     did: 'did:web:agent',
     label: 'Agent',
@@ -84,7 +86,10 @@ function makeMocks() {
         if (index !== -1) eventHandlers.splice(index, 1)
       },
     },
-    dependencyManager: { resolve: () => vtFlowApi },
+    dependencyManager: {
+      resolve: (token: unknown) =>
+        token === VtFlowModuleConfig ? new VtFlowModuleConfig({ verifyCredential }) : vtFlowApi,
+    },
     context: { resolve: () => ({ update: vi.fn().mockResolvedValue(undefined) }) },
     didcomm: {
       oob: {
@@ -98,9 +103,13 @@ function makeMocks() {
         returnWhenIsConnected: vi.fn().mockResolvedValue({ id: 'conn-1' }),
         deleteById: vi.fn().mockResolvedValue(undefined),
       },
+      credentials: {
+        getById: vi.fn().mockResolvedValue({ id: 'cred-ex-1', state: DidCommCredentialState.OfferReceived }),
+        acceptCredential: vi.fn().mockResolvedValue(undefined),
+      },
     },
   }
-  return { agent, chain, indexer, vtFlowApi, eventHandlers }
+  return { agent, chain, indexer, vtFlowApi, verifyCredential, eventHandlers }
 }
 
 function makeService(
@@ -266,6 +275,33 @@ describe('EcsBootstrapService standalone', () => {
     })
     expect(mocks.vtFlowApi.acceptCredentialOffer).toHaveBeenCalledTimes(1)
     expect(mocks.vtFlowApi.acceptCredentialOffer).toHaveBeenCalledWith('flow-1')
+  })
+
+  it.each([
+    ['verifies it', true, [[{ credentialExchangeRecordId: 'cred-ex-1' }]]],
+    ['refuses it', false, []],
+  ])('accepts a flow credential received before a restart only when the verifyCredential hook %s', async (_, verdict, accepted) => {
+    const mocks = makeMocks()
+    mocks.indexer.listParticipants.mockImplementation(async (filter: { did?: string }) =>
+      filter.did === 'did:web:agent'
+        ? [{ id: 9, participant_state: ParticipantState.Active, revoked: null, slashed: null }]
+        : [],
+    )
+    const record = { id: 'flow-1', connectionId: 'conn-1', credentialExchangeRecordId: 'cred-ex-1' }
+    const exchange = { id: 'cred-ex-1', state: DidCommCredentialState.CredentialReceived }
+    mocks.vtFlowApi.findAllByQuery.mockResolvedValue([record])
+    mocks.agent.didcomm.credentials.getById.mockResolvedValue(exchange)
+    mocks.verifyCredential.mockResolvedValue(verdict)
+
+    await makeService(mocks).run()
+
+    expect(mocks.verifyCredential).toHaveBeenCalledWith({
+      agentContext: mocks.agent.context,
+      record,
+      credentialExchangeRecord: exchange,
+    })
+    expect(mocks.agent.didcomm.credentials.acceptCredential.mock.calls).toEqual(accepted)
+    expect(mocks.vtFlowApi.acceptCredentialOffer).not.toHaveBeenCalled()
   })
 
   it('reconnects a CRED_OFFERED flow whose connection is gone instead of accepting the stale offer', async () => {

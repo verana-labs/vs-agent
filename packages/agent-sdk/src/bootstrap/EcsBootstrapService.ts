@@ -1,6 +1,8 @@
 import { BaseLogger } from '@credo-ts/core'
+import { DidCommCredentialState } from '@credo-ts/didcomm'
 import {
   VtFlowApi,
+  VtFlowModuleConfig,
   VtFlowRole,
   VtFlowState,
   VtFlowVariant,
@@ -119,6 +121,16 @@ export class EcsBootstrapService {
       }
       if (!record.credentialExchangeRecordId) continue
       try {
+        const exchange = await this.agent.didcomm.credentials.getById(record.credentialExchangeRecordId)
+        if (exchange.state === DidCommCredentialState.CredentialReceived) {
+          const { verifyCredential } = this.agent.dependencyManager.resolve(VtFlowModuleConfig)
+          const agentContext = this.agent.context
+          if (await verifyCredential?.({ agentContext, record, credentialExchangeRecord: exchange })) {
+            await this.agent.didcomm.credentials.acceptCredential({ credentialExchangeRecordId: exchange.id })
+            this.logger.info(`[EcsBootstrap] accepted the verified credential of flow ${record.id}`)
+          }
+          continue
+        }
         await api.acceptCredentialOffer(record.id)
         this.logger.info(`[EcsBootstrap] re-accepted the pending credential offer for flow ${record.id}`)
       } catch (error) {
