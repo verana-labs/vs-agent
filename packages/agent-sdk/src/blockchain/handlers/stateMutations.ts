@@ -211,7 +211,7 @@ export async function markVtFlowRecordsValidated(agent: VsAgent, participantId: 
     agent,
     participantId,
     async (record, service, agentContext) => {
-      if (!VtFlowValidatedFromStates.has(record.state)) {
+      if (record.role !== VtFlowRole.Validator || !VtFlowValidatedFromStates.has(record.state)) {
         return null
       }
       await service.markValidated(agentContext, record.id)

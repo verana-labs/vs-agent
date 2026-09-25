@@ -18,6 +18,7 @@ import {
 } from '../src/blockchain/handlers/defaultHandlers'
 import {
   applyStateMutation,
+  markVtFlowRecordsValidated,
   reconcileVtFlowRecordsOnCancel,
   removeHolderTrustCredentialIfRevoked,
   removeSelfIssuedEcsCredentialsIfIssuerRevoked,
@@ -308,6 +309,29 @@ describe('applyStateMutation', () => {
     )
     expect(state.participants['12']).toMatchObject({ id: 12, schemaId: 4, did: 'did:web:self' })
     expect(state.participants['13']).toMatchObject({ id: 13, schemaId: 4, did: 'did:web:root' })
+  })
+})
+
+describe('markVtFlowRecordsValidated', () => {
+  it('moves only the validator flows of the participant', async () => {
+    const records = [
+      { id: 'applicant', role: VtFlowRole.Applicant, state: VtFlowState.Validating },
+      { id: 'validator', role: VtFlowRole.Validator, state: VtFlowState.Validating },
+    ]
+    const markValidated = vi.fn().mockResolvedValue(undefined)
+    const agent = {
+      context: {
+        dependencyManager: {
+          resolve: () => ({ findAllByQuery: vi.fn().mockResolvedValue(records), markValidated }),
+        },
+      },
+      config: { logger: { info: vi.fn(), error: vi.fn() } },
+    }
+
+    await markVtFlowRecordsValidated(agent as never, '7')
+
+    expect(markValidated).toHaveBeenCalledTimes(1)
+    expect(markValidated).toHaveBeenCalledWith(expect.anything(), 'validator')
   })
 })
 
