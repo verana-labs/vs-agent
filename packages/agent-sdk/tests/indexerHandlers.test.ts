@@ -22,6 +22,7 @@ import {
   reconcileVtFlowRecordsOnCancel,
   removeHolderTrustCredentialIfRevoked,
   removeSelfIssuedEcsCredentialsIfIssuerRevoked,
+  startParticipantOPAutoFlow,
 } from '../src/blockchain/handlers/stateMutations'
 import { IndexerActivity, VeranaSyncState } from '../src/blockchain/types'
 import { vtFlowEvents } from '../src/events/VtFlowEvents'
@@ -311,6 +312,33 @@ describe('applyStateMutation', () => {
     )
     expect(state.participants['12']).toMatchObject({ id: 12, schemaId: 4, did: 'did:web:self' })
     expect(state.participants['13']).toMatchObject({ id: 13, schemaId: 4, did: 'did:web:root' })
+  })
+})
+
+describe('startParticipantOPAutoFlow', () => {
+  it('sends the onboarding request of a non-ECS schema without claims, as a normal case', async () => {
+    const startOnboardingProcess = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'startOnboardingProcess')
+      .mockResolvedValue({} as never)
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const agent = {
+      did: 'did:web:agent',
+      veranaChain: {},
+      ecsClaims: { org: { name: 'Acme' } },
+      config: { logger },
+      indexer: {
+        findParticipant: vi.fn().mockResolvedValue({ id: 5, did: 'did:web:agent', schemaId: 12 }),
+        getCredentialSchema: vi
+          .fn()
+          .mockResolvedValue({ id: 12, json_schema: '{"title":"ExampleCredential"}' }),
+      },
+    }
+
+    await startParticipantOPAutoFlow(agent as never, makeActivity('StartParticipantOP', { entity_id: '5' }))
+
+    expect(startOnboardingProcess).toHaveBeenCalledWith({ applicantParticipantId: 5 })
+    expect(logger.warn).not.toHaveBeenCalled()
+    startOnboardingProcess.mockRestore()
   })
 })
 

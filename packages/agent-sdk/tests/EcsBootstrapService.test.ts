@@ -367,6 +367,22 @@ describe('EcsBootstrapService onboarding resume', () => {
     expect(mocks.chain.setParticipantOPToValidated).toHaveBeenCalledWith(expect.objectContaining({ id: 42 }))
   })
 
+  it('resumes a non-ECS schema onboarding without claims, as a normal case', async () => {
+    const mocks = makeMocks()
+    onlyOwnPending(mocks)
+    Object.assign(mocks.agent, {
+      ecsClaims: { org: { name: 'Acme' } },
+      indexer: {
+        getCredentialSchema: vi.fn().mockResolvedValue({ json_schema: '{"title":"ExampleCredential"}' }),
+      },
+    })
+
+    await makeService(mocks).run()
+
+    expect(startOnboardingProcess).toHaveBeenCalledWith({ applicantParticipantId: 42 })
+    expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('not an ECS schema'))
+  })
+
   it('carries on with the bootstrap when the resume fails', async () => {
     const mocks = makeMocks()
     onlyOwnPending(mocks)
