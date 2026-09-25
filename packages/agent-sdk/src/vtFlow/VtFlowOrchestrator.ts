@@ -1073,6 +1073,7 @@ export class VtFlowOrchestrator {
     }
 
     const credentialJson = await this.getReceivedCredentialJson(record.credentialExchangeRecordId)
+    await this.assertFlowCredentialFormat(credentialJson, issuer)
     const { digestAlgorithm, ecsKey } = await this.credentialSchema(issuer.schema_id)
     const digest = computeCredentialDigestJCS(
       credentialJson as unknown as W3cVerifiableCredential,
@@ -1083,6 +1084,29 @@ export class VtFlowOrchestrator {
       throw new Error(`Credential digest ${digest} is not anchored on-chain`)
     }
     if (ecsKey) await vtFlowApi.setEcsSchemaKey(record.id, ecsKey)
+  }
+
+  /** [VSA-VTI-FLOW-FMT-1]. Credo already verified the proof and its assertionMethod key, for data model 2.0 only. */
+  private async assertFlowCredentialFormat(credential: JsonObject, issuer: ParticipantDto): Promise<void> {
+    if (!isVcdm2Credential(credential)) {
+      throw new Error('Received credential is not a VC Data Model 2.0 credential')
+    }
+    const verificationMethod = (credential.proof as { verificationMethod?: string } | undefined)
+      ?.verificationMethod
+    if (!issuer.did || verificationMethod?.split('#')[0] !== issuer.did) {
+      throw new Error(
+        `Proof verification method ${verificationMethod} is not one of the validator ${issuer.did}`,
+      )
+    }
+    const subjectId = (credential.credentialSubject as { id?: string } | undefined)?.id
+    if (subjectId !== this.agent.did) {
+      throw new Error(`Credential subject ${subjectId} is not the applicant ${this.agent.did}`)
+    }
+    const schemaRef = (credential.credentialSchema as { id?: string } | undefined)?.id
+    const jsonSchemaCredentialId = await this.resolveJsonSchemaCredentialId(String(issuer.schema_id))
+    if (schemaRef !== jsonSchemaCredentialId) {
+      throw new Error(`Credential schema ${schemaRef} is not the VTJSC ${jsonSchemaCredentialId} of the flow`)
+    }
   }
 
   async onCredentialRevoked(vtFlowRecordId: string): Promise<void> {
