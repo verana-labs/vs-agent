@@ -781,7 +781,8 @@ export class VtFlowOrchestrator {
 
   /**
    * [VSA-VTI-FLOW-OP-ISSUE]: moves the flow to VALIDATED and fills `validation` from the validated
-   * entry. Without the landed transaction, a recorded broadcast keeps its submission and tx.
+   * entry. Without the landed transaction, a recorded broadcast keeps its tx, and its submission
+   * unless that tx failed.
    */
   async markValidated(
     recordId: string,
