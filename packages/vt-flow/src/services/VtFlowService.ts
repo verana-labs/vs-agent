@@ -402,7 +402,10 @@ export class VtFlowService {
       `[vt-flow] validating received for session ${record.threadId}: ${message.comment ?? '(no comment)'}`,
     )
 
-    if (record.role === VtFlowRole.Applicant && message.comment) {
+    if (
+      record.role === VtFlowRole.Applicant &&
+      (message.comment || record.state === VtFlowState.OobPending)
+    ) {
       this.appendMessage(record, {
         type: VtFlowMessageType.Validating,
         text: message.comment,
@@ -648,13 +651,11 @@ export class VtFlowService {
       comment: params.comment,
     })
 
-    if (params.comment) {
-      this.appendMessage(record, {
-        type: VtFlowMessageType.Validating,
-        text: params.comment,
-        at: new Date().toISOString(),
-      })
-    }
+    this.appendMessage(record, {
+      type: VtFlowMessageType.Validating,
+      text: params.comment,
+      at: new Date().toISOString(),
+    })
     await this.updateState(agentContext, record, VtFlowState.Validating)
     return { record, message }
   }

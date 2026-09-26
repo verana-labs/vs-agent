@@ -533,10 +533,16 @@ describe('VtFlowService.reattachOnboardingProcessRecord', () => {
 
 describe('VtFlowService.processReceiveValidating', () => {
   it.each([
-    VtFlowState.OrSent,
-    VtFlowState.IrSent,
-    VtFlowState.OobPending,
-  ])('applicant moves from %s to VALIDATING', async state => {
+    { state: VtFlowState.OrSent, messages: undefined },
+    { state: VtFlowState.IrSent, messages: undefined },
+    {
+      state: VtFlowState.OobPending,
+      messages: [{ type: VtFlowMessageType.Validating, at: expect.any(String) }],
+    },
+  ])('applicant moves from $state to VALIDATING and records a validating without comment from OOB_PENDING only', async ({
+    state,
+    messages,
+  }) => {
     const existing = makeRecord({ state })
     const { service } = makeService(existing)
 
@@ -547,6 +553,7 @@ describe('VtFlowService.processReceiveValidating', () => {
     } as never)
 
     expect(record.state).toBe(VtFlowState.Validating)
+    expect(record.messages).toEqual(messages)
   })
 })
 
@@ -599,6 +606,15 @@ describe('VtFlowService.sendValidatingForSession', () => {
     await expect(service.sendValidatingForSession({} as never, pending.id)).rejects.toThrow(
       /state 'VALIDATING'/,
     )
+  })
+
+  it('records the validating it sends without a comment', async () => {
+    const pending = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.OobPending })
+    const { service } = makeService(pending)
+
+    const { record } = await service.sendValidatingForSession({} as never, pending.id)
+
+    expect(record.messages).toEqual([{ type: VtFlowMessageType.Validating, at: expect.any(String) }])
   })
 })
 
