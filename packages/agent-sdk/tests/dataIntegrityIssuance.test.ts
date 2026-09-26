@@ -278,6 +278,27 @@ describe('VC Data Model 2.0 issuance over the Data Integrity credential format',
     ).rejects.toThrow(/Missing credential attributes|does not match the offered credential/)
   })
 
+  it('refuses a received credential whose proof purpose is not assertionMethod', async () => {
+    const { credential, credentialExchangeRecord, offerAttachment, requestAttachment } =
+      await offerAndRequest()
+    const { proof } = await agent.w3cDataIntegrity.createProofOrThrow({
+      unsecuredDocument: credential,
+      verificationMethod: verificationMethodId,
+      proofPurpose: 'authentication',
+      cryptosuite: 'eddsa-jcs-2022',
+    })
+
+    await expect(
+      formatService.processCredential(agent.context, {
+        credentialExchangeRecord,
+        attachment: formatService.getFormatData({ credential: { ...credential, proof } }, 'issued'),
+        requestAttachment,
+        offerAttachment,
+      }),
+    ).rejects.toThrow(/Failed to validate credential/)
+    expect(credentialExchangeRecord.credentials).toEqual([])
+  }, 30_000)
+
   it('accepts a received credential whose claims include zero, false and an empty string', async () => {
     // the ECS service schema requires `minimumAgeRequired` and allows 0, so a falsy claim value is
     // both legal and mandatory; the holder must not mistake it for a missing claim

@@ -12,21 +12,46 @@ const record = {
   schemaId: '5',
 }
 
-const activeIssuer = { id: 10, role: 'ISSUER', participant_state: 'ACTIVE', schema_id: 5 }
+const APPLICANT_DID = 'did:web:applicant'
+const VALIDATOR_DID = 'did:web:validator'
+const JSC_ID = 'https://ecosystem.example/vt/schemas-5-jsc.json'
+
+const activeIssuer = {
+  id: 10,
+  did: VALIDATOR_DID,
+  role: 'ISSUER',
+  participant_state: 'ACTIVE',
+  schema_id: 5,
+}
+
+const PROOF = {
+  type: 'DataIntegrityProof',
+  cryptosuite: 'eddsa-jcs-2022',
+  proofPurpose: 'assertionMethod',
+  verificationMethod: `${VALIDATOR_DID}#key-1`,
+}
+
+const RECEIVED_CREDENTIAL = {
+  '@context': ['https://www.w3.org/ns/credentials/v2'],
+  issuer: VALIDATOR_DID,
+  credentialSubject: { id: APPLICANT_DID },
+  credentialSchema: { id: JSC_ID, type: 'JsonSchemaCredential' },
+  proof: PROOF,
+}
 
 const SERVICE_SCHEMA = JSON.stringify({ title: 'ServiceCredential' })
 
-function verify(indexer: Record<string, unknown>, setEcsSchemaKey = vi.fn(async () => undefined)) {
+function verify(
+  indexer: Record<string, unknown>,
+  setEcsSchemaKey = vi.fn(async () => undefined),
+  credential: Record<string, unknown> = RECEIVED_CREDENTIAL,
+) {
   const agent: Record<string, unknown> = {
+    did: APPLICANT_DID,
     dependencyManager: { resolve: () => ({ findById: async () => record, setEcsSchemaKey }) },
     didcomm: {
       credentials: {
-        // verre only digests JSON-LD, so the received credential must at least carry its context
-        getFormatData: async () => ({
-          credential: {
-            dataIntegrity: { credential: { '@context': ['https://www.w3.org/ns/credentials/v2'] } },
-          },
-        }),
+        getFormatData: async () => ({ credential: { dataIntegrity: { credential } } }),
       },
     },
   }
@@ -37,7 +62,10 @@ function verify(indexer: Record<string, unknown>, setEcsSchemaKey = vi.fn(async 
     getDigest: async () => ({ digest: 'anchored' }),
   }
   agent.indexer = { ...defaults, ...indexer }
-  return new VtFlowOrchestrator(agent as never).verifyOfferedCredential('rec-1')
+  const orchestrator = new VtFlowOrchestrator(agent as never)
+  ;(orchestrator as unknown as { resolveJsonSchemaCredentialId: unknown }).resolveJsonSchemaCredentialId =
+    async () => JSC_ID
+  return orchestrator.verifyOfferedCredential('rec-1')
 }
 
 describe('VtFlowOrchestrator.verifyOfferedCredential', () => {
@@ -104,6 +132,39 @@ describe('VtFlowOrchestrator.verifyOfferedCredential', () => {
     })
     expect(looked).toBeDefined()
     expect(looked).not.toMatch(/^sha\d+-/)
+  })
+
+  it('rejects a data model 1.1 credential, whose proof Credo does not verify', async () => {
+    const credential = { ...RECEIVED_CREDENTIAL, '@context': ['https://www.w3.org/2018/credentials/v1'] }
+
+    await expect(verify({}, undefined, credential)).rejects.toThrow(/not a VC Data Model 2.0 credential/)
+  })
+
+  it('rejects a proof by a verification method outside the validator DID Document', async () => {
+    const credential = {
+      ...RECEIVED_CREDENTIAL,
+      proof: { ...PROOF, verificationMethod: 'did:web:other#key-1' },
+    }
+
+    await expect(verify({}, undefined, credential)).rejects.toThrow(/is not one of the validator/)
+  })
+
+  it('rejects a credential whose subject is not the applicant', async () => {
+    const credential = { ...RECEIVED_CREDENTIAL, credentialSubject: { id: 'did:web:other' } }
+
+    await expect(verify({}, undefined, credential)).rejects.toThrow(/is not the applicant/)
+  })
+
+  it('rejects a credential whose schema is not the VTJSC of the flow schema', async () => {
+    const credential = {
+      ...RECEIVED_CREDENTIAL,
+      credentialSchema: {
+        id: 'https://ecosystem.example/vt/schemas-6-jsc.json',
+        type: 'JsonSchemaCredential',
+      },
+    }
+
+    await expect(verify({}, undefined, credential)).rejects.toThrow(/is not the VTJSC/)
   })
 })
 

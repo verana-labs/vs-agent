@@ -13,7 +13,14 @@ import {
   type DidCommProofStateChangedEvent,
 } from '@credo-ts/didcomm'
 import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
-import { ConsoleLogger, DidRepository, LogLevel } from '@credo-ts/core'
+import {
+  ConsoleLogger,
+  DidDocument,
+  DidDocumentService,
+  DidRepository,
+  type DidResolver,
+  LogLevel,
+} from '@credo-ts/core'
 import {
   VT_FLOW_ONBOARDING_REQUEST_TYPE,
   VtFlowApi,
@@ -153,6 +160,30 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
   const resolver = new FakeDidResolver()
   const logger = new ConsoleLogger(LogLevel.Warn)
 
+  // [VSA-VTI-VTJSC]: the Ecosystem DID Document carries each VTJSC, and no Ecosystem agent runs here
+  const ecosystemServices: DidDocumentService[] = []
+  const ecosystemResolver: DidResolver = {
+    supportedMethods: ['example'],
+    allowsCaching: false,
+    allowsLocalDidRecord: false,
+    resolve: async (_, did) => ({
+      didDocument: did === ecosystemDid ? new DidDocument({ id: did, service: ecosystemServices }) : null,
+      didDocumentMetadata: {},
+      didResolutionMetadata: did === ecosystemDid ? {} : { error: 'notFound' },
+    }),
+  }
+  const publishVtjsc = (schemaId: number, vtjsc: { id: string }) => {
+    const serviceEndpoint = `https://ecosystem/vt/schemas-${schemaId}-c-vp.json`
+    mockResponses[serviceEndpoint] = { verifiableCredential: [vtjsc] }
+    ecosystemServices.push(
+      new DidDocumentService({
+        id: `${ecosystemDid}#vpr-schemas-${schemaId}-vtjsc-vp`,
+        type: 'LinkedVerifiablePresentation',
+        serviceEndpoint,
+      }),
+    )
+  }
+
   beforeAll(async () => {
     stack = await startStack()
     chainA = await VeranaTestChain.connect(stack.rpcUrl, COOLUSER_MNEMONIC)
@@ -222,6 +253,8 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       vtFlowOptions: {
         assertVerifiableService: async ({ peerDid }) => !peerDid.startsWith('did:peer:'),
         autoIssueCredentialOnRequest: true,
+        onBeforeCredentialIssued: async ({ record, credential }) =>
+          new VtFlowOrchestrator(validator).onCredentialIssued(record.id, credential as never),
       },
     })
     validator.didcomm.registerInboundTransport(new SubjectInboundTransport(validatorMessages))
@@ -241,11 +274,14 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
     validatorParticipantId = vp.participantId
     await seederChain.setParticipantOPToValidated({ id: vp.participantId, opSummaryDigest: 'sha384-v' })
 
-    await createJsc(validator, validator.publicApiBaseUrl, getEcsSchemas(validator.publicApiBaseUrl), {
-      schemaBaseId: String(orgSchemaId),
-      jsonSchemaRef: `vpr:verana:${validatorChain.getChainId}:cs:${orgSchemaId}`,
-      precomputedDigestSRI: await computeSchemaDigest(JSON.parse(ecsSchema('OrganizationCredential'))),
-    })
+    publishVtjsc(
+      orgSchemaId,
+      await createJsc(validator, validator.publicApiBaseUrl, getEcsSchemas(validator.publicApiBaseUrl), {
+        schemaBaseId: String(orgSchemaId),
+        jsonSchemaRef: `vpr:verana:${validatorChain.getChainId}:cs:${orgSchemaId}`,
+        precomputedDigestSRI: await computeSchemaDigest(JSON.parse(ecsSchema('OrganizationCredential'))),
+      }),
+    )
 
     applicant = await startAgent({
       label: 'Applicant',
@@ -267,6 +303,8 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
             return null
           }
         },
+        onBeforeCredentialIssued: async ({ record, credential }) =>
+          applicantOrchestrator.onCredentialIssued(record.id, credential as never),
         verifyCredential: async ({ record }) => {
           for (let attempt = 1; ; attempt++) {
             try {
@@ -299,7 +337,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
     })
     applicant.didcomm.registerInboundTransport(new SubjectInboundTransport(applicantMessages))
     applicant.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
-    applicant.dids.config.resolvers.unshift(resolver)
+    applicant.dids.config.resolvers.unshift(resolver, ecosystemResolver)
     await applicant.initialize()
     await resolver.registerAgent(applicant)
     applicantEvents = vi.spyOn(applicant.events, 'emit')
@@ -489,11 +527,14 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       await parentChain.start()
       ;(applicant as { veranaChain?: VeranaChainService }).veranaChain = parentChain
 
-      await createJsc(applicant, applicant.publicApiBaseUrl, getEcsSchemas(applicant.publicApiBaseUrl), {
-        schemaBaseId: String(serviceSchemaId),
-        jsonSchemaRef: `vpr:verana:${seederChain.getChainId}:cs:${serviceSchemaId}`,
-        precomputedDigestSRI: await computeSchemaDigest(JSON.parse(ecsSchema('ServiceCredential'))),
-      })
+      publishVtjsc(
+        serviceSchemaId,
+        await createJsc(applicant, applicant.publicApiBaseUrl, getEcsSchemas(applicant.publicApiBaseUrl), {
+          schemaBaseId: String(serviceSchemaId),
+          jsonSchemaRef: `vpr:verana:${seederChain.getChainId}:cs:${serviceSchemaId}`,
+          precomputedDigestSRI: await computeSchemaDigest(JSON.parse(ecsSchema('ServiceCredential'))),
+        }),
+      )
       await until(async () => {
         const issuers = await indexer.listParticipants({
           did: applicant.did!,
@@ -542,7 +583,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       })
       child.didcomm.registerInboundTransport(new SubjectInboundTransport(childMessages))
       child.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
-      child.dids.config.resolvers.unshift(resolver)
+      child.dids.config.resolvers.unshift(resolver, ecosystemResolver)
       await child.initialize()
       await resolver.registerAgent(child)
       const childEvents = vi.spyOn(child.events, 'emit')
@@ -580,7 +621,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       const parentFlow = await until(async () => {
         const [flow] = await parentVtFlowApi.findAllByQuery({
           role: VtFlowRole.Validator,
-          participantId: String(childHolder.id),
+          applicantParticipantId: String(childHolder.id),
         })
         return flow?.state === VtFlowState.AwaitingOr ? flow : undefined
       })

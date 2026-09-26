@@ -1,5 +1,9 @@
 import { EventEmitter, JsonTransformer, utils } from '@credo-ts/core'
-import { DidCommCredentialExchangeRepository, WhoRetriesStatus } from '@credo-ts/didcomm'
+import {
+  DidCommCredentialExchangeRepository,
+  DidCommCredentialState,
+  WhoRetriesStatus,
+} from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -896,6 +900,20 @@ describe('VtFlowService VS-CONN-VS gate', () => {
   })
 })
 
+describe('VtFlowService.onSubprotocolStateChanged', () => {
+  it('moves the flow to ERROR when the applicant declines the offer', async () => {
+    const record = makeRecord({ state: VtFlowState.CredOffered, credentialExchangeRecordId: 'cx-1' })
+    const { service, agentContext } = makeService(record)
+
+    await service.onSubprotocolStateChanged(agentContext as never, record, {
+      id: 'cx-1',
+      state: DidCommCredentialState.Declined,
+    } as never)
+
+    expect(record.state).toBe(VtFlowState.Error)
+  })
+})
+
 describe('VtFlowModule state listeners', () => {
   it('log a record read that fails after shutdown instead of rejecting', async () => {
     const listeners: Array<(event: unknown) => Promise<void>> = []
@@ -969,5 +987,43 @@ describe('VtFlowModule state listeners', () => {
     await Promise.all(listeners.map(listener => listener(event)))
 
     expect(vtFlowApi.acceptOnboardingRequest).toHaveBeenCalledWith(record.id)
+  })
+
+  it('auto-accepts an offer through the vt-flow offer check', async () => {
+    const listeners: Array<(event: unknown) => Promise<void>> = []
+    const record = makeRecord({ state: VtFlowState.CredOffered, credentialExchangeRecordId: 'cx-1' })
+    const service = new VtFlowService(
+      { findById: vi.fn().mockResolvedValue(record) } as never,
+      {} as never,
+      { debug: vi.fn(), error: vi.fn() } as never,
+      new VtFlowModuleConfig({ autoAcceptCredentialOffer: true }),
+    )
+    const vtFlowApi = { acceptCredentialOffer: vi.fn(async () => record) }
+    const eventEmitter = {
+      on: (type: string, listener: (event: unknown) => Promise<void>) => {
+        if (type === VtFlowEventTypes.VtFlowStateChanged) listeners.push(listener)
+      },
+    }
+    const registry = { registerMessageHandlers: vi.fn(), register: vi.fn() }
+    const dependencies = new Map<unknown, unknown>([
+      [VtFlowService, service],
+      [EventEmitter, eventEmitter],
+      [VtFlowApi, vtFlowApi],
+    ])
+    const agentContext = {
+      dependencyManager: { resolve: (token: unknown) => dependencies.get(token) ?? registry },
+    }
+    await new VtFlowModule().initialize(agentContext as never)
+
+    const event = {
+      payload: {
+        vtFlowRecordId: record.id,
+        state: VtFlowState.CredOffered,
+        previousState: VtFlowState.Validated,
+      },
+    }
+    await Promise.all(listeners.map(listener => listener(event)))
+
+    expect(vtFlowApi.acceptCredentialOffer).toHaveBeenCalledWith(record.id)
   })
 })
