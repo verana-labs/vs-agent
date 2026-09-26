@@ -434,6 +434,11 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
 
       const entry = await indexer.getParticipant(holderId)
       expect(entry.op_state).toBe('VALIDATED')
+      const { credential } = await applicant.didcomm.credentials.getFormatData(exchange.id)
+      const signed = (credential as { dataIntegrity?: { credential?: object } } | undefined)?.dataIntegrity
+        ?.credential
+      expect(signed).toMatchObject({ id: issued.credentialId, validUntil: entry.effective_until })
+      expect(issued.credentialId?.startsWith(`${validator.did}#`)).toBe(true)
       expect(issued.validation).toMatchObject({
         submission: VtFlowSubmission.Agent,
         validationFees: entry.validation_fees,
