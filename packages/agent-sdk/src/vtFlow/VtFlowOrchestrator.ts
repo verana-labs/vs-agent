@@ -17,6 +17,7 @@ import {
   VtFlowSubmission,
   VtFlowTxReason,
   VtFlowTxStatus,
+  VtFlowValidatedFromStates,
   VtFlowVariant,
   isVtFlowRenewable,
   isVtFlowTerminalState,
@@ -381,7 +382,7 @@ export class VtFlowOrchestrator {
 
     if (record.state === VtFlowState.ValidatedPendingClaims) return this.continueAfterValidated(record.id)
     if (entryValidated) {
-      if (record.state !== VtFlowState.Validated) await vtFlowApi.markValidated(record.id)
+      if (record.state !== VtFlowState.Validated) await this.markValidated(record.id, applicant)
       return this.continueAfterValidated(record.id)
     }
 
@@ -707,15 +708,13 @@ export class VtFlowOrchestrator {
       const record = await vtFlowApi.findById(recordId)
       const validation = record?.validation
       const hash = validation?.tx?.hash
-      if (!record || !validation || !hash || record.state !== VtFlowState.ValidationTxSubmitted) return
+      if (!record?.applicantParticipantId || !validation || !hash) return
+      if (record.state !== VtFlowState.ValidationTxSubmitted) return
 
       const tx = await chain.findTx(hash).catch(() => undefined)
       if (tx && tx.code === 0) {
-        await vtFlowApi.recordValidation(recordId, {
-          ...validation,
-          tx: { ...validation.tx, height: tx.height, status: VtFlowTxStatus.Succeeded },
-        })
-        await vtFlowApi.markValidated(recordId)
+        const entry = await this.agent.indexer.getParticipant(record.applicantParticipantId)
+        await this.markValidated(recordId, entry, { hash, height: tx.height })
         await this.continueAfterValidated(recordId)
         return
       }
@@ -749,7 +748,7 @@ export class VtFlowOrchestrator {
       ? await this.agent.indexer.getParticipant(record.applicantParticipantId)
       : undefined
     if (applicant?.op_state === 'VALIDATED') {
-      await vtFlowApi.markValidated(record.id)
+      await this.markValidated(record.id, applicant)
       await this.continueAfterValidated(record.id)
       return
     }
@@ -761,6 +760,50 @@ export class VtFlowOrchestrator {
       },
       VtFlowState.ValidationTxFailed,
     )
+  }
+
+  /**
+   * [VSA-VTI-FLOW-OP-ISSUE]: moves the flow to VALIDATED and fills `validation` from the validated
+   * entry. Without the landed transaction, a recorded broadcast keeps its submission and tx.
+   */
+  async markValidated(
+    recordId: string,
+    entry: ParticipantDto,
+    landed?: { hash: string; height: number; timestamp?: string },
+  ): Promise<VtFlowRecord> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(recordId)
+    if (!record) throw new Error(`vt-flow record ${recordId} not found`)
+    if (!VtFlowValidatedFromStates.has(record.state) && record.state !== VtFlowState.TerminatedByValidator) {
+      throw invalidState(`the flow is '${record.state}', which does not precede VALIDATED`)
+    }
+    const recorded = record.validation
+    const agentTx = landed && recorded?.tx?.hash === landed.hash ? recorded.tx : undefined
+    const validation: VtFlowValidation = {
+      ...recorded,
+      decidedAt: recorded?.decidedAt ?? landed?.timestamp ?? entry.modified,
+      submission:
+        !landed && recorded?.tx?.hash
+          ? recorded.submission
+          : agentTx
+            ? VtFlowSubmission.Agent
+            : VtFlowSubmission.Operator,
+      validationFees: entry.validation_fees,
+      issuanceFees: entry.issuance_fees,
+      verificationFees: entry.verification_fees,
+      issuanceFeeDiscount: entry.issuance_fee_discount,
+      verificationFeeDiscount: entry.verification_fee_discount,
+      effectiveUntil: entry.effective_until ?? undefined,
+      ...(agentTx && {
+        tx: {
+          hash: agentTx.hash,
+          submittedAt: agentTx.submittedAt,
+          height: landed?.height,
+          status: VtFlowTxStatus.Succeeded,
+        },
+      }),
+    }
+    return vtFlowApi.recordValidation(recordId, validation, VtFlowState.Validated)
   }
 
   async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {

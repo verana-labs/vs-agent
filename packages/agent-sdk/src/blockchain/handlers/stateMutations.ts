@@ -7,11 +7,8 @@ import {
   VtFlowRole,
   VtFlowService,
   VtFlowState,
-  VtFlowSubmission,
-  VtFlowTxStatus,
   VtFlowValidatedFromStates,
   isVtFlowTerminalState,
-  type VtFlowValidation,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
@@ -215,10 +212,11 @@ export async function markVtFlowRecordsValidated(
   participantId: string,
   tx: { hash: string; height: number; timestamp: string },
 ): Promise<void> {
+  const orchestrator = new VtFlowOrchestrator(agent)
   await reconcileVtFlowRecordsForParticipant(
     agent,
     participantId,
-    async (record, service, agentContext) => {
+    async record => {
       // rejectFlow ended the flow after validateFlow recorded a decision, so with the transaction in flight
       const rejectedInFlight = record.state === VtFlowState.TerminatedByValidator && !!record.validation
       if (
@@ -227,30 +225,9 @@ export async function markVtFlowRecordsValidated(
       ) {
         return null
       }
-      const entry = await agent.indexer.getParticipant(participantId)
-      const agentTx = record.validation?.tx?.hash === tx.hash ? record.validation.tx : undefined
-      const validation: VtFlowValidation = {
-        ...record.validation,
-        decidedAt: record.validation?.decidedAt ?? tx.timestamp,
-        submission: agentTx ? VtFlowSubmission.Agent : VtFlowSubmission.Operator,
-        validationFees: entry.validation_fees,
-        issuanceFees: entry.issuance_fees,
-        verificationFees: entry.verification_fees,
-        issuanceFeeDiscount: entry.issuance_fee_discount,
-        verificationFeeDiscount: entry.verification_fee_discount,
-        effectiveUntil: entry.effective_until ?? undefined,
-        ...(agentTx && {
-          tx: {
-            hash: agentTx.hash,
-            submittedAt: agentTx.submittedAt,
-            height: tx.height,
-            status: VtFlowTxStatus.Succeeded,
-          },
-        }),
-      }
-      await service.recordValidation(agentContext, record.id, validation, VtFlowState.Validated)
+      await orchestrator.markValidated(record.id, await agent.indexer.getParticipant(participantId), tx)
       // the connection stays TERMINATED, so issuance waits for the applicant to reconnect
-      if (!rejectedInFlight) await new VtFlowOrchestrator(agent).continueAfterValidated(record.id)
+      if (!rejectedInFlight) await orchestrator.continueAfterValidated(record.id)
       return 'VALIDATED'
     },
     'Failed to markValidated',

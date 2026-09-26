@@ -340,7 +340,8 @@ describe('validateFlow against the real chain and indexer', () => {
       })
       const shortCircuit = await orchestrator.validateFlow({ vtFlowRecordId: 'flow-short' })
       expect(shortCircuit.state).toBe(VtFlowState.CredOffered)
-      expect(shortCircuit.validation).toBeUndefined()
+      expect(shortCircuit.validation).toMatchObject({ submission: 'OPERATOR' })
+      expect(shortCircuit.validation).not.toHaveProperty('tx')
 
       // A second SetParticipantOPtoValidated fails its simulation, but CheckTx runs no message
       // handler, so a broadcast that skips the simulation is only refused at delivery.

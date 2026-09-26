@@ -359,13 +359,12 @@ describe('markVtFlowRecordsValidated', () => {
     const continueAfterValidated = vi
       .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
       .mockResolvedValue({} as never)
+    const findAllByQuery = vi.fn().mockResolvedValue(records)
+    const findById = vi.fn(async (id: string) => records.find(record => record.id === id))
     const agent = {
       indexer: { getParticipant: vi.fn().mockResolvedValue(entry) },
-      context: {
-        dependencyManager: {
-          resolve: () => ({ findAllByQuery: vi.fn().mockResolvedValue(records), recordValidation }),
-        },
-      },
+      dependencyManager: { resolve: () => ({ findById, findAllByQuery, recordValidation }) },
+      context: { dependencyManager: { resolve: () => ({ findAllByQuery }) } },
       config: { logger: { info: vi.fn(), error: vi.fn() } },
     }
     return { agent, recordValidation, continueAfterValidated }
@@ -382,12 +381,7 @@ describe('markVtFlowRecordsValidated', () => {
     await markVtFlowRecordsValidated(agent as never, '7', tx)
 
     expect(recordValidation).toHaveBeenCalledTimes(1)
-    expect(recordValidation).toHaveBeenCalledWith(
-      expect.anything(),
-      'validator',
-      expect.anything(),
-      VtFlowState.Validated,
-    )
+    expect(recordValidation).toHaveBeenCalledWith('validator', expect.anything(), VtFlowState.Validated)
     expect(continueAfterValidated).toHaveBeenCalledWith('validator')
     continueAfterValidated.mockRestore()
   })
@@ -421,7 +415,6 @@ describe('markVtFlowRecordsValidated', () => {
       effectiveUntil: '2027-09-25T10:00:00Z',
     }
     expect(recordValidation).toHaveBeenCalledWith(
-      expect.anything(),
       'agent',
       {
         decidedAt,
@@ -432,7 +425,6 @@ describe('markVtFlowRecordsValidated', () => {
       VtFlowState.Validated,
     )
     expect(recordValidation).toHaveBeenCalledWith(
-      expect.anything(),
       'operator',
       { decidedAt: tx.timestamp, submission: 'OPERATOR', ...terms },
       VtFlowState.Validated,
@@ -454,7 +446,6 @@ describe('markVtFlowRecordsValidated', () => {
     await markVtFlowRecordsValidated(agent as never, '7', tx)
 
     expect(recordValidation).toHaveBeenCalledWith(
-      expect.anything(),
       'rejected',
       expect.objectContaining({ submission: 'OPERATOR' }),
       VtFlowState.Validated,

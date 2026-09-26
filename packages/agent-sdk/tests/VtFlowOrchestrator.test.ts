@@ -744,13 +744,33 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(kept.current().validation).toMatchObject({ validationFees: 7, issuanceFeeDiscount: 0.1235 })
   })
 
-  it('skips the submission when the entry is already VALIDATED on chain', async () => {
-    const { agent, chain, vtFlowApi } = makeValidateAgent({ applicant: { op_state: 'VALIDATED' } })
+  it('skips the submission when the entry is already VALIDATED on chain, and takes the terms from it', async () => {
+    const modified = '2026-09-25T10:00:00Z'
+    const { agent, chain, current } = makeValidateAgent({
+      applicant: { op_state: 'VALIDATED', modified, validation_fees: 4, issuance_fee_discount: 0.5 },
+    })
 
     await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
 
     expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
-    expect(vtFlowApi.markValidated).toHaveBeenCalledWith('rec-v')
+    expect(current()).toMatchObject({
+      state: 'VALIDATED',
+      validation: {
+        decidedAt: modified,
+        submission: 'OPERATOR',
+        validationFees: 4,
+        issuanceFeeDiscount: 0.5,
+      },
+    })
+  })
+
+  it('refuses to move a flow to VALIDATED once it has left the states before it', async () => {
+    const { agent, vtFlowApi } = makeValidateAgent({ state: 'CRED_OFFERED' })
+
+    await expect(
+      new VtFlowOrchestrator(agent as never).markValidated('rec-v', { op_state: 'VALIDATED' } as never),
+    ).rejects.toMatchObject({ code: 'INVALID_STATE' })
+    expect(vtFlowApi.recordValidation).not.toHaveBeenCalled()
   })
 
   function makeHolderRenewal(state: string) {
@@ -771,16 +791,23 @@ describe('VtFlowOrchestrator validateFlow', () => {
   }
 
   it('offers the updated credential of a HOLDER renewal once its transaction lands', async () => {
-    const { orchestrator, vtFlowApi, chain, offer } = makeHolderRenewal('VALIDATION_TX_SUBMITTED')
+    const { orchestrator, agent, vtFlowApi, chain, current, offer } =
+      makeHolderRenewal('VALIDATION_TX_SUBMITTED')
     await vtFlowApi.recordValidation('rec-v', {
       decidedAt: new Date().toISOString(),
       submission: 'AGENT',
       tx: { hash: 'AB12', status: 'SUBMITTED' },
     })
     chain.findTx.mockResolvedValue({ code: 0, height: 7, rawLog: '' } as never)
+    agent.indexer.getParticipant.mockResolvedValue({ op_state: 'VALIDATED', validation_fees: 6 } as never)
 
     await orchestrator.resolveValidationTx('rec-v')
 
+    expect(current().validation).toMatchObject({
+      submission: 'AGENT',
+      validationFees: 6,
+      tx: { hash: 'AB12', height: 7, status: 'SUCCEEDED' },
+    })
     expect(offer).toHaveBeenCalledWith(expect.objectContaining({ vtFlowRecordId: 'rec-v' }))
   })
 
@@ -872,7 +899,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
   it('reads the entry before recording a transaction that was not found', async () => {
     const { agent, vtFlowApi, current } = makeValidateAgent({
       state: 'VALIDATION_TX_SUBMITTED',
-      applicant: { op_state: 'VALIDATED' },
+      applicant: { op_state: 'VALIDATED', validation_fees: 2 },
     })
     await vtFlowApi.recordValidation('rec-v', {
       decidedAt: new Date(now - 120_000).toISOString(),
@@ -882,8 +909,10 @@ describe('VtFlowOrchestrator validateFlow', () => {
 
     await new VtFlowOrchestrator(agent as never).resolveValidationTx('rec-v')
 
-    expect(vtFlowApi.markValidated).toHaveBeenCalledWith('rec-v')
-    expect(current().state).toBe('VALIDATED')
+    expect(current()).toMatchObject({
+      state: 'VALIDATED',
+      validation: { submission: 'AGENT', validationFees: 2, tx: { hash: 'AB12', status: 'SUBMITTED' } },
+    })
   })
 
   it('counts the 60 seconds from the broadcast, not from the decision', async () => {
