@@ -390,10 +390,11 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
         oobLink,
         pendingAction: VtFlowPendingAction.Applicant,
       })
-      expect(linked.messages.at(-1)).toMatchObject({ type: 'oob-link', text: oobLink.description })
+      const oobMessage = { type: 'oob-link', text: oobLink.description, url: oobLink.url }
+      expect(linked.messages.at(-1)).toMatchObject(oobMessage)
       const received = await untilState(applicantFlows, holderSid, VtFlowState.OobPending)
       expect(received).toMatchObject({ oobLink, pendingAction: VtFlowPendingAction.Applicant })
-      expect(received.messages.at(-1)).toMatchObject({ type: 'oob-link', url: oobLink.url })
+      expect(received.messages.at(-1)).toMatchObject(oobMessage)
 
       const edited = await validatorFlows.editCredentialClaims(holderSid, fullClaims)
       expect(edited).toMatchObject({ state: VtFlowState.OobPending, claims: fullClaims })
@@ -404,7 +405,7 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
       expect(started.messages.at(-1)).toMatchObject({ type: 'validating', text: undefined })
       const resumed = await untilState(applicantFlows, holderSid, VtFlowState.Validating)
       expect(resumed.oobLink).toBeUndefined()
-      expect(resumed.messages.at(-1)).toMatchObject({ type: 'validating' })
+      expect(resumed.messages.at(-1)).toMatchObject({ type: 'validating', text: undefined })
 
       const submitted = await validatorFlows.validateFlow(holderSid, {})
       expect(submitted).toMatchObject({
@@ -415,10 +416,12 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
 
       const issued = await untilState(validatorFlows, holderSid, VtFlowState.Completed)
       const held = await untilState(applicantFlows, holderSid, VtFlowState.Completed)
+      const validationTx = await operatorChain.findTx(submitted.validation!.tx!.hash!)
+      const anchoringTx = await operatorChain.findTx(issued.issuance!.tx!.hash!)
       expect(issued).toMatchObject({
         pendingAction: VtFlowPendingAction.None,
         connectionState: 'ESTABLISHED',
-        issuance: { tx: { status: VtFlowTxStatus.Succeeded, height: expect.any(Number) } },
+        issuance: { tx: { status: VtFlowTxStatus.Succeeded, height: anchoringTx?.height } },
       })
       expect(held).toMatchObject({ pendingAction: VtFlowPendingAction.None, connectionState: 'ESTABLISHED' })
       expect(await indexer.getDigest(issued.credentialDigest!)).toBeDefined()
@@ -442,7 +445,7 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
         tx: {
           hash: submitted.validation?.tx?.hash,
           status: VtFlowTxStatus.Succeeded,
-          height: expect.any(Number),
+          height: validationTx?.height,
         },
       })
       expect(statesOf(issued.id).slice(-3)).toEqual([
@@ -483,7 +486,8 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
         VtFlowState.Validating,
       ])
 
-      await validatorFlows.editCredentialClaims(holderSid, { name: fullClaims.name })
+      const partial = await validatorFlows.editCredentialClaims(holderSid, { name: fullClaims.name })
+      expect(partial.claims).toEqual({ name: fullClaims.name })
       await operatorChain.setParticipantOPToValidated({ id: holderId })
 
       const pending = await untilState(validatorFlows, holderSid, VtFlowState.ValidatedPendingClaims)
@@ -504,6 +508,7 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
       expect(reissued.credentialExchangeRecordId).not.toBe(before.credentialExchangeRecordId)
       expect(reissued.credentialDigest).not.toBe(before.credentialDigest)
       expect(await indexer.getDigest(reissued.credentialDigest!)).toBeDefined()
+      expect(reheld.credentialExchangeRecordId).not.toBe(beforeHeld.credentialExchangeRecordId)
       expect(verifiedExchanges).toContain(reheld.credentialExchangeRecordId)
     },
     SETUP_TIMEOUT_MS,
@@ -525,12 +530,14 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
       const refused = await validatorFlows.editCredentialClaims(issuerSid, fullClaims).catch(error => error)
       expect(refused.code).toBe(AdminApiErrorCode.NoCredentialForRole)
 
+      const decidedFrom = Date.now()
       const decided = await validatorFlows.validateFlow(issuerSid, {})
       expect(decided).toMatchObject({
         state: VtFlowState.AwaitingValidationTx,
         pendingAction: VtFlowPendingAction.Validator,
-        validation: { submission: VtFlowSubmission.Operator, decidedAt: expect.any(String) },
+        validation: { submission: VtFlowSubmission.Operator },
       })
+      expect(Date.parse(decided.validation!.decidedAt)).toBeGreaterThanOrEqual(decidedFrom)
       expect(decided.validation?.tx).toBeUndefined()
       expect(await applicantFlows.getFlow(issuerSid)).toMatchObject({
         flowState: VtFlowState.Validating,
