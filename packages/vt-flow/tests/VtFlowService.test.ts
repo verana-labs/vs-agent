@@ -764,6 +764,50 @@ describe('VtFlowService.terminateByValidator', () => {
   })
 })
 
+describe('VtFlowService.rejectRequest', () => {
+  it.each([
+    [VtFlowVariant.OnboardingProcess, VtFlowState.AwaitingOr],
+    [VtFlowVariant.DirectIssuance, VtFlowState.AwaitingIr],
+  ])('returns a %s validator to %s on a retryable code', async (variant, awaiting) => {
+    const validating = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validating, variant })
+    const { service } = makeService(validating)
+
+    const { record, problemReport } = await service.rejectRequest({} as never, validating.id, {
+      code: VtFlowErrorCode.InvalidClaims,
+    })
+
+    expect(record.state).toBe(awaiting)
+    expect(record.errorMessage).toBeUndefined()
+    expect(record.messages).toEqual([
+      expect.objectContaining({ type: VtFlowMessageType.ProblemReport, text: problemReport.description.en }),
+    ])
+  })
+
+  it.each([
+    [VtFlowRole.Validator, VtFlowErrorCode.NotAVerifiableService, VtFlowState.Error],
+    [VtFlowRole.Validator, VtFlowErrorCode.ValidationRefused, VtFlowState.TerminatedByValidator],
+    [VtFlowRole.Applicant, VtFlowErrorCode.SessionTerminated, VtFlowState.TerminatedByApplicant],
+  ])('moves the %s sending %s to %s', async (role, code, state) => {
+    const validating = makeRecord({ role, state: VtFlowState.Validating })
+    const { service } = makeService(validating)
+
+    const { record } = await service.rejectRequest({} as never, validating.id, { code })
+
+    expect(record.state).toBe(state)
+    expect(record.errorMessage).toBe(code)
+  })
+
+  it('refuses a flow that has ended', async () => {
+    const ended = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.TerminatedByApplicant })
+    const { service, repository } = makeService(ended)
+
+    await expect(
+      service.rejectRequest({} as never, ended.id, { code: VtFlowErrorCode.InvalidClaims }),
+    ).rejects.toThrow(/cannot be rejected/)
+    expect(repository.update).not.toHaveBeenCalled()
+  })
+})
+
 describe('VtFlowService.notifyCredentialStateChange', () => {
   it('allows re-notifying a revocation from CRED_REVOKED', async () => {
     const revoked = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.CredRevoked })

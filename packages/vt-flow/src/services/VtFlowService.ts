@@ -489,7 +489,7 @@ export class VtFlowService {
     return { record, message: new ValidatingMessage({ threadId: record.threadId }) }
   }
 
-  /** Reject with a problem-report; transitions to `TERMINATED_BY_{role}` and marks the connection as `TERMINATED`. */
+  /** Reject with a problem-report; a fatal code moves the sender to the Error Codes state, a retryable one returns a validator to `AWAITING_OR` or `AWAITING_IR`. */
   public async rejectRequest(
     agentContext: AgentContext,
     recordId: string,
@@ -499,6 +499,9 @@ export class VtFlowService {
     problemReport: ReturnType<typeof buildVtFlowProblemReport>
   }> {
     const record = await this.repository.getById(agentContext, recordId)
+    if (isVtFlowTerminalState(record.state)) {
+      throw new CredoError(`vt-flow: flow '${record.id}' in state ${record.state} cannot be rejected`)
+    }
 
     const problemReport = buildVtFlowProblemReport({
       code: params.code,
@@ -507,14 +510,31 @@ export class VtFlowService {
       fixHintEn: params.fixHintEn,
     })
 
-    const nextState =
-      record.role === VtFlowRole.Validator
-        ? VtFlowState.TerminatedByValidator
-        : VtFlowState.TerminatedByApplicant
+    const info = VT_FLOW_ERROR_INFO[params.code]
+    const receiverRole = record.role === VtFlowRole.Validator ? VtFlowRole.Applicant : VtFlowRole.Validator
+    // a fatal code lands both parties in the state the table gives the receiver
+    const fatalState = this.resolveErrorFlowState(
+      info.flowState,
+      receiverRole,
+      whoRetriesMap[info.whoRetries],
+    )
+    const retryState =
+      record.variant === VtFlowVariant.OnboardingProcess ? VtFlowState.AwaitingOr : VtFlowState.AwaitingIr
 
-    record.errorMessage = params.enDescription ?? params.code
+    if (record.role === VtFlowRole.Validator) {
+      this.appendMessage(record, {
+        type: VtFlowMessageType.ProblemReport,
+        text: problemReport.description.en,
+        at: new Date().toISOString(),
+      })
+    }
+    if (fatalState) record.errorMessage = params.enDescription ?? params.code
 
-    await this.updateState(agentContext, record, nextState)
+    await this.updateState(
+      agentContext,
+      record,
+      fatalState ?? (record.role === VtFlowRole.Validator ? retryState : record.state),
+    )
 
     return { record, problemReport }
   }
