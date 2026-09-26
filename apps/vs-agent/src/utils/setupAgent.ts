@@ -113,9 +113,7 @@ export const setupAgent = async ({
           },
           onBeforeCredentialIssued: async ({ record, credential }) => {
             if (!orchestrator) throw new Error('[vt-flow] orchestrator not ready, refusing to issue')
-            return {
-              credentialDigest: await orchestrator.onCredentialIssued(record.id, credential as never),
-            }
+            return orchestrator.onCredentialIssued(record.id, credential as never)
           },
           assertVerifiableService: verifiablePublicRegistries
             ? assertVerifiableService({ verifiablePublicRegistries })

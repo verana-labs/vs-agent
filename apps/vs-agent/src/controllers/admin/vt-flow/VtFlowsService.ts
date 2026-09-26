@@ -187,10 +187,9 @@ export class VtFlowsService {
       if (entryMayBeValidated && record.applicantParticipantId) {
         const applicant = await agent.indexer.getParticipant(record.applicantParticipantId)
         if (applicant.op_state === 'VALIDATED') {
-          await vtFlowApi.markValidated(record.id)
-          await new VtFlowOrchestrator(agent, {
-            publicApiBaseUrl: agent.publicApiBaseUrl,
-          }).continueAfterValidated(record.id)
+          const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
+          await orchestrator.markValidated(record.id, applicant)
+          await orchestrator.continueAfterValidated(record.id)
           throw new ConflictException('the applicant entry is already VALIDATED on chain')
         }
       }
@@ -359,13 +358,14 @@ function pendingActionOf(record: VtFlowRecord): VtFlowPendingAction {
 
 /**
  * Gives the Connection State of one flow, per [VSA-VTI-FLOW-STATE] Flow State. A flow in a
- * terminal state is TERMINATED, and so is a flow whose connection no longer exists.
+ * terminal state is TERMINATED, and so is a flow the validator terminated until the applicant
+ * re-attaches it ([VSA-ADM-VT-FL-REJECT-2]), and a flow whose connection no longer exists.
  */
 function connectionStateOf(
   record: VtFlowRecord,
   connection: DidCommConnectionRecord | null | undefined,
 ): VtConnectionState {
-  if (isVtFlowTerminalState(record.state) || !connection) return 'TERMINATED'
+  if (isVtFlowTerminalState(record.state) || record.connectionTerminated || !connection) return 'TERMINATED'
   return connection.isReady ? 'ESTABLISHED' : 'NOT_CONNECTED'
 }
 

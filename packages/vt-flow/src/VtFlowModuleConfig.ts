@@ -1,4 +1,5 @@
 import type { VtFlowRecord } from './repository/VtFlowRecord'
+import type { VtFlowIssuance } from './types'
 import type { AgentContext } from '@credo-ts/core'
 import type {
   DidCommCredentialExchangeRecord,
@@ -15,9 +16,10 @@ export interface VtFlowBeforeCredentialIssuedContext extends VtFlowCredentialLif
   credential: Record<string, unknown>
 }
 
+/** A returned `issuance` whose `tx` FAILED keeps the flow in `CRED_OFFERED` without delivering ([VSA-VTI-FLOW-ISSUE-1]). */
 export type VtFlowBeforeCredentialIssuedHook = (
   ctx: VtFlowBeforeCredentialIssuedContext,
-) => Promise<{ credentialDigest?: string } | void>
+) => Promise<{ credentialDigest?: string; issuance?: VtFlowIssuance } | void>
 
 /** Applicant hook fired on `credential-received`; return `true` to auto-Ack, `false`/omit to leave the Ack to the caller. */
 export type VtFlowVerifyCredentialHook = (ctx: VtFlowCredentialLifecycleContext) => Promise<boolean>

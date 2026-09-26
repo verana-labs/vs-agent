@@ -12,6 +12,7 @@ import {
   VtFlowRole,
   VtFlowState,
   VtFlowSubmission,
+  VtFlowTxReason,
   VtFlowTxStatus,
   VtFlowVariant,
 } from '../src'
@@ -457,6 +458,9 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
       state: VtFlowState.CredOffered,
       credentialExchangeRecordId: 'cred-ex-1',
       subprotocolThid: 'sub-1',
+      issuance: {
+        tx: { hash: 'CD34', submittedAt: new Date().toISOString(), status: VtFlowTxStatus.Submitted },
+      },
     })
     const { service, agentContext, exchangeRepository } = makeService(existing, {
       id: 'conn-old',
@@ -470,6 +474,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(record.state).toBe(VtFlowState.Validated)
     expect(record.credentialExchangeRecordId).toBeUndefined()
     expect(record.subprotocolThid).toBeUndefined()
+    expect(record.issuance).toBeUndefined()
     expect(record.connectionId).toBe('conn-new')
     expect(stale.parentThreadId).toBeUndefined()
     expect(exchangeRepository.update).toHaveBeenCalledWith(agentContext, stale)
@@ -647,6 +652,30 @@ describe('VtFlowService.terminateByValidator', () => {
       expect.objectContaining({ type: VtFlowMessageType.ProblemReport, text: 'Documents do not match' }),
     ])
   })
+
+  it('keeps the connection terminated when a validation in flight lands, until the applicant re-attaches', async () => {
+    const pending = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingValidationTx })
+    const { service, agentContext } = makeService(pending, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+
+    await service.terminateByValidator({} as never, pending.id)
+    expect(pending.connectionTerminated).toBe(true)
+
+    await service.recordValidation(
+      {} as never,
+      pending.id,
+      { decidedAt: '2026-09-25T09:00:00Z', submission: VtFlowSubmission.Operator },
+      VtFlowState.Validated,
+    )
+    expect(pending.state).toBe(VtFlowState.Validated)
+    expect(pending.connectionTerminated).toBe(true)
+
+    await service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+    expect(pending.connectionId).toBe('conn-new')
+    expect(pending.connectionTerminated).toBeUndefined()
+  })
 })
 
 describe('VtFlowService.notifyCredentialStateChange', () => {
@@ -696,6 +725,33 @@ describe('VtFlowService.sendOobLinkForSession', () => {
       }),
     )
     expect(eventEmitter.emit).not.toHaveBeenCalled()
+  })
+})
+
+describe('VtFlowService issuance after validation', () => {
+  it('moves VALIDATED to VALIDATED_PENDING_CLAIMS and refuses any other state', async () => {
+    const validated = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validated })
+    const { service } = makeService(validated)
+
+    const record = await service.markPendingClaims({} as never, validated.id)
+    expect(record.state).toBe(VtFlowState.ValidatedPendingClaims)
+
+    await expect(service.markPendingClaims({} as never, validated.id)).rejects.toThrow(
+      /state 'VALIDATED_PENDING_CLAIMS'/,
+    )
+  })
+
+  it('records the anchoring outcome and keeps the flow in CRED_OFFERED', async () => {
+    const offered = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.CredOffered })
+    const { service, repository } = makeService(offered)
+    const issuance = { tx: { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.TxFailed, error: 'out' } }
+
+    await service.recordIssuance({} as never, offered.id, issuance)
+
+    expect(repository.update).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ state: VtFlowState.CredOffered, issuance }),
+    )
   })
 })
 

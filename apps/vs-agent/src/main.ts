@@ -499,9 +499,13 @@ const run = async () => {
       )
     }
 
-    void new VtFlowOrchestrator(agent, { publicApiBaseUrl })
+    const vtFlowOrchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl })
+    void vtFlowOrchestrator
       .resumeValidationSubmissions()
       .catch((error: Error) => serverLogger.error(`[vt-flow] resuming validations failed: ${error.message}`))
+    void vtFlowOrchestrator
+      .resumeIssuanceSubmissions()
+      .catch((error: Error) => serverLogger.error(`[vt-flow] resuming issuances failed: ${error.message}`))
   }
 
   const ecsBootstrap = new EcsBootstrapService(

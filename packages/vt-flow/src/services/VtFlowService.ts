@@ -39,6 +39,7 @@ import { VtFlowRecord, VtFlowRepository } from '../repository'
 import { peerAnchorDid } from '../utils'
 import {
   VtFlowEventTypes,
+  type VtFlowIssuance,
   type VtFlowMessage,
   type VtFlowValidation,
   VtFlowMessageType,
@@ -238,6 +239,7 @@ export class VtFlowService {
     }
     record.credentialExchangeRecordId = undefined
     record.subprotocolThid = undefined
+    record.issuance = undefined
   }
 
   /** Validator-side OnboardingProcess: create or re-attach (by `participant_session_id`) a record in `AWAITING_OR` from an inbound `onboarding-request`. */
@@ -266,6 +268,7 @@ export class VtFlowService {
       }
       await this.assertSamePeer(agentContext, existing, connection)
       existing.connectionId = connection.id
+      existing.connectionTerminated = undefined
       if (existing.threadId !== message.threadId) {
         existing.threadId = message.threadId
         if (message.claims) existing.claims = message.claims
@@ -549,7 +552,7 @@ export class VtFlowService {
       VtFlowState.OobPending,
       VtFlowState.AwaitingValidationTx,
       VtFlowState.ValidationTxFailed,
-      // VtFlowModule ends the flow here when auto-issue fails, until verana-labs/vs-agent#738
+      // VtFlowModule ends the flow here when auto-issue throws. A failed anchoring stays in CRED_OFFERED instead
       VtFlowState.CredOffered,
       VtFlowState.Completed,
     ])
@@ -568,6 +571,7 @@ export class VtFlowService {
       text: problemReport.description.en,
       at: new Date().toISOString(),
     })
+    record.connectionTerminated = true
 
     await this.updateState(agentContext, record, VtFlowState.TerminatedByValidator)
 
@@ -672,6 +676,28 @@ export class VtFlowService {
     record.validation = validation
     if (state) await this.updateState(agentContext, record, state)
     else await this.updateRecord(agentContext, record)
+    return record
+  }
+
+  /** Record the outcome of the `CreateOrUpdateParticipantSession` transaction that anchors the issued credential. */
+  public async recordIssuance(
+    agentContext: AgentContext,
+    recordId: string,
+    issuance: VtFlowIssuance,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.issuance = issuance
+    await this.updateRecord(agentContext, record)
+    return record
+  }
+
+  /** `VALIDATED` => `VALIDATED_PENDING_CLAIMS`, when the claims fail the schema at offer time ([VSA-VTI-FLOW-OP-ISSUE-4]). */
+  public async markPendingClaims(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.assertState(VtFlowState.Validated)
+    await this.updateState(agentContext, record, VtFlowState.ValidatedPendingClaims)
     return record
   }
 

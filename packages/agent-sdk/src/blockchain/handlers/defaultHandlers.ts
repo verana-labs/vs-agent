@@ -1,6 +1,6 @@
 import { IndexerEventHandler, IndexerHandlerRegistry } from './IndexerHandlerRegistry'
 import {
-  completeVtFlowRecordsWithoutCredential,
+  markApplicantVtFlowRecordsValidated,
   markVtFlowRecordsValidated,
   publishVtjscIfOwner,
   removeHolderTrustCredentialIfRevoked,
@@ -98,9 +98,12 @@ export const defaultHandlers: IndexerEventHandler[] = [
       ctx.agent.config.logger.info(
         `[IndexerWS] SetParticipantOPToValidated participant=${activity.entity_id} block=${ctx.blockHeight}`,
       )
-      await markVtFlowRecordsValidated(ctx.agent, String(activity.entity_id))
-      // An onboarding process that carries no credential exchange ends here for both sides.
-      await completeVtFlowRecordsWithoutCredential(ctx.agent, String(activity.entity_id))
+      await markVtFlowRecordsValidated(ctx.agent, String(activity.entity_id), {
+        hash: ctx.txHash,
+        height: ctx.blockHeight,
+        timestamp: activity.timestamp,
+      })
+      await markApplicantVtFlowRecordsValidated(ctx.agent, String(activity.entity_id))
     },
   },
   {

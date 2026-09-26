@@ -166,6 +166,19 @@ describe('VtFlowsService v2 routes', () => {
     })
   })
 
+  it('reports TERMINATED for a rejected flow that its validation in flight moved to VALIDATED', async () => {
+    const service = makeService({
+      findAllByQuery: vi
+        .fn()
+        .mockResolvedValue([{ ...flowRecord('a', 1000, VtFlowState.Validated), connectionTerminated: true }]),
+    })
+
+    await expect(service.getFlow('sess-a')).resolves.toMatchObject({
+      flowState: VtFlowState.Validated,
+      connectionState: 'TERMINATED',
+    })
+  })
+
   it('rejects an unknown participant session with UNKNOWN_ID and status 404', async () => {
     const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([]) })
 
@@ -294,20 +307,23 @@ describe('VtFlowsService v2 routes', () => {
 
   it('moves the flow to VALIDATED and refuses the reject when the applicant entry is already VALIDATED', async () => {
     const record = flowRecord('a', 1000, VtFlowState.ValidationTxFailed)
-    const markValidated = vi.fn().mockResolvedValue(record)
     const terminateSessionAsValidator = vi.fn()
+    const markValidated = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'markValidated')
+      .mockResolvedValue(record as never)
     const continueAfterValidated = vi
       .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
       .mockResolvedValue(record as never)
     const service = makeService(
-      { findAllByQuery: vi.fn().mockResolvedValue([record]), markValidated, terminateSessionAsValidator },
+      { findAllByQuery: vi.fn().mockResolvedValue([record]), terminateSessionAsValidator },
       { applicantOpState: 'VALIDATED' },
     )
 
     await expect(service.rejectFlow('sess-a', { description: 'no' })).rejects.toThrow(ConflictException)
-    expect(markValidated).toHaveBeenCalledWith('a')
+    expect(markValidated).toHaveBeenCalledWith('a', { op_state: 'VALIDATED' })
     expect(continueAfterValidated).toHaveBeenCalledWith('a')
     expect(terminateSessionAsValidator).not.toHaveBeenCalled()
+    markValidated.mockRestore()
     continueAfterValidated.mockRestore()
   })
 })

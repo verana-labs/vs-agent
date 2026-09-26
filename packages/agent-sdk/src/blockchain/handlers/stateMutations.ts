@@ -206,46 +206,44 @@ export async function reconcileVtFlowRecordsForParticipant(
   }
 }
 
-export async function markVtFlowRecordsValidated(agent: VsAgent, participantId: string): Promise<void> {
+/** [VSA-VTI-FLOW-OP-ISSUE]: the validator side of the `SetParticipantOPtoValidated` notification. */
+export async function markVtFlowRecordsValidated(
+  agent: VsAgent,
+  participantId: string,
+  tx: { hash: string; height: number; timestamp: string },
+): Promise<void> {
+  const orchestrator = new VtFlowOrchestrator(agent)
   await reconcileVtFlowRecordsForParticipant(
     agent,
     participantId,
-    async (record, service, agentContext) => {
-      if (record.role !== VtFlowRole.Validator || !VtFlowValidatedFromStates.has(record.state)) {
-        return null
-      }
-      await service.markValidated(agentContext, record.id)
-      if (record.validation) await new VtFlowOrchestrator(agent).continueAfterValidated(record.id)
+    async record => {
+      if (record.role !== VtFlowRole.Validator) return null
+      const rejectedInFlight = await orchestrator.isRejectedInFlight(record)
+      if (!VtFlowValidatedFromStates.has(record.state) && !rejectedInFlight) return null
+      await orchestrator.markValidated(record.id, await agent.indexer.getParticipant(participantId), tx)
+      // the connection stays TERMINATED, so issuance waits for the applicant to reconnect
+      if (!rejectedInFlight) await orchestrator.continueAfterValidated(record.id)
       return 'VALIDATED'
     },
     'Failed to markValidated',
   )
 }
 
-/**
- * Close the onboarding records of a participant that receives no credential.
- *
- * Only a HOLDER takes part in a credential exchange, and the exchange is what moves a record to
- * COMPLETED. An ISSUER, a VERIFIER or a grantor is finished the moment the chain records
- * SetParticipantOPToValidated, so without this both sides would sit at OR_SENT and VALIDATED for
- * ever. The applicant reaches its own record here, because it watches the same chain event.
- */
-export async function completeVtFlowRecordsWithoutCredential(
+/** Applicant side: VALIDATED is terminal for a role other than HOLDER, and a HOLDER flow waits there for the offer ([VSA-VTI-FLOW-OP-ISSUE-2]). */
+export async function markApplicantVtFlowRecordsValidated(
   agent: VsAgent,
   participantId: string,
 ): Promise<void> {
-  const participant = await agent.indexer.findParticipant(participantId).catch(() => undefined)
-  if (!participant || participant.role === HOLDER_PARTICIPANT_TYPE) return
-
   await reconcileVtFlowRecordsForParticipant(
     agent,
     participantId,
     async (record, service, agentContext) => {
-      if (record.state === VtFlowState.Completed || isVtFlowTerminalState(record.state)) return null
-      await service.markCompleted(agentContext, record.id)
-      return 'COMPLETED'
+      const running = [VtFlowState.OrSent, VtFlowState.Validating, VtFlowState.OobPending]
+      if (record.role !== VtFlowRole.Applicant || !running.includes(record.state)) return null
+      await service.updateState(agentContext, record, VtFlowState.Validated)
+      return 'VALIDATED'
     },
-    'Failed to mark COMPLETED',
+    'Failed to mark VALIDATED',
   )
 }
 

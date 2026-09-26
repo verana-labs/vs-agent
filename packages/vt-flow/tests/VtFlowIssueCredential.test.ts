@@ -1,3 +1,4 @@
+import { DidCommCredentialState } from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
 
 import { VtFlowApi } from '../src/VtFlowApi'
@@ -5,32 +6,44 @@ import { VtFlowModuleConfig, type VtFlowModuleConfigOptions } from '../src/VtFlo
 import { VtFlowErrorCode } from '../src/errors'
 import { VtFlowRecord } from '../src/repository'
 import { VtFlowService } from '../src/services'
-import { VtFlowRole, VtFlowState, VtFlowVariant } from '../src/types'
+import { VtFlowRole, VtFlowState, VtFlowTxReason, VtFlowTxStatus, VtFlowVariant } from '../src/types'
 
 const SIGNED_CREDENTIAL = { id: 'urn:uuid:vtc-1', proof: { proofValue: 'zSIG' } }
 
-const buildApi = (options: VtFlowModuleConfigOptions) => {
+const buildApi = (
+  options: VtFlowModuleConfigOptions,
+  exchangeState = DidCommCredentialState.RequestReceived,
+) => {
   const sendMessage = vi.fn(async () => undefined)
   const setCredentialDigest = vi.fn(async () => undefined)
+  const recordIssuance = vi.fn(async () => undefined)
   const record = { id: 'flow-1', assertRole: (role: VtFlowRole) => role }
 
   const protocol = {
     version: 'v2',
     acceptRequest: vi.fn(async () => ({ message: { setThread: () => undefined } })),
+    findCredentialMessage: vi.fn(async () => ({ setThread: () => undefined })),
     getFormatData: vi.fn(async () => ({ credential: { dataIntegrity: { credential: SIGNED_CREDENTIAL } } })),
   }
 
   const api = new VtFlowApi(
-    { getById: async () => record, setCredentialDigest } as never,
+    { getById: async () => record, setCredentialDigest, recordIssuance } as never,
     { sendMessage } as never,
     { getById: async () => ({ assertReady: () => undefined }) } as never,
     {} as never,
     new VtFlowModuleConfig(options),
     { credentialProtocols: [protocol] } as never,
-    { getById: async () => ({ id: 'cx-1', protocolVersion: 'v2', connectionId: 'conn-1' }) } as never,
+    {
+      getById: async () => ({
+        id: 'cx-1',
+        protocolVersion: 'v2',
+        connectionId: 'conn-1',
+        state: exchangeState,
+      }),
+    } as never,
   )
 
-  return { api, sendMessage, setCredentialDigest, protocol }
+  return { api, sendMessage, setCredentialDigest, recordIssuance, protocol }
 }
 
 const issue = (api: VtFlowApi) =>
@@ -77,6 +90,43 @@ describe('issueCredentialForSession', () => {
     expect(seenCredential).toEqual(SIGNED_CREDENTIAL)
     expect(setCredentialDigest).toHaveBeenCalledWith(expect.anything(), 'flow-1', 'anchored-digest')
     expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('records a failed anchoring and returns without delivering the credential', async () => {
+    const issuance = {
+      tx: { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.TxFailed, error: 'code 5' },
+    }
+    const { api, sendMessage, setCredentialDigest, recordIssuance } = buildApi({
+      onBeforeCredentialIssued: async () => ({ credentialDigest: 'not-anchored', issuance }),
+    })
+
+    await issue(api)
+
+    expect(recordIssuance).toHaveBeenCalledWith(expect.anything(), 'flow-1', issuance)
+    expect(setCredentialDigest).not.toHaveBeenCalled()
+    expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('anchors again the credential it signed before instead of signing a new one', async () => {
+    const onBeforeCredentialIssued = vi.fn(async () => undefined)
+    const { api, protocol } = buildApi({ onBeforeCredentialIssued }, DidCommCredentialState.CredentialIssued)
+
+    await issue(api).catch(() => undefined)
+
+    expect(protocol.acceptRequest).not.toHaveBeenCalled()
+    expect(protocol.findCredentialMessage).toHaveBeenCalledWith(expect.anything(), 'cx-1')
+    expect(onBeforeCredentialIssued).toHaveBeenCalledWith(
+      expect.objectContaining({ credential: SIGNED_CREDENTIAL }),
+    )
+  })
+
+  it('records an anchoring transaction SUBMITTED on the flow before it lands', async () => {
+    const { api, recordIssuance } = buildApi({})
+    const issuance = { tx: { hash: 'CD34', status: VtFlowTxStatus.Submitted } }
+
+    await api.recordIssuance('flow-1', issuance)
+
+    expect(recordIssuance).toHaveBeenCalledWith(expect.anything(), 'flow-1', issuance)
   })
 })
 

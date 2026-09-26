@@ -49,6 +49,7 @@ function makeFlowStore() {
     acceptOnboardingRequest: async (id: string) => set(id, { state: VtFlowState.Validating }),
     sendValidating: async (id: string) => set(id, { state: VtFlowState.Validating }),
     markValidated: async (id: string) => set(id, { state: VtFlowState.Validated }),
+    markPendingClaims: async (id: string) => set(id, { state: VtFlowState.ValidatedPendingClaims }),
     markCompleted: async (id: string) => set(id, { state: VtFlowState.Completed }),
     recordValidation: async (id: string, validation: unknown, state?: string) =>
       set(id, { validation, ...(state && { state }) }),
@@ -339,7 +340,8 @@ describe('validateFlow against the real chain and indexer', () => {
       })
       const shortCircuit = await orchestrator.validateFlow({ vtFlowRecordId: 'flow-short' })
       expect(shortCircuit.state).toBe(VtFlowState.CredOffered)
-      expect(shortCircuit.validation).toBeUndefined()
+      expect(shortCircuit.validation).toMatchObject({ submission: 'OPERATOR' })
+      expect(shortCircuit.validation).not.toHaveProperty('tx')
 
       // A second SetParticipantOPtoValidated fails its simulation, but CheckTx runs no message
       // handler, so a broadcast that skips the simulation is only refused at delivery.
@@ -354,6 +356,7 @@ describe('validateFlow against the real chain and indexer', () => {
         id: 'flow-dup',
         state: VtFlowState.ValidationTxSubmitted,
         applicantParticipantId: String(applicant),
+        claims: { name: 'Acme' },
         validation: {
           decidedAt: new Date().toISOString(),
           submission: 'AGENT',
@@ -362,6 +365,10 @@ describe('validateFlow against the real chain and indexer', () => {
       })
       await orchestrator.resolveValidationTx('flow-dup')
       expect(store.get('flow-dup').state).toBe(VtFlowState.CredOffered)
+      expect(store.get('flow-dup').validation).toMatchObject({
+        submission: 'OPERATOR',
+        tx: { hash, status: 'FAILED', reason: 'TX_FAILED', error: expect.stringMatching(/PENDING state/) },
+      })
     },
     SETUP_TIMEOUT_MS,
   )
