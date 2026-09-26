@@ -753,6 +753,22 @@ describe('VtFlowService issuance after validation', () => {
       expect.objectContaining({ state: VtFlowState.CredOffered, issuance }),
     )
   })
+
+  it('passes an onboarding applicant through VALIDATED when the offer beats the chain notification', async () => {
+    const onboarding = makeRecord({ state: VtFlowState.Validating })
+    const direct = makeRecord({ state: VtFlowState.Validating, variant: VtFlowVariant.DirectIssuance })
+    const transitions: VtFlowState[][] = []
+    for (const record of [onboarding, direct]) {
+      const { service, agentContext, eventEmitter } = makeService(record)
+      await service.onSubprotocolStateChanged(agentContext as never, record, {
+        id: 'cx-1',
+        state: 'offer-received',
+      } as never)
+      transitions.push(eventEmitter.emit.mock.calls.map(([, { payload }]) => payload.state))
+    }
+
+    expect(transitions).toEqual([[VtFlowState.Validated, VtFlowState.CredOffered], [VtFlowState.CredOffered]])
+  })
 })
 
 describe('VtFlowService.updateClaims', () => {

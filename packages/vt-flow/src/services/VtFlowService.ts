@@ -858,6 +858,13 @@ export class VtFlowService {
         }
         break
       case DidCommCredentialState.OfferReceived:
+        // the offer can beat the chain notification, and an Onboarding Process offers only from VALIDATED
+        if (
+          record.variant === VtFlowVariant.OnboardingProcess &&
+          [VtFlowState.OrSent, VtFlowState.Validating, VtFlowState.OobPending].includes(record.state)
+        ) {
+          await this.updateState(agentContext, record, VtFlowState.Validated)
+        }
         if (record.state !== VtFlowState.CredOffered) {
           await this.updateState(agentContext, record, VtFlowState.CredOffered)
         }
