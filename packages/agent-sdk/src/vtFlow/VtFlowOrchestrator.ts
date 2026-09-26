@@ -370,12 +370,17 @@ export class VtFlowOrchestrator {
 
     const applicant = await this.agent.indexer.getParticipant(record.applicantParticipantId)
     const entryValidated = applicant.op_state === 'VALIDATED'
-    this.assertValidateState(record, entryValidated)
-    if (record.connectionTerminated)
-      throw invalidState('the flow connection is TERMINATED until the applicant reconnects')
+    const rejectedInFlight = entryValidated && (await this.isRejectedInFlight(record))
+    if (!rejectedInFlight) {
+      this.assertValidateState(record, entryValidated)
+      if (record.connectionTerminated)
+        throw invalidState('the flow connection is TERMINATED until the applicant reconnects')
+    }
 
     const terms = this.validationTerms(input, applicant, record)
     await this.assertClaimsAndTerm(record, applicant, terms)
+    // [VSA-VTI-FLOW-OP-ISSUE-6]: the connection stays TERMINATED, so issuance waits for the applicant to reconnect
+    if (rejectedInFlight) return this.markValidated(record.id, applicant)
 
     if (record.state === VtFlowState.AwaitingOr) await vtFlowApi.acceptOnboardingRequest(record.id)
     if (record.state === VtFlowState.OobPending) await this.sendValidating(record)

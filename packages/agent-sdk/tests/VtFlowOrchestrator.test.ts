@@ -835,6 +835,31 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(offer).toHaveBeenCalledWith(expect.objectContaining({ vtFlowRecordId: 'rec-v' }))
   })
 
+  it('moves a flow rejected with its transaction in flight to VALIDATED once the entry is, and issues nothing', async () => {
+    const { orchestrator, vtFlowApi, current, offer } = makeHolderRenewal('TERMINATED_BY_VALIDATOR')
+    Object.assign(current(), {
+      connectionTerminated: true,
+      createdAt: new Date(now - 60_000),
+      validation: { decidedAt: past, submission: 'OPERATOR' },
+    })
+    const newer = { id: 'rec-newer', createdAt: new Date(now) }
+    vtFlowApi.findAllByQuery.mockResolvedValue([current(), newer] as never)
+
+    await expect(orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })).rejects.toMatchObject({
+      code: 'INVALID_STATE',
+    })
+
+    vtFlowApi.findAllByQuery.mockResolvedValue([current()] as never)
+    const validated = await orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(validated).toMatchObject({
+      state: 'VALIDATED',
+      connectionTerminated: true,
+      validation: { submission: 'OPERATOR' },
+    })
+    expect(offer).not.toHaveBeenCalled()
+  })
+
   function makeDirectIssuance(claims: Record<string, unknown>) {
     const setup = makeValidateAgent({ claims })
     const record = setup.current()
