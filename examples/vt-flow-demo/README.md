@@ -90,12 +90,16 @@ The seed prints the three corporation ids, the ecosystem DID, the schema ids, an
 
 ```bash
 docker compose -f docker/docker-compose.yml --env-file .env up -d agent-ecosystem
-docker compose -f docker/docker-compose.yml --env-file .env up -d
+docker compose -f docker/docker-compose.yml --env-file .env up -d agent-validator
+curl -s http://localhost:4001/.well-known/did.jsonl | tail -n 1 | grep -o 'vpr-schemas-[a-z]*-vtc-vp'
+docker compose -f docker/docker-compose.yml --env-file .env up -d agent-applicant
 ```
 
 Use `up -d`, not `restart`: `restart` keeps the old environment, so the new `TRUSTED_ECS_ECOSYSTEM_DIDS` would not take effect. Bring up the ecosystem agent first and let it publish its VTJSCs; the other two rebind onto them at startup, and if they come up first they log `[SelfTR] Failed to rebind the ECS credential of schema <id>` and keep their self-issued references.
 
-The applicant's ECS bootstrap then self-onboards and sends the onboarding request to the validator over DIDComm. That request is driven by a single indexer event and is never retried, so a failed first attempt needs a `down -v` and a fresh seed.
+Start the applicant only once the `curl` lists both `vpr-schemas-org-vtc-vp` and `vpr-schemas-service-vtc-vp`. These are the Organization and Service credentials the validator issues to itself, and the applicant checks them (VS-CONN-VS) before it sends anything.
+
+The applicant's ECS bootstrap then self-onboards and sends the onboarding request to the validator over DIDComm. If it logs `vt-flow.not-a-verifiable-service` instead, the validator was not ready yet. Run `docker compose -f docker/docker-compose.yml --env-file .env restart agent-applicant` (its environment is already current): at startup it sends the onboarding request again for every `PENDING` participant.
 
 The applicant resolves as `not-trusted` at that point — it has not onboarded yet, so it holds no anchored credentials — and the validator logs the rejection:
 

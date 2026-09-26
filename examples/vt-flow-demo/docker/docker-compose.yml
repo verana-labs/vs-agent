@@ -115,6 +115,11 @@ services:
       ECS_CLAIMS_SERVICE_LOGO_URI: https://agent-validator.demo/vt/default/logo.svg
       ECS_CLAIMS_SERVICE_TERMS_AND_CONDITIONS_URI: https://agent-validator.demo/vt/default/terms.html
       ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI: https://agent-validator.demo/vt/default/privacy.html
+      ECS_CLAIMS_ORG_NAME: Validator Demo Org
+      ECS_CLAIMS_ORG_LOGO_URI: https://agent-validator.demo/vt/default/logo.svg
+      ECS_CLAIMS_ORG_REGISTRY_ID: DEMO-VALIDATOR-1
+      ECS_CLAIMS_ORG_ADDRESS: 1 Validator Street
+      ECS_CLAIMS_ORG_COUNTRY_CODE: ES
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
       ADMIN_API_AUTH_MODE: internal
       AGENT_MODE: standalone

@@ -92,12 +92,14 @@ async function seed() {
 
   // The applicant runs VS-CONN-VS against the validator before it will send an onboarding
   // request, and that resolves the validator's self-issued ECS Service credential. So the
-  // validator needs an active ISSUER participant on the Service schema too. No vsOperator here:
-  // it already holds its VSOA from the OP above, and one per corporation/operator pair is the max.
+  // validator needs an active ISSUER participant on the Service schema too, operated by its own
+  // account with a session grant to anchor that credential ([VSA-VTI-ECS-SELF]).
   const validatorServiceOp = await chain.startParticipantOp(corp.policyAddress, {
     role: PARTICIPANT_ROLE_ISSUER,
     validatorParticipantId: serviceRoot.participantId,
     did: validatorDid,
+    vsOperator: VALIDATOR_OPERATOR,
+    vsOperatorAuthzMsgTypes: [PP_SESSION],
   })
 
   // The roots that validate these OPs belong to the ecosystem corporation, so the seeder signs
