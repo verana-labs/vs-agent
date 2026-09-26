@@ -171,6 +171,9 @@ export class V2VtFlowRecordDto {
   })
   credentialExchangeRecordId?: string
 
+  @ApiPropertyOptional({ description: 'Identifier of the offered credential.' })
+  credentialId?: string
+
   @ApiPropertyOptional({ description: 'digestJCS of the offered credential.' })
   credentialDigest?: string
 

@@ -749,11 +749,13 @@ export class VtFlowService {
     credentialExchangeRecord: DidCommCredentialExchangeRecord,
     credentialDigest?: string,
     issuerParticipantId?: number,
+    credentialId?: string,
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     this.assertCanOfferCredential(record)
 
     record.credentialExchangeRecordId = credentialExchangeRecord.id
+    record.credentialId = credentialId
     if (credentialDigest) record.credentialDigest = credentialDigest
     if (issuerParticipantId !== undefined) record.issuerParticipantId = issuerParticipantId
     record.subprotocolThid = credentialExchangeRecord.threadId

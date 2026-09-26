@@ -360,12 +360,14 @@ export class VtFlowApi {
     })
     await this.messageSender.sendMessage(outboundMessageContext)
 
+    const { id: credentialId } = options.credentialFormats.dataIntegrity.credential
     await this.vtFlowService.attachCredentialExchangeRecord(
       this.agentContext,
       record.id,
       credentialExchangeRecord,
       options.credentialDigest,
       options.issuerParticipantId,
+      typeof credentialId === 'string' ? credentialId : undefined,
     )
 
     return {

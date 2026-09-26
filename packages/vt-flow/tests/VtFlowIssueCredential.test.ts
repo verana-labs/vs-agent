@@ -172,6 +172,48 @@ describe('offerCredentialForSession', () => {
     ).rejects.toThrow(/state 'VALIDATING'/)
     expect(createOffer).not.toHaveBeenCalled()
   })
+
+  it('keeps the identifier of the offered credential on the flow', async () => {
+    const record = new VtFlowRecord({
+      threadId: 'thid-1',
+      participantSessionId: 'sess-1',
+      connectionId: 'conn-1',
+      role: VtFlowRole.Validator,
+      state: VtFlowState.Validated,
+      variant: VtFlowVariant.OnboardingProcess,
+      agentParticipantId: '0',
+      walletAgentParticipantId: '0',
+    })
+    const createOffer = vi.fn(async () => ({
+      credentialExchangeRecord: { id: 'cx-1', threadId: 'thid-cx' },
+      message: { id: 'msg-1', setThread: () => undefined },
+    }))
+    const config = new VtFlowModuleConfig({})
+    const api = new VtFlowApi(
+      new VtFlowService(
+        { getById: async () => record, update: async () => undefined } as never,
+        { emit: () => undefined } as never,
+        {} as never,
+        config,
+      ),
+      { sendMessage: async () => undefined } as never,
+      { getById: async () => ({ assertReady: () => undefined }) } as never,
+      { config: { logger: { debug: () => undefined } } } as never,
+      config,
+      { credentialProtocols: [{ version: 'v2', createOffer }] } as never,
+      { update: async () => undefined } as never,
+    )
+
+    await api.offerCredentialForSession({
+      vtFlowRecordId: record.id,
+      credentialFormats: {
+        dataIntegrity: { credential: { id: 'did:web:validator#vc-1' }, bindingRequired: false },
+      },
+    })
+
+    expect(record.credentialId).toBe('did:web:validator#vc-1')
+    expect(record.state).toBe(VtFlowState.CredOffered)
+  })
 })
 
 describe('acceptCredentialOffer', () => {

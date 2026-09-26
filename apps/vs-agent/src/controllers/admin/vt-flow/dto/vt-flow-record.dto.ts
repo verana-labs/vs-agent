@@ -36,6 +36,7 @@ export class VtFlowRecordDto {
   @ApiProperty({ required: false, type: Object }) validation?: VtFlowValidation
   @ApiProperty({ required: false, type: Object }) issuance?: VtFlowIssuance
   @ApiProperty({ required: false, type: [Object] }) proofs?: unknown[]
+  @ApiProperty({ required: false }) credentialId?: string
   @ApiProperty({ required: false }) credentialDigest?: string
   @ApiProperty({ required: false }) peerDid?: string
   @ApiProperty({ enum: VT_CONNECTION_STATES }) connectionState!: VtConnectionState

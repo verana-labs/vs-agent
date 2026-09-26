@@ -119,6 +119,21 @@ describe('VtFlowsService v2 routes', () => {
     })
   })
 
+  it('reports the identifier and the digestJCS of the offered credential with its session', async () => {
+    const offered = {
+      ...flowRecord('a', 1000, VtFlowState.CredOffered),
+      credentialId: 'did:web:validator#vc-1',
+      credentialDigest: 'digest-1',
+    }
+    const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([offered]) })
+
+    expect(await service.getFlow('sess-a')).toMatchObject({
+      credentialId: 'did:web:validator#vc-1',
+      credentialDigest: 'digest-1',
+      participantSessionId: 'sess-a',
+    })
+  })
+
   it('reports the flow state and the connection state on every listed flow', async () => {
     const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) })
 

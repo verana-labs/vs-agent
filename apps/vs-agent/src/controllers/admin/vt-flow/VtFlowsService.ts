@@ -410,6 +410,7 @@ function toDto({ record, peerDid, connectionState }: ResolvedFlow): VtFlowRecord
     validation: record.validation,
     issuance: record.issuance,
     proofs: record.proofsAttach,
+    credentialId: record.credentialId,
     credentialDigest: record.credentialDigest,
     id: record.id,
     threadId: record.threadId,
