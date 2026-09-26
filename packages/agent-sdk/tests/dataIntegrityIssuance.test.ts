@@ -115,7 +115,7 @@ describe('VC Data Model 2.0 issuance over the Data Integrity credential format',
     return { credential, credentialExchangeRecord, offerAttachment, requestAttachment }
   }
 
-  it('builds a data model 2.0 credential with the claims on the subject and a ten year validity', () => {
+  it('builds a data model 2.0 credential with the claims on the subject and no validUntil unless given', () => {
     const credential = trustCredential()
 
     expect((credential['@context'] as string[])[0]).toBe(CREDENTIALS_CONTEXT_V2_URL)
@@ -123,10 +123,16 @@ describe('VC Data Model 2.0 issuance over the Data Integrity credential format',
     expect(credential.credentialSubject).toEqual({ id: did, name: 'Test Service', countryCode: 'AR' })
     expect(credential).not.toHaveProperty('issuanceDate')
     expect(credential.validFrom).toBeDefined()
-    expect(credential.validUntil).toBeDefined()
-    expect(new Date(credential.validUntil as string).getTime()).toBeGreaterThan(
-      new Date(credential.validFrom as string).getTime(),
-    )
+    expect(credential.validUntil).toBeUndefined()
+
+    const validUntil = '2027-03-01T00:00:00Z'
+    const bounded = createW3cV2Credential({
+      type: ['VerifiableCredential'],
+      issuer: did,
+      credentialSubject: { id: did },
+      validUntil,
+    })
+    expect(bounded.validUntil).toBe(validUntil)
   })
 
   it('advertises the data model of the offered credential and echoes it on the request', async () => {
@@ -206,7 +212,6 @@ describe('VC Data Model 2.0 issuance over the Data Integrity credential format',
       '@context': credential['@context'],
       id: credential.id,
       validFrom: credential.validFrom,
-      validUntil: credential.validUntil,
       credentialSubject: credential.credentialSubject,
       proof: { type: 'DataIntegrityProof', cryptosuite: 'eddsa-jcs-2022', proofPurpose: 'assertionMethod' },
     })

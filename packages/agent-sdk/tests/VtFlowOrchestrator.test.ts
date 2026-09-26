@@ -891,6 +891,65 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(offer).toHaveBeenCalledWith(expect.objectContaining({ vtFlowRecordId: 'rec-v' }))
   })
 
+  it('gives the credential the effective_until of the validated entry as validUntil, read again on a renewal', async () => {
+    const { agent, vtFlowApi, chain, current } = makeValidateAgent({ applicant: { role: 'HOLDER' } })
+    agent.indexer.findParticipant.mockResolvedValue({
+      id: 94,
+      role: 6,
+      schemaId: 22,
+      did: 'did:web:applicant',
+      validatorParticipantId: 93,
+    } as never)
+    const offerCredentialForSession = vi.fn(
+      async (_: { credentialFormats: { dataIntegrity: { credential: { validUntil?: string } } } }) => ({
+        record: current(),
+      }),
+    )
+    Object.assign(vtFlowApi, { offerCredentialForSession })
+    chain.findTx.mockResolvedValue({ code: 0, height: 7, rawLog: '' } as never)
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+    ;(orchestrator as unknown as { resolveJsonSchemaCredentialId: unknown }).resolveJsonSchemaCredentialId =
+      async () => JSC_ID
+    const validUntilAfterTx = async (effectiveUntil: string | null) => {
+      Object.assign(current(), {
+        state: 'VALIDATION_TX_SUBMITTED',
+        validation: { decidedAt: past, submission: 'AGENT', tx: { hash: 'AB12', status: 'SUBMITTED' } },
+      })
+      agent.indexer.getParticipant.mockResolvedValue({
+        op_state: 'VALIDATED',
+        effective_until: effectiveUntil,
+      } as never)
+      await orchestrator.resolveValidationTx('rec-v')
+      const [offered] = offerCredentialForSession.mock.lastCall ?? []
+      return offered?.credentialFormats.dataIntegrity.credential.validUntil
+    }
+
+    expect(await validUntilAfterTx('2027-03-01T00:00:00Z')).toBe('2027-03-01T00:00:00Z')
+    expect(await validUntilAfterTx('2028-03-01T00:00:00Z')).toBe('2028-03-01T00:00:00Z')
+    expect(await validUntilAfterTx(null)).toBeUndefined()
+    expect(offerCredentialForSession).toHaveBeenCalledTimes(3)
+  })
+
+  it('offers a Direct Issuance credential with no validUntil', async () => {
+    const { agent, current } = makeValidateAgent()
+    Object.assign(current(), { variant: 'direct-issuance', schemaId: '22', connectionId: 'conn-1' })
+    Object.assign(agent, {
+      didcomm: { connections: { findById: vi.fn(async () => ({ theirDid: 'did:web:holder' })) } },
+    })
+    Object.assign(agent.veranaChain, { address: 'verana1agent' })
+    Object.assign(agent.indexer, {
+      listParticipants: vi.fn(async () => [{ id: 93, vs_operator: 'verana1agent' }]),
+    })
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+    ;(orchestrator as unknown as { resolveJsonSchemaCredentialId: unknown }).resolveJsonSchemaCredentialId =
+      async () => JSC_ID
+
+    const offer = await orchestrator.buildDirectIssuanceOffer('rec-v')
+
+    const credential = offer?.credentialFormats.dataIntegrity.credential as { validUntil?: string }
+    expect(credential.validUntil).toBeUndefined()
+  })
+
   it('resumes a HOLDER renewal whose entry is already VALIDATED into issuance', async () => {
     const { orchestrator, chain, offer } = makeHolderRenewal('VALIDATION_TX_SUBMITTED')
 

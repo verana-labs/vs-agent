@@ -326,6 +326,8 @@ export class VtFlowOrchestrator {
         claims: (record.claims ?? {}) as JsonObject,
         credentialType: input.credentialType,
         credentialContext: input.credentialContext,
+        // [VSA-VTI-FLOW-FMT-1]: markValidated sets it from the entry on every pass, a renewal included
+        validUntil: record.validation?.effectiveUntil,
       }))
 
     // W3C Data Integrity attachment format (RFC 0809). The applicant DID is the credential subject
@@ -979,6 +981,7 @@ export class VtFlowOrchestrator {
     claims: JsonObject
     credentialType?: string[]
     credentialContext?: string[]
+    validUntil?: string
   }): Promise<JsonObject> {
     const jsonSchemaCredentialId = await this.resolveJsonSchemaCredentialId(input.credentialSchemaId)
 
@@ -996,6 +999,7 @@ export class VtFlowOrchestrator {
       context: input.credentialContext,
       credentialSubject: { ...input.claims, id: input.subjectDid },
       credentialSchema: { id: jsonSchemaCredentialId, type: 'JsonSchemaCredential' },
+      validUntil: input.validUntil,
     })
 
     return toOfferedCredentialJson(unsignedCredential)

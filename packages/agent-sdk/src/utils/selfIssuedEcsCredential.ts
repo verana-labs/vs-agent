@@ -1,4 +1,5 @@
 import { DidDocumentService, DidRecord, DidRepository, W3cCredentialSchema } from '@credo-ts/core'
+import { ECS } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../agent/VsAgent'
 import { EcsClaims } from './ecsClaims'
@@ -12,7 +13,7 @@ import {
   signerW3c,
   sortKeysDeep,
 } from './setupSelfTr'
-import { isDataIntegrityVcdm2Credential } from './vcdm2'
+import { createW3cV2Credential, isDataIntegrityVcdm2Credential } from './vcdm2'
 
 const buildIntegrityData = (data: Record<string, unknown>) => {
   return generateDigestSRI(JSON.stringify(sortKeysDeep(data)))
@@ -70,14 +71,17 @@ async function signSelfIssuedEcsCredential(
   agent: VsAgent,
   didRecord: DidRecord,
   presentationId: string,
+  schemaKey: string,
   type: string[],
   claims: Record<string, unknown>,
   credentialSchema: W3cCredentialSchema,
 ): Promise<SelfIssuedEcsPresentation> {
-  const unsignedCredential = createCredential({
+  // [VSA-VTI-FLOW-FMT-1]: the self-issued Service credential has no applicant entry, so no validUntil
+  const build = schemaKey === ECS.SERVICE ? createW3cV2Credential : createCredential
+  const unsignedCredential = build({
     id: agent.did,
     type,
-    issuer: agent.did,
+    issuer: agent.did!,
     credentialSubject: { ...claims, id: agent.did },
     credentialSchema: { id: credentialSchema.id, type: credentialSchema.type },
   })
@@ -131,6 +135,7 @@ export async function publishSelfIssuedEcsPresentation(
     agent,
     didRecord,
     id,
+    schemaKey,
     type,
     claims as Record<string, unknown>,
     credentialSchema,

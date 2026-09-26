@@ -174,6 +174,25 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
     )
     expect(repositoryUpdate).toHaveBeenCalledTimes(2)
   })
+
+  it('self-issues the Service credential with no validUntil, and an Organization credential with one', async () => {
+    const { agent, metadata } = makeAgent()
+    const orgJsc = 'https://agent.example/vt/schemas-6-jsc.json'
+
+    await publish(agent, async () => {})
+    await publishSelfIssuedEcsPresentation(
+      agent as never,
+      'https://agent.example/vt/ecs-org-vtc-vp.json',
+      getEcsSchemas('https://agent.example'),
+      'ecs-org',
+      ['VerifiableCredential', 'VerifiableTrustCredential'],
+      { id: orgJsc, type: 'JsonSchemaCredential' },
+      ecsClaims,
+    )
+
+    expect(storedEntry(metadata, JSC_URL).credential.validUntil).toBeUndefined()
+    expect(storedEntry(metadata, orgJsc).credential.validUntil).toEqual(expect.any(String))
+  })
 })
 
 describe('stored self-issued VTC revalidation', () => {
