@@ -1130,6 +1130,29 @@ describe('VtFlowOrchestrator validateFlow', () => {
     })
   })
 
+  it('does not record a landed transaction TX_NOT_FOUND when a later lookup fails', async () => {
+    const { agent, vtFlowApi, chain, current } = makeValidateAgent({ state: 'VALIDATION_TX_SUBMITTED' })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    await vtFlowApi.recordValidation('rec-v', {
+      decidedAt: past,
+      submission: 'AGENT',
+      tx: { hash: 'AB12', status: 'SUBMITTED', submittedAt: new Date().toISOString() },
+    })
+    chain.findTx
+      .mockResolvedValueOnce({ code: 0, height: 7, rawLog: '' } as never)
+      .mockRejectedValue(new Error('the node is unreachable'))
+
+    const resolving = new VtFlowOrchestrator(agent as never).resolveValidationTx('rec-v')
+    await vi.runAllTimersAsync()
+    await resolving
+    vi.useRealTimers()
+
+    expect(current()).toMatchObject({
+      state: 'VALIDATION_TX_SUBMITTED',
+      validation: { tx: { status: 'SUBMITTED' } },
+    })
+  })
+
   it('moves a flow to VALIDATED once when the notification and the tx lookup reach it together', async () => {
     const { agent, vtFlowApi } = makeValidateAgent({
       state: 'VALIDATION_TX_SUBMITTED',

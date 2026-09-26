@@ -724,6 +724,7 @@ export class VtFlowOrchestrator {
   async resolveValidationTx(recordId: string): Promise<void> {
     const chain = this.requireChain()
     const vtFlowApi = this.resolveVtFlowApi()
+    let landed: Awaited<ReturnType<typeof chain.findTx>>
 
     for (;;) {
       const record = await vtFlowApi.findById(recordId)
@@ -732,8 +733,9 @@ export class VtFlowOrchestrator {
       if (!record?.applicantParticipantId || !validation || !hash) return
       if (record.state !== VtFlowState.ValidationTxSubmitted) return
 
-      const tx = await chain.findTx(hash).catch(() => undefined)
+      const tx = landed ?? (await chain.findTx(hash).catch(() => undefined))
       if (tx && tx.code === 0) {
+        landed = tx
         // the indexer can lag the block of the transaction, and the fill needs the validated entry
         const entry = await this.agent.indexer.getParticipant(record.applicantParticipantId)
         if (entry.op_state === 'VALIDATED') {
