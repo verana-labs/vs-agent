@@ -522,6 +522,29 @@ describe('vt-flow: VS-CONN-VS trust gate', () => {
       .find(isVtFlowStateChangedEvent(VtFlowState.Validating))
     expect(validatingEvent).toBeUndefined()
   })
+
+  it('ends both flows in ERROR with the problem-report the Validator sends a not-trusted peer', async () => {
+    resolveDID.mockImplementation(async (did: string) => ({
+      verified: true,
+      outcome: did === validator.did ? 'verified' : 'not-trusted',
+    }))
+    const applicantEvents = vi.spyOn(applicant.events, 'emit')
+    const applicantErrored = waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.Error))
+
+    const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
+      connectionId: applicantConnection.id,
+      schemaId: 'https://example.test/schemas/organization.json',
+      agentParticipantId: 'agent-participant-gate-neg-4',
+      walletAgentParticipantId: 'wallet-agent-participant-gate-neg-4',
+    })
+    await applicantErrored
+
+    const validatorRecord = await validator.modules.vtFlow.findByThreadId(applicantRecord.threadId)
+    expect(validatorRecord?.state).toBe(VtFlowState.Error)
+    expect((await applicant.modules.vtFlow.getById(applicantRecord.id)).messages).toEqual([
+      expect.objectContaining({ type: 'problem-report', text: validatorRecord?.messages?.[0].text }),
+    ])
+  })
 })
 
 describe('vt-flow: Direct Issuance validated after an out-of-band step', () => {

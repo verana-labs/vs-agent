@@ -21,6 +21,7 @@ import {
   VtFlowVariant,
 } from '../src'
 import { VtFlowErrorCode } from '../src/errors'
+import { IssuanceRequestHandler, OnboardingRequestHandler } from '../src/handlers'
 import {
   IssuanceRequestMessage,
   OnboardingRequestMessage,
@@ -47,7 +48,11 @@ function makeRecord(overrides: Partial<ConstructorParameters<typeof VtFlowRecord
   })
 }
 
-function makeService(existing: VtFlowRecord | null, previousConnection: unknown = null) {
+function makeService(
+  existing: VtFlowRecord | null,
+  previousConnection: unknown = null,
+  moduleConfig: Record<string, unknown> = {},
+) {
   const repository = {
     findByParticipantSessionId: vi.fn().mockResolvedValue(existing),
     getById: vi.fn().mockResolvedValue(existing),
@@ -57,7 +62,7 @@ function makeService(existing: VtFlowRecord | null, previousConnection: unknown 
   }
   const eventEmitter = { emit: vi.fn() }
   const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
-  const config = { assertVerifiableService: undefined }
+  const config = { assertVerifiableService: undefined, ...moduleConfig }
   const connectionRepository = { findById: vi.fn().mockResolvedValue(previousConnection) }
   const exchangeRepository = { findById: vi.fn().mockResolvedValue(null), update: vi.fn() }
   const agentContext = {
@@ -88,6 +93,25 @@ function makeMessageContext(agentContext: unknown, theirDid = 'did:web:agent-pee
     agentContext,
     assertReadyConnection: () => ({ id: 'conn-new', theirDid, previousTheirDids: [] }),
   }
+}
+
+function makeIssuanceContext(agentContext: unknown, schemaId = '5') {
+  const message = new IssuanceRequestMessage({
+    schemaId,
+    participantSessionId: 'sess-1',
+    agentParticipantId: '0',
+    walletAgentParticipantId: '0',
+  })
+  message.setThread({ threadId: message.id })
+  return {
+    message,
+    agentContext,
+    assertReadyConnection: () => ({ id: 'conn-new', theirDid: 'did:web:agent-peer', previousTheirDids: [] }),
+  }
+}
+
+function sentReport(outbound: { message: unknown } | undefined) {
+  return JsonTransformer.toJSON(outbound?.message) as Record<string, any>
 }
 
 const applicantParams = {
@@ -482,6 +506,64 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(record.connectionId).toBe('conn-new')
     expect(stale.parentThreadId).toBeUndefined()
     expect(exchangeRepository.update).toHaveBeenCalledWith(agentContext, stale)
+  })
+})
+
+describe('vt-flow request refusals', () => {
+  it.each([
+    [
+      'the session id of a terminated flow',
+      { state: VtFlowState.TerminatedByValidator },
+      'did:web:agent-peer',
+    ],
+    [
+      'a participant_id that is not the one of the session',
+      { applicantParticipantId: '43' },
+      'did:web:agent-peer',
+    ],
+    ['the session id of another peer', {}, 'did:web:attacker'],
+  ])('answer an onboarding-request with %s with a retryable problem-report', async (_label, overrides, theirDid) => {
+    const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validating, ...overrides })
+    const { service, repository, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+    const context = makeMessageContext(agentContext, theirDid)
+
+    const report = sentReport(await new OnboardingRequestHandler(service).handle(context as never))
+
+    expect(report).toMatchObject({
+      description: { code: VtFlowErrorCode.InvalidParticipantSessionId },
+      who_retries: 'you',
+      impact: 'thread',
+    })
+    expect(report['~thread']).toEqual({ thid: context.message.threadId })
+    expect(repository.update).not.toHaveBeenCalled()
+    expect(repository.save).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['the session id of a terminated flow', VtFlowState.TerminatedByValidator, '5'],
+    ['the session id of another schema', VtFlowState.Validating, '6'],
+  ])('answer an issuance-request with %s with a retryable problem-report', async (_label, state, schemaId) => {
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state,
+      variant: VtFlowVariant.DirectIssuance,
+      schemaId: '5',
+    })
+    const { service, repository, agentContext } = makeService(existing)
+    const context = makeIssuanceContext(agentContext, schemaId)
+
+    const report = sentReport(await new IssuanceRequestHandler(service).handle(context as never))
+
+    expect(report).toMatchObject({
+      description: { code: VtFlowErrorCode.InvalidParticipantSessionId },
+      who_retries: 'you',
+      impact: 'thread',
+    })
+    expect(report['~thread']).toEqual({ thid: context.message.threadId })
+    expect(repository.update).not.toHaveBeenCalled()
   })
 })
 
@@ -898,6 +980,57 @@ describe('VtFlowService VS-CONN-VS gate', () => {
       service.checkIsVerifiableService({} as never, readyConnection as never, { participantId: '42' }),
     ).rejects.toThrow(/not-a-verifiable-service/)
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('indexer unreachable'))
+  })
+
+  it.each([
+    ['onboarding-request', OnboardingRequestHandler, makeMessageContext, VtFlowVariant.OnboardingProcess],
+    ['issuance-request', IssuanceRequestHandler, makeIssuanceContext, VtFlowVariant.DirectIssuance],
+  ])('answers an %s from an unverifiable peer with a fatal problem-report and a flow in ERROR', async (_label, Handler, makeContext, variant) => {
+    const { service, repository } = makeGatedService({ assertVerifiableService: async () => false })
+    const context = makeContext({})
+
+    const report = sentReport(await new Handler(service).handle(context as never))
+
+    expect(report).toMatchObject({
+      description: { code: VtFlowErrorCode.NotAVerifiableService },
+      who_retries: 'none',
+      impact: 'connection',
+    })
+    expect(report['~thread']).toEqual({ thid: context.message.threadId })
+    expect(repository.save).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        state: VtFlowState.Error,
+        variant,
+        threadId: context.message.threadId,
+        errorMessage: expect.stringMatching(/not-a-verifiable-service/),
+        messages: [
+          expect.objectContaining({ type: VtFlowMessageType.ProblemReport, text: report.description.en }),
+        ],
+      }),
+    )
+  })
+
+  it('ends the running flow of an unverifiable peer in ERROR and leaves the flow of another peer alone', async () => {
+    const previous = { id: 'conn-old', theirDid: 'did:web:agent-peer' }
+    const rejectAll = { assertVerifiableService: async () => false }
+
+    const own = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validating })
+    const same = makeService(own, previous, rejectAll)
+    await new OnboardingRequestHandler(same.service).handle(makeMessageContext(same.agentContext) as never)
+    expect(own.state).toBe(VtFlowState.Error)
+
+    const other = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validating })
+    const foreign = makeService(other, previous, rejectAll)
+    const report = sentReport(
+      await new OnboardingRequestHandler(foreign.service).handle(
+        makeMessageContext(foreign.agentContext, 'did:web:attacker') as never,
+      ),
+    )
+    expect(report.description.code).toBe(VtFlowErrorCode.NotAVerifiableService)
+    expect(other.state).toBe(VtFlowState.Validating)
+    expect(foreign.repository.update).not.toHaveBeenCalled()
+    expect(foreign.repository.save).not.toHaveBeenCalled()
   })
 
   it('passes the onboarding request participant id to the exemption', async () => {

@@ -48,7 +48,7 @@ export function buildVtFlowProblemReport(
   return message
 }
 
-function defaultEnglishDescription(code: VtFlowErrorCode): string {
+export function defaultEnglishDescription(code: VtFlowErrorCode): string {
   switch (code) {
     case VtFlowErrorCode.OrRequired:
       return 'An onboarding-request was expected for this session.'
