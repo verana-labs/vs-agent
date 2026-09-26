@@ -84,6 +84,8 @@ export type {
   VtFlowAssertVerifiableServiceHook,
   VtFlowBuildCredentialOfferContext,
   VtFlowBuildCredentialOfferHook,
+  VtFlowCheckParticipantIdContext,
+  VtFlowCheckParticipantIdHook,
   VtFlowCredentialLifecycleContext,
   VtFlowCredentialOfferPayload,
   VtFlowModuleConfigOptions,

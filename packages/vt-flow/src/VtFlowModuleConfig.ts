@@ -75,6 +75,14 @@ export interface VtFlowEcsIssuanceExemptionContext extends VtFlowAssertVerifiabl
 /** VS-CONN-VS exemption: a Validator MAY accept a peer that is not yet a Verifiable Service when the purpose of the request is the issuance of an ECS Organization, Persona or Service credential. Consulted only on the Validator side, only after `assertVerifiableService` rejected the peer; return `true` to let the flow proceed. */
 export type VtFlowEcsIssuanceExemptionHook = (ctx: VtFlowEcsIssuanceExemptionContext) => Promise<boolean>
 
+export interface VtFlowCheckParticipantIdContext {
+  agentContext: AgentContext
+  record: VtFlowRecord
+}
+
+/** Validator check of the onboarding-request `participant_id` before the flow moves to `VALIDATING`; return `false` to refuse the request with `vt-flow.invalid-participant-id`. */
+export type VtFlowCheckParticipantIdHook = (ctx: VtFlowCheckParticipantIdContext) => Promise<boolean>
+
 /** Default Data Integrity cryptosuite, applied when `dataIntegrityCryptosuite` is not configured. */
 export const DEFAULT_DATA_INTEGRITY_CRYPTOSUITE = 'eddsa-jcs-2022'
 
@@ -104,6 +112,7 @@ export interface VtFlowModuleConfigOptions {
   onBeforeCredentialIssued?: VtFlowBeforeCredentialIssuedHook
   assertVerifiableService?: VtFlowAssertVerifiableServiceHook
   checkEcsIssuanceExemption?: VtFlowEcsIssuanceExemptionHook
+  checkParticipantId?: VtFlowCheckParticipantIdHook
 }
 
 /** Read-only view over VtFlowModuleConfigOptions with defaults applied. */
@@ -176,5 +185,9 @@ export class VtFlowModuleConfig {
 
   public get checkEcsIssuanceExemption(): VtFlowEcsIssuanceExemptionHook | undefined {
     return this.options.checkEcsIssuanceExemption
+  }
+
+  public get checkParticipantId(): VtFlowCheckParticipantIdHook | undefined {
+    return this.options.checkParticipantId
   }
 }

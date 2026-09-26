@@ -764,6 +764,54 @@ describe('VtFlowService.terminateByValidator', () => {
   })
 })
 
+describe('VtFlowService.acceptOnboardingRequest', () => {
+  it('refuses a participant_id the checkParticipantId hook rejects and leaves the flow in AWAITING_OR', async () => {
+    const awaiting = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    const checkParticipantId = vi.fn().mockResolvedValue(false)
+    const { service, repository, agentContext } = makeService(awaiting, null, { checkParticipantId })
+
+    await expect(service.acceptOnboardingRequest(agentContext as never, awaiting.id)).rejects.toMatchObject({
+      code: VtFlowErrorCode.InvalidParticipantId,
+    })
+    expect(checkParticipantId).toHaveBeenCalledWith({ agentContext, record: awaiting })
+    expect(awaiting.state).toBe(VtFlowState.AwaitingOr)
+    expect(repository.update).not.toHaveBeenCalled()
+  })
+
+  it('moves to VALIDATING only when the flow is still AWAITING_OR once the check passes', async () => {
+    const awaiting = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    const { service, repository, agentContext } = makeService(awaiting, null, {
+      checkParticipantId: vi.fn().mockResolvedValue(true),
+    })
+    repository.getById
+      .mockResolvedValueOnce(awaiting)
+      .mockResolvedValueOnce(
+        makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.TerminatedByValidator }),
+      )
+
+    await expect(service.acceptOnboardingRequest(agentContext as never, awaiting.id)).rejects.toThrow(
+      /TERMINATED_BY_VALIDATOR/,
+    )
+    expect(repository.update).not.toHaveBeenCalled()
+
+    const { record } = await service.acceptOnboardingRequest(agentContext as never, awaiting.id)
+    expect(record.state).toBe(VtFlowState.Validating)
+  })
+
+  it('leaves the checkParticipantId hook out when the caller turns the check off', async () => {
+    const awaiting = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    const checkParticipantId = vi.fn().mockResolvedValue(false)
+    const { service, agentContext } = makeService(awaiting, null, { checkParticipantId })
+
+    const { record } = await service.acceptOnboardingRequest(agentContext as never, awaiting.id, {
+      checkParticipantId: false,
+    })
+
+    expect(checkParticipantId).not.toHaveBeenCalled()
+    expect(record.state).toBe(VtFlowState.Validating)
+  })
+})
+
 describe('VtFlowService.rejectRequest', () => {
   it.each([
     [VtFlowVariant.OnboardingProcess, VtFlowState.AwaitingOr],

@@ -33,7 +33,7 @@ import {
 } from '@credo-ts/didcomm'
 
 import { VtFlowModuleConfig } from './VtFlowModuleConfig'
-import { VtFlowErrorCode } from './errors'
+import { VtFlowError, VtFlowErrorCode } from './errors'
 import { VtFlowService } from './services'
 import { VtFlowRole, VtFlowState, VtFlowTxStatus } from './types'
 
@@ -237,13 +237,23 @@ export class VtFlowApi {
     return record
   }
 
-  public async acceptOnboardingRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
-    const { record, message } = await this.vtFlowService.acceptOnboardingRequest(
-      this.agentContext,
-      vtFlowRecordId,
-    )
-    await this.dispatchMessage(record.connectionId, message, record)
-    return record
+  public async acceptOnboardingRequest(
+    vtFlowRecordId: string,
+    options: { checkParticipantId?: boolean } = {},
+  ): Promise<VtFlowRecord> {
+    try {
+      const { record, message } = await this.vtFlowService.acceptOnboardingRequest(
+        this.agentContext,
+        vtFlowRecordId,
+        options,
+      )
+      await this.dispatchMessage(record.connectionId, message, record)
+      return record
+    } catch (error) {
+      if (!(error instanceof VtFlowError)) throw error
+      await this.rejectRequest({ vtFlowRecordId, code: error.code })
+      throw error
+    }
   }
 
   public async acceptIssuanceRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {

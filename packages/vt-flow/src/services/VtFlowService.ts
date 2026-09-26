@@ -461,15 +461,30 @@ export class VtFlowService {
     return record
   }
 
-  /** `AWAITING_OR => VALIDATING`; caller is expected to have verified participant/agent/wallet IDs on-chain. */
+  /** `AWAITING_OR => VALIDATING` once the `checkParticipantId` hook accepts the `participant_id`; caller is expected to have verified agent/wallet IDs on-chain. */
   public async acceptOnboardingRequest(
     agentContext: AgentContext,
     recordId: string,
+    options: { checkParticipantId?: boolean } = {},
   ): Promise<{ record: VtFlowRecord; message: ValidatingMessage }> {
-    const record = await this.repository.getById(agentContext, recordId)
+    let record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
     record.assertState(VtFlowState.AwaitingOr)
     record.assertVariant(VtFlowVariant.OnboardingProcess)
+
+    const checkParticipantId =
+      options.checkParticipantId === false ? undefined : this.config.checkParticipantId
+    if (checkParticipantId) {
+      if (!(await checkParticipantId({ agentContext, record }))) {
+        throw new VtFlowError(
+          VtFlowErrorCode.InvalidParticipantId,
+          `vt-flow: participant_id '${record.applicantParticipantId}' is not a PENDING entry that names this agent as its validator`,
+        )
+      }
+      // the check can wait for the indexer while the flow moves on
+      record = await this.repository.getById(agentContext, recordId)
+      record.assertState(VtFlowState.AwaitingOr)
+    }
 
     await this.updateState(agentContext, record, VtFlowState.Validating)
     return { record, message: new ValidatingMessage({ threadId: record.threadId }) }
