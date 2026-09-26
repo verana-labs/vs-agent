@@ -34,7 +34,7 @@ describe('setupAgent transport ordering', () => {
 })
 
 describe('setupAgent vt-flow', () => {
-  it('accepts an onboarding-request on its own ([VSA-VTI-FLOW-OP-OR])', async () => {
+  it('accepts an onboarding-request on its own once the indexer shows its participant_id ([VSA-VTI-FLOW-OP-OR])', async () => {
     const { agent } = await setupAgent({
       port: 3998,
       walletConfig: getAskarStoreConfig('setupAgent vt-flow'),
@@ -48,7 +48,16 @@ describe('setupAgent vt-flow', () => {
       logLevel: LogLevel.Off,
     })
 
-    expect(agent.dependencyManager.resolve(VtFlowModuleConfig).autoAcceptOnboardingRequest).toBe(true)
+    const config = agent.dependencyManager.resolve(VtFlowModuleConfig)
+    expect(config.autoAcceptOnboardingRequest).toBe(true)
+    vi.spyOn(agent.indexer, 'getParticipant').mockImplementation(
+      async id =>
+        (Number(id) === 7
+          ? { did: agent.did }
+          : { op_state: 'PENDING', validator_participant_id: 7 }) as never,
+    )
+    const record = { applicantParticipantId: '42' } as never
+    await expect(config.checkParticipantId?.({ agentContext: agent.context, record })).resolves.toBe(true)
 
     await agent.shutdown()
   }, 60_000)

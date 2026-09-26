@@ -21,6 +21,7 @@ import {
   VtFlowVariant,
   isVtFlowRenewable,
   isVtFlowTerminalState,
+  type VtFlowCheckParticipantIdContext,
   type VtFlowEcsIssuanceExemptionContext,
   type VtFlowIssuance,
   type VtFlowTx,
@@ -386,7 +387,10 @@ export class VtFlowOrchestrator {
     // [VSA-VTI-FLOW-OP-ISSUE-6]: the connection stays TERMINATED, so issuance waits for the applicant to reconnect
     if (rejectedInFlight) return this.markValidated(record.id, applicant)
 
-    if (record.state === VtFlowState.AwaitingOr) await vtFlowApi.acceptOnboardingRequest(record.id)
+    // [VSA-ADM-VT-FL-VALIDATE-11]: an entry already VALIDATED on chain is no longer the PENDING one the check wants
+    if (record.state === VtFlowState.AwaitingOr) {
+      await vtFlowApi.acceptOnboardingRequest(record.id, { checkParticipantId: !entryValidated })
+    }
     if (record.state === VtFlowState.OobPending) await this.sendValidating(record)
 
     if (record.state === VtFlowState.ValidatedPendingClaims) return this.continueAfterValidated(record.id)
@@ -1186,6 +1190,27 @@ export class VtFlowOrchestrator {
       },
       context,
     )
+  }
+
+  // the indexer can still lag the applicant's own transaction, so wait for it as a tx lookup does
+  async checkParticipantId({ record }: VtFlowCheckParticipantIdContext): Promise<boolean> {
+    if (!record.applicantParticipantId || !this.agent.did) return false
+    const deadline = Date.now() + TX_LOOKUP_TIMEOUT_MS
+    for (;;) {
+      const entry = await this.agent.indexer
+        .getParticipant(record.applicantParticipantId)
+        .catch(() => undefined)
+      if (entry) {
+        if (entry.revoked || entry.slashed || entry.validator_participant_id == null) return false
+        const validator = await this.agent.indexer
+          .getParticipant(entry.validator_participant_id)
+          .catch(() => undefined)
+        if (validator && validator.did !== this.agent.did) return false
+        if (validator && entry.op_state === 'PENDING') return true
+      }
+      if (Date.now() >= deadline) return false
+      await new Promise(resolve => setTimeout(resolve, TX_LOOKUP_INTERVAL_MS))
+    }
   }
 
   async publishCredentialAsLinkedVp(vtFlowRecordId: string): Promise<void> {

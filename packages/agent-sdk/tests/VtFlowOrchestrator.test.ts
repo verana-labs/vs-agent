@@ -576,6 +576,56 @@ describe('VtFlowOrchestrator.allowEcsIssuanceExemption', () => {
   })
 })
 
+describe('VtFlowOrchestrator.checkParticipantId', () => {
+  const context = { record: { applicantParticipantId: '42' } } as never
+  const pending = { id: 42, op_state: 'PENDING', validator_participant_id: 10, revoked: null, slashed: null }
+
+  function check(...applicantReads: Array<Record<string, unknown> | Error>) {
+    const validators: Record<number, unknown> = { 10: activeIssuer, 11: { id: 11, did: 'did:web:other' } }
+    const getParticipant = vi.fn(async (id: string | number) => {
+      if (validators[Number(id)]) return validators[Number(id)]
+      const read = applicantReads.length > 1 ? applicantReads.shift() : applicantReads[0]
+      if (read instanceof Error) throw read
+      return read
+    })
+    const orchestrator = new VtFlowOrchestrator({ did: VALIDATOR_DID, indexer: { getParticipant } } as never)
+    const applicantLookups = () => getParticipant.mock.calls.filter(([id]) => id === '42').length
+    return { checking: orchestrator.checkParticipantId(context), applicantLookups }
+  }
+
+  it('accepts a PENDING entry whose validator entry has the DID of the agent', async () => {
+    await expect(check(pending).checking).resolves.toBe(true)
+  })
+
+  it.each([
+    ['names another validator', { validator_participant_id: 11 }],
+    ['is revoked', { revoked: '2026-09-01T00:00:00Z' }],
+  ])('refuses at once an entry that %s', async (_label, overrides) => {
+    const { checking, applicantLookups } = check({ ...pending, ...overrides })
+
+    await expect(checking).resolves.toBe(false)
+    expect(applicantLookups()).toBe(1)
+  })
+
+  it('refuses an entry that is still not PENDING once a transaction lookup would have given up', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    const { checking, applicantLookups } = check({ ...pending, op_state: 'VALIDATED' })
+    await vi.runAllTimersAsync()
+    await expect(checking).resolves.toBe(false)
+    vi.useRealTimers()
+
+    expect(applicantLookups()).toBe(21)
+  })
+
+  it('waits for the indexer to show the entry the applicant has just created', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    const { checking } = check(new Error('404 Not Found'), pending)
+    await vi.runAllTimersAsync()
+    await expect(checking).resolves.toBe(true)
+    vi.useRealTimers()
+  })
+})
+
 describe('VtFlowOrchestrator validateFlow', () => {
   const SET_VALIDATED = '/verana.pp.v1.MsgSetParticipantOPToValidated'
   const now = Date.now()
@@ -823,6 +873,21 @@ describe('VtFlowOrchestrator validateFlow', () => {
         issuanceFeeDiscount: 0.5,
       },
     })
+  })
+
+  it('accepts an AWAITING_OR flow whose entry is already VALIDATED without the participant_id check', async () => {
+    const { agent, vtFlowApi, current } = makeValidateAgent({
+      state: 'AWAITING_OR',
+      applicant: { op_state: 'VALIDATED' },
+    })
+    vtFlowApi.acceptOnboardingRequest.mockImplementation(async () =>
+      Object.assign(current(), { state: 'VALIDATING' }),
+    )
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(vtFlowApi.acceptOnboardingRequest).toHaveBeenCalledWith('rec-v', { checkParticipantId: false })
+    expect(current().state).toBe('VALIDATED')
   })
 
   it('records OPERATOR when the entry is VALIDATED after the agent transaction failed', async () => {

@@ -120,6 +120,7 @@ export const setupAgent = async ({
             : undefined,
           checkEcsIssuanceExemption: async context =>
             (await orchestrator?.checkEcsIssuanceExemption(context)) ?? false,
+          checkParticipantId: async context => (await orchestrator?.checkParticipantId(context)) ?? false,
           autoAcceptCredentialOffer: true,
           verifyCredential: async ({ record }) => {
             if (!orchestrator) {
