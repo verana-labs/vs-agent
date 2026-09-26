@@ -671,23 +671,35 @@ export class VtFlowOrchestrator {
     return { fee }
   }
 
-  // [VSA-VTI-FLOW-ISSUE-1]: [VSA-ADM-VT-FL-VALIDATE-6] to -9 applied to the anchoring, which the delivery waits for
-  private async anchor(message: EncodeObject, issuerParticipantId: number): Promise<VtFlowTx> {
+  // [VSA-VTI-FLOW-ISSUE-1]: [VSA-ADM-VT-FL-VALIDATE-6] to -9 applied to the anchoring, which the delivery waits for.
+  // A transaction left SUBMITTED by a restart is looked up again, not broadcast twice.
+  private async anchor(
+    record: VtFlowRecord,
+    message: EncodeObject,
+    issuerParticipantId: number,
+  ): Promise<VtFlowTx> {
     const chain = this.requireChain()
-    const checked = await this.preflight(message, issuerParticipantId)
-    if ('reason' in checked) return { status: VtFlowTxStatus.Failed, ...checked }
+    const pending = record.issuance?.tx?.status === VtFlowTxStatus.Submitted ? record.issuance.tx : undefined
+    let hash = pending?.hash
+    let submittedAt = pending?.submittedAt ?? new Date().toISOString()
+    if (!hash) {
+      const checked = await this.preflight(message, issuerParticipantId)
+      if ('reason' in checked) return { status: VtFlowTxStatus.Failed, ...checked }
 
-    let hash: string
-    try {
-      hash = await chain.broadcastWithoutWaiting([message], checked.fee)
-    } catch (error) {
-      return {
-        status: VtFlowTxStatus.Failed,
-        reason: VtFlowTxReason.BroadcastError,
-        error: errorMessage(error),
+      try {
+        hash = await chain.broadcastWithoutWaiting([message], checked.fee)
+      } catch (error) {
+        return {
+          status: VtFlowTxStatus.Failed,
+          reason: VtFlowTxReason.BroadcastError,
+          error: errorMessage(error),
+        }
       }
+      submittedAt = new Date().toISOString()
+      await this.resolveVtFlowApi().recordIssuance(record.id, {
+        tx: { hash, submittedAt, status: VtFlowTxStatus.Submitted },
+      })
     }
-    const submittedAt = new Date().toISOString()
     for (;;) {
       const tx = await chain.findTx(hash).catch(() => undefined)
       if (tx?.code === 0) return { hash, submittedAt, height: tx.height, status: VtFlowTxStatus.Succeeded }
@@ -860,6 +872,22 @@ export class VtFlowOrchestrator {
     await Promise.all(pending.map(record => this.resolveValidationTx(record.id)))
   }
 
+  /** [VSA-VTI-FLOW-ISSUE-1]: at startup, resume every anchoring left SUBMITTED through the stored issued credential. */
+  async resumeIssuanceSubmissions(): Promise<void> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const offered = await vtFlowApi.findAllByQuery({
+      role: VtFlowRole.Validator,
+      flowState: VtFlowState.CredOffered,
+    })
+    await Promise.all(
+      offered.map(({ id, issuance, credentialExchangeRecordId }) =>
+        issuance?.tx?.status === VtFlowTxStatus.Submitted && credentialExchangeRecordId
+          ? vtFlowApi.issueCredentialForSession({ vtFlowRecordId: id, credentialExchangeRecordId })
+          : undefined,
+      ),
+    )
+  }
+
   async acceptCredential(input: AcceptCredentialInput): Promise<VtFlowRecord> {
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(input.vtFlowRecordId)
@@ -1002,7 +1030,7 @@ export class VtFlowOrchestrator {
     })
     return {
       credentialDigest: digest,
-      issuance: { tx: await this.anchor(message, record.issuerParticipantId) },
+      issuance: { tx: await this.anchor(record, message, record.issuerParticipantId) },
     }
   }
 

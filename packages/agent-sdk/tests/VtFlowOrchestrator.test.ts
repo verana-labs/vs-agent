@@ -1025,16 +1025,21 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       broadcastWithoutWaiting: vi.fn(async () => 'CD34'),
       findTx: vi.fn(async () => ({ code: 0, height: 12, rawLog: '' })),
     }
-    const record = { id: 'rec-v', participantSessionId: 'sess-1', issuerParticipantId: 93 }
+    const record: Record<string, unknown> = {
+      id: 'rec-v',
+      participantSessionId: 'sess-1',
+      issuerParticipantId: 93,
+    }
+    const recordIssuance = vi.fn(async () => record)
     const agent = {
-      dependencyManager: { resolve: () => ({ findById: async () => record }) },
+      dependencyManager: { resolve: () => ({ findById: async () => record, recordIssuance }) },
       indexer: {
         getParticipant: async () => ({ schema_id: 22 }),
         getCredentialSchema: async () => ({ digest_algorithm: 'sha384', json_schema: '{}' }),
       },
       veranaChain: chain,
     }
-    return { orchestrator: new VtFlowOrchestrator(agent as never), chain }
+    return { orchestrator: new VtFlowOrchestrator(agent as never), chain, record, recordIssuance }
   }
 
   it('returns the anchoring transaction once it is included', async () => {
@@ -1046,6 +1051,59 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       expect.objectContaining({ id: 'sess-1', issuerParticipantId: 93, digest: credentialDigest }),
     )
     expect(issuance.tx).toMatchObject({ hash: 'CD34', height: 12, status: 'SUCCEEDED' })
+  })
+
+  it('records the anchoring SUBMITTED as soon as the broadcast is accepted', async () => {
+    const { orchestrator, recordIssuance } = makeAnchorAgent()
+
+    await orchestrator.onCredentialIssued('rec-v', signed)
+
+    expect(recordIssuance).toHaveBeenCalledWith('rec-v', {
+      tx: { hash: 'CD34', submittedAt: expect.any(String), status: 'SUBMITTED' },
+    })
+  })
+
+  it('looks up an anchoring left SUBMITTED by a restart instead of broadcasting it again', async () => {
+    const landed = makeAnchorAgent()
+    landed.record.issuance = {
+      tx: { hash: 'EF56', submittedAt: new Date().toISOString(), status: 'SUBMITTED' },
+    }
+    const { issuance } = await landed.orchestrator.onCredentialIssued('rec-v', signed)
+    expect(landed.chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(landed.chain.findTx).toHaveBeenCalledWith('EF56')
+    expect(issuance.tx).toMatchObject({ hash: 'EF56', height: 12, status: 'SUCCEEDED' })
+
+    const lost = makeAnchorAgent()
+    lost.chain.findTx.mockResolvedValue(undefined as never)
+    lost.record.issuance = {
+      tx: { hash: 'EF56', submittedAt: new Date(Date.now() - 120_000).toISOString(), status: 'SUBMITTED' },
+    }
+    const notFound = await lost.orchestrator.onCredentialIssued('rec-v', signed)
+    expect(lost.chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(notFound.issuance.tx).toMatchObject({ hash: 'EF56', status: 'FAILED', reason: 'TX_NOT_FOUND' })
+  })
+
+  it('resumes at startup only the flows whose anchoring was left SUBMITTED', async () => {
+    const issueCredentialForSession = vi.fn(async () => ({}))
+    const offered = [
+      {
+        id: 'rec-a',
+        credentialExchangeRecordId: 'cx-a',
+        issuance: { tx: { hash: 'A1', status: 'SUBMITTED' } },
+      },
+      { id: 'rec-b', credentialExchangeRecordId: 'cx-b', issuance: { tx: { status: 'FAILED' } } },
+    ]
+    const findAllByQuery = vi.fn(async () => offered)
+    const agent = { dependencyManager: { resolve: () => ({ findAllByQuery, issueCredentialForSession }) } }
+
+    await new VtFlowOrchestrator(agent as never).resumeIssuanceSubmissions()
+
+    expect(findAllByQuery).toHaveBeenCalledWith({ role: VtFlowRole.Validator, flowState: 'CRED_OFFERED' })
+    expect(issueCredentialForSession).toHaveBeenCalledTimes(1)
+    expect(issueCredentialForSession).toHaveBeenCalledWith({
+      vtFlowRecordId: 'rec-a',
+      credentialExchangeRecordId: 'cx-a',
+    })
   })
 
   it('lets the Corporation pay the anchoring when the grant of the issuer entry has with_feegrant', async () => {

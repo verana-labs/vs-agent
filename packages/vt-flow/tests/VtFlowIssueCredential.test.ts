@@ -119,6 +119,15 @@ describe('issueCredentialForSession', () => {
       expect.objectContaining({ credential: SIGNED_CREDENTIAL }),
     )
   })
+
+  it('records an anchoring transaction SUBMITTED on the flow before it lands', async () => {
+    const { api, recordIssuance } = buildApi({})
+    const issuance = { tx: { hash: 'CD34', status: VtFlowTxStatus.Submitted } }
+
+    await api.recordIssuance('flow-1', issuance)
+
+    expect(recordIssuance).toHaveBeenCalledWith(expect.anything(), 'flow-1', issuance)
+  })
 })
 
 describe('offerCredentialForSession', () => {
