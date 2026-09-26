@@ -764,6 +764,25 @@ describe('VtFlowOrchestrator validateFlow', () => {
     })
   })
 
+  it('records OPERATOR when the entry is VALIDATED after the agent transaction failed', async () => {
+    const { agent, vtFlowApi, current } = makeValidateAgent({
+      state: 'VALIDATION_TX_FAILED',
+      applicant: { op_state: 'VALIDATED' },
+    })
+    await vtFlowApi.recordValidation('rec-v', {
+      decidedAt: past,
+      submission: 'AGENT',
+      tx: { hash: 'AB12', status: 'FAILED', reason: 'TX_FAILED' },
+    })
+
+    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(current()).toMatchObject({
+      state: 'VALIDATED',
+      validation: { submission: 'OPERATOR', tx: { hash: 'AB12', status: 'FAILED' } },
+    })
+  })
+
   it('refuses to move a flow to VALIDATED once it has left the states before it', async () => {
     const { agent, vtFlowApi } = makeValidateAgent({ state: 'CRED_OFFERED' })
 

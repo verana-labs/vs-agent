@@ -800,7 +800,7 @@ export class VtFlowOrchestrator {
       ...recorded,
       decidedAt: recorded?.decidedAt ?? landed?.timestamp ?? entry.modified,
       submission:
-        !landed && recorded?.tx?.hash
+        !landed && recorded?.tx?.hash && recorded.tx.reason !== VtFlowTxReason.TxFailed
           ? recorded.submission
           : agentTx
             ? VtFlowSubmission.Agent
