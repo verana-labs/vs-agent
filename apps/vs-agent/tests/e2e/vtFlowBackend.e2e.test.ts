@@ -48,6 +48,7 @@ import { SubjectInboundTransport, SubjectOutboundTransport, type SubjectMessage 
 
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
 const PP_SESSION = '/verana.pp.v1.MsgCreateOrUpdateParticipantSession'
+const PP_TRIGGER_RESOLVER = '/verana.pp.v1.MsgTriggerResolver'
 const GRANTOR_ONBOARDING_PROCESS = 3
 const ECOSYSTEM_DID = 'did:example:ecosystem'
 
@@ -256,6 +257,7 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
 
     const validatorOperator = await chain.createFundedOperator()
     const applicantOperator = await chain.createFundedOperator()
+    await chain.grantOperatorAuthorization(corporation, applicantOperator.address, [PP_TRIGGER_RESOLVER])
     operatorChain = await startChain(COOLUSER_MNEMONIC)
     const validatorChain = await startChain(validatorOperator.mnemonic)
 
