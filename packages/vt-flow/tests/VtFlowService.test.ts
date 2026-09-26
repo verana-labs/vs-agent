@@ -806,6 +806,16 @@ describe('VtFlowService.rejectRequest', () => {
     ).rejects.toThrow(/cannot be rejected/)
     expect(repository.update).not.toHaveBeenCalled()
   })
+
+  it('refuses a retryable code once the validator has finished the flow', async () => {
+    const completed = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Completed })
+    const { service, repository } = makeService(completed)
+
+    await expect(
+      service.rejectRequest({} as never, completed.id, { code: VtFlowErrorCode.InvalidClaims }),
+    ).rejects.toThrow(/state 'COMPLETED'/)
+    expect(repository.update).not.toHaveBeenCalled()
+  })
 })
 
 describe('VtFlowService.notifyCredentialStateChange', () => {

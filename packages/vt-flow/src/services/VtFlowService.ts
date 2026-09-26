@@ -520,6 +520,14 @@ export class VtFlowService {
     )
     const retryState =
       record.variant === VtFlowVariant.OnboardingProcess ? VtFlowState.AwaitingOr : VtFlowState.AwaitingIr
+    if (!fatalState && record.role === VtFlowRole.Validator) {
+      record.assertState([
+        VtFlowState.AwaitingOr,
+        VtFlowState.AwaitingIr,
+        VtFlowState.Validating,
+        VtFlowState.OobPending,
+      ])
+    }
 
     if (record.role === VtFlowRole.Validator) {
       this.appendMessage(record, {
