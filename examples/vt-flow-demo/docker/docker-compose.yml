@@ -135,7 +135,7 @@ services:
       VERANA_CORPORATION_ID: ${VALIDATOR_CORPORATION_ID:-}
       TRUSTED_ECS_ECOSYSTEM_DIDS: ${TRUSTED_ECS_ECOSYSTEM_DIDS:-}
     ports:
-      - '4000:3000'
+      - '127.0.0.1:4000:3000'
       - '4001:3001'
 
   agent-applicant:
@@ -173,7 +173,7 @@ services:
       VERANA_CORPORATION_ID: ${APPLICANT_CORPORATION_ID:-}
       TRUSTED_ECS_ECOSYSTEM_DIDS: ${TRUSTED_ECS_ECOSYSTEM_DIDS:-}
     ports:
-      - '4100:3000'
+      - '127.0.0.1:4100:3000'
       - '4101:3001'
 
   # Operates the Corporation that owns the Ecosystem and its ECS schemas, and publishes a VTJSC
@@ -216,7 +216,7 @@ services:
       VERANA_CORPORATION_ID: ${ECOSYSTEM_CORPORATION_ID:-}
       TRUSTED_ECS_ECOSYSTEM_DIDS: ${TRUSTED_ECS_ECOSYSTEM_DIDS:-}
     ports:
-      - '4200:3000'
+      - '127.0.0.1:4200:3000'
       - '4201:3001'
 
 volumes:
