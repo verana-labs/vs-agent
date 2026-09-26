@@ -389,7 +389,7 @@ async function onboardingClaims(
   const schema = await agent.indexer.getCredentialSchema(schemaId)
   const ecsKey = schema && (await classifyEcsSchema(schema.json_schema))
   if (!ecsKey) {
-    agent.config.logger.warn(`[ecs-claims] schema ${schemaId} is not an ECS schema, sending no claims`)
+    agent.config.logger.info(`[ecs-claims] schema ${schemaId} is not an ECS schema, sending no claims`)
     return undefined
   }
   // a digest the agent cannot compute must stop the flow, per [VSA-VTI-CFG-ENV-ECS]

@@ -4,12 +4,15 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   VtCredentialState,
+  VtFlowApi,
   VtFlowEventTypes,
   VtFlowMessageType,
   VtFlowModule,
   VtFlowModuleConfig,
   VtFlowRole,
   VtFlowState,
+  VtFlowSubmission,
+  VtFlowTxStatus,
   VtFlowVariant,
 } from '../src'
 import { VtFlowErrorCode } from '../src/errors'
@@ -234,6 +237,38 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(repository.save).not.toHaveBeenCalled()
   })
 
+  it('applicant renewal re-enters a flow left in VALIDATED only for a role other than HOLDER', async () => {
+    const issuer = makeService(makeRecord({ state: VtFlowState.Validated, applicantParticipantRole: 1 }))
+    const { record } = await issuer.service.createOnboardingProcessRecord({} as never, applicantParams)
+    expect(record.state).toBe(VtFlowState.OrSent)
+
+    const holder = makeService(makeRecord({ state: VtFlowState.Validated, applicantParticipantRole: 6 }))
+    await expect(holder.service.createOnboardingProcessRecord({} as never, applicantParams)).rejects.toThrow(
+      /already belongs to a flow in state VALIDATED/,
+    )
+  })
+
+  it('validator re-enters a flow left in VALIDATED on a renewal only for a role other than HOLDER', async () => {
+    const peer = { id: 'conn-old', theirDid: 'did:web:agent-peer' }
+    const issuer = makeService(
+      makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validated, applicantParticipantRole: 1 }),
+      peer,
+    )
+    const renewed = await issuer.service.processReceiveOnboardingRequest(
+      makeMessageContext(issuer.agentContext) as never,
+    )
+    expect(renewed.state).toBe(VtFlowState.AwaitingOr)
+
+    const holder = makeService(
+      makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validated, applicantParticipantRole: 6 }),
+      peer,
+    )
+    const kept = await holder.service.processReceiveOnboardingRequest(
+      makeMessageContext(holder.agentContext) as never,
+    )
+    expect(kept.state).toBe(VtFlowState.Validated)
+  })
+
   it('validator receiving a renewal OR re-runs the finished flow instead of creating a new record', async () => {
     const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.CredRevoked })
     const { service, repository, agentContext } = makeService(existing, {
@@ -247,6 +282,36 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(record.state).toBe(VtFlowState.AwaitingOr)
     expect(record.connectionId).toBe('conn-new')
     expect(repository.save).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [VtFlowState.Completed, 6],
+    [VtFlowState.Validated, 1],
+    [VtFlowState.CredRevoked, 6],
+  ])('validator renewal from %s drops the validation and issuance of the previous round', async (state, role) => {
+    const messages = [{ type: VtFlowMessageType.Validating, text: 'ok', at: '2026-01-01T00:00:00.000Z' }]
+    const tx = { hash: 'AA', status: VtFlowTxStatus.Succeeded }
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state,
+      applicantParticipantRole: role,
+      claims: { name: 'Acme' },
+      messages,
+      validation: { decidedAt: '2026-01-01T00:00:00.000Z', submission: VtFlowSubmission.Agent, tx },
+      issuance: { tx },
+    })
+    const { service, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+
+    const record = await service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+
+    expect(record.state).toBe(VtFlowState.AwaitingOr)
+    expect(record.validation).toBeUndefined()
+    expect(record.issuance).toBeUndefined()
+    expect(record.messages).toEqual(messages)
+    expect(record.claims).toEqual({ name: 'Acme' })
   })
 
   it('validator keeps a flow in VALIDATED when the applicant resends its request', async () => {
@@ -767,5 +832,47 @@ describe('VtFlowModule state listeners', () => {
 
     expect(listeners).toHaveLength(3)
     expect(logger.error).toHaveBeenCalledTimes(4)
+  })
+
+  it('auto-accept an onboarding-request that re-entered a VALIDATED flow on a renewal', async () => {
+    const listeners: Array<(event: unknown) => Promise<void>> = []
+    const record = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    const service = new VtFlowService(
+      { findById: vi.fn().mockResolvedValue(record) } as never,
+      {} as never,
+      { debug: vi.fn(), error: vi.fn() } as never,
+      new VtFlowModuleConfig({ autoAcceptOnboardingRequest: true }),
+    )
+    const vtFlowApi = { acceptOnboardingRequest: vi.fn() }
+    const eventEmitter = {
+      on: (type: string, listener: (event: unknown) => Promise<void>) => {
+        if (type === VtFlowEventTypes.VtFlowStateChanged) listeners.push(listener)
+      },
+    }
+    const registry = { registerMessageHandlers: vi.fn(), register: vi.fn() }
+    const agentContext = {
+      dependencyManager: {
+        resolve: (token: unknown) =>
+          token === VtFlowService
+            ? service
+            : token === EventEmitter
+              ? eventEmitter
+              : token === VtFlowApi
+                ? vtFlowApi
+                : registry,
+      },
+    }
+    await new VtFlowModule().initialize(agentContext as never)
+
+    const event = {
+      payload: {
+        vtFlowRecordId: record.id,
+        state: VtFlowState.AwaitingOr,
+        previousState: VtFlowState.Validated,
+      },
+    }
+    await Promise.all(listeners.map(listener => listener(event)))
+
+    expect(vtFlowApi.acceptOnboardingRequest).toHaveBeenCalledWith(record.id)
   })
 })

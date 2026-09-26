@@ -61,6 +61,22 @@ export function isVtFlowTerminalState(state: VtFlowState): boolean {
   return VtFlowTerminalStates.has(state)
 }
 
+const HOLDER_PARTICIPANT_ROLE = 6
+
+/** A renewal re-enters a flow in `COMPLETED` or `CRED_REVOKED`, or in `VALIDATED` for a role other than HOLDER ([VSA-VTI-FLOW-OP-RENEW] step 3). */
+export function isVtFlowRenewable(record: {
+  state: VtFlowState
+  applicantParticipantRole?: number
+}): boolean {
+  if (record.state === VtFlowState.Validated) {
+    return (
+      record.applicantParticipantRole !== undefined &&
+      record.applicantParticipantRole !== HOLDER_PARTICIPANT_ROLE
+    )
+  }
+  return record.state === VtFlowState.Completed || record.state === VtFlowState.CredRevoked
+}
+
 export enum VtFlowEventTypes {
   VtFlowStateChanged = 'VtFlowStateChanged',
 }

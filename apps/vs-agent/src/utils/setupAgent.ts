@@ -99,6 +99,7 @@ export const setupAgent = async ({
         didcommVersions: ['v1', 'v2'],
         vtFlow: {
           autoIssueCredentialOnRequest: true,
+          autoAcceptOnboardingRequest: true,
           autoAcceptIssuanceRequest: true,
           autoOfferCredential: true,
           buildCredentialOffer: async ({ record }) => {

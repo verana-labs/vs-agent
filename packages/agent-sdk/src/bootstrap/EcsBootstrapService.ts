@@ -538,7 +538,7 @@ export class EcsBootstrapService {
     const schema = await this.agent.indexer.getCredentialSchema(schemaId)
     const ecsKey = schema && (await classifyEcsSchema(schema.json_schema))
     if (!ecsKey) {
-      this.agent.config.logger.warn(`[ecs-claims] schema ${schemaId} is not an ECS schema, sending no claims`)
+      this.agent.config.logger.info(`[ecs-claims] schema ${schemaId} is not an ECS schema, sending no claims`)
       return undefined
     }
     return await composeEcsClaims(this.agent.ecsClaims, ecsKey, this.agent.config.logger)
