@@ -769,6 +769,8 @@ export class VtFlowOrchestrator {
       tx: { ...validation.tx, height, status: VtFlowTxStatus.Failed, reason, error },
     }
     if (applicant?.op_state === 'VALIDATED') {
+      // the notification handler may have moved the flow while the tx and the entry were read
+      if ((await vtFlowApi.findById(record.id))?.state !== VtFlowState.ValidationTxSubmitted) return
       if (reason === VtFlowTxReason.TxFailed) await vtFlowApi.recordValidation(record.id, failed)
       await this.markValidated(record.id, applicant)
       await this.continueAfterValidated(record.id)
