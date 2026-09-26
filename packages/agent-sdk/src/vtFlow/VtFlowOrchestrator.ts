@@ -730,16 +730,25 @@ export class VtFlowOrchestrator {
 
       const tx = await chain.findTx(hash).catch(() => undefined)
       if (tx && tx.code === 0) {
+        // the indexer can lag the block of the transaction, and the fill needs the validated entry
         const entry = await this.agent.indexer.getParticipant(record.applicantParticipantId)
-        await this.markValidated(recordId, entry, { hash, height: tx.height })
-        await this.continueAfterValidated(recordId)
-        return
-      }
-      if (tx)
+        if (entry.op_state === 'VALIDATED') {
+          await this.markValidated(recordId, entry, { hash, height: tx.height })
+          await this.continueAfterValidated(recordId)
+          return
+        }
+      } else if (tx) {
         return this.failUnlessValidated(record, validation, VtFlowTxReason.TxFailed, tx.rawLog, tx.height)
+      }
 
       const submittedAt = validation.tx?.submittedAt ?? validation.decidedAt
       if (Date.now() - Date.parse(submittedAt) >= TX_LOOKUP_TIMEOUT_MS) {
+        if (tx) {
+          this.agent.config.logger.warn(
+            `[vt-flow] the transaction of flow ${recordId} landed, but the indexer does not show the entry VALIDATED yet: its notification completes the flow`,
+          )
+          return
+        }
         return this.failUnlessValidated(
           record,
           validation,

@@ -959,6 +959,52 @@ describe('VtFlowOrchestrator validateFlow', () => {
     })
   })
 
+  it('fills the validation of a landed transaction only once the indexer shows the entry VALIDATED', async () => {
+    const { agent, vtFlowApi, chain, current } = makeValidateAgent({ state: 'VALIDATION_TX_SUBMITTED' })
+    await vtFlowApi.recordValidation('rec-v', {
+      decidedAt: past,
+      submission: 'AGENT',
+      tx: { hash: 'AB12', status: 'SUBMITTED', submittedAt: new Date().toISOString() },
+    })
+    chain.findTx.mockResolvedValue({ code: 0, height: 7, rawLog: '' } as never)
+    const effectiveUntil = new Date(now + 86_400_000).toISOString()
+    agent.indexer.getParticipant
+      .mockResolvedValueOnce({ op_state: 'PENDING', validation_fees: 0 } as never)
+      .mockResolvedValueOnce({
+        op_state: 'VALIDATED',
+        validation_fees: 6,
+        effective_until: effectiveUntil,
+      } as never)
+
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const resolving = new VtFlowOrchestrator(agent as never).resolveValidationTx('rec-v')
+    await vi.runAllTimersAsync()
+    await resolving
+    vi.useRealTimers()
+
+    expect(current()).toMatchObject({
+      state: 'VALIDATED',
+      validation: { validationFees: 6, effectiveUntil, tx: { hash: 'AB12', height: 7, status: 'SUCCEEDED' } },
+    })
+  })
+
+  it('leaves a landed transaction to the notification when the indexer still lags after 60 seconds', async () => {
+    const { agent, vtFlowApi, chain, current } = makeValidateAgent({ state: 'VALIDATION_TX_SUBMITTED' })
+    await vtFlowApi.recordValidation('rec-v', {
+      decidedAt: past,
+      submission: 'AGENT',
+      tx: { hash: 'AB12', status: 'SUBMITTED', submittedAt: new Date(now - 120_000).toISOString() },
+    })
+    chain.findTx.mockResolvedValue({ code: 0, height: 7, rawLog: '' } as never)
+
+    await new VtFlowOrchestrator(agent as never).resolveValidationTx('rec-v')
+
+    expect(current()).toMatchObject({
+      state: 'VALIDATION_TX_SUBMITTED',
+      validation: { tx: { status: 'SUBMITTED' } },
+    })
+  })
+
   it('keeps the failed transaction and records OPERATOR when the entry is VALIDATED after a non-zero code', async () => {
     const { agent, vtFlowApi, chain, current } = makeValidateAgent({
       state: 'VALIDATION_TX_SUBMITTED',
