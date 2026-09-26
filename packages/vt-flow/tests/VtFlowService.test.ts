@@ -1087,6 +1087,21 @@ describe('VtFlowService VS-CONN-VS gate', () => {
     expect(foreign.repository.save).not.toHaveBeenCalled()
   })
 
+  it('leaves an ended flow of an unverifiable peer as it is', async () => {
+    const ended = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.TerminatedByValidator })
+    const { service, repository, agentContext } = makeService(ended, null, {
+      assertVerifiableService: async () => false,
+    })
+
+    const report = sentReport(
+      await new OnboardingRequestHandler(service).handle(makeMessageContext(agentContext) as never),
+    )
+
+    expect(report.description.code).toBe(VtFlowErrorCode.NotAVerifiableService)
+    expect(ended.state).toBe(VtFlowState.TerminatedByValidator)
+    expect(repository.update).not.toHaveBeenCalled()
+  })
+
   it('passes the onboarding request participant id to the exemption', async () => {
     const checkEcsIssuanceExemption = vi.fn().mockResolvedValue(true)
     const { service, repository } = makeGatedService({
