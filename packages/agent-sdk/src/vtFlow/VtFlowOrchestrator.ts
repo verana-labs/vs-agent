@@ -806,6 +806,19 @@ export class VtFlowOrchestrator {
     return vtFlowApi.recordValidation(recordId, validation, VtFlowState.Validated)
   }
 
+  /** rejectFlow ended the flow with its transaction in flight, and no newer flow of the applicant replaced it ([VSA-ADM-VT-FL-REJECT-2]). */
+  async isRejectedInFlight(record: VtFlowRecord): Promise<boolean> {
+    if (record.state !== VtFlowState.TerminatedByValidator || !record.validation) return false
+    if (!record.applicantParticipantId) return false
+    const [latest] = (
+      await this.resolveVtFlowApi().findAllByQuery({
+        role: VtFlowRole.Validator,
+        applicantParticipantId: record.applicantParticipantId,
+      })
+    ).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    return latest?.id === record.id
+  }
+
   async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(recordId)

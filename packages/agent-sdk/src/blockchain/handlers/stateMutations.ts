@@ -217,14 +217,9 @@ export async function markVtFlowRecordsValidated(
     agent,
     participantId,
     async record => {
-      // rejectFlow ended the flow after validateFlow recorded a decision, so with the transaction in flight
-      const rejectedInFlight = record.state === VtFlowState.TerminatedByValidator && !!record.validation
-      if (
-        record.role !== VtFlowRole.Validator ||
-        !(VtFlowValidatedFromStates.has(record.state) || rejectedInFlight)
-      ) {
-        return null
-      }
+      if (record.role !== VtFlowRole.Validator) return null
+      const rejectedInFlight = await orchestrator.isRejectedInFlight(record)
+      if (!VtFlowValidatedFromStates.has(record.state) && !rejectedInFlight) return null
       await orchestrator.markValidated(record.id, await agent.indexer.getParticipant(participantId), tx)
       // the connection stays TERMINATED, so issuance waits for the applicant to reconnect
       if (!rejectedInFlight) await orchestrator.continueAfterValidated(record.id)

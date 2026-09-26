@@ -359,7 +359,7 @@ describe('markVtFlowRecordsValidated', () => {
     const continueAfterValidated = vi
       .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
       .mockResolvedValue({} as never)
-    const findAllByQuery = vi.fn().mockResolvedValue(records)
+    const findAllByQuery = vi.fn(async () => [...records])
     const findById = vi.fn(async (id: string) => records.find(record => record.id === id))
     const agent = {
       indexer: { getParticipant: vi.fn().mockResolvedValue(entry) },
@@ -438,6 +438,8 @@ describe('markVtFlowRecordsValidated', () => {
         id: 'rejected',
         role: VtFlowRole.Validator,
         state: VtFlowState.TerminatedByValidator,
+        applicantParticipantId: '7',
+        createdAt: new Date('2026-09-20T09:00:00Z'),
         validation: { decidedAt: '2026-09-25T09:00:00Z', submission: 'OPERATOR' },
       },
     ]
@@ -451,6 +453,33 @@ describe('markVtFlowRecordsValidated', () => {
       VtFlowState.Validated,
     )
     expect(continueAfterValidated).not.toHaveBeenCalled()
+    continueAfterValidated.mockRestore()
+  })
+
+  it('leaves a flow rejected in flight alone once a newer flow of the applicant exists', async () => {
+    const records = [
+      {
+        id: 'rejected',
+        role: VtFlowRole.Validator,
+        state: VtFlowState.TerminatedByValidator,
+        applicantParticipantId: '7',
+        createdAt: new Date('2026-09-20T09:00:00Z'),
+        validation: { decidedAt: '2026-09-20T10:00:00Z', submission: 'OPERATOR' },
+      },
+      {
+        id: 'newer',
+        role: VtFlowRole.Validator,
+        state: VtFlowState.AwaitingValidationTx,
+        applicantParticipantId: '7',
+        createdAt: new Date('2026-09-24T09:00:00Z'),
+      },
+    ]
+    const { agent, recordValidation, continueAfterValidated } = makeValidatedAgent(records)
+
+    await markVtFlowRecordsValidated(agent as never, '7', tx)
+
+    expect(recordValidation).toHaveBeenCalledTimes(1)
+    expect(recordValidation).toHaveBeenCalledWith('newer', expect.anything(), VtFlowState.Validated)
     continueAfterValidated.mockRestore()
   })
 })
