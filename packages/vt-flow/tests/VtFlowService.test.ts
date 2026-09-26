@@ -458,6 +458,9 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
       state: VtFlowState.CredOffered,
       credentialExchangeRecordId: 'cred-ex-1',
       subprotocolThid: 'sub-1',
+      issuance: {
+        tx: { hash: 'CD34', submittedAt: new Date().toISOString(), status: VtFlowTxStatus.Submitted },
+      },
     })
     const { service, agentContext, exchangeRepository } = makeService(existing, {
       id: 'conn-old',
@@ -471,6 +474,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(record.state).toBe(VtFlowState.Validated)
     expect(record.credentialExchangeRecordId).toBeUndefined()
     expect(record.subprotocolThid).toBeUndefined()
+    expect(record.issuance).toBeUndefined()
     expect(record.connectionId).toBe('conn-new')
     expect(stale.parentThreadId).toBeUndefined()
     expect(exchangeRepository.update).toHaveBeenCalledWith(agentContext, stale)

@@ -239,6 +239,7 @@ export class VtFlowService {
     }
     record.credentialExchangeRecordId = undefined
     record.subprotocolThid = undefined
+    record.issuance = undefined
   }
 
   /** Validator-side OnboardingProcess: create or re-attach (by `participant_session_id`) a record in `AWAITING_OR` from an inbound `onboarding-request`. */
