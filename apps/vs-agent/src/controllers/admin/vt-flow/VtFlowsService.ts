@@ -187,10 +187,9 @@ export class VtFlowsService {
       if (entryMayBeValidated && record.applicantParticipantId) {
         const applicant = await agent.indexer.getParticipant(record.applicantParticipantId)
         if (applicant.op_state === 'VALIDATED') {
-          await vtFlowApi.markValidated(record.id)
-          await new VtFlowOrchestrator(agent, {
-            publicApiBaseUrl: agent.publicApiBaseUrl,
-          }).continueAfterValidated(record.id)
+          const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
+          await orchestrator.markValidated(record.id, applicant)
+          await orchestrator.continueAfterValidated(record.id)
           throw new ConflictException('the applicant entry is already VALIDATED on chain')
         }
       }
