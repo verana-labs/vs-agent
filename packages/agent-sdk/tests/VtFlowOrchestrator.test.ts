@@ -959,6 +959,39 @@ describe('VtFlowOrchestrator validateFlow', () => {
     })
   })
 
+  it('keeps the failed transaction and records OPERATOR when the entry is VALIDATED after a non-zero code', async () => {
+    const { agent, vtFlowApi, chain, current } = makeValidateAgent({
+      state: 'VALIDATION_TX_SUBMITTED',
+      applicant: { op_state: 'VALIDATED' },
+    })
+    await vtFlowApi.recordValidation('rec-v', {
+      decidedAt: past,
+      submission: 'AGENT',
+      tx: { hash: 'AB12', status: 'SUBMITTED' },
+    })
+    chain.findTx.mockResolvedValue({
+      code: 5,
+      height: 9,
+      rawLog: 'participant must be in PENDING state to be validated',
+    } as never)
+
+    await new VtFlowOrchestrator(agent as never).resolveValidationTx('rec-v')
+
+    expect(current()).toMatchObject({
+      state: 'VALIDATED',
+      validation: {
+        submission: 'OPERATOR',
+        tx: {
+          hash: 'AB12',
+          height: 9,
+          status: 'FAILED',
+          reason: 'TX_FAILED',
+          error: 'participant must be in PENDING state to be validated',
+        },
+      },
+    })
+  })
+
   it('counts the 60 seconds from the broadcast, not from the decision', async () => {
     const { agent, vtFlowApi, chain, current } = makeValidateAgent({ state: 'VALIDATION_TX_SUBMITTED' })
     await vtFlowApi.recordValidation('rec-v', {

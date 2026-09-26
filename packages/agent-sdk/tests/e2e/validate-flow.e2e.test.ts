@@ -365,6 +365,10 @@ describe('validateFlow against the real chain and indexer', () => {
       })
       await orchestrator.resolveValidationTx('flow-dup')
       expect(store.get('flow-dup').state).toBe(VtFlowState.CredOffered)
+      expect(store.get('flow-dup').validation).toMatchObject({
+        submission: 'OPERATOR',
+        tx: { hash, status: 'FAILED', reason: 'TX_FAILED', error: expect.stringMatching(/PENDING state/) },
+      })
     },
     SETUP_TIMEOUT_MS,
   )

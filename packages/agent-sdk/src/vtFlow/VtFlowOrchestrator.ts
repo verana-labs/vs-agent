@@ -764,19 +764,17 @@ export class VtFlowOrchestrator {
     const applicant = record.applicantParticipantId
       ? await this.agent.indexer.getParticipant(record.applicantParticipantId)
       : undefined
+    const failed: VtFlowValidation = {
+      ...validation,
+      tx: { ...validation.tx, height, status: VtFlowTxStatus.Failed, reason, error },
+    }
     if (applicant?.op_state === 'VALIDATED') {
+      if (reason === VtFlowTxReason.TxFailed) await vtFlowApi.recordValidation(record.id, failed)
       await this.markValidated(record.id, applicant)
       await this.continueAfterValidated(record.id)
       return
     }
-    await vtFlowApi.recordValidation(
-      record.id,
-      {
-        ...validation,
-        tx: { ...validation.tx, height, status: VtFlowTxStatus.Failed, reason, error },
-      },
-      VtFlowState.ValidationTxFailed,
-    )
+    await vtFlowApi.recordValidation(record.id, failed, VtFlowState.ValidationTxFailed)
   }
 
   /**
