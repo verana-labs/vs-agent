@@ -53,6 +53,8 @@ Endpoints once healthy:
 | Ecosystem admin API + Swagger | http://localhost:4200 (`/api`) |
 | Ecosystem public API + UI | http://localhost:4201 |
 
+A request from the host reaches an agent from the Docker network gateway, not from loopback, so the compose file adds the private address ranges to `ADMIN_API_TRUSTED_NETWORKS`. The admin ports answer anyone in those ranges without authentication.
+
 ### Seed the chain
 
 The demo chain starts empty apart from the funded `cooluser` account. Once the three agents are up, seed the three corporations, the ecosystem, the ECS schemas, the root participants, and the operator grants. Until the seed runs, each agent logs that it cannot resolve its corporation and that it skipped its bootstrap; that is expected.

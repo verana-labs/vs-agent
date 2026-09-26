@@ -122,6 +122,7 @@ services:
       ECS_CLAIMS_ORG_COUNTRY_CODE: ES
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
       ADMIN_API_AUTH_MODE: internal
+      ADMIN_API_TRUSTED_NETWORKS: 127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7
       AGENT_MODE: standalone
       ECS_CLAIMS_SERVICE_NAME: vt-flow demo agent
       ECS_CLAIMS_SERVICE_TYPE: WEB_PORTAL
@@ -159,6 +160,7 @@ services:
       ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI: https://agent-applicant.demo/vt/default/privacy.html
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
       ADMIN_API_AUTH_MODE: internal
+      ADMIN_API_TRUSTED_NETWORKS: 127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7
       AGENT_MODE: standalone
       ECS_CLAIMS_SERVICE_NAME: vt-flow demo agent
       ECS_CLAIMS_SERVICE_TYPE: WEB_PORTAL
@@ -201,6 +203,7 @@ services:
       ECS_CLAIMS_SERVICE_PRIVACY_POLICY_URI: https://agent-ecosystem.demo/vt/default/privacy.html
       NODE_EXTRA_CA_CERTS: /caddy/caddy/pki/authorities/local/root.crt
       ADMIN_API_AUTH_MODE: internal
+      ADMIN_API_TRUSTED_NETWORKS: 127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7
       AGENT_MODE: standalone
       ECS_CLAIMS_SERVICE_NAME: vt-flow demo agent
       ECS_CLAIMS_SERVICE_TYPE: WEB_PORTAL
