@@ -156,7 +156,7 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.applicantParticipantId).toBe('participant-42')
 
     const { VtFlowsService } = await import('../src/controllers/admin/vt-flow/VtFlowsService')
-    const flowsService = new VtFlowsService({ getAgent: async () => applicant } as never, undefined as never)
+    const flowsService = new VtFlowsService({ getAgent: async () => applicant } as never)
     const bySchema = await flowsService.listFlowsPage({ schemaId: '12' })
     expect(bySchema.items.map(flow => flow.id)).toEqual([applicantRecord.id])
   })
@@ -198,7 +198,7 @@ describe('vt-flow: two-agent integration', () => {
     await validatingReached
 
     const { VtFlowsService } = await import('../src/controllers/admin/vt-flow/VtFlowsService')
-    const flowsService = new VtFlowsService({ getAgent: async () => validator } as never, undefined as never)
+    const flowsService = new VtFlowsService({ getAgent: async () => validator } as never)
 
     const flows = await flowsService.listFlows({ role: VtFlowRole.Validator })
     expect(flows).toHaveLength(1)

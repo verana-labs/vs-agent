@@ -51,7 +51,7 @@ export class V2VtFlowIssuanceDto {
 
 export class V2VtFlowMessageDto {
   @ApiProperty({ enum: ['oob-link', 'validating', 'problem-report'] }) type!: string
-  @ApiProperty() text!: string
+  @ApiPropertyOptional({ description: 'Absent for a validating sent without a comment.' }) text?: string
   @ApiProperty() at!: string
   @ApiPropertyOptional({ description: 'Set for an oob-link only.' }) url?: string
 }

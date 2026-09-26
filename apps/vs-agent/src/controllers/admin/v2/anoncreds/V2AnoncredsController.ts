@@ -29,7 +29,7 @@ export class V2AnoncredsController {
     description:
       'Revokes one AnonCreds credential at registry level, addressed by revocation registry definition ' +
       'and index. The agent updates and republishes the revocation status list. This method has no ' +
-      'DIDComm and no Flow State effect: use `revokeFlowCredential` to also notify the applicant.',
+      'DIDComm and no Flow State effect.',
   })
   @ApiOkResponse({ type: RevokeCredentialResponseDto })
   @ApiBadRequestResponse()

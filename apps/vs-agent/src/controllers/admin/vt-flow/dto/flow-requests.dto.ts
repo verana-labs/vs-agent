@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { VtFlowErrorCode, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
   IsEnum,
   IsIn,
@@ -111,6 +111,51 @@ export class SendOobLinkDto {
   @IsOptional()
   @IsString()
   message?: string
+}
+
+export class SendOobLinkV2Dto {
+  @ApiProperty({ description: 'Absolute https:// URL where the applicant completes the step.' })
+  @IsUrl({ require_tld: false, protocols: ['https'], require_protocol: true })
+  url!: string
+
+  @ApiProperty({ description: 'The text the applicant reads.' })
+  @IsString()
+  @IsNotEmpty()
+  description!: string
+
+  @ApiProperty({ required: false, description: 'ISO 8601 UTC datetime, the expires_time of the message.' })
+  @IsOptional()
+  @IsISO8601()
+  expiresAt?: string
+}
+
+export class StartValidationDto {
+  @ApiProperty({ required: false, description: 'The text the applicant reads.' })
+  @IsOptional()
+  @IsString()
+  comment?: string
+}
+
+const TERMINATED_BY_VALIDATOR_CODES = [
+  VtFlowErrorCode.ValidationRefused,
+  VtFlowErrorCode.SessionTerminated,
+  VtFlowErrorCode.OobExpired,
+]
+
+export class RejectFlowDto {
+  @ApiProperty({
+    required: false,
+    enum: TERMINATED_BY_VALIDATOR_CODES,
+    default: VtFlowErrorCode.ValidationRefused,
+  })
+  @IsOptional()
+  @IsIn(TERMINATED_BY_VALIDATOR_CODES)
+  code?: VtFlowErrorCode
+
+  @ApiProperty({ description: 'The reason, sent to the applicant in the problem-report.' })
+  @IsString()
+  @IsNotEmpty()
+  description!: string
 }
 
 export class RevokeFlowCredentialDto {

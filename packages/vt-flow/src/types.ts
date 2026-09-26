@@ -166,7 +166,7 @@ export enum VtFlowMessageType {
 /** One human-readable message of a flow; `url` is set for an `oob-link` only. Timestamps are ISO 8601, the record is stored as JSON. */
 export interface VtFlowMessage {
   type: VtFlowMessageType
-  text: string
+  text?: string
   at: string
   url?: string
 }

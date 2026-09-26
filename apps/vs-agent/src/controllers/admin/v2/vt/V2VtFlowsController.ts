@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Post, Put, Query } from '@nestjs/common'
 import {
+  ApiBadRequestResponse,
   ApiConflictResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -13,8 +14,9 @@ import { toV2Dto, VtFlowsService } from '../../vt-flow/VtFlowsService'
 import {
   EditClaimsDto,
   ListFlowsV2QueryDto,
-  RevokeFlowCredentialDto,
-  SendOobLinkDto,
+  RejectFlowDto,
+  SendOobLinkV2Dto,
+  StartValidationDto,
   ValidateFlowDto,
 } from '../../vt-flow/dto/flow-requests.dto'
 
@@ -83,9 +85,29 @@ export class V2VtFlowsController {
   @ApiConflictResponse()
   public async sendOobLink(
     @Param('participantSessionId') participantSessionId: string,
-    @Body() body: SendOobLinkDto,
+    @Body() body: SendOobLinkV2Dto,
   ): Promise<V2VtFlowRecordDto> {
-    return toV2Dto(await this.service.sendOobLink(participantSessionId, body.url, body.message))
+    return toV2Dto(
+      await this.service.sendOobLink(participantSessionId, body.url, body.description, body.expiresAt),
+    )
+  }
+
+  @Post(':participantSessionId/start-validation')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Move a flow back to VALIDATING',
+    description:
+      'Validator action. Tells the applicant with a validating message once it has completed the out-of-band step.',
+  })
+  @ApiParam({ name: 'participantSessionId', type: String })
+  @ApiOkResponse({ type: V2VtFlowRecordDto })
+  @ApiNotFoundResponse()
+  @ApiConflictResponse()
+  public async startValidation(
+    @Param('participantSessionId') participantSessionId: string,
+    @Body() body: StartValidationDto,
+  ): Promise<V2VtFlowRecordDto> {
+    return toV2Dto(await this.service.startValidation(participantSessionId, body.comment))
   }
 
   @Post(':participantSessionId/validate')
@@ -108,21 +130,23 @@ export class V2VtFlowsController {
     return toV2Dto(await this.service.validateFlow(participantSessionId, body))
   }
 
-  @Post(':participantSessionId/revoke-credential')
+  @Post(':participantSessionId/reject')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Revoke the credential issued for a flow',
+    summary: 'Reject a flow',
     description:
-      'Validator action. Revokes the AnonCreds credential through its revocation registry and notifies the applicant over DIDComm.',
+      'Validator action. Sends a problem-report and moves the flow to TERMINATED_BY_VALIDATOR, ' +
+      'with no on-chain transaction.',
   })
   @ApiParam({ name: 'participantSessionId', type: String })
   @ApiOkResponse({ type: V2VtFlowRecordDto })
+  @ApiBadRequestResponse()
   @ApiNotFoundResponse()
   @ApiConflictResponse()
-  public async revokeFlowCredential(
+  public async rejectFlow(
     @Param('participantSessionId') participantSessionId: string,
-    @Body() body: RevokeFlowCredentialDto,
+    @Body() body: RejectFlowDto,
   ): Promise<V2VtFlowRecordDto> {
-    return toV2Dto(await this.service.revokeFlowCredential(participantSessionId, body.reason))
+    return toV2Dto(await this.service.rejectFlow(participantSessionId, body))
   }
 }

@@ -533,10 +533,16 @@ describe('VtFlowService.reattachOnboardingProcessRecord', () => {
 
 describe('VtFlowService.processReceiveValidating', () => {
   it.each([
-    VtFlowState.OrSent,
-    VtFlowState.IrSent,
-    VtFlowState.OobPending,
-  ])('applicant moves from %s to VALIDATING', async state => {
+    { state: VtFlowState.OrSent, messages: undefined },
+    { state: VtFlowState.IrSent, messages: undefined },
+    {
+      state: VtFlowState.OobPending,
+      messages: [{ type: VtFlowMessageType.Validating, at: expect.any(String) }],
+    },
+  ])('applicant moves from $state to VALIDATING and records a validating without comment from OOB_PENDING only', async ({
+    state,
+    messages,
+  }) => {
     const existing = makeRecord({ state })
     const { service } = makeService(existing)
 
@@ -547,6 +553,7 @@ describe('VtFlowService.processReceiveValidating', () => {
     } as never)
 
     expect(record.state).toBe(VtFlowState.Validating)
+    expect(record.messages).toEqual(messages)
   })
 })
 
@@ -600,6 +607,15 @@ describe('VtFlowService.sendValidatingForSession', () => {
       /state 'VALIDATING'/,
     )
   })
+
+  it('records the validating it sends without a comment', async () => {
+    const pending = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.OobPending })
+    const { service } = makeService(pending)
+
+    const { record } = await service.sendValidatingForSession({} as never, pending.id)
+
+    expect(record.messages).toEqual([{ type: VtFlowMessageType.Validating, at: expect.any(String) }])
+  })
 })
 
 describe('VtFlowService.terminateByValidator', () => {
@@ -616,6 +632,20 @@ describe('VtFlowService.terminateByValidator', () => {
     repository.getById.mockResolvedValue(completed)
     const { record } = await service.terminateByValidator({} as never, completed.id)
     expect(record.state).toBe(VtFlowState.TerminatedByValidator)
+  })
+
+  it('records the problem-report it sends in messages[]', async () => {
+    const validating = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validating })
+    const { service } = makeService(validating)
+
+    const { record } = await service.terminateByValidator({} as never, validating.id, {
+      code: VtFlowErrorCode.ValidationRefused,
+      enDescription: 'Documents do not match',
+    })
+
+    expect(record.messages).toEqual([
+      expect.objectContaining({ type: VtFlowMessageType.ProblemReport, text: 'Documents do not match' }),
+    ])
   })
 })
 
@@ -681,6 +711,15 @@ describe('VtFlowService.updateClaims', () => {
     const completed = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Completed })
     repository.getById.mockResolvedValue(completed)
     await expect(service.updateClaims({} as never, completed.id, {})).rejects.toThrow()
+  })
+
+  it('replaces claims while the validation transaction is pending, per [VSA-ADM-VT-FL-EDIT]', async () => {
+    const awaitingTx = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingValidationTx })
+    const { service } = makeService(awaitingTx)
+
+    const updated = await service.updateClaims({} as never, awaitingTx.id, { name: 'Edited' })
+    expect(updated.claims).toEqual({ name: 'Edited' })
+    expect(updated.state).toBe(VtFlowState.AwaitingValidationTx)
   })
 })
 
