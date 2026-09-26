@@ -913,7 +913,12 @@ describe('VtFlowOrchestrator validateFlow', () => {
     const validUntilAfterTx = async (effectiveUntil: string | null) => {
       Object.assign(current(), {
         state: 'VALIDATION_TX_SUBMITTED',
-        validation: { decidedAt: past, submission: 'AGENT', tx: { hash: 'AB12', status: 'SUBMITTED' } },
+        validation: {
+          decidedAt: past,
+          submission: 'AGENT',
+          effectiveUntil: '2030-01-01T00:00:00Z',
+          tx: { hash: 'AB12', status: 'SUBMITTED' },
+        },
       })
       agent.indexer.getParticipant.mockResolvedValue({
         op_state: 'VALIDATED',
