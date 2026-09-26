@@ -1005,6 +1005,23 @@ describe('VtFlowOrchestrator validateFlow', () => {
     })
   })
 
+  it('moves a flow to VALIDATED once when the notification and the tx lookup reach it together', async () => {
+    const { agent, vtFlowApi } = makeValidateAgent({
+      state: 'VALIDATION_TX_SUBMITTED',
+      applicant: { op_state: 'VALIDATED' },
+    })
+    const orchestrator = new VtFlowOrchestrator(agent as never)
+    const entry = await agent.indexer.getParticipant(94)
+
+    const results = await Promise.allSettled([
+      orchestrator.markValidated('rec-v', entry as never),
+      new VtFlowOrchestrator(agent as never).markValidated('rec-v', entry as never),
+    ])
+
+    expect(results.map(result => result.status)).toEqual(['fulfilled', 'rejected'])
+    expect(vtFlowApi.recordValidation).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the failed transaction and records OPERATOR when the entry is VALIDATED after a non-zero code', async () => {
     const { agent, vtFlowApi, chain, current } = makeValidateAgent({
       state: 'VALIDATION_TX_SUBMITTED',

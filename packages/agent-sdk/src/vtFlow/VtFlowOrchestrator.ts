@@ -68,6 +68,8 @@ const DISCOUNT_SCALE = 10_000
 const TX_LOOKUP_TIMEOUT_MS = 60_000
 const TX_LOOKUP_INTERVAL_MS = 3_000
 const FEE_DENOM = 'uvna'
+// the notification handler and the tx lookup can both reach markValidated for one flow at the same time
+const markingValidated = new Set<string>()
 
 const FEE_KEYS = ['validationFees', 'issuanceFees', 'verificationFees'] as const
 const DISCOUNT_KEYS = ['issuanceFeeDiscount', 'verificationFeeDiscount'] as const
@@ -799,38 +801,47 @@ export class VtFlowOrchestrator {
     landed?: { hash: string; height: number; timestamp?: string },
   ): Promise<VtFlowRecord> {
     const vtFlowApi = this.resolveVtFlowApi()
-    const record = await vtFlowApi.findById(recordId)
-    if (!record) throw new Error(`vt-flow record ${recordId} not found`)
-    if (!VtFlowValidatedFromStates.has(record.state) && record.state !== VtFlowState.TerminatedByValidator) {
-      throw invalidState(`the flow is '${record.state}', which does not precede VALIDATED`)
+    if (markingValidated.has(recordId)) throw invalidState('the flow is already moving to VALIDATED')
+    markingValidated.add(recordId)
+    try {
+      const record = await vtFlowApi.findById(recordId)
+      if (!record) throw new Error(`vt-flow record ${recordId} not found`)
+      if (
+        !VtFlowValidatedFromStates.has(record.state) &&
+        record.state !== VtFlowState.TerminatedByValidator
+      ) {
+        throw invalidState(`the flow is '${record.state}', which does not precede VALIDATED`)
+      }
+      const recorded = record.validation
+      const agentTx = landed && recorded?.tx?.hash === landed.hash ? recorded.tx : undefined
+      const validation: VtFlowValidation = {
+        ...recorded,
+        decidedAt: recorded?.decidedAt ?? landed?.timestamp ?? entry.modified,
+        submission:
+          !landed && recorded?.tx?.hash && recorded.tx.reason !== VtFlowTxReason.TxFailed
+            ? recorded.submission
+            : agentTx
+              ? VtFlowSubmission.Agent
+              : VtFlowSubmission.Operator,
+        validationFees: entry.validation_fees,
+        issuanceFees: entry.issuance_fees,
+        verificationFees: entry.verification_fees,
+        issuanceFeeDiscount: entry.issuance_fee_discount,
+        verificationFeeDiscount: entry.verification_fee_discount,
+        effectiveUntil: entry.effective_until ?? undefined,
+        ...(agentTx && {
+          tx: {
+            hash: agentTx.hash,
+            submittedAt: agentTx.submittedAt,
+            height: landed?.height,
+            status: VtFlowTxStatus.Succeeded,
+          },
+        }),
+      }
+      return await vtFlowApi.recordValidation(recordId, validation, VtFlowState.Validated)
+    } finally {
+      markingValidated.delete(recordId)
     }
-    const recorded = record.validation
-    const agentTx = landed && recorded?.tx?.hash === landed.hash ? recorded.tx : undefined
-    const validation: VtFlowValidation = {
-      ...recorded,
-      decidedAt: recorded?.decidedAt ?? landed?.timestamp ?? entry.modified,
-      submission:
-        !landed && recorded?.tx?.hash && recorded.tx.reason !== VtFlowTxReason.TxFailed
-          ? recorded.submission
-          : agentTx
-            ? VtFlowSubmission.Agent
-            : VtFlowSubmission.Operator,
-      validationFees: entry.validation_fees,
-      issuanceFees: entry.issuance_fees,
-      verificationFees: entry.verification_fees,
-      issuanceFeeDiscount: entry.issuance_fee_discount,
-      verificationFeeDiscount: entry.verification_fee_discount,
-      effectiveUntil: entry.effective_until ?? undefined,
-      ...(agentTx && {
-        tx: {
-          hash: agentTx.hash,
-          submittedAt: agentTx.submittedAt,
-          height: landed?.height,
-          status: VtFlowTxStatus.Succeeded,
-        },
-      }),
-    }
-    return vtFlowApi.recordValidation(recordId, validation, VtFlowState.Validated)
   }
 
   /** rejectFlow ended the flow with its transaction in flight, and no newer flow of the applicant replaced it ([VSA-ADM-VT-FL-REJECT-2]). */
