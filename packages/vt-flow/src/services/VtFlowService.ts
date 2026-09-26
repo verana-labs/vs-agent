@@ -551,7 +551,7 @@ export class VtFlowService {
       VtFlowState.OobPending,
       VtFlowState.AwaitingValidationTx,
       VtFlowState.ValidationTxFailed,
-      // VtFlowModule ends the flow here when auto-issue fails, until verana-labs/vs-agent#738
+      // VtFlowModule ends the flow here when auto-issue throws. A failed anchoring stays in CRED_OFFERED instead
       VtFlowState.CredOffered,
       VtFlowState.Completed,
     ])
