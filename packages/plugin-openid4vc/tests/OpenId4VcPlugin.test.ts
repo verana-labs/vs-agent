@@ -1,8 +1,9 @@
 import type { OpenId4VcIssuerSink, OpenId4VcPluginOptions } from '../src/types'
-import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
+import type { IndexerActivity, IndexerHandlerContext, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
+import { IndexerHandlerRegistry } from '@verana-labs/vs-agent-sdk'
 import request from 'supertest'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { IssuerService } from '../src/services/IssuerService'
 import { VerifierService } from '../src/services/VerifierService'
@@ -20,6 +21,19 @@ const options = (): OpenId4VcPluginOptions => ({
 
 const issuerSinkOf = (plugin: VsAgentNestPlugin): OpenId4VcIssuerSink =>
   plugin.providers?.find(provider => provider.provide === OPENID4VC_ISSUER_SINK).useValue
+
+const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
+
+const participantActivity = (msg: string): IndexerActivity => ({
+  timestamp: '2026-01-01T00:00:00.000Z',
+  block_height: 42,
+  entity_type: 'participant',
+  entity_id: '7',
+  msg,
+  changes: {},
+})
+
+const handlerContext = () => ({ agent: { config: { logger } } }) as unknown as IndexerHandlerContext
 
 describe('OpenId4VcPlugin', () => {
   it('registers the three v2 controllers', () => {
@@ -46,6 +60,40 @@ describe('OpenId4VcPlugin', () => {
     expect(plugin.credoPlugin?.modules).toHaveProperty('openId4Vc')
     expect(plugin.credoPlugin?.modules).toHaveProperty('x509')
     expect(typeof plugin.publicMiddleware).toBe('function')
+  })
+
+  it('refreshes the configuration set on a Participant notification, keeping the original handler', async () => {
+    const plugin = OpenId4VcPlugin(options())
+    const original = vi.fn()
+    const registry = new IndexerHandlerRegistry()
+    registry.register({ msg: 'StartParticipantOP', handle: original })
+    plugin.registerIndexerHandlers?.(registry)
+
+    const refreshCredentialConfigurations = vi.fn().mockResolvedValue(undefined)
+    issuerSinkOf(plugin)({ refreshCredentialConfigurations } as never)
+    await registry.dispatch(participantActivity('StartParticipantOP'), handlerContext())
+
+    expect(original).toHaveBeenCalledOnce()
+    expect(refreshCredentialConfigurations).toHaveBeenCalledOnce()
+  })
+
+  it('stays quiet until the issuer published itself and logs a failed refresh', async () => {
+    const plugin = OpenId4VcPlugin(options())
+    const registry = new IndexerHandlerRegistry()
+    plugin.registerIndexerHandlers?.(registry)
+
+    await registry.dispatch(participantActivity('CreateNewCredentialSchema'), handlerContext())
+    expect(logger.error).not.toHaveBeenCalled()
+
+    issuerSinkOf(plugin)({
+      refreshCredentialConfigurations: () => Promise.reject(new Error('credo refused the metadata')),
+    } as never)
+    await registry.dispatch(participantActivity('CreateNewCredentialSchema'), handlerContext())
+
+    expect(logger.error).toHaveBeenCalledWith(
+      '[OpenID4VC] credential configuration refresh failed for CreateNewCredentialSchema',
+      expect.any(Error),
+    )
   })
 
   it('serves the well-known issuer metadata of the issuer that registered itself', async () => {

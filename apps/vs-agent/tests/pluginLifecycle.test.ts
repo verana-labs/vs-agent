@@ -5,6 +5,7 @@ import {
   mountPublicPluginMiddleware,
   nestPluginContributions,
   registerNestPluginEvents,
+  registerNestPluginIndexerHandlers,
 } from '../src/utils/pluginLifecycle'
 
 describe('plugin lifecycle', () => {
@@ -31,6 +32,17 @@ describe('plugin lifecycle', () => {
     registerNestPluginEvents([{ name: 'events', registerEvents }, { name: 'silent' }], agent, logger)
     expect(registerEvents).toHaveBeenCalledOnce()
     expect(registerEvents).toHaveBeenCalledWith(agent, logger)
+  })
+
+  it('registers the indexer handlers of every plugin that declares them', () => {
+    const registry = {} as never
+    const registerIndexerHandlers = vi.fn()
+    registerNestPluginIndexerHandlers(
+      [{ name: 'indexed', registerIndexerHandlers }, { name: 'silent' }],
+      registry,
+    )
+    expect(registerIndexerHandlers).toHaveBeenCalledOnce()
+    expect(registerIndexerHandlers).toHaveBeenCalledWith(registry)
   })
 
   it('collects the Nest contributions of every plugin and defaults the absent ones', () => {

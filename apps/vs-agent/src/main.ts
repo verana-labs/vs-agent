@@ -92,6 +92,7 @@ import {
   mountPublicPluginMiddleware,
   type PublicDidLocation,
   registerNestPluginEvents,
+  registerNestPluginIndexerHandlers,
   runWithRetries,
   type ServerConfig,
   setupAgent,
@@ -469,6 +470,9 @@ const run = async () => {
         ecsClaims,
       )
     }
+    // The registry only exists here, after registerNestPluginEvents, so a plugin driven by indexer
+    // notifications cannot be wired from registerEvents.
+    registerNestPluginIndexerHandlers(nestPlugins, handlerRegistry)
 
     const indexerCorporationId =
       VERANA_INDEXER_SUBSCRIPTION_SCOPE === 'corporation' && VERANA_CORPORATION_ID
