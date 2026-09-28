@@ -156,6 +156,7 @@ export class IssuerService implements OnModuleInit {
         ttlSeconds: parseOfferTtlSeconds(ttlSeconds),
       }
     } catch (error) {
+      if (error instanceof AdminApiError) throw error
       throw new AdminApiError(
         AdminApiErrorCode.InvalidInput,
         BAD_REQUEST,

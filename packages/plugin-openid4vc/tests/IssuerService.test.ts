@@ -591,6 +591,26 @@ describe('IssuerService', () => {
     expect(api.createCredentialOffer).not.toHaveBeenCalled()
   })
 
+  it('answers a schema violation with the claim error code of the trust decision', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
+    await service.ensureInitialized()
+
+    await expect(
+      service.createOffer({
+        jsonSchemaCredentialId: 'employee',
+        claims: { role: 'engineer' },
+        ttlSeconds: 3_600,
+      }),
+    ).rejects.toMatchObject({
+      code: AdminApiErrorCode.InvalidClaims,
+      status: 422,
+      details: { violations: [{ path: '', message: "must have required property 'name'" }] },
+    })
+    expect(api.createCredentialOffer).not.toHaveBeenCalled()
+  })
+
   it.each([59, 7_776_001, '3600', undefined])('rejects an offer lifetime of %s', async ttlSeconds => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })

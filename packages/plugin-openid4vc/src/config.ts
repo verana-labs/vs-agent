@@ -5,11 +5,14 @@ import type {
 } from './types'
 
 import { X509Certificate } from '@credo-ts/core'
+import { AdminApiError, AdminApiErrorCode, schemaViolations } from '@verana-labs/vs-agent-sdk'
 
 import { isRecord } from './utils/isRecord'
 
 export const ISSUER_CAPABILITY_ID = 'issuer'
 export const VERIFIER_CAPABILITY_ID = 'verifier'
+
+const UNPROCESSABLE_ENTITY = 422
 
 export const OFFER_TTL_SECONDS_MIN = 60
 export const OFFER_TTL_SECONDS_MAX = 7_776_000
@@ -138,6 +141,16 @@ export function parseOfferClaims(
 
   if (Object.keys(claims).length === 0) {
     throw new Error('claims must include at least one configured claim')
+  }
+
+  const violations = schemaViolations(JSON.parse(configuration.jsonSchema), claims)
+  if (violations.length > 0) {
+    throw new AdminApiError(
+      AdminApiErrorCode.InvalidClaims,
+      UNPROCESSABLE_ENTITY,
+      'the claim set does not satisfy the json_schema',
+      { violations },
+    )
   }
 
   return claims
