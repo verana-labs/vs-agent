@@ -4,13 +4,14 @@ const FETCH_TIMEOUT_MS = 30_000
 
 export type TypeMetadataIntegrity = (url: string) => Promise<string>
 
-// The integrity covers the served bytes, so the document must not be parsed on the way through.
-export async function fetchTypeMetadata(url: string): Promise<string> {
+// The digest covers the bytes on the wire: `response.text()` would decode per the response charset and
+// strip a leading BOM, and the digest would then cover a re-encoding of the document.
+export async function fetchTypeMetadata(url: string): Promise<Uint8Array> {
   const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
   if (!response.ok) {
     throw new Error(`Failed to fetch the Type Metadata at ${url}: ${response.status} ${response.statusText}`)
   }
-  return response.text()
+  return new Uint8Array(await response.arrayBuffer())
 }
 
 export function createTypeMetadataIntegrity(): TypeMetadataIntegrity {

@@ -218,7 +218,7 @@ describe('IssuerService', () => {
       ok: true,
       status: 200,
       statusText: 'OK',
-      text: async () => TYPE_METADATA,
+      arrayBuffer: async () => new TextEncoder().encode(TYPE_METADATA).buffer,
     })
     vi.stubGlobal('fetch', typeMetadataFetch)
     loadSigningCertificate.mockResolvedValue(issuerSigningHandle())

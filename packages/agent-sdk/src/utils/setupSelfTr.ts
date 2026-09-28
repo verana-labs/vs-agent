@@ -273,7 +273,7 @@ function assertValidSchema(schemaContent: string, id: string): void {
  * @param algorithm - The hash algorithm to use (default: sha256).
  * @returns The SRI digest string.
  */
-export function generateDigestSRI(content: string, algorithm: string = 'sha384'): string {
+export function generateDigestSRI(content: string | Uint8Array, algorithm: string = 'sha384'): string {
   const hash = createHash(algorithm).update(content).digest('base64')
   return `${algorithm}-${hash}`
 }
