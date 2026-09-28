@@ -219,6 +219,32 @@ describe('parseOfferClaims', () => {
     )
   })
 
+  it.each([
+    'vct',
+    'vct#integrity',
+    'iat',
+    'exp',
+    'nbf',
+    'iss',
+    'cnf',
+    'status',
+  ])('rejects the reserved envelope name %s', reserved => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferClaims(config, { name: 'Ada', [reserved]: 'supplied' })).toThrow(
+      `claim '${reserved}' is reserved by SD-JWT VC`,
+    )
+  })
+
+  it('rejects a reserved envelope name the configuration itself declares', () => {
+    const config = validOptions().credentialConfigurations[0]
+    config.claims = [...config.claims, 'vct']
+
+    expect(() => parseOfferClaims(config, { name: 'Ada', vct: 'https://attacker.example/vct' })).toThrow(
+      "claim 'vct' is reserved by SD-JWT VC",
+    )
+  })
+
   it('rejects empty offered claims', () => {
     const config = validOptions().credentialConfigurations[0]
 

@@ -27,6 +27,10 @@ const SCHEMAS: Record<number, { ecosystem_id: number; json_schema: string }> = {
     ecosystem_id: 20,
     json_schema: jsonSchema('Unreachable credential', { name: { type: 'string' } }),
   },
+  4: {
+    ecosystem_id: 10,
+    json_schema: jsonSchema('Envelope credential', { name: { type: 'string' }, vct: { type: 'string' } }),
+  },
 }
 
 const ECOSYSTEMS: Record<number, string> = { 10: 'did:web:ecosystem.example', 20: 'did:example:ecosystem' }
@@ -116,6 +120,15 @@ describe('buildCredentialConfigurations', () => {
 
     expect(configurations?.map(configuration => configuration.credentialSchemaId)).toEqual([1])
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('the CredentialSchema 3'))
+  })
+
+  it('skips a schema whose credentialSubject declares a reserved SD-JWT VC claim', async () => {
+    const configurations = await buildCredentialConfigurations(fakeAgent(fakeIndexer([1, 4])))
+
+    expect(configurations?.map(configuration => configuration.credentialSchemaId)).toEqual([1])
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("the JSON Schema declares the reserved SD-JWT VC claim 'vct'"),
+    )
   })
 
   it('derives an empty set from an empty participant list', async () => {

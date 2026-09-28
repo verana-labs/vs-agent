@@ -1,6 +1,8 @@
 import type { OpenId4VcCredentialConfiguration } from '../types'
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
+import { isReservedClaimName } from '../config'
+
 import {
   anonCredsSchemaFromJsonSchema,
   getDidWebHttpsBaseUrl,
@@ -59,6 +61,12 @@ async function buildCredentialConfiguration(
     chainId,
   )
   const { name, attrNames } = anonCredsSchemaFromJsonSchema(schema.json_schema)
+  const reserved = attrNames.filter(isReservedClaimName)
+  if (reserved.length > 0) {
+    throw new Error(
+      `the JSON Schema declares the reserved SD-JWT VC claim ${reserved.map(claim => `'${claim}'`).join(', ')}`,
+    )
+  }
 
   return {
     id: jsonSchemaCredentialId,

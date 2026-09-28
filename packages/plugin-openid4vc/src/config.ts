@@ -17,6 +17,23 @@ const UNPROCESSABLE_ENTITY = 422
 export const OFFER_TTL_SECONDS_MIN = 60
 export const OFFER_TTL_SECONDS_MAX = 7_776_000
 
+// `pack()` moves every payload key named in `_sd` into a disclosure, so a claim under one of these names
+// makes `vct` selectively disclosable or loses its value to the envelope the issuer stamps.
+const RESERVED_CLAIM_NAMES: readonly string[] = [
+  'vct',
+  'vct#integrity',
+  'iat',
+  'exp',
+  'nbf',
+  'iss',
+  'cnf',
+  'status',
+]
+
+export function isReservedClaimName(name: string): boolean {
+  return RESERVED_CLAIM_NAMES.includes(name)
+}
+
 /** [VSA-VTI-CFG-ENV-OID] Validation of the OpenID4VC configuration file. */
 export function parseOpenId4VcConfiguration(document: unknown): OpenId4VcConfigurationFile {
   const configuration = assertJsonObject(document, '')
@@ -124,6 +141,9 @@ export function parseOfferClaims(
   }
 
   for (const name of Object.keys(input)) {
+    if (isReservedClaimName(name)) {
+      throw new Error(`claim '${name}' is reserved by SD-JWT VC`)
+    }
     if (!configuration.claims.includes(name)) {
       throw new Error(`unknown claim '${name}'`)
     }

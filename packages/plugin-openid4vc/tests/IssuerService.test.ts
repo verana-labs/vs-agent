@@ -751,9 +751,7 @@ describe('IssuerService', () => {
     vi.useRealTimers()
   })
 
-  it('prevents supplied exp metadata from overriding the configured credential lifetime', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-07-21T12:00:00.000Z'))
+  it('refuses stored offer metadata that carries a reserved envelope claim', async () => {
     const unsafeOptions = issuerOptions()
     unsafeOptions.credentialConfigurations[0].claims.push('exp')
     const api = issuerApi()
@@ -761,25 +759,19 @@ describe('IssuerService', () => {
     const service = new IssuerService(issuerAgent(api) as never, unsafeOptions, issuerSink)
     await service.ensureInitialized()
 
-    const mapped = await service.mapCredentialRequest({
-      credentialConfigurationId: 'employee',
-      issuanceSession: {
-        issuanceMetadata: { claims: { name: 'Ada', role: 'engineer', exp: 1 }, ttlSeconds: 3_600 },
-      },
-      holderBinding: {
-        bindingMethod: 'jwk',
-        proofType: 'jwt',
-        keys: [{ method: 'jwk', jwk: HOLDER_JWK }],
-      },
-    } as never)
-
-    expect(mapped.type).toBe('credentials')
-    if (mapped.type !== 'credentials') throw new Error('expected credentials')
-    const credential = mapped.credentials[0]
-    if (!credential || !('payload' in credential)) throw new Error('expected SD-JWT credentials')
-    expect(credential.payload.iat).toBe(1_784_635_200)
-    expect(credential.payload.exp).toBe(1_784_638_800)
-    vi.useRealTimers()
+    await expect(
+      service.mapCredentialRequest({
+        credentialConfigurationId: 'employee',
+        issuanceSession: {
+          issuanceMetadata: { claims: { name: 'Ada', role: 'engineer', exp: 1 }, ttlSeconds: 3_600 },
+        },
+        holderBinding: {
+          bindingMethod: 'jwk',
+          proofType: 'jwt',
+          keys: [{ method: 'jwk', jwk: HOLDER_JWK }],
+        },
+      } as never),
+    ).rejects.toThrow("claim 'exp' is reserved by SD-JWT VC")
   })
 
   it('preserves a verified DID holder binding supplied by Credo', async () => {
