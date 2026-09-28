@@ -211,6 +211,14 @@ async function initializedIssuer(
   return { service, api }
 }
 
+async function stampedIntegrity(service: IssuerService, request: unknown): Promise<unknown> {
+  const mapped = await service.mapCredentialRequest(request as never)
+  if (mapped.type !== 'credentials') throw new Error('expected credentials')
+  const credential = mapped.credentials[0]
+  if (!credential || !('payload' in credential)) throw new Error('expected SD-JWT credentials')
+  return credential.payload['vct#integrity']
+}
+
 describe('IssuerService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -670,6 +678,30 @@ describe('IssuerService', () => {
       'https://agent.example/oid4vc/vct/employee',
       expect.anything(),
     )
+  })
+
+  it('stamps the digest of the document the refresh re-read', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
+    await service.ensureInitialized()
+    const request = {
+      credentialConfigurationId: 'employee',
+      issuanceSession: { issuanceMetadata: { claims: { name: 'Ada' }, ttlSeconds: 3_600 } },
+      holderBinding: { bindingMethod: 'jwk', proofType: 'jwt', keys: [{ method: 'jwk', jwk: HOLDER_JWK }] },
+    }
+    expect(await stampedIntegrity(service, request)).toBe(TYPE_METADATA_INTEGRITY)
+
+    const updated = JSON.stringify({ vct: 'https://agent.example/oid4vc/vct/employee', name: 'renamed' })
+    typeMetadataFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      arrayBuffer: async () => new TextEncoder().encode(updated).buffer,
+    })
+    await service.refreshCredentialConfigurations()
+
+    expect(await stampedIntegrity(service, request)).toBe(generateDigestSRI(updated))
   })
 
   it('answers a schema violation with the claim error code of the trust decision', async () => {

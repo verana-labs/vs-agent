@@ -114,6 +114,7 @@ export class IssuerService implements OnModuleInit {
 
   public async refreshCredentialConfigurations(): Promise<void> {
     await this.ensureInitialized()
+    this.typeMetadataIntegrity.invalidate()
     await this.replaceCredentialConfigurations()
   }
 
@@ -266,7 +267,7 @@ export class IssuerService implements OnModuleInit {
       configuration,
       input.issuanceSession.issuanceMetadata,
     )
-    const integrity = await this.typeMetadataIntegrity(configuration.vct)
+    const integrity = await this.typeMetadataIntegrity.digest(configuration.vct)
     const issuedAt = Math.floor(Date.now() / 1_000)
     const payload = {
       ...claims,
@@ -336,7 +337,7 @@ export class IssuerService implements OnModuleInit {
 
   private async assertTypeMetadataReadable(vct: string): Promise<void> {
     try {
-      await this.typeMetadataIntegrity(vct)
+      await this.typeMetadataIntegrity.digest(vct)
     } catch (error) {
       throw new AdminApiError(
         AdminApiErrorCode.ResolverUnavailable,

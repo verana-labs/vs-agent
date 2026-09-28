@@ -44,14 +44,14 @@ describe('createTypeMetadataIntegrity', () => {
   it('digests the exact bytes the Type Metadata URL served', async () => {
     const integrity = createTypeMetadataIntegrity()
 
-    await expect(integrity(`${baseUrl}/vt/vct/1`)).resolves.toBe(generateDigestSRI(TYPE_METADATA))
+    await expect(integrity.digest(`${baseUrl}/vt/vct/1`)).resolves.toBe(generateDigestSRI(TYPE_METADATA))
   })
 
   it('digests a BOM as served instead of digesting the decoded document', async () => {
     servedBody = Buffer.from(`\uFEFF${TYPE_METADATA}`, 'utf8')
     const integrity = createTypeMetadataIntegrity()
 
-    const digest = await integrity(`${baseUrl}/vt/vct/1`)
+    const digest = await integrity.digest(`${baseUrl}/vt/vct/1`)
 
     expect(digest).toBe(generateDigestSRI(servedBody))
     expect(digest).not.toBe(generateDigestSRI(TYPE_METADATA))
@@ -60,17 +60,30 @@ describe('createTypeMetadataIntegrity', () => {
   it('serves a second call from the cache without a second request', async () => {
     const integrity = createTypeMetadataIntegrity()
 
-    const first = await integrity(`${baseUrl}/vt/vct/1`)
-    const second = await integrity(`${baseUrl}/vt/vct/1`)
+    const first = await integrity.digest(`${baseUrl}/vt/vct/1`)
+    const second = await integrity.digest(`${baseUrl}/vt/vct/1`)
 
     expect(second).toBe(first)
     expect(served).toHaveBeenCalledOnce()
   })
 
+  it('re-reads the document after an invalidation and yields the new digest', async () => {
+    const integrity = createTypeMetadataIntegrity()
+    const first = await integrity.digest(`${baseUrl}/vt/vct/1`)
+    servedBody = JSON.stringify({ vct: 'employee', name: 'Employee credential v2' })
+
+    integrity.invalidate()
+    const second = await integrity.digest(`${baseUrl}/vt/vct/1`)
+
+    expect(second).toBe(generateDigestSRI(servedBody))
+    expect(second).not.toBe(first)
+    expect(served).toHaveBeenCalledTimes(2)
+  })
+
   it('fails on a document the URL does not serve and caches no failure', async () => {
     const integrity = createTypeMetadataIntegrity()
 
-    await expect(integrity(`${baseUrl}/vt/vct/2`)).rejects.toThrow('404')
-    await expect(integrity(`${baseUrl}/vt/vct/2`)).rejects.toThrow('404')
+    await expect(integrity.digest(`${baseUrl}/vt/vct/2`)).rejects.toThrow('404')
+    await expect(integrity.digest(`${baseUrl}/vt/vct/2`)).rejects.toThrow('404')
   })
 })

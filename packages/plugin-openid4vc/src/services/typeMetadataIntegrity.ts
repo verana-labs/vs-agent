@@ -2,7 +2,10 @@ import { generateDigestSRI } from '@verana-labs/vs-agent-sdk'
 
 const FETCH_TIMEOUT_MS = 30_000
 
-export type TypeMetadataIntegrity = (url: string) => Promise<string>
+export interface TypeMetadataIntegrity {
+  digest(url: string): Promise<string>
+  invalidate(): void
+}
 
 // The digest covers the bytes on the wire: `response.text()` would decode per the response charset and
 // strip a leading BOM, and the digest would then cover a re-encoding of the document.
@@ -17,13 +20,18 @@ export async function fetchTypeMetadata(url: string): Promise<Uint8Array> {
 export function createTypeMetadataIntegrity(): TypeMetadataIntegrity {
   const digests = new Map<string, Promise<string>>()
 
-  return url => {
-    const cached = digests.get(url)
-    if (cached) return cached
+  return {
+    digest(url) {
+      const cached = digests.get(url)
+      if (cached) return cached
 
-    const pending = fetchTypeMetadata(url).then(document => generateDigestSRI(document))
-    digests.set(url, pending)
-    pending.catch(() => digests.delete(url))
-    return pending
+      const pending = fetchTypeMetadata(url).then(document => generateDigestSRI(document))
+      digests.set(url, pending)
+      pending.catch(() => digests.delete(url))
+      return pending
+    },
+    invalidate() {
+      digests.clear()
+    },
   }
 }
