@@ -387,10 +387,6 @@ export class VtFlowOrchestrator {
     // [VSA-VTI-FLOW-OP-ISSUE-6]: the connection stays TERMINATED, so issuance waits for the applicant to reconnect
     if (rejectedInFlight) return this.markValidated(record.id, applicant)
 
-    // [VSA-ADM-VT-FL-VALIDATE-11]: an entry already VALIDATED on chain is no longer the PENDING one the check wants
-    if (record.state === VtFlowState.AwaitingOr) {
-      await vtFlowApi.acceptOnboardingRequest(record.id, { checkParticipantId: !entryValidated })
-    }
     if (record.state === VtFlowState.OobPending) await this.sendValidating(record)
 
     if (record.state === VtFlowState.ValidatedPendingClaims) return this.continueAfterValidated(record.id)
@@ -455,7 +451,6 @@ export class VtFlowOrchestrator {
 
   private assertValidateState(record: VtFlowRecord, entryValidated: boolean): void {
     const accepted = [
-      VtFlowState.AwaitingOr,
       VtFlowState.Validating,
       VtFlowState.OobPending,
       VtFlowState.ValidationTxFailed,

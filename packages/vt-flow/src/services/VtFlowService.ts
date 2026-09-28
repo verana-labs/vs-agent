@@ -307,8 +307,11 @@ export class VtFlowService {
         await this.updateState(agentContext, existing, VtFlowState.Validated)
       } else {
         await this.repository.update(agentContext, existing)
-        // [VSA-ADM-VT-FL-REJECT-2]: issuance of a flow validated after a reject waits for this reconnection
-        if (reconnected && existing.state === VtFlowState.Validated) {
+        // [VSA-VTI-FLOW-OP-OR] checks every request, and [VSA-ADM-VT-FL-REJECT-2] issuance waits for this reconnection
+        if (
+          existing.state === VtFlowState.AwaitingOr ||
+          (reconnected && existing.state === VtFlowState.Validated)
+        ) {
           this.emitStateChanged(agentContext, existing, existing.state)
         }
       }
@@ -470,15 +473,13 @@ export class VtFlowService {
   public async acceptOnboardingRequest(
     agentContext: AgentContext,
     recordId: string,
-    options: { checkParticipantId?: boolean } = {},
   ): Promise<{ record: VtFlowRecord; message: ValidatingMessage }> {
     let record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
     record.assertState(VtFlowState.AwaitingOr)
     record.assertVariant(VtFlowVariant.OnboardingProcess)
 
-    const checkParticipantId =
-      options.checkParticipantId === false ? undefined : this.config.checkParticipantId
+    const { checkParticipantId } = this.config
     if (checkParticipantId) {
       if (!(await checkParticipantId({ agentContext, record }))) {
         throw new VtFlowError(

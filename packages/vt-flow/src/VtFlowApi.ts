@@ -237,15 +237,11 @@ export class VtFlowApi {
     return record
   }
 
-  public async acceptOnboardingRequest(
-    vtFlowRecordId: string,
-    options: { checkParticipantId?: boolean } = {},
-  ): Promise<VtFlowRecord> {
+  public async acceptOnboardingRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
     try {
       const { record, message } = await this.vtFlowService.acceptOnboardingRequest(
         this.agentContext,
         vtFlowRecordId,
-        options,
       )
       await this.dispatchMessage(record.connectionId, message, record)
       return record

@@ -46,7 +46,6 @@ function makeFlowStore() {
     findById: async (id: string) => records.get(id) ?? null,
     findAllByQuery: async (query: Record<string, unknown>) =>
       [...records.values()].filter(r => !query.flowState || r.state === query.flowState),
-    acceptOnboardingRequest: async (id: string) => set(id, { state: VtFlowState.Validating }),
     sendValidating: async (id: string) => set(id, { state: VtFlowState.Validating }),
     markValidated: async (id: string) => set(id, { state: VtFlowState.Validated }),
     markPendingClaims: async (id: string) => set(id, { state: VtFlowState.ValidatedPendingClaims }),

@@ -223,6 +223,51 @@ describe('vt-flow: two-agent integration', () => {
     ).toBeUndefined()
   })
 
+  it('onboarding-request: Validator checks a request resent after a refusal again, and accepts it once the entry names it', async () => {
+    const entries = vi.mocked(validator.indexer.getParticipant)
+    const accepted = entries.getMockImplementation()!
+    entries.mockImplementation(
+      async id =>
+        (Number(id) === 8
+          ? { did: 'did:web:another-validator' }
+          : { op_state: 'PENDING', validator_participant_id: 8 }) as never,
+    )
+    const refusals = (): number =>
+      applicantEvents.mock.calls
+        .flat()
+        .filter(
+          (ev: any) => ev?.type === 'DidCommMessageProcessed' && ev?.payload?.message?.description?.code,
+        ).length
+    const applicantRecord = await applicant.modules.vtFlow.sendOnboardingRequest({
+      connectionId: applicantConnection.id,
+      applicantParticipantId: '42',
+      agentParticipantId: 'agent-participant-8',
+      walletAgentParticipantId: 'wallet-agent-participant-8',
+    })
+    await vi.waitFor(() => expect(refusals()).toBe(1))
+    const resend = () =>
+      applicant.modules.vtFlow.resendOnboardingRequest({
+        vtFlowRecordId: applicantRecord.id,
+        connectionId: applicantConnection.id,
+      })
+
+    await resend()
+    await vi.waitFor(() => expect(refusals()).toBe(2))
+    const refused = await validator.modules.vtFlow.findByThreadId(applicantRecord.threadId)
+    expect(refused?.state).toBe(VtFlowState.AwaitingOr)
+    expect(refused?.messages).toHaveLength(2)
+
+    entries.mockImplementation(accepted)
+    const validating = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+    await resend()
+
+    expect((await validating).payload.vtFlowRecordId).toBe(refused?.id)
+    await vi.waitFor(async () =>
+      expect((await applicant.modules.vtFlow.getById(applicantRecord.id)).state).toBe(VtFlowState.Validating),
+    )
+    expect(refusals()).toBe(2)
+  })
+
   it('admin flow routes: list, edit claims, and send oob-link on a live flow', async () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
     await applicant.modules.vtFlow.sendIssuanceRequest({

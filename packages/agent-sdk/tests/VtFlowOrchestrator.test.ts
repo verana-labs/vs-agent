@@ -875,19 +875,20 @@ describe('VtFlowOrchestrator validateFlow', () => {
     })
   })
 
-  it('accepts an AWAITING_OR flow whose entry is already VALIDATED without the participant_id check', async () => {
-    const { agent, vtFlowApi, current } = makeValidateAgent({
+  it.each(['PENDING', 'VALIDATED'])('refuses an AWAITING_OR flow whose entry is %s', async opState => {
+    const { agent, vtFlowApi, chain, current } = makeValidateAgent({
       state: 'AWAITING_OR',
-      applicant: { op_state: 'VALIDATED' },
+      applicant: { op_state: opState },
     })
-    vtFlowApi.acceptOnboardingRequest.mockImplementation(async () =>
-      Object.assign(current(), { state: 'VALIDATING' }),
-    )
 
-    await new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+    await expect(
+      new VtFlowOrchestrator(agent as never).validateFlow({ vtFlowRecordId: 'rec-v' }),
+    ).rejects.toMatchObject({ code: 'INVALID_STATE', status: 409 })
 
-    expect(vtFlowApi.acceptOnboardingRequest).toHaveBeenCalledWith('rec-v', { checkParticipantId: false })
-    expect(current().state).toBe('VALIDATED')
+    expect(vtFlowApi.acceptOnboardingRequest).not.toHaveBeenCalled()
+    expect(vtFlowApi.recordValidation).not.toHaveBeenCalled()
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(current().state).toBe('AWAITING_OR')
   })
 
   it('records OPERATOR when the entry is VALIDATED after the agent transaction failed', async () => {

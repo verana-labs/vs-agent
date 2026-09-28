@@ -390,6 +390,35 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(plain.eventEmitter.emit).not.toHaveBeenCalled()
   })
 
+  it('validator signals a request re-attached to a flow in AWAITING_OR, so its checks run again', async () => {
+    const peer = { id: 'conn-old', theirDid: 'did:web:agent-peer' }
+    const rejected = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    const retry = makeService(rejected, peer)
+    const context = makeMessageContext(retry.agentContext)
+    context.message.claims = { name: 'Acme' }
+
+    const record = await retry.service.processReceiveOnboardingRequest(context as never)
+
+    expect(record).toMatchObject({ state: VtFlowState.AwaitingOr, claims: { name: 'Acme' } })
+    expect(retry.eventEmitter.emit).toHaveBeenCalledExactlyOnceWith(retry.agentContext, {
+      type: VtFlowEventTypes.VtFlowStateChanged,
+      payload: {
+        vtFlowRecordId: rejected.id,
+        threadId: context.message.threadId,
+        participantSessionId: 'sess-1',
+        state: VtFlowState.AwaitingOr,
+        previousState: VtFlowState.AwaitingOr,
+      },
+    })
+
+    const running = makeService(
+      makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validating }),
+      peer,
+    )
+    await running.service.processReceiveOnboardingRequest(makeMessageContext(running.agentContext) as never)
+    expect(running.eventEmitter.emit).not.toHaveBeenCalled()
+  })
+
   it('validator rejects a session id colliding with a terminated flow', async () => {
     const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.TerminatedByValidator })
     const { service, agentContext } = makeService(existing)
@@ -830,19 +859,6 @@ describe('VtFlowService.acceptOnboardingRequest', () => {
     const { record } = await service.acceptOnboardingRequest(agentContext as never, awaiting.id)
     expect(record.state).toBe(VtFlowState.Validating)
   })
-
-  it('leaves the checkParticipantId hook out when the caller turns the check off', async () => {
-    const awaiting = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
-    const checkParticipantId = vi.fn().mockResolvedValue(false)
-    const { service, agentContext } = makeService(awaiting, null, { checkParticipantId })
-
-    const { record } = await service.acceptOnboardingRequest(agentContext as never, awaiting.id, {
-      checkParticipantId: false,
-    })
-
-    expect(checkParticipantId).not.toHaveBeenCalled()
-    expect(record.state).toBe(VtFlowState.Validating)
-  })
 })
 
 describe('VtFlowService.rejectRequest', () => {
@@ -1246,7 +1262,11 @@ describe('VtFlowModule state listeners', () => {
     expect(logger.error).toHaveBeenCalledTimes(4)
   })
 
-  it('auto-accept an onboarding-request that re-entered a VALIDATED flow on a renewal', async () => {
+  it.each([
+    ['re-entered a VALIDATED flow on a renewal', VtFlowState.Validated, 1],
+    ['re-attached to a flow in AWAITING_OR', VtFlowState.AwaitingOr, 1],
+    ['rejected with a retryable code', VtFlowState.Validating, 0],
+  ])('auto-accept an onboarding-request that %s', async (_label, previousState, accepts) => {
     const listeners: Array<(event: unknown) => Promise<void>> = []
     const record = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
     const service = new VtFlowService(
@@ -1276,16 +1296,11 @@ describe('VtFlowModule state listeners', () => {
     }
     await new VtFlowModule().initialize(agentContext as never)
 
-    const event = {
-      payload: {
-        vtFlowRecordId: record.id,
-        state: VtFlowState.AwaitingOr,
-        previousState: VtFlowState.Validated,
-      },
-    }
+    const event = { payload: { vtFlowRecordId: record.id, state: VtFlowState.AwaitingOr, previousState } }
     await Promise.all(listeners.map(listener => listener(event)))
 
-    expect(vtFlowApi.acceptOnboardingRequest).toHaveBeenCalledWith(record.id)
+    expect(vtFlowApi.acceptOnboardingRequest).toHaveBeenCalledTimes(accepts)
+    if (accepts) expect(vtFlowApi.acceptOnboardingRequest).toHaveBeenCalledWith(record.id)
   })
 
   it('auto-accepts an offer through the vt-flow offer check', async () => {
