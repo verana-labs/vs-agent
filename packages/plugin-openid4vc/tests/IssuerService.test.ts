@@ -4,7 +4,12 @@ import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import { OpenId4VcIssuanceSessionRepository, OpenId4VcIssuanceSessionState } from '@credo-ts/openid4vc'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
+import {
+  AdminApiErrorCode,
+  AnonCredsTrustError,
+  AnonCredsTrustErrorReason,
+  ParticipantRole,
+} from '@verana-labs/vs-agent-sdk'
 
 import { createCredentialConfigurationRegistry } from '../src/credentialConfigurationRegistry'
 import { IssuerService } from '../src/services/IssuerService'
@@ -107,6 +112,7 @@ function issuerApi() {
 }
 
 const issuanceSessionRepository = { findByQuery: vi.fn(), update: vi.fn() }
+const anonCredsTrust = { assertOwnAuthorization: vi.fn() }
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
 
 function issuanceSession(overrides: Record<string, unknown> = {}) {
@@ -141,6 +147,7 @@ function issuerAgent(
   return {
     did,
     ecsClaims,
+    anonCredsTrust,
     config: { logger },
     dids: { resolve: () => undefined },
     genericRecords: { findById: async () => null, save: () => undefined, update: () => undefined },
@@ -588,6 +595,28 @@ describe('IssuerService', () => {
     await expect(
       service.createOffer({ jsonSchemaCredentialId: 'employee', claims, ttlSeconds: 3_600 }),
     ).rejects.toThrow(message)
+    expect(api.createCredentialOffer).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [AnonCredsTrustErrorReason.Unavailable, AdminApiErrorCode.ResolverUnavailable, 503],
+    [AnonCredsTrustErrorReason.NotAuthorized, AdminApiErrorCode.NotAuthorized, 409],
+  ])('maps the %s trust decision of the agent participant onto %s', async (reason, code, status) => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
+    await service.ensureInitialized()
+    anonCredsTrust.assertOwnAuthorization.mockRejectedValueOnce(
+      new AnonCredsTrustError(reason, 'the indexer refused the Participant lookup'),
+    )
+
+    await expect(
+      service.createOffer({ jsonSchemaCredentialId: 'employee', claims: { name: 'Ada' }, ttlSeconds: 3_600 }),
+    ).rejects.toMatchObject({ code, status })
+    expect(anonCredsTrust.assertOwnAuthorization).toHaveBeenCalledWith({
+      role: ParticipantRole.Issuer,
+      credentialSchemaId: 1,
+    })
     expect(api.createCredentialOffer).not.toHaveBeenCalled()
   })
 

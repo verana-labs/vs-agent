@@ -17,7 +17,12 @@ import type {
 import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import { Inject, Injectable } from '@nestjs/common'
 import { OpenId4VcIssuanceSessionRepository } from '@credo-ts/openid4vc'
-import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
+import {
+  AdminApiError,
+  AdminApiErrorCode,
+  ParticipantRole,
+  trustDecisionError,
+} from '@verana-labs/vs-agent-sdk'
 
 import {
   findCredentialConfiguration,
@@ -162,6 +167,15 @@ export class IssuerService implements OnModuleInit {
         BAD_REQUEST,
         error instanceof Error ? error.message : 'invalid credential offer',
       )
+    }
+
+    try {
+      await this.agent.anonCredsTrust.assertOwnAuthorization({
+        role: ParticipantRole.Issuer,
+        credentialSchemaId: configuration.credentialSchemaId,
+      })
+    } catch (error) {
+      throw trustDecisionError(error, 'agent')
     }
 
     const { credentialOffer, issuanceSession } = await this.issuerApi().createCredentialOffer({

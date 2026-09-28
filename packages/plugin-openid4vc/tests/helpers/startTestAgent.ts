@@ -30,7 +30,13 @@ import {
   SubjectAlternativeNameExtension,
   X509CertificateGenerator,
 } from '@peculiar/x509'
-import { createVsAgent, setupBaseDidComm, VeranaIndexerService } from '@verana-labs/vs-agent-sdk'
+import {
+  createVsAgent,
+  ParticipantRole,
+  ParticipantState,
+  setupBaseDidComm,
+  VeranaIndexerService,
+} from '@verana-labs/vs-agent-sdk'
 import express from 'express'
 import { webcrypto } from 'node:crypto'
 
@@ -222,6 +228,20 @@ export async function startTestAgents(input: {
       logger,
     })
     stops.push(issuer.stop)
+
+    // The fixture indexer is unroutable, and the offer path reads the agent's own ISSUER Participant.
+    issuer.agent.indexer.listParticipants = async () => [
+      {
+        id: 1,
+        schema_id: input.credentialConfiguration.credentialSchemaId,
+        did: input.issuerDid,
+        role: ParticipantRole.Issuer,
+        participant_state: ParticipantState.Active,
+        revoked: null,
+        slashed: null,
+        modified: '2026-09-01T00:00:00.000Z',
+      },
+    ]
 
     const holder = await startHolderAgent(input.didResolver, rootCertificate, logger)
     stops.push(holder.stop)
