@@ -116,7 +116,7 @@ It accepts the request anyway, under the [VS-CONN-VS] ECS issuance exemption: th
 
 ### Drive the flow
 
-Use each agent's Swagger (`/api` on the admin port). The flow surface is under `/v2/vt/flows`: list flows, edit claims, send OOB links, validate, and reject.
+Use each agent's Swagger (`/api` on the admin port). The flow surface is under `/v2/vt/flows`: list flows, edit claims, send OOB links, start validation, validate, and reject.
 
 The ECS Organization schema requires claims the applicant does not send, so set them before validating (`<sid>` is the flow's `participantSessionId`):
 
