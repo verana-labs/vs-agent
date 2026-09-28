@@ -1,7 +1,8 @@
 import type { KeyBindingResult } from './types'
 import type { BaseAgent, DidDocument, DidPurpose, VerificationMethod } from '@credo-ts/core'
 
-import { getPublicJwkFromVerificationMethod, Kms, tryParseDid } from '@credo-ts/core'
+import { getPublicJwkFromVerificationMethod, Kms } from '@credo-ts/core'
+import { getDidWebHttpsBaseUrl } from '@verana-labs/vs-agent-sdk'
 
 type BindingPurpose = Extract<DidPurpose, 'assertionMethod' | 'authentication'>
 export type DidResolverAgent = Pick<BaseAgent, 'dids'>
@@ -97,36 +98,8 @@ function* verificationMethodsForPurposes(
 }
 
 function didWebHost(did: string): string | undefined {
-  const parsed = tryParseDid(did)
-  if (!parsed || parsed.did !== did) return undefined
-
-  const components = parsed.id.split(':')
-  const encodedHost =
-    parsed.method === 'web'
-      ? components[0]
-      : parsed.method === 'webvh' && components.length >= 2 && components[0]
-        ? components[1]
-        : undefined
-  if (!encodedHost) return undefined
-
-  try {
-    return canonicalHost(decodeURIComponent(encodedHost))
-  } catch {
-    return undefined
-  }
-}
-
-function canonicalHost(value: string): string | undefined {
-  try {
-    const url = new URL(`https://${value}`)
-    if (!url.hostname || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
-      return undefined
-    }
-
-    return url.host.toLowerCase()
-  } catch {
-    return undefined
-  }
+  const baseUrl = getDidWebHttpsBaseUrl(did)
+  return baseUrl ? new URL(baseUrl).host : undefined
 }
 
 async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
