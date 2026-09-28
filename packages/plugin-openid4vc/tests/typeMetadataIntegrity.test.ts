@@ -5,11 +5,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { generateDigestSRI } from '@verana-labs/vs-agent-sdk'
 
-import { createTypeMetadataIntegrity } from '../src/services/typeMetadataIntegrity'
+import { createTypeMetadataIntegrity, FAILURE_CACHE_MS } from '../src/services/typeMetadataIntegrity'
 
 const TYPE_METADATA = JSON.stringify({ vct: 'employee', name: 'Employee credential' })
 
 const served = vi.fn()
+const requested = vi.fn()
 
 let server: Server
 let baseUrl: string
@@ -17,6 +18,10 @@ let servedBody: string | Buffer
 
 beforeAll(async () => {
   const app = express()
+  app.use((_request, _response, next) => {
+    requested()
+    next()
+  })
   app.get('/vt/vct/1', (_request, response) => {
     served()
     response.type('application/json').send(servedBody)
@@ -37,6 +42,7 @@ afterAll(async () => {
 
 describe('createTypeMetadataIntegrity', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     vi.clearAllMocks()
     servedBody = TYPE_METADATA
   })
@@ -80,10 +86,32 @@ describe('createTypeMetadataIntegrity', () => {
     expect(served).toHaveBeenCalledTimes(2)
   })
 
-  it('fails on a document the URL does not serve and caches no failure', async () => {
+  it('answers a failed read from the failure cache instead of asking again per offer', async () => {
     const integrity = createTypeMetadataIntegrity()
 
     await expect(integrity.digest(`${baseUrl}/vt/vct/2`)).rejects.toThrow('404')
     await expect(integrity.digest(`${baseUrl}/vt/vct/2`)).rejects.toThrow('404')
+
+    expect(requested).toHaveBeenCalledOnce()
+  })
+
+  it('asks again once the failure window passed', async () => {
+    const integrity = createTypeMetadataIntegrity()
+    await expect(integrity.digest(`${baseUrl}/vt/vct/2`)).rejects.toThrow('404')
+
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + FAILURE_CACHE_MS)
+    await expect(integrity.digest(`${baseUrl}/vt/vct/2`)).rejects.toThrow('404')
+
+    expect(requested).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads a document again after an invalidation cleared its failure', async () => {
+    const integrity = createTypeMetadataIntegrity()
+    await expect(integrity.digest(`${baseUrl}/vt/vct/2`)).rejects.toThrow('404')
+
+    integrity.invalidate()
+    await expect(integrity.digest(`${baseUrl}/vt/vct/2`)).rejects.toThrow('404')
+
+    expect(requested).toHaveBeenCalledTimes(2)
   })
 })
