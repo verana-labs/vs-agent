@@ -179,21 +179,38 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
 
   it('takes validUntil from the effective_until of the ISSUER entry, and leaves it out without one', async () => {
     const { agent, metadata } = makeAgent()
-    const orgJsc = 'https://agent.example/vt/schemas-6-jsc.json'
+    const otherJsc = 'https://agent.example/vt/schemas-6-jsc.json'
 
     await publish(agent, async () => {}, JSC_URL, '2027-09-25T10:00:00Z')
-    await publishSelfIssuedEcsPresentation(
-      agent as never,
-      'https://agent.example/vt/ecs-org-vtc-vp.json',
-      getEcsSchemas('https://agent.example'),
-      'ecs-org',
-      ['VerifiableCredential', 'VerifiableTrustCredential'],
-      { id: orgJsc, type: 'JsonSchemaCredential' },
-      ecsClaims,
-    )
+    await publish(agent, async () => {}, otherJsc)
 
     expect(storedEntry(metadata, JSC_URL).credential.validUntil).toBe('2027-09-25T10:00:00Z')
-    expect(storedEntry(metadata, orgJsc).credential.validUntil).toBeUndefined()
+    expect(storedEntry(metadata, otherJsc).credential.validUntil).toBeUndefined()
+  })
+
+  it('stops an Organization issuance, and anchors nothing, when the ISSUER entry has no effective_until', async () => {
+    const { agent, metadata, repositoryUpdate } = makeAgent()
+    const orgJsc = 'https://agent.example/vt/schemas-6-jsc.json'
+    const publishOrg = (beforePublish: () => Promise<void>, validUntil?: string) =>
+      publishSelfIssuedEcsPresentation(
+        agent as never,
+        'https://agent.example/vt/ecs-org-vtc-vp.json',
+        getEcsSchemas('https://agent.example'),
+        'ecs-org',
+        ['VerifiableCredential', 'VerifiableTrustCredential'],
+        { id: orgJsc, type: 'JsonSchemaCredential' },
+        ecsClaims,
+        beforePublish,
+        validUntil,
+      )
+    await publishOrg(async () => {}, '2027-09-25T10:00:00Z')
+    const beforePublish = vi.fn(async () => {})
+
+    await expect(publishOrg(beforePublish)).rejects.toThrow('requires validUntil')
+
+    expect(beforePublish).not.toHaveBeenCalled()
+    expect(repositoryUpdate).toHaveBeenCalledTimes(1)
+    expect(storedEntry(metadata, orgJsc).credential.validUntil).toBe('2027-09-25T10:00:00Z')
   })
 })
 

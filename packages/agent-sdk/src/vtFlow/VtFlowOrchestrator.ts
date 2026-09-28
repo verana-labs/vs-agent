@@ -29,7 +29,7 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { veranaTypeUrls } from '@verana-labs/verana-types'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
-import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
+import { ECS, classifyEcsSchema, ecsRequiresValidUntil } from '@verana-labs/vs-agent-model'
 
 import { AdminApiError, AdminApiErrorCode } from '../adminApi'
 import { BaseAgentModules, VsAgent } from '../agent'
@@ -531,8 +531,7 @@ export class VtFlowOrchestrator {
 
     // An ECS Organization or Persona credential needs a validUntil. With a validity period of 0 the
     // VPR sets no effective_until, so the call has to carry one.
-    const ecsKey = await classifyEcsSchema(schema.json_schema)
-    const needsValidUntil = ecsKey === ECS.ORG || ecsKey === ECS.PERSONA
+    const needsValidUntil = ecsRequiresValidUntil(await classifyEcsSchema(schema.json_schema))
     if (needsValidUntil && (schema.holder_validation_validity_period ?? 0) === 0 && !terms.effectiveUntil) {
       throw invalidInput('this schema has no validity period, so effectiveUntil is required')
     }
