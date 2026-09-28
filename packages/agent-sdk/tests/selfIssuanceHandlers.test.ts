@@ -51,7 +51,8 @@ describe('self-issuance anchor handlers', () => {
   it.each([
     'SetParticipantOPToValidated',
     'SelfCreateParticipant',
-  ])('reconciles the ECS credentials when %s makes the agent an ISSUER', async msg => {
+    'SetParticipantEffectiveUntil',
+  ])('reconciles the ECS credentials on %s for an ISSUER entry of the agent', async msg => {
     const { original } = await dispatch(msg, { id: 42, did: DID, role: 'ISSUER' })
 
     expect(original).toHaveBeenCalledTimes(1)

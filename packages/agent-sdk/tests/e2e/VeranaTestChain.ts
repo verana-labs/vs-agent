@@ -230,7 +230,12 @@ export class VeranaTestChain {
 
   async createCredentialSchema(
     policyAddress: string,
-    params: { ecosystemId: number; jsonSchema: string; issuerOnboardingMode?: number },
+    params: {
+      ecosystemId: number
+      jsonSchema: string
+      issuerOnboardingMode?: number
+      verifierOnboardingMode?: number
+    },
   ): Promise<{ schemaId: number; txHash: string }> {
     const msg = {
       typeUrl: veranaTypeUrls.MsgCreateCredentialSchema,
@@ -245,7 +250,7 @@ export class VeranaTestChain {
         verifierValidationValidityPeriod: { value: 365 },
         holderValidationValidityPeriod: { value: 365 },
         issuerOnboardingMode: params.issuerOnboardingMode ?? 2,
-        verifierOnboardingMode: 2,
+        verifierOnboardingMode: params.verifierOnboardingMode ?? 2,
         holderOnboardingMode: 1,
         pricingAssetType: 1,
         pricingAsset: 'tu',

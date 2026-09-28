@@ -14,6 +14,7 @@ export enum AdminApiErrorCode {
   InvalidState = 'INVALID_STATE',
   InvalidClaims = 'INVALID_CLAIMS',
   NoCompatibleCredentials = 'NO_COMPATIBLE_CREDENTIALS',
+  NoCredentialForRole = 'NO_CREDENTIAL_FOR_ROLE',
   InvalidPackage = 'INVALID_PACKAGE',
   UnsupportedFormat = 'UNSUPPORTED_FORMAT',
   NotReady = 'NOT_READY',

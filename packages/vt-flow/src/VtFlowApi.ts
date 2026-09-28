@@ -7,6 +7,7 @@ import type {
   ResendOnboardingRequestOptions,
   SendOnboardingRequestOptions,
   SendOobLinkOptions,
+  VtFlowIssuance,
   VtFlowValidation,
 } from './types'
 import type { Query, QueryOptions } from '@credo-ts/core'
@@ -16,6 +17,7 @@ import type {
   DidCommCredentialProtocol,
   DidCommDataIntegrityAcceptRequestFormat,
   DidCommMessage,
+  DidCommOfferCredentialV2Message,
 } from '@credo-ts/didcomm'
 
 import { AgentContext, CredoError, injectable, utils } from '@credo-ts/core'
@@ -23,6 +25,7 @@ import {
   DidCommAutoAcceptCredential,
   DidCommConnectionService,
   DidCommCredentialExchangeRepository,
+  DidCommCredentialState,
   DidCommCredentialsApi,
   DidCommCredentialsModuleConfig,
   DidCommMessageSender,
@@ -30,9 +33,11 @@ import {
 } from '@credo-ts/didcomm'
 
 import { VtFlowModuleConfig } from './VtFlowModuleConfig'
-import { VtFlowErrorCode } from './errors'
+import { VtFlowError, VtFlowErrorCode } from './errors'
 import { VtFlowService } from './services'
-import { VtFlowRole, VtFlowState } from './types'
+import { VtFlowRole, VtFlowState, VtFlowTxStatus } from './types'
+
+const DATA_INTEGRITY_OFFER_FORMAT = 'didcomm/w3c-di-vc-offer@v0.1'
 
 /** Public API for vt-flow; each method performs a single state transition so callers can gate each one on its own on-chain work. */
 @injectable()
@@ -139,6 +144,50 @@ export class VtFlowApi {
     return record
   }
 
+  /** [VSA-VTI-FLOW-FMT-2]: requests only a data model 2.0 credential with no binding proof. */
+  public async acceptCredentialOffer(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    const record = await this.vtFlowService.getById(this.agentContext, vtFlowRecordId)
+    record.assertRole(VtFlowRole.Applicant)
+    const credentialExchangeRecordId = record.credentialExchangeRecordId
+    if (!credentialExchangeRecordId) {
+      throw new CredoError(`VtFlow record '${record.id}' has no linked credentialExchangeRecordId`)
+    }
+
+    const credentialsApi = this.agentContext.dependencyManager.resolve(DidCommCredentialsApi)
+    const offer = (await credentialsApi.findOfferMessage(
+      credentialExchangeRecordId,
+    )) as DidCommOfferCredentialV2Message | null
+    const [format] = offer?.formats ?? []
+    const data =
+      format &&
+      offer?.getOfferAttachmentById(format.attachmentId)?.getDataAsJson<{
+        data_model_versions_supported?: string[]
+        binding_required?: boolean
+      }>()
+    const conformant =
+      offer?.formats.length === 1 &&
+      format.format === DATA_INTEGRITY_OFFER_FORMAT &&
+      data?.data_model_versions_supported?.includes('2.0') &&
+      !data.binding_required
+
+    if (!conformant) {
+      await credentialsApi.declineOffer({
+        credentialExchangeRecordId,
+        sendProblemReport: true,
+        problemReportDescription: `The offer must be ${DATA_INTEGRITY_OFFER_FORMAT} for VC Data Model 2.0 with no binding`,
+      })
+      return record
+    }
+
+    await credentialsApi.acceptOffer({
+      credentialExchangeRecordId,
+      credentialFormats: { dataIntegrity: { dataModelVersion: '2.0' } },
+      // [VSA-VTI-FLOW-VERIFY-VT]: the verifyCredential hook accepts the credential, not Credo on receipt
+      autoAcceptCredential: DidCommAutoAcceptCredential.Never,
+    })
+    return record
+  }
+
   public async terminateSession(options: ProblemReportDispatchOptions): Promise<VtFlowRecord> {
     const { record, problemReport } = await this.vtFlowService.terminateByApplicant(
       this.agentContext,
@@ -189,12 +238,18 @@ export class VtFlowApi {
   }
 
   public async acceptOnboardingRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
-    const { record, message } = await this.vtFlowService.acceptOnboardingRequest(
-      this.agentContext,
-      vtFlowRecordId,
-    )
-    await this.dispatchMessage(record.connectionId, message, record)
-    return record
+    try {
+      const { record, message } = await this.vtFlowService.acceptOnboardingRequest(
+        this.agentContext,
+        vtFlowRecordId,
+      )
+      if (message) await this.dispatchMessage(record.connectionId, message, record)
+      return record
+    } catch (error) {
+      if (!(error instanceof VtFlowError)) throw error
+      await this.rejectRequest({ vtFlowRecordId, code: error.code })
+      throw error
+    }
   }
 
   public async acceptIssuanceRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
@@ -255,8 +310,16 @@ export class VtFlowApi {
     return this.vtFlowService.recordValidation(this.agentContext, vtFlowRecordId, validation, state)
   }
 
+  public recordIssuance(vtFlowRecordId: string, issuance: VtFlowIssuance): Promise<VtFlowRecord> {
+    return this.vtFlowService.recordIssuance(this.agentContext, vtFlowRecordId, issuance)
+  }
+
   public markValidated(vtFlowRecordId: string): Promise<VtFlowRecord> {
     return this.vtFlowService.markValidated(this.agentContext, vtFlowRecordId)
+  }
+
+  public markPendingClaims(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    return this.vtFlowService.markPendingClaims(this.agentContext, vtFlowRecordId)
   }
 
   public markCompleted(vtFlowRecordId: string): Promise<VtFlowRecord> {
@@ -303,12 +366,14 @@ export class VtFlowApi {
     })
     await this.messageSender.sendMessage(outboundMessageContext)
 
+    const { id: credentialId } = options.credentialFormats.dataIntegrity.credential
     await this.vtFlowService.attachCredentialExchangeRecord(
       this.agentContext,
       record.id,
       credentialExchangeRecord,
       options.credentialDigest,
       options.issuerParticipantId,
+      typeof credentialId === 'string' ? credentialId : undefined,
     )
 
     return {
@@ -351,14 +416,26 @@ export class VtFlowApi {
       : undefined
     connectionRecord?.assertReady()
 
+    // a credential signed by an earlier call whose anchoring failed is delivered as it was signed
+    const reissue = credentialExchangeRecord.state === DidCommCredentialState.CredentialIssued
+    const storedMessage = reissue
+      ? await protocol.findCredentialMessage(this.agentContext, credentialExchangeRecord.id)
+      : null
+    if (reissue && !storedMessage) {
+      throw new CredoError(`Credential exchange '${credentialExchangeRecord.id}' has no issued credential`)
+    }
     // unlike DidCommCredentialsApi.acceptRequest, this signs without sending
-    const { message } = await protocol.acceptRequest(this.agentContext, {
-      credentialExchangeRecord,
-      comment: options.comment,
-      credentialFormats: options.credentialFormats ?? {
-        dataIntegrity: { cryptosuite: this.config.dataIntegrityCryptosuite },
-      },
-    })
+    const message =
+      storedMessage ??
+      (
+        await protocol.acceptRequest(this.agentContext, {
+          credentialExchangeRecord,
+          comment: options.comment,
+          credentialFormats: options.credentialFormats ?? {
+            dataIntegrity: { cryptosuite: this.config.dataIntegrityCryptosuite },
+          },
+        })
+      ).message
 
     const hook = this.config.onBeforeCredentialIssued
     if (hook) {
@@ -377,6 +454,15 @@ export class VtFlowApi {
         credentialExchangeRecord,
         credential,
       })
+      if (result?.issuance) {
+        await this.vtFlowService.recordIssuance(this.agentContext, record.id, result.issuance)
+      }
+      if (result?.issuance?.tx?.status === VtFlowTxStatus.Failed) {
+        return {
+          record: await this.vtFlowService.getById(this.agentContext, record.id),
+          credentialExchangeRecord,
+        }
+      }
       if (result?.credentialDigest) {
         await this.vtFlowService.setCredentialDigest(this.agentContext, record.id, result.credentialDigest)
       }

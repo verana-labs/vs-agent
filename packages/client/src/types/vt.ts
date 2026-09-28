@@ -11,7 +11,7 @@ export interface VtFlowOobLink {
 
 export interface VtFlowMessage {
   type: 'oob-link' | 'validating' | 'problem-report'
-  text: string
+  text?: string
   at: string
   url?: string
 }
@@ -61,6 +61,7 @@ export interface VtFlowRecord {
   validation?: VtFlowValidation
   issuance?: { tx?: VtFlowTx }
   credentialExchangeRecordId?: string
+  credentialId?: string
   credentialDigest?: string
   subprotocolThid?: string
   errorMessage?: string
@@ -86,7 +87,12 @@ export interface EditClaimsBody {
 
 export interface SendOobLinkBody {
   url: string
-  message?: string
+  description: string
+  expiresAt?: string
+}
+
+export interface StartValidationBody {
+  comment?: string
 }
 
 export interface ValidateFlowBody {
@@ -99,8 +105,9 @@ export interface ValidateFlowBody {
   opSummaryDigest?: string
 }
 
-export interface RevokeFlowCredentialBody {
-  reason?: string
+export interface RejectFlowBody {
+  code?: 'vt-flow.validation-refused' | 'vt-flow.session-terminated' | 'vt-flow.oob-expired'
+  description: string
 }
 
 export type ServiceEndpointValue = string | Record<string, unknown> | Array<string | Record<string, unknown>>

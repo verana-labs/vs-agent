@@ -11,33 +11,30 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import {
-  VtCredentialState,
   VtFlowApi,
+  VtFlowErrorCode,
   VtFlowPendingAction,
   VtFlowRecord,
   VtFlowRole,
   VtFlowState,
   VtFlowTxStatus,
+  VtFlowVariant,
   isVtFlowTerminalState,
   peerAnchorDid,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { HOLDER_PARTICIPANT_TYPE, VtFlowOrchestrator } from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, Page, paginate } from '../../../../common'
-import { CredentialTypesService } from '../../../../services/CredentialTypesService'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
-import { ListFlowsV2QueryDto, ValidateFlowDto } from './dto/flow-requests.dto'
+import { ListFlowsV2QueryDto, RejectFlowDto, ValidateFlowDto } from './dto/flow-requests.dto'
 import { V2VtFlowRecordDto, VtConnectionState } from './dto/vt-flow-record.dto'
 
 type VtFlowRecordDto = Omit<V2VtFlowRecordDto, 'flowState'> & { state: VtFlowState }
 
 @Injectable()
 export class VtFlowsService {
-  public constructor(
-    @Inject(VsAgentService) private readonly agentService: VsAgentService,
-    @Inject(CredentialTypesService) private readonly credentialTypesService: CredentialTypesService,
-  ) {}
+  public constructor(@Inject(VsAgentService) private readonly agentService: VsAgentService) {}
 
   public async listFlowsPage(query: ListFlowsV2QueryDto): Promise<Page<V2VtFlowRecordDto>> {
     const flows = await this.collectFlows(query)
@@ -115,59 +112,65 @@ export class VtFlowsService {
   ): Promise<VtFlowRecordDto> {
     return this.mutateFlow(participantSessionId, async ({ agent, vtFlowApi, record }) => {
       await this.assertConnectionEstablished(agent, record)
+      record.assertState(EDIT_CLAIMS_STATES)
+      if (
+        record.variant === VtFlowVariant.OnboardingProcess &&
+        record.applicantParticipantRole !== HOLDER_PARTICIPANT_TYPE
+      ) {
+        throw new AdminApiError(
+          AdminApiErrorCode.NoCredentialForRole,
+          HttpStatus.CONFLICT,
+          'the applicant participant role of the flow is not HOLDER',
+        )
+      }
       return vtFlowApi.updateClaims(record.id, claims)
     })
   }
 
-  public sendOobLink(participantSessionId: string, url: string, message?: string): Promise<VtFlowRecordDto> {
+  public sendOobLink(
+    participantSessionId: string,
+    url: string,
+    description?: string,
+    expiresAt?: string,
+  ): Promise<VtFlowRecordDto> {
     return this.mutateFlow(participantSessionId, async ({ agent, vtFlowApi, record }) => {
       await this.assertConnectionEstablished(agent, record)
       return vtFlowApi.sendOobLink({
         vtFlowRecordId: record.id,
         url,
-        description: message ?? '',
+        description: description ?? '',
+        expiresTime: expiresAt ? new Date(expiresAt) : undefined,
       })
     })
   }
 
-  public revokeFlowCredential(participantSessionId: string, reason?: string): Promise<VtFlowRecordDto> {
+  public startValidation(participantSessionId: string, comment?: string): Promise<VtFlowRecordDto> {
     return this.mutateFlow(participantSessionId, async ({ agent, vtFlowApi, record }) => {
-      await this.revokeIssuedCredential(agent, record)
-      return vtFlowApi.notifyCredentialStateChange({
-        vtFlowRecordId: record.id,
-        state: VtCredentialState.Revoked,
-        reason,
-      })
+      await this.assertConnectionEstablished(agent, record)
+      return vtFlowApi.sendValidating(record.id, { comment })
     })
   }
 
-  private async revokeIssuedCredential(agent: VsAgent, record: VtFlowRecord): Promise<void> {
-    record.assertState([VtFlowState.Completed, VtFlowState.CredRevoked])
-    if (!record.credentialExchangeRecordId) {
-      throw new AdminApiError(
-        AdminApiErrorCode.UnsupportedFormat,
-        HttpStatus.BAD_REQUEST,
-        'the flow holds no credential exchange to revoke',
-      )
-    }
-    const credential = await agent.didcomm.credentials.findById(record.credentialExchangeRecordId)
-    if (!credential) {
-      throw new AdminApiError(
-        AdminApiErrorCode.UnsupportedFormat,
-        HttpStatus.BAD_REQUEST,
-        'the credential exchange of the flow no longer exists',
-      )
-    }
-    const registryId = credential.getTag('anonCredsRevocationRegistryId')
-    const revocationId = credential.getTag('anonCredsCredentialRevocationId')
-    if (typeof registryId !== 'string' || !revocationId) {
-      throw new AdminApiError(
-        AdminApiErrorCode.UnsupportedFormat,
-        HttpStatus.BAD_REQUEST,
-        'the credential of the flow supports no credential-level revocation',
-      )
-    }
-    await this.credentialTypesService.revokeCredential(agent, registryId, Number(revocationId))
+  public rejectFlow(participantSessionId: string, input: RejectFlowDto): Promise<VtFlowRecordDto> {
+    return this.mutateFlow(participantSessionId, async ({ agent, vtFlowApi, record }) => {
+      record.assertState(REJECT_STATES[record.variant])
+      const entryMayBeValidated =
+        record.state === VtFlowState.AwaitingValidationTx || record.state === VtFlowState.ValidationTxFailed
+      if (entryMayBeValidated && record.applicantParticipantId) {
+        const applicant = await agent.indexer.getParticipant(record.applicantParticipantId)
+        if (applicant.op_state === 'VALIDATED') {
+          const orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
+          await orchestrator.markValidated(record.id, applicant)
+          await orchestrator.continueAfterValidated(record.id)
+          throw new ConflictException('the applicant entry is already VALIDATED on chain')
+        }
+      }
+      return vtFlowApi.terminateSessionAsValidator({
+        vtFlowRecordId: record.id,
+        code: input.code ?? VtFlowErrorCode.ValidationRefused,
+        enDescription: input.description,
+      })
+    })
   }
 
   private async mutateFlow(
@@ -256,6 +259,26 @@ const AGENT_STATES: ReadonlySet<VtFlowState> = new Set([
   VtFlowState.AwaitingIr,
 ])
 
+const EDIT_CLAIMS_STATES = [
+  VtFlowState.OobPending,
+  VtFlowState.Validating,
+  VtFlowState.AwaitingValidationTx,
+  VtFlowState.ValidationTxSubmitted,
+  VtFlowState.ValidationTxFailed,
+  VtFlowState.ValidatedPendingClaims,
+]
+
+const REJECT_STATES: Record<VtFlowVariant, VtFlowState[]> = {
+  [VtFlowVariant.OnboardingProcess]: [
+    VtFlowState.AwaitingOr,
+    VtFlowState.OobPending,
+    VtFlowState.Validating,
+    VtFlowState.AwaitingValidationTx,
+    VtFlowState.ValidationTxFailed,
+  ],
+  [VtFlowVariant.DirectIssuance]: [VtFlowState.AwaitingIr, VtFlowState.OobPending, VtFlowState.Validating],
+}
+
 const VALIDATOR_STATES: ReadonlySet<VtFlowState> = new Set([
   VtFlowState.Validating,
   VtFlowState.AwaitingValidationTx,
@@ -306,13 +329,14 @@ function pendingActionOf(record: VtFlowRecord): VtFlowPendingAction {
 
 /**
  * Gives the Connection State of one flow, per [VSA-VTI-FLOW-STATE] Flow State. A flow in a
- * terminal state is TERMINATED, and so is a flow whose connection no longer exists.
+ * terminal state is TERMINATED, and so is a flow the validator terminated until the applicant
+ * re-attaches it ([VSA-ADM-VT-FL-REJECT-2]), and a flow whose connection no longer exists.
  */
 function connectionStateOf(
   record: VtFlowRecord,
   connection: DidCommConnectionRecord | null | undefined,
 ): VtConnectionState {
-  if (isVtFlowTerminalState(record.state) || !connection) return 'TERMINATED'
+  if (isVtFlowTerminalState(record.state) || record.connectionTerminated || !connection) return 'TERMINATED'
   return connection.isReady ? 'ESTABLISHED' : 'NOT_CONNECTED'
 }
 
@@ -357,6 +381,7 @@ function toDto({ record, peerDid, connectionState }: ResolvedFlow): VtFlowRecord
     validation: record.validation,
     issuance: record.issuance,
     proofs: record.proofsAttach,
+    credentialId: record.credentialId,
     credentialDigest: record.credentialDigest,
     id: record.id,
     threadId: record.threadId,

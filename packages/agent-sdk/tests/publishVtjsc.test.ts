@@ -443,6 +443,26 @@ describe('self-issued ECS credentials', () => {
     expect(keys).toContain('ecs-org')
   })
 
+  it('self-issues under the effective_until of the ISSUER entry', async () => {
+    const agent = chainAgent([])
+    const indexer = makeIndexer({
+      getCredentialSchema: vi.fn(async () => ({
+        id: 6,
+        ecosystem_id: 1,
+        json_schema: jsonSchema('OrganizationCredential'),
+      })),
+      listParticipants: vi.fn(async ({ participantState }: { participantState: string }) =>
+        participantState === 'ACTIVE'
+          ? [{ id: 60, schema_id: 6, vs_operator: OPERATOR, effective_until: '2027-09-25T10:00:00Z' }]
+          : [],
+      ),
+    })
+
+    await reconcileVtjscPublications(agent as never, indexer as never, 7, ecsClaims as never)
+
+    expect(rebindEcsCredentialSchema.mock.calls[0][8]).toBe('2027-09-25T10:00:00Z')
+  })
+
   it('skips a schema that is not an ECS schema', async () => {
     const agent = chainAgent([])
     const indexer = indexerWithIssuerOn([{ id: 7, title: 'ExampleCredential' }])

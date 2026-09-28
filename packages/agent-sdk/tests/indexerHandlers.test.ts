@@ -18,10 +18,12 @@ import {
 } from '../src/blockchain/handlers/defaultHandlers'
 import {
   applyStateMutation,
+  markApplicantVtFlowRecordsValidated,
   markVtFlowRecordsValidated,
   reconcileVtFlowRecordsOnCancel,
   removeHolderTrustCredentialIfRevoked,
   removeSelfIssuedEcsCredentialsIfIssuerRevoked,
+  startParticipantOPAutoFlow,
 } from '../src/blockchain/handlers/stateMutations'
 import { IndexerActivity, VeranaSyncState } from '../src/blockchain/types'
 import { vtFlowEvents } from '../src/events/VtFlowEvents'
@@ -314,56 +316,273 @@ describe('applyStateMutation', () => {
   })
 })
 
+describe('startParticipantOPAutoFlow', () => {
+  it('sends the onboarding request of a non-ECS schema without claims, as a normal case', async () => {
+    const startOnboardingProcess = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'startOnboardingProcess')
+      .mockResolvedValue({} as never)
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const agent = {
+      did: 'did:web:agent',
+      veranaChain: {},
+      ecsClaims: { org: { name: 'Acme' } },
+      config: { logger },
+      indexer: {
+        findParticipant: vi.fn().mockResolvedValue({ id: 5, did: 'did:web:agent', schemaId: 12 }),
+        getCredentialSchema: vi
+          .fn()
+          .mockResolvedValue({ id: 12, json_schema: '{"title":"ExampleCredential"}' }),
+      },
+    }
+
+    await startParticipantOPAutoFlow(agent as never, makeActivity('StartParticipantOP', { entity_id: '5' }))
+
+    expect(startOnboardingProcess).toHaveBeenCalledWith({ applicantParticipantId: 5 })
+    expect(logger.warn).not.toHaveBeenCalled()
+    startOnboardingProcess.mockRestore()
+  })
+})
+
 describe('markVtFlowRecordsValidated', () => {
-  it('moves only the running validator flows of the participant', async () => {
+  const tx = { hash: 'TXHASH', height: 100, timestamp: '2026-09-25T10:00:00Z' }
+  const entry = {
+    validation_fees: 3,
+    issuance_fees: 4,
+    verification_fees: 5,
+    issuance_fee_discount: 0.25,
+    verification_fee_discount: 0.5,
+    effective_until: '2027-09-25T10:00:00Z',
+  }
+
+  function makeValidatedAgent(records: Record<string, unknown>[]) {
+    const recordValidation = vi.fn().mockResolvedValue(undefined)
+    const continueAfterValidated = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
+      .mockResolvedValue({} as never)
+    const findAllByQuery = vi.fn(async () => [...records])
+    const findById = vi.fn(async (id: string) => records.find(record => record.id === id))
+    const agent = {
+      indexer: { getParticipant: vi.fn().mockResolvedValue(entry) },
+      dependencyManager: { resolve: () => ({ findById, findAllByQuery, recordValidation }) },
+      context: { dependencyManager: { resolve: () => ({ findAllByQuery }) } },
+      config: { logger: { info: vi.fn(), error: vi.fn() } },
+    }
+    return { agent, recordValidation, continueAfterValidated }
+  }
+
+  it('moves only the running validator flows of the participant, and continues into issuance', async () => {
     const records = [
       { id: 'applicant', role: VtFlowRole.Applicant, state: VtFlowState.Validating },
       { id: 'validator', role: VtFlowRole.Validator, state: VtFlowState.Validating },
       { id: 'terminated', role: VtFlowRole.Validator, state: VtFlowState.TerminatedByValidator },
     ]
-    const markValidated = vi.fn().mockResolvedValue(undefined)
-    const agent = {
-      context: {
-        dependencyManager: {
-          resolve: () => ({ findAllByQuery: vi.fn().mockResolvedValue(records), markValidated }),
-        },
-      },
-      config: { logger: { info: vi.fn(), error: vi.fn() } },
-    }
+    const { agent, recordValidation, continueAfterValidated } = makeValidatedAgent(records)
 
-    await markVtFlowRecordsValidated(agent as never, '7')
+    await markVtFlowRecordsValidated(agent as never, '7', tx)
 
-    expect(markValidated).toHaveBeenCalledTimes(1)
-    expect(markValidated).toHaveBeenCalledWith(expect.anything(), 'validator')
+    expect(recordValidation).toHaveBeenCalledTimes(1)
+    expect(recordValidation).toHaveBeenCalledWith('validator', expect.anything(), VtFlowState.Validated)
+    expect(continueAfterValidated).toHaveBeenCalledWith('validator')
+    continueAfterValidated.mockRestore()
   })
 
-  it('continues into issuance a flow that validateFlow submitted', async () => {
-    const records = [
-      {
-        id: 'submitted',
-        role: VtFlowRole.Validator,
-        state: VtFlowState.ValidationTxSubmitted,
-        validation: { submission: 'AGENT' },
-      },
-      { id: 'legacy', role: VtFlowRole.Validator, state: VtFlowState.Validating },
-    ]
+  it('moves a flow still in AWAITING_OR to VALIDATED with the terms of the entry, and continues into issuance', async () => {
+    const records = [{ id: 'awaiting', role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr }]
+    const { agent, recordValidation, continueAfterValidated } = makeValidatedAgent(records)
+
+    await markVtFlowRecordsValidated(agent as never, '7', tx)
+
+    expect(recordValidation).toHaveBeenCalledWith(
+      'awaiting',
+      expect.objectContaining({
+        decidedAt: tx.timestamp,
+        submission: 'OPERATOR',
+        effectiveUntil: entry.effective_until,
+      }),
+      VtFlowState.Validated,
+    )
+    expect(continueAfterValidated).toHaveBeenCalledWith('awaiting')
+    continueAfterValidated.mockRestore()
+  })
+
+  it('moves a flow once when its participant_id check reads the entry VALIDATED while the notification moves it', async () => {
+    let flow = {
+      id: 'raced',
+      role: VtFlowRole.Validator,
+      state: VtFlowState.AwaitingOr,
+      applicantParticipantId: '42',
+    }
+    let land = (): void => undefined
+    const recordValidation = vi.fn(async (_id: string, _validation: unknown, state: VtFlowState) => {
+      await new Promise<void>(resolve => {
+        land = resolve
+      })
+      flow = { ...flow, state }
+    })
+    const findAllByQuery = vi.fn(async () => [flow])
     const continueAfterValidated = vi
       .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
       .mockResolvedValue({} as never)
+    const validated = {
+      ...entry,
+      op_state: 'VALIDATED',
+      validator_participant_id: 10,
+      revoked: null,
+      slashed: null,
+    }
     const agent = {
+      did: 'did:web:validator',
+      indexer: {
+        getParticipant: vi.fn(async (id: string) =>
+          Number(id) === 10 ? { did: 'did:web:validator' } : validated,
+        ),
+      },
+      dependencyManager: {
+        resolve: () => ({ findById: async () => flow, findAllByQuery, recordValidation }),
+      },
+      context: { dependencyManager: { resolve: () => ({ findAllByQuery }) } },
+      config: { logger: { info: vi.fn(), error: vi.fn() } },
+    }
+
+    const notified = markVtFlowRecordsValidated(agent as never, '42', tx)
+    await vi.waitFor(() => expect(recordValidation).toHaveBeenCalled())
+    const checked = vi.fn()
+    new VtFlowOrchestrator(agent as never).checkParticipantId({ record: flow } as never).then(checked)
+    await vi.waitFor(() => expect(checked).toHaveBeenCalledWith('validated'))
+    land()
+    await notified
+
+    expect(recordValidation).toHaveBeenCalledExactlyOnceWith(
+      'raced',
+      expect.anything(),
+      VtFlowState.Validated,
+    )
+    expect(continueAfterValidated).toHaveBeenCalledExactlyOnceWith('raced')
+    expect(agent.config.logger.error).not.toHaveBeenCalled()
+    expect(flow.state).toBe(VtFlowState.Validated)
+    continueAfterValidated.mockRestore()
+  })
+
+  it('tells its own transaction apart from an operator one and takes the terms from the entry', async () => {
+    const decidedAt = '2026-09-25T09:00:00Z'
+    const records = [
+      {
+        id: 'agent',
+        role: VtFlowRole.Validator,
+        state: VtFlowState.ValidationTxFailed,
+        validation: {
+          decidedAt,
+          submission: 'AGENT',
+          validationFees: 9,
+          tx: { hash: 'TXHASH', status: 'FAILED', reason: 'TX_NOT_FOUND', error: 'not found' },
+        },
+      },
+      { id: 'operator', role: VtFlowRole.Validator, state: VtFlowState.OobPending },
+    ]
+    const { agent, recordValidation, continueAfterValidated } = makeValidatedAgent(records)
+
+    await markVtFlowRecordsValidated(agent as never, '7', tx)
+
+    const terms = {
+      validationFees: 3,
+      issuanceFees: 4,
+      verificationFees: 5,
+      issuanceFeeDiscount: 0.25,
+      verificationFeeDiscount: 0.5,
+      effectiveUntil: '2027-09-25T10:00:00Z',
+    }
+    expect(recordValidation).toHaveBeenCalledWith(
+      'agent',
+      {
+        decidedAt,
+        submission: 'AGENT',
+        ...terms,
+        tx: { hash: 'TXHASH', height: 100, status: 'SUCCEEDED' },
+      },
+      VtFlowState.Validated,
+    )
+    expect(recordValidation).toHaveBeenCalledWith(
+      'operator',
+      { decidedAt: tx.timestamp, submission: 'OPERATOR', ...terms },
+      VtFlowState.Validated,
+    )
+    continueAfterValidated.mockRestore()
+  })
+
+  it('moves a flow rejected while its transaction was in flight to VALIDATED, and issues nothing yet', async () => {
+    const records = [
+      {
+        id: 'rejected',
+        role: VtFlowRole.Validator,
+        state: VtFlowState.TerminatedByValidator,
+        applicantParticipantId: '7',
+        createdAt: new Date('2026-09-20T09:00:00Z'),
+        validation: { decidedAt: '2026-09-25T09:00:00Z', submission: 'OPERATOR' },
+      },
+    ]
+    const { agent, recordValidation, continueAfterValidated } = makeValidatedAgent(records)
+
+    await markVtFlowRecordsValidated(agent as never, '7', tx)
+
+    expect(recordValidation).toHaveBeenCalledWith(
+      'rejected',
+      expect.objectContaining({ submission: 'OPERATOR' }),
+      VtFlowState.Validated,
+    )
+    expect(continueAfterValidated).not.toHaveBeenCalled()
+    continueAfterValidated.mockRestore()
+  })
+
+  it('leaves a flow rejected in flight alone once a newer flow of the applicant exists', async () => {
+    const records = [
+      {
+        id: 'rejected',
+        role: VtFlowRole.Validator,
+        state: VtFlowState.TerminatedByValidator,
+        applicantParticipantId: '7',
+        createdAt: new Date('2026-09-20T09:00:00Z'),
+        validation: { decidedAt: '2026-09-20T10:00:00Z', submission: 'OPERATOR' },
+      },
+      {
+        id: 'newer',
+        role: VtFlowRole.Validator,
+        state: VtFlowState.AwaitingValidationTx,
+        applicantParticipantId: '7',
+        createdAt: new Date('2026-09-24T09:00:00Z'),
+      },
+    ]
+    const { agent, recordValidation, continueAfterValidated } = makeValidatedAgent(records)
+
+    await markVtFlowRecordsValidated(agent as never, '7', tx)
+
+    expect(recordValidation).toHaveBeenCalledTimes(1)
+    expect(recordValidation).toHaveBeenCalledWith('newer', expect.anything(), VtFlowState.Validated)
+    continueAfterValidated.mockRestore()
+  })
+})
+
+describe('markApplicantVtFlowRecordsValidated', () => {
+  it('moves the running applicant flow to VALIDATED for a HOLDER too, and leaves the others', async () => {
+    const records = [
+      { id: 'applicant', role: VtFlowRole.Applicant, state: VtFlowState.Validating },
+      { id: 'offered', role: VtFlowRole.Applicant, state: VtFlowState.CredOffered },
+      { id: 'validator', role: VtFlowRole.Validator, state: VtFlowState.Validated },
+    ]
+    const updateState = vi.fn().mockResolvedValue(undefined)
+    const agent = {
+      indexer: { findParticipant: vi.fn().mockResolvedValue({ role: 6 }) },
       context: {
         dependencyManager: {
-          resolve: () => ({ findAllByQuery: vi.fn().mockResolvedValue(records), markValidated: vi.fn() }),
+          resolve: () => ({ findAllByQuery: vi.fn().mockResolvedValue(records), updateState }),
         },
       },
       config: { logger: { info: vi.fn(), error: vi.fn() } },
     }
 
-    await markVtFlowRecordsValidated(agent as never, '7')
+    await markApplicantVtFlowRecordsValidated(agent as never, '7')
 
-    expect(continueAfterValidated).toHaveBeenCalledTimes(1)
-    expect(continueAfterValidated).toHaveBeenCalledWith('submitted')
-    continueAfterValidated.mockRestore()
+    expect(updateState).toHaveBeenCalledTimes(1)
+    expect(updateState).toHaveBeenCalledWith(expect.anything(), records[0], VtFlowState.Validated)
   })
 })
 
@@ -484,5 +703,34 @@ describe('vtFlowEvents', () => {
       applicantParticipantRole: 6,
       schemaId: '12',
     })
+  })
+
+  it('emits no state-updated event for a re-attach that leaves the Flow State as it was', async () => {
+    const service = { findById: vi.fn().mockResolvedValue(null) }
+    const on = vi.fn()
+    const agent = {
+      events: { on, emit: vi.fn() },
+      context: { dependencyManager: { resolve: () => service } },
+    }
+    vtFlowEvents(agent as never, { debug: vi.fn(), warn: vi.fn() } as never)
+    const [, listener] = on.mock.calls[0]
+
+    await listener({
+      payload: {
+        vtFlowRecordId: 'rec-v',
+        state: VtFlowState.Validated,
+        previousState: VtFlowState.Validated,
+      },
+    })
+    expect(agent.events.emit).not.toHaveBeenCalled()
+
+    await listener({
+      payload: {
+        vtFlowRecordId: 'rec-v',
+        state: VtFlowState.Validated,
+        previousState: VtFlowState.ValidationTxSubmitted,
+      },
+    })
+    expect(agent.events.emit).toHaveBeenCalledTimes(1)
   })
 })
