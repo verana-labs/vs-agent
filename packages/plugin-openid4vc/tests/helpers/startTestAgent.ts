@@ -104,6 +104,7 @@ export interface OpenId4VcTestAgents {
     service: IssuerService
     publicApiBaseUrl: string
     configurationRegistry: CredentialConfigurationRegistry
+    credentialConfiguration: OpenId4VcCredentialConfiguration
   }
   holder: {
     agent: OpenId4VcAgent
@@ -193,6 +194,7 @@ export async function startTestAgents(input: {
   issuerDid: string
   verifierDid: string
   credentialConfiguration: OpenId4VcCredentialConfiguration
+  typeMetadataServer?: Server
   issuerTrust?: Partial<NonNullable<OpenId4VcPluginOptions['issuer']>>
   logger?: BaseLogger
 }): Promise<OpenId4VcTestAgents> {
@@ -201,6 +203,8 @@ export async function startTestAgents(input: {
   const issuerCertificate = await createIssuerCertificate(input.certificates.intermediate, input.issuerDid)
   const stops: Array<() => Promise<void>> = []
   const configurationRegistry = createCredentialConfigurationRegistry([input.credentialConfiguration])
+  const typeMetadataServer = input.typeMetadataServer
+  if (typeMetadataServer) stops.push(() => closeServer(typeMetadataServer))
 
   try {
     const issuer = await startPluginAgent({
@@ -271,7 +275,11 @@ export async function startTestAgents(input: {
     stops.push(verifier.stop)
 
     return {
-      issuer: { ...issuer, configurationRegistry },
+      issuer: {
+        ...issuer,
+        configurationRegistry,
+        credentialConfiguration: input.credentialConfiguration,
+      },
       holder,
       verifier,
       rootCertificate,
@@ -464,6 +472,8 @@ export async function createTestAgentsInput() {
     ],
   ])
 
+  const typeMetadata = await startTypeMetadataServer()
+
   return {
     certificates,
     verifierCertificate,
@@ -471,8 +481,26 @@ export async function createTestAgentsInput() {
     didResolver: new FakeDidResolver(didDocuments),
     issuerDid: TEST_ISSUER_DID,
     verifierDid: TEST_VERIFIER_DID,
-    credentialConfiguration: testCredentialConfiguration,
+    credentialConfiguration: {
+      ...testCredentialConfiguration,
+      vct: `${typeMetadata.baseUrl}/vt/vct/${testCredentialConfiguration.credentialSchemaId}`,
+    },
+    typeMetadataServer: typeMetadata.server,
   }
+}
+
+async function startTypeMetadataServer(): Promise<{ server: Server; baseUrl: string }> {
+  const app = express()
+  app.get('/vt/vct/:credentialSchemaId', (request, response) => {
+    response.json({
+      vct: `${serverUrl(server)}/vt/vct/${request.params.credentialSchemaId}`,
+      name: testCredentialConfiguration.name,
+      claims: testCredentialConfiguration.claims.map(claim => ({ path: [claim] })),
+    })
+  })
+
+  const server = await listen(app)
+  return { server, baseUrl: serverUrl(server) }
 }
 
 async function listen(app: express.Express): Promise<Server> {

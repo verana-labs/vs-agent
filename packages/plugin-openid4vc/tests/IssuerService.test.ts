@@ -8,6 +8,7 @@ import {
   AdminApiErrorCode,
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
+  generateDigestSRI,
   ParticipantRole,
 } from '@verana-labs/vs-agent-sdk'
 
@@ -113,6 +114,9 @@ function issuerApi() {
 
 const issuanceSessionRepository = { findByQuery: vi.fn(), update: vi.fn() }
 const anonCredsTrust = { assertOwnAuthorization: vi.fn() }
+const TYPE_METADATA = JSON.stringify({ vct: 'https://agent.example/oid4vc/vct/employee' })
+const TYPE_METADATA_INTEGRITY = generateDigestSRI(TYPE_METADATA)
+const typeMetadataFetch = vi.fn()
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
 
 function issuanceSession(overrides: Record<string, unknown> = {}) {
@@ -210,6 +214,13 @@ async function initializedIssuer(
 describe('IssuerService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    typeMetadataFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => TYPE_METADATA,
+    })
+    vi.stubGlobal('fetch', typeMetadataFetch)
     loadSigningCertificate.mockResolvedValue(issuerSigningHandle())
     publishDevelopmentSigningKey.mockResolvedValue(undefined)
     verifyKeyBoundToDid.mockResolvedValue('bound')
@@ -620,6 +631,47 @@ describe('IssuerService', () => {
     expect(api.createCredentialOffer).not.toHaveBeenCalled()
   })
 
+  it('answers an unreadable Type Metadata document with the unavailable resolver code', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
+    await service.ensureInitialized()
+    typeMetadataFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' })
+
+    await expect(
+      service.createOffer({ jsonSchemaCredentialId: 'employee', claims: { name: 'Ada' }, ttlSeconds: 3_600 }),
+    ).rejects.toMatchObject({ code: AdminApiErrorCode.ResolverUnavailable, status: 503 })
+    expect(api.createCredentialOffer).not.toHaveBeenCalled()
+  })
+
+  it('reads the Type Metadata once for an offer and the credential it issues', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    api.createCredentialOffer.mockResolvedValue({
+      credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
+      issuanceSession: issuanceSession({ id: 'session-id' }),
+    })
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
+    await service.ensureInitialized()
+
+    await service.createOffer({
+      jsonSchemaCredentialId: 'employee',
+      claims: { name: 'Ada' },
+      ttlSeconds: 3_600,
+    })
+    await service.mapCredentialRequest({
+      credentialConfigurationId: 'employee',
+      issuanceSession: { issuanceMetadata: { claims: { name: 'Ada' }, ttlSeconds: 3_600 } },
+      holderBinding: { bindingMethod: 'jwk', proofType: 'jwt', keys: [{ method: 'jwk', jwk: HOLDER_JWK }] },
+    } as never)
+
+    expect(typeMetadataFetch).toHaveBeenCalledOnce()
+    expect(typeMetadataFetch).toHaveBeenCalledWith(
+      'https://agent.example/oid4vc/vct/employee',
+      expect.anything(),
+    )
+  })
+
   it('answers a schema violation with the claim error code of the trust decision', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
@@ -679,6 +731,7 @@ describe('IssuerService', () => {
         {
           payload: {
             vct: 'https://agent.example/oid4vc/vct/employee',
+            'vct#integrity': TYPE_METADATA_INTEGRITY,
             iat: 1_784_635_200,
             exp: 1_784_638_800,
             name: 'Ada',

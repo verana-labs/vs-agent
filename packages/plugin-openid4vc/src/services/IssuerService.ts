@@ -36,6 +36,7 @@ import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
 import { buildCredentialConfigurations } from './credentialConfigurationBuilder'
+import { createTypeMetadataIntegrity } from './typeMetadataIntegrity'
 
 import {
   didFromValidatedCertificate,
@@ -87,6 +88,7 @@ export interface OpenId4VcIssuanceSessionSummary {
 
 const BAD_REQUEST = 400
 const NOT_FOUND = 404
+const SERVICE_UNAVAILABLE = 503
 
 const JSON_SCHEMA_CREDENTIAL_ID_TAG = 'jsonSchemaCredentialId'
 const DPOP_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
@@ -96,6 +98,7 @@ const ATTESTATION_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
 export class IssuerService implements OnModuleInit {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
+  private readonly typeMetadataIntegrity = createTypeMetadataIntegrity()
 
   public constructor(
     @Inject('VSAGENT') private readonly agent: OpenId4VcAgent,
@@ -177,6 +180,8 @@ export class IssuerService implements OnModuleInit {
     } catch (error) {
       throw trustDecisionError(error, 'agent')
     }
+
+    await this.assertTypeMetadataReadable(configuration.vct)
 
     const { credentialOffer, issuanceSession } = await this.issuerApi().createCredentialOffer({
       issuerId: ISSUER_CAPABILITY_ID,
@@ -261,10 +266,12 @@ export class IssuerService implements OnModuleInit {
       configuration,
       input.issuanceSession.issuanceMetadata,
     )
+    const integrity = await this.typeMetadataIntegrity(configuration.vct)
     const issuedAt = Math.floor(Date.now() / 1_000)
     const payload = {
       ...claims,
       vct: configuration.vct,
+      'vct#integrity': integrity,
       iat: issuedAt,
       exp: issuedAt + ttlSeconds,
     }
@@ -325,6 +332,20 @@ export class IssuerService implements OnModuleInit {
     this.agent.config.logger.info(
       `[OpenID4VC] issuer signs with a ${signingCertificate.development ? 'development' : 'configured'} certificate${publishedMethodId ? `, published as ${publishedMethodId}` : ''}`,
     )
+  }
+
+  private async assertTypeMetadataReadable(vct: string): Promise<void> {
+    try {
+      await this.typeMetadataIntegrity(vct)
+    } catch (error) {
+      throw new AdminApiError(
+        AdminApiErrorCode.ResolverUnavailable,
+        SERVICE_UNAVAILABLE,
+        `the Type Metadata at ${vct} could not be read: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
   }
 
   // Runs while `initialize` is still pending, so it must not wait on the initialization it is part of.

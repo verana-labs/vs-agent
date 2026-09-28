@@ -17,17 +17,29 @@ What it does:
 Out of scope, and not implied: W3C VCDM credentials, ISO mdoc, authorization-code issuance,
 wallet-attestation trust-list distribution, production PKI onboarding, formal conformance.
 
+## Credential types
+
+The configuration file carries no credential type. The agent reads them from the VPR instead: one
+per `CredentialSchema` for which it holds an active ISSUER `Participant`, identified by the
+`jsonSchemaCredentialId` of that schema. Claims come from the `credentialSubject` properties of
+the JSON schema, every one of them selectively disclosable, and the display name from its `title`.
+The `vct` is the Type Metadata URL of the type, `{ecosystem base}/vt/vct/{credentialSchemaId}`.
+A schema the agent cannot resolve is skipped with a warning and the rest of the set still stands.
+
+The set follows the VPR without a restart: a `Participant` or `CredentialSchema` notification
+rebuilds it and re-renders the served issuer metadata. `createCredentialOffer` validates the
+claims against the JSON schema (`422 INVALID_CLAIMS` with the violations), checks the active
+ISSUER `Participant` through the indexer (`409 NOT_AUTHORIZED`, or `503 RESOLVER_UNAVAILABLE`
+when the indexer cannot answer), and reads the Type Metadata document to bind every credential to
+its `vct#integrity`. It answers `503 RESOLVER_UNAVAILABLE` when that document cannot be read.
+
 ## Not wired up yet
 
-The configuration file the spec defines carries no credential type and no trust setting, and the
-agent derives none of them yet. So `createCredentialOffer` and `createPresentationRequest` answer
-`404 UNKNOWN_ID` for every `jsonSchemaCredentialId`, `createCredentialOffer` answers it for every
-`statusListId`, and reading a verified presentation answers the `RESOLVER_UNAVAILABLE` verdict.
-The Ecosystem side is in place: the agent serves the SD-JWT VC Type Metadata of each VTJSC it
-issues at `/vt/vct/{credentialSchemaId}`, with or without this plugin. Three issues carry the rest:
+The configuration file carries no trust setting and the agent hosts no status list. So
+`createPresentationRequest` answers `404 UNKNOWN_ID` for every `jsonSchemaCredentialId`,
+`createCredentialOffer` answers it for every `statusListId`, and reading a verified presentation
+answers the `RESOLVER_UNAVAILABLE` verdict. Two issues carry the rest:
 
-- [#711](https://github.com/verana-labs/vs-agent/issues/711): credential types read from the VPR,
-  one per active issuer participant;
 - [#712](https://github.com/verana-labs/vs-agent/issues/712): the verifier trust decision on the
   eight steps the spec now defines, with no `trust` block anywhere;
 - [#713](https://github.com/verana-labs/vs-agent/issues/713): status lists.
@@ -100,11 +112,11 @@ answers in the v2 error envelope. Without `OID4VC_CONFIG_FILE_LOCATION`, every p
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `createCredentialOffer` | `POST /credential-offer` | `jsonSchemaCredentialId`, `claims`, `ttlSeconds` (60 to 7776000), optional `statusListId` and `statusListIndex` together. Returns `credentialExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`. Answers `UNKNOWN_ID` for every credential type until #711 and for every status list until #713. |
+| `createCredentialOffer` | `POST /credential-offer` | `jsonSchemaCredentialId`, `claims`, `ttlSeconds` (60 to 7776000), optional `statusListId` and `statusListIndex` together. Returns `credentialExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`, `422 INVALID_CLAIMS`, `409 NOT_AUTHORIZED`, `503 RESOLVER_UNAVAILABLE`. Answers `UNKNOWN_ID` for every status list until #713. |
 | `listCredentialExchanges` | `GET /credential-exchanges` | Filters `jsonSchemaCredentialId`, `state`. Keyset pagination. |
 | `getCredentialExchange` | `GET /credential-exchanges/{credentialExchangeId}` | `credentialExchangeId`, `jsonSchemaCredentialId`, `state`, `createdAt`, `updatedAt`, `expiresAt`, `errorMessage`. Never the claims, the offer URL or the pre-authorized code. |
 | `deleteCredentialExchange` | `DELETE /credential-exchanges/{credentialExchangeId}` | `204`. Deletes the record only, never a credential that a wallet holds. |
-| `createPresentationRequest` | `POST /presentation-request` | `jsonSchemaCredentialId`, optional `requestedClaims` (defaults to every claim of the type), optional `queryLanguage` (`dcql`, `presentation_exchange`), optional `requestSigner` (`x5c`, `did`). Returns `proofExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`, `409 INVALID_STATE`. Answers `UNKNOWN_ID` for every credential type until #711. |
+| `createPresentationRequest` | `POST /presentation-request` | `jsonSchemaCredentialId`, optional `requestedClaims` (defaults to every claim of the type), optional `queryLanguage` (`dcql`, `presentation_exchange`), optional `requestSigner` (`x5c`, `did`). Returns `proofExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`, `409 INVALID_STATE`. The credential type has to be one the agent derived from the VPR. |
 | `listPresentations` | `GET /presentations` | Filters `jsonSchemaCredentialId`, `state`. Keyset pagination. |
 | `getPresentation` | `GET /presentations/{proofExchangeId}` | Adds the stored `jsonSchemaCredentialId` and `requestedClaims` of the request, then `cryptographicVerified`, `accepted`, `trust` and `credential` once the wallet answered. |
 | `deletePresentation` | `DELETE /presentations/{proofExchangeId}` | `204`. |

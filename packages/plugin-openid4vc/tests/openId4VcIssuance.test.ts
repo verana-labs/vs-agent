@@ -33,7 +33,7 @@ describe('in-process OpenID4VC issuance', () => {
   it('issues and stores a holder-bound dc+sd-jwt through the pre-authorized flow', async () => {
     expect(storedCredential.claimFormat).toBe('dc+sd-jwt')
     expect(storedCredential.prettyClaims).toMatchObject({
-      vct: testCredentialConfiguration.vct,
+      vct: agents.issuer.credentialConfiguration.vct,
       name: 'Ada Lovelace',
       role: 'engineer',
     })
