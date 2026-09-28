@@ -15,6 +15,8 @@ import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 export const vtFlowEvents = (agent: VsAgent, logger: BaseLogger) => {
   agent.events.on(VtFlowEventTypes.VtFlowStateChanged, async ({ payload }: VtFlowStateChangedEvent) => {
     logger.debug(`Incoming vtFlow state change: ${payload.vtFlowRecordId}`)
+    // a re-attach signals itself with the same state, and vt.flows.state-updated is for Flow State changes
+    if (payload.state === payload.previousState) return
     emitVsAgentEvent(
       agent,
       VsAgentEventTypes.VtFlowStateUpdated,

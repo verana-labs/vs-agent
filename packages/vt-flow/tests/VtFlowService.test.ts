@@ -357,6 +357,39 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(record.state).toBe(VtFlowState.Validated)
   })
 
+  it('validator signals issuance only when the applicant re-attaches a VALIDATED flow whose connection a reject ended', async () => {
+    const peer = { id: 'conn-old', theirDid: 'did:web:agent-peer' }
+    const waiting = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.Validated,
+      applicantParticipantRole: 6,
+    })
+    waiting.connectionTerminated = true
+    const reconnection = makeService(waiting, peer)
+    const context = makeMessageContext(reconnection.agentContext)
+
+    await reconnection.service.processReceiveOnboardingRequest(context as never)
+
+    expect(waiting.connectionTerminated).toBeUndefined()
+    expect(reconnection.eventEmitter.emit).toHaveBeenCalledExactlyOnceWith(reconnection.agentContext, {
+      type: VtFlowEventTypes.VtFlowStateChanged,
+      payload: {
+        vtFlowRecordId: waiting.id,
+        threadId: context.message.threadId,
+        participantSessionId: 'sess-1',
+        state: VtFlowState.Validated,
+        previousState: VtFlowState.Validated,
+      },
+    })
+
+    const plain = makeService(
+      makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validated, applicantParticipantRole: 6 }),
+      peer,
+    )
+    await plain.service.processReceiveOnboardingRequest(makeMessageContext(plain.agentContext) as never)
+    expect(plain.eventEmitter.emit).not.toHaveBeenCalled()
+  })
+
   it('validator rejects a session id colliding with a terminated flow', async () => {
     const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.TerminatedByValidator })
     const { service, agentContext } = makeService(existing)
@@ -1291,5 +1324,43 @@ describe('VtFlowModule state listeners', () => {
     await Promise.all(listeners.map(listener => listener(event)))
 
     expect(vtFlowApi.acceptCredentialOffer).toHaveBeenCalledWith(record.id)
+  })
+
+  it('call onReconnected when the applicant re-attaches a VALIDATED flow, and not on the move to VALIDATED', async () => {
+    const listeners: Array<(event: unknown) => Promise<void>> = []
+    const record = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.Validated })
+    const onReconnected = vi.fn()
+    const service = new VtFlowService(
+      { findById: vi.fn().mockResolvedValue(record) } as never,
+      {} as never,
+      { debug: vi.fn(), error: vi.fn() } as never,
+      new VtFlowModuleConfig({ onReconnected }),
+    )
+    const eventEmitter = {
+      on: (type: string, listener: (event: unknown) => Promise<void>) => {
+        if (type === VtFlowEventTypes.VtFlowStateChanged) listeners.push(listener)
+      },
+    }
+    const registry = { registerMessageHandlers: vi.fn(), register: vi.fn() }
+    const dependencies = new Map<unknown, unknown>([
+      [VtFlowService, service],
+      [EventEmitter, eventEmitter],
+    ])
+    const agentContext = {
+      dependencyManager: { resolve: (token: unknown) => dependencies.get(token) ?? registry },
+    }
+    await new VtFlowModule().initialize(agentContext as never)
+    const receive = (previousState: VtFlowState) =>
+      Promise.all(
+        listeners.map(listener =>
+          listener({ payload: { vtFlowRecordId: record.id, state: VtFlowState.Validated, previousState } }),
+        ),
+      )
+
+    await receive(VtFlowState.ValidationTxSubmitted)
+    expect(onReconnected).not.toHaveBeenCalled()
+
+    await receive(VtFlowState.Validated)
+    expect(onReconnected).toHaveBeenCalledExactlyOnceWith({ agentContext, record })
   })
 })

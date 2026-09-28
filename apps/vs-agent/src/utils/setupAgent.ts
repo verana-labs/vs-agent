@@ -157,6 +157,9 @@ export const setupAgent = async ({
               logger.error(`[vt-flow] onCredentialRevoked failed: ${(error as Error).message}`)
             }
           },
+          onReconnected: async ({ record }) => {
+            await orchestrator?.continueAfterValidated(record.id)
+          },
         },
       }),
       ...credoPluginsFromNestPlugins(nestPlugins),

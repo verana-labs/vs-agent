@@ -81,7 +81,7 @@ export enum VtFlowEventTypes {
   VtFlowStateChanged = 'VtFlowStateChanged',
 }
 
-/** Emitted every time a VtFlowRecord's Flow State changes; `previousState` is null on first write. The DIDComm connection lifecycle is observed by the caller via Credo's `DidCommConnectionStateChangedEvent`. */
+/** Emitted every time a VtFlowRecord's Flow State changes; `previousState` is null on first write, and equals `state` when an applicant re-attach resumes a validator flow. The DIDComm connection lifecycle is observed by the caller via Credo's `DidCommConnectionStateChangedEvent`. */
 export interface VtFlowStateChangedEvent extends BaseEvent {
   type: typeof VtFlowEventTypes.VtFlowStateChanged
   payload: {

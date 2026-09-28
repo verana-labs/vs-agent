@@ -288,6 +288,7 @@ export class VtFlowService {
         )
       }
       await this.assertSamePeer(agentContext, existing, connection)
+      const reconnected = existing.connectionTerminated
       existing.connectionId = connection.id
       existing.connectionTerminated = undefined
       if (existing.threadId !== message.threadId) {
@@ -306,6 +307,10 @@ export class VtFlowService {
         await this.updateState(agentContext, existing, VtFlowState.Validated)
       } else {
         await this.repository.update(agentContext, existing)
+        // [VSA-ADM-VT-FL-REJECT-2]: issuance of a flow validated after a reject waits for this reconnection
+        if (reconnected && existing.state === VtFlowState.Validated) {
+          this.emitStateChanged(agentContext, existing, existing.state)
+        }
       }
       return existing
     }

@@ -1,6 +1,10 @@
 import { ConsoleLogger, LogLevel, parseDid } from '@credo-ts/core'
 import { VtFlowModuleConfig } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { VeranaIndexerService, VsAgentWsInboundTransport } from '@verana-labs/vs-agent-sdk'
+import {
+  VeranaIndexerService,
+  VsAgentWsInboundTransport,
+  VtFlowOrchestrator,
+} from '@verana-labs/vs-agent-sdk'
 import { describe, expect, it, vi } from 'vitest'
 
 import { setupAgent } from '../src/utils'
@@ -59,6 +63,31 @@ describe('setupAgent vt-flow', () => {
     const record = { applicantParticipantId: '42' } as never
     await expect(config.checkParticipantId?.({ agentContext: agent.context, record })).resolves.toBe(true)
 
+    await agent.shutdown()
+  }, 60_000)
+
+  it('resumes issuance when the applicant reconnects to a VALIDATED flow ([VSA-ADM-VT-FL-REJECT-2])', async () => {
+    const { agent } = await setupAgent({
+      port: 3997,
+      walletConfig: getAskarStoreConfig('setupAgent vt-flow reconnect'),
+      endpoints: ['wss://reconnect.example'],
+      publicApiBaseUrl: 'https://reconnect.example',
+      indexer: new VeranaIndexerService({
+        baseUrl: 'https://indexer.invalid',
+        logger: new ConsoleLogger(LogLevel.Off),
+      }),
+      parsedDid: parseDid('did:webvh:reconnect.example'),
+      logLevel: LogLevel.Off,
+    })
+    const continueAfterValidated = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
+      .mockResolvedValue({} as never)
+
+    const config = agent.dependencyManager.resolve(VtFlowModuleConfig)
+    await config.onReconnected?.({ agentContext: agent.context, record: { id: 'flow-1' } as never })
+
+    expect(continueAfterValidated).toHaveBeenCalledExactlyOnceWith('flow-1')
+    continueAfterValidated.mockRestore()
     await agent.shutdown()
   }, 60_000)
 })

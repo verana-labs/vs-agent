@@ -250,6 +250,11 @@ export class VtFlowModule implements Module {
           return
         }
 
+        if (payload.state === VtFlowState.Validated && payload.previousState === VtFlowState.Validated) {
+          await config.onReconnected?.({ agentContext, record })
+          return
+        }
+
         // The validator itself moves a flow out of OOB_PENDING, and validateFlow then offers
         const readyToOffer =
           (record.variant === VtFlowVariant.OnboardingProcess && payload.state === VtFlowState.Validated) ||

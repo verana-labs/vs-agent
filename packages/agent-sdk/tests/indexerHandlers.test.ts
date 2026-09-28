@@ -627,4 +627,33 @@ describe('vtFlowEvents', () => {
       schemaId: '12',
     })
   })
+
+  it('emits no state-updated event for a re-attach that leaves the Flow State as it was', async () => {
+    const service = { findById: vi.fn().mockResolvedValue(null) }
+    const on = vi.fn()
+    const agent = {
+      events: { on, emit: vi.fn() },
+      context: { dependencyManager: { resolve: () => service } },
+    }
+    vtFlowEvents(agent as never, { debug: vi.fn(), warn: vi.fn() } as never)
+    const [, listener] = on.mock.calls[0]
+
+    await listener({
+      payload: {
+        vtFlowRecordId: 'rec-v',
+        state: VtFlowState.Validated,
+        previousState: VtFlowState.Validated,
+      },
+    })
+    expect(agent.events.emit).not.toHaveBeenCalled()
+
+    await listener({
+      payload: {
+        vtFlowRecordId: 'rec-v',
+        state: VtFlowState.Validated,
+        previousState: VtFlowState.ValidationTxSubmitted,
+      },
+    })
+    expect(agent.events.emit).toHaveBeenCalledTimes(1)
+  })
 })

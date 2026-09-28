@@ -32,6 +32,12 @@ export type VtFlowOnCredentialRevokedHook = (ctx: {
   record: VtFlowRecord
 }) => Promise<void>
 
+/** Validator hook fired when the applicant re-attaches a `VALIDATED` flow whose issuance waited for its reconnection ([VSA-ADM-VT-FL-REJECT-2]). */
+export type VtFlowOnReconnectedHook = (ctx: {
+  agentContext: AgentContext
+  record: VtFlowRecord
+}) => Promise<void>
+
 export interface VtFlowBuildCredentialOfferContext {
   agentContext: AgentContext
   record: VtFlowRecord
@@ -104,6 +110,7 @@ export interface VtFlowModuleConfigOptions {
   verifyCredential?: VtFlowVerifyCredentialHook
   onCompleted?: VtFlowOnCompletedHook
   onCredentialRevoked?: VtFlowOnCredentialRevokedHook
+  onReconnected?: VtFlowOnReconnectedHook
   autoMarkValidated?: boolean
   autoOfferCredential?: boolean
   buildCredentialOffer?: VtFlowBuildCredentialOfferHook
@@ -153,6 +160,10 @@ export class VtFlowModuleConfig {
 
   public get onCredentialRevoked(): VtFlowOnCredentialRevokedHook | undefined {
     return this.options.onCredentialRevoked
+  }
+
+  public get onReconnected(): VtFlowOnReconnectedHook | undefined {
+    return this.options.onReconnected
   }
 
   public get autoMarkValidated(): boolean {
