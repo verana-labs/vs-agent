@@ -33,6 +33,13 @@ describe('getDidWebHttpsBaseUrl', () => {
     expect(getDidWebHttpsBaseUrl('did:peer:2.Ez6fixture')).toBeUndefined()
   })
 
+  it('maps the explicit https default port onto the portless base it shares', () => {
+    expect(getDidWebHttpsBaseUrl('did:web:example.com%3A443')).toBe('https://example.com')
+    expect(getDidWebHttpsBaseUrl('did:web:example.com%3A443:dids:issuer')).toBe(
+      'https://example.com/dids/issuer',
+    )
+  })
+
   it('keeps distinct ports distinct instead of normalising them away', () => {
     expect(getDidWebHttpsBaseUrl('did:web:example.com%3A80')).toBe('https://example.com:80')
     expect(getDidWebHttpsBaseUrl('did:web:example.com%3A8080')).toBe('https://example.com:8080')
@@ -67,6 +74,14 @@ describe('getDidWebHttpsBaseUrl', () => {
     'did:web:user%40example.com',
     'did:web:example.com%25',
     'did:web:%5B%3A%3A1%5D',
+    'did:web:127.1',
+    'did:web:0x7f.1',
+    'did:web:example.com%3A0443',
+    'did:web:%2E%2E',
+    'did:web:%2E',
+    'did:web:example.com.',
+    'did:web:.example.com',
+    'did:web:b%C3%BCcher.example',
   ])('rejects rather than normalises %s', value => {
     expect(getDidWebHttpsBaseUrl(value)).toBeUndefined()
   })
