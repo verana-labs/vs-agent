@@ -11,10 +11,13 @@ const validConfig = () => ({ issuer: {}, verifier: {} })
 
 const signingMaterial = () => ({ certificateChain: ['MIIB-certificate'], privateJwk: { kty: 'EC' } })
 
+const registry = () => ({ configurations: [], replace: expect.any(Function) })
+
 const readOptions = () => ({
   ...validConfig(),
   publicApiBaseUrl,
   credentialConfigurations: [],
+  credentialConfigurationRegistry: registry(),
 })
 
 const readError = async (location: string) => {
@@ -49,7 +52,11 @@ describe('OpenID4VC configuration file', () => {
     await writeFile(configPath, JSON.stringify({}))
 
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).resolves.toEqual({
-      options: { publicApiBaseUrl, credentialConfigurations: [] },
+      options: {
+        publicApiBaseUrl,
+        credentialConfigurations: [],
+        credentialConfigurationRegistry: registry(),
+      },
       errors: [],
     })
   })

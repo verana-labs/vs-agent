@@ -1,6 +1,9 @@
 import type { OpenId4VcPluginOptions } from '@verana-labs/vs-agent-plugin-openid4vc'
 
-import { parseOpenId4VcConfiguration } from '@verana-labs/vs-agent-plugin-openid4vc'
+import {
+  createCredentialConfigurationRegistry,
+  parseOpenId4VcConfiguration,
+} from '@verana-labs/vs-agent-plugin-openid4vc'
 import { readFile } from 'fs/promises'
 
 const FETCH_TIMEOUT_MS = 10_000
@@ -20,8 +23,14 @@ export async function readOpenId4VcOptions(
   try {
     const contents = url ? await fetchConfiguration(url, name) : await readConfiguration(location)
     const parsed = parseConfiguration(contents, name)
+    const credentialConfigurationRegistry = createCredentialConfigurationRegistry()
     return {
-      options: { ...parseOpenId4VcConfiguration(parsed), publicApiBaseUrl, credentialConfigurations: [] },
+      options: {
+        ...parseOpenId4VcConfiguration(parsed),
+        publicApiBaseUrl,
+        credentialConfigurations: credentialConfigurationRegistry.configurations,
+        credentialConfigurationRegistry,
+      },
       errors: [],
     }
   } catch (error) {
