@@ -386,6 +386,25 @@ describe('markVtFlowRecordsValidated', () => {
     continueAfterValidated.mockRestore()
   })
 
+  it('moves a flow still in AWAITING_OR to VALIDATED with the terms of the entry, and continues into issuance', async () => {
+    const records = [{ id: 'awaiting', role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr }]
+    const { agent, recordValidation, continueAfterValidated } = makeValidatedAgent(records)
+
+    await markVtFlowRecordsValidated(agent as never, '7', tx)
+
+    expect(recordValidation).toHaveBeenCalledWith(
+      'awaiting',
+      expect.objectContaining({
+        decidedAt: tx.timestamp,
+        submission: 'OPERATOR',
+        effectiveUntil: entry.effective_until,
+      }),
+      VtFlowState.Validated,
+    )
+    expect(continueAfterValidated).toHaveBeenCalledWith('awaiting')
+    continueAfterValidated.mockRestore()
+  })
+
   it('tells its own transaction apart from an operator one and takes the terms from the entry', async () => {
     const decidedAt = '2026-09-25T09:00:00Z'
     const records = [

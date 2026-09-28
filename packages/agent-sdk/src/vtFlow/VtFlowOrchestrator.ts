@@ -459,6 +459,7 @@ export class VtFlowOrchestrator {
     // Once the entry is VALIDATED on chain any validator-side state resumes into issuance, which is
     // how a backend that disabled the default notification handler drives the flow ([VSA-ADM-VT-FL-VALIDATE-11]).
     const acceptedOnceValidated = [
+      VtFlowState.AwaitingOr,
       VtFlowState.AwaitingValidationTx,
       VtFlowState.ValidationTxSubmitted,
       VtFlowState.Validated,

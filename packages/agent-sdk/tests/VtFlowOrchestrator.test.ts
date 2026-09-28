@@ -875,10 +875,10 @@ describe('VtFlowOrchestrator validateFlow', () => {
     })
   })
 
-  it.each(['PENDING', 'VALIDATED'])('refuses an AWAITING_OR flow whose entry is %s', async opState => {
+  it('refuses an AWAITING_OR flow whose entry is PENDING', async () => {
     const { agent, vtFlowApi, chain, current } = makeValidateAgent({
       state: 'AWAITING_OR',
-      applicant: { op_state: opState },
+      applicant: { op_state: 'PENDING' },
     })
 
     await expect(
@@ -1021,12 +1021,16 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(credential.validUntil).toBeUndefined()
   })
 
-  it('resumes a HOLDER renewal whose entry is already VALIDATED into issuance', async () => {
-    const { orchestrator, chain, offer } = makeHolderRenewal('VALIDATION_TX_SUBMITTED')
+  it.each([
+    'VALIDATION_TX_SUBMITTED',
+    'AWAITING_OR',
+  ])('resumes a HOLDER renewal in %s whose entry is already VALIDATED into issuance', async state => {
+    const { orchestrator, chain, current, offer } = makeHolderRenewal(state)
 
     await orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })
 
     expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(current()).toMatchObject({ state: 'VALIDATED', validation: { submission: 'OPERATOR' } })
     expect(offer).toHaveBeenCalledWith(expect.objectContaining({ vtFlowRecordId: 'rec-v' }))
   })
 
