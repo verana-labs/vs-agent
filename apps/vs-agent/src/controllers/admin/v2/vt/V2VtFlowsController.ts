@@ -10,17 +10,17 @@ import {
 } from '@nestjs/swagger'
 
 import { Page } from '../../../../common'
-import { toV2Dto, VtFlowsService } from '../../vt-flow/VtFlowsService'
+import { toV2Dto, VtFlowsService } from './VtFlowsService'
 import {
   EditClaimsDto,
   ListFlowsV2QueryDto,
   RejectFlowDto,
   SendOobLinkV2Dto,
   StartValidationDto,
+  V2VtFlowRecordDto,
+  V2VtFlowRecordPageDto,
   ValidateFlowDto,
-} from '../../vt-flow/dto/flow-requests.dto'
-
-import { V2VtFlowRecordDto, V2VtFlowRecordPageDto } from './dto'
+} from './dto'
 
 @ApiTags('v2/vt')
 @Controller({ path: 'vt/flows', version: '2' })

@@ -3,7 +3,7 @@ import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { getEcsSchemas } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../services/VsAgentService'
-import { TrustService } from '../../admin/verifiable/TrustService'
+import { TrustService } from './TrustService'
 
 @ApiTags('Self Trust Registry')
 @Controller('vt')

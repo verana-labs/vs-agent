@@ -1,9 +1,9 @@
-// stats.service.ts
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { StatEnum, StatEvent } from '@verana-labs/vs-agent-model'
 import { Container, Connection, Sender, create_container } from 'rhea'
 
-import { StatEventOptions } from '../types'
+import { EVENTS_MODULE_OPTIONS } from '../tokens'
+import { EventsModuleOptions } from '../types'
 
 @Injectable()
 export class StatProducerService implements OnModuleInit, OnModuleDestroy {
@@ -27,11 +27,11 @@ export class StatProducerService implements OnModuleInit, OnModuleDestroy {
    * Initializes the StatProducerService with default settings optimized for a local development environment.
    * By default, it connects to a JMS broker running on `localhost` with predefined credentials.
    *
-   * If custom options are provided through `GLOBAL_MODULE_OPTIONS`, they will override the defaults.
+   * If custom options are provided through `EVENTS_MODULE_OPTIONS`, they will override the defaults.
    *
    * @param options - Configuration options for the JMS connection.
    */
-  constructor(@Inject('GLOBAL_MODULE_OPTIONS') private options: StatEventOptions) {
+  constructor(@Inject(EVENTS_MODULE_OPTIONS) options: EventsModuleOptions) {
     this.container = create_container()
     this.config = {
       host: options.statOptions?.host || 'localhost',

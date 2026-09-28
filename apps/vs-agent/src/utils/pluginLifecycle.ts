@@ -9,7 +9,6 @@ export const nestPluginContributions = (plugins: VsAgentNestPlugin[]) => ({
   imports: plugins.flatMap(plugin => plugin.imports ?? []),
   controllers: plugins.flatMap(plugin => plugin.controllers ?? []),
   providers: plugins.flatMap(plugin => plugin.providers ?? []),
-  messageHandlers: plugins.flatMap(plugin => plugin.messageHandlers ?? []),
   didcommModules: plugins.flatMap(plugin => plugin.didcommModules ?? []),
 })
 

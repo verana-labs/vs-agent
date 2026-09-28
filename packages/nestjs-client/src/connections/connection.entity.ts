@@ -1,29 +1,22 @@
-import { ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm'
+import { ReceivedUserProfile } from '@verana-labs/vs-agent-client'
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm'
 
-import { UserProfile } from '../types'
+import { ConnectionStatus } from '../types'
 
 @Entity('connections')
 export class ConnectionEntity {
   @PrimaryGeneratedColumn('uuid')
   id?: string
 
-  @Column({
-    type: 'enum',
-    enum: ExtendedDidExchangeState,
-    default: ExtendedDidExchangeState.Start,
-  })
-  status?: ExtendedDidExchangeState
+  @Column({ type: 'enum', enum: ConnectionStatus, default: ConnectionStatus.Start })
+  status?: ConnectionStatus
 
   @Column('jsonb', { nullable: true })
-  userProfile?: UserProfile
+  userProfile?: ReceivedUserProfile
 
   @CreateDateColumn()
   createdTs?: Date
 
   @UpdateDateColumn()
   updatedTs?: Date
-
-  @Column('jsonb', { nullable: true })
-  metadata?: Record<string, any>
 }

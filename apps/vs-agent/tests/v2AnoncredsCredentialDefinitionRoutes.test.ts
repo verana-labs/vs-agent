@@ -16,7 +16,7 @@ import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AdminApiError, AdminApiErrorCode, ErrorEnvelopeFilter } from '../src/common'
-import { CredentialTypesService } from '../src/controllers/admin/credentials'
+import { CredentialTypesService } from '../src/services'
 import { CreateCredentialDefinitionDto } from '../src/controllers/admin/v2/anoncreds/dto'
 import { V2AnoncredsCredentialDefinitionsController } from '../src/controllers/admin/v2/anoncreds/V2AnoncredsCredentialDefinitionsController'
 import { VsAgentService } from '../src/services/VsAgentService'

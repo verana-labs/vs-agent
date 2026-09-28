@@ -27,18 +27,9 @@ import { CoreModule } from '@/core.module'
       load: [appConfig],
     }),
     EventsModule.register({
-      modules: {
-        messages: true,
-        connections: true,
-        credentials: true,
-      },
-      options: {
-        eventHandler: CoreService, // This is the service that will handle the events
-        imports: [], // Add any additional dependency injection modules here that are needed for the Core Service
-        // For example, if you need to inject a service from another module:
-        // imports: [SomeOtherModule],
-        url: process.env.VS_AGENT_ADMIN_URL,
-      },
+      url: process.env.VS_AGENT_ADMIN_URL || 'http://localhost:3000',
+      eventHandler: CoreService,
+      modules: { connections: true, credentials: true },
     }),
   ],
 })

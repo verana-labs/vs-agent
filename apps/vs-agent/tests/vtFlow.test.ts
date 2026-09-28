@@ -163,7 +163,7 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.threadId).toBe(applicantRecord.threadId)
     expect(validatorRecord?.applicantParticipantId).toBe('participant-42')
 
-    const { VtFlowsService } = await import('../src/controllers/admin/vt-flow/VtFlowsService')
+    const { VtFlowsService } = await import('../src/controllers/admin/v2/vt/VtFlowsService')
     const flowsService = new VtFlowsService({ getAgent: async () => applicant } as never)
     const bySchema = await flowsService.listFlowsPage({ schemaId: '12' })
     expect(bySchema.items.map(flow => flow.id)).toEqual([applicantRecord.id])
@@ -279,15 +279,16 @@ describe('vt-flow: two-agent integration', () => {
     })
     await validatingReached
 
-    const { VtFlowsService } = await import('../src/controllers/admin/vt-flow/VtFlowsService')
+    const { VtFlowsService } = await import('../src/controllers/admin/v2/vt/VtFlowsService')
     const flowsService = new VtFlowsService({ getAgent: async () => validator } as never)
 
-    const flows = await flowsService.listFlows({ role: VtFlowRole.Validator })
+    const flows = (await flowsService.listFlowsPage({ role: VtFlowRole.Validator })).items
     expect(flows).toHaveLength(1)
     expect(flows[0].peerDid).toBe(applicant.did)
-    expect(flows[0].state).toBe(VtFlowState.Validating)
+    expect(flows[0].flowState).toBe(VtFlowState.Validating)
 
-    const none = await flowsService.listFlows({ role: VtFlowRole.Validator, peerDID: 'did:web:nobody' })
+    const none = (await flowsService.listFlowsPage({ role: VtFlowRole.Validator, peerDid: 'did:web:nobody' }))
+      .items
     expect(none).toHaveLength(0)
 
     const psid = flows[0].participantSessionId

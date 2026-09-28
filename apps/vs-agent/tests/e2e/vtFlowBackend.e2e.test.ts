@@ -43,7 +43,7 @@ import {
 import { mockResponses, startAgent } from '../__mocks__'
 import { FakeDidResolver } from '../__mocks__/fakeDidResolver'
 import type { V2VtFlowRecordDto } from '../../src/controllers/admin/v2/vt/dto'
-import { VtFlowsService } from '../../src/controllers/admin/vt-flow/VtFlowsService'
+import { VtFlowsService } from '../../src/controllers/admin/v2/vt/VtFlowsService'
 import { SubjectInboundTransport, SubjectOutboundTransport, type SubjectMessage } from '../helpers'
 
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'

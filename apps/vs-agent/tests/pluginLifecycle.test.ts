@@ -35,7 +35,6 @@ describe('plugin lifecycle', () => {
 
   it('collects the Nest contributions of every plugin and defaults the absent ones', () => {
     class ExampleController {}
-    class ExampleHandler {}
     const provider = { provide: 'EXAMPLE', useValue: 1 }
     const didcommModule = { module: 'example', prefixes: ['https://example.org/'] }
     const imported = class ExampleModule {}
@@ -47,7 +46,6 @@ describe('plugin lifecycle', () => {
           imports: [imported],
           controllers: [ExampleController],
           providers: [provider],
-          messageHandlers: [ExampleHandler as never],
           didcommModules: [didcommModule],
         },
         { name: 'empty' },
@@ -56,7 +54,6 @@ describe('plugin lifecycle', () => {
       imports: [imported],
       controllers: [ExampleController],
       providers: [provider],
-      messageHandlers: [ExampleHandler],
       didcommModules: [didcommModule],
     })
   })

@@ -21,7 +21,7 @@ export class CredentialEntity {
   connectionId?: string
 
   @Column({ type: 'varchar', nullable: true })
-  threadId?: string
+  credentialExchangeId?: string
 
   @Column({ type: 'varchar', nullable: true })
   refIdHash?: string

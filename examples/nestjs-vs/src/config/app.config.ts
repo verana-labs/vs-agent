@@ -48,6 +48,8 @@ export default registerAs('appConfig', () => ({
    */
   vsAgentAdminUrl: process.env.VS_AGENT_ADMIN_URL || 'http://localhost:3000',
 
+  jsonSchemaCredentialId: process.env.JSON_SCHEMA_CREDENTIAL_ID,
+
   /**
    * Base URL for the application.
    * Defaults to 'http://localhost:2902' if PUBLIC_BASE_URL is not set.

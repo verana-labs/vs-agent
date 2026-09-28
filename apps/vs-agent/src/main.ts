@@ -83,7 +83,7 @@ import {
   TRUSTED_ECS_ECOSYSTEM_DIDS,
   readOpenId4VcOptions,
 } from './config'
-import { MessagingPlugin, VtFlowNestPlugin } from './plugins'
+import { VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
@@ -101,7 +101,7 @@ import {
   webhookEvent,
 } from './utils'
 
-const SELECTABLE_PLUGINS = ['messaging', 'chat', 'mrtd']
+const SELECTABLE_PLUGINS = ['chat', 'mrtd']
 
 const ADMIN_TAGS = Object.fromEntries(
   Object.entries(ADMIN_V2_TAGS).filter(
@@ -309,7 +309,6 @@ const run = async () => {
 
   // Build the list of active NestJS plugins
   const nestPlugins: VsAgentNestPlugin[] = [
-    ...(ENABLED_PLUGINS.includes('messaging') ? [MessagingPlugin] : []),
     ...(chatModule ? [chatModule.ChatPlugin({ defaultProfile: ecsServiceProfile })] : []),
     ...(mrtdModule
       ? [mrtdModule.MrtdPlugin({ masterListCscaLocation: MRTD_MASTER_LIST_CSCA_LOCATION })]
