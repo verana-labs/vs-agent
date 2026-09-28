@@ -83,7 +83,7 @@ describe('createCredentialConfigurationRegistry', () => {
     expect(registry.configurations).toEqual([])
   })
 
-  it('rejects a duplicate vct and names the offender', () => {
+  it('rejects a duplicate vct handed to replace, which the VPR-derived set cannot hold', () => {
     const { registry } = registeredOptions()
 
     expect(() =>
