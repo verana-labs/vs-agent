@@ -62,4 +62,28 @@ describe('createCredentialConfigurationRegistry', () => {
 
     expect(response.body).toEqual({ credential_configuration_id: 'employee' })
   })
+
+  it('rejects a duplicate id and names the offender', () => {
+    const { registry } = registeredOptions()
+
+    expect(() =>
+      registry.replace([
+        configuration('employee'),
+        { ...configuration('employee'), vct: 'https://issuer.example/vct/other' },
+      ]),
+    ).toThrow('duplicate credential configuration id "employee"')
+    expect(registry.configurations).toEqual([])
+  })
+
+  it('rejects a duplicate vct and names the offender', () => {
+    const { registry } = registeredOptions()
+
+    expect(() =>
+      registry.replace([
+        configuration('employee'),
+        { ...configuration('member'), vct: 'https://issuer.example/vct/employee' },
+      ]),
+    ).toThrow('duplicate credential configuration vct "https://issuer.example/vct/employee"')
+    expect(registry.configurations).toEqual([])
+  })
 })
