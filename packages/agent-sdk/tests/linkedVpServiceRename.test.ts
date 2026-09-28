@@ -101,6 +101,8 @@ async function publishOrgCredential(agent: unknown) {
     TYPE,
     { id: `${PUBLIC_URL}/vt/schemas-29-jsc.json`, type: 'JsonSchemaCredential' } as never,
     ecsClaims,
+    undefined,
+    '2027-09-25T10:00:00Z',
   )
 }
 

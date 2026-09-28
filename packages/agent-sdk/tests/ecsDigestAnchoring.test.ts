@@ -120,8 +120,27 @@ describe('ECS credential digest anchoring', () => {
       expect.anything(),
       `https://agent.example/vt/${key}-vtc-vp.json`,
       ...Array(6).fill(expect.anything()),
+      undefined,
     )
     expect(chain.createOrUpdateParticipantSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('hands the effective_until of the ISSUER entry to the credential as validUntil', async () => {
+    const { agent } = makeAgent(makeChain())
+
+    await rebindEcsCredentialSchema(
+      agent as never,
+      'https://agent.example',
+      '5',
+      'ecs-org',
+      ecsClaims,
+      JSC_ID,
+      ISSUER_PARTICIPANT_ID,
+      undefined,
+      '2027-09-25T10:00:00Z',
+    )
+
+    expect(publishSelfIssuedEcsPresentation.mock.calls[0][8]).toBe('2027-09-25T10:00:00Z')
   })
 
   it('names only the issuer, because a self-issued credential has no counterparty', async () => {

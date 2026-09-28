@@ -1,4 +1,5 @@
 import type { VtFlowRecord } from './repository/VtFlowRecord'
+import type { VtFlowIssuance } from './types'
 import type { AgentContext } from '@credo-ts/core'
 import type {
   DidCommCredentialExchangeRecord,
@@ -15,9 +16,10 @@ export interface VtFlowBeforeCredentialIssuedContext extends VtFlowCredentialLif
   credential: Record<string, unknown>
 }
 
+/** A returned `issuance` whose `tx` FAILED keeps the flow in `CRED_OFFERED` without delivering ([VSA-VTI-FLOW-ISSUE-1]). */
 export type VtFlowBeforeCredentialIssuedHook = (
   ctx: VtFlowBeforeCredentialIssuedContext,
-) => Promise<{ credentialDigest?: string } | void>
+) => Promise<{ credentialDigest?: string; issuance?: VtFlowIssuance } | void>
 
 /** Applicant hook fired on `credential-received`; return `true` to auto-Ack, `false`/omit to leave the Ack to the caller. */
 export type VtFlowVerifyCredentialHook = (ctx: VtFlowCredentialLifecycleContext) => Promise<boolean>
@@ -26,6 +28,12 @@ export type VtFlowVerifyCredentialHook = (ctx: VtFlowCredentialLifecycleContext)
 export type VtFlowOnCompletedHook = (ctx: VtFlowCredentialLifecycleContext) => Promise<void>
 
 export type VtFlowOnCredentialRevokedHook = (ctx: {
+  agentContext: AgentContext
+  record: VtFlowRecord
+}) => Promise<void>
+
+/** Validator hook fired when the applicant re-attaches a `VALIDATED` flow whose issuance waited for its reconnection ([VSA-ADM-VT-FL-REJECT-2]). */
+export type VtFlowOnReconnectedHook = (ctx: {
   agentContext: AgentContext
   record: VtFlowRecord
 }) => Promise<void>
@@ -73,6 +81,16 @@ export interface VtFlowEcsIssuanceExemptionContext extends VtFlowAssertVerifiabl
 /** VS-CONN-VS exemption: a Validator MAY accept a peer that is not yet a Verifiable Service when the purpose of the request is the issuance of an ECS Organization, Persona or Service credential. Consulted only on the Validator side, only after `assertVerifiableService` rejected the peer; return `true` to let the flow proceed. */
 export type VtFlowEcsIssuanceExemptionHook = (ctx: VtFlowEcsIssuanceExemptionContext) => Promise<boolean>
 
+export interface VtFlowCheckParticipantIdContext {
+  agentContext: AgentContext
+  record: VtFlowRecord
+}
+
+/** Validator check of the onboarding-request `participant_id` before the flow moves to `VALIDATING`; return `false` to refuse the request with `vt-flow.invalid-participant-id`, or `'validated'` when a `VALIDATED` entry settles the request and the flow has been moved on, so the acceptance neither moves it nor sends anything. */
+export type VtFlowCheckParticipantIdHook = (
+  ctx: VtFlowCheckParticipantIdContext,
+) => Promise<boolean | 'validated'>
+
 /** Default Data Integrity cryptosuite, applied when `dataIntegrityCryptosuite` is not configured. */
 export const DEFAULT_DATA_INTEGRITY_CRYPTOSUITE = 'eddsa-jcs-2022'
 
@@ -94,6 +112,7 @@ export interface VtFlowModuleConfigOptions {
   verifyCredential?: VtFlowVerifyCredentialHook
   onCompleted?: VtFlowOnCompletedHook
   onCredentialRevoked?: VtFlowOnCredentialRevokedHook
+  onReconnected?: VtFlowOnReconnectedHook
   autoMarkValidated?: boolean
   autoOfferCredential?: boolean
   buildCredentialOffer?: VtFlowBuildCredentialOfferHook
@@ -102,6 +121,7 @@ export interface VtFlowModuleConfigOptions {
   onBeforeCredentialIssued?: VtFlowBeforeCredentialIssuedHook
   assertVerifiableService?: VtFlowAssertVerifiableServiceHook
   checkEcsIssuanceExemption?: VtFlowEcsIssuanceExemptionHook
+  checkParticipantId?: VtFlowCheckParticipantIdHook
 }
 
 /** Read-only view over VtFlowModuleConfigOptions with defaults applied. */
@@ -144,6 +164,10 @@ export class VtFlowModuleConfig {
     return this.options.onCredentialRevoked
   }
 
+  public get onReconnected(): VtFlowOnReconnectedHook | undefined {
+    return this.options.onReconnected
+  }
+
   public get autoMarkValidated(): boolean {
     return this.options.autoMarkValidated ?? false
   }
@@ -174,5 +198,9 @@ export class VtFlowModuleConfig {
 
   public get checkEcsIssuanceExemption(): VtFlowEcsIssuanceExemptionHook | undefined {
     return this.options.checkEcsIssuanceExemption
+  }
+
+  public get checkParticipantId(): VtFlowCheckParticipantIdHook | undefined {
+    return this.options.checkParticipantId
   }
 }

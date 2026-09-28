@@ -22,6 +22,8 @@ import type { VsAgent } from '../agent/VsAgent'
 import { composeEcsClaims, EcsClaims } from './ecsClaims'
 import { createW3cV2Credential } from './vcdm2'
 
+const TEN_YEARS_MS = 10 * 365 * 24 * 60 * 60 * 1000
+
 const ajv = new Ajv({ strict: false, allErrors: true })
 addFormats(ajv)
 
@@ -69,7 +71,10 @@ export const sortKeysDeep = (value: unknown): unknown => {
  * context, valid from now for ten years unless told otherwise.
  */
 export function createCredential(options: Partial<W3cV2CredentialOptions>): W3cV2Credential {
-  return createW3cV2Credential(options as W3cV2CredentialOptions)
+  return createW3cV2Credential({
+    ...options,
+    validUntil: options.validUntil ?? new Date(Date.now() + TEN_YEARS_MS).toISOString(),
+  } as W3cV2CredentialOptions)
 }
 
 /**

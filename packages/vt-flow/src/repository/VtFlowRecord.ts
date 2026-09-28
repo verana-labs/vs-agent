@@ -63,6 +63,7 @@ export interface VtFlowStorageProps {
   validation?: VtFlowValidation
   issuance?: VtFlowIssuance
   proofsAttach?: DidCommAttachment[]
+  credentialId?: string
   credentialDigest?: string
   errorMessage?: string
 
@@ -103,8 +104,11 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
   public validation?: VtFlowValidation
   public issuance?: VtFlowIssuance
   public proofsAttach?: DidCommAttachment[]
+  public credentialId?: string
   public credentialDigest?: string
   public errorMessage?: string
+  /** Outlives TERMINATED_BY_VALIDATOR when a validation in flight lands, until the applicant re-attaches ([VSA-ADM-VT-FL-REJECT-2]) */
+  public connectionTerminated?: boolean
 
   public constructor(props: VtFlowStorageProps) {
     super()
@@ -140,6 +144,7 @@ export class VtFlowRecord extends BaseRecord<DefaultVtFlowTags, CustomVtFlowTags
       this.validation = props.validation
       this.issuance = props.issuance
       this.proofsAttach = props.proofsAttach
+      this.credentialId = props.credentialId
       this.credentialDigest = props.credentialDigest
       this.errorMessage = props.errorMessage
     }

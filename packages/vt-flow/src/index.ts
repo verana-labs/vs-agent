@@ -11,6 +11,7 @@ export {
   VtFlowTxStatus,
   VtFlowValidatedFromStates,
   VtFlowVariant,
+  isVtFlowRenewable,
   isVtFlowTerminalState,
 } from './types'
 export type {
@@ -83,6 +84,8 @@ export type {
   VtFlowAssertVerifiableServiceHook,
   VtFlowBuildCredentialOfferContext,
   VtFlowBuildCredentialOfferHook,
+  VtFlowCheckParticipantIdContext,
+  VtFlowCheckParticipantIdHook,
   VtFlowCredentialLifecycleContext,
   VtFlowCredentialOfferPayload,
   VtFlowModuleConfigOptions,

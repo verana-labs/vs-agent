@@ -53,6 +53,8 @@ Endpoints once healthy:
 | Ecosystem admin API + Swagger | http://localhost:4200 (`/api`) |
 | Ecosystem public API + UI | http://localhost:4201 |
 
+A request from the host reaches an agent from the Docker network gateway, not from loopback, so the compose file adds the private address ranges to `ADMIN_API_TRUSTED_NETWORKS`. The admin ports then answer without authentication, so they are published on `127.0.0.1` only.
+
 ### Seed the chain
 
 The demo chain starts empty apart from the funded `cooluser` account. Once the three agents are up, seed the three corporations, the ecosystem, the ECS schemas, the root participants, and the operator grants. Until the seed runs, each agent logs that it cannot resolve its corporation and that it skipped its bootstrap; that is expected.
@@ -90,12 +92,19 @@ The seed prints the three corporation ids, the ecosystem DID, the schema ids, an
 
 ```bash
 docker compose -f docker/docker-compose.yml --env-file .env up -d agent-ecosystem
-docker compose -f docker/docker-compose.yml --env-file .env up -d
+docker compose -f docker/docker-compose.yml --env-file .env up -d agent-validator
+curl -s http://localhost:4001/.well-known/did.jsonl | tail -n 1 | grep -o 'vpr-schemas-[a-z]*-vtc-vp'
 ```
 
 Use `up -d`, not `restart`: `restart` keeps the old environment, so the new `TRUSTED_ECS_ECOSYSTEM_DIDS` would not take effect. Bring up the ecosystem agent first and let it publish its VTJSCs; the other two rebind onto them at startup, and if they come up first they log `[SelfTR] Failed to rebind the ECS credential of schema <id>` and keep their self-issued references.
 
-The applicant's ECS bootstrap then self-onboards and sends the onboarding request to the validator over DIDComm. That request is driven by a single indexer event and is never retried, so a failed first attempt needs a `down -v` and a fresh seed.
+Rerun the `curl` until it lists both `vpr-schemas-org-vtc-vp` and `vpr-schemas-service-vtc-vp`. These are the Organization and Service credentials the validator issues to itself, and the applicant checks them (VS-CONN-VS) before it sends anything. Then start the applicant:
+
+```bash
+docker compose -f docker/docker-compose.yml --env-file .env up -d agent-applicant
+```
+
+The applicant's ECS bootstrap then self-onboards and sends the onboarding request to the validator over DIDComm. If it logs `vt-flow.not-a-verifiable-service` instead, the validator was not ready yet. Run `docker compose -f docker/docker-compose.yml --env-file .env restart agent-applicant` (its environment is already current): at startup it sends the onboarding request again for every `PENDING` participant.
 
 The applicant resolves as `not-trusted` at that point — it has not onboarded yet, so it holds no anchored credentials — and the validator logs the rejection:
 
@@ -103,11 +112,11 @@ The applicant resolves as `not-trusted` at that point — it has not onboarded y
 [vt-flow] VS-CONN-VS rejected 'did:webvh:...:agent-applicant.demo': verified=true outcome=not-trusted
 ```
 
-It accepts the request anyway, under the [VS-CONN-VS] ECS issuance exemption: the applicant owns a `PENDING` Participant entry that names the validator as its validator, on an ECS schema of the ecosystem in `TRUSTED_ECS_ECOSYSTEM_DIDS`. The flow lands in `AWAITING_OR` on the validator and `OR_SENT` on the applicant. The exemption is one-way: the applicant still requires the validator to resolve as `verified`, which is why the ecosystem agent has to publish its VTJSCs first.
+It accepts the request anyway, under the [VS-CONN-VS] ECS issuance exemption: the applicant owns a `PENDING` Participant entry that names the validator as its validator, on an ECS schema of the ecosystem in `TRUSTED_ECS_ECOSYSTEM_DIDS`. It then sends `validating`, so the flow is `VALIDATING` on both sides. The exemption is one-way: the applicant still requires the validator to resolve as `verified`, which is why the ecosystem agent has to publish its VTJSCs first.
 
 ### Drive the flow
 
-Use each agent's Swagger (`/api` on the admin port). The flow surface is under `/v2/vt/flows`: list flows, edit claims, send OOB links, validate, and revoke.
+Use each agent's Swagger (`/api` on the admin port). The flow surface is under `/v2/vt/flows`: list flows, edit claims, send OOB links, start validation, validate, and reject.
 
 The ECS Organization schema requires claims the applicant does not send, so set them before validating (`<sid>` is the flow's `participantSessionId`):
 

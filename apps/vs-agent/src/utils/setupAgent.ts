@@ -98,6 +98,7 @@ export const setupAgent = async ({
         didcommVersions: ['v1', 'v2'],
         vtFlow: {
           autoIssueCredentialOnRequest: true,
+          autoAcceptOnboardingRequest: true,
           autoAcceptIssuanceRequest: true,
           autoOfferCredential: true,
           buildCredentialOffer: async ({ record }) => {
@@ -111,15 +112,14 @@ export const setupAgent = async ({
           },
           onBeforeCredentialIssued: async ({ record, credential }) => {
             if (!orchestrator) throw new Error('[vt-flow] orchestrator not ready, refusing to issue')
-            return {
-              credentialDigest: await orchestrator.onCredentialIssued(record.id, credential as never),
-            }
+            return orchestrator.onCredentialIssued(record.id, credential as never)
           },
           assertVerifiableService: verifiablePublicRegistries
             ? assertVerifiableService({ verifiablePublicRegistries })
             : undefined,
           checkEcsIssuanceExemption: async context =>
             (await orchestrator?.checkEcsIssuanceExemption(context)) ?? false,
+          checkParticipantId: async context => (await orchestrator?.checkParticipantId(context)) ?? false,
           autoAcceptCredentialOffer: true,
           verifyCredential: async ({ record }) => {
             if (!orchestrator) {
@@ -155,6 +155,9 @@ export const setupAgent = async ({
             } catch (error) {
               logger.error(`[vt-flow] onCredentialRevoked failed: ${(error as Error).message}`)
             }
+          },
+          onReconnected: async ({ record }) => {
+            await orchestrator?.continueAfterValidated(record.id)
           },
         },
       }),
