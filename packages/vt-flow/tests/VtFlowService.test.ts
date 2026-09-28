@@ -859,6 +859,34 @@ describe('VtFlowService.acceptOnboardingRequest', () => {
     const { record } = await service.acceptOnboardingRequest(agentContext as never, awaiting.id)
     expect(record.state).toBe(VtFlowState.Validating)
   })
+
+  it('neither moves the flow nor sends anything once the check settles the request on a VALIDATED entry', async () => {
+    const awaiting = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    const checkParticipantId = vi.fn(async () => {
+      awaiting.state = VtFlowState.Validated
+      return 'validated' as const
+    })
+    const { service, repository, agentContext, eventEmitter } = makeService(awaiting, null, {
+      checkParticipantId,
+    })
+    const sendMessage = vi.fn()
+    const api = new VtFlowApi(
+      service,
+      { sendMessage } as never,
+      {} as never,
+      agentContext as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+
+    await expect(api.acceptOnboardingRequest(awaiting.id)).resolves.toMatchObject({
+      state: VtFlowState.Validated,
+    })
+    expect(repository.update).not.toHaveBeenCalled()
+    expect(eventEmitter.emit).not.toHaveBeenCalled()
+    expect(sendMessage).not.toHaveBeenCalled()
+  })
 })
 
 describe('VtFlowService.rejectRequest', () => {

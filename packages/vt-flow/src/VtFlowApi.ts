@@ -243,7 +243,7 @@ export class VtFlowApi {
         this.agentContext,
         vtFlowRecordId,
       )
-      await this.dispatchMessage(record.connectionId, message, record)
+      if (message) await this.dispatchMessage(record.connectionId, message, record)
       return record
     } catch (error) {
       if (!(error instanceof VtFlowError)) throw error

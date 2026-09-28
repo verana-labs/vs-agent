@@ -1188,13 +1188,15 @@ export class VtFlowOrchestrator {
   }
 
   // the indexer can still lag the applicant's own transaction, so wait for it as a tx lookup does
-  async checkParticipantId({ record }: VtFlowCheckParticipantIdContext): Promise<boolean> {
+  async checkParticipantId({ record }: VtFlowCheckParticipantIdContext): Promise<boolean | 'validated'> {
     if (!record.applicantParticipantId || !this.agent.did) return false
     const deadline = Date.now() + TX_LOOKUP_TIMEOUT_MS
+    let validatedAtFirstRead: boolean | undefined
     for (;;) {
       const entry = await this.agent.indexer
         .getParticipant(record.applicantParticipantId)
         .catch(() => undefined)
+      validatedAtFirstRead ??= entry?.op_state === 'VALIDATED'
       if (entry) {
         if (entry.revoked || entry.slashed || entry.validator_participant_id == null) return false
         const validator = await this.agent.indexer
@@ -1202,6 +1204,17 @@ export class VtFlowOrchestrator {
           .catch(() => undefined)
         if (validator && validator.did !== this.agent.did) return false
         if (validator && entry.op_state === 'PENDING') return true
+        if (validator && entry.op_state === 'VALIDATED') {
+          const flow = await this.resolveVtFlowApi().findById(record.id)
+          // the flow has moved on, or another path is moving it to VALIDATED and continues it itself
+          if (flow?.state !== VtFlowState.AwaitingOr || markingValidated.has(record.id)) return 'validated'
+          // VALIDATED at the first read can be the round before this request, which it does not settle
+          if (!validatedAtFirstRead) {
+            await this.markValidated(record.id, entry)
+            await this.continueAfterValidated(record.id)
+            return 'validated'
+          }
+        }
       }
       if (Date.now() >= deadline) return false
       await new Promise(resolve => setTimeout(resolve, TX_LOOKUP_INTERVAL_MS))

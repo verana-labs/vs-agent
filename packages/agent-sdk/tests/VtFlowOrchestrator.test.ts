@@ -1,5 +1,5 @@
 import { VtFlowRole } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ValidationState } from '../src/blockchain/types'
 import { VtFlowOrchestrator } from '../src/vtFlow/VtFlowOrchestrator'
@@ -577,8 +577,14 @@ describe('VtFlowOrchestrator.allowEcsIssuanceExemption', () => {
 })
 
 describe('VtFlowOrchestrator.checkParticipantId', () => {
-  const context = { record: { applicantParticipantId: '42' } } as never
+  const context = { record: { id: 'flow-1', applicantParticipantId: '42' } } as never
   const pending = { id: 42, op_state: 'PENDING', validator_participant_id: 10, revoked: null, slashed: null }
+  const validated = { ...pending, op_state: 'VALIDATED' }
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
 
   function check(...applicantReads: Array<Record<string, unknown> | Error>) {
     const validators: Record<number, unknown> = { 10: activeIssuer, 11: { id: 11, did: 'did:web:other' } }
@@ -588,9 +594,14 @@ describe('VtFlowOrchestrator.checkParticipantId', () => {
       if (read instanceof Error) throw read
       return read
     })
-    const orchestrator = new VtFlowOrchestrator({ did: VALIDATOR_DID, indexer: { getParticipant } } as never)
+    const findById = vi.fn(async () => ({ id: 'flow-1', state: 'AWAITING_OR' }))
+    const orchestrator = new VtFlowOrchestrator({
+      did: VALIDATOR_DID,
+      indexer: { getParticipant },
+      dependencyManager: { resolve: () => ({ findById }) },
+    } as never)
     const applicantLookups = () => getParticipant.mock.calls.filter(([id]) => id === '42').length
-    return { checking: orchestrator.checkParticipantId(context), applicantLookups }
+    return { checking: orchestrator.checkParticipantId(context), applicantLookups, findById }
   }
 
   it('accepts a PENDING entry whose validator entry has the DID of the agent', async () => {
@@ -623,6 +634,45 @@ describe('VtFlowOrchestrator.checkParticipantId', () => {
     await vi.runAllTimersAsync()
     await expect(checking).resolves.toBe(true)
     vi.useRealTimers()
+  })
+
+  it('moves the flow to VALIDATED and on, without refusing it, once the entry turns VALIDATED during the wait', async () => {
+    const markValidated = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'markValidated')
+      .mockResolvedValue({} as never)
+    const continueAfterValidated = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
+      .mockResolvedValue({} as never)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    const { checking, applicantLookups } = check(new Error('404 Not Found'), validated)
+    await vi.runAllTimersAsync()
+    await expect(checking).resolves.toBe('validated')
+
+    expect(applicantLookups()).toBe(2)
+    expect(markValidated).toHaveBeenCalledExactlyOnceWith('flow-1', validated)
+    expect(continueAfterValidated).toHaveBeenCalledExactlyOnceWith('flow-1')
+  })
+
+  it('does not settle an entry VALIDATED at the first read, which can be the round before a renewal', async () => {
+    const markValidated = vi.spyOn(VtFlowOrchestrator.prototype, 'markValidated')
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    const { checking } = check(validated, pending)
+    await vi.runAllTimersAsync()
+    await expect(checking).resolves.toBe(true)
+    expect(markValidated).not.toHaveBeenCalled()
+  })
+
+  it('stops waiting on an entry VALIDATED at the first read once the notification moves the flow', async () => {
+    const markValidated = vi.spyOn(VtFlowOrchestrator.prototype, 'markValidated')
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    const { checking, applicantLookups, findById } = check(validated)
+    await vi.advanceTimersByTimeAsync(0)
+    findById.mockResolvedValue({ id: 'flow-1', state: 'VALIDATED' })
+    await vi.runAllTimersAsync()
+    await expect(checking).resolves.toBe('validated')
+
+    expect(applicantLookups()).toBe(2)
+    expect(markValidated).not.toHaveBeenCalled()
   })
 })
 

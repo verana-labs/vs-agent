@@ -405,6 +405,64 @@ describe('markVtFlowRecordsValidated', () => {
     continueAfterValidated.mockRestore()
   })
 
+  it('moves a flow once when its participant_id check reads the entry VALIDATED while the notification moves it', async () => {
+    let flow = {
+      id: 'raced',
+      role: VtFlowRole.Validator,
+      state: VtFlowState.AwaitingOr,
+      applicantParticipantId: '42',
+    }
+    let land = (): void => undefined
+    const recordValidation = vi.fn(async (_id: string, _validation: unknown, state: VtFlowState) => {
+      await new Promise<void>(resolve => {
+        land = resolve
+      })
+      flow = { ...flow, state }
+    })
+    const findAllByQuery = vi.fn(async () => [flow])
+    const continueAfterValidated = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
+      .mockResolvedValue({} as never)
+    const validated = {
+      ...entry,
+      op_state: 'VALIDATED',
+      validator_participant_id: 10,
+      revoked: null,
+      slashed: null,
+    }
+    const agent = {
+      did: 'did:web:validator',
+      indexer: {
+        getParticipant: vi.fn(async (id: string) =>
+          Number(id) === 10 ? { did: 'did:web:validator' } : validated,
+        ),
+      },
+      dependencyManager: {
+        resolve: () => ({ findById: async () => flow, findAllByQuery, recordValidation }),
+      },
+      context: { dependencyManager: { resolve: () => ({ findAllByQuery }) } },
+      config: { logger: { info: vi.fn(), error: vi.fn() } },
+    }
+
+    const notified = markVtFlowRecordsValidated(agent as never, '42', tx)
+    await vi.waitFor(() => expect(recordValidation).toHaveBeenCalled())
+    const checked = vi.fn()
+    new VtFlowOrchestrator(agent as never).checkParticipantId({ record: flow } as never).then(checked)
+    await vi.waitFor(() => expect(checked).toHaveBeenCalledWith('validated'))
+    land()
+    await notified
+
+    expect(recordValidation).toHaveBeenCalledExactlyOnceWith(
+      'raced',
+      expect.anything(),
+      VtFlowState.Validated,
+    )
+    expect(continueAfterValidated).toHaveBeenCalledExactlyOnceWith('raced')
+    expect(agent.config.logger.error).not.toHaveBeenCalled()
+    expect(flow.state).toBe(VtFlowState.Validated)
+    continueAfterValidated.mockRestore()
+  })
+
   it('tells its own transaction apart from an operator one and takes the terms from the entry', async () => {
     const decidedAt = '2026-09-25T09:00:00Z'
     const records = [

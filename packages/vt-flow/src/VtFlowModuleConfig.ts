@@ -86,8 +86,10 @@ export interface VtFlowCheckParticipantIdContext {
   record: VtFlowRecord
 }
 
-/** Validator check of the onboarding-request `participant_id` before the flow moves to `VALIDATING`; return `false` to refuse the request with `vt-flow.invalid-participant-id`. */
-export type VtFlowCheckParticipantIdHook = (ctx: VtFlowCheckParticipantIdContext) => Promise<boolean>
+/** Validator check of the onboarding-request `participant_id` before the flow moves to `VALIDATING`; return `false` to refuse the request with `vt-flow.invalid-participant-id`, or `'validated'` when a `VALIDATED` entry settles the request and the flow has been moved on, so the acceptance neither moves it nor sends anything. */
+export type VtFlowCheckParticipantIdHook = (
+  ctx: VtFlowCheckParticipantIdContext,
+) => Promise<boolean | 'validated'>
 
 /** Default Data Integrity cryptosuite, applied when `dataIntegrityCryptosuite` is not configured. */
 export const DEFAULT_DATA_INTEGRITY_CRYPTOSUITE = 'eddsa-jcs-2022'
