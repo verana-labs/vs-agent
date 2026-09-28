@@ -1,113 +1,100 @@
-import { Test, TestingModule } from '@nestjs/testing'
-import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { Test } from '@nestjs/testing'
+import { getRepositoryToken } from '@nestjs/typeorm'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ConnectionsRepository, EventHandler, ConnectionsEventService } from '../../src'
+import { EventHandler } from '../interfaces'
+import { EVENT_HANDLER, EVENTS_MODULE_OPTIONS } from '../tokens'
+import { ConnectionStatus } from '../types'
 
-describe('ConnectionsEventService', () => {
-  let service: ConnectionsEventService
-  let mockEventHandler: Partial<EventHandler>
-  let mockRepository: Partial<ConnectionsRepository>
+import { ConnectionEntity } from './connection.entity'
+import { ConnectionsRepository } from './connection.repository'
+import { ConnectionsService } from './connection.service'
+
+async function build(
+  connections: boolean | { requireProfile?: boolean },
+  isCompleted: ReturnType<typeof vi.fn>,
+): Promise<{ service: ConnectionsService; eventHandler: EventHandler }> {
+  const eventHandler: EventHandler = { newConnection: vi.fn(), closeConnection: vi.fn(), onEvent: vi.fn() }
+  const module = await Test.createTestingModule({
+    providers: [
+      ConnectionsService,
+      { provide: EVENTS_MODULE_OPTIONS, useValue: { url: 'http://example.com', modules: { connections } } },
+      { provide: EVENT_HANDLER, useValue: eventHandler },
+      { provide: ConnectionsRepository, useValue: { isCompleted } },
+    ],
+  }).compile()
+  return { service: module.get(ConnectionsService), eventHandler }
+}
+
+describe('ConnectionsService.handleNewConnection', () => {
+  it('requires the profile by default and fires newConnection when the repository says completed', async () => {
+    const isCompleted = vi.fn().mockResolvedValue(true)
+    const { service, eventHandler } = await build(true, isCompleted)
+
+    await service.handleNewConnection('conn-1')
+
+    expect(isCompleted).toHaveBeenCalledWith('conn-1', true)
+    expect(eventHandler.newConnection).toHaveBeenCalledWith('conn-1')
+  })
+
+  it('passes requireProfile false through and stays silent when not completed', async () => {
+    const isCompleted = vi.fn().mockResolvedValue(false)
+    const { service, eventHandler } = await build({ requireProfile: false }, isCompleted)
+
+    await service.handleNewConnection('conn-1')
+
+    expect(isCompleted).toHaveBeenCalledWith('conn-1', false)
+    expect(eventHandler.newConnection).not.toHaveBeenCalled()
+  })
+})
+
+describe('ConnectionsRepository.isCompleted', () => {
+  let repository: ConnectionsRepository
+  let findOne: ReturnType<typeof vi.fn>
+  let update: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
-    vi.clearAllMocks()
-
-    mockEventHandler = {
-      closeConnection: vi.fn(),
-      newConnection: vi.fn(),
-    }
-
-    mockRepository = {
-      updateMetadata: vi.fn(),
-      create: vi.fn(),
-      updateStatus: vi.fn(),
-      isCompleted: vi.fn().mockResolvedValue(false),
-    }
-
-    const module: TestingModule = await Test.createTestingModule({
+    findOne = vi.fn()
+    update = vi.fn().mockResolvedValue({ affected: 1 })
+    const module = await Test.createTestingModule({
       providers: [
-        ConnectionsEventService,
-        {
-          provide: 'GLOBAL_MODULE_OPTIONS',
-          useValue: { useMessages: false },
-        },
-        {
-          provide: 'CONNECTIONS_EVENT',
-          useValue: mockEventHandler,
-        },
-        {
-          provide: ConnectionsRepository,
-          useValue: mockRepository,
-        },
+        ConnectionsRepository,
+        { provide: getRepositoryToken(ConnectionEntity), useValue: { findOne, update } },
       ],
     }).compile()
-
-    service = module.get<ConnectionsEventService>(ConnectionsEventService)
+    repository = module.get(ConnectionsRepository)
   })
 
-  it('should be defined', () => {
-    expect(service['messageEvent']).toBe(false)
+  it('completes without a profile when the profile is not required', async () => {
+    findOne.mockResolvedValue({ id: 'conn-1', status: ConnectionStatus.Start })
+
+    expect(await repository.isCompleted('conn-1', false)).toBe(true)
+    expect(update).toHaveBeenCalledWith('conn-1', { status: ConnectionStatus.Completed })
   })
 
-  describe('update', () => {
-    it('should update state to Terminated and call closeConnection', async () => {
-      const event = new ConnectionStateUpdated({
-        state: ExtendedDidExchangeState.Terminated,
-        connectionId: '123',
-      })
-
-      await service.update(event)
-
-      expect(mockRepository.updateStatus).toHaveBeenCalledWith('123', ExtendedDidExchangeState.Terminated)
-      expect(mockEventHandler.closeConnection).toHaveBeenCalledWith('123')
+  it('waits for preferredLanguage when the profile is required', async () => {
+    findOne.mockResolvedValue({
+      id: 'conn-1',
+      status: ConnectionStatus.Start,
+      userProfile: { displayName: 'A' },
     })
 
-    it('should update state to completed', async () => {
-      const event = new ConnectionStateUpdated({
-        state: ExtendedDidExchangeState.Completed,
-        connectionId: '123',
-        metadata: { key: 'value' },
-      })
+    expect(await repository.isCompleted('conn-1', true)).toBe(false)
+    expect(update).not.toHaveBeenCalled()
 
-      await service.update(event)
-
-      expect(mockRepository.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: '123',
-          status: ExtendedDidExchangeState.Start,
-          metadata: event.metadata,
-        }),
-      )
+    findOne.mockResolvedValue({
+      id: 'conn-1',
+      status: ConnectionStatus.Start,
+      userProfile: { preferredLanguage: 'en' },
     })
 
-    it('should update state to Updated and call handleNewConnection', async () => {
-      const event = new ConnectionStateUpdated({
-        state: ExtendedDidExchangeState.Updated,
-        connectionId: '123',
-        metadata: { key: 'value' },
-      })
-
-      vi.spyOn(service, 'handleNewConnection').mockImplementation(vi.fn())
-
-      await service.update(event)
-
-      expect(service.handleNewConnection).toHaveBeenCalledWith('123')
-    })
+    expect(await repository.isCompleted('conn-1', true)).toBe(true)
   })
 
-  describe('handleNewConnection', () => {
-    it('should not call newConnection when isCompleted returns false', async () => {
-      mockRepository.isCompleted = vi.fn().mockResolvedValue(false)
-      await service.handleNewConnection('123')
-      expect(mockRepository.isCompleted).toHaveBeenCalledWith('123', false)
-      expect(mockEventHandler.newConnection).not.toHaveBeenCalled()
-    })
+  it('never completes twice', async () => {
+    findOne.mockResolvedValue({ id: 'conn-1', status: ConnectionStatus.Completed })
 
-    it('should call newConnection when isCompleted returns true', async () => {
-      mockRepository.isCompleted = vi.fn().mockResolvedValue(true)
-      await service.handleNewConnection('123')
-      expect(mockRepository.isCompleted).toHaveBeenCalledWith('123', false)
-      expect(mockEventHandler.newConnection).toHaveBeenCalledWith('123')
-    })
+    expect(await repository.isCompleted('conn-1', false)).toBe(false)
+    expect(update).not.toHaveBeenCalled()
   })
 })

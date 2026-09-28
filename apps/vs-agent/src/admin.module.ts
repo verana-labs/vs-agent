@@ -3,18 +3,7 @@ import { APP_GUARD } from '@nestjs/core'
 import { VsAgent, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import {
-  V1ConnectionController,
-  V1CredentialExchangesController,
-  V1CredentialTypesController,
-  CredentialTypesService,
-  V1HealthController,
-  V1InvitationController,
-  V1PresentationsController,
-  V1QrController,
-  V1ServiceEndpointsController,
   ServiceEndpointsService,
-  V1TrustController,
-  TrustService,
   V2AgentController,
   V2AnoncredsController,
   V2AnoncredsCredentialDefinitionsController,
@@ -27,9 +16,7 @@ import {
   V2DidcommInvitationsController,
   V2DidcommPresentationsController,
   V2VtServiceEndpointsController,
-  V1VsAgentController,
   InvitationsService,
-  MESSAGE_HANDLERS,
 } from './controllers'
 import { BOOTSTRAP_STATE, BootstrapState } from './common'
 import {
@@ -39,6 +26,7 @@ import {
   parseTrustedNetworks,
   TrustedNetwork,
 } from './security'
+import { CredentialTypesService } from './services/CredentialTypesService'
 import { UrlShorteningService } from './services/UrlShorteningService'
 import { VsAgentService } from './services/VsAgentService'
 import { DIDCOMM_MODULES } from './utils/didcommModules'
@@ -62,19 +50,6 @@ export class VsAgentModule {
     const bootstrapState = options.bootstrapState ?? new BootstrapState()
     const trustedNetworks =
       options.trustedNetworks ?? parseTrustedNetworks(DEFAULT_ADMIN_API_TRUSTED_NETWORKS)
-
-    const baseControllers = [
-      V1VsAgentController,
-      V1CredentialTypesController,
-      V1CredentialExchangesController,
-      V1HealthController,
-      V1InvitationController,
-      V1QrController,
-      V1TrustController,
-      V1ConnectionController,
-      V1PresentationsController,
-      V1ServiceEndpointsController,
-    ]
 
     const v2Controllers = [
       V2AuthController,
@@ -110,17 +85,10 @@ export class VsAgentModule {
       },
       VsAgentService,
       UrlShorteningService,
-      TrustService,
       CredentialTypesService,
       ServiceEndpointsService,
       InvitationsService,
     ]
-
-    const handlersProvider = {
-      provide: MESSAGE_HANDLERS,
-      useFactory: (...handlers: any[]) => handlers,
-      inject: pluginParts.messageHandlers,
-    }
 
     const securityProviders = [
       AdminAuthService,
@@ -133,8 +101,8 @@ export class VsAgentModule {
     return {
       module: VsAgentModule,
       imports: pluginParts.imports,
-      controllers: [...baseControllers, ...v2Controllers, ...pluginParts.controllers],
-      providers: [...baseProviders, ...securityProviders, ...pluginParts.providers, handlersProvider],
+      controllers: [...v2Controllers, ...pluginParts.controllers],
+      providers: [...baseProviders, ...securityProviders, ...pluginParts.providers],
       exports: [VsAgentService],
     }
   }

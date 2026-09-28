@@ -24,7 +24,7 @@ import {
 
 import { AdminApiError, AdminApiErrorCode, Page, paginate } from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
-import { CredentialTypesService } from '../../credentials/CredentialTypeService'
+import { CredentialTypesService } from '../../../../services/CredentialTypesService'
 
 import {
   CreateRevocationRegistryBodyDto,

@@ -1,10 +1,16 @@
 import { CredoError } from '@credo-ts/core'
-import { ConflictException } from '@nestjs/common'
-import { VtCredentialState, VtFlowRole, VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { ConflictException, NotFoundException } from '@nestjs/common'
+import {
+  VtCredentialState,
+  VtFlowPendingAction,
+  VtFlowRole,
+  VtFlowState,
+  VtFlowTxStatus,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AdminApiError, AdminApiErrorCode } from '../src/common'
-import { VtFlowsService } from '../src/controllers/admin/vt-flow/VtFlowsService'
+import { VtFlowsService } from '../src/controllers/admin/v2/vt/VtFlowsService'
 
 function flowRecord(id: string, createdAtMs: number, state: VtFlowState = VtFlowState.Validating) {
   return {
@@ -46,6 +52,47 @@ function makeService(
     (options.credentialTypesService ?? {}) as never,
   )
 }
+
+describe('VtFlowsService pendingAction', () => {
+  async function pendingActionFor(overrides: Record<string, unknown>) {
+    const service = makeService({
+      findAllByQuery: vi.fn().mockResolvedValue([{ ...flowRecord('a', 1000), ...overrides }]),
+    })
+    const page = await service.listFlowsPage({})
+    return page.items[0].pendingAction
+  }
+
+  it('hands an expired oob-link back to the validator', async () => {
+    const link = { url: 'https://collect.example/form', description: 'Upload', at: new Date(0).toISOString() }
+
+    await expect(
+      pendingActionFor({
+        state: VtFlowState.OobPending,
+        oobLink: { ...link, expiresAt: new Date(Date.now() + 60_000).toISOString() },
+      }),
+    ).resolves.toBe(VtFlowPendingAction.Applicant)
+
+    await expect(
+      pendingActionFor({
+        state: VtFlowState.OobPending,
+        oobLink: { ...link, expiresAt: new Date(Date.now() - 60_000).toISOString() },
+      }),
+    ).resolves.toBe(VtFlowPendingAction.Validator)
+  })
+
+  it('hands CRED_OFFERED back to the validator when the anchoring transaction failed', async () => {
+    await expect(pendingActionFor({ state: VtFlowState.CredOffered })).resolves.toBe(
+      VtFlowPendingAction.Agent,
+    )
+
+    await expect(
+      pendingActionFor({
+        state: VtFlowState.CredOffered,
+        issuance: { tx: { status: VtFlowTxStatus.Failed } },
+      }),
+    ).resolves.toBe(VtFlowPendingAction.Validator)
+  })
+})
 
 describe('VtFlowsService v2 routes', () => {
   it('maps the camelCase v2 filters onto record tags', async () => {
@@ -114,6 +161,21 @@ describe('VtFlowsService v2 routes', () => {
     })
   })
 
+  it('reports the DID the peer connected with once it has rotated', async () => {
+    const service = makeService(
+      { findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) },
+      {
+        connection: {
+          isReady: true,
+          theirDid: 'did:peer:2.Ez6Mk.Vz6Mk',
+          previousTheirDids: ['did:web:peer'],
+        },
+      },
+    )
+
+    await expect(service.getFlow('sess-a')).resolves.toMatchObject({ peerDid: 'did:web:peer' })
+  })
+
   it('reports the flow state and the connection state on every listed flow', async () => {
     const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) })
 
@@ -167,6 +229,22 @@ describe('VtFlowsService v2 routes', () => {
     const rejection = expect(service.getFlow('sess-missing')).rejects
     await rejection.toBeInstanceOf(AdminApiError)
     await rejection.toMatchObject({ code: AdminApiErrorCode.UnknownId, status: 404 })
+  })
+
+  it('rejects an unknown session on a mutation with 404', async () => {
+    const service = makeService({ findAllByQuery: vi.fn().mockResolvedValue([]) })
+
+    await expect(service.editCredentialClaims('missing', {})).rejects.toThrow(NotFoundException)
+  })
+
+  it('refuses claim edits and oob links with 409 while the connection is not ready', async () => {
+    const service = makeService(
+      { findAllByQuery: vi.fn().mockResolvedValue([flowRecord('a', 1000)]) },
+      { connection: { isReady: false, previousTheirDids: [] } },
+    )
+
+    await expect(service.editCredentialClaims('sess-a', {})).rejects.toThrow(ConflictException)
+    await expect(service.sendOobLink('sess-a', 'https://x')).rejects.toThrow(ConflictException)
   })
 
   it('validates the flow that the path names, whatever the body carries', async () => {

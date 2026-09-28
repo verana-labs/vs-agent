@@ -1,13 +1,12 @@
 import { Injectable } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
+import { ReceivedUserProfile } from '@verana-labs/vs-agent-client'
 import { Repository } from 'typeorm'
 
-import { UserProfile } from '../types'
+import { ConnectionStatus } from '../types'
 
 import { ConnectionEntity } from './connection.entity'
 
-// TypeORM
 @Injectable()
 export class ConnectionsRepository {
   constructor(
@@ -15,59 +14,30 @@ export class ConnectionsRepository {
     private readonly repository: Repository<ConnectionEntity>,
   ) {}
 
-  async create(connection: Partial<ConnectionEntity>): Promise<ConnectionEntity> {
-    const entity = this.repository.create(connection)
-    return await this.repository.save(entity)
+  public async create(connection: Partial<ConnectionEntity>): Promise<void> {
+    await this.repository.createQueryBuilder().insert().values(connection).orIgnore().execute()
   }
 
-  async findAll(): Promise<ConnectionEntity[]> {
-    return await this.repository.find()
-  }
-
-  async findById(id: string): Promise<ConnectionEntity | undefined> {
+  public async findById(id: string): Promise<ConnectionEntity | undefined> {
     return (await this.repository.findOne({ where: { id } })) ?? undefined
   }
 
-  async updateStatus(id: string, status: ExtendedDidExchangeState): Promise<ConnectionEntity | undefined> {
-    await this.repository.update(id, { status })
-    return (await this.repository.findOne({ where: { id } })) ?? undefined
+  public async updateStatus(id: string, status: ConnectionStatus): Promise<boolean> {
+    const result = await this.repository.update(id, { status })
+    return (result.affected ?? 0) > 0
   }
 
-  async updateUserProfile(id: string, userProfile: UserProfile): Promise<ConnectionEntity | undefined> {
+  public async updateUserProfile(id: string, userProfile: ReceivedUserProfile): Promise<void> {
     await this.repository.update(id, { userProfile })
-    return (await this.repository.findOne({ where: { id } })) ?? undefined
   }
 
-  async updateMetadata(id: string, metadata: Record<string, any>): Promise<ConnectionEntity | undefined> {
-    await this.repository.update(id, { metadata })
-    return (await this.repository.findOne({ where: { id } })) ?? undefined
-  }
-
-  /**
-   * Checks if a connection has been completed.
-   *
-   * This method verifies whether the connection's `lang` (if required)
-   * and `metadata` meet the completion criteria.
-   * @param id The unique identifier of the connection to validate
-   * @param requireLang If `true`, ensures that `lang` is not `null`
-   * @returns A promise that resolves to `true` if:
-   *   - `metadata` is either `undefined` or a non-empty object.
-   *   - If `requireLang` is `true`, `lang` must not be `null`.
-   * @throws Error if the connection is not found or if `createdTs` is missing.
-   */
-  async isCompleted(id: string, requireLang: boolean): Promise<boolean> {
+  public async isCompleted(id: string, requireProfile: boolean): Promise<boolean> {
     const conn = await this.findById(id)
-    if (!conn?.id) {
-      throw new Error(`No connection found with id: ${id}. The connection may not have been created properly`)
-    }
-    if (conn.status === ExtendedDidExchangeState.Completed) return false
+    if (!conn?.id) throw new Error(`No connection found with id: ${id}`)
+    if (conn.status === ConnectionStatus.Completed) return false
 
-    const isMetadataValid = !conn.metadata || Object.keys(conn.metadata).length > 0
-    const isLangValid = !requireLang || conn.userProfile?.preferredLanguage != null
-    if (isLangValid && isMetadataValid) {
-      this.updateStatus(conn.id, ExtendedDidExchangeState.Completed)
-      return true
-    }
-    return false
+    const completed = !requireProfile || conn.userProfile?.preferredLanguage != null
+    if (completed) await this.updateStatus(conn.id, ConnectionStatus.Completed)
+    return completed
   }
 }

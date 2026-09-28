@@ -1,145 +1,63 @@
 # Chatbot Example
 
-## Overview
+An Express backend that drives a VS Agent through `@verana-labs/vs-agent-client`. It answers chat commands, sends menus, questions, media, calls and MRTD requests, and can issue and verify a `phoneNumber` AnonCreds credential.
 
-The Chatbot example demonstrates a VS Agent–powered conversational service that issues and manages Verifiable Credentials (VCs) via a DIDComm wallet. It shows how to:
+## Running
 
-- Run the VS Agent gateway and Chatbot service locally
-- Establish a secure connection with a DIDComm wallet (e.g., Hologram)
-- Exchange messages and interactive menus
-- Issue a sample `phoneNumber` credential
-
-## Prerequisites
-
-- Docker & Docker Compose installed
-- A modern web browser to view invitation URLs or QR codes
-- A DIDComm-compatible wallet (e.g., Hologram mobile app)
-
-## Installation
-
-1. Clone the repository and navigate to the example:
-
-   ```bash
-   git clone https://github.com/verana-labs/vs-agent.git
-   cd vs-agent/examples/chatbot
-   ```
-
-## Running Locally
-
-1. Build and start services:
-
-   ```bash
-   docker-compose up --build
-   ```
-
-2. Check logs for:
-   - VS Agent on port `3001`
-   - Chatbot service on port `5000`
-3. Obtain a connection invitation in one of two ways:
-   - **Web endpoint**: Visit `http://localhost:3001/invitation` to be redirected to a QR code page.
-   - **Direct QR**: Fetch the raw QR code from VS Agent at `http://localhost:3001/invitation/qr` (no redirect). Scan the displayed QR with your wallet app.
-4. Scan the QR code with your wallet and accept the connection.
-
-## Usage
-
-- **Menus & Commands**: Type or select menu options like `help`, `quotes`, or `poll`.
-- **Credential Issuance**: At prompts, the bot offers a `phoneNumber` credential. Approve to receive it.
-- **Free-form Q&A**: Send messages to see scripted responses.
-
-## Configuration
-
-### Key Configuration Files
-
-#### `data.ts`
-
-Defines mock data and flow definitions for the Chatbot service. Configure:
-
-- **quotes**: array of strings for the `quotes` command.
-- **pollOptions**: poll choices for the `poll` command.
-- **mainMenu**: supported commands and descriptions.
-
-Customize by editing `examples/chatbot/src/data.ts`. For example:
-
-```ts
-// examples/chatbot/src/data.ts
-export const quotes = [
-  'The only limit to our realization of tomorrow is our doubts of today.',
-  "Life is what happens when you're busy making other plans.",
-  // ... add your custom quotes
-]
-
-export const pollOptions = [
-  { id: 'A', label: 'Team A' },
-  { id: 'B', label: 'Team B' },
-  // ... add additional options
-]
-
-export const mainMenu = [
-  { command: 'help', description: 'Show available commands' },
-  { command: 'quotes', description: 'Get a random quote' },
-  { command: 'poll', description: 'Start a poll' },
-  // ... extend menu commands
-]
+```bash
+cd examples/chatbot
+docker-compose up --build
 ```
 
-#### `phone-cred-def-dev.json`
+Set `PUBLIC_API_BASE_URL` in `docker-compose.yml` to the public `https` URL that fronts port `3001`. The agent derives its DID and its DIDComm endpoint from it. Then connect your wallet (for example Hologram) to the agent's public DID. There is no invitation endpoint. When the connection completes the bot sends its context menu and a welcome message.
 
-Contains the ANoCreds credential definition for issuing the `phoneNumber` VC:
+Services:
 
-- **schema**: attribute names (e.g., `phoneNumber`).
-- **credentialDefinition**: public keys and revocation settings.
-- **credentialDefinitionPrivate**: private key material (not used at runtime).
+- VS Agent, admin API on `3000`, public API on `3001`
+- Chatbot backend on `5000`, receives the [Events API](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#events-api) webhook at `POST /events`
 
-The Chatbot service loads and registers this file with VS Agent on startup. To adjust the credential schema or parameters, update this JSON and redeploy. For example:
+## Environment
 
-```json
-// examples/chatbot/phone-cred-def-dev.json
-{
-  "schema": {
-    "name": "phoneNumber",
-    "version": "1.0",
-    "attributes": ["phoneNumber"]
-  },
-  "credentialDefinition": {
-    "tag": "dev",
-    "value": {
-      "primary": {
-        /* public key data */
-      },
-      "revocation": {
-        /* revocation params */
-      }
-    }
-  }
-  // ... additional fields
-}
-```
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `5000` | Port of the backend |
+| `VS_AGENT_ADMIN_BASE_URL` | `http://localhost:3000` | Admin API origin, the client appends `/v2` |
+| `PUBLIC_BASE_URL` | `http://localhost:5000` | Public URL of the backend, used for the media sample and the call callbacks |
+| `CREDENTIAL_DEFINITION_ID` | unset | AnonCreds credential definition with a `phoneNumber` attribute. Unset disables `issue`, `proof` and `/revoke` |
+| `VISION_SERVICE_BASE_URL`, `WEBRTC_SERVER_BASE_URL` | 2060 dev services | Used by `/call` |
 
-#### Other configurations
+## Credentials
 
-- Adjust ports or service names in `docker-compose.yml`.
+`issue`, `proof` and `/revoke` need an agent enrolled on a Verana ecosystem: `createCredentialOffer` and `createPresentationRequest` require an active ISSUER or VERIFIER Participant for the credential schema behind `CREDENTIAL_DEFINITION_ID`. See [examples/vt-flow-demo](../vt-flow-demo/README.md) for the setup. On startup the bot picks the first revocation registry of the definition or creates one.
 
-## Flow Diagram
+Both methods return an out of band invitation. The bot sends its `shortUrl` to the chat and the wallet opens it, which creates a second connection for the exchange. The bot keeps the chat connection per exchange id so the result lands in the chat the user typed in.
 
-```mermaid
-sequenceDiagram
-    actor User as DIDComm Wallet
-    participant Agent as VS Agent
-    participant Bot as Chatbot Service
+## Commands
 
-    User ->> Agent: Scan QR (invitation/qr)
-    Agent ->> User: Send invitation
-    User ->> Agent: Establish connection
-    Agent ->> Bot: Forward connection event (HTTP webhook)
-    Bot ->> Agent: Send message/menus
-    Agent ->> User: Deliver chat messages
-    User ->> Agent: Respond to bot
-    Agent ->> Bot: Forward user message
-    Bot ->> Agent: Issue credential offer
-    Agent ->> User: Deliver credential offer
-```
+Menu options: Home, World Cup poll, Rocky quotes, Issue credential, Request proof, Help.
 
-## Troubleshooting
+| Command | What it does |
+|---|---|
+| `/echo <text>` | Repeats the text |
+| `/menu` | Sends the main menu as a question |
+| `/context` | Resends the context menu |
+| `/link <url> [title] [desc] [icon] [openingMode]` | Shares a link |
+| `/media [url] [desc]` | Shares an image, `bunny.jpeg` by default |
+| `/invitation [label] [imageUrl] [did]` | Sends an invitation on the chat connection. Without `did` it opens a sub-connection to the bot, with `did` it refers the wallet to that service |
+| `/profile [name] [image] [icon]` | Sends the bot profile |
+| `/call [wsUrl] [roomId]` | Offers a call, creating a WebRTC room when no arguments are given |
+| `/mrz` | Requests the MRZ of a passport. When the wallet answers, the bot requests the eMRTD data. The eMRTD request is not threaded under the MRZ exchange, the v2 API has no parent thread field |
+| `/emrtd` | Requests the eMRTD data directly |
+| `/proof` | Requests a `phoneNumber` presentation |
+| `/revoke <credentialExchangeId>` | Revokes the credential, the id is the one the bot sends after issuance. The wallet gets no notification |
+| `/rocky` | An inspiring quote |
+| `/help` | The command list |
+| `/terminate` | Deletes the connection record on the agent. No hangup is sent |
 
-- If port `3001` is in use, stop other services or change the VS Agent port.
-- Review Chatbot container logs for errors: `docker-compose logs chatbot`.
+Not ported from v1: the `viewed` receipt after every inbound message (the basic message event carries no DIDComm message id).
+
+## Files
+
+- `index.ts`: the Express app, the event handlers and the command dispatch
+- `data.ts`: `welcomeMessage`, `helpMessage`, `rootContextMenu`, `rootMenuAsQA`, `worldCupPoll`, `rockyQuotes`
+- `public/`: static files served by the backend

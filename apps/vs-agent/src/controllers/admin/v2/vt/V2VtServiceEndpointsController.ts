@@ -13,13 +13,13 @@ import {
 import { ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 
 import { Page, PaginationQueryDto, paginate } from '../../../../common'
-import { ServiceEndpoint, ServiceEndpointsService } from '../../service-endpoints/ServiceEndpointsService'
+import { ServiceEndpoint, ServiceEndpointsService } from './ServiceEndpointsService'
 import {
   AddServiceEndpointDto,
   ServiceEndpointDto,
   ServiceEndpointPageDto,
   UpdateServiceEndpointDto,
-} from '../../service-endpoints/dto/service-endpoint.dto'
+} from './dto/service-endpoint.dto'
 
 @ApiTags('v2/vt')
 @Controller({ path: 'vt/service-endpoints', version: '2' })

@@ -1,26 +1,15 @@
 import { DidRepository } from '@credo-ts/core'
-import { DidCommConnectionRecord } from '@credo-ts/didcomm'
-import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { INestApplication } from '@nestjs/common'
-import { Claim, CredentialIssuanceMessage } from '@verana-labs/vs-agent-model'
 import { type BaseAgentModules, type VsAgent, migrateVtjscServiceIds } from '@verana-labs/vs-agent-sdk'
 import { Subject } from 'rxjs'
-import request from 'supertest'
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest'
 
-import { MessageService, TrustService } from '../src/controllers'
+import { TrustService } from '../src/controllers'
 
-import { computeCredentialDigestJCS, verifySignature } from '@verana-labs/verre'
+import { verifySignature } from '@verana-labs/verre'
 
-import { isCredentialStateChangedEvent, startAgent, startServersTesting } from './__mocks__'
-import { issueVtjscFrom } from './__mocks__'
-import {
-  makeConnection,
-  SubjectInboundTransport,
-  SubjectOutboundTransport,
-  waitForEvent,
-  type SubjectMessage,
-} from './helpers'
+import { startAgent, startServersTesting } from './__mocks__'
+import { SubjectInboundTransport, SubjectOutboundTransport, type SubjectMessage } from './helpers'
 
 /** verre, as a third-party resolver would run it, against the agent's own DID Document */
 async function verreVerifies(agent: VsAgent<BaseAgentModules>, document: unknown) {
@@ -37,20 +26,12 @@ async function verreVerifies(agent: VsAgent<BaseAgentModules>, document: unknown
 }
 
 describe('TrustService', () => {
-  let faberApp: INestApplication
-  let faberService: TrustService
-  let faberMsgService: MessageService
   const faberMessages = new Subject<SubjectMessage>()
   const aliceMessages = new Subject<SubjectMessage>()
   const subjectMap = {
     'rxjs:faber': faberMessages,
     'rxjs:alice': aliceMessages,
   }
-  let faberAgent: VsAgent<BaseAgentModules>
-  let aliceAgent: VsAgent<BaseAgentModules>
-  let faberConnection: DidCommConnectionRecord
-  let aliceConnection: DidCommConnectionRecord
-  let aliceEvents: ReturnType<typeof vi.spyOn>
 
   describe('JSC creation and DID document references', () => {
     let jscFaberApp: INestApplication
@@ -182,247 +163,5 @@ describe('TrustService', () => {
       expect(services.filter(s => s.id === orgServiceId)).toHaveLength(1)
       expect(services.filter(s => s.id === svcServiceId)).toHaveLength(1)
     })
-  })
-
-  describe('Testing for message exchange with VsAgent', async () => {
-    let sessionMock: ReturnType<typeof vi.fn>
-    let fakeChain: Record<string, unknown>
-    beforeEach(async () => {
-      sessionMock = vi.fn(async () => ({ txHash: 'tx-1' }))
-      fakeChain = {
-        getChainId: 'vna-test-1',
-        address: 'verana1agent',
-        createOrUpdateParticipantSession: sessionMock,
-      }
-      const fakeIndexer = {
-        findActiveIssuerParticipantId: vi.fn(async () => 12),
-        getCredentialSchema: vi.fn(async () => ({ digest_algorithm: 'sha384' })),
-        getDigest: vi.fn(async () => undefined),
-      }
-      faberAgent = await startAgent({
-        label: 'Faber Test',
-        domain: 'faber',
-        veranaChain: fakeChain as never,
-        indexer: fakeIndexer as never,
-      })
-      faberAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(faberMessages))
-      faberAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
-      await faberAgent.initialize()
-      faberApp = await startServersTesting(faberAgent, { chat: false })
-
-      aliceAgent = await startAgent({ label: 'Alice Test', domain: 'alice' })
-      aliceAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(aliceMessages))
-      aliceAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
-      await aliceAgent.initialize()
-      ;[aliceConnection, faberConnection] = await makeConnection(aliceAgent, faberAgent)
-      aliceEvents = vi.spyOn(aliceAgent.events, 'emit')
-      await startServersTesting(aliceAgent, { chat: false })
-
-      faberService = faberApp.get<TrustService>(TrustService)
-      faberMsgService = faberApp.get<MessageService>(MessageService)
-    })
-
-    afterEach(async () => {
-      await faberApp.close()
-      await faberAgent.shutdown()
-      await aliceAgent.shutdown()
-      vi.restoreAllMocks()
-    })
-
-    it('should issue a VC Data Model 2.0 credential secured with a Data Integrity proof', async () => {
-      const credentialResponse = await faberService.issueCredential({
-        format: 'jsonld',
-        did: 'did:web:example.com',
-        participantSessionId: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
-        jsonSchemaCredentialId: 'https://example.org/vt/schemas-vpr-org-jsc.json',
-        claims: {
-          id: 'https://example.org/org/123',
-          name: 'OpenAI Research',
-          logoUri: 'https://example.com/logo.png',
-          logoDigestSri: 'sha384-AAAA',
-          registryId: 'REG-123',
-          registryUri: 'https://registry.example.org',
-          address: '123 Main St, San Francisco, CA',
-          organizationKind: 'PRIVATE',
-          countryCode: 'US',
-        },
-      })
-      expect(credentialResponse.credential!['@context']).toContain('https://www.w3.org/ns/credentials/v2')
-      expect(credentialResponse.credential!.validFrom).toEqual(expect.any(String))
-      expect(credentialResponse.credential).not.toHaveProperty('issuanceDate')
-      expect(credentialResponse.credential!.proof).toEqual(
-        expect.objectContaining({
-          type: 'DataIntegrityProof',
-          cryptosuite: 'eddsa-jcs-2022',
-          verificationMethod: expect.any(String),
-          proofPurpose: 'assertionMethod',
-          proofValue: expect.any(String),
-        }),
-      )
-      expect(credentialResponse.digestJCS).toBe(
-        computeCredentialDigestJCS(credentialResponse.credential as never, 'sha384'),
-      )
-      expect(await verreVerifies(faberAgent, credentialResponse.credential)).toEqual({ result: true })
-      expect(sessionMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
-          issuerParticipantId: 12,
-          digest: credentialResponse.digestJCS,
-        }),
-      )
-    })
-
-    it('rejects a jsonld issuance without a participantSessionId', async () => {
-      await expect(
-        faberService.issueCredential({
-          format: 'jsonld',
-          did: 'did:web:example.com',
-          jsonSchemaCredentialId: 'https://example.org/vt/schemas-vpr-org-jsc.json',
-          claims: {
-            id: 'https://example.org/org/123',
-            name: 'OpenAI Research',
-            logoUri: 'https://example.com/logo.png',
-            logoDigestSri: 'sha384-AAAA',
-            registryId: 'REG-123',
-            registryUri: 'https://registry.example.org',
-            address: '123 Main St, San Francisco, CA',
-            organizationKind: 'PRIVATE',
-            countryCode: 'US',
-          },
-        }),
-      ).rejects.toThrow(/participantSessionId/)
-      expect(sessionMock).not.toHaveBeenCalled()
-    })
-
-    it('returns no credential when the anchoring transaction fails', async () => {
-      sessionMock.mockRejectedValueOnce(new Error('tx rejected'))
-      await expect(
-        faberService.issueCredential({
-          format: 'jsonld',
-          did: 'did:web:example.com',
-          participantSessionId: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
-          jsonSchemaCredentialId: 'https://example.org/vt/schemas-vpr-org-jsc.json',
-          claims: {
-            id: 'https://example.org/org/123',
-            name: 'OpenAI Research',
-            logoUri: 'https://example.com/logo.png',
-            logoDigestSri: 'sha384-AAAA',
-            registryId: 'REG-123',
-            registryUri: 'https://registry.example.org',
-            address: '123 Main St, San Francisco, CA',
-            organizationKind: 'PRIVATE',
-            countryCode: 'US',
-          },
-        }),
-      ).rejects.toThrow(/ANCHORING_FAILED/)
-    })
-
-    it('rejects a schema that is not governed by the configured chain', async () => {
-      await expect(
-        faberService.issueCredential({
-          format: 'jsonld',
-          did: 'did:web:example.com',
-          participantSessionId: 'd7f2f4c6-9c9b-4c39-9e6a-3e1c2a3b4c5d',
-          jsonSchemaCredentialId: 'https://example.org/vt/schemas-example-org-jsc.json',
-          claims: {
-            id: 'https://example.org/org/123',
-            name: 'OpenAI Research',
-            logoUri: 'https://example.com/logo.png',
-            logoDigestSri: 'sha384-AAAA',
-            registryId: 'REG-123',
-            registryUri: 'https://registry.example.org',
-            address: '123 Main St, San Francisco, CA',
-            organizationKind: 'PRIVATE',
-            countryCode: 'US',
-          },
-        }),
-      ).rejects.toThrow(/ANCHORING_FAILED/)
-      expect(sessionMock).not.toHaveBeenCalled()
-    })
-
-    it('should issue a valid anoncreds credential', async () => {
-      issueVtjscFrom(faberAgent.did)
-
-      // Mocks
-      const original = WebVhAnonCredsRegistry.prototype['_resolveAndValidateAttestedResource']
-      vi.spyOn(
-        WebVhAnonCredsRegistry.prototype as any,
-        '_resolveAndValidateAttestedResource',
-      ).mockImplementation(async function (...args: any[]) {
-        const resourceId = args[1]
-        if (resourceId.includes(':faber/')) {
-          const cid = resourceId.split('/').pop()
-          const res = await request(faberApp.getHttpServer()).get(`/resources/${cid}`)
-          if (res.status !== 200) {
-            throw new Error(`resource ${cid} not found in test server`)
-          }
-          return {
-            resolutionResult: {
-              content: res.body,
-            },
-            resourceObject: res.body,
-          }
-        }
-        return original.call(this, ...args)
-      })
-
-      const claims = {
-        id: 'https://example.org/org/123',
-        name: 'OpenAI Research',
-        logoUri: 'https://example.com/logo.png',
-        logoDigestSri: 'sha384-AAAA',
-        registryId: 'REG-123',
-        registryUri: 'https://registry.example.org',
-        address: '123 Main St, San Francisco, CA',
-        organizationKind: 'PRIVATE',
-        countryCode: 'US',
-      }
-      const credentialResponse = await faberService.issueCredential({
-        format: 'anoncreds',
-        jsonSchemaCredentialId: 'https://example.org/vt/schemas-example-org-jsc.json',
-        claims,
-      })
-
-      // Create wait event
-      const alicePromise = waitForEvent(aliceEvents, isCredentialStateChangedEvent)
-
-      const record = await faberMsgService.sendMessage(
-        {
-          type: 'credential-issuance',
-          connectionId: faberConnection.id,
-          claims: Object.entries(claims).map(([name, value]) => new Claim({ name, value: String(value) })),
-          jsonSchemaCredentialId: credentialResponse.jsonSchemaCredentialId,
-        } as CredentialIssuanceMessage,
-        faberConnection,
-      )
-
-      // Receiving messages
-      const {
-        payload: { credentialExchangeRecord },
-      } = await alicePromise
-
-      // expects
-      expect(credentialExchangeRecord).toEqual(
-        expect.objectContaining({
-          state: 'offer-received',
-          connectionId: aliceConnection.id,
-          type: 'CredentialRecord',
-          role: 'holder',
-          protocolVersion: 'v2',
-          id: expect.any(String),
-          threadId: expect.any(String),
-          createdAt: expect.any(Date),
-          updatedAt: expect.any(Date),
-        }),
-      )
-      expect(record.id).toEqual(credentialExchangeRecord.threadId)
-      expect(credentialResponse).toEqual(
-        expect.objectContaining({
-          status: 200,
-          didcommInvitationUrl: expect.any(String),
-          jsonSchemaCredentialId: expect.any(String),
-        }),
-      )
-    }, 20000)
   })
 })

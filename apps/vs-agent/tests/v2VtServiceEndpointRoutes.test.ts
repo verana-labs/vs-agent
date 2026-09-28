@@ -11,12 +11,10 @@ import {
   ServiceEndpointError,
   ServiceEndpointErrorCode,
   ServiceEndpointsService,
-} from '../src/controllers/admin/service-endpoints/ServiceEndpointsService'
+} from '../src/controllers/admin/v2/vt/ServiceEndpointsService'
 import { V2VtFlowsController } from '../src/controllers/admin/v2/vt/V2VtFlowsController'
 import { V2VtServiceEndpointsController } from '../src/controllers/admin/v2/vt/V2VtServiceEndpointsController'
-import { V1TrustController } from '../src/controllers/admin/verifiable/V1TrustController'
-import { TrustService } from '../src/controllers/admin/verifiable/TrustService'
-import { VtFlowsService } from '../src/controllers/admin/vt-flow/VtFlowsService'
+import { VtFlowsService } from '../src/controllers/admin/v2/vt/VtFlowsService'
 
 const entries = [
   { id: 'did:web:agent.test#a2a', type: 'A2A', serviceEndpoint: 'https://a2a.agent.test' },
@@ -40,21 +38,15 @@ const vtFlowsService = {
   revokeFlowCredential: vi.fn(),
 }
 
-const trustService = {
-  getVerifiableTrustCredential: vi.fn().mockResolvedValue([]),
-  getJsonSchemaCredential: vi.fn().mockResolvedValue([]),
-}
-
 describe('v2 vt routes', () => {
   let app: INestApplication
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      controllers: [V2VtServiceEndpointsController, V2VtFlowsController, V1TrustController],
+      controllers: [V2VtServiceEndpointsController, V2VtFlowsController],
       providers: [
         { provide: ServiceEndpointsService, useValue: serviceEndpointsService },
         { provide: VtFlowsService, useValue: vtFlowsService },
-        { provide: TrustService, useValue: trustService },
       ],
     }).compile()
 
@@ -197,17 +189,5 @@ describe('v2 vt routes', () => {
       peerDid: 'did:web:peer',
     })
     expect(response.body.state).toBeUndefined()
-  })
-
-  it('keeps the v1 GET methods and drops the trimmed v1 mutations', async () => {
-    expect((await request(app.getHttpServer()).get('/v1/vt/linked-credentials')).status).toBe(200)
-    expect((await request(app.getHttpServer()).get('/v1/vt/json-schema-credentials')).status).toBe(200)
-
-    expect((await request(app.getHttpServer()).post('/v1/vt/linked-credentials').send({})).status).toBe(404)
-    expect((await request(app.getHttpServer()).delete('/v1/vt/linked-credentials')).status).toBe(404)
-    expect((await request(app.getHttpServer()).post('/v1/vt/json-schema-credentials').send({})).status).toBe(
-      404,
-    )
-    expect((await request(app.getHttpServer()).delete('/v1/vt/json-schema-credentials')).status).toBe(404)
   })
 })

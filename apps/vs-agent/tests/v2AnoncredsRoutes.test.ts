@@ -9,7 +9,7 @@ import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrorEnvelopeFilter } from '../src/common'
-import { CredentialTypesService } from '../src/controllers/admin/credentials'
+import { CredentialTypesService } from '../src/services'
 import { V2AnoncredsController } from '../src/controllers/admin/v2/anoncreds'
 import { RevokeCredentialBodyDto } from '../src/controllers/admin/v2/anoncreds/dto'
 import { VsAgentService } from '../src/services/VsAgentService'

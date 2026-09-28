@@ -1,222 +1,82 @@
-`@verana-labs/vs-agent-nestjs-client`
-# Nestjs-client for VS Agent
-The `nestjs-client` library simplifies the integration of VS Agent components in your NestJS applications. It provides several modules that follow a plug-and-play architecture, allowing you to incorporate them based on your needs. Certain modules, such as credential management, recommend using the message handling module for seamless operation.
+# @verana-labs/vs-agent-nestjs-client
 
-## Available Modules
-1. Message Handling:
-    - Manages the events related to message states, including when a message is sent, delivered, or received.
-    - Use this module if you're integrating messaging functionality into your application.
-2. Credential Management:
-    - Handles the lifecycle of credentials, including offering, accepting, rejecting, and revoking credentials.
-    - This module is typically used when you need to manage digital credentials for your application.
-3. Connection Management:
-    - Manages events related to connection state changes.
+NestJS module for hosts of a VS Agent. It mounts the Events API webhook, keeps a small table of connections and issued credentials, and provides a configured `ApiClient` from `@verana-labs/vs-agent-client` for injection. Everything the client exports is re-exported here.
 
-## How to work
-```mermaid
-classDiagram
-    class VsAgent {
-        + Handles DIDComm communication
-        + Manages agent wallet and credentials
-        + Exposes API for client interactions
-    }
-
-    class NestJSClient {
-        + Plug-and-play integration
-        + Selectable modules for various services
-        + Modules:
-        -- MessageEventOptions: Configures message event handling
-        -- ConnectionEventOptions: Configures connection event handling
-        -- CredentialOptions: Configures credential management
-        -- StatsOptions: Configures stats management
-    }
-
-    class Client {
-        + Directly manages requests to SA
-        + Facilitates reception of requests from modules
-        + Provides an abstraction for service communication
-        + Interfaces:
-        -- messages
-        -- credentialTypes
-        -- revocationRegistries
-        -- invitations
-    }
-
-    class ModelLibrary {
-        + Defines required data models
-        + Ensures type safety across services
-    }
-
-    %% Relations
-    NestJSClient --> VsAgent : Uses
-    Client --> VsAgent : Sends requests
-    Client --> VsAgent : Receives requests
-    Client --> ModelLibrary : Uses models
-    ModelLibrary --> VsAgent : Provides data models
-    NestJSClient --> ModelLibrary : Uses models
-
-    %% Style
-    style NestJSClient stroke:#333,stroke-width:4px
-```
-
-## Configuration
-### Dynamic Module Setup
-The `nestjs-client` allows dynamic configuration through various module options defined in `types.ts`. You can configure individual modules or the `EventsModule` for handling multiple events at once
-### Key Configuration Options
-- `eventHandler`: Specifies the event handler class to handle incoming events. It must implement the `EventHandler` interface.
-- `imports`: An array of additional modules to import, such as service modules or other shared functionality.
-- `url`: VS Agent Admin API URL
-- `version`: Specifies the version of VS Agent API to use.
-- `statOptions`: Configuration options for the **JMS (Jakarta Message Service) broker**, including host, port, queue name, authentication, and reconnection settings. The default broker used is **Apache Artemis**. 
-
-### `statOptions` Parameters  
-The `statOptions` object includes the following properties for configuring the message broker:  
-
-| Parameter       | Type      | Description |
-|---------------|---------|-------------|
-| `host`        | `string`  | The hostname or IP address of the JMS broker. |
-| `port`        | `number`  | The port used to connect to the JMS broker. |
-| `queue`       | `string`  | The name of the message queue to use. |
-| `username`    | `string`  | The username for authenticating with the broker (if required). |
-| `password`    | `string`  | The password for authentication (if required). |
-| `reconnectLimit` | `number` | The maximum number of reconnection attempts in case of a connection failure. |
-| `threads`     | `number`  | The number of worker threads for processing messages. |
-| `delay`       | `number`  | The delay (in milliseconds) before retrying a failed connection or message processing. |
-
-#### `MessageEventOptions`
-Configures message event handling. The following properties are available:
-- `eventHandler` (optional).
-- `imports` (optional).
-- `url` (mandatory).
-- `version` (optional).
-#### `ConnectionEventOptions`
-Configures connection event handling. The following properties are available:
-- `eventHandler` (optional).
-- `imports` (optional).
-
-#### `CredentialOptions`
-Configures credential management. The following properties are available:
-- `imports` (optional).
-- `url` (mandatory).
-- `version` (optional).
-
-#### `StatsOptions`
-Configures stats management. The following properties are available:
-- `imports` (optional).
-- `statOptions` (optional).
-
-##### Example of Using the `StatEventModule`
-
-This example demonstrates how to configure and use the `StatEventModule` to send and process statistics using a JMS broker:
-
-- **AppModule**
-```typescript
-import { Module } from '@nestjs/common';
-import { StatEventModule } from '@verana-labs/vs-agent-nestjs-client';
-
-EventsModule.register({
-  modules: {
-    ...
-    stats: true,
-  },
-  options: {
-    statOptions: {
-        host: 'jms-broker.example.com',
-        port: 61616,
-        queue: 'stats-queue', // The queue must be unique
-        username: 'admin',
-        password: 'password123',
-        reconnectLimit: 5,
-        threads: 10,
-        delay: 1000,
-      },
-    eventHandler: CoreService,
-    url: 'http://localhost',
-    imports: [],
-  },
-})
-```
-
-- **STAT_KPI**
-```typescript
-export enum STAT_KPI {
-  USER_CONNECTED,
-}
-```
-
-- **StatProducerService**
-After configuring the `StatEventModule`, you can inject the `StatProducerService` into your services to send statistics to the configured JMS broker:
+## Setup
 
 ```typescript
-import { STAT_KPI } from './common'
-import { StatEnum, StatProducerService } from '@verana-labs/vs-agent-nestjs-client'
+import { EventsModule } from '@verana-labs/vs-agent-nestjs-client'
 
-export class CoreService implements EventHandler, OnModuleInit {
-  constructor(
-    @InjectRepository(SessionEntity)
-    private readonly statProducer: StatProducerService,
-  ) {}
-  
-  await this.statProducer.spool(STAT_KPI.USER_CONNECTED, 'uuid', [new StatEnum(0, 'string')])
-}
-```
-
-
-#### `ModulesConfig`
-This interface defines the configuration for enabling or disabling modules:
-- `messages` (optional): Whether to enable the message handling module. Defaults to false.
-- `connections` (optional): Whether to enable the connection management module. Defaults to false.
-- `credentials` (optional): Whether to enable the credential management module. Defaults to false.
-- `stats` (optional): Whether to enable the stats management module. Defaults to false.
-
-#### `EventsModuleOptions`
-This configuration interface is used to configure multiple modules at once via the EventsModule:
-- `modules`: Specifies which modules to enable (messages, connections, and credentials).
-- `options`: Contains common configuration options that apply to each module, such as eventHandler, imports, url, and version.
-
-
-
-
-### Example of Using Independent Modules
-This example demonstrates how to use each module separately:
-```typescript
-@Module({
-  imports: [
-    MessageEventModule.forRoot({
-      messageHandler: CustomMessageHandler, // Class with input method
-      imports: [],
-      url: 'http://vsa-url.com',
-      version: ApiVersion.V1,
-    }),
-    CredentialManagementModule.forRoot({
-      // Configuration options
-    }),
-  ],
-})
-export class AppModule {}
-```
-
-###  Example of Using the Recommended `EventsModule`
-The recommended approach is to use the `EventsModule` to register multiple modules at once for easier configuration:
-```typescript
 @Module({
   imports: [
     EventsModule.register({
-      modules: {
-        messages: true,
-        credentials: true,
-      },
-      options: {
-        eventHandler: CoreService,
-        imports: [],
-        url: process.env.VS_AGENT_ADMIN_URL,
-        version: ApiVersion.V1,
-      },
+      url: process.env.VS_AGENT_ADMIN_URL,
+      eventHandler: CoreService,
+      modules: { connections: true, credentials: true },
     }),
   ],
 })
 export class AppModule {}
 ```
-In this example, the `EventsModule` is used to register multiple modules simultaneously, which ensures better integration and streamlined configuration for common use cases.
 
-For more information on dynamic modules and their configuration in NestJS, refer to the official [documentation](https://docs.nestjs.com/fundamentals/dynamic-modules)
+Options:
+
+| Option | Description |
+|---|---|
+| `url` | Admin API origin, for example `http://localhost:3000`. The client appends `/v2` |
+| `token` | Bearer token for corporation mode. Omit in internal mode |
+| `webhookApiKey` | When set, `POST /events` requires `Authorization: Bearer <webhookApiKey>` |
+| `eventHandler` | Class implementing `EventHandler`, registered as a provider |
+| `modules.connections` | `true` or `{ requireProfile }`. Tracks connections and derives `newConnection` and `closeConnection`. With `requireProfile`, `newConnection` waits for a profile carrying `preferredLanguage` |
+| `modules.credentials` | Tracks issued credentials and their revocation registries |
+| `modules.stats` | Registers `StatProducerService` |
+| `statOptions` | JMS broker settings for the stats producer (`host`, `port`, `queue`, `username`, `password`, `reconnectLimit`, `threads`, `delay`) |
+
+The module is global. It exports `VS_AGENT_CLIENT` and whichever of `ConnectionsRepository`, `ConnectionsService`, `CredentialService` and `StatProducerService` are registered.
+
+The host owns the database. Register the entities it uses with `TypeOrmModule.forFeature([ConnectionEntity, CredentialEntity, RevocationRegistryEntity])` in a module that exports `TypeOrmModule`. Migration based deployments coming from the v1 client write one migration for the `connections.status` enum (now `start`, `completed`, `terminated`), the dropped `connections.metadata` column and the `credentials.threadId` to `credentialExchangeId` rename.
+
+## Webhook
+
+The module mounts `POST /events` and answers 204. Point the agent's `EVENTS_WEBHOOK_URL` at it. A repeated envelope `id` is discarded before dispatch. Errors thrown by `onEvent` propagate, so the agent logs the delivery as failed.
+
+## EventHandler
+
+```typescript
+export interface EventHandler {
+  newConnection(connectionId: string): Promise<void> | void
+  closeConnection(connectionId: string): Promise<void> | void
+  onEvent(envelope: EventEnvelope | UnknownEventEnvelope): Promise<void> | void
+}
+```
+
+`onEvent` receives every envelope after the module has acted on it. Check `isEventEnvelope(envelope)` first, then switch on `envelope.type` to get typed `envelope.data`. The else branch is reachable: extension modules emit types the map does not list, and there `envelope.data` is `unknown`.
+
+## Connections
+
+`didcomm.connections.state-updated` with `state: 'completed'` creates the row. `didcomm.user-profile.profile-received` stores the profile. `newConnection` fires once per connection, once it is `completed` and a profile with `preferredLanguage` has been received when `requireProfile` is true (the default), or right after `completed` when it is false. `closeConnection` fires on `state: 'abandoned'`. A peer hangup by DID rotation emits no Events API event today, so it does not reach `closeConnection`.
+
+`newConnection` also fires for the connection each accepted credential offer or proof request creates, since those go through an out of band invitation.
+
+## Credentials
+
+`CredentialService` wraps the v2 credential offer flow.
+
+- `createCredentialDefinition(jsonSchemaCredentialId, { supportRevocation, maximumCredentialNumber })` returns the definition for that schema, creating it and two revocation registries when missing. Call it once at startup.
+- `issue(claims, { connectionId, refId, credentialDefinitionId, jsonSchemaCredentialId, revokeIfAlreadyIssued })` picks a definition, reserves a revocation index and calls `createCredentialOffer` with `autoAccept: true`. It returns the offer, hand its `shortUrl` to the user. `connectionId` is bookkeeping only, it is the connection `revoke(connectionId)` looks up by. `issue` no longer registers a credential definition, run `createCredentialDefinition` first.
+- `didcomm.credential-exchanges.state-updated` with `role: 'issuer'` marks the row accepted on `done` and rejected on `declined` or `abandoned`.
+- `revoke(connectionId, credentialExchangeId?)` revokes the latest accepted credential of the connection, or the given exchange, through `revokeCredential`.
+
+## Client
+
+Inject the configured client anywhere:
+
+```typescript
+constructor(@Inject(VS_AGENT_CLIENT) private readonly client: ApiClient) {}
+
+await this.client.didcomm.sendBasicMessage({ connectionId, content: 'hello' })
+```
+
+## Stats
+
+With `modules.stats` the `StatProducerService` sends `StatEvent` messages to a JMS queue. Call `spool(statClass, entityId, [new StatEnum(0, 'value')])` or `spoolSingle`.

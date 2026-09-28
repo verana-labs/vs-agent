@@ -1,69 +1,48 @@
-import { MrtdCapabilities } from '@2060.io/credo-ts-didcomm-mrtd'
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
-import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
+import { Inject, Injectable, Logger } from '@nestjs/common'
+import { ConnectionStateUpdatedData, ProfileReceivedData } from '@verana-labs/vs-agent-client'
 
 import { EventHandler } from '../interfaces'
-import { ConnectionEventOptions } from '../types'
+import { EVENT_HANDLER, EVENTS_MODULE_OPTIONS } from '../tokens'
+import { ConnectionStatus, EventsModuleOptions } from '../types'
 
-import { ConnectionEntity } from './connection.entity'
 import { ConnectionsRepository } from './connection.repository'
 
 @Injectable()
-export class ConnectionsEventService {
-  private readonly logger = new Logger(ConnectionsEventService.name)
-  private readonly messageEvent: boolean
+export class ConnectionsService {
+  private readonly logger = new Logger(ConnectionsService.name)
+  private readonly requireProfile: boolean
 
   constructor(
-    @Inject('GLOBAL_MODULE_OPTIONS') private options: ConnectionEventOptions,
+    @Inject(EVENTS_MODULE_OPTIONS) options: EventsModuleOptions,
     @Inject(ConnectionsRepository) private readonly repository: ConnectionsRepository,
-    @Optional() @Inject('CONNECTIONS_EVENT') private eventHandler?: EventHandler,
+    @Inject(EVENT_HANDLER) private readonly eventHandler: EventHandler,
   ) {
-    this.messageEvent = options.useMessages ?? false
+    const connections = options.modules?.connections
+    this.requireProfile = typeof connections === 'object' ? (connections.requireProfile ?? true) : true
   }
 
-  async update(event: ConnectionStateUpdated): Promise<any> {
-    switch (event.state) {
-      case ExtendedDidExchangeState.Updated:
-        if (event.metadata?.[MrtdCapabilities.EMrtdReadSupport])
-          await this.repository.updateMetadata(event.connectionId, event.metadata)
-        await this.handleNewConnection(event.connectionId)
-        break
-      case ExtendedDidExchangeState.Completed:
-        const newConnection = new ConnectionEntity()
-        newConnection.id = event.connectionId
-        newConnection.createdTs = event.timestamp
-        newConnection.status = ExtendedDidExchangeState.Start
-        newConnection.metadata = event.metadata
-        await this.repository.create(newConnection)
-        break
-      case ExtendedDidExchangeState.Terminated:
-        await this.repository.updateStatus(event.connectionId, event.state)
-
-        if (this.eventHandler) {
-          await this.eventHandler.closeConnection(event.connectionId)
-        }
-        break
-      default:
-        break
+  public async handleStateUpdated(data: ConnectionStateUpdatedData, timestamp: string): Promise<void> {
+    if (data.state === 'completed' && data.previousState !== 'completed') {
+      await this.repository.create({
+        id: data.id,
+        status: ConnectionStatus.Start,
+        createdTs: new Date(timestamp),
+      })
+      await this.handleNewConnection(data.id)
+    } else if (data.state === 'abandoned') {
+      const existed = await this.repository.updateStatus(data.id, ConnectionStatus.Terminated)
+      if (existed) await this.eventHandler.closeConnection(data.id)
     }
-
-    return null
   }
 
-  /**
-   * Handles a new connection by verifying its completion status.
-   *
-   * If the connection is considered completed, it triggers the event handler
-   * and logs the connection initiation.
-   *
-   * @param connectionId The unique identifier of the connection.
-   * @returns A promise that resolves when the connection is processed.
-   */
-  async handleNewConnection(connectionId: string): Promise<void> {
-    if (!this.eventHandler) return
+  public async handleProfileReceived(data: ProfileReceivedData): Promise<void> {
+    await this.repository.create({ id: data.connectionId, status: ConnectionStatus.Start })
+    await this.repository.updateUserProfile(data.connectionId, data.profile)
+    await this.handleNewConnection(data.connectionId)
+  }
 
-    const isCompleted = await this.repository.isCompleted(connectionId, !!this.messageEvent)
-    if (isCompleted) {
+  public async handleNewConnection(connectionId: string): Promise<void> {
+    if (await this.repository.isCompleted(connectionId, this.requireProfile)) {
       this.logger.log(`A new connection has been completed with connection id: ${connectionId}`)
       await this.eventHandler.newConnection(connectionId)
     }
