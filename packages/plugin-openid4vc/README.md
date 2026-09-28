@@ -24,7 +24,10 @@ per `CredentialSchema` for which it holds an active ISSUER `Participant`, identi
 `jsonSchemaCredentialId` of that schema. Claims come from the `credentialSubject` properties of
 the JSON schema, every one of them selectively disclosable, and the display name from its `title`.
 The `vct` is the Type Metadata URL of the type, `{ecosystem base}/vt/vct/{credentialSchemaId}`.
-A schema the agent cannot resolve is skipped with a warning and the rest of the set still stands.
+A schema the agent cannot resolve is skipped with a warning and the rest of the set still stands, and
+so is one whose `credentialSubject` declares an SD-JWT VC envelope claim (`vct`, `vct#integrity`,
+`iat`, `exp`, `nbf`, `iss`, `cnf`, `status`): the issuer stamps those itself, and an offer that carries
+one is rejected with `400 INVALID_INPUT`.
 
 The set follows the VPR without a restart: a `Participant` or `CredentialSchema` notification
 rebuilds it and re-renders the served issuer metadata. `createCredentialOffer` validates the
