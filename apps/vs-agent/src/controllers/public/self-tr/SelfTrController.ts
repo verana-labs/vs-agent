@@ -1,4 +1,4 @@
-import { Controller, Get, Param, HttpException, HttpStatus, Logger, Inject } from '@nestjs/common'
+import { Controller, Get, Header, Param, HttpException, HttpStatus, Logger, Inject } from '@nestjs/common'
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { getEcsSchemas } from '@verana-labs/vs-agent-sdk'
 
@@ -12,11 +12,22 @@ export class SelfTrController {
   private ecsSchemas
 
   constructor(
-    private readonly agentService: VsAgentService,
-    private readonly trustService: TrustService,
+    @Inject(VsAgentService) private readonly agentService: VsAgentService,
+    @Inject(TrustService) private readonly trustService: TrustService,
     @Inject('PUBLIC_API_BASE_URL') private readonly publicApiBaseUrl: string,
   ) {
     this.ecsSchemas = getEcsSchemas(publicApiBaseUrl)
+  }
+
+  // The stored bytes go out as they are: a string bypasses the JSON serializer and its `json spaces`.
+  @Get('vct/:credentialSchemaId')
+  @Header('Content-Type', 'application/json')
+  @ApiOperation({ summary: 'Get the SD-JWT VC Type Metadata of a credential schema' })
+  @ApiParam({ name: 'credentialSchemaId', required: true, description: 'On-chain CredentialSchema id', example: '144' })
+  @ApiResponse({ status: 200, description: 'Type Metadata returned' })
+  @ApiResponse({ status: 404, description: 'No VTJSC of that schema' })
+  async getTypeMetadata(@Param('credentialSchemaId') credentialSchemaId: string): Promise<string> {
+    return await this.trustService.getTypeMetadata(credentialSchemaId)
   }
 
   @Get(':schemaId')

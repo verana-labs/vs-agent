@@ -16,6 +16,7 @@ const createJsc = vi.fn()
 const detachVtjscPublications = vi.fn(async (_agent: unknown, refs: readonly string[]) => [...refs])
 const reattachVtjscPublication = vi.fn(async () => false)
 const rebindEcsCredentialSchema = vi.fn()
+const saveVtjscTypeMetadata = vi.fn(async () => true)
 
 vi.mock('../src/utils/trustCredentialStore', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/utils/trustCredentialStore')>()),
@@ -23,7 +24,17 @@ vi.mock('../src/utils/trustCredentialStore', async importOriginal => ({
   detachVtjscPublications: (...args: unknown[]) => detachVtjscPublications(args[0], args[1] as string[]),
   reattachVtjscPublication: (...args: unknown[]) => reattachVtjscPublication(...(args as [])),
   rebindEcsCredentialSchema: (...args: unknown[]) => rebindEcsCredentialSchema(...args),
+  saveVtjscTypeMetadata: (...args: unknown[]) => saveVtjscTypeMetadata(...(args as [])),
 }))
+
+/** The Type Metadata bytes [VSA-PUB-VT-5] expects for a schema of this suite. */
+const typeMetadataOf = (schemaId: number, title: string) =>
+  JSON.stringify({
+    vct: `https://agent.example/vt/vct/${schemaId}`,
+    name: title,
+    claims: [{ path: ['name'], sd: 'always' }],
+    relatedJsonSchemaCredentialId: jscId(schemaId),
+  })
 
 vi.mock('../src/utils/vtjscResolver', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/utils/vtjscResolver')>()),
@@ -137,6 +148,26 @@ describe('publishVtjscIfOwner', () => {
 
     expect(anoncreds.getCreatedSchemas).toHaveBeenCalledWith({ relatedJsonSchemaCredentialId: jscId(5) })
     expect(anoncreds.registerSchema).not.toHaveBeenCalled()
+  })
+
+  it('stores the Type Metadata of the VTJSC it just published, at the fixed vct URL', async () => {
+    saveVtjscTypeMetadata.mockClear()
+    const { agent } = makeAgent()
+    await publishVtjscIfOwner(stateWith(7), agent as never, '5', 7)
+
+    expect(saveVtjscTypeMetadata).toHaveBeenCalledWith(agent, schemaRef(5), typeMetadataOf(5, 'x'))
+  })
+
+  it('still publishes the AnonCreds schema when the Type Metadata cannot be stored', async () => {
+    saveVtjscTypeMetadata.mockRejectedValueOnce(new Error('record gone'))
+    const { agent, anoncreds } = makeAgent()
+    await publishVtjscIfOwner(stateWith(7), agent as never, '5', 7)
+
+    expect(anoncreds.registerSchema).toHaveBeenCalledTimes(1)
+    expect(agent.config.logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Type Metadata'),
+      expect.any(Error),
+    )
   })
 
   it('keeps the schemas of two VTJSCs apart when both derive the same name and attributes', async () => {
@@ -323,6 +354,17 @@ describe('reconcileVtjscPublications', () => {
       schema: { attrNames: ['name'], name: 'kept', version: '5', issuerId: agent.did },
       options: { extraMetadata: { relatedJsonSchemaCredentialId: jscId(5) } },
     })
+  })
+
+  it('stores the Type Metadata of a VTJSC that was published without one', async () => {
+    saveVtjscTypeMetadata.mockClear()
+    reattachVtjscPublication.mockResolvedValueOnce(true)
+    const agent = agentPublishing([schemaRef(5)], {
+      [schemaRef(5)]: generateDigestSRI(jsonSchema('kept')),
+    })
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+
+    expect(saveVtjscTypeMetadata).toHaveBeenCalledWith(agent, schemaRef(5), typeMetadataOf(5, 'kept'))
   })
 
   it('never touches the self-issued schema credentials stored in the same bucket', async () => {

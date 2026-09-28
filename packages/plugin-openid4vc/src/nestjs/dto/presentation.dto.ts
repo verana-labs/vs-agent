@@ -129,7 +129,7 @@ export class OpenId4VcTrustVerdictDto {
 export class OpenId4VcPresentedCredentialDto {
   @ApiProperty({
     description: 'SD-JWT VC type of the presented credential',
-    example: 'https://agent.example/oid4vc/vct/employee',
+    example: 'https://ecosystem.example/vt/vct/144',
   })
   vct!: string
 

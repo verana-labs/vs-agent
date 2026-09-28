@@ -3,6 +3,7 @@ import {
   createJsc,
   createVtc,
   findMetadataEntry,
+  findVtjscTypeMetadata,
   getEcsSchemas,
   removeTrustCredential,
   type TrustCredential,
@@ -41,6 +42,20 @@ export class TrustService {
 
   public async getJsonSchemaCredential(schemaId: string) {
     return await this.getTrustCredential('_vt/jsc', schemaId)
+  }
+
+  /** The stored SD-JWT VC Type Metadata of a `CredentialSchema`, as serialized ([VSA-PUB-VT-5]). */
+  public async getTypeMetadata(credentialSchemaId: string): Promise<string> {
+    try {
+      const { didRecord } = await this.getDidRecord()
+      const typeMetadata = findVtjscTypeMetadata(didRecord, credentialSchemaId)
+      if (!typeMetadata) {
+        throw new HttpException('Type Metadata not found', HttpStatus.NOT_FOUND)
+      }
+      return typeMetadata
+    } catch (error) {
+      this.handleError(error, 'Failed to load type metadata')
+    }
   }
 
   private async removeCredentialByType(schemaId: string, key: '_vt/vtc' | '_vt/jsc') {

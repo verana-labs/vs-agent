@@ -23,10 +23,9 @@ The configuration file the spec defines carries no credential type and no trust 
 agent derives none of them yet. So `createCredentialOffer` and `createPresentationRequest` answer
 `404 UNKNOWN_ID` for every `jsonSchemaCredentialId`, `createCredentialOffer` answers it for every
 `statusListId`, and reading a verified presentation answers the `RESOLVER_UNAVAILABLE` verdict.
-Four issues carry the rest:
+The Ecosystem side is in place: the agent serves the SD-JWT VC Type Metadata of each VTJSC it
+issues at `/vt/vct/{credentialSchemaId}`, with or without this plugin. Three issues carry the rest:
 
-- [#710](https://github.com/verana-labs/vs-agent/issues/710): SD-JWT VC Type Metadata, served at
-  the spec path `/vt/vct/{credentialSchemaId}`;
 - [#711](https://github.com/verana-labs/vs-agent/issues/711): credential types read from the VPR,
   one per active issuer participant;
 - [#712](https://github.com/verana-labs/vs-agent/issues/712): the verifier trust decision on the

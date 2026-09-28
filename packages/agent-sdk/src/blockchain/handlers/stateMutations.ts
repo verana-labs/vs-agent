@@ -26,8 +26,10 @@ import {
   reattachVtjscPublication,
   rebindEcsCredentialSchema,
   removeStoredTrustCredential,
+  saveVtjscTypeMetadata,
   withdrawSelfIssuedEcsCredentials,
 } from '../../utils/trustCredentialStore'
+import { composeTypeMetadata, typeMetadataUrl } from '../../utils/typeMetadata'
 import { anonCredsSchemaFromJsonSchema } from '../../utils/util'
 import { isDataIntegrityVcdm2Credential } from '../../utils/vcdm2'
 import { resolveJsonSchemaCredentialId } from '../../utils/vtjscResolver'
@@ -475,8 +477,22 @@ export async function reconcileVtjscPublications(
         agent.config.logger.error(`[VTJSC] Failed to reconcile VTJSC for schema ${schema.id}`, e as Error)
       }
 
-      // an agent that published a VTJSC before [VSA-PUB-AC-5] has no AnonCreds schema for it yet
+      // an agent that published a VTJSC before [VSA-PUB-VT-5] or [VSA-PUB-AC-5] has neither artifact yet
       if (!jsonSchemaCredentialId) continue
+      try {
+        await publishTypeMetadataForVtjsc(
+          agent,
+          schema.id,
+          schema.json_schema,
+          jsonSchemaCredentialId,
+          schemaRef,
+        )
+      } catch (e) {
+        agent.config.logger.error(
+          `[VTJSC] Failed to store the Type Metadata of ${jsonSchemaCredentialId} at startup`,
+          e as Error,
+        )
+      }
       try {
         await publishAnonCredsSchemaForVtjsc(agent, schema.id, schema.json_schema, jsonSchemaCredentialId)
       } catch (e) {
@@ -685,6 +701,27 @@ export async function publishAnonCredsSchemaForVtjsc(
   return schemaId
 }
 
+/**
+ * [VSA-PUB-VT-5]: the SD-JWT VC Type Metadata of a VTJSC, built once and stored with its entry.
+ * Every issuer the Ecosystem accredits names its URL as `vct` and hashes its bytes into
+ * `vct#integrity`, so a stored document is never rebuilt.
+ */
+export async function publishTypeMetadataForVtjsc(
+  agent: VsAgent,
+  credentialSchemaId: string | number,
+  jsonSchema: string | object,
+  jsonSchemaCredentialId: string,
+  schemaRef: string,
+): Promise<boolean> {
+  const typeMetadata = composeTypeMetadata({
+    vct: typeMetadataUrl(agent.publicApiBaseUrl, credentialSchemaId),
+    jsonSchema,
+    credentialSchemaRef: schemaRef,
+    jsonSchemaCredentialId,
+  })
+  return await saveVtjscTypeMetadata(agent, schemaRef, typeMetadata)
+}
+
 export async function publishVtjscIfOwner(
   state: VeranaSyncState,
   agent: VsAgent,
@@ -735,8 +772,22 @@ export async function publishVtjscIfOwner(
     return
   }
 
-  // an AnonCreds failure keeps the VTJSC: the startup reconciliation retries the schema
+  // a failure here keeps the VTJSC: the startup pass retries the type metadata and the schema
   if (!jsonSchemaCredentialId) return
+  try {
+    await publishTypeMetadataForVtjsc(
+      agent,
+      schema.id,
+      schema.jsonSchema,
+      jsonSchemaCredentialId,
+      jsonSchemaRef,
+    )
+  } catch (e) {
+    agent.config.logger.error(
+      `[VTJSC] Failed to publish the Type Metadata of ${jsonSchemaCredentialId}`,
+      e as Error,
+    )
+  }
   try {
     const schemaId = await publishAnonCredsSchemaForVtjsc(
       agent,

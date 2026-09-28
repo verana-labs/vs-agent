@@ -465,6 +465,43 @@ export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc
 }
 
 /**
+ * Stores the serialized SD-JWT VC Type Metadata of a VTJSC with its `_vt/jsc` entry, once. A
+ * stored document is never replaced: [VSA-PUB-VT-5] serves identical bytes while the schema exists.
+ * Returns false when the entry does not exist or already carries a document.
+ */
+export async function saveVtjscTypeMetadata(
+  agent: VsAgent,
+  schemaRef: string,
+  typeMetadata: string,
+): Promise<boolean> {
+  const didRecord = await getDidRecord(agent)
+  const metadata = didRecord?.metadata.get('_vt/jsc')
+  const entry = metadata?.[schemaRef]
+  if (!entry || typeof entry.typeMetadata === 'string') return false
+
+  entry.typeMetadata = typeMetadata
+  didRecord.metadata.set('_vt/jsc', metadata)
+  // the DID Document does not change, so the record is saved without a DID update
+  const repo = agent.context.dependencyManager.resolve(DidRepository)
+  await repo.update(agent.context, didRecord)
+  return true
+}
+
+/**
+ * The stored Type Metadata of the `CredentialSchema` with the given on-chain id, as serialized.
+ * The `_vt/jsc` key of such a schema is `vpr:verana:{chainId}:cs:{id}`; the agent syncs one chain.
+ */
+export function findVtjscTypeMetadata(didRecord: DidRecord, credentialSchemaId: string): string | undefined {
+  const metadata = didRecord.metadata.get('_vt/jsc')
+  if (!metadata) return undefined
+
+  const entry = Object.entries(metadata).find(
+    ([schemaRef]) => schemaRef.startsWith('vpr:verana:') && schemaRef.endsWith(`:cs:${credentialSchemaId}`),
+  )?.[1]
+  return typeof entry?.typeMetadata === 'string' ? entry.typeMetadata : undefined
+}
+
+/**
  * Anchors a self-issued ECS credential, the same way as any other issuance: through
  * CreateOrUpdateParticipantSession, which stores the digest in the `di` module keeper-to-keeper.
  *

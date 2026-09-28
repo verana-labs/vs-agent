@@ -164,6 +164,29 @@ export async function fetchJson<T>(
   }
 }
 
+/** What the JSON Schema of a `CredentialSchema` entry says about the credentials it governs. */
+export interface JsonSchemaShape {
+  title?: string
+  description?: string
+  /** The `credentialSubject` properties, in schema order. */
+  attrNames: string[]
+}
+
+/** Reads the title, the description and the `credentialSubject` properties of a JSON Schema. */
+export function readJsonSchema(jsonSchema: string | object): JsonSchemaShape {
+  const parsed = (typeof jsonSchema === 'string' ? JSON.parse(jsonSchema) : jsonSchema) as {
+    title?: string
+    description?: string
+    properties?: { credentialSubject?: { properties?: Record<string, unknown> } }
+  }
+
+  return {
+    title: parsed?.title,
+    description: parsed?.description,
+    attrNames: Object.keys(parsed?.properties?.credentialSubject?.properties ?? {}).map(String),
+  }
+}
+
 /** The AnonCreds schema that the JSON Schema of a `CredentialSchema` entry defines. */
 export interface AnonCredsSchemaShape {
   name: string
@@ -175,15 +198,8 @@ export interface AnonCredsSchemaShape {
  * [VSA-PUB-AC-5]. The VTJSC issuer and every accredited issuer must derive the same values.
  */
 export function anonCredsSchemaFromJsonSchema(jsonSchema: string | object): AnonCredsSchemaShape {
-  const parsed = (typeof jsonSchema === 'string' ? JSON.parse(jsonSchema) : jsonSchema) as {
-    title?: string
-    properties?: { credentialSubject?: { properties?: Record<string, unknown> } }
-  }
-
-  const name = parsed?.title
+  const { title: name, attrNames } = readJsonSchema(jsonSchema)
   if (!name) throw new Error('The JSON Schema carries no title')
-
-  const attrNames = Object.keys(parsed?.properties?.credentialSubject?.properties ?? {}).map(String)
   if (attrNames.length === 0)
     throw new Error(`The JSON Schema "${name}" defines no credentialSubject property`)
 
