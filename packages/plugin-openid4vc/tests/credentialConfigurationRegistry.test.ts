@@ -86,4 +86,25 @@ describe('createCredentialConfigurationRegistry', () => {
     ).toThrow('duplicate credential configuration vct "https://issuer.example/vct/employee"')
     expect(registry.configurations).toEqual([])
   })
+
+  it('runs the registered refresh after the set changed', async () => {
+    const { registry } = registeredOptions()
+    const seen: string[][] = []
+    registry.onReplace(async () => {
+      seen.push(registry.configurations.map(configuration => configuration.id))
+    })
+
+    await registry.replace([configuration('employee')])
+
+    expect(seen).toEqual([['employee']])
+  })
+
+  it('rolls the set back when the refresh fails, and reports the failure', async () => {
+    const { registry } = registeredOptions()
+    await registry.replace([configuration('employee')])
+    registry.onReplace(() => Promise.reject(new Error('credo refused the metadata')))
+
+    await expect(registry.replace([configuration('member')])).rejects.toThrow('credo refused the metadata')
+    expect(registry.configurations.map(entry => entry.id)).toEqual(['employee'])
+  })
 })

@@ -1,5 +1,9 @@
 import type { OpenId4VcAgent } from '../../src/types'
-import type { OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../../src/types'
+import type {
+  CredentialConfigurationRegistry,
+  OpenId4VcCredentialConfiguration,
+  OpenId4VcPluginOptions,
+} from '../../src/types'
 import type { AskarModuleConfigStoreOptions, AskarSqliteStorageConfig } from '@credo-ts/askar'
 import type { BaseLogger, DidResolver, Kms, SdJwtVc, X509Certificate } from '@credo-ts/core'
 import type { OpenId4VcHolderApi } from '@credo-ts/openid4vc'
@@ -30,6 +34,7 @@ import { createVsAgent, setupBaseDidComm, VeranaIndexerService } from '@verana-l
 import express from 'express'
 import { webcrypto } from 'node:crypto'
 
+import { createCredentialConfigurationRegistry } from '../../src/credentialConfigurationRegistry'
 import { setupOpenId4Vc } from '../../src/sdk/setupOpenId4Vc'
 import { IssuerService } from '../../src/services/IssuerService'
 import { VerifierService } from '../../src/services/VerifierService'
@@ -80,6 +85,7 @@ export interface OpenId4VcTestAgents {
     agent: OpenId4VcAgent
     service: IssuerService
     publicApiBaseUrl: string
+    configurationRegistry: CredentialConfigurationRegistry
   }
   holder: {
     agent: OpenId4VcAgent
@@ -176,6 +182,7 @@ export async function startTestAgents(input: {
   const rootCertificate = input.certificates.root.toString('base64')
   const issuerCertificate = await createIssuerCertificate(input.certificates.intermediate, input.issuerDid)
   const stops: Array<() => Promise<void>> = []
+  const configurationRegistry = createCredentialConfigurationRegistry([input.credentialConfiguration])
 
   try {
     const issuer = await startPluginAgent({
@@ -196,7 +203,8 @@ export async function startTestAgents(input: {
           },
           ...input.issuerTrust,
         },
-        credentialConfigurations: [input.credentialConfiguration],
+        credentialConfigurations: configurationRegistry.configurations,
+        credentialConfigurationRegistry: configurationRegistry,
       }),
       createService: (agent, options) => new IssuerService(agent, options, () => {}),
       logger,
@@ -231,7 +239,7 @@ export async function startTestAgents(input: {
     stops.push(verifier.stop)
 
     return {
-      issuer,
+      issuer: { ...issuer, configurationRegistry },
       holder,
       verifier,
       rootCertificate,
@@ -318,7 +326,8 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
     })
     await agent.initialize()
     service = input.createService(agent, options)
-    await service.ensureInitialized()
+    if (service instanceof IssuerService) await service.onModuleInit()
+    else await service.ensureInitialized()
     return {
       agent,
       service,

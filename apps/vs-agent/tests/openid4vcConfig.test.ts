@@ -11,7 +11,11 @@ const validConfig = () => ({ issuer: {}, verifier: {} })
 
 const signingMaterial = () => ({ certificateChain: ['MIIB-certificate'], privateJwk: { kty: 'EC' } })
 
-const registry = () => ({ configurations: [], replace: expect.any(Function) })
+const registry = () => ({
+  configurations: [],
+  replace: expect.any(Function),
+  onReplace: expect.any(Function),
+})
 
 const readOptions = () => ({
   ...validConfig(),

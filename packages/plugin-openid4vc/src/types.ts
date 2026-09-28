@@ -46,9 +46,12 @@ export const OPENID4VC_ISSUER_SINK = 'OPENID4VC_ISSUER_SINK'
 
 export type OpenId4VcIssuerSink = (service: OpenId4VcIssuerRequestMapper) => void
 
+export type CredentialConfigurationRefresh = () => Promise<void>
+
 export interface CredentialConfigurationRegistry {
   readonly configurations: OpenId4VcCredentialConfiguration[]
-  replace(configurations: OpenId4VcCredentialConfiguration[]): void
+  replace(configurations: OpenId4VcCredentialConfiguration[]): Promise<void>
+  onReplace(refresh: CredentialConfigurationRefresh): void
 }
 
 export interface OpenId4VcPluginOptions extends OpenId4VcConfigurationFile {

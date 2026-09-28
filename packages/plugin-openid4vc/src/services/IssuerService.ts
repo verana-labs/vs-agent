@@ -93,7 +93,13 @@ export class IssuerService implements OnModuleInit {
 
   public async onModuleInit(): Promise<void> {
     this.publishIssuerService(this)
+    this.options.credentialConfigurationRegistry?.onReplace(() => this.refreshCredentialConfigurations())
     await this.ensureInitialized()
+  }
+
+  public async refreshCredentialConfigurations(): Promise<void> {
+    await this.ensureInitialized()
+    await this.createOrUpdateIssuer(this.signingCertificateHandle())
   }
 
   public ensureInitialized(): Promise<void> {

@@ -147,6 +147,25 @@ describe('in-process OpenID4VC issuance', () => {
     })
   }, 60_000)
 
+  it('re-renders the served metadata when the configuration set is replaced after startup', async () => {
+    const metadataUrl = `${agents.issuer.publicApiBaseUrl}/.well-known/openid-credential-issuer/oid4vci/issuer`
+    const servedConfigurationIds = async () => {
+      const response = await fetch(metadataUrl, { headers: { accept: 'application/json' } })
+      const metadata = (await response.json()) as {
+        credential_configurations_supported: Record<string, unknown>
+      }
+      return Object.keys(metadata.credential_configurations_supported)
+    }
+
+    expect(await servedConfigurationIds()).toEqual([testCredentialConfiguration.id])
+
+    await agents.issuer.configurationRegistry.replace([
+      { ...testCredentialConfiguration, id: 'contractor', vct: 'https://credentials.example/vct/contractor' },
+    ])
+
+    expect(await servedConfigurationIds()).toEqual(['contractor'])
+  }, 60_000)
+
   it('keeps holder controllers and services out of production source', async () => {
     const sourceFiles = await filesBelow(join(__dirname, '../src'))
     expect(sourceFiles).not.toContain('WalletController.ts')

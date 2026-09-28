@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
+import { createCredentialConfigurationRegistry } from '../src/credentialConfigurationRegistry'
 import { IssuerService } from '../src/services/IssuerService'
 
 const { loadSigningCertificate, publishDevelopmentSigningKey, verifyKeyBoundToDid } = vi.hoisted(() => ({
@@ -56,6 +57,27 @@ const issuerOptions = (): OpenId4VcPluginOptions => ({
     },
   ],
 })
+
+const contractorConfiguration = {
+  id: 'contractor',
+  format: 'dc+sd-jwt' as const,
+  vct: 'https://agent.example/oid4vc/vct/contractor',
+  name: 'Contractor credential',
+  vtjscId: 'https://agent.example/vt/contractor.json',
+  claims: ['name'],
+  disclosureFrame: ['name'],
+}
+
+function registeredIssuerOptions(): OpenId4VcPluginOptions & {
+  credentialConfigurationRegistry: ReturnType<typeof createCredentialConfigurationRegistry>
+} {
+  const credentialConfigurationRegistry = createCredentialConfigurationRegistry()
+  return {
+    ...issuerOptions(),
+    credentialConfigurations: credentialConfigurationRegistry.configurations,
+    credentialConfigurationRegistry,
+  }
+}
 
 function issuerApi() {
   return {
@@ -184,6 +206,47 @@ describe('IssuerService', () => {
       issuer: 'https://agent.example',
       jwks: { keys: [PUBLIC_JWK] },
     })
+  })
+
+  it('re-renders the issuer metadata when the registry replaces the set after initialization', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const options = registeredIssuerOptions()
+
+    await new IssuerService(issuerAgent(api) as never, options, issuerSink).onModuleInit()
+    expect(api.updateIssuerMetadata.mock.calls[0][0].credentialConfigurationsSupported).toEqual({})
+
+    await options.credentialConfigurationRegistry.replace([contractorConfiguration])
+
+    expect(Object.keys(api.updateIssuerMetadata.mock.calls[1][0].credentialConfigurationsSupported)).toEqual([
+      'contractor',
+    ])
+  })
+
+  it('leaves the registry agreeing with the served metadata when the re-render fails', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const options = registeredIssuerOptions()
+
+    await new IssuerService(issuerAgent(api) as never, options, issuerSink).onModuleInit()
+    api.updateIssuerMetadata.mockRejectedValueOnce(new Error('credo refused the metadata'))
+
+    await expect(options.credentialConfigurationRegistry.replace([contractorConfiguration])).rejects.toThrow(
+      'credo refused the metadata',
+    )
+    expect(options.credentialConfigurations).toEqual([])
+  })
+
+  it('does not re-render before the Nest hook registered the issuer', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const options = registeredIssuerOptions()
+    new IssuerService(issuerAgent(api) as never, options, issuerSink)
+
+    await options.credentialConfigurationRegistry.replace([contractorConfiguration])
+
+    expect(loadSigningCertificate).not.toHaveBeenCalled()
+    expect(api.updateIssuerMetadata).not.toHaveBeenCalled()
   })
 
   it('logs the certificate mode and the published verification method at startup', async () => {
