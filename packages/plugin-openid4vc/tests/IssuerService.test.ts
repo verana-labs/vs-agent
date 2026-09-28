@@ -41,6 +41,18 @@ const HOLDER_JWK = {
   y: 'OeoQ8PF6k3JwXnKcHk4x1v3wFOhMB1d3Z5GZln0FrcA',
 }
 
+const EMPLOYEE_JSON_SCHEMA = JSON.stringify({
+  title: 'Employee credential',
+  type: 'object',
+  properties: {
+    credentialSubject: {
+      type: 'object',
+      properties: { name: { type: 'string' }, role: { type: 'string' } },
+      required: ['name'],
+    },
+  },
+})
+
 const issuerOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   issuer: {},
@@ -52,6 +64,8 @@ const issuerOptions = (): OpenId4VcPluginOptions => ({
       name: 'Employee credential',
       description: 'Proof of employment',
       vtjscId: 'https://agent.example/vt/employee.json',
+      credentialSchemaId: 1,
+      jsonSchema: EMPLOYEE_JSON_SCHEMA,
       claims: ['name', 'role'],
       disclosureFrame: ['name', 'role'],
     },
@@ -64,6 +78,8 @@ const contractorConfiguration = {
   vct: 'https://agent.example/oid4vc/vct/contractor',
   name: 'Contractor credential',
   vtjscId: 'https://agent.example/vt/contractor.json',
+  credentialSchemaId: 2,
+  jsonSchema: EMPLOYEE_JSON_SCHEMA,
   claims: ['name'],
   disclosureFrame: ['name'],
 }

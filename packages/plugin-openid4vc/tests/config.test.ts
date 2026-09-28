@@ -18,6 +18,18 @@ beforeAll(async () => {
   fixtures = await createCertificateFixtures()
 })
 
+const EMPLOYEE_JSON_SCHEMA = JSON.stringify({
+  title: 'Employee credential',
+  type: 'object',
+  properties: {
+    credentialSubject: {
+      type: 'object',
+      properties: { name: { type: 'string' }, role: { type: 'string' } },
+      required: ['name'],
+    },
+  },
+})
+
 const validOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   issuer: {},
@@ -29,6 +41,8 @@ const validOptions = (): OpenId4VcPluginOptions => ({
       vct: 'https://agent.example/oid4vc/vct/employee',
       name: 'Employee credential',
       vtjscId: 'https://agent.example/vt/employee.json',
+      credentialSchemaId: 1,
+      jsonSchema: EMPLOYEE_JSON_SCHEMA,
       claims: ['name', 'role'],
       disclosureFrame: ['name', 'role'],
     },

@@ -64,6 +64,18 @@ export const testCredentialConfiguration: OpenId4VcCredentialConfiguration = {
   vct: 'https://credentials.example/vct/employee',
   name: 'Employee credential',
   vtjscId: 'https://credentials.example/vt/employee.json',
+  credentialSchemaId: 1,
+  jsonSchema: JSON.stringify({
+    title: 'Employee credential',
+    type: 'object',
+    properties: {
+      credentialSubject: {
+        type: 'object',
+        properties: { name: { type: 'string' }, role: { type: 'string' } },
+        required: ['name'],
+      },
+    },
+  }),
   claims: ['name', 'role'],
   disclosureFrame: ['name', 'role'],
 }

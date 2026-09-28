@@ -261,6 +261,18 @@ const configuration: OpenId4VcCredentialConfiguration = {
   vct: 'https://issuer.example/oid4vc/vct/demo-credential',
   name: 'DemoCredential',
   vtjscId: 'vtjsc:example',
+  credentialSchemaId: 1,
+  jsonSchema: JSON.stringify({
+    title: 'DemoCredential',
+    type: 'object',
+    properties: {
+      credentialSubject: {
+        type: 'object',
+        properties: { name: { type: 'string' }, demoId: { type: 'string' } },
+        required: ['name'],
+      },
+    },
+  }),
   claims: ['name', 'demoId'],
   disclosureFrame: ['name', 'demoId'],
 }

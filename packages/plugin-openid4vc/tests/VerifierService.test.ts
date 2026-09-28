@@ -38,6 +38,17 @@ const PUBLIC_JWK = {
 const ISSUER_DID = 'did:web:issuer.example'
 const VCT = 'https://agent.example/oid4vc/vct/employee'
 const VTJSC_ID = 'https://agent.example/vt/employee.json'
+const JSON_SCHEMA = JSON.stringify({
+  title: 'Employee credential',
+  type: 'object',
+  properties: {
+    credentialSubject: {
+      type: 'object',
+      properties: { name: { type: 'string' }, role: { type: 'string' } },
+      required: ['name'],
+    },
+  },
+})
 
 const verifierOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
@@ -49,6 +60,8 @@ const verifierOptions = (): OpenId4VcPluginOptions => ({
       vct: VCT,
       name: 'Employee credential',
       vtjscId: VTJSC_ID,
+      credentialSchemaId: 1,
+      jsonSchema: JSON_SCHEMA,
       claims: ['name', 'role'],
       disclosureFrame: ['name', 'role'],
     },

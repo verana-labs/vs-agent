@@ -1,4 +1,9 @@
-import type { OpenId4VcAgent, OpenId4VcIssuerSink, OpenId4VcPluginOptions } from '../types'
+import type {
+  OpenId4VcAgent,
+  OpenId4VcCredentialConfiguration,
+  OpenId4VcIssuerSink,
+  OpenId4VcPluginOptions,
+} from '../types'
 import type { Kms } from '@credo-ts/core'
 import type { OnModuleInit } from '@nestjs/common'
 import type {
@@ -24,6 +29,8 @@ import {
 import { verifyKeyBoundToDid } from '../trust/keyBinding'
 import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
+
+import { buildCredentialConfigurations } from './credentialConfigurationBuilder'
 
 import {
   didFromValidatedCertificate,
@@ -93,13 +100,13 @@ export class IssuerService implements OnModuleInit {
 
   public async onModuleInit(): Promise<void> {
     this.publishIssuerService(this)
-    this.options.credentialConfigurationRegistry?.onReplace(() => this.refreshCredentialConfigurations())
+    this.options.credentialConfigurationRegistry?.onReplace(() => this.renderCredentialConfigurations())
     await this.ensureInitialized()
   }
 
   public async refreshCredentialConfigurations(): Promise<void> {
     await this.ensureInitialized()
-    await this.createOrUpdateIssuer(this.signingCertificateHandle())
+    await this.replaceCredentialConfigurations()
   }
 
   public ensureInitialized(): Promise<void> {
@@ -296,12 +303,39 @@ export class IssuerService implements OnModuleInit {
       throw new Error('OpenID4VC issuer certificate key is not bound to the agent DID assertionMethod')
     }
 
+    await this.replaceCredentialConfigurations()
     await this.createOrUpdateIssuer(signingCertificate)
 
     this.signingCertificate = signingCertificate
     this.agent.config.logger.info(
       `[OpenID4VC] issuer signs with a ${signingCertificate.development ? 'development' : 'configured'} certificate${publishedMethodId ? `, published as ${publishedMethodId}` : ''}`,
     )
+  }
+
+  // Runs while `initialize` is still pending, so it must not wait on the initialization it is part of.
+  private async renderCredentialConfigurations(): Promise<void> {
+    if (!this.signingCertificate) return
+    await this.createOrUpdateIssuer(this.signingCertificate)
+  }
+
+  private async replaceCredentialConfigurations(): Promise<void> {
+    const registry = this.options.credentialConfigurationRegistry
+    if (!registry) return
+
+    let configurations: OpenId4VcCredentialConfiguration[] | undefined
+    try {
+      configurations = await buildCredentialConfigurations(this.agent)
+    } catch (error) {
+      this.agent.config.logger.warn(
+        `[OpenID4VC] the credential configuration set keeps its last known contents: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return
+    }
+    if (!configurations) return
+
+    await registry.replace(configurations)
   }
 
   private async createOrUpdateIssuer(signingCertificate: SigningCertificateHandle): Promise<void> {

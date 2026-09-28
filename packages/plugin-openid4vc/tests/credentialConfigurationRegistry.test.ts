@@ -14,6 +14,14 @@ const configuration = (id: string): OpenId4VcCredentialConfiguration => ({
   vct: `https://issuer.example/vct/${id}`,
   name: id,
   vtjscId: `vtjsc:${id}`,
+  credentialSchemaId: 1,
+  jsonSchema: JSON.stringify({
+    title: id,
+    type: 'object',
+    properties: {
+      credentialSubject: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+    },
+  }),
   claims: ['name'],
   disclosureFrame: ['name'],
 })

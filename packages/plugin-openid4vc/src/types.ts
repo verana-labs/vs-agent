@@ -26,6 +26,8 @@ export interface OpenId4VcCredentialConfiguration {
   name: string
   description?: string
   vtjscId: string
+  credentialSchemaId: number
+  jsonSchema: string
   claims: string[]
   disclosureFrame: string[]
 }
