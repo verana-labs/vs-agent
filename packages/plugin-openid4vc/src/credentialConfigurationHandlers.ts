@@ -28,14 +28,17 @@ export function registerCredentialConfigurationHandlers(
     registry.register({
       msg,
       handle: async (activity: IndexerActivity, ctx: IndexerHandlerContext) => {
-        if (original) await original.handle(activity, ctx)
         try {
-          await getIssuerService()?.refreshCredentialConfigurations()
-        } catch (error) {
-          ctx.agent.config.logger.error(
-            `[OpenID4VC] credential configuration refresh failed for ${msg}`,
-            error as Record<string, unknown>,
-          )
+          if (original) await original.handle(activity, ctx)
+        } finally {
+          try {
+            await getIssuerService()?.refreshCredentialConfigurations()
+          } catch (error) {
+            ctx.agent.config.logger.error(
+              `[OpenID4VC] credential configuration refresh failed for ${msg}`,
+              error as Record<string, unknown>,
+            )
+          }
         }
       },
     })

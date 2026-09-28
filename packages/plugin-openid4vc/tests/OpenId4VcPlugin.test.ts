@@ -77,6 +77,24 @@ describe('OpenId4VcPlugin', () => {
     expect(refreshCredentialConfigurations).toHaveBeenCalledOnce()
   })
 
+  it('refreshes the configuration set even when the original handler throws', async () => {
+    const plugin = OpenId4VcPlugin(options())
+    const registry = new IndexerHandlerRegistry()
+    registry.register({
+      msg: 'RevokeParticipant',
+      handle: () => Promise.reject(new Error('the indexer block could not be applied')),
+    })
+    plugin.registerIndexerHandlers?.(registry)
+
+    const refreshCredentialConfigurations = vi.fn().mockResolvedValue(undefined)
+    issuerSinkOf(plugin)({ refreshCredentialConfigurations } as never)
+
+    await expect(
+      registry.dispatch(participantActivity('RevokeParticipant'), handlerContext()),
+    ).rejects.toThrow('the indexer block could not be applied')
+    expect(refreshCredentialConfigurations).toHaveBeenCalledOnce()
+  })
+
   it('stays quiet until the issuer published itself and logs a failed refresh', async () => {
     const plugin = OpenId4VcPlugin(options())
     const registry = new IndexerHandlerRegistry()
