@@ -113,7 +113,7 @@ export class IssuerService implements OnModuleInit {
   }
 
   public async refreshCredentialConfigurations(): Promise<void> {
-    await this.ensureInitialized()
+    if (!this.signingCertificate) return
     this.typeMetadataIntegrity.invalidate()
     await this.replaceCredentialConfigurations()
   }

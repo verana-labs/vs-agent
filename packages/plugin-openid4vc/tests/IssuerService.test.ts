@@ -291,6 +291,18 @@ describe('IssuerService', () => {
     expect(api.updateIssuerMetadata).not.toHaveBeenCalled()
   })
 
+  it('leaves a refresh alone rather than driving the issuer initialization', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const options = registeredIssuerOptions()
+    const service = new IssuerService(issuerAgent(api) as never, options, issuerSink)
+
+    await service.refreshCredentialConfigurations()
+
+    expect(loadSigningCertificate).not.toHaveBeenCalled()
+    expect(api.updateIssuerMetadata).not.toHaveBeenCalled()
+  })
+
   it('logs the certificate mode and the published verification method at startup', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
