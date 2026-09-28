@@ -33,6 +33,11 @@ describe('getDidWebHttpsBaseUrl', () => {
     expect(getDidWebHttpsBaseUrl('did:peer:2.Ez6fixture')).toBeUndefined()
   })
 
+  it('keeps distinct ports distinct instead of normalising them away', () => {
+    expect(getDidWebHttpsBaseUrl('did:web:example.com%3A80')).toBe('https://example.com:80')
+    expect(getDidWebHttpsBaseUrl('did:web:example.com%3A8080')).toBe('https://example.com:8080')
+  })
+
   it.each([
     'not-a-did',
     'did:web',
@@ -43,6 +48,26 @@ describe('getDidWebHttpsBaseUrl', () => {
     'did:web:example.com#key-1',
     'did:web:example.com/did.json',
   ])('returns undefined for %s', value => {
+    expect(getDidWebHttpsBaseUrl(value)).toBeUndefined()
+  })
+
+  it.each([
+    'did:web:example.com%00',
+    'did:web:example.com%20',
+    'did:web:example.com%09',
+    'did:web:example.com%0A',
+    'did:web:%20',
+    'did:web:example.com%3A',
+    'did:web:example.com%3A:dids:issuer',
+    'did:webvh:QmFixtureScid:example.com%3A',
+    'did:web:example.com%3A80%20',
+    'did:web:example.com%3Anotaport',
+    'did:web:example.com%3A80%3A443',
+    'did:web:%3A8080',
+    'did:web:user%40example.com',
+    'did:web:example.com%25',
+    'did:web:%5B%3A%3A1%5D',
+  ])('rejects rather than normalises %s', value => {
     expect(getDidWebHttpsBaseUrl(value)).toBeUndefined()
   })
 })
