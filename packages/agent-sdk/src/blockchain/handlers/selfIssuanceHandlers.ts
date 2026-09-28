@@ -8,9 +8,14 @@ import { reconcileVtjscPublications, removeSelfIssuedEcsCredentialsIfIssuerRevok
 /**
  * Messages that can give this agent the ISSUER participant its own ECS credentials anchor
  * against: an ECOSYSTEM-mode entry becomes usable when the validator validates it, an OPEN-mode
- * entry as soon as its owner creates it.
+ * entry as soon as its owner creates it. SetParticipantEffectiveUntil changes the validUntil of those
+ * credentials, per [VSA-VTI-ECS-SELF-2].
  */
-const ISSUER_READY_MSGS = ['SetParticipantOPToValidated', 'SelfCreateParticipant']
+const ISSUER_READY_MSGS = [
+  'SetParticipantOPToValidated',
+  'SelfCreateParticipant',
+  'SetParticipantEffectiveUntil',
+]
 
 /** Messages that make an ISSUER participant permanently unusable, per VSA-VTI-FLOW-OP-REVOKE. */
 const ISSUER_REVOKED_MSGS = ['RevokeParticipant', 'SlashParticipantTrustDeposit']

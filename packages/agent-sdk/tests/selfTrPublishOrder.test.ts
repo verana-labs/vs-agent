@@ -98,6 +98,7 @@ async function publish(
   agent: unknown,
   beforePublish: (vp: unknown) => Promise<void>,
   credentialSchemaId = JSC_URL,
+  validUntil?: string,
 ) {
   return await publishSelfIssuedEcsPresentation(
     agent as never,
@@ -108,6 +109,7 @@ async function publish(
     { id: credentialSchemaId, type: 'JsonSchemaCredential' },
     ecsClaims,
     beforePublish,
+    validUntil,
   )
 }
 
@@ -175,11 +177,11 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
     expect(repositoryUpdate).toHaveBeenCalledTimes(2)
   })
 
-  it('self-issues the Service credential with no validUntil, and an Organization credential with one', async () => {
+  it('takes validUntil from the effective_until of the ISSUER entry, and leaves it out without one', async () => {
     const { agent, metadata } = makeAgent()
     const orgJsc = 'https://agent.example/vt/schemas-6-jsc.json'
 
-    await publish(agent, async () => {})
+    await publish(agent, async () => {}, JSC_URL, '2027-09-25T10:00:00Z')
     await publishSelfIssuedEcsPresentation(
       agent as never,
       'https://agent.example/vt/ecs-org-vtc-vp.json',
@@ -190,8 +192,8 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
       ecsClaims,
     )
 
-    expect(storedEntry(metadata, JSC_URL).credential.validUntil).toBeUndefined()
-    expect(storedEntry(metadata, orgJsc).credential.validUntil).toEqual(expect.any(String))
+    expect(storedEntry(metadata, JSC_URL).credential.validUntil).toBe('2027-09-25T10:00:00Z')
+    expect(storedEntry(metadata, orgJsc).credential.validUntil).toBeUndefined()
   })
 })
 
@@ -238,6 +240,19 @@ describe('stored self-issued VTC revalidation', () => {
 
     expect(repositoryUpdate).toHaveBeenCalledTimes(2)
     expect(storedEntry(metadata, JSC_URL).credential.credentialSchema.id).toBe(JSC_URL)
+  })
+
+  it('rebuilds when the effective_until of the ISSUER entry changes', async () => {
+    const { agent, metadata, repositoryUpdate } = makeAgent()
+
+    await publish(agent, beforePublish, JSC_URL, '2027-09-25T10:00:00Z')
+    await publish(agent, beforePublish, JSC_URL, '2027-09-25T10:00:00Z')
+    expect(repositoryUpdate).toHaveBeenCalledTimes(1)
+
+    await publish(agent, beforePublish, JSC_URL, '2028-09-25T10:00:00Z')
+
+    expect(repositoryUpdate).toHaveBeenCalledTimes(2)
+    expect(storedEntry(metadata, JSC_URL).credential.validUntil).toBe('2028-09-25T10:00:00Z')
   })
 
   it('rebuilds when the stored credential was issued by another DID', async () => {

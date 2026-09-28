@@ -622,6 +622,7 @@ async function reconcileSelfIssuedEcsCredentials(
         jsonSchemaCredentialId,
         issuer.id,
         schema.json_schema,
+        issuer.effective_until ?? undefined,
       )
     } catch (e) {
       agent.config.logger.error(

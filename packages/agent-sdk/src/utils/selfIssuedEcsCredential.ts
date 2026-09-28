@@ -1,10 +1,8 @@
 import { DidDocumentService, DidRecord, DidRepository, W3cCredentialSchema } from '@credo-ts/core'
-import { ECS } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../agent/VsAgent'
 import { EcsClaims } from './ecsClaims'
 import {
-  createCredential,
   createPresentation,
   generateDigestSRI,
   getClaims,
@@ -21,6 +19,7 @@ const buildIntegrityData = (data: Record<string, unknown>) => {
 
 interface StoredSelfIssuedCredential {
   issuer?: string | { id?: string }
+  validUntil?: string
   credentialSchema?: { id?: string } | Array<{ id?: string }>
   proof?: { verificationMethod?: string } | Array<{ verificationMethod?: string }>
 }
@@ -30,6 +29,7 @@ function storedCredentialIsCurrent(
   credentialSchemaId: string,
   did: string,
   didRecord: DidRecord,
+  validUntil: string | undefined,
 ): boolean {
   if (!credential) return false
   // a credential published by an older agent as data model 1.1 is rebuilt on upgrade
@@ -42,6 +42,7 @@ function storedCredentialIsCurrent(
     ? credential.credentialSchema[0]
     : credential.credentialSchema
   if (schema?.id !== credentialSchemaId) return false
+  if (credential.validUntil !== validUntil) return false
 
   const proofs = !credential.proof
     ? []
@@ -71,19 +72,18 @@ async function signSelfIssuedEcsCredential(
   agent: VsAgent,
   didRecord: DidRecord,
   presentationId: string,
-  schemaKey: string,
   type: string[],
   claims: Record<string, unknown>,
   credentialSchema: W3cCredentialSchema,
+  validUntil: string | undefined,
 ): Promise<SelfIssuedEcsPresentation> {
-  // [VSA-VTI-FLOW-FMT-1]: the self-issued Service credential has no applicant entry, so no validUntil
-  const build = schemaKey === ECS.SERVICE ? createW3cV2Credential : createCredential
-  const unsignedCredential = build({
+  const unsignedCredential = createW3cV2Credential({
     id: agent.did,
     type,
     issuer: agent.did!,
     credentialSubject: { ...claims, id: agent.did },
     credentialSchema: { id: credentialSchema.id, type: credentialSchema.type },
+    validUntil,
   })
   const verificationMethodId = getVerificationMethodId(agent.config.logger, didRecord)
   const signedCredential = await signerW3c(agent, unsignedCredential, verificationMethodId)
@@ -105,6 +105,7 @@ export async function publishSelfIssuedEcsPresentation(
   credentialSchema: W3cCredentialSchema,
   ecsClaims: EcsClaims,
   beforePublish?: (verifiablePresentation: SelfIssuedEcsPresentation) => Promise<void>,
+  validUntil?: string,
 ): Promise<SelfIssuedEcsPresentation> {
   if (!agent.did) throw Error('The DID must be set up')
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
@@ -124,7 +125,7 @@ export async function publishSelfIssuedEcsPresentation(
   const attached = (metadata?.attached ?? true) && !superseded
   if (
     metadata?.integrityData === integrityData &&
-    storedCredentialIsCurrent(metadata?.credential, credentialSchema.id, agent.did, didRecord)
+    storedCredentialIsCurrent(metadata?.credential, credentialSchema.id, agent.did, didRecord, validUntil)
   ) {
     // the presentation is already public, so a failed beforePublish step still needs a retry here
     if (attached) await beforePublish?.(metadata.verifiablePresentation)
@@ -135,10 +136,10 @@ export async function publishSelfIssuedEcsPresentation(
     agent,
     didRecord,
     id,
-    schemaKey,
     type,
     claims as Record<string, unknown>,
     credentialSchema,
+    validUntil,
   )
   // nothing is persisted yet, so a failure here leaves no public presentation behind
   if (attached) await beforePublish?.(verifiablePresentation)
