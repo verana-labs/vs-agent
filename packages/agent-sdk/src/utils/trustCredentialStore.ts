@@ -192,6 +192,8 @@ export async function saveMetadataEntry(
   const record = didRecord.metadata.get(key) ?? {}
   // Remove previous entry for this credential ID (if exists)
   const found = findMetadataEntry(didRecord, key, fields.id, ref)
+  // [VSA-PUB-VT-5]: the Type Metadata of a schema outlives every re-issue of its VTJSC
+  const typeMetadata = found?.schemaId === ref ? record[ref]?.typeMetadata : undefined
   if (found) {
     if (didRecord.didDocument?.service) {
       didRecord.didDocument.service = didRecord.didDocument.service.filter(
@@ -201,6 +203,7 @@ export async function saveMetadataEntry(
     delete record[found.schemaId]
   }
   record[ref] = {
+    ...(typeof typeMetadata === 'string' ? { typeMetadata } : {}),
     credential: trustCredentialEntry(credential),
     verifiablePresentation: trustPresentationEntry(verifiablePresentation),
     didDocumentServiceId,
@@ -462,6 +465,42 @@ export async function reattachVtjscPublication(agent: VsAgent, schemaRef: string
 
 export function getTrustMetadata(didRecord: DidRecord, key: '_vt/vtc' | '_vt/jsc', schemaId?: string) {
   return findMetadataEntry(didRecord, key, schemaId)
+}
+
+/**
+ * Stores the serialized SD-JWT VC Type Metadata of a VTJSC with its `_vt/jsc` entry, once. A
+ * stored document is never replaced: [VSA-PUB-VT-5] serves identical bytes while the schema exists.
+ * Returns false when the entry does not exist or already carries a document.
+ */
+export async function saveVtjscTypeMetadata(
+  agent: VsAgent,
+  schemaRef: string,
+  typeMetadata: string,
+): Promise<boolean> {
+  const didRecord = await getDidRecord(agent)
+  const metadata = didRecord?.metadata.get('_vt/jsc')
+  const entry = metadata?.[schemaRef]
+  if (!entry || typeof entry.typeMetadata === 'string') return false
+
+  entry.typeMetadata = typeMetadata
+  didRecord.metadata.set('_vt/jsc', metadata)
+  // the DID Document does not change, so the record is saved without a DID update
+  const repo = agent.context.dependencyManager.resolve(DidRepository)
+  await repo.update(agent.context, didRecord)
+  return true
+}
+
+/**
+ * The stored Type Metadata of the `CredentialSchema` with the given on-chain id, as serialized.
+ * The `_vt/jsc` key of such a schema is `vpr:verana:{chainId}:cs:{id}`.
+ */
+export function findVtjscTypeMetadata(
+  didRecord: DidRecord,
+  chainId: string,
+  credentialSchemaId: string,
+): string | undefined {
+  const entry = didRecord.metadata.get('_vt/jsc')?.[`vpr:verana:${chainId}:cs:${credentialSchemaId}`]
+  return typeof entry?.typeMetadata === 'string' ? entry.typeMetadata : undefined
 }
 
 /**
