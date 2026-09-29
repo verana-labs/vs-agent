@@ -338,9 +338,9 @@ export class IssuerService implements OnModuleInit {
       throw error
     }
 
-    this.agent.config.logger.info(
-      `[OpenID4VC] issuer signs with a ${signingCertificate.development ? 'development' : 'configured'} certificate${publishedMethodId ? `, published as ${publishedMethodId}` : ''}`,
-    )
+    const mode = signingCertificate.development ? 'development' : 'configured'
+    const publication = publishedMethodId ? `, published as ${publishedMethodId}` : ''
+    this.agent.config.logger.info(`[OpenID4VC] issuer signs with a ${mode} certificate${publication}`)
   }
 
   private async assertTypeMetadataReadable(vct: string): Promise<void> {

@@ -206,7 +206,8 @@ describe('IssuerService initialization', () => {
     await new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink).ensureInitialized()
 
     expect(logger.info).toHaveBeenCalledWith(
-      `[OpenID4VC] issuer signs with a development certificate, published as ${AGENT_DID}#openid4vc-development-issuer`,
+      '[OpenID4VC] issuer signs with a development certificate, ' +
+        `published as ${AGENT_DID}#openid4vc-development-issuer`,
     )
   })
 

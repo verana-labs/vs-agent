@@ -78,7 +78,8 @@ describe('in-process OpenID4VC issuance', () => {
   }, 60_000)
 
   it('serves a verifiable x5c-headed signed metadata JWT to a jwt-only client', async () => {
-    const metadataUrl = `${agents.issuer.publicApiBaseUrl}/.well-known/openid-credential-issuer/oid4vci/issuer`
+    const base = agents.issuer.publicApiBaseUrl
+    const metadataUrl = `${base}/.well-known/openid-credential-issuer/oid4vci/issuer`
 
     const signed = await fetch(metadataUrl, { headers: { accept: 'application/jwt' } })
     const jwt = await signed.text()

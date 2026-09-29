@@ -550,7 +550,7 @@ describe('VerifierService', () => {
       expect(sessions.map(session => session.id)).toEqual(['session-1', 'session-2'])
     })
 
-    it('lists a verified session that nobody read yet as verified but not accepted, without deciding', async () => {
+    it('lists a verified session nobody read yet as verified but not accepted', async () => {
       const { service, api } = await initializedVerifier()
       api.findVerificationSessionsByQuery.mockResolvedValue([
         verificationSession({ state: 'ResponseVerified' }),

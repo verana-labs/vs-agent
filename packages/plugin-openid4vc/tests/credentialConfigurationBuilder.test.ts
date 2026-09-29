@@ -124,7 +124,7 @@ describe('buildCredentialConfigurations', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('the CredentialSchema 3'))
   })
 
-  it('advertises a schema whose credentialSubject declares an envelope claim, without that claim', async () => {
+  it('advertises a schema declaring an envelope claim, without that claim', async () => {
     const configurations = await buildCredentialConfigurations(fakeAgent(fakeIndexer([4])))
 
     expect(configurations?.map(configuration => configuration.claims)).toEqual([['name']])
