@@ -47,21 +47,12 @@ export const OPENID4VC_OPTIONS = 'OPENID4VC_OPTIONS'
 export const OPENID4VC_ISSUER_SINK = 'OPENID4VC_ISSUER_SINK'
 
 export interface OpenId4VcIssuerRuntime extends OpenId4VcIssuerRequestMapper {
-  refreshCredentialConfigurations(): Promise<void>
+  refreshCredentialConfigurations(updatedCredentialSchemaId?: number): Promise<void>
 }
 
 export type OpenId4VcIssuerSink = (service: OpenId4VcIssuerRuntime) => void
 
-export type CredentialConfigurationRefresh = () => Promise<void>
-
-export interface CredentialConfigurationRegistry {
-  readonly configurations: OpenId4VcCredentialConfiguration[]
-  replace(configurations: OpenId4VcCredentialConfiguration[]): Promise<void>
-  onReplace(refresh: CredentialConfigurationRefresh): void
-}
-
 export interface OpenId4VcPluginOptions extends OpenId4VcConfigurationFile {
   publicApiBaseUrl: string
   credentialConfigurations: OpenId4VcCredentialConfiguration[]
-  credentialConfigurationRegistry?: CredentialConfigurationRegistry
 }

@@ -27,6 +27,7 @@ import {
 import {
   findCredentialConfiguration,
   ISSUER_CAPABILITY_ID,
+  OfferClaimsError,
   parseOfferClaims,
   parseOfferIssuanceMetadata,
   parseOfferTtlSeconds,
@@ -98,6 +99,7 @@ const ATTESTATION_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
 export class IssuerService implements OnModuleInit {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
+  private replacement: Promise<void> = Promise.resolve()
   private readonly typeMetadataIntegrity = createTypeMetadataIntegrity()
 
   public constructor(
@@ -108,13 +110,15 @@ export class IssuerService implements OnModuleInit {
 
   public async onModuleInit(): Promise<void> {
     this.publishIssuerService(this)
-    this.options.credentialConfigurationRegistry?.onReplace(() => this.renderCredentialConfigurations())
     await this.ensureInitialized()
   }
 
-  public async refreshCredentialConfigurations(): Promise<void> {
+  public async refreshCredentialConfigurations(updatedCredentialSchemaId?: number): Promise<void> {
     if (!this.signingCertificate) return
-    this.typeMetadataIntegrity.invalidate()
+    const updated = this.options.credentialConfigurations.find(
+      configuration => configuration.credentialSchemaId === updatedCredentialSchemaId,
+    )
+    if (updated) this.typeMetadataIntegrity.invalidate(updated.vct)
     await this.replaceCredentialConfigurations()
   }
 
@@ -165,11 +169,11 @@ export class IssuerService implements OnModuleInit {
         ttlSeconds: parseOfferTtlSeconds(ttlSeconds),
       }
     } catch (error) {
-      if (error instanceof AdminApiError) throw error
       throw new AdminApiError(
         AdminApiErrorCode.InvalidInput,
         BAD_REQUEST,
         error instanceof Error ? error.message : 'invalid credential offer',
+        error instanceof OfferClaimsError && error.violations ? { violations: error.violations } : undefined,
       )
     }
 
@@ -326,10 +330,14 @@ export class IssuerService implements OnModuleInit {
       throw new Error('OpenID4VC issuer certificate key is not bound to the agent DID assertionMethod')
     }
 
-    await this.replaceCredentialConfigurations()
-    await this.createOrUpdateIssuer(signingCertificate)
-
     this.signingCertificate = signingCertificate
+    try {
+      await this.replaceCredentialConfigurations(true)
+    } catch (error) {
+      this.signingCertificate = undefined
+      throw error
+    }
+
     this.agent.config.logger.info(
       `[OpenID4VC] issuer signs with a ${signingCertificate.development ? 'development' : 'configured'} certificate${publishedMethodId ? `, published as ${publishedMethodId}` : ''}`,
     )
@@ -349,30 +357,49 @@ export class IssuerService implements OnModuleInit {
     }
   }
 
-  // Runs while `initialize` is still pending, so it must not wait on the initialization it is part of.
-  private async renderCredentialConfigurations(): Promise<void> {
-    if (!this.signingCertificate) return
-    await this.createOrUpdateIssuer(this.signingCertificate)
+  // A notification can trigger a refresh while the initialization still runs, so the derived sets
+  // reach the served metadata in the order they were derived.
+  private replaceCredentialConfigurations(render = false): Promise<void> {
+    const derive = () => this.deriveAndRender(render)
+    const next = this.replacement.then(derive, derive)
+    this.replacement = next.then(
+      () => undefined,
+      () => undefined,
+    )
+    return next
   }
 
-  private async replaceCredentialConfigurations(): Promise<void> {
-    const registry = this.options.credentialConfigurationRegistry
-    if (!registry) return
+  private async deriveAndRender(render: boolean): Promise<void> {
+    const signingCertificate = this.signingCertificate
+    if (!signingCertificate) return
 
-    let configurations: OpenId4VcCredentialConfiguration[] | undefined
+    const previous = this.options.credentialConfigurations
+    const derived = await this.deriveCredentialConfigurations()
+    if (derived && !sameCredentialConfigurations(previous, derived)) {
+      this.options.credentialConfigurations = derived
+      render = true
+    }
+    if (!render) return
+
     try {
-      configurations = await buildCredentialConfigurations(this.agent)
+      await this.createOrUpdateIssuer(signingCertificate)
+    } catch (error) {
+      this.options.credentialConfigurations = previous
+      throw error
+    }
+  }
+
+  private async deriveCredentialConfigurations(): Promise<OpenId4VcCredentialConfiguration[] | undefined> {
+    try {
+      return await buildCredentialConfigurations(this.agent)
     } catch (error) {
       this.agent.config.logger.warn(
         `[OpenID4VC] the credential configuration set keeps its last known contents: ${
           error instanceof Error ? error.message : String(error)
         }`,
       )
-      return
+      return undefined
     }
-    if (!configurations) return
-
-    await registry.replace(configurations)
   }
 
   private async createOrUpdateIssuer(signingCertificate: SigningCertificateHandle): Promise<void> {
@@ -470,6 +497,15 @@ export class IssuerService implements OnModuleInit {
     if (!signingCertificate) throw new Error('OpenID4VC issuer service is not initialized')
     return signingCertificate
   }
+}
+
+function sameCredentialConfigurations(
+  one: OpenId4VcCredentialConfiguration[],
+  other: OpenId4VcCredentialConfiguration[],
+): boolean {
+  const serialize = (configurations: OpenId4VcCredentialConfiguration[]) =>
+    JSON.stringify([...configurations].sort((a, b) => a.id.localeCompare(b.id)))
+  return serialize(one) === serialize(other)
 }
 
 function summarizeIssuanceSession(session: OpenId4VcIssuanceSessionRecord): OpenId4VcIssuanceSessionSummary {

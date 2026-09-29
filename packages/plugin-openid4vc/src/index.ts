@@ -7,7 +7,6 @@ export {
   parseOfferClaims,
   parseOpenId4VcConfiguration,
 } from './config'
-export { createCredentialConfigurationRegistry } from './credentialConfigurationRegistry'
 export { OpenId4VcPlugin } from './nestjs/OpenId4VcPlugin'
 export * from './nestjs/dto'
 export { V2OpenId4VcCredentialExchangesController } from './nestjs/V2OpenId4VcCredentialExchangesController'
@@ -35,7 +34,6 @@ export { TRUST_VERDICT_NAMES, VERANA_TRUST_STATUSES } from './trust/types'
 export type { TrustEvidence, TrustVerdict, TrustVerdictName, VeranaTrustStatus } from './trust/types'
 export { OPENID4VC_OPTIONS } from './types'
 export type {
-  CredentialConfigurationRegistry,
   OpenId4VcAgent,
   OpenId4VcConfigurationFile,
   OpenId4VcConfiguredSigningMaterial,

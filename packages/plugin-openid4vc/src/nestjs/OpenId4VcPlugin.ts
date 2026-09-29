@@ -1,11 +1,11 @@
 import type { OpenId4VcIssuerRuntime, OpenId4VcIssuerSink, OpenId4VcPluginOptions } from '../types'
 import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
-import { registerCredentialConfigurationHandlers } from '../credentialConfigurationHandlers'
 import { IssuerService } from '../services/IssuerService'
 import { VerifierService } from '../services/VerifierService'
 import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 
+import { registerCredentialConfigurationHandlers } from '../sdk/credentialConfigurationHandlers'
 import { setupOpenId4Vc } from '../sdk/setupOpenId4Vc'
 
 import { V2OpenId4VcCredentialExchangesController } from './V2OpenId4VcCredentialExchangesController'
@@ -27,7 +27,7 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlu
     credoPlugin: sdkPlugin,
     publicMiddleware: sdkPlugin.publicMiddleware,
     registerIndexerHandlers: registry =>
-      registerCredentialConfigurationHandlers(registry, () => issuerService),
+      registerCredentialConfigurationHandlers(registry, options, () => issuerService),
     controllers: [
       V2OpenId4VcCredentialExchangesController,
       V2OpenId4VcPresentationsController,

@@ -43,7 +43,7 @@ export function setupOpenId4Vc(
   app.use(
     new URL(`${options.publicApiBaseUrl}/oid4vci`).pathname,
     express.json({ limit: ISSUER_BODY_LIMIT }),
-    acceptDraftCredentialRequests(options.credentialConfigurations),
+    acceptDraftCredentialRequests(() => options.credentialConfigurations),
   )
   // RFC 8615 puts the issuer path after the well-known segment, so a holder whose issuer identifier carries a
   // path requests `/.well-known/jwt-vc-issuer/oid4vci/<id>`, not just the bare form.
@@ -107,7 +107,7 @@ function withoutTrailingSlash(path: string): string {
 
 // Draft wallets predating OpenID4VCI 1.0 still send `format` alongside `vct` on the credential request, which
 // Credo answers with `unsupported_credential_format`.
-export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentialConfiguration[]) {
+export function acceptDraftCredentialRequests(getConfigurations: () => OpenId4VcCredentialConfiguration[]) {
   return (request: Request, _response: Response, next: NextFunction): void => {
     const body: unknown = request.body
     if (request.method !== 'POST' || !request.path.endsWith('/credential') || !isRecord(body)) {
@@ -119,7 +119,7 @@ export function acceptDraftCredentialRequests(configurations: OpenId4VcCredentia
       return
     }
 
-    const configuration = configurations.find(candidate => candidate.vct === body.vct)
+    const configuration = getConfigurations().find(candidate => candidate.vct === body.vct)
     if (configuration) {
       const { format: _format, vct: _vct, ...rest } = body
       request.body = { ...rest, credential_configuration_id: configuration.id }
