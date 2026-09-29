@@ -30,6 +30,18 @@ const EMPLOYEE_JSON_SCHEMA = JSON.stringify({
   },
 })
 
+const ECS_JSON_SCHEMA = JSON.stringify({
+  title: 'OrganizationCredential',
+  type: 'object',
+  properties: {
+    credentialSubject: {
+      type: 'object',
+      properties: { id: { type: 'string' }, name: { type: 'string' }, logoUri: { type: 'string' } },
+      required: ['id', 'name'],
+    },
+  },
+})
+
 const validOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   issuer: {},
@@ -47,6 +59,12 @@ const validOptions = (): OpenId4VcPluginOptions => ({
       disclosureFrame: ['name', 'role'],
     },
   ],
+})
+
+const ecsShapedConfiguration = () => ({
+  ...validOptions().credentialConfigurations[0],
+  jsonSchema: ECS_JSON_SCHEMA,
+  claims: ['name', 'logoUri'],
 })
 
 const configurationFile = () => ({ issuer: {}, verifier: {} })
@@ -275,6 +293,20 @@ describe('parseOfferClaims', () => {
         name: 'OfferClaimsError',
         violations: [{ path: '', message: "must have required property 'name'" }],
       }),
+    )
+  })
+
+  it('accepts a claim set of a schema that requires id, without id', () => {
+    const config = ecsShapedConfiguration()
+
+    expect(parseOfferClaims(config, { name: 'Acme' })).toEqual({ name: 'Acme' })
+  })
+
+  it('rejects an id the offer carries as an unknown claim', () => {
+    const config = ecsShapedConfiguration()
+
+    expect(() => parseOfferClaims(config, { name: 'Acme', id: 'did:web:acme.example' })).toThrow(
+      "unknown claim 'id'",
     )
   })
 })

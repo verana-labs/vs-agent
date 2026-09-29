@@ -172,12 +172,30 @@ export function parseOfferClaims(
     throw new OfferClaimsError('claims must include at least one configured claim')
   }
 
-  const violations = schemaViolations(JSON.parse(configuration.jsonSchema), claims)
+  const violations = schemaViolations(claimSetSchema(configuration.jsonSchema), claims)
   if (violations.length > 0) {
     throw new OfferClaimsError('the claim set does not satisfy the json_schema', violations)
   }
 
   return claims
+}
+
+// An SD-JWT VTC carries no `credentialSubject.id`, so `id` is never a required property of a claim set.
+function claimSetSchema(jsonSchema: string): Record<string, unknown> {
+  const schema = JSON.parse(jsonSchema)
+  const credentialSubject = schema?.properties?.credentialSubject
+  if (!isRecord(credentialSubject) || !Array.isArray(credentialSubject.required)) return schema
+
+  return {
+    ...schema,
+    properties: {
+      ...schema.properties,
+      credentialSubject: {
+        ...credentialSubject,
+        required: credentialSubject.required.filter(name => name !== 'id'),
+      },
+    },
+  }
 }
 
 export function parseOfferTtlSeconds(input: unknown): number {
