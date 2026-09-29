@@ -16,8 +16,6 @@ export type { BaseDidCommPlugin, BaseDidCommPluginOptions } from './plugins/setu
 export { CachedWebDidResolver } from './did/CachedWebDidResolver'
 export { WebDidRegistrar } from './did/WebDidRegistrar'
 export { getLegacyDidDocument } from './did/legacyDidWeb'
-export { getDidWebHttpsBaseUrl, getDidWebLocation } from './did/didWebLocation'
-export type { DidWebLocation } from './did/didWebLocation'
 export {
   applyArtifactServices,
   artifactServicesMatch,

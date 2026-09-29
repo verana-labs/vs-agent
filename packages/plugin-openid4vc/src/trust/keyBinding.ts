@@ -2,7 +2,7 @@ import type { KeyBindingResult } from './types'
 import type { BaseAgent, DidDocument, DidPurpose, VerificationMethod } from '@credo-ts/core'
 
 import { getPublicJwkFromVerificationMethod, Kms } from '@credo-ts/core'
-import { getDidWebLocation } from '@verana-labs/vs-agent-sdk'
+import { getDidWebHttpsBaseUrl } from '@verana-labs/vs-agent-sdk'
 
 type BindingPurpose = Extract<DidPurpose, 'assertionMethod' | 'authentication'>
 export type DidResolverAgent = Pick<BaseAgent, 'dids'>
@@ -63,7 +63,7 @@ async function lookupBoundVerificationMethod(
 }
 
 async function resolveDidDocument(agent: DidResolverAgent, did: string): Promise<DidDocument | null> {
-  if (!didWebHost(did)) return null
+  if (!isDidWebTarget(did)) return null
 
   try {
     const resolution = await withTimeout(
@@ -97,8 +97,12 @@ function* verificationMethodsForPurposes(
   }
 }
 
-function didWebHost(did: string): string | undefined {
-  return getDidWebLocation(did)?.host
+function isDidWebTarget(did: string): boolean {
+  try {
+    return getDidWebHttpsBaseUrl(did) !== undefined
+  } catch {
+    return false
+  }
 }
 
 async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {

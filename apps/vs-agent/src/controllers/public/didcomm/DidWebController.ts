@@ -15,6 +15,7 @@ import {
   Res,
 } from '@nestjs/common'
 import {
+  derivePublicDidLocation,
   findAttestedResource,
   findAttestedResources,
   getLegacyDidDocument,
@@ -28,7 +29,6 @@ import * as fs from 'fs'
 import * as path from 'path'
 
 import { VsAgentService } from '../../../services'
-import { derivePublicDidLocation } from '../../../utils/didLocation'
 
 type PublicDidAgent = VsAgent & { did: string }
 
