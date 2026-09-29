@@ -27,10 +27,12 @@ import {
   X509CertificateGenerator,
 } from '@peculiar/x509'
 import {
+  composeTypeMetadata,
   createVsAgent,
   ParticipantRole,
   ParticipantState,
   setupBaseDidComm,
+  typeMetadataUrl,
   VeranaIndexerService,
 } from '@verana-labs/vs-agent-sdk'
 import express from 'express'
@@ -59,33 +61,40 @@ const UNROUTABLE_INDEXER_BASE_URL = 'http://indexer.invalid'
 export const TEST_ISSUER_DID = 'did:web:issuer.example'
 export const TEST_VERIFIER_DID = 'did:web:verifier.example'
 
-export const TEST_TYPE_METADATA = JSON.stringify({
-  vct: 'https://credentials.example/vt/vct/1',
-  name: 'Employee credential',
-  claims: [{ path: ['name'] }, { path: ['role'] }],
+const TEST_ECOSYSTEM_BASE_URL = 'https://credentials.example'
+const TEST_CREDENTIAL_SCHEMA_ID = 1
+const TEST_CREDENTIAL_SCHEMA_REF = `vpr:verana:vpr-test-1:cs:${TEST_CREDENTIAL_SCHEMA_ID}`
+const TEST_VTJSC_ID = `${TEST_ECOSYSTEM_BASE_URL}/vt/employee.json`
+const TEST_JSON_SCHEMA = JSON.stringify({
+  title: 'Employee credential',
+  type: 'object',
+  properties: {
+    credentialSubject: {
+      type: 'object',
+      properties: { name: { type: 'string' }, role: { type: 'string' } },
+      required: ['name'],
+    },
+  },
 })
 
 export const testCredentialConfiguration: OpenId4VcCredentialConfiguration = {
   id: 'employee',
   format: 'dc+sd-jwt',
-  vct: 'https://credentials.example/vt/vct/1',
+  vct: typeMetadataUrl(TEST_ECOSYSTEM_BASE_URL, TEST_CREDENTIAL_SCHEMA_ID),
   name: 'Employee credential',
-  vtjscId: 'https://credentials.example/vt/employee.json',
-  credentialSchemaId: 1,
-  jsonSchema: JSON.stringify({
-    title: 'Employee credential',
-    type: 'object',
-    properties: {
-      credentialSubject: {
-        type: 'object',
-        properties: { name: { type: 'string' }, role: { type: 'string' } },
-        required: ['name'],
-      },
-    },
-  }),
+  vtjscId: TEST_VTJSC_ID,
+  credentialSchemaId: TEST_CREDENTIAL_SCHEMA_ID,
+  jsonSchema: TEST_JSON_SCHEMA,
   claims: ['name', 'role'],
   disclosureFrame: ['name', 'role'],
 }
+
+export const TEST_TYPE_METADATA = composeTypeMetadata({
+  vct: testCredentialConfiguration.vct,
+  jsonSchema: TEST_JSON_SCHEMA,
+  credentialSchemaRef: TEST_CREDENTIAL_SCHEMA_REF,
+  jsonSchemaCredentialId: TEST_VTJSC_ID,
+})
 
 export interface TestHolderCredential {
   claimFormat: string
