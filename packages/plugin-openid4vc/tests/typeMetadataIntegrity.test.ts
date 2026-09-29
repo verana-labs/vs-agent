@@ -50,7 +50,17 @@ describe('createTypeMetadataIntegrity', () => {
     expect(served).toHaveBeenCalledOnce()
   })
 
-  it('re-reads the document after an invalidation and yields the new digest', async () => {
+  it('re-reads the document after an invalidation', async () => {
+    const integrity = createTypeMetadataIntegrity()
+    await integrity.digest(URL_ONE)
+
+    integrity.invalidate(URL_ONE)
+    await integrity.digest(URL_ONE)
+
+    expect(served).toHaveBeenCalledTimes(2)
+  })
+
+  it('yields the digest of the document served after an invalidation', async () => {
     const integrity = createTypeMetadataIntegrity()
     const first = await integrity.digest(URL_ONE)
     servedBody = JSON.stringify({ vct: URL_ONE, name: 'Employee credential v2' })
@@ -60,7 +70,6 @@ describe('createTypeMetadataIntegrity', () => {
 
     expect(second).toBe(digestOfBytes(servedBody))
     expect(second).not.toBe(first)
-    expect(served).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the cached digest of a document the invalidation did not name', async () => {

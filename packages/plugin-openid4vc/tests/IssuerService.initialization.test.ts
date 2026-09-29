@@ -69,11 +69,23 @@ describe('IssuerService initialization', () => {
     })
   })
 
-  it('advertises the rebuilt set and re-renders the issuer metadata on a refresh', async () => {
+  it('advertises the rebuilt set on a refresh', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
     const options = issuerOptions()
     const service = new IssuerService(issuerAgent(api) as never, options, issuerSink)
+    await service.onModuleInit()
+
+    buildCredentialConfigurations.mockResolvedValue([contractorConfiguration])
+    await service.refreshCredentialConfigurations()
+
+    expect(options.credentialConfigurations).toEqual([contractorConfiguration])
+  })
+
+  it('re-renders the issuer metadata on a refresh', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
     await service.onModuleInit()
     expect(Object.keys(api.updateIssuerMetadata.mock.calls[0][0].credentialConfigurationsSupported)).toEqual([
       'employee',
@@ -82,13 +94,24 @@ describe('IssuerService initialization', () => {
     buildCredentialConfigurations.mockResolvedValue([contractorConfiguration])
     await service.refreshCredentialConfigurations()
 
-    expect(options.credentialConfigurations).toEqual([contractorConfiguration])
     expect(Object.keys(api.updateIssuerMetadata.mock.calls[1][0].credentialConfigurationsSupported)).toEqual([
       'contractor',
     ])
   })
 
-  it('keeps the advertised set and the served metadata together when the re-render fails', async () => {
+  it('surfaces the failure a re-render raised', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
+    await service.onModuleInit()
+
+    buildCredentialConfigurations.mockResolvedValue([contractorConfiguration])
+    api.updateIssuerMetadata.mockRejectedValueOnce(new Error('credo refused the metadata'))
+
+    await expect(service.refreshCredentialConfigurations()).rejects.toThrow('credo refused the metadata')
+  })
+
+  it('keeps the advertised set when the re-render fails', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
     const options = issuerOptions()
@@ -99,7 +122,7 @@ describe('IssuerService initialization', () => {
     buildCredentialConfigurations.mockResolvedValue([contractorConfiguration])
     api.updateIssuerMetadata.mockRejectedValueOnce(new Error('credo refused the metadata'))
 
-    await expect(service.refreshCredentialConfigurations()).rejects.toThrow('credo refused the metadata')
+    await expect(service.refreshCredentialConfigurations()).rejects.toThrow()
     expect(options.credentialConfigurations).toBe(previous)
   })
 
@@ -116,7 +139,7 @@ describe('IssuerService initialization', () => {
     expect(api.updateIssuerMetadata).toHaveBeenCalledOnce()
   })
 
-  it('keeps the last known set when the rebuild fails, and says so', async () => {
+  it('keeps the last known set when the rebuild fails', async () => {
     const api = issuerApi()
     api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
     const options = issuerOptions()
@@ -127,8 +150,19 @@ describe('IssuerService initialization', () => {
     await service.refreshCredentialConfigurations()
 
     expect(options.credentialConfigurations.map(configuration => configuration.id)).toEqual(['employee'])
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('keeps its last known contents'))
     expect(api.updateIssuerMetadata).toHaveBeenCalledOnce()
+  })
+
+  it('says the set kept its last known contents when the rebuild fails', async () => {
+    const api = issuerApi()
+    api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
+    const service = new IssuerService(issuerAgent(api) as never, issuerOptions(), issuerSink)
+    await service.onModuleInit()
+
+    buildCredentialConfigurations.mockRejectedValue(new Error('the indexer refused the Participant list'))
+    await service.refreshCredentialConfigurations()
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('keeps its last known contents'))
   })
 
   it('applies a refresh that arrives while the initialization still runs', async () => {

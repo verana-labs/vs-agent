@@ -181,11 +181,18 @@ describe('buildCredentialConfigurations', () => {
     expect(indexer.getEcosystem).toHaveBeenCalledOnce()
   })
 
-  it('derives an empty set from an empty participant list, and says so', async () => {
+  it('derives an empty set from an empty participant list', async () => {
     const indexer = fakeIndexer([])
 
     await expect(buildCredentialConfigurations(fakeAgent(indexer))).resolves.toEqual([])
     expect(indexer.getCredentialSchema).not.toHaveBeenCalled()
+  })
+
+  it('says an empty participant list leaves no credential type to issue', async () => {
+    const indexer = fakeIndexer([])
+
+    await buildCredentialConfigurations(fakeAgent(indexer))
+
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('no credential type to issue'))
   })
 

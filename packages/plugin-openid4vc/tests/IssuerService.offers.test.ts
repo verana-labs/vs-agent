@@ -215,7 +215,7 @@ describe('IssuerService credential offers', () => {
     expect(api.createCredentialOffer).not.toHaveBeenCalled()
   })
 
-  it('reads the Type Metadata once for an offer and the credential it issues', async () => {
+  it('reads the Type Metadata once for an offer, then reuses it for the credential', async () => {
     const { service, api } = await initializedIssuer()
     api.createCredentialOffer.mockResolvedValue({
       credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
@@ -226,6 +226,17 @@ describe('IssuerService credential offers', () => {
     await service.mapCredentialRequest(credentialRequest() as never)
 
     expect(typeMetadataFetch).toHaveBeenCalledOnce()
+  })
+
+  it('reads the Type Metadata under the bounded fetch', async () => {
+    const { service, api } = await initializedIssuer()
+    api.createCredentialOffer.mockResolvedValue({
+      credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
+      issuanceSession: issuanceSession({ id: 'session-id' }),
+    })
+
+    await service.createOffer(offer)
+
     expect(typeMetadataFetch).toHaveBeenCalledWith(EMPLOYEE_VCT, {
       redirect: 'manual',
       signal: expect.any(AbortSignal),
@@ -370,7 +381,7 @@ describe('IssuerService credential offers', () => {
     expect(await stampedIntegrity(service, credentialRequest())).toBe(digestOfBytes(withBom))
   })
 
-  it('rejects half a status list pair as invalid input and a whole one as an unknown list', async () => {
+  it('rejects half a status list pair as invalid input', async () => {
     const { service } = await initializedIssuer()
 
     await expect(service.createOffer({ ...offer, statusListIndex: 0 })).rejects.toMatchObject({
@@ -379,6 +390,11 @@ describe('IssuerService credential offers', () => {
     await expect(service.createOffer({ ...offer, statusListId: 'list-1' })).rejects.toMatchObject({
       code: AdminApiErrorCode.InvalidInput,
     })
+  })
+
+  it('rejects a whole status list pair as an unknown list', async () => {
+    const { service } = await initializedIssuer()
+
     await expect(
       service.createOffer({ ...offer, statusListId: 'list-1', statusListIndex: 0 }),
     ).rejects.toMatchObject({ code: AdminApiErrorCode.UnknownId })

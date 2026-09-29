@@ -108,7 +108,7 @@ describe('IssuerService issuance sessions', () => {
     })
   })
 
-  it('lists only the sessions of this issuer and leaves the filters to the query', async () => {
+  it('lists only the sessions of this issuer', async () => {
     const { service } = await initializedIssuer()
     issuanceSessionRepository.findByQuery.mockResolvedValue([
       issuanceSession(),
@@ -124,6 +124,11 @@ describe('IssuerService issuance sessions', () => {
       ['session-1', 'OfferCreated'],
       ['session-2', 'Completed'],
     ])
+  })
+
+  it('leaves the listing filters to the query', async () => {
+    const { service } = await initializedIssuer()
+    issuanceSessionRepository.findByQuery.mockResolvedValue([])
 
     await service.listIssuanceSessions({
       jsonSchemaCredentialId: 'badge',
@@ -137,16 +142,22 @@ describe('IssuerService issuance sessions', () => {
     })
   })
 
-  it('deletes a session of this issuer and refuses a foreign one', async () => {
+  it('deletes a session of this issuer', async () => {
     const { service, api } = await initializedIssuer()
     api.getIssuanceSessionById.mockResolvedValueOnce(issuanceSession())
-    await service.deleteIssuanceSession('session-1')
-    expect(api.deleteIssuanceSessionById).toHaveBeenCalledWith('session-1')
 
+    await service.deleteIssuanceSession('session-1')
+
+    expect(api.deleteIssuanceSessionById).toHaveBeenCalledWith('session-1')
+  })
+
+  it('refuses to delete a session of another issuer', async () => {
+    const { service, api } = await initializedIssuer()
     api.getIssuanceSessionById.mockResolvedValueOnce(issuanceSession({ issuerId: 'other-issuer' }))
+
     await expect(service.deleteIssuanceSession('session-1')).rejects.toMatchObject({
       code: AdminApiErrorCode.UnknownId,
     })
-    expect(api.deleteIssuanceSessionById).toHaveBeenCalledTimes(1)
+    expect(api.deleteIssuanceSessionById).not.toHaveBeenCalled()
   })
 })

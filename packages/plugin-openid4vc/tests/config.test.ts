@@ -274,14 +274,19 @@ describe('parseOfferClaims', () => {
     expect(() => parseOfferClaims(config, {})).toThrow('at least one')
   })
 
-  it('rejects a claim value the json_schema does not accept, and names the violation', () => {
+  it('rejects a claim value the json_schema does not accept', () => {
     const config = validOptions().credentialConfigurations[0]
 
     expect(() => parseOfferClaims(config, { name: 42, role: 'engineer' })).toThrowError(
-      expect.objectContaining({
-        name: 'OfferClaimsError',
-        violations: [{ path: '/name', message: 'must be string' }],
-      }),
+      expect.objectContaining({ name: 'OfferClaimsError' }),
+    )
+  })
+
+  it('names the json_schema violation of a claim value it refused', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferClaims(config, { name: 42, role: 'engineer' })).toThrowError(
+      expect.objectContaining({ violations: [{ path: '/name', message: 'must be string' }] }),
     )
   })
 
