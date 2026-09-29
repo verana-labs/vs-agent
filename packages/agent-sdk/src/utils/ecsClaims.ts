@@ -1,8 +1,8 @@
 import type { Logger } from '@credo-ts/core'
 
-import { createHash } from 'crypto'
-
 import axios from 'axios'
+
+import { digestOfBytes } from './boundedFetch'
 
 // [VSA-VTI-CFG-ENV-ECS]. Values come from the ECS_CLAIMS_* variables; a claim the operator
 // did not set is absent, never an invented default.
@@ -73,17 +73,12 @@ const DIGEST_BASE_DELAY_MS = 500
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-// Generate a SHA-384 digest for the given content
-export function digestOf(content: string): string {
-  return `sha384-${createHash('sha384').update(content).digest('base64')}`
-}
-
 export async function digestOfUri(uri: string, variable: string, logger?: Logger): Promise<string> {
   let lastError: Error | undefined
   for (let attempt = 1; attempt <= DIGEST_ATTEMPTS; attempt++) {
     try {
       const response = await axios.get(uri, { responseType: 'arraybuffer', timeout: DIGEST_TIMEOUT_MS })
-      return `sha384-${createHash('sha384').update(Buffer.from(response.data)).digest('base64')}`
+      return digestOfBytes(Buffer.from(response.data))
     } catch (error) {
       lastError = error as Error
       if (attempt < DIGEST_ATTEMPTS) await sleep(DIGEST_BASE_DELAY_MS * 2 ** (attempt - 1))
@@ -129,7 +124,7 @@ export async function composeEcsClaims(
     const group = GROUP_OF[schemaKey]
     const variable = (group && (ECS_CLAIMS_VARIABLES[group] as Record<string, string>)[uriClaim]) || uriClaim
     const local = claims.localResources?.[uri]
-    composed[digestClaim] = local ? digestOf(local) : await digestOfUri(uri, variable, logger)
+    composed[digestClaim] = local ? digestOfBytes(local) : await digestOfUri(uri, variable, logger)
   }
   return composed
 }

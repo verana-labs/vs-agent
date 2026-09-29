@@ -1,4 +1,5 @@
 export * from './agent'
+export * from './boundedFetch'
 export * from './data'
 export * from './ecsClaims'
 export * from './ecsService'

@@ -16,9 +16,9 @@ import { DEFAULT_DATA_INTEGRITY_CRYPTOSUITE, VtFlowModuleConfig } from '@verana-
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
-import { createHash } from 'crypto'
 
 import type { VsAgent } from '../agent/VsAgent'
+import { digestOfBytes } from './boundedFetch'
 import { composeEcsClaims, EcsClaims } from './ecsClaims'
 import { createW3cV2Credential } from './vcdm2'
 
@@ -267,15 +267,8 @@ function assertValidSchema(schemaContent: string, id: string): void {
   }
 }
 
-/**
- * Generates a SRI digest string for the given content using the specified algorithm.
- * @param content - The content to hash.
- * @param algorithm - The hash algorithm to use (default: sha256).
- * @returns The SRI digest string.
- */
-export function generateDigestSRI(content: string, algorithm: string = 'sha384'): string {
-  const hash = createHash(algorithm).update(content).digest('base64')
-  return `${algorithm}-${hash}`
+export function generateDigestSRI(content: string): string {
+  return digestOfBytes(content)
 }
 
 export function getVerificationMethodId(logger: Logger, didRecord: DidRecord): string {

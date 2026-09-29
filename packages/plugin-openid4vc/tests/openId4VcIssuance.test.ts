@@ -4,9 +4,14 @@ import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
-import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
+import { AdminApiErrorCode, digestOfBytes } from '@verana-labs/vs-agent-sdk'
 
-import { createTestAgentsInput, startTestAgents, testCredentialConfiguration } from './helpers/startTestAgent'
+import {
+  createTestAgentsInput,
+  startTestAgents,
+  TEST_TYPE_METADATA,
+  testCredentialConfiguration,
+} from './helpers/startTestAgent'
 
 const TTL_SECONDS = 3_600
 
@@ -34,6 +39,7 @@ describe('in-process OpenID4VC issuance', () => {
     expect(storedCredential.claimFormat).toBe('dc+sd-jwt')
     expect(storedCredential.prettyClaims).toMatchObject({
       vct: testCredentialConfiguration.vct,
+      'vct#integrity': digestOfBytes(TEST_TYPE_METADATA),
       name: 'Ada Lovelace',
       role: 'engineer',
     })
@@ -72,7 +78,8 @@ describe('in-process OpenID4VC issuance', () => {
   }, 60_000)
 
   it('serves a verifiable x5c-headed signed metadata JWT to a jwt-only client', async () => {
-    const metadataUrl = `${agents.issuer.publicApiBaseUrl}/.well-known/openid-credential-issuer/oid4vci/issuer`
+    const base = agents.issuer.publicApiBaseUrl
+    const metadataUrl = `${base}/.well-known/openid-credential-issuer/oid4vci/issuer`
 
     const signed = await fetch(metadataUrl, { headers: { accept: 'application/jwt' } })
     const jwt = await signed.text()

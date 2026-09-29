@@ -26,7 +26,15 @@ import {
   SubjectAlternativeNameExtension,
   X509CertificateGenerator,
 } from '@peculiar/x509'
-import { createVsAgent, setupBaseDidComm, VeranaIndexerService } from '@verana-labs/vs-agent-sdk'
+import {
+  composeTypeMetadata,
+  createVsAgent,
+  ParticipantRole,
+  ParticipantState,
+  setupBaseDidComm,
+  typeMetadataUrl,
+  VeranaIndexerService,
+} from '@verana-labs/vs-agent-sdk'
 import express from 'express'
 import { webcrypto } from 'node:crypto'
 
@@ -53,15 +61,40 @@ const UNROUTABLE_INDEXER_BASE_URL = 'http://indexer.invalid'
 export const TEST_ISSUER_DID = 'did:web:issuer.example'
 export const TEST_VERIFIER_DID = 'did:web:verifier.example'
 
+const TEST_ECOSYSTEM_BASE_URL = 'https://credentials.example'
+const TEST_CREDENTIAL_SCHEMA_ID = 1
+const TEST_CREDENTIAL_SCHEMA_REF = `vpr:verana:vpr-test-1:cs:${TEST_CREDENTIAL_SCHEMA_ID}`
+const TEST_VTJSC_ID = `${TEST_ECOSYSTEM_BASE_URL}/vt/employee.json`
+const TEST_JSON_SCHEMA = JSON.stringify({
+  title: 'Employee credential',
+  type: 'object',
+  properties: {
+    credentialSubject: {
+      type: 'object',
+      properties: { name: { type: 'string' }, role: { type: 'string' } },
+      required: ['name'],
+    },
+  },
+})
+
 export const testCredentialConfiguration: OpenId4VcCredentialConfiguration = {
   id: 'employee',
   format: 'dc+sd-jwt',
-  vct: 'https://credentials.example/vct/employee',
+  vct: typeMetadataUrl(TEST_ECOSYSTEM_BASE_URL, TEST_CREDENTIAL_SCHEMA_ID),
   name: 'Employee credential',
-  vtjscId: 'https://credentials.example/vt/employee.json',
+  vtjscId: TEST_VTJSC_ID,
+  credentialSchemaId: TEST_CREDENTIAL_SCHEMA_ID,
+  jsonSchema: TEST_JSON_SCHEMA,
   claims: ['name', 'role'],
   disclosureFrame: ['name', 'role'],
 }
+
+export const TEST_TYPE_METADATA = composeTypeMetadata({
+  vct: testCredentialConfiguration.vct,
+  jsonSchema: TEST_JSON_SCHEMA,
+  credentialSchemaRef: TEST_CREDENTIAL_SCHEMA_REF,
+  jsonSchemaCredentialId: TEST_VTJSC_ID,
+})
 
 export interface TestHolderCredential {
   claimFormat: string
@@ -176,6 +209,7 @@ export async function startTestAgents(input: {
   const rootCertificate = input.certificates.root.toString('base64')
   const issuerCertificate = await createIssuerCertificate(input.certificates.intermediate, input.issuerDid)
   const stops: Array<() => Promise<void>> = []
+  stops.push(serveTypeMetadata(input.credentialConfiguration.vct, TEST_TYPE_METADATA))
 
   try {
     const issuer = await startPluginAgent({
@@ -199,6 +233,7 @@ export async function startTestAgents(input: {
         credentialConfigurations: [input.credentialConfiguration],
       }),
       createService: (agent, options) => new IssuerService(agent, options, () => {}),
+      indexer: issuerIndexer(input.issuerDid, input.credentialConfiguration.credentialSchemaId),
       logger,
     })
     stops.push(issuer.stop)
@@ -252,6 +287,7 @@ function createTestVsAgent(input: {
   didResolver: DidResolver
   logger: BaseLogger
   did?: string
+  indexer?: unknown
 }): OpenId4VcAgent {
   const walletConfig = getAskarStoreConfig(input.storeName)
   const agent = createVsAgent({
@@ -269,10 +305,11 @@ function createTestVsAgent(input: {
     dependencies: agentDependencies,
     publicApiBaseUrl: input.publicApiBaseUrl,
     // Unroutable on purpose: a test that reaches the VPR fails loudly instead of talking to a real indexer.
-    indexer: new VeranaIndexerService({
-      baseUrl: UNROUTABLE_INDEXER_BASE_URL,
-      logger: input.logger,
-    }),
+    indexer: (input.indexer ??
+      new VeranaIndexerService({
+        baseUrl: UNROUTABLE_INDEXER_BASE_URL,
+        logger: input.logger,
+      })) as VeranaIndexerService,
   }) as unknown as OpenId4VcAgent
 
   // Credo resolves with the first resolver claiming the method, so the fixture has to come first.
@@ -286,6 +323,7 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
   didResolver: DidResolver
   options: (publicApiBaseUrl: string) => OpenId4VcPluginOptions
   createService: (agent: OpenId4VcAgent, options: OpenId4VcPluginOptions) => Service
+  indexer?: unknown
   logger: BaseLogger
 }): Promise<{
   agent: OpenId4VcAgent
@@ -315,6 +353,7 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
       didResolver: input.didResolver,
       logger: input.logger,
       did: input.did,
+      indexer: input.indexer,
     })
     await agent.initialize()
     service = input.createService(agent, options)
@@ -431,6 +470,38 @@ export async function createTestAgentsInput() {
     issuerDid: TEST_ISSUER_DID,
     verifierDid: TEST_VERIFIER_DID,
     credentialConfiguration: testCredentialConfiguration,
+  }
+}
+
+// The Type Metadata document is read under the https boundary of the spec, which no fixture server can
+// answer, so the bytes are served from here and every other request reaches the network as before.
+function serveTypeMetadata(vct: string, document: string): () => Promise<void> {
+  const original = globalThis.fetch
+  globalThis.fetch = async (resource, init) => {
+    const url =
+      typeof resource === 'string' ? resource : resource instanceof URL ? resource.href : resource.url
+    if (url !== vct) return original(resource, init)
+    return new Response(document, { headers: { 'content-type': 'application/json' } })
+  }
+  return async () => {
+    globalThis.fetch = original
+  }
+}
+
+function issuerIndexer(did: string, credentialSchemaId: number) {
+  return {
+    listParticipants: async () => [
+      {
+        id: 1,
+        schema_id: credentialSchemaId,
+        did,
+        role: ParticipantRole.Issuer,
+        participant_state: ParticipantState.Active,
+        revoked: null,
+        slashed: null,
+        modified: '2026-09-01T00:00:00.000Z',
+      },
+    ],
   }
 }
 

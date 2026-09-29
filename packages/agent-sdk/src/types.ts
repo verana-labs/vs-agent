@@ -1,4 +1,5 @@
 import type { BaseAgentModules, VsAgent } from './agent/VsAgent'
+import type { IndexerHandlerRegistry } from './blockchain/handlers/IndexerHandlerRegistry'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { BaseLogger } from '@credo-ts/core'
@@ -24,6 +25,12 @@ export interface VsAgentNestPlugin {
   didcommModules?: DidcommModule[]
   imports?: any[]
   registerEvents?: (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => void
+  /**
+   * Wraps or adds indexer event handlers. The agent calls this after it built the default registry
+   * and after `registerEvents`, so the original handler of a msg is already there to preserve, and
+   * a plugin driven by indexer notifications cannot be wired from `registerEvents`.
+   */
+  registerIndexerHandlers?: (registry: IndexerHandlerRegistry) => void
 }
 
 export const ISSUER_PARTICIPANT_TYPE = 1

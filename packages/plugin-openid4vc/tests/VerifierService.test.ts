@@ -38,6 +38,17 @@ const PUBLIC_JWK = {
 const ISSUER_DID = 'did:web:issuer.example'
 const VCT = 'https://agent.example/oid4vc/vct/employee'
 const VTJSC_ID = 'https://agent.example/vt/employee.json'
+const JSON_SCHEMA = JSON.stringify({
+  title: 'Employee credential',
+  type: 'object',
+  properties: {
+    credentialSubject: {
+      type: 'object',
+      properties: { name: { type: 'string' }, role: { type: 'string' } },
+      required: ['name'],
+    },
+  },
+})
 
 const verifierOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
@@ -49,6 +60,8 @@ const verifierOptions = (): OpenId4VcPluginOptions => ({
       vct: VCT,
       name: 'Employee credential',
       vtjscId: VTJSC_ID,
+      credentialSchemaId: 1,
+      jsonSchema: JSON_SCHEMA,
       claims: ['name', 'role'],
       disclosureFrame: ['name', 'role'],
     },
@@ -537,7 +550,7 @@ describe('VerifierService', () => {
       expect(sessions.map(session => session.id)).toEqual(['session-1', 'session-2'])
     })
 
-    it('lists a verified session that nobody read yet as verified but not accepted, without deciding', async () => {
+    it('lists a verified session nobody read yet as verified but not accepted', async () => {
       const { service, api } = await initializedVerifier()
       api.findVerificationSessionsByQuery.mockResolvedValue([
         verificationSession({ state: 'ResponseVerified' }),

@@ -1,5 +1,10 @@
 import type { BaseLogger } from '@credo-ts/core'
-import type { BaseAgentModules, VsAgent, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
+import type {
+  BaseAgentModules,
+  IndexerHandlerRegistry,
+  VsAgent,
+  VsAgentNestPlugin,
+} from '@verana-labs/vs-agent-sdk'
 import type { Express } from 'express'
 
 export const credoPluginsFromNestPlugins = (plugins: VsAgentNestPlugin[]) =>
@@ -27,4 +32,11 @@ export const registerNestPluginEvents = (
   logger: BaseLogger,
 ): void => {
   for (const plugin of plugins) plugin.registerEvents?.(agent, logger)
+}
+
+export const registerNestPluginIndexerHandlers = (
+  plugins: VsAgentNestPlugin[],
+  registry: IndexerHandlerRegistry,
+): void => {
+  for (const plugin of plugins) plugin.registerIndexerHandlers?.(registry)
 }

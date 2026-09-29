@@ -27,6 +27,8 @@ import {
   reconcileVtjscPublications,
   SUPPORTED_PUBLIC_DID_METHODS,
   isSupportedPublicDidMethod,
+  derivePublicDidLocation,
+  type PublicDidLocation,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
 import * as fs from 'fs'
@@ -88,10 +90,9 @@ import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
-  derivePublicDidLocation,
   mountPublicPluginMiddleware,
-  type PublicDidLocation,
   registerNestPluginEvents,
+  registerNestPluginIndexerHandlers,
   runWithRetries,
   type ServerConfig,
   setupAgent,
@@ -469,6 +470,7 @@ const run = async () => {
         ecsClaims,
       )
     }
+    registerNestPluginIndexerHandlers(nestPlugins, handlerRegistry)
 
     const indexerCorporationId =
       VERANA_INDEXER_SUBSCRIPTION_SCOPE === 'corporation' && VERANA_CORPORATION_ID

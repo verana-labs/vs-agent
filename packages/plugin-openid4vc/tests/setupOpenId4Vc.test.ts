@@ -261,14 +261,30 @@ const configuration: OpenId4VcCredentialConfiguration = {
   vct: 'https://issuer.example/oid4vc/vct/demo-credential',
   name: 'DemoCredential',
   vtjscId: 'vtjsc:example',
+  credentialSchemaId: 1,
+  jsonSchema: JSON.stringify({
+    title: 'DemoCredential',
+    type: 'object',
+    properties: {
+      credentialSubject: {
+        type: 'object',
+        properties: { name: { type: 'string' }, demoId: { type: 'string' } },
+        required: ['name'],
+      },
+    },
+  }),
   claims: ['name', 'demoId'],
   disclosureFrame: ['name', 'demoId'],
 }
 
-const runCredentialRequest = (body: unknown, overrides: Partial<Request> = {}) => {
+const runCredentialRequest = (
+  body: unknown,
+  overrides: Partial<Request> = {},
+  configurations: OpenId4VcCredentialConfiguration[] = [configuration],
+) => {
   const request = { method: 'POST', path: '/oid4vci/demo-did/credential', body, ...overrides } as Request
   const next = vi.fn() as unknown as NextFunction
-  acceptDraftCredentialRequests([configuration])(request, {} as Response, next)
+  acceptDraftCredentialRequests(() => configurations)(request, {} as Response, next)
   return { body: request.body, next }
 }
 
@@ -314,6 +330,21 @@ describe('acceptDraftCredentialRequests', () => {
   it('passes a non-object body through', () => {
     const { next } = runCredentialRequest(undefined)
     expect(next).toHaveBeenCalledOnce()
+  })
+
+  it('reads the set the issuer advertises now, not the one it held at construction', () => {
+    let configurations: OpenId4VcCredentialConfiguration[] = []
+    const request = {
+      method: 'POST',
+      path: '/oid4vci/demo-did/credential',
+      body: { format: 'dc+sd-jwt', vct: configuration.vct },
+    } as Request
+    const middleware = acceptDraftCredentialRequests(() => configurations)
+
+    configurations = [configuration]
+    middleware(request, {} as Response, vi.fn() as unknown as NextFunction)
+
+    expect(request.body).toEqual({ credential_configuration_id: 'demo-credential' })
   })
 })
 

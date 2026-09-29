@@ -18,6 +18,30 @@ beforeAll(async () => {
   fixtures = await createCertificateFixtures()
 })
 
+const EMPLOYEE_JSON_SCHEMA = JSON.stringify({
+  title: 'Employee credential',
+  type: 'object',
+  properties: {
+    credentialSubject: {
+      type: 'object',
+      properties: { name: { type: 'string' }, role: { type: 'string' } },
+      required: ['name'],
+    },
+  },
+})
+
+const ECS_JSON_SCHEMA = JSON.stringify({
+  title: 'OrganizationCredential',
+  type: 'object',
+  properties: {
+    credentialSubject: {
+      type: 'object',
+      properties: { id: { type: 'string' }, name: { type: 'string' }, logoUri: { type: 'string' } },
+      required: ['id', 'name'],
+    },
+  },
+})
+
 const validOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   issuer: {},
@@ -29,10 +53,18 @@ const validOptions = (): OpenId4VcPluginOptions => ({
       vct: 'https://agent.example/oid4vc/vct/employee',
       name: 'Employee credential',
       vtjscId: 'https://agent.example/vt/employee.json',
+      credentialSchemaId: 1,
+      jsonSchema: EMPLOYEE_JSON_SCHEMA,
       claims: ['name', 'role'],
       disclosureFrame: ['name', 'role'],
     },
   ],
+})
+
+const ecsShapedConfiguration = () => ({
+  ...validOptions().credentialConfigurations[0],
+  jsonSchema: ECS_JSON_SCHEMA,
+  claims: ['name', 'logoUri'],
 })
 
 const configurationFile = () => ({ issuer: {}, verifier: {} })
@@ -203,6 +235,32 @@ describe('parseOfferClaims', () => {
     )
   })
 
+  it.each([
+    'vct',
+    'vct#integrity',
+    'iat',
+    'exp',
+    'nbf',
+    'iss',
+    'cnf',
+    'status',
+  ])('rejects the reserved envelope name %s', reserved => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferClaims(config, { name: 'Ada', [reserved]: 'supplied' })).toThrow(
+      `claim '${reserved}' is reserved by SD-JWT VC`,
+    )
+  })
+
+  it('rejects a reserved envelope name the configuration itself declares', () => {
+    const config = validOptions().credentialConfigurations[0]
+    config.claims = [...config.claims, 'vct']
+
+    expect(() => parseOfferClaims(config, { name: 'Ada', vct: 'https://attacker.example/vct' })).toThrow(
+      "claim 'vct' is reserved by SD-JWT VC",
+    )
+  })
+
   it('rejects empty offered claims', () => {
     const config = validOptions().credentialConfigurations[0]
 
@@ -214,6 +272,47 @@ describe('parseOfferClaims', () => {
     const config = validOptions().credentialConfigurations[0]
 
     expect(() => parseOfferClaims(config, {})).toThrow('at least one')
+  })
+
+  it('rejects a claim value the json_schema does not accept', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferClaims(config, { name: 42, role: 'engineer' })).toThrowError(
+      expect.objectContaining({ name: 'OfferClaimsError' }),
+    )
+  })
+
+  it('names the json_schema violation of a claim value it refused', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferClaims(config, { name: 42, role: 'engineer' })).toThrowError(
+      expect.objectContaining({ violations: [{ path: '/name', message: 'must be string' }] }),
+    )
+  })
+
+  it('rejects a claim set the json_schema requires more of', () => {
+    const config = validOptions().credentialConfigurations[0]
+
+    expect(() => parseOfferClaims(config, { role: 'engineer' })).toThrowError(
+      expect.objectContaining({
+        name: 'OfferClaimsError',
+        violations: [{ path: '', message: "must have required property 'name'" }],
+      }),
+    )
+  })
+
+  it('accepts a claim set of a schema that requires id, without id', () => {
+    const config = ecsShapedConfiguration()
+
+    expect(parseOfferClaims(config, { name: 'Acme' })).toEqual({ name: 'Acme' })
+  })
+
+  it('rejects an id the offer carries as an unknown claim', () => {
+    const config = ecsShapedConfiguration()
+
+    expect(() => parseOfferClaims(config, { name: 'Acme', id: 'did:web:acme.example' })).toThrow(
+      "unknown claim 'id'",
+    )
   })
 })
 

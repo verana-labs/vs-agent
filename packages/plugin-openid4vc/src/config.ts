@@ -3,8 +3,10 @@ import type {
   OpenId4VcCredentialConfiguration,
   OpenId4VcPluginOptions,
 } from './types'
+import type { SchemaViolation } from '@verana-labs/vs-agent-sdk'
 
 import { X509Certificate } from '@credo-ts/core'
+import { schemaViolations } from '@verana-labs/vs-agent-sdk'
 
 import { isRecord } from './utils/isRecord'
 
@@ -13,6 +15,33 @@ export const VERIFIER_CAPABILITY_ID = 'verifier'
 
 export const OFFER_TTL_SECONDS_MIN = 60
 export const OFFER_TTL_SECONDS_MAX = 7_776_000
+
+// The issuer stamps these claims itself, so a credential never carries a value a caller supplied for one.
+const RESERVED_CLAIM_NAMES: readonly string[] = [
+  'vct',
+  'vct#integrity',
+  'iat',
+  'exp',
+  'nbf',
+  'iss',
+  'cnf',
+  'status',
+]
+
+export function isReservedClaimName(name: string): boolean {
+  return RESERVED_CLAIM_NAMES.includes(name)
+}
+
+/** A claim set the credential type refuses, which the Administration API answers as INVALID_INPUT. */
+export class OfferClaimsError extends Error {
+  public constructor(
+    message: string,
+    public readonly violations?: SchemaViolation[],
+  ) {
+    super(message)
+    this.name = 'OfferClaimsError'
+  }
+}
 
 /** [VSA-VTI-CFG-ENV-OID] Validation of the OpenID4VC configuration file. */
 export function parseOpenId4VcConfiguration(document: unknown): OpenId4VcConfigurationFile {
@@ -117,12 +146,15 @@ export function parseOfferClaims(
   input: unknown,
 ): Record<string, unknown> {
   if (!isRecord(input)) {
-    throw new Error('claims must be an object')
+    throw new OfferClaimsError('claims must be an object')
   }
 
   for (const name of Object.keys(input)) {
+    if (isReservedClaimName(name)) {
+      throw new OfferClaimsError(`claim '${name}' is reserved by SD-JWT VC`)
+    }
     if (!configuration.claims.includes(name)) {
-      throw new Error(`unknown claim '${name}'`)
+      throw new OfferClaimsError(`unknown claim '${name}'`)
     }
   }
 
@@ -131,16 +163,39 @@ export function parseOfferClaims(
     if (!(name in input)) continue
     const value = input[name]
     if (isEmptyClaim(value)) {
-      throw new Error(`claim '${name}' must be non-empty`)
+      throw new OfferClaimsError(`claim '${name}' must be non-empty`)
     }
     claims[name] = value
   }
 
   if (Object.keys(claims).length === 0) {
-    throw new Error('claims must include at least one configured claim')
+    throw new OfferClaimsError('claims must include at least one configured claim')
+  }
+
+  const violations = schemaViolations(claimSetSchema(configuration.jsonSchema), claims)
+  if (violations.length > 0) {
+    throw new OfferClaimsError('the claim set does not satisfy the json_schema', violations)
   }
 
   return claims
+}
+
+// An SD-JWT VTC carries no `credentialSubject.id`, so `id` is never a required property of a claim set.
+function claimSetSchema(jsonSchema: string): Record<string, unknown> {
+  const schema = JSON.parse(jsonSchema)
+  const credentialSubject = schema?.properties?.credentialSubject
+  if (!isRecord(credentialSubject) || !Array.isArray(credentialSubject.required)) return schema
+
+  return {
+    ...schema,
+    properties: {
+      ...schema.properties,
+      credentialSubject: {
+        ...credentialSubject,
+        required: credentialSubject.required.filter(name => name !== 'id'),
+      },
+    },
+  }
 }
 
 export function parseOfferTtlSeconds(input: unknown): number {

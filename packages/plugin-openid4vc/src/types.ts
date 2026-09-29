@@ -26,6 +26,8 @@ export interface OpenId4VcCredentialConfiguration {
   name: string
   description?: string
   vtjscId: string
+  credentialSchemaId: number
+  jsonSchema: string
   claims: string[]
   disclosureFrame: string[]
 }
@@ -44,7 +46,11 @@ export interface OpenId4VcConfigurationFile {
 export const OPENID4VC_OPTIONS = 'OPENID4VC_OPTIONS'
 export const OPENID4VC_ISSUER_SINK = 'OPENID4VC_ISSUER_SINK'
 
-export type OpenId4VcIssuerSink = (service: OpenId4VcIssuerRequestMapper) => void
+export interface OpenId4VcIssuerRuntime extends OpenId4VcIssuerRequestMapper {
+  refreshCredentialConfigurations(updatedCredentialSchemaId?: number): Promise<void>
+}
+
+export type OpenId4VcIssuerSink = (service: OpenId4VcIssuerRuntime) => void
 
 export interface OpenId4VcPluginOptions extends OpenId4VcConfigurationFile {
   publicApiBaseUrl: string

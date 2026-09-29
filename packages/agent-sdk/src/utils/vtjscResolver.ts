@@ -1,10 +1,16 @@
 import type { VsAgent } from '../agent/VsAgent'
-import type { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
+import type { CredentialSchemaDto, EcosystemDto } from '../blockchain/types'
 
 import { findMetadataEntry } from './trustCredentialStore'
 import { fetchJson } from './util'
 
 const VTJSC_FETCH_TIMEOUT_MS = 30_000
+
+/** The indexer reads that resolving a VTJSC needs, so a caller can pass reads it already made. */
+export interface IndexerSchemaReader {
+  getCredentialSchema(id: string | number): Promise<CredentialSchemaDto>
+  getEcosystem(id: string | number): Promise<EcosystemDto | undefined>
+}
 
 /** Minimal shape of the Linked Verifiable Presentation that carries a VTJSC. */
 interface VtjscPresentation {
@@ -28,7 +34,7 @@ interface VtjscPresentation {
  */
 export async function resolveJsonSchemaCredentialId(
   agent: VsAgent,
-  indexer: VeranaIndexerService,
+  indexer: IndexerSchemaReader,
   credentialSchemaId: string | number,
   chainId: string,
 ): Promise<string> {
