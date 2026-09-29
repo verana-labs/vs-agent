@@ -24,17 +24,20 @@ per `CredentialSchema` for which it holds an active ISSUER `Participant`, identi
 `jsonSchemaCredentialId` of that schema. Claims come from the `credentialSubject` properties of
 the JSON schema, every one of them selectively disclosable, and the display name from its `title`.
 The `vct` is the Type Metadata URL of the type, `{ecosystem base}/vt/vct/{credentialSchemaId}`.
-A schema the agent cannot resolve is skipped with a warning and the rest of the set still stands, and
-so is one whose `credentialSubject` declares an SD-JWT VC envelope claim (`vct`, `vct#integrity`,
-`iat`, `exp`, `nbf`, `iss`, `cnf`, `status`): the issuer stamps those itself, and an offer that carries
-one is rejected with `400 INVALID_INPUT`.
+A schema the agent cannot resolve is skipped with a warning and the rest of the set still stands.
+A `credentialSubject` property named after an SD-JWT VC envelope claim (`vct`, `vct#integrity`,
+`iat`, `exp`, `nbf`, `iss`, `cnf`, `status`) is no claim of the type: the issuer stamps those itself,
+and an offer that carries one is rejected with `400 INVALID_INPUT`. Neither is `id`: SD-JWT VC binds
+the holder through `cnf`, so an `id` the caller supplies would assert a subject the issuer never
+checked.
 
 The set follows the VPR without a restart: a `Participant` or `CredentialSchema` notification
 rebuilds it and re-renders the served issuer metadata. `createCredentialOffer` validates the
-claims against the JSON schema (`422 INVALID_CLAIMS` with the violations), checks the active
+claims against the JSON schema (`400 INVALID_INPUT` with the violations), checks the active
 ISSUER `Participant` through the indexer (`409 NOT_AUTHORIZED`, or `503 RESOLVER_UNAVAILABLE`
-when the indexer cannot answer), and reads the Type Metadata document to bind every credential to
-its `vct#integrity`. It answers `503 RESOLVER_UNAVAILABLE` when that document cannot be read.
+when the indexer cannot answer), and reads the Type Metadata document over `https`, without
+following a redirect, to bind every credential to its `vct#integrity`. It answers
+`503 RESOLVER_UNAVAILABLE` when that document cannot be read.
 
 ## Not wired up yet
 
@@ -115,7 +118,7 @@ answers in the v2 error envelope. Without `OID4VC_CONFIG_FILE_LOCATION`, every p
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `createCredentialOffer` | `POST /credential-offer` | `jsonSchemaCredentialId`, `claims`, `ttlSeconds` (60 to 7776000), optional `statusListId` and `statusListIndex` together. Returns `credentialExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`, `422 INVALID_CLAIMS`, `409 NOT_AUTHORIZED`, `503 RESOLVER_UNAVAILABLE`. Answers `UNKNOWN_ID` for every status list until #713. |
+| `createCredentialOffer` | `POST /credential-offer` | `jsonSchemaCredentialId`, `claims`, `ttlSeconds` (60 to 7776000), optional `statusListId` and `statusListIndex` together. Returns `credentialExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`, `409 NOT_AUTHORIZED`, `503 RESOLVER_UNAVAILABLE`. Answers `UNKNOWN_ID` for every status list until #713. |
 | `listCredentialExchanges` | `GET /credential-exchanges` | Filters `jsonSchemaCredentialId`, `state`. Keyset pagination. |
 | `getCredentialExchange` | `GET /credential-exchanges/{credentialExchangeId}` | `credentialExchangeId`, `jsonSchemaCredentialId`, `state`, `createdAt`, `updatedAt`, `expiresAt`, `errorMessage`. Never the claims, the offer URL or the pre-authorized code. |
 | `deleteCredentialExchange` | `DELETE /credential-exchanges/{credentialExchangeId}` | `204`. Deletes the record only, never a credential that a wallet holds. |
