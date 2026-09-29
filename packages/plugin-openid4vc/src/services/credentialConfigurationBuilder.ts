@@ -9,11 +9,12 @@ import type {
 import { isReservedClaimName } from '../config'
 
 import {
-  anonCredsSchemaFromJsonSchema,
   getDidWebHttpsBaseUrl,
   ParticipantRole,
   ParticipantState,
+  readJsonSchema,
   resolveJsonSchemaCredentialId,
+  typeMetadataUrl,
 } from '@verana-labs/vs-agent-sdk'
 
 // `undefined` means the agent cannot derive the set at all, and the caller keeps the last known one.
@@ -73,7 +74,7 @@ async function buildCredentialConfiguration(
     credentialSchemaId,
     chainId,
   )
-  const { name, attrNames } = anonCredsSchemaFromJsonSchema(schema.json_schema)
+  const { title, attrNames } = readJsonSchema(schema.json_schema)
   const envelope = attrNames.filter(isEnvelopeClaim)
   if (envelope.length > 0) {
     agent.config.logger.warn(
@@ -87,8 +88,8 @@ async function buildCredentialConfiguration(
   return {
     id: jsonSchemaCredentialId,
     format: 'dc+sd-jwt',
-    vct: `${baseUrl}/vt/vct/${credentialSchemaId}`,
-    name,
+    vct: typeMetadataUrl(baseUrl, credentialSchemaId),
+    name: title ?? `vpr:verana:${chainId}:cs:${credentialSchemaId}`,
     vtjscId: jsonSchemaCredentialId,
     credentialSchemaId,
     jsonSchema: schema.json_schema,

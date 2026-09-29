@@ -22,7 +22,8 @@ wallet-attestation trust-list distribution, production PKI onboarding, formal co
 The configuration file carries no credential type. The agent reads them from the VPR instead: one
 per `CredentialSchema` for which it holds an active ISSUER `Participant`, identified by the
 `jsonSchemaCredentialId` of that schema. Claims come from the `credentialSubject` properties of
-the JSON schema, every one of them selectively disclosable, and the display name from its `title`.
+the JSON schema, every one of them selectively disclosable, and the display name from its `title`,
+or from the on-chain reference `vpr:verana:{chainId}:cs:{credentialSchemaId}` when it carries none.
 The `vct` is the Type Metadata URL of the type, `{ecosystem base}/vt/vct/{credentialSchemaId}`.
 A schema the agent cannot resolve is skipped with a warning and the rest of the set still stands.
 A `credentialSubject` property named after an SD-JWT VC envelope claim (`vct`, `vct#integrity`,

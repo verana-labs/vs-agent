@@ -31,6 +31,13 @@ const SCHEMAS: Record<number, { ecosystem_id: number; json_schema: string }> = {
     ecosystem_id: 10,
     json_schema: jsonSchema('Envelope credential', { name: { type: 'string' }, vct: { type: 'string' } }),
   },
+  5: {
+    ecosystem_id: 10,
+    json_schema: JSON.stringify({
+      type: 'object',
+      properties: { credentialSubject: { type: 'object', properties: { name: { type: 'string' } } } },
+    }),
+  },
 }
 
 const ECOSYSTEMS: Record<number, string> = { 10: 'did:web:ecosystem.example', 20: 'did:example:ecosystem' }
@@ -141,6 +148,13 @@ describe('buildCredentialConfigurations', () => {
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("the CredentialSchema 2 declares 'id', which the credential envelope carries"),
     )
+  })
+
+  it('names a title-less schema after its on-chain reference, the way the served document does', async () => {
+    const configurations = await buildCredentialConfigurations(fakeAgent(fakeIndexer([5])))
+
+    expect(configurations?.[0].name).toBe(`vpr:verana:${CHAIN_ID}:cs:5`)
+    expect(configurations?.[0].claims).toEqual(['name'])
   })
 
   it('reads each CredentialSchema and each Ecosystem of a rebuild once', async () => {
