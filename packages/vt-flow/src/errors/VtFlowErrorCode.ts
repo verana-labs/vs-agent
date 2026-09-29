@@ -1,3 +1,5 @@
+import { CredoError } from '@credo-ts/core'
+
 import { VtFlowState } from '../types'
 
 /** Wire `description.code` values for vt-flow problem-reports (see spec Error Codes). */
@@ -132,4 +134,14 @@ export const VT_FLOW_ERROR_INFO: Readonly<Record<VtFlowErrorCode, VtFlowErrorInf
 
 export function isVtFlowErrorCode(code: string): code is VtFlowErrorCode {
   return (Object.values(VtFlowErrorCode) as string[]).includes(code)
+}
+
+/** Answered with a report from `buildVtFlowProblemReport`: a `DidCommProblemReportError` loses `who_retries`, `impact` and `thid` on dispatch. */
+export class VtFlowError extends CredoError {
+  public constructor(
+    public readonly code: VtFlowErrorCode,
+    message: string,
+  ) {
+    super(message)
+  }
 }

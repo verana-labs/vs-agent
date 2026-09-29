@@ -5,9 +5,10 @@ import {
   ListFlowsQuery,
   Page,
   PaginationQuery,
-  RevokeFlowCredentialBody,
+  RejectFlowBody,
   SendOobLinkBody,
   ServiceEndpoint,
+  StartValidationBody,
   UpdateServiceEndpointBody,
   ValidateFlowBody,
   VtFlowRecord,
@@ -37,21 +38,24 @@ export class VtApi {
     })
   }
 
+  public startValidation(participantSessionId: string, body?: StartValidationBody): Promise<VtFlowRecord> {
+    return this.http.request(
+      'POST',
+      `/vt/flows/${encodeURIComponent(participantSessionId)}/start-validation`,
+      { body },
+    )
+  }
+
   public validateFlow(participantSessionId: string, body?: ValidateFlowBody): Promise<VtFlowRecord> {
     return this.http.request('POST', `/vt/flows/${encodeURIComponent(participantSessionId)}/validate`, {
       body,
     })
   }
 
-  public revokeFlowCredential(
-    participantSessionId: string,
-    body?: RevokeFlowCredentialBody,
-  ): Promise<VtFlowRecord> {
-    return this.http.request(
-      'POST',
-      `/vt/flows/${encodeURIComponent(participantSessionId)}/revoke-credential`,
-      { body },
-    )
+  public rejectFlow(participantSessionId: string, body: RejectFlowBody): Promise<VtFlowRecord> {
+    return this.http.request('POST', `/vt/flows/${encodeURIComponent(participantSessionId)}/reject`, {
+      body,
+    })
   }
 
   public listServiceEndpoints(query?: PaginationQuery): Promise<Page<ServiceEndpoint>> {

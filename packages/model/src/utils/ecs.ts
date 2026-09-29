@@ -122,6 +122,11 @@ export async function classifyEcsSchema(jsonSchema: string): Promise<ECS | null>
   }
 }
 
+// [VT-ECS-ORG-JSON-SCHEMA-CRED-W3C] and [VT-ECS-PERSONA-JSON-SCHEMA-CRED-W3C] require validUntil
+export function ecsRequiresValidUntil(ecsKey: string | null): boolean {
+  return ecsKey === ECS.ORG || ecsKey === ECS.PERSONA
+}
+
 type W3CCred = {
   credentialSubject?: { jsonSchema?: { $ref?: string } }
 }

@@ -38,6 +38,7 @@ describe('vt-flow: two-agent integration', () => {
   let applicantEvents: ReturnType<typeof vi.spyOn>
   let validatorEvents: ReturnType<typeof vi.spyOn>
   const sharedResolver = new FakeDidResolver()
+  const VALIDATOR_ENTRY_ID = 7
 
   beforeEach(async () => {
     const applicantMessages = new Subject<SubjectMessage>()
@@ -69,6 +70,7 @@ describe('vt-flow: two-agent integration', () => {
         autoAcceptIssuanceRequest: true,
         autoMarkValidated: true,
         autoOfferCredential: false,
+        checkParticipantId: context => new VtFlowOrchestrator(validator).checkParticipantId(context),
       },
       didcommVersions: ['v1', 'v2'],
     })
@@ -78,6 +80,12 @@ describe('vt-flow: two-agent integration', () => {
     await validator.initialize()
     await sharedResolver.registerAgent(validator)
     validatorEvents = vi.spyOn(validator.events, 'emit')
+    vi.spyOn(validator.indexer, 'getParticipant').mockImplementation(
+      async id =>
+        (Number(id) === VALIDATOR_ENTRY_ID
+          ? { did: validator.did }
+          : { op_state: 'PENDING', validator_participant_id: VALIDATOR_ENTRY_ID }) as never,
+    )
 
     const { connectionRecord } = await applicant.didcomm.oob.receiveImplicitInvitation({
       did: validator.did,
@@ -156,7 +164,7 @@ describe('vt-flow: two-agent integration', () => {
     expect(validatorRecord?.applicantParticipantId).toBe('participant-42')
 
     const { VtFlowsService } = await import('../src/controllers/admin/v2/vt/VtFlowsService')
-    const flowsService = new VtFlowsService({ getAgent: async () => applicant } as never, undefined as never)
+    const flowsService = new VtFlowsService({ getAgent: async () => applicant } as never)
     const bySchema = await flowsService.listFlowsPage({ schemaId: '12' })
     expect(bySchema.items.map(flow => flow.id)).toEqual([applicantRecord.id])
   })
@@ -186,6 +194,80 @@ describe('vt-flow: two-agent integration', () => {
     expect(updatedApplicant?.state).toBe(VtFlowState.Validating)
   })
 
+  it('onboarding-request: Validator refuses the participant_id of another validator and never sends validating', async () => {
+    vi.mocked(validator.indexer.getParticipant).mockImplementation(
+      async id =>
+        (Number(id) === 8
+          ? { did: 'did:web:another-validator' }
+          : { op_state: 'PENDING', validator_participant_id: 8 }) as never,
+    )
+    const reportReceived = waitForEvent(applicantEvents, (ev: unknown): ev is any => {
+      const e = ev as any
+      return e?.type === 'DidCommMessageProcessed' && e?.payload?.message?.description?.code !== undefined
+    })
+
+    const applicantRecord = await applicant.modules.vtFlow.sendOnboardingRequest({
+      connectionId: applicantConnection.id,
+      applicantParticipantId: '42',
+      agentParticipantId: 'agent-participant-8',
+      walletAgentParticipantId: 'wallet-agent-participant-8',
+    })
+
+    expect((await reportReceived).payload.message.description.code).toBe('vt-flow.invalid-participant-id')
+    const validatorRecord = await validator.modules.vtFlow.findByThreadId(applicantRecord.threadId)
+    expect(validatorRecord?.state).toBe(VtFlowState.AwaitingOr)
+    expect(validatorRecord?.messages).toEqual([expect.objectContaining({ type: 'problem-report' })])
+    expect((await applicant.modules.vtFlow.getById(applicantRecord.id)).state).toBe(VtFlowState.OrSent)
+    expect(
+      validatorEvents.mock.calls.flat().find(isVtFlowStateChangedEvent(VtFlowState.Validating)),
+    ).toBeUndefined()
+  })
+
+  it('onboarding-request: Validator checks a request resent after a refusal again, and accepts it once the entry names it', async () => {
+    const entries = vi.mocked(validator.indexer.getParticipant)
+    const accepted = entries.getMockImplementation()!
+    entries.mockImplementation(
+      async id =>
+        (Number(id) === 8
+          ? { did: 'did:web:another-validator' }
+          : { op_state: 'PENDING', validator_participant_id: 8 }) as never,
+    )
+    const refusals = (): number =>
+      applicantEvents.mock.calls
+        .flat()
+        .filter(
+          (ev: any) => ev?.type === 'DidCommMessageProcessed' && ev?.payload?.message?.description?.code,
+        ).length
+    const applicantRecord = await applicant.modules.vtFlow.sendOnboardingRequest({
+      connectionId: applicantConnection.id,
+      applicantParticipantId: '42',
+      agentParticipantId: 'agent-participant-8',
+      walletAgentParticipantId: 'wallet-agent-participant-8',
+    })
+    await vi.waitFor(() => expect(refusals()).toBe(1))
+    const resend = () =>
+      applicant.modules.vtFlow.resendOnboardingRequest({
+        vtFlowRecordId: applicantRecord.id,
+        connectionId: applicantConnection.id,
+      })
+
+    await resend()
+    await vi.waitFor(() => expect(refusals()).toBe(2))
+    const refused = await validator.modules.vtFlow.findByThreadId(applicantRecord.threadId)
+    expect(refused?.state).toBe(VtFlowState.AwaitingOr)
+    expect(refused?.messages).toHaveLength(2)
+
+    entries.mockImplementation(accepted)
+    const validating = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+    await resend()
+
+    expect((await validating).payload.vtFlowRecordId).toBe(refused?.id)
+    await vi.waitFor(async () =>
+      expect((await applicant.modules.vtFlow.getById(applicantRecord.id)).state).toBe(VtFlowState.Validating),
+    )
+    expect(refusals()).toBe(2)
+  })
+
   it('admin flow routes: list, edit claims, and send oob-link on a live flow', async () => {
     const validatingReached = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
     await applicant.modules.vtFlow.sendIssuanceRequest({
@@ -198,7 +280,7 @@ describe('vt-flow: two-agent integration', () => {
     await validatingReached
 
     const { VtFlowsService } = await import('../src/controllers/admin/v2/vt/VtFlowsService')
-    const flowsService = new VtFlowsService({ getAgent: async () => validator } as never, undefined as never)
+    const flowsService = new VtFlowsService({ getAgent: async () => validator } as never)
 
     const flows = (await flowsService.listFlowsPage({ role: VtFlowRole.Validator })).items
     expect(flows).toHaveLength(1)
@@ -522,6 +604,29 @@ describe('vt-flow: VS-CONN-VS trust gate', () => {
       .flat()
       .find(isVtFlowStateChangedEvent(VtFlowState.Validating))
     expect(validatingEvent).toBeUndefined()
+  })
+
+  it('ends both flows in ERROR with the problem-report the Validator sends a not-trusted peer', async () => {
+    resolveDID.mockImplementation(async (did: string) => ({
+      verified: true,
+      outcome: did === validator.did ? 'verified' : 'not-trusted',
+    }))
+    const applicantEvents = vi.spyOn(applicant.events, 'emit')
+    const applicantErrored = waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.Error))
+
+    const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
+      connectionId: applicantConnection.id,
+      schemaId: 'https://example.test/schemas/organization.json',
+      agentParticipantId: 'agent-participant-gate-neg-4',
+      walletAgentParticipantId: 'wallet-agent-participant-gate-neg-4',
+    })
+    await applicantErrored
+
+    const validatorRecord = await validator.modules.vtFlow.findByThreadId(applicantRecord.threadId)
+    expect(validatorRecord?.state).toBe(VtFlowState.Error)
+    expect((await applicant.modules.vtFlow.getById(applicantRecord.id)).messages).toEqual([
+      expect.objectContaining({ type: 'problem-report', text: validatorRecord?.messages?.[0].text }),
+    ])
   })
 })
 

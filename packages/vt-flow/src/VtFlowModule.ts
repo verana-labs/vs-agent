@@ -208,10 +208,7 @@ export class VtFlowModule implements Module {
             .debug(
               `[vt-flow] auto-accepting credential offer for ${record.id} (autoAcceptCredentialOffer=true)`,
             )
-          const credentialsApi = agentContext.dependencyManager.resolve(DidCommCredentialsApi)
-          await credentialsApi.acceptOffer({
-            credentialExchangeRecordId: record.credentialExchangeRecordId,
-          })
+          await agentContext.dependencyManager.resolve(VtFlowApi).acceptCredentialOffer(record.id)
           return
         }
 
@@ -219,7 +216,10 @@ export class VtFlowModule implements Module {
 
         if (
           payload.state === VtFlowState.AwaitingOr &&
-          (payload.previousState === null || payload.previousState === VtFlowState.Completed) &&
+          (payload.previousState === null ||
+            payload.previousState === VtFlowState.AwaitingOr ||
+            payload.previousState === VtFlowState.Completed ||
+            payload.previousState === VtFlowState.Validated) &&
           config.autoAcceptOnboardingRequest
         ) {
           service
@@ -248,6 +248,11 @@ export class VtFlowModule implements Module {
         ) {
           service.getLogger().debug(`[vt-flow] auto-mark-validated for ${record.id} (autoMarkValidated=true)`)
           await service.markValidated(agentContext, record.id)
+          return
+        }
+
+        if (payload.state === VtFlowState.Validated && payload.previousState === VtFlowState.Validated) {
+          await config.onReconnected?.({ agentContext, record })
           return
         }
 

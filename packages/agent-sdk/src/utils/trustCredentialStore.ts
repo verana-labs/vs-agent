@@ -524,6 +524,7 @@ export async function rebindEcsCredentialSchema(
   jsonSchemaCredentialId: string,
   issuerParticipantId: number,
   onChainJsonSchema?: string,
+  effectiveUntil?: string,
 ): Promise<void> {
   if (!agent.did) return
   const vpUrl = `${publicApiBaseUrl}/vt/${schemaKey}-vtc-vp.json`
@@ -573,6 +574,7 @@ export async function rebindEcsCredentialSchema(
         verifiablePresentation.verifiableCredential[0],
         issuerParticipantId,
       ),
+    effectiveUntil,
   )
 
   const freshRecord = await getDidRecord(agent)

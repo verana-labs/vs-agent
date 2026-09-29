@@ -27,19 +27,15 @@ export const CREDENTIALS_V2_CONTEXT: string[] = [
   CREDENTIALS_UNDEFINED_TERMS_V2_URL,
 ]
 
-const TEN_YEARS_MS = 10 * 365 * 24 * 60 * 60 * 1000
-
 /**
  * Builds an unsigned VC Data Model 2.0 credential. Unless told otherwise it uses
- * {@link CREDENTIALS_V2_CONTEXT} and is valid from now for ten years.
+ * {@link CREDENTIALS_V2_CONTEXT} and is valid from now, with no `validUntil`.
  */
 export function createW3cV2Credential(options: W3cV2CredentialOptions): W3cV2Credential {
-  const now = Date.now()
   return new W3cV2Credential({
     ...options,
     context: options.context ?? CREDENTIALS_V2_CONTEXT,
-    validFrom: options.validFrom ?? new Date(now).toISOString(),
-    validUntil: options.validUntil ?? new Date(now + TEN_YEARS_MS).toISOString(),
+    validFrom: options.validFrom ?? new Date().toISOString(),
   })
 }
 

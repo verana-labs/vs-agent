@@ -17,9 +17,11 @@ import { VtFlowModuleConfig, type VtFlowRequestPurpose } from '../VtFlowModuleCo
 import {
   type BuildVtFlowProblemReportOptions,
   VT_FLOW_ERROR_INFO,
+  VtFlowError,
   type VtFlowErrorFlowState,
   VtFlowErrorCode,
   buildVtFlowProblemReport,
+  defaultEnglishDescription,
   isVtFlowErrorCode,
   whoRetriesMap,
 } from '../errors'
@@ -39,6 +41,7 @@ import { VtFlowRecord, VtFlowRepository } from '../repository'
 import { peerAnchorDid } from '../utils'
 import {
   VtFlowEventTypes,
+  type VtFlowIssuance,
   type VtFlowMessage,
   type VtFlowValidation,
   VtFlowMessageType,
@@ -47,6 +50,7 @@ import {
   VtFlowValidatedFromStates,
   VtFlowVariant,
   type VtFlowStateChangedEvent,
+  isVtFlowRenewable,
   isVtFlowTerminalState,
 } from '../types'
 
@@ -124,7 +128,7 @@ export class VtFlowService {
       VtFlowRole.Applicant,
     )
     if (existing) {
-      if (existing.state !== VtFlowState.Completed && existing.state !== VtFlowState.CredRevoked) {
+      if (!isVtFlowRenewable(existing)) {
         throw new CredoError(
           `vt-flow: participant_session_id '${params.participantSessionId}' already belongs to a flow in state ${existing.state}; use a new session id`,
         )
@@ -237,6 +241,7 @@ export class VtFlowService {
     }
     record.credentialExchangeRecordId = undefined
     record.subprotocolThid = undefined
+    record.issuance = undefined
   }
 
   /** Validator-side OnboardingProcess: create or re-attach (by `participant_session_id`) a record in `AWAITING_OR` from an inbound `onboarding-request`. */
@@ -245,57 +250,73 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    await this.checkIsVerifiableService(agentContext, connection, { participantId: message.participantId })
-
     const existing = await this.repository.findByParticipantSessionId(
       agentContext,
       message.participantSessionId,
       VtFlowRole.Validator,
     )
+    const record =
+      existing ??
+      new VtFlowRecord({
+        threadId: message.threadId,
+        participantSessionId: message.participantSessionId,
+        connectionId: connection.id,
+        role: VtFlowRole.Validator,
+        state: VtFlowState.AwaitingOr,
+        variant: VtFlowVariant.OnboardingProcess,
+        agentParticipantId: message.agentParticipantId,
+        walletAgentParticipantId: message.walletAgentParticipantId,
+        applicantParticipantId: message.participantId,
+        claims: message.claims,
+        proofsAttach: message.proofsAttach,
+      })
+    await this.checkRequestFromVerifiableService(agentContext, connection, record, !existing, {
+      participantId: message.participantId,
+    })
+
     if (existing) {
       if (isVtFlowTerminalState(existing.state)) {
-        throw new CredoError(
+        throw new VtFlowError(
+          VtFlowErrorCode.InvalidParticipantSessionId,
           `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
         )
       }
       if (existing.applicantParticipantId !== message.participantId) {
-        throw new CredoError(
+        throw new VtFlowError(
+          VtFlowErrorCode.InvalidParticipantSessionId,
           `vt-flow: participant_id '${message.participantId}' does not match the flow of participant_session_id '${message.participantSessionId}'`,
         )
       }
       await this.assertSamePeer(agentContext, existing, connection)
+      const reconnected = existing.connectionTerminated
       existing.connectionId = connection.id
+      existing.connectionTerminated = undefined
       if (existing.threadId !== message.threadId) {
         existing.threadId = message.threadId
         if (message.claims) existing.claims = message.claims
         if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
       }
-      if (existing.state === VtFlowState.Completed || existing.state === VtFlowState.CredRevoked) {
+      if (isVtFlowRenewable(existing)) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
         existing.oobLink = undefined
+        existing.validation = undefined
+        existing.issuance = undefined
         await this.updateState(agentContext, existing, VtFlowState.AwaitingOr)
       } else if (existing.state === VtFlowState.CredOffered) {
         await this.releaseCredentialExchange(agentContext, existing)
         await this.updateState(agentContext, existing, VtFlowState.Validated)
       } else {
         await this.repository.update(agentContext, existing)
+        // [VSA-VTI-FLOW-OP-OR] checks every request, and [VSA-ADM-VT-FL-REJECT-2] issuance waits for this reconnection
+        if (
+          existing.state === VtFlowState.AwaitingOr ||
+          (reconnected && existing.state === VtFlowState.Validated)
+        ) {
+          this.emitStateChanged(agentContext, existing, existing.state)
+        }
       }
       return existing
     }
-
-    const record = new VtFlowRecord({
-      threadId: message.threadId,
-      participantSessionId: message.participantSessionId,
-      connectionId: connection.id,
-      role: VtFlowRole.Validator,
-      state: VtFlowState.AwaitingOr,
-      variant: VtFlowVariant.OnboardingProcess,
-      agentParticipantId: message.agentParticipantId,
-      walletAgentParticipantId: message.walletAgentParticipantId,
-      applicantParticipantId: message.participantId,
-      claims: message.claims,
-      proofsAttach: message.proofsAttach,
-    })
 
     await this.repository.save(agentContext, record)
     this.emitStateChanged(agentContext, record, null)
@@ -308,21 +329,39 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const { message, agentContext } = messageContext
     const connection = messageContext.assertReadyConnection()
-    await this.checkIsVerifiableService(agentContext, connection, { schemaId: message.schemaId })
-
     const existing = await this.repository.findByParticipantSessionId(
       agentContext,
       message.participantSessionId,
       VtFlowRole.Validator,
     )
+    const record =
+      existing ??
+      new VtFlowRecord({
+        threadId: message.threadId,
+        participantSessionId: message.participantSessionId,
+        connectionId: connection.id,
+        role: VtFlowRole.Validator,
+        state: VtFlowState.AwaitingIr,
+        variant: VtFlowVariant.DirectIssuance,
+        agentParticipantId: message.agentParticipantId,
+        walletAgentParticipantId: message.walletAgentParticipantId,
+        schemaId: message.schemaId,
+        claims: message.claims,
+      })
+    await this.checkRequestFromVerifiableService(agentContext, connection, record, !existing, {
+      schemaId: message.schemaId,
+    })
+
     if (existing) {
       if (isVtFlowTerminalState(existing.state)) {
-        throw new CredoError(
+        throw new VtFlowError(
+          VtFlowErrorCode.InvalidParticipantSessionId,
           `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
         )
       }
       if (existing.variant !== VtFlowVariant.DirectIssuance || existing.schemaId !== message.schemaId) {
-        throw new CredoError(
+        throw new VtFlowError(
+          VtFlowErrorCode.InvalidParticipantSessionId,
           `vt-flow: schema_id '${message.schemaId}' does not match the flow of participant_session_id '${message.participantSessionId}'`,
         )
       }
@@ -337,19 +376,6 @@ export class VtFlowService {
       }
       return existing
     }
-
-    const record = new VtFlowRecord({
-      threadId: message.threadId,
-      participantSessionId: message.participantSessionId,
-      connectionId: connection.id,
-      role: VtFlowRole.Validator,
-      state: VtFlowState.AwaitingIr,
-      variant: VtFlowVariant.DirectIssuance,
-      agentParticipantId: message.agentParticipantId,
-      walletAgentParticipantId: message.walletAgentParticipantId,
-      schemaId: message.schemaId,
-      claims: message.claims,
-    })
 
     await this.repository.save(agentContext, record)
     this.emitStateChanged(agentContext, record, null)
@@ -399,7 +425,10 @@ export class VtFlowService {
       `[vt-flow] validating received for session ${record.threadId}: ${message.comment ?? '(no comment)'}`,
     )
 
-    if (record.role === VtFlowRole.Applicant && message.comment) {
+    if (
+      record.role === VtFlowRole.Applicant &&
+      (message.comment || record.state === VtFlowState.OobPending)
+    ) {
       this.appendMessage(record, {
         type: VtFlowMessageType.Validating,
         text: message.comment,
@@ -440,15 +469,30 @@ export class VtFlowService {
     return record
   }
 
-  /** `AWAITING_OR => VALIDATING`; caller is expected to have verified participant/agent/wallet IDs on-chain. */
+  /** `AWAITING_OR => VALIDATING` once the `checkParticipantId` hook accepts the `participant_id`, with no transition and no message once it reports the request settled by a `VALIDATED` entry; caller is expected to have verified agent/wallet IDs on-chain. */
   public async acceptOnboardingRequest(
     agentContext: AgentContext,
     recordId: string,
-  ): Promise<{ record: VtFlowRecord; message: ValidatingMessage }> {
-    const record = await this.repository.getById(agentContext, recordId)
+  ): Promise<{ record: VtFlowRecord; message?: ValidatingMessage }> {
+    let record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
     record.assertState(VtFlowState.AwaitingOr)
     record.assertVariant(VtFlowVariant.OnboardingProcess)
+
+    const { checkParticipantId } = this.config
+    if (checkParticipantId) {
+      const checked = await checkParticipantId({ agentContext, record })
+      if (!checked) {
+        throw new VtFlowError(
+          VtFlowErrorCode.InvalidParticipantId,
+          `vt-flow: participant_id '${record.applicantParticipantId}' is not a PENDING entry that names this agent as its validator`,
+        )
+      }
+      // the check can wait for the indexer while the flow moves on
+      record = await this.repository.getById(agentContext, recordId)
+      if (checked === 'validated') return { record }
+      record.assertState(VtFlowState.AwaitingOr)
+    }
 
     await this.updateState(agentContext, record, VtFlowState.Validating)
     return { record, message: new ValidatingMessage({ threadId: record.threadId }) }
@@ -468,7 +512,7 @@ export class VtFlowService {
     return { record, message: new ValidatingMessage({ threadId: record.threadId }) }
   }
 
-  /** Reject with a problem-report; transitions to `TERMINATED_BY_{role}` and marks the connection as `TERMINATED`. */
+  /** Reject with a problem-report; a fatal code moves the sender to the Error Codes state, a retryable one returns a validator to `AWAITING_OR` or `AWAITING_IR`. */
   public async rejectRequest(
     agentContext: AgentContext,
     recordId: string,
@@ -478,6 +522,9 @@ export class VtFlowService {
     problemReport: ReturnType<typeof buildVtFlowProblemReport>
   }> {
     const record = await this.repository.getById(agentContext, recordId)
+    if (isVtFlowTerminalState(record.state)) {
+      throw new CredoError(`vt-flow: flow '${record.id}' in state ${record.state} cannot be rejected`)
+    }
 
     const problemReport = buildVtFlowProblemReport({
       code: params.code,
@@ -486,14 +533,39 @@ export class VtFlowService {
       fixHintEn: params.fixHintEn,
     })
 
-    const nextState =
-      record.role === VtFlowRole.Validator
-        ? VtFlowState.TerminatedByValidator
-        : VtFlowState.TerminatedByApplicant
+    const info = VT_FLOW_ERROR_INFO[params.code]
+    const receiverRole = record.role === VtFlowRole.Validator ? VtFlowRole.Applicant : VtFlowRole.Validator
+    // a fatal code lands both parties in the state the table gives the receiver
+    const fatalState = this.resolveErrorFlowState(
+      info.flowState,
+      receiverRole,
+      whoRetriesMap[info.whoRetries],
+    )
+    const retryState =
+      record.variant === VtFlowVariant.OnboardingProcess ? VtFlowState.AwaitingOr : VtFlowState.AwaitingIr
+    if (!fatalState && record.role === VtFlowRole.Validator) {
+      record.assertState([
+        VtFlowState.AwaitingOr,
+        VtFlowState.AwaitingIr,
+        VtFlowState.Validating,
+        VtFlowState.OobPending,
+      ])
+    }
 
-    record.errorMessage = params.enDescription ?? params.code
+    if (record.role === VtFlowRole.Validator) {
+      this.appendMessage(record, {
+        type: VtFlowMessageType.ProblemReport,
+        text: problemReport.description.en,
+        at: new Date().toISOString(),
+      })
+    }
+    if (fatalState) record.errorMessage = params.enDescription ?? params.code
 
-    await this.updateState(agentContext, record, nextState)
+    await this.updateState(
+      agentContext,
+      record,
+      fatalState ?? (record.role === VtFlowRole.Validator ? retryState : record.state),
+    )
 
     return { record, problemReport }
   }
@@ -543,7 +615,7 @@ export class VtFlowService {
       VtFlowState.OobPending,
       VtFlowState.AwaitingValidationTx,
       VtFlowState.ValidationTxFailed,
-      // VtFlowModule ends the flow here when auto-issue fails, until verana-labs/vs-agent#738
+      // VtFlowModule ends the flow here when auto-issue throws. A failed anchoring stays in CRED_OFFERED instead
       VtFlowState.CredOffered,
       VtFlowState.Completed,
     ])
@@ -557,6 +629,12 @@ export class VtFlowService {
     })
 
     record.errorMessage = params.enDescription ?? code
+    this.appendMessage(record, {
+      type: VtFlowMessageType.ProblemReport,
+      text: problemReport.description.en,
+      at: new Date().toISOString(),
+    })
+    record.connectionTerminated = true
 
     await this.updateState(agentContext, record, VtFlowState.TerminatedByValidator)
 
@@ -640,13 +718,11 @@ export class VtFlowService {
       comment: params.comment,
     })
 
-    if (params.comment) {
-      this.appendMessage(record, {
-        type: VtFlowMessageType.Validating,
-        text: params.comment,
-        at: new Date().toISOString(),
-      })
-    }
+    this.appendMessage(record, {
+      type: VtFlowMessageType.Validating,
+      text: params.comment,
+      at: new Date().toISOString(),
+    })
     await this.updateState(agentContext, record, VtFlowState.Validating)
     return { record, message }
   }
@@ -663,6 +739,28 @@ export class VtFlowService {
     record.validation = validation
     if (state) await this.updateState(agentContext, record, state)
     else await this.updateRecord(agentContext, record)
+    return record
+  }
+
+  /** Record the outcome of the `CreateOrUpdateParticipantSession` transaction that anchors the issued credential. */
+  public async recordIssuance(
+    agentContext: AgentContext,
+    recordId: string,
+    issuance: VtFlowIssuance,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.issuance = issuance
+    await this.updateRecord(agentContext, record)
+    return record
+  }
+
+  /** `VALIDATED` => `VALIDATED_PENDING_CLAIMS`, when the claims fail the schema at offer time ([VSA-VTI-FLOW-OP-ISSUE-4]). */
+  public async markPendingClaims(agentContext: AgentContext, recordId: string): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.assertState(VtFlowState.Validated)
+    await this.updateState(agentContext, record, VtFlowState.ValidatedPendingClaims)
     return record
   }
 
@@ -714,11 +812,13 @@ export class VtFlowService {
     credentialExchangeRecord: DidCommCredentialExchangeRecord,
     credentialDigest?: string,
     issuerParticipantId?: number,
+    credentialId?: string,
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     this.assertCanOfferCredential(record)
 
     record.credentialExchangeRecordId = credentialExchangeRecord.id
+    record.credentialId = credentialId
     if (credentialDigest) record.credentialDigest = credentialDigest
     if (issuerParticipantId !== undefined) record.issuerParticipantId = issuerParticipantId
     record.subprotocolThid = credentialExchangeRecord.threadId
@@ -786,7 +886,16 @@ export class VtFlowService {
   ): Promise<VtFlowRecord> {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
-    record.assertState([VtFlowState.AwaitingOr, VtFlowState.Validating, VtFlowState.CredRevoked])
+    record.assertState([
+      VtFlowState.AwaitingOr,
+      VtFlowState.OobPending,
+      VtFlowState.Validating,
+      VtFlowState.AwaitingValidationTx,
+      VtFlowState.ValidationTxSubmitted,
+      VtFlowState.ValidationTxFailed,
+      VtFlowState.ValidatedPendingClaims,
+      VtFlowState.CredRevoked,
+    ])
     record.claims = claims
     await this.updateRecord(agentContext, record)
     return record
@@ -814,6 +923,13 @@ export class VtFlowService {
         }
         break
       case DidCommCredentialState.OfferReceived:
+        // the offer can beat the chain notification, and an Onboarding Process offers only from VALIDATED
+        if (
+          record.variant === VtFlowVariant.OnboardingProcess &&
+          [VtFlowState.OrSent, VtFlowState.Validating, VtFlowState.OobPending].includes(record.state)
+        ) {
+          await this.updateState(agentContext, record, VtFlowState.Validated)
+        }
         if (record.state !== VtFlowState.CredOffered) {
           await this.updateState(agentContext, record, VtFlowState.CredOffered)
         }
@@ -829,6 +945,7 @@ export class VtFlowService {
         }
         break
       case DidCommCredentialState.Abandoned:
+      case DidCommCredentialState.Declined:
         if (record.state !== VtFlowState.Error) {
           record.errorMessage = record.errorMessage ?? 'Subprotocol abandoned'
           await this.updateState(agentContext, record, VtFlowState.Error)
@@ -966,18 +1083,61 @@ export class VtFlowService {
   }
 
   /** participant_session_ids are public on-chain, so only the original peer may re-attach a flow with one. */
+  private async isSamePeer(
+    agentContext: AgentContext,
+    record: VtFlowRecord,
+    connection: DidCommConnectionRecord,
+  ): Promise<boolean> {
+    if (record.connectionId === connection.id) return true
+    const connectionRepository = agentContext.dependencyManager.resolve(DidCommConnectionRepository)
+    const previous = await connectionRepository.findById(agentContext, record.connectionId)
+    return !(previous?.theirDid && connection.theirDid && previous.theirDid !== connection.theirDid)
+  }
+
   private async assertSamePeer(
     agentContext: AgentContext,
     record: VtFlowRecord,
     connection: DidCommConnectionRecord,
   ): Promise<void> {
-    if (record.connectionId === connection.id) return
-    const connectionRepository = agentContext.dependencyManager.resolve(DidCommConnectionRepository)
-    const previous = await connectionRepository.findById(agentContext, record.connectionId)
-    if (previous?.theirDid && connection.theirDid && previous.theirDid !== connection.theirDid) {
-      throw new CredoError(
+    if (!(await this.isSamePeer(agentContext, record, connection))) {
+      throw new VtFlowError(
+        VtFlowErrorCode.InvalidParticipantSessionId,
         `vt-flow: connection '${connection.id}' peer does not match the original connection of participant_session_id '${record.participantSessionId}'`,
       )
+    }
+  }
+
+  /** VS-CONN-VS failure is fatal, so it ends the flow of the request in ERROR unless that flow has ended or belongs to another peer. */
+  private async checkRequestFromVerifiableService(
+    agentContext: AgentContext,
+    connection: DidCommConnectionRecord,
+    record: VtFlowRecord,
+    isNew: boolean,
+    purpose: VtFlowRequestPurpose,
+  ): Promise<void> {
+    try {
+      await this.checkIsVerifiableService(agentContext, connection, purpose)
+    } catch (error) {
+      if (
+        error instanceof VtFlowError &&
+        (isNew ||
+          (!isVtFlowTerminalState(record.state) && (await this.isSamePeer(agentContext, record, connection))))
+      ) {
+        record.errorMessage = error.message
+        this.appendMessage(record, {
+          type: VtFlowMessageType.ProblemReport,
+          text: defaultEnglishDescription(error.code),
+          at: new Date().toISOString(),
+        })
+        if (isNew) {
+          record.state = VtFlowState.Error
+          await this.repository.save(agentContext, record)
+          this.emitStateChanged(agentContext, record, null)
+        } else {
+          await this.updateState(agentContext, record, VtFlowState.Error)
+        }
+      }
+      throw error
     }
   }
 
@@ -1048,7 +1208,8 @@ export class VtFlowService {
       return
     }
 
-    throw new CredoError(
+    throw new VtFlowError(
+      VtFlowErrorCode.NotAVerifiableService,
       `vt-flow.not-a-verifiable-service: peer '${peerDid}' failed VS-CONN-VS check${failure ? ` (${failure})` : ''}`,
     )
   }

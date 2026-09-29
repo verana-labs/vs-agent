@@ -50,6 +50,7 @@ export const VtFlowTerminalStates: ReadonlySet<VtFlowState> = new Set([
 
 /** Validator states that `SetParticipantOPtoValidated` on-chain moves to `VALIDATED` ([VSA-VTI-FLOW-OP-ISSUE]). */
 export const VtFlowValidatedFromStates: ReadonlySet<VtFlowState> = new Set([
+  VtFlowState.AwaitingOr,
   VtFlowState.Validating,
   VtFlowState.OobPending,
   VtFlowState.AwaitingValidationTx,
@@ -61,11 +62,27 @@ export function isVtFlowTerminalState(state: VtFlowState): boolean {
   return VtFlowTerminalStates.has(state)
 }
 
+const HOLDER_PARTICIPANT_ROLE = 6
+
+/** A renewal re-enters a flow in `COMPLETED` or `CRED_REVOKED`, or in `VALIDATED` for a role other than HOLDER ([VSA-VTI-FLOW-OP-RENEW] step 3). */
+export function isVtFlowRenewable(record: {
+  state: VtFlowState
+  applicantParticipantRole?: number
+}): boolean {
+  if (record.state === VtFlowState.Validated) {
+    return (
+      record.applicantParticipantRole !== undefined &&
+      record.applicantParticipantRole !== HOLDER_PARTICIPANT_ROLE
+    )
+  }
+  return record.state === VtFlowState.Completed || record.state === VtFlowState.CredRevoked
+}
+
 export enum VtFlowEventTypes {
   VtFlowStateChanged = 'VtFlowStateChanged',
 }
 
-/** Emitted every time a VtFlowRecord's Flow State changes; `previousState` is null on first write. The DIDComm connection lifecycle is observed by the caller via Credo's `DidCommConnectionStateChangedEvent`. */
+/** Emitted every time a VtFlowRecord's Flow State changes; `previousState` is null on first write, and equals `state` when an applicant re-attach resumes a validator flow. The DIDComm connection lifecycle is observed by the caller via Credo's `DidCommConnectionStateChangedEvent`. */
 export interface VtFlowStateChangedEvent extends BaseEvent {
   type: typeof VtFlowEventTypes.VtFlowStateChanged
   payload: {
@@ -150,7 +167,7 @@ export enum VtFlowMessageType {
 /** One human-readable message of a flow; `url` is set for an `oob-link` only. Timestamps are ISO 8601, the record is stored as JSON. */
 export interface VtFlowMessage {
   type: VtFlowMessageType
-  text: string
+  text?: string
   at: string
   url?: string
 }

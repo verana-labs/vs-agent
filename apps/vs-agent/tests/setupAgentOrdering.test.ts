@@ -1,5 +1,10 @@
 import { ConsoleLogger, LogLevel, parseDid } from '@credo-ts/core'
-import { VeranaIndexerService, VsAgentWsInboundTransport } from '@verana-labs/vs-agent-sdk'
+import { VtFlowModuleConfig } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  VeranaIndexerService,
+  VsAgentWsInboundTransport,
+  VtFlowOrchestrator,
+} from '@verana-labs/vs-agent-sdk'
 import { describe, expect, it, vi } from 'vitest'
 
 import { setupAgent } from '../src/utils'
@@ -28,6 +33,61 @@ describe('setupAgent transport ordering', () => {
     expect(agent.didcomm.inboundTransports).toHaveLength(1)
     expect(startSpy).not.toHaveBeenCalled()
 
+    await agent.shutdown()
+  }, 60_000)
+})
+
+describe('setupAgent vt-flow', () => {
+  it('accepts an onboarding-request on its own once the indexer shows its participant_id ([VSA-VTI-FLOW-OP-OR])', async () => {
+    const { agent } = await setupAgent({
+      port: 3998,
+      walletConfig: getAskarStoreConfig('setupAgent vt-flow'),
+      endpoints: ['wss://vtflow.example'],
+      publicApiBaseUrl: 'https://vtflow.example',
+      indexer: new VeranaIndexerService({
+        baseUrl: 'https://indexer.invalid',
+        logger: new ConsoleLogger(LogLevel.Off),
+      }),
+      parsedDid: parseDid('did:webvh:vtflow.example'),
+      logLevel: LogLevel.Off,
+    })
+
+    const config = agent.dependencyManager.resolve(VtFlowModuleConfig)
+    expect(config.autoAcceptOnboardingRequest).toBe(true)
+    vi.spyOn(agent.indexer, 'getParticipant').mockImplementation(
+      async id =>
+        (Number(id) === 7
+          ? { did: agent.did }
+          : { op_state: 'PENDING', validator_participant_id: 7 }) as never,
+    )
+    const record = { applicantParticipantId: '42' } as never
+    await expect(config.checkParticipantId?.({ agentContext: agent.context, record })).resolves.toBe(true)
+
+    await agent.shutdown()
+  }, 60_000)
+
+  it('resumes issuance when the applicant reconnects to a VALIDATED flow ([VSA-ADM-VT-FL-REJECT-2])', async () => {
+    const { agent } = await setupAgent({
+      port: 3997,
+      walletConfig: getAskarStoreConfig('setupAgent vt-flow reconnect'),
+      endpoints: ['wss://reconnect.example'],
+      publicApiBaseUrl: 'https://reconnect.example',
+      indexer: new VeranaIndexerService({
+        baseUrl: 'https://indexer.invalid',
+        logger: new ConsoleLogger(LogLevel.Off),
+      }),
+      parsedDid: parseDid('did:webvh:reconnect.example'),
+      logLevel: LogLevel.Off,
+    })
+    const continueAfterValidated = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
+      .mockResolvedValue({} as never)
+
+    const config = agent.dependencyManager.resolve(VtFlowModuleConfig)
+    await config.onReconnected?.({ agentContext: agent.context, record: { id: 'flow-1' } as never })
+
+    expect(continueAfterValidated).toHaveBeenCalledExactlyOnceWith('flow-1')
+    continueAfterValidated.mockRestore()
     await agent.shutdown()
   }, 60_000)
 })
