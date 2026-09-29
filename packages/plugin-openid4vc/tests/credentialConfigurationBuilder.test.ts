@@ -1,6 +1,6 @@
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ParticipantRole, ParticipantState } from '@verana-labs/vs-agent-sdk'
 
@@ -79,6 +79,8 @@ function fakeAgent(indexer: ReturnType<typeof fakeIndexer>, overrides: Record<st
 describe('buildCredentialConfigurations', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  afterEach(() => vi.unstubAllGlobals())
+
   it('builds one configuration per CredentialSchema of an active ISSUER participant', async () => {
     const indexer = fakeIndexer([1, 2])
 
@@ -109,8 +111,8 @@ describe('buildCredentialConfigurations', () => {
         vtjscId: 'https://vtjsc.example/2',
         credentialSchemaId: 2,
         jsonSchema: SCHEMAS[2].json_schema,
-        claims: ['id', 'tier'],
-        disclosureFrame: ['id', 'tier'],
+        claims: ['tier'],
+        disclosureFrame: ['tier'],
       },
     ])
   })
@@ -122,20 +124,69 @@ describe('buildCredentialConfigurations', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('the CredentialSchema 3'))
   })
 
-  it('skips a schema whose credentialSubject declares a reserved SD-JWT VC claim', async () => {
-    const configurations = await buildCredentialConfigurations(fakeAgent(fakeIndexer([1, 4])))
+  it('advertises a schema whose credentialSubject declares an envelope claim, without that claim', async () => {
+    const configurations = await buildCredentialConfigurations(fakeAgent(fakeIndexer([4])))
 
-    expect(configurations?.map(configuration => configuration.credentialSchemaId)).toEqual([1])
+    expect(configurations?.map(configuration => configuration.claims)).toEqual([['name']])
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("the JSON Schema declares the reserved SD-JWT VC claim 'vct'"),
+      expect.stringContaining("the CredentialSchema 4 declares 'vct', which the credential envelope carries"),
     )
   })
 
-  it('derives an empty set from an empty participant list', async () => {
+  it('offers no id claim, which the holder key of the credential answers for', async () => {
+    const configurations = await buildCredentialConfigurations(fakeAgent(fakeIndexer([2])))
+
+    expect(configurations?.[0].claims).toEqual(['tier'])
+    expect(configurations?.[0].disclosureFrame).toEqual(['tier'])
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("the CredentialSchema 2 declares 'id', which the credential envelope carries"),
+    )
+  })
+
+  it('reads each CredentialSchema and each Ecosystem of a rebuild once', async () => {
+    const indexer = fakeIndexer([1, 2])
+
+    await buildCredentialConfigurations(fakeAgent(indexer))
+
+    expect(indexer.getCredentialSchema).toHaveBeenCalledTimes(2)
+    expect(indexer.getEcosystem).toHaveBeenCalledTimes(1)
+  })
+
+  it('resolves the VTJSC of the Ecosystem from the reads it already made', async () => {
+    const indexer = fakeIndexer([1])
+    const agent = fakeAgent(indexer, {
+      dids: {
+        getCreatedDids: vi.fn().mockResolvedValue([]),
+        resolve: vi.fn().mockResolvedValue({
+          didDocument: {
+            service: [
+              {
+                id: 'did:web:ecosystem.example#vpr-schemas-1-vtjsc-vp',
+                serviceEndpoint: 'https://ecosystem.example/vt/jsc/1',
+              },
+            ],
+          },
+        }),
+      },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ verifiableCredential: [{ id: 'vtjsc:1' }] }))),
+    )
+
+    const configurations = await buildCredentialConfigurations(agent)
+
+    expect(configurations?.[0].id).toBe('vtjsc:1')
+    expect(indexer.getCredentialSchema).toHaveBeenCalledOnce()
+    expect(indexer.getEcosystem).toHaveBeenCalledOnce()
+  })
+
+  it('derives an empty set from an empty participant list, and says so', async () => {
     const indexer = fakeIndexer([])
 
     await expect(buildCredentialConfigurations(fakeAgent(indexer))).resolves.toEqual([])
     expect(indexer.getCredentialSchema).not.toHaveBeenCalled()
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('no credential type to issue'))
   })
 
   it('derives no set at all without an agent DID or a chain', async () => {

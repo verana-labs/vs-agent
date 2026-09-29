@@ -1,5 +1,10 @@
 import type { OpenId4VcCredentialConfiguration } from '../types'
-import type { VsAgent } from '@verana-labs/vs-agent-sdk'
+import type {
+  CredentialSchemaDto,
+  EcosystemDto,
+  IndexerSchemaReader,
+  VsAgent,
+} from '@verana-labs/vs-agent-sdk'
 
 import { isReservedClaimName } from '../config'
 
@@ -26,10 +31,11 @@ export async function buildCredentialConfigurations(
   })
 
   const credentialSchemaIds = new Set((participants ?? []).map(participant => Number(participant.schema_id)))
+  const reader = memoizedSchemaReader(agent.indexer)
   const configurations: OpenId4VcCredentialConfiguration[] = []
   for (const credentialSchemaId of credentialSchemaIds) {
     try {
-      configurations.push(await buildCredentialConfiguration(agent, credentialSchemaId, chainId))
+      configurations.push(await buildCredentialConfiguration(agent, reader, credentialSchemaId, chainId))
     } catch (error) {
       agent.config.logger.warn(
         `[OpenID4VC] the CredentialSchema ${credentialSchemaId} carries no credential configuration: ${
@@ -39,16 +45,23 @@ export async function buildCredentialConfigurations(
     }
   }
 
+  if (configurations.length === 0) {
+    agent.config.logger.info(
+      `[OpenID4VC] the VPR gives ${did} no credential type to issue, so the issuer advertises none`,
+    )
+  }
+
   return configurations
 }
 
 async function buildCredentialConfiguration(
   agent: VsAgent,
+  reader: IndexerSchemaReader,
   credentialSchemaId: number,
   chainId: string,
 ): Promise<OpenId4VcCredentialConfiguration> {
-  const schema = await agent.indexer.getCredentialSchema(credentialSchemaId)
-  const ecosystem = await agent.indexer.getEcosystem(schema.ecosystem_id)
+  const schema = await reader.getCredentialSchema(credentialSchemaId)
+  const ecosystem = await reader.getEcosystem(schema.ecosystem_id)
   const baseUrl = ecosystem?.did ? getDidWebHttpsBaseUrl(ecosystem.did) : undefined
   if (!baseUrl) {
     throw new Error(`the Ecosystem ${schema.ecosystem_id} maps its DID to no https base url`)
@@ -56,17 +69,20 @@ async function buildCredentialConfiguration(
 
   const jsonSchemaCredentialId = await resolveJsonSchemaCredentialId(
     agent,
-    agent.indexer,
+    reader,
     credentialSchemaId,
     chainId,
   )
   const { name, attrNames } = anonCredsSchemaFromJsonSchema(schema.json_schema)
-  const reserved = attrNames.filter(isReservedClaimName)
-  if (reserved.length > 0) {
-    throw new Error(
-      `the JSON Schema declares the reserved SD-JWT VC claim ${reserved.map(claim => `'${claim}'`).join(', ')}`,
+  const envelope = attrNames.filter(isEnvelopeClaim)
+  if (envelope.length > 0) {
+    agent.config.logger.warn(
+      `[OpenID4VC] the CredentialSchema ${credentialSchemaId} declares ${envelope
+        .map(claim => `'${claim}'`)
+        .join(', ')}, which the credential envelope carries, so its type offers no such claim`,
     )
   }
+  const claims = attrNames.filter(claim => !isEnvelopeClaim(claim))
 
   return {
     id: jsonSchemaCredentialId,
@@ -76,7 +92,29 @@ async function buildCredentialConfiguration(
     vtjscId: jsonSchemaCredentialId,
     credentialSchemaId,
     jsonSchema: schema.json_schema,
-    claims: attrNames,
-    disclosureFrame: attrNames,
+    claims,
+    disclosureFrame: claims,
+  }
+}
+
+// `id` joins the reserved names: SD-JWT VC binds the holder through `cnf`, so an `id` the caller
+// supplies would assert a subject the issuer never checked.
+function isEnvelopeClaim(claim: string): boolean {
+  return claim === 'id' || isReservedClaimName(claim)
+}
+
+function memoizedSchemaReader(reader: IndexerSchemaReader): IndexerSchemaReader {
+  const schemas = new Map<string, Promise<CredentialSchemaDto>>()
+  const ecosystems = new Map<string, Promise<EcosystemDto | undefined>>()
+
+  const once = <T>(cache: Map<string, Promise<T>>, id: string | number, read: () => Promise<T>) => {
+    const pending = cache.get(String(id)) ?? read()
+    cache.set(String(id), pending)
+    return pending
+  }
+
+  return {
+    getCredentialSchema: id => once(schemas, id, () => reader.getCredentialSchema(id)),
+    getEcosystem: id => once(ecosystems, id, () => reader.getEcosystem(id)),
   }
 }
