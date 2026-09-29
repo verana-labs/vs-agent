@@ -2,8 +2,6 @@ import type { OpenId4VcPluginOptions } from '../src/types'
 
 import { beforeAll, describe, expect, it } from 'vitest'
 
-import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
-
 import {
   findCredentialConfiguration,
   parseOfferClaims,
@@ -258,14 +256,13 @@ describe('parseOfferClaims', () => {
     expect(() => parseOfferClaims(config, {})).toThrow('at least one')
   })
 
-  it('rejects a claim value the json_schema does not accept', () => {
+  it('rejects a claim value the json_schema does not accept, and names the violation', () => {
     const config = validOptions().credentialConfigurations[0]
 
     expect(() => parseOfferClaims(config, { name: 42, role: 'engineer' })).toThrowError(
       expect.objectContaining({
-        code: AdminApiErrorCode.InvalidClaims,
-        status: 422,
-        details: { violations: [{ path: '/name', message: 'must be string' }] },
+        name: 'OfferClaimsError',
+        violations: [{ path: '/name', message: 'must be string' }],
       }),
     )
   })
@@ -275,8 +272,8 @@ describe('parseOfferClaims', () => {
 
     expect(() => parseOfferClaims(config, { role: 'engineer' })).toThrowError(
       expect.objectContaining({
-        code: AdminApiErrorCode.InvalidClaims,
-        details: { violations: [{ path: '', message: "must have required property 'name'" }] },
+        name: 'OfferClaimsError',
+        violations: [{ path: '', message: "must have required property 'name'" }],
       }),
     )
   })

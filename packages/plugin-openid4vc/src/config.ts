@@ -3,22 +3,20 @@ import type {
   OpenId4VcCredentialConfiguration,
   OpenId4VcPluginOptions,
 } from './types'
+import type { SchemaViolation } from '@verana-labs/vs-agent-sdk'
 
 import { X509Certificate } from '@credo-ts/core'
-import { AdminApiError, AdminApiErrorCode, schemaViolations } from '@verana-labs/vs-agent-sdk'
+import { schemaViolations } from '@verana-labs/vs-agent-sdk'
 
 import { isRecord } from './utils/isRecord'
 
 export const ISSUER_CAPABILITY_ID = 'issuer'
 export const VERIFIER_CAPABILITY_ID = 'verifier'
 
-const UNPROCESSABLE_ENTITY = 422
-
 export const OFFER_TTL_SECONDS_MIN = 60
 export const OFFER_TTL_SECONDS_MAX = 7_776_000
 
-// `pack()` moves every payload key named in `_sd` into a disclosure, so a claim under one of these names
-// makes `vct` selectively disclosable or loses its value to the envelope the issuer stamps.
+// The issuer stamps these claims itself, so a credential never carries a value a caller supplied for one.
 const RESERVED_CLAIM_NAMES: readonly string[] = [
   'vct',
   'vct#integrity',
@@ -32,6 +30,17 @@ const RESERVED_CLAIM_NAMES: readonly string[] = [
 
 export function isReservedClaimName(name: string): boolean {
   return RESERVED_CLAIM_NAMES.includes(name)
+}
+
+/** A claim set the credential type refuses, which the Administration API answers as INVALID_INPUT. */
+export class OfferClaimsError extends Error {
+  public constructor(
+    message: string,
+    public readonly violations?: SchemaViolation[],
+  ) {
+    super(message)
+    this.name = 'OfferClaimsError'
+  }
 }
 
 /** [VSA-VTI-CFG-ENV-OID] Validation of the OpenID4VC configuration file. */
@@ -137,15 +146,15 @@ export function parseOfferClaims(
   input: unknown,
 ): Record<string, unknown> {
   if (!isRecord(input)) {
-    throw new Error('claims must be an object')
+    throw new OfferClaimsError('claims must be an object')
   }
 
   for (const name of Object.keys(input)) {
     if (isReservedClaimName(name)) {
-      throw new Error(`claim '${name}' is reserved by SD-JWT VC`)
+      throw new OfferClaimsError(`claim '${name}' is reserved by SD-JWT VC`)
     }
     if (!configuration.claims.includes(name)) {
-      throw new Error(`unknown claim '${name}'`)
+      throw new OfferClaimsError(`unknown claim '${name}'`)
     }
   }
 
@@ -154,23 +163,18 @@ export function parseOfferClaims(
     if (!(name in input)) continue
     const value = input[name]
     if (isEmptyClaim(value)) {
-      throw new Error(`claim '${name}' must be non-empty`)
+      throw new OfferClaimsError(`claim '${name}' must be non-empty`)
     }
     claims[name] = value
   }
 
   if (Object.keys(claims).length === 0) {
-    throw new Error('claims must include at least one configured claim')
+    throw new OfferClaimsError('claims must include at least one configured claim')
   }
 
   const violations = schemaViolations(JSON.parse(configuration.jsonSchema), claims)
   if (violations.length > 0) {
-    throw new AdminApiError(
-      AdminApiErrorCode.InvalidClaims,
-      UNPROCESSABLE_ENTITY,
-      'the claim set does not satisfy the json_schema',
-      { violations },
-    )
+    throw new OfferClaimsError('the claim set does not satisfy the json_schema', violations)
   }
 
   return claims
