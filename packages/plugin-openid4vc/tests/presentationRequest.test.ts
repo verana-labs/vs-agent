@@ -27,7 +27,7 @@ import { askar } from '@openwallet-foundation/askar-nodejs'
 import { base58 } from '@scure/base'
 import { CachedWebDidResolver } from '@verana-labs/vs-agent-sdk'
 import express from 'express'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { setupOpenId4Vc } from '../src/sdk/setupOpenId4Vc'
 import { IssuerService } from '../src/services/IssuerService'
@@ -39,6 +39,12 @@ import {
   getAskarStoreConfig,
   testCredentialConfiguration,
 } from './helpers/startTestAgent'
+
+// The request under test is the signed authorization request; the type it asks for comes from the fixture.
+vi.mock('../src/services/credentialConfigurationBuilder', async importOriginal => ({
+  ...(await importOriginal<typeof import('../src/services/credentialConfigurationBuilder')>()),
+  resolveCredentialType: async () => testCredentialConfiguration,
+}))
 
 function clone(document: DidDocument): DidDocument {
   return JsonTransformer.fromJSON(document.toJSON(), DidDocument)
@@ -210,8 +216,9 @@ async function startWebvhVerifier() {
       }),
       ...sdkPlugin.modules,
     },
-  }) as Agent & { did?: string }
+  }) as Agent & { did?: string; anonCredsTrust?: unknown }
   agent.did = WEBVH_DID
+  agent.anonCredsTrust = { assertOwnAuthorization: async () => {} }
   await agent.initialize()
   cleanups.push(() => agent.shutdown())
 
@@ -236,7 +243,9 @@ async function startWebvhVerifier() {
   didRecord.setTag('domain', 'verifier.example')
   await agent.dependencyManager.resolve(DidRepository).save(agent.context, didRecord)
 
-  const service = new VerifierService(agent as unknown as OpenId4VcAgent, options)
+  const service = new VerifierService(agent as unknown as OpenId4VcAgent, options, () =>
+    Promise.reject(new Error('no VPR in this test')),
+  )
   await service.ensureInitialized()
 
   const fetchRequestJwt = async (authorizationRequest: string) => {

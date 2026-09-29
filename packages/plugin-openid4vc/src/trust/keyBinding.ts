@@ -51,18 +51,29 @@ async function lookupBoundVerificationMethod(
   const didDocument = await resolveDidDocument(agent, did)
   if (!didDocument) return { result: 'unresolvable' }
 
-  for (const verificationMethod of verificationMethodsForPurposes(didDocument, purposes)) {
-    try {
-      if (certificateKey.equals(getPublicJwkFromVerificationMethod(verificationMethod))) {
-        return { result: 'bound', verificationMethodId: verificationMethod.id }
-      }
-    } catch {}
-  }
-
-  return { result: 'unbound' }
+  const verificationMethodId = boundVerificationMethod(didDocument, certificateKey, purposes)
+  return verificationMethodId ? { result: 'bound', verificationMethodId } : { result: 'unbound' }
 }
 
-async function resolveDidDocument(agent: DidResolverAgent, did: string): Promise<DidDocument | null> {
+/** The id of the verification method under one of the purposes that carries the key, if any. */
+export function boundVerificationMethod(
+  didDocument: DidDocument,
+  key: Kms.PublicJwk,
+  purposes: BindingPurpose[],
+): string | undefined {
+  for (const verificationMethod of verificationMethodsForPurposes(didDocument, purposes)) {
+    try {
+      if (key.equals(getPublicJwkFromVerificationMethod(verificationMethod))) return verificationMethod.id
+    } catch {}
+  }
+  return undefined
+}
+
+/**
+ * Resolves a did:web or did:webvh, fresh, within 5 seconds, and only when the document carries the
+ * requested DID as its id ([VSA-VTI-FLOW-VERIFY-OID] step 3). Null when any of that fails.
+ */
+export async function resolveDidDocument(agent: DidResolverAgent, did: string): Promise<DidDocument | null> {
   if (!isDidWebTarget(did)) return null
 
   try {

@@ -15,7 +15,7 @@ import { TRUST_VERDICT_NAMES, VERANA_TRUST_STATUSES } from '../../trust/types'
 export class OpenId4VcCreatePresentationRequestBodyDto {
   @ApiProperty({
     description:
-      'Credential type the request asks for. The agent derives no credential type yet, so every identifier answers UNKNOWN_ID.',
+      'Credential type the request asks for: the jsonSchemaCredentialId of a VTJSC whose CredentialSchema the agent holds an active VERIFIER Participant for.',
     example: 'employee',
   })
   @IsString()
@@ -89,7 +89,11 @@ export class OpenId4VcListPresentationsQueryDto extends PaginationQueryDto {
 
 /** What the agent read from the resolver to reach a trust verdict on a presentation. */
 export class OpenId4VcTrustEvidenceDto {
-  @ApiProperty({ type: String, nullable: true, description: 'DID of the issuer, read from the certificate' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'DID of the issuer: iss when it is a DID, else the URI SAN of the leaf certificate',
+  })
   did!: string | null
 
   @ApiProperty({

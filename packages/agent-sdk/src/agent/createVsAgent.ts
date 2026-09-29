@@ -3,6 +3,7 @@ import type { DidCommFeatureQueryOptions } from '@credo-ts/didcomm'
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { AgentDependencies, InitConfig, LogLevel } from '@credo-ts/core'
 
+import { AnonCredsTrustService } from '../blockchain/AnonCredsTrustService'
 import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
@@ -38,6 +39,7 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
   ecsClaims?: EcsClaims
   authorizationService?: AuthorizationService
   discoveryOptions?: DidCommFeatureQueryOptions[]
+  anonCredsTrust?: AnonCredsTrustService
 }
 
 /**
@@ -87,5 +89,6 @@ export function createVsAgent<T extends Plugin[]>(
     ecsClaims: options.ecsClaims,
     authorizationService: options.authorizationService,
     discoveryOptions: options.discoveryOptions,
+    anonCredsTrust: options.anonCredsTrust,
   })
 }

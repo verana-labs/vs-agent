@@ -17,6 +17,7 @@ import {
   readEcsClaimsFromEnv,
   VsAgentWsInboundTransport,
   VtFlowOrchestrator,
+  type VerifiablePublicRegistries,
   type VsAgentNestPlugin,
 } from '@verana-labs/vs-agent-sdk'
 import express from 'express'
@@ -36,6 +37,19 @@ import {
 
 import { TsLogger } from './logger'
 import { credoPluginsFromNestPlugins } from './pluginLifecycle'
+
+/** The VPR the agent resolves Verifiable Trust against: the indexer and the chain of its environment. */
+export function verifiablePublicRegistriesFromEnv(): VerifiablePublicRegistries | undefined {
+  if (!VERANA_INDEXER_BASE_URL || !VERANA_CHAIN_ID) return undefined
+  return [
+    {
+      id: `vpr:verana:${VERANA_CHAIN_ID}`,
+      scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
+      api: [VERANA_INDEXER_BASE_URL],
+      production: true,
+    },
+  ]
+}
 
 export const setupAgent = async ({
   port,
@@ -73,17 +87,7 @@ export const setupAgent = async ({
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
-  const verifiablePublicRegistries =
-    VERANA_INDEXER_BASE_URL && VERANA_CHAIN_ID
-      ? [
-          {
-            id: `vpr:verana:${VERANA_CHAIN_ID}`,
-            scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
-            api: [VERANA_INDEXER_BASE_URL],
-            production: true,
-          },
-        ]
-      : undefined
+  const verifiablePublicRegistries = verifiablePublicRegistriesFromEnv()
 
   // eslint-disable-next-line prefer-const
   let orchestrator: VtFlowOrchestrator | undefined

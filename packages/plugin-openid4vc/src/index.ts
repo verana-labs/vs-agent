@@ -32,7 +32,7 @@ export type {
 } from './services/presentationVerification'
 export { TRUST_VERDICT_NAMES, VERANA_TRUST_STATUSES } from './trust/types'
 export type { TrustEvidence, TrustVerdict, TrustVerdictName, VeranaTrustStatus } from './trust/types'
-export { OPENID4VC_OPTIONS } from './types'
+export { OPENID4VC_DID_TRUST_RESOLVER, OPENID4VC_OPTIONS } from './types'
 export type {
   OpenId4VcAgent,
   OpenId4VcConfigurationFile,

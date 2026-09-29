@@ -27,6 +27,14 @@ export function didDocumentWithKey(
   )
 }
 
+/** A DID Document that publishes one service entry and no key, as an Ecosystem controller does. */
+export function didDocumentWithService(
+  did: string,
+  service: { id: string; type: string; serviceEndpoint: string },
+): DidDocument {
+  return JsonTransformer.fromJSON({ id: did, service: [service] }, DidDocument)
+}
+
 export class FakeDidResolver implements DidResolver {
   public readonly supportedMethods = ['web']
   public readonly allowsCaching = false

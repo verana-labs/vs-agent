@@ -2,9 +2,17 @@ import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ParticipantRole, ParticipantState } from '@verana-labs/vs-agent-sdk'
+import {
+  AnonCredsTrustError,
+  AnonCredsTrustErrorReason,
+  ParticipantRole,
+  ParticipantState,
+} from '@verana-labs/vs-agent-sdk'
 
-import { buildCredentialConfigurations } from '../src/services/credentialConfigurationBuilder'
+import {
+  buildCredentialConfigurations,
+  resolveCredentialType,
+} from '../src/services/credentialConfigurationBuilder'
 
 const AGENT_DID = 'did:web:issuer.example'
 const CHAIN_ID = 'vpr-test-1'
@@ -220,5 +228,44 @@ describe('buildCredentialConfigurations', () => {
       buildCredentialConfigurations(fakeAgent(indexer, { veranaChain: undefined })),
     ).resolves.toBeUndefined()
     expect(indexer.listParticipants).not.toHaveBeenCalled()
+  })
+})
+
+describe('resolveCredentialType', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('resolves the type of a VTJSC through its CredentialSchema link', async () => {
+    const indexer = fakeIndexer([])
+    const anonCredsTrust = {
+      resolveCredentialSchemaLink: vi
+        .fn()
+        .mockResolvedValue({ credentialSchemaId: 1, ecosystemDid: ECOSYSTEMS[10] }),
+    }
+
+    const configuration = await resolveCredentialType(
+      fakeAgent(indexer, { anonCredsTrust }),
+      'https://vtjsc.example/1',
+    )
+
+    expect(anonCredsTrust.resolveCredentialSchemaLink).toHaveBeenCalledWith('https://vtjsc.example/1')
+    expect(configuration).toMatchObject({
+      id: 'https://vtjsc.example/1',
+      vct: 'https://ecosystem.example/vt/vct/1',
+      credentialSchemaId: 1,
+      claims: ['name', 'role'],
+    })
+    expect(indexer.listParticipants).not.toHaveBeenCalled()
+  })
+
+  it('passes the error of a VTJSC that binds to no CredentialSchema through', async () => {
+    const anonCredsTrust = {
+      resolveCredentialSchemaLink: vi
+        .fn()
+        .mockRejectedValue(new AnonCredsTrustError(AnonCredsTrustErrorReason.NotDerivable, 'binds to none')),
+    }
+
+    await expect(
+      resolveCredentialType(fakeAgent(fakeIndexer([]), { anonCredsTrust }), 'https://vtjsc.example/9'),
+    ).rejects.toMatchObject({ reason: AnonCredsTrustErrorReason.NotDerivable })
   })
 })

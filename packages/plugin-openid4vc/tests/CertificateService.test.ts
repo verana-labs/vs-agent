@@ -824,7 +824,9 @@ async function createHarness(
       await issuerService.ensureInitialized()
     }
     if (options.verifier) {
-      await new VerifierService(lifecycleAgent, options).ensureInitialized()
+      await new VerifierService(lifecycleAgent, options, () =>
+        Promise.reject(new Error('no VPR in this test')),
+      ).ensureInitialized()
     }
   }
 

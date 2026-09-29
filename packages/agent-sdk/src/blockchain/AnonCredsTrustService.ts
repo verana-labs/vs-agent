@@ -73,7 +73,8 @@ export interface UnaccreditedDidsResult {
   unchecked: string[]
 }
 
-interface CredentialSchemaLink {
+/** The on-chain `CredentialSchema` a VTJSC binds to, and the Ecosystem that owns it. */
+export interface CredentialSchemaLink {
   credentialSchemaId: number
   ecosystemDid: string
 }
@@ -275,7 +276,12 @@ export class AnonCredsTrustService {
     return { jsonSchemaCredentialId, anonCredsSchemaId: schemaId }
   }
 
-  private async resolveCredentialSchemaLink(jsonSchemaCredentialId: string): Promise<CredentialSchemaLink> {
+  /**
+   * Dereferences a VTJSC, verifies its proof and its issuer per [TR-3], and returns the on-chain
+   * `CredentialSchema` it binds to. Throws an `AnonCredsTrustError`: `not-derivable` when the VTJSC
+   * binds to no `CredentialSchema` of this chain, `unavailable` when a read fails.
+   */
+  public async resolveCredentialSchemaLink(jsonSchemaCredentialId: string): Promise<CredentialSchemaLink> {
     const cached = this.credentialSchemaLinks.get(jsonSchemaCredentialId)
     if (cached) return cached
 

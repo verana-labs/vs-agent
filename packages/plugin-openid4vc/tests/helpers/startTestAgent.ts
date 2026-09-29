@@ -3,7 +3,12 @@ import type { OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '.
 import type { AskarModuleConfigStoreOptions, AskarSqliteStorageConfig } from '@credo-ts/askar'
 import type { BaseLogger, DidResolver, Kms, SdJwtVc, X509Certificate } from '@credo-ts/core'
 import type { OpenId4VcHolderApi } from '@credo-ts/openid4vc'
-import type { Plugin } from '@verana-labs/vs-agent-sdk'
+import type {
+  AnonCredsTrustService,
+  DidTrustResolver,
+  Plugin,
+  VeranaChainService,
+} from '@verana-labs/vs-agent-sdk'
 import type { Server } from 'node:http'
 
 import {
@@ -32,6 +37,7 @@ import {
   ParticipantRole,
   ParticipantState,
   setupBaseDidComm,
+  TrustResolutionOutcome,
   typeMetadataUrl,
   VeranaIndexerService,
 } from '@verana-labs/vs-agent-sdk'
@@ -49,7 +55,7 @@ import {
   ROOT_PRIVATE_JWK,
   createCertificateFixtures,
 } from './certificates'
-import { didDocumentWithKey, FakeDidResolver } from './fakeDidResolver'
+import { didDocumentWithKey, didDocumentWithService, FakeDidResolver } from './fakeDidResolver'
 
 type CertificateFixtures = Awaited<ReturnType<typeof createCertificateFixtures>>
 type PluginAgentRole = 'issuer' | 'verifier'
@@ -61,10 +67,16 @@ const UNROUTABLE_INDEXER_BASE_URL = 'http://indexer.invalid'
 export const TEST_ISSUER_DID = 'did:web:issuer.example'
 export const TEST_VERIFIER_DID = 'did:web:verifier.example'
 
+export const TEST_ECOSYSTEM_DID = 'did:web:credentials.example'
 const TEST_ECOSYSTEM_BASE_URL = 'https://credentials.example'
+const TEST_ECOSYSTEM_ID = 10
+const TEST_CHAIN_ID = 'vpr-test-1'
 const TEST_CREDENTIAL_SCHEMA_ID = 1
-const TEST_CREDENTIAL_SCHEMA_REF = `vpr:verana:vpr-test-1:cs:${TEST_CREDENTIAL_SCHEMA_ID}`
+const TEST_CREDENTIAL_SCHEMA_REF = `vpr:verana:${TEST_CHAIN_ID}:cs:${TEST_CREDENTIAL_SCHEMA_ID}`
 const TEST_VTJSC_ID = `${TEST_ECOSYSTEM_BASE_URL}/vt/employee.json`
+// createJsc publishes the VTJSC presentation under this service id, and the resolver reads it there
+const TEST_VTJSC_SERVICE_ID = `${TEST_ECOSYSTEM_DID}#vpr-schemas-${TEST_CREDENTIAL_SCHEMA_ID}-vtjsc-vp`
+const TEST_VTJSC_PRESENTATION_URL = `${TEST_ECOSYSTEM_BASE_URL}/vt/schemas-1-vtjsc-vp.json`
 const TEST_JSON_SCHEMA = JSON.stringify({
   title: 'Employee credential',
   type: 'object',
@@ -78,7 +90,7 @@ const TEST_JSON_SCHEMA = JSON.stringify({
 })
 
 export const testCredentialConfiguration: OpenId4VcCredentialConfiguration = {
-  id: 'employee',
+  id: TEST_VTJSC_ID,
   format: 'dc+sd-jwt',
   vct: typeMetadataUrl(TEST_ECOSYSTEM_BASE_URL, TEST_CREDENTIAL_SCHEMA_ID),
   name: 'Employee credential',
@@ -203,13 +215,20 @@ export async function startTestAgents(input: {
   verifierDid: string
   credentialConfiguration: OpenId4VcCredentialConfiguration
   issuerTrust?: Partial<NonNullable<OpenId4VcPluginOptions['issuer']>>
+  /** Step 7 of the trust decision for the verifier; trusts every DID when absent. */
+  resolveDidTrust?: DidTrustResolver
   logger?: BaseLogger
 }): Promise<OpenId4VcTestAgents> {
   const logger = input.logger ?? new ConsoleLogger(LogLevel.Off)
   const rootCertificate = input.certificates.root.toString('base64')
   const issuerCertificate = await createIssuerCertificate(input.certificates.intermediate, input.issuerDid)
   const stops: Array<() => Promise<void>> = []
-  stops.push(serveTypeMetadata(input.credentialConfiguration.vct, TEST_TYPE_METADATA))
+  stops.push(
+    serveDocuments({
+      [input.credentialConfiguration.vct]: TEST_TYPE_METADATA,
+      [TEST_VTJSC_PRESENTATION_URL]: JSON.stringify({ verifiableCredential: [{ id: TEST_VTJSC_ID }] }),
+    }),
+  )
 
   try {
     const issuer = await startPluginAgent({
@@ -260,7 +279,11 @@ export async function startTestAgents(input: {
         },
         credentialConfigurations: [input.credentialConfiguration],
       }),
-      createService: (agent, options) => new VerifierService(agent, options),
+      createService: (agent, options) =>
+        new VerifierService(agent, options, input.resolveDidTrust ?? trustEveryDid),
+      indexer: verifierIndexer(input.credentialConfiguration),
+      veranaChain: { getChainId: TEST_CHAIN_ID },
+      anonCredsTrust: verifierTrust(input.credentialConfiguration.credentialSchemaId),
       logger,
     })
     stops.push(verifier.stop)
@@ -288,6 +311,8 @@ function createTestVsAgent(input: {
   logger: BaseLogger
   did?: string
   indexer?: unknown
+  veranaChain?: unknown
+  anonCredsTrust?: unknown
 }): OpenId4VcAgent {
   const walletConfig = getAskarStoreConfig(input.storeName)
   const agent = createVsAgent({
@@ -310,6 +335,8 @@ function createTestVsAgent(input: {
         baseUrl: UNROUTABLE_INDEXER_BASE_URL,
         logger: input.logger,
       })) as VeranaIndexerService,
+    veranaChain: input.veranaChain as VeranaChainService | undefined,
+    anonCredsTrust: input.anonCredsTrust as AnonCredsTrustService | undefined,
   }) as unknown as OpenId4VcAgent
 
   // Credo resolves with the first resolver claiming the method, so the fixture has to come first.
@@ -324,6 +351,8 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
   options: (publicApiBaseUrl: string) => OpenId4VcPluginOptions
   createService: (agent: OpenId4VcAgent, options: OpenId4VcPluginOptions) => Service
   indexer?: unknown
+  veranaChain?: unknown
+  anonCredsTrust?: unknown
   logger: BaseLogger
 }): Promise<{
   agent: OpenId4VcAgent
@@ -354,6 +383,8 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
       logger: input.logger,
       did: input.did,
       indexer: input.indexer,
+      veranaChain: input.veranaChain,
+      anonCredsTrust: input.anonCredsTrust,
     })
     await agent.initialize()
     service = input.createService(agent, options)
@@ -460,6 +491,14 @@ export async function createTestAgentsInput() {
       TEST_VERIFIER_DID,
       didDocumentWithKey(TEST_VERIFIER_DID, verifierCertificate.publicJwk.toJson(), ['authentication']),
     ],
+    [
+      TEST_ECOSYSTEM_DID,
+      didDocumentWithService(TEST_ECOSYSTEM_DID, {
+        id: TEST_VTJSC_SERVICE_ID,
+        type: 'LinkedVerifiablePresentation',
+        serviceEndpoint: TEST_VTJSC_PRESENTATION_URL,
+      }),
+    ],
   ])
 
   return {
@@ -474,19 +513,49 @@ export async function createTestAgentsInput() {
 }
 
 // The Type Metadata document is read under the https boundary of the spec, which no fixture server can
-// answer, so the bytes are served from here and every other request reaches the network as before.
-function serveTypeMetadata(vct: string, document: string): () => Promise<void> {
+// answer, so these Ecosystem documents are served from here and every other request reaches the
+// network as before.
+function serveDocuments(documents: Record<string, string>): () => Promise<void> {
   const original = globalThis.fetch
   globalThis.fetch = async (resource, init) => {
     const url =
       typeof resource === 'string' ? resource : resource instanceof URL ? resource.href : resource.url
-    if (url !== vct) return original(resource, init)
+    const document = documents[url]
+    if (document === undefined) return original(resource, init)
     return new Response(document, { headers: { 'content-type': 'application/json' } })
   }
   return async () => {
     globalThis.fetch = original
   }
 }
+
+// The verifier reads the CredentialSchema and its Ecosystem to compose the type it asks for.
+function verifierIndexer(configuration: OpenId4VcCredentialConfiguration) {
+  return {
+    getCredentialSchema: async () => ({
+      id: configuration.credentialSchemaId,
+      ecosystem_id: TEST_ECOSYSTEM_ID,
+      json_schema: configuration.jsonSchema,
+    }),
+    getEcosystem: async () => ({ id: TEST_ECOSYSTEM_ID, did: TEST_ECOSYSTEM_DID }),
+  }
+}
+
+// The VTJSC link and both Participant checks answer from here instead of a VPR.
+function verifierTrust(credentialSchemaId: number) {
+  return {
+    resolveCredentialSchemaLink: async () => ({ credentialSchemaId, ecosystemDid: TEST_ECOSYSTEM_DID }),
+    assertOwnAuthorization: async () => {},
+    assertAuthorized: async () => {},
+  }
+}
+
+const trustEveryDid: DidTrustResolver = async () => ({
+  trusted: true,
+  verified: true,
+  outcome: TrustResolutionOutcome.VERIFIED,
+  source: 'fresh',
+})
 
 function issuerIndexer(did: string, credentialSchemaId: number) {
   return {
