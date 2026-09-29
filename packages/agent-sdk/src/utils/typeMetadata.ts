@@ -10,7 +10,7 @@ export interface TypeMetadataInput {
   vct: string
   /** The JSON Schema of the `CredentialSchema` entry, as the VPR holds it. */
   jsonSchema: string | object
-  /** The on-chain identifier of the `CredentialSchema`, the `name` when the schema has no title. */
+  /** The reference of the VTJSC to its on-chain `CredentialSchema` entry; the `name` without a title. */
   credentialSchemaRef: string
   /** The `id` of the VTJSC of the schema. */
   jsonSchemaCredentialId: string

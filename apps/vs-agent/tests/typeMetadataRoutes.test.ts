@@ -20,7 +20,11 @@ const BYTES = JSON.stringify({
 const didRecord = {
   metadata: { get: (key: string) => (key === '_vt/jsc' ? { [SCHEMA_REF]: { typeMetadata: BYTES } } : null) },
 }
-const agent = { did: 'did:web:agent.example', dids: { getCreatedDids: async () => [didRecord] } }
+const agent = {
+  did: 'did:web:agent.example',
+  dids: { getCreatedDids: async () => [didRecord] },
+  veranaChain: { getChainId: 'vna-testnet-1' },
+}
 
 describe('GET /vt/vct/:credentialSchemaId', () => {
   let app: INestApplication

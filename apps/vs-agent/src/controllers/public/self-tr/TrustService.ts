@@ -47,8 +47,13 @@ export class TrustService {
   /** The stored SD-JWT VC Type Metadata of a `CredentialSchema`, as serialized ([VSA-PUB-VT-5]). */
   public async getTypeMetadata(credentialSchemaId: string): Promise<string> {
     try {
-      const { didRecord } = await this.getDidRecord()
-      const typeMetadata = findVtjscTypeMetadata(didRecord, credentialSchemaId)
+      const { agent, didRecord } = await this.getDidRecord()
+      // an agent on no chain publishes no VTJSC, so it holds no Type Metadata either
+      const chainId = agent.veranaChain?.getChainId
+      if (!chainId) {
+        throw new HttpException('Type Metadata not found', HttpStatus.NOT_FOUND)
+      }
+      const typeMetadata = findVtjscTypeMetadata(didRecord, chainId, credentialSchemaId)
       if (!typeMetadata) {
         throw new HttpException('Type Metadata not found', HttpStatus.NOT_FOUND)
       }

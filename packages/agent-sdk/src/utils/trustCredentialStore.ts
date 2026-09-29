@@ -192,6 +192,8 @@ export async function saveMetadataEntry(
   const record = didRecord.metadata.get(key) ?? {}
   // Remove previous entry for this credential ID (if exists)
   const found = findMetadataEntry(didRecord, key, fields.id, ref)
+  // [VSA-PUB-VT-5]: the Type Metadata of a schema outlives every re-issue of its VTJSC
+  const typeMetadata = found?.schemaId === ref ? record[ref]?.typeMetadata : undefined
   if (found) {
     if (didRecord.didDocument?.service) {
       didRecord.didDocument.service = didRecord.didDocument.service.filter(
@@ -201,6 +203,7 @@ export async function saveMetadataEntry(
     delete record[found.schemaId]
   }
   record[ref] = {
+    ...(typeof typeMetadata === 'string' ? { typeMetadata } : {}),
     credential: trustCredentialEntry(credential),
     verifiablePresentation: trustPresentationEntry(verifiablePresentation),
     didDocumentServiceId,
@@ -489,15 +492,14 @@ export async function saveVtjscTypeMetadata(
 
 /**
  * The stored Type Metadata of the `CredentialSchema` with the given on-chain id, as serialized.
- * The `_vt/jsc` key of such a schema is `vpr:verana:{chainId}:cs:{id}`; the agent syncs one chain.
+ * The `_vt/jsc` key of such a schema is `vpr:verana:{chainId}:cs:{id}`.
  */
-export function findVtjscTypeMetadata(didRecord: DidRecord, credentialSchemaId: string): string | undefined {
-  const metadata = didRecord.metadata.get('_vt/jsc')
-  if (!metadata) return undefined
-
-  const entry = Object.entries(metadata).find(
-    ([schemaRef]) => schemaRef.startsWith('vpr:verana:') && schemaRef.endsWith(`:cs:${credentialSchemaId}`),
-  )?.[1]
+export function findVtjscTypeMetadata(
+  didRecord: DidRecord,
+  chainId: string,
+  credentialSchemaId: string,
+): string | undefined {
+  const entry = didRecord.metadata.get('_vt/jsc')?.[`vpr:verana:${chainId}:cs:${credentialSchemaId}`]
   return typeof entry?.typeMetadata === 'string' ? entry.typeMetadata : undefined
 }
 

@@ -718,7 +718,9 @@ export async function publishTypeMetadataForVtjsc(
     credentialSchemaRef: schemaRef,
     jsonSchemaCredentialId,
   })
-  return await saveVtjscTypeMetadata(agent, schemaRef, typeMetadata)
+  const stored = await saveVtjscTypeMetadata(agent, schemaRef, typeMetadata)
+  if (stored) agent.config.logger.info(`[VTJSC] Stored the Type Metadata of schema ${credentialSchemaId}`)
+  return stored
 }
 
 export async function publishVtjscIfOwner(
