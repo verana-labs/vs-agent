@@ -73,11 +73,6 @@ const DIGEST_BASE_DELAY_MS = 500
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-// Generate a SHA-384 digest for the given content
-export function digestOf(content: string): string {
-  return digestOfBytes(content)
-}
-
 export async function digestOfUri(uri: string, variable: string, logger?: Logger): Promise<string> {
   let lastError: Error | undefined
   for (let attempt = 1; attempt <= DIGEST_ATTEMPTS; attempt++) {
@@ -129,7 +124,7 @@ export async function composeEcsClaims(
     const group = GROUP_OF[schemaKey]
     const variable = (group && (ECS_CLAIMS_VARIABLES[group] as Record<string, string>)[uriClaim]) || uriClaim
     const local = claims.localResources?.[uri]
-    composed[digestClaim] = local ? digestOf(local) : await digestOfUri(uri, variable, logger)
+    composed[digestClaim] = local ? digestOfBytes(local) : await digestOfUri(uri, variable, logger)
   }
   return composed
 }
