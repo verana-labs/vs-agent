@@ -470,8 +470,6 @@ const run = async () => {
         ecsClaims,
       )
     }
-    // The registry only exists here, after registerNestPluginEvents, so a plugin driven by indexer
-    // notifications cannot be wired from registerEvents.
     registerNestPluginIndexerHandlers(nestPlugins, handlerRegistry)
 
     const indexerCorporationId =
