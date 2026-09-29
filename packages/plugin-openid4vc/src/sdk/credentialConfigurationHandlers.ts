@@ -65,8 +65,7 @@ export function registerCredentialConfigurationHandlers(
       const { agent } = ctx
       if (!agent.did) return false
       const participant = await agent.indexer.getParticipant(String(activity.entity_id))
-      if (participant.did === agent.did && participant.role === ParticipantRole.Issuer) return true
-      return advertised(Number(participant.schema_id))
+      return participant.did === agent.did && participant.role === ParticipantRole.Issuer
     })
   }
 

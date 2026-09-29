@@ -131,7 +131,7 @@ describe('OpenId4VcPlugin', () => {
     expect(refreshCredentialConfigurations).not.toHaveBeenCalled()
   })
 
-  it('refreshes for a foreign participant of a CredentialSchema the agent advertises', async () => {
+  it('leaves the configuration set alone for a foreign participant of an advertised schema', async () => {
     const plugin = OpenId4VcPlugin(advertising(9))
     const registry = new IndexerHandlerRegistry()
     plugin.registerIndexerHandlers?.(registry)
@@ -140,10 +140,25 @@ describe('OpenId4VcPlugin', () => {
     issuerSinkOf(plugin)({ refreshCredentialConfigurations } as never)
     await registry.dispatch(
       activity('RevokeParticipant'),
-      handlerContext({ id: 7, schema_id: 9, did: 'did:web:other.example', role: ParticipantRole.Verifier }),
+      handlerContext({ id: 7, schema_id: 9, did: 'did:web:other.example', role: ParticipantRole.Issuer }),
     )
 
-    expect(refreshCredentialConfigurations).toHaveBeenCalledOnce()
+    expect(refreshCredentialConfigurations).not.toHaveBeenCalled()
+  })
+
+  it('leaves the configuration set alone for a participant this agent does not issue under', async () => {
+    const plugin = OpenId4VcPlugin(advertising(1))
+    const registry = new IndexerHandlerRegistry()
+    plugin.registerIndexerHandlers?.(registry)
+
+    const refreshCredentialConfigurations = vi.fn().mockResolvedValue(undefined)
+    issuerSinkOf(plugin)({ refreshCredentialConfigurations } as never)
+    await registry.dispatch(
+      activity('RevokeParticipant'),
+      handlerContext({ id: 7, schema_id: 1, did: AGENT_DID, role: ParticipantRole.Verifier }),
+    )
+
+    expect(refreshCredentialConfigurations).not.toHaveBeenCalled()
   })
 
   it('leaves the configuration set alone for a CredentialSchema the agent does not advertise', async () => {
