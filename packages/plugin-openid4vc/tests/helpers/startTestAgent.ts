@@ -1,9 +1,5 @@
 import type { OpenId4VcAgent } from '../../src/types'
-import type {
-  CredentialConfigurationRegistry,
-  OpenId4VcCredentialConfiguration,
-  OpenId4VcPluginOptions,
-} from '../../src/types'
+import type { OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../../src/types'
 import type { AskarModuleConfigStoreOptions, AskarSqliteStorageConfig } from '@credo-ts/askar'
 import type { BaseLogger, DidResolver, Kms, SdJwtVc, X509Certificate } from '@credo-ts/core'
 import type { OpenId4VcHolderApi } from '@credo-ts/openid4vc'
@@ -40,7 +36,6 @@ import {
 import express from 'express'
 import { webcrypto } from 'node:crypto'
 
-import { createCredentialConfigurationRegistry } from '../../src/credentialConfigurationRegistry'
 import { setupOpenId4Vc } from '../../src/sdk/setupOpenId4Vc'
 import { IssuerService } from '../../src/services/IssuerService'
 import { VerifierService } from '../../src/services/VerifierService'
@@ -64,10 +59,16 @@ const UNROUTABLE_INDEXER_BASE_URL = 'http://indexer.invalid'
 export const TEST_ISSUER_DID = 'did:web:issuer.example'
 export const TEST_VERIFIER_DID = 'did:web:verifier.example'
 
+export const TEST_TYPE_METADATA = JSON.stringify({
+  vct: 'https://credentials.example/vt/vct/1',
+  name: 'Employee credential',
+  claims: [{ path: ['name'] }, { path: ['role'] }],
+})
+
 export const testCredentialConfiguration: OpenId4VcCredentialConfiguration = {
   id: 'employee',
   format: 'dc+sd-jwt',
-  vct: 'https://credentials.example/vct/employee',
+  vct: 'https://credentials.example/vt/vct/1',
   name: 'Employee credential',
   vtjscId: 'https://credentials.example/vt/employee.json',
   credentialSchemaId: 1,
@@ -103,8 +104,6 @@ export interface OpenId4VcTestAgents {
     agent: OpenId4VcAgent
     service: IssuerService
     publicApiBaseUrl: string
-    configurationRegistry: CredentialConfigurationRegistry
-    credentialConfiguration: OpenId4VcCredentialConfiguration
   }
   holder: {
     agent: OpenId4VcAgent
@@ -194,7 +193,6 @@ export async function startTestAgents(input: {
   issuerDid: string
   verifierDid: string
   credentialConfiguration: OpenId4VcCredentialConfiguration
-  typeMetadataServer?: Server
   issuerTrust?: Partial<NonNullable<OpenId4VcPluginOptions['issuer']>>
   logger?: BaseLogger
 }): Promise<OpenId4VcTestAgents> {
@@ -202,9 +200,7 @@ export async function startTestAgents(input: {
   const rootCertificate = input.certificates.root.toString('base64')
   const issuerCertificate = await createIssuerCertificate(input.certificates.intermediate, input.issuerDid)
   const stops: Array<() => Promise<void>> = []
-  const configurationRegistry = createCredentialConfigurationRegistry([input.credentialConfiguration])
-  const typeMetadataServer = input.typeMetadataServer
-  if (typeMetadataServer) stops.push(() => closeServer(typeMetadataServer))
+  stops.push(serveTypeMetadata(input.credentialConfiguration.vct, TEST_TYPE_METADATA))
 
   try {
     const issuer = await startPluginAgent({
@@ -225,27 +221,13 @@ export async function startTestAgents(input: {
           },
           ...input.issuerTrust,
         },
-        credentialConfigurations: configurationRegistry.configurations,
-        credentialConfigurationRegistry: configurationRegistry,
+        credentialConfigurations: [input.credentialConfiguration],
       }),
       createService: (agent, options) => new IssuerService(agent, options, () => {}),
+      indexer: issuerIndexer(input.issuerDid, input.credentialConfiguration.credentialSchemaId),
       logger,
     })
     stops.push(issuer.stop)
-
-    // The fixture indexer is unroutable, and the offer path reads the agent's own ISSUER Participant.
-    issuer.agent.indexer.listParticipants = async () => [
-      {
-        id: 1,
-        schema_id: input.credentialConfiguration.credentialSchemaId,
-        did: input.issuerDid,
-        role: ParticipantRole.Issuer,
-        participant_state: ParticipantState.Active,
-        revoked: null,
-        slashed: null,
-        modified: '2026-09-01T00:00:00.000Z',
-      },
-    ]
 
     const holder = await startHolderAgent(input.didResolver, rootCertificate, logger)
     stops.push(holder.stop)
@@ -275,11 +257,7 @@ export async function startTestAgents(input: {
     stops.push(verifier.stop)
 
     return {
-      issuer: {
-        ...issuer,
-        configurationRegistry,
-        credentialConfiguration: input.credentialConfiguration,
-      },
+      issuer,
       holder,
       verifier,
       rootCertificate,
@@ -300,6 +278,7 @@ function createTestVsAgent(input: {
   didResolver: DidResolver
   logger: BaseLogger
   did?: string
+  indexer?: unknown
 }): OpenId4VcAgent {
   const walletConfig = getAskarStoreConfig(input.storeName)
   const agent = createVsAgent({
@@ -317,10 +296,11 @@ function createTestVsAgent(input: {
     dependencies: agentDependencies,
     publicApiBaseUrl: input.publicApiBaseUrl,
     // Unroutable on purpose: a test that reaches the VPR fails loudly instead of talking to a real indexer.
-    indexer: new VeranaIndexerService({
-      baseUrl: UNROUTABLE_INDEXER_BASE_URL,
-      logger: input.logger,
-    }),
+    indexer: (input.indexer ??
+      new VeranaIndexerService({
+        baseUrl: UNROUTABLE_INDEXER_BASE_URL,
+        logger: input.logger,
+      })) as VeranaIndexerService,
   }) as unknown as OpenId4VcAgent
 
   // Credo resolves with the first resolver claiming the method, so the fixture has to come first.
@@ -334,6 +314,7 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
   didResolver: DidResolver
   options: (publicApiBaseUrl: string) => OpenId4VcPluginOptions
   createService: (agent: OpenId4VcAgent, options: OpenId4VcPluginOptions) => Service
+  indexer?: unknown
   logger: BaseLogger
 }): Promise<{
   agent: OpenId4VcAgent
@@ -363,11 +344,11 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
       didResolver: input.didResolver,
       logger: input.logger,
       did: input.did,
+      indexer: input.indexer,
     })
     await agent.initialize()
     service = input.createService(agent, options)
-    if (service instanceof IssuerService) await service.onModuleInit()
-    else await service.ensureInitialized()
+    await service.ensureInitialized()
     return {
       agent,
       service,
@@ -472,8 +453,6 @@ export async function createTestAgentsInput() {
     ],
   ])
 
-  const typeMetadata = await startTypeMetadataServer()
-
   return {
     certificates,
     verifierCertificate,
@@ -481,26 +460,40 @@ export async function createTestAgentsInput() {
     didResolver: new FakeDidResolver(didDocuments),
     issuerDid: TEST_ISSUER_DID,
     verifierDid: TEST_VERIFIER_DID,
-    credentialConfiguration: {
-      ...testCredentialConfiguration,
-      vct: `${typeMetadata.baseUrl}/vt/vct/${testCredentialConfiguration.credentialSchemaId}`,
-    },
-    typeMetadataServer: typeMetadata.server,
+    credentialConfiguration: testCredentialConfiguration,
   }
 }
 
-async function startTypeMetadataServer(): Promise<{ server: Server; baseUrl: string }> {
-  const app = express()
-  app.get('/vt/vct/:credentialSchemaId', (request, response) => {
-    response.json({
-      vct: `${serverUrl(server)}/vt/vct/${request.params.credentialSchemaId}`,
-      name: testCredentialConfiguration.name,
-      claims: testCredentialConfiguration.claims.map(claim => ({ path: [claim] })),
-    })
-  })
+// The Type Metadata document is read under the https boundary of the spec, which no fixture server can
+// answer, so the bytes are served from here and every other request reaches the network as before.
+function serveTypeMetadata(vct: string, document: string): () => Promise<void> {
+  const original = globalThis.fetch
+  globalThis.fetch = async (resource, init) => {
+    const url =
+      typeof resource === 'string' ? resource : resource instanceof URL ? resource.href : resource.url
+    if (url !== vct) return original(resource, init)
+    return new Response(document, { headers: { 'content-type': 'application/json' } })
+  }
+  return async () => {
+    globalThis.fetch = original
+  }
+}
 
-  const server = await listen(app)
-  return { server, baseUrl: serverUrl(server) }
+function issuerIndexer(did: string, credentialSchemaId: number) {
+  return {
+    listParticipants: async () => [
+      {
+        id: 1,
+        schema_id: credentialSchemaId,
+        did,
+        role: ParticipantRole.Issuer,
+        participant_state: ParticipantState.Active,
+        revoked: null,
+        slashed: null,
+        modified: '2026-09-01T00:00:00.000Z',
+      },
+    ],
+  }
 }
 
 async function listen(app: express.Express): Promise<Server> {

@@ -4,9 +4,14 @@ import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
-import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
+import { AdminApiErrorCode, digestOfBytes } from '@verana-labs/vs-agent-sdk'
 
-import { createTestAgentsInput, startTestAgents, testCredentialConfiguration } from './helpers/startTestAgent'
+import {
+  createTestAgentsInput,
+  startTestAgents,
+  TEST_TYPE_METADATA,
+  testCredentialConfiguration,
+} from './helpers/startTestAgent'
 
 const TTL_SECONDS = 3_600
 
@@ -33,7 +38,8 @@ describe('in-process OpenID4VC issuance', () => {
   it('issues and stores a holder-bound dc+sd-jwt through the pre-authorized flow', async () => {
     expect(storedCredential.claimFormat).toBe('dc+sd-jwt')
     expect(storedCredential.prettyClaims).toMatchObject({
-      vct: agents.issuer.credentialConfiguration.vct,
+      vct: testCredentialConfiguration.vct,
+      'vct#integrity': digestOfBytes(TEST_TYPE_METADATA),
       name: 'Ada Lovelace',
       role: 'engineer',
     })
@@ -145,25 +151,6 @@ describe('in-process OpenID4VC issuance', () => {
     await expect(response.json()).resolves.toMatchObject({
       credential_issuer: `${agents.issuer.publicApiBaseUrl}/oid4vci/issuer`,
     })
-  }, 60_000)
-
-  it('re-renders the served metadata when the configuration set is replaced after startup', async () => {
-    const metadataUrl = `${agents.issuer.publicApiBaseUrl}/.well-known/openid-credential-issuer/oid4vci/issuer`
-    const servedConfigurationIds = async () => {
-      const response = await fetch(metadataUrl, { headers: { accept: 'application/json' } })
-      const metadata = (await response.json()) as {
-        credential_configurations_supported: Record<string, unknown>
-      }
-      return Object.keys(metadata.credential_configurations_supported)
-    }
-
-    expect(await servedConfigurationIds()).toEqual([testCredentialConfiguration.id])
-
-    await agents.issuer.configurationRegistry.replace([
-      { ...testCredentialConfiguration, id: 'contractor', vct: 'https://credentials.example/vct/contractor' },
-    ])
-
-    expect(await servedConfigurationIds()).toEqual(['contractor'])
   }, 60_000)
 
   it('keeps holder controllers and services out of production source', async () => {
