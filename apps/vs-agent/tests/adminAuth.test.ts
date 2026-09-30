@@ -87,7 +87,7 @@ describe('AdminAuthService', () => {
     const authService = new AdminAuthService(AUDIENCE)
     const { signer, pubKey, sign } = await makeSigner()
     const { nonce } = authService.createChallenge(signer)
-    const signature = await sign(challengePayload(AUDIENCE, nonce))
+    const signature = await sign(`vs-agent-admin-auth:${AUDIENCE}:${nonce}`)
 
     const issued = await authService.issueToken({ account: signer, pubKey, signature, nonce })
     expect(issued?.token).toBeTruthy()
