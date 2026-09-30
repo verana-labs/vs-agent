@@ -231,6 +231,11 @@ describe('AdminAuthGuard', () => {
     expect(() => makeGuard(rejected.reflector).canActivate(rejected.context)).toThrow(ForbiddenException)
   })
 
+  it('refuses a corporation-exempt method in internal mode, to a trusted peer too', () => {
+    const { reflector, context } = makeContext('corporation', { remoteAddress: '127.0.0.1' })
+    expect(() => makeGuard(reflector).canActivate(context)).toThrow(ForbiddenException)
+  })
+
   it('serves an always-exempt method to an external caller in both modes', () => {
     for (const authMode of ['internal', 'corporation'] as const) {
       const { reflector, context } = makeContext('always')
