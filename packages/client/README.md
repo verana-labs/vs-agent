@@ -22,7 +22,7 @@ const { id } = await client.didcomm.sendBasicMessage({ connectionId, content: 'H
 
 `baseUrl` is the admin origin. The client appends `/v2`.
 
-Auth. An agent in `ADMIN_API_AUTH_MODE=internal`, or a caller inside `ADMIN_API_TRUSTED_NETWORKS` in either mode, needs no token. A caller outside the trusted networks of an agent in `corporation` mode runs the ADR-036 flow with its own Cosmos signer: `client.auth.challenge({ account })`, sign `vs-agent-admin-auth:${nonce}`, `client.auth.token({ account, pubKey, signature, nonce })`, then build the client with the returned token. Tokens live 900 seconds, build a new `ApiClient` to refresh.
+Auth. An agent in `ADMIN_API_AUTH_MODE=internal`, or a caller inside `ADMIN_API_TRUSTED_NETWORKS` in either mode, needs no token. A caller outside the trusted networks of an agent in `corporation` mode runs the ADR-036 flow with its own Cosmos signer: `client.auth.challenge({ account })`, check that the returned `audience` is the origin you called and refuse to sign otherwise, sign `vs-agent-admin-auth:${audience}:${nonce}`, `client.auth.token({ account, pubKey, signature, nonce })`, then build the client with the returned token. Tokens live 900 seconds, build a new `ApiClient` to refresh.
 
 ```ts
 const client = new ApiClient('https://agent.example.com', { token })
