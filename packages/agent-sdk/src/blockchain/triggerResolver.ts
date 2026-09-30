@@ -3,11 +3,11 @@ import type { ParticipantDto } from './types'
 
 import { veranaTypeUrls } from '@verana-labs/verana-types'
 
-import { feeGranterFor, preflightFee } from './feePreflight'
+import { FeePreflightError, feeGranterFor } from './feePreflight'
 
 /** DID record writes come in bursts, and the resolver reads the current document, so one trigger covers a burst. */
 const COALESCE_WINDOW_MS = 2_000
-const pendingByDid = new Map<string, ReturnType<typeof setTimeout>>()
+const pendingByDid = new Map<string, { timer: ReturnType<typeof setTimeout>; send: () => Promise<void> }>()
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -48,15 +48,15 @@ export async function triggerResolver(agent: VsAgent, participantId: number, cau
   const target = `TriggerResolver for participant ${participantId} (${cause})`
 
   const granter = feeGranterFor(agent, participantId)
-  const checked = await preflightFee(chain, chain.triggerResolverMsg(participantId), granter)
-  if ('reason' in checked) {
-    logger.error(`[TriggerResolver] ${target} not sent: ${checked.reason}: ${checked.error}`)
-    return
-  }
   try {
+    // the fee pre-flight of the broadcast names the payer it could not charge
     const { txHash } = await chain.triggerResolver(participantId, { granter })
     logger.info(`[TriggerResolver] ${target} sent: tx ${txHash}${granter ? `, fee granter ${granter}` : ''}`)
   } catch (error) {
+    if (error instanceof FeePreflightError) {
+      logger.error(`[TriggerResolver] ${target} not sent: ${error.reason}: ${error.message}`)
+      return
+    }
     logger.error(`[TriggerResolver] ${target} failed: ${errorMessage(error)}`)
   }
 }
@@ -89,11 +89,27 @@ export async function triggerResolverForOwnDid(agent: VsAgent, cause: string): P
 export function scheduleTriggerResolverForOwnDid(agent: VsAgent, cause: string): void {
   const key = agent.did ?? ''
   const pending = pendingByDid.get(key)
-  if (pending) clearTimeout(pending)
-  const timer = setTimeout(() => {
+  if (pending) clearTimeout(pending.timer)
+  const send = async () => {
     pendingByDid.delete(key)
-    void triggerResolverForOwnDid(agent, cause)
-  }, COALESCE_WINDOW_MS)
+    await triggerResolverForOwnDid(agent, cause)
+  }
+  const timer = setTimeout(() => void send(), COALESCE_WINDOW_MS)
+  // the window must not hold a shutdown open; `flushPendingTriggerResolvers` sends what it holds
   timer.unref?.()
-  pendingByDid.set(key, timer)
+  pendingByDid.set(key, { timer, send })
+}
+
+/**
+ * Sends every trigger that a coalescing window still holds, and waits for it. The agent calls this
+ * when it shuts down: [IDX-VT-EVAL-3] makes the trigger the only signal of a publication change, so a
+ * trigger the window still holds at exit would leave the trust state of the agent stale for good.
+ */
+export async function flushPendingTriggerResolvers(): Promise<void> {
+  const pending = [...pendingByDid.values()]
+  pendingByDid.clear()
+  for (const { timer, send } of pending) {
+    clearTimeout(timer)
+    await send()
+  }
 }

@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../src/blockchain/triggerResolver', () => ({ scheduleTriggerResolverForOwnDid: vi.fn() }))
 
 import { scheduleTriggerResolverForOwnDid } from '../src/blockchain/triggerResolver'
+import { publicationFingerprint } from '../src/utils/publishedDidRecord'
 import {
   deleteMetadataEntry,
   detachVtjscPublications,
-  publicationFingerprint,
   saveMetadataEntry,
 } from '../src/utils/trustCredentialStore'
 

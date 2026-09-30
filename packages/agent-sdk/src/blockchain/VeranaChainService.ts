@@ -25,6 +25,7 @@ import type { Timestamp } from 'cosmjs-types/google/protobuf/timestamp'
 import { connectComet } from '@cosmjs/tendermint-rpc'
 import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
 
+import { FeePreflightError, preflightFee } from './feePreflight'
 import {
   Coin,
   CreateOrUpdateParticipantSessionParams,
@@ -400,7 +401,11 @@ export class VeranaChainService {
   }): Promise<DeliverTxResponse> {
     const { typeUrl, value, granter } = options
     const messages = [{ typeUrl, value }]
-    const fee = await this.estimateFee(messages, granter)
+    // [VSA-ADM-VT-FL-VALIDATE-6] on every transaction this service sends: the funnel checks that the
+    // fee payer can pay before it signs, so no call site can forget it
+    const checked = await preflightFee(this, messages[0], granter)
+    if ('reason' in checked) throw new FeePreflightError(checked.reason, checked.error)
+    const fee = checked.fee
     this.config.logger.debug(
       `[VeranaChain] Broadcasting ${typeUrl} as ${this.operatorAddress}${granter ? ` with fee granter ${granter}` : ''}`,
     )

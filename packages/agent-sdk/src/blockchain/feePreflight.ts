@@ -18,6 +18,17 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** What a broadcast throws when its fee payer cannot pay it, with the reason of [VSA-ADM-VT-FL-VALIDATE-9]. */
+export class FeePreflightError extends Error {
+  public constructor(
+    public readonly reason: VtFlowTxReason,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'FeePreflightError'
+  }
+}
+
 /**
  * [VSA-VPR-TX-3]: the fee payer of a transaction that targets a `Participant` entry follows the
  * `ParticipantAuthorizationRecord` of that entry. With `with_feegrant`, the Corporation pays through

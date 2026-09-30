@@ -1,27 +1,28 @@
+import { VtFlowTxReason } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { describe, expect, it, vi } from 'vitest'
 
-import { triggerResolver, triggerResolverForOwnDid } from '../src/blockchain/triggerResolver'
+import { FeePreflightError } from '../src/blockchain/feePreflight'
+import {
+  flushPendingTriggerResolvers,
+  scheduleTriggerResolverForOwnDid,
+  triggerResolver,
+  triggerResolverForOwnDid,
+} from '../src/blockchain/triggerResolver'
 
-const TRIGGER = '/verana.pp.v1.MsgTriggerResolver'
 const past = '2026-01-01T00:00:00Z'
 
 function makeAgent(
   options: {
     grant?: { withFeegrant: boolean } | null
-    balance?: string
     participants?: Record<string, unknown>[]
     canSign?: (id: number) => boolean
   } = {},
 ) {
   const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  // the fee pre-flight belongs to the broadcast, so the chain either answers or throws it back
   const chain = {
     corporation: 'verana1corp',
-    triggerResolverMsg: vi.fn((id: number) => ({ typeUrl: TRIGGER, value: { id } })),
     triggerResolver: vi.fn(async () => ({ txHash: 'AB12' })),
-    feeAllowance: vi.fn(async () => ({ unlimited: true })),
-    estimateFee: vi.fn(async () => ({ amount: [{ denom: 'uvna', amount: '500' }], gas: '200000' })),
-    getAccountBalance: vi.fn(async () => ({ denom: 'uvna', amount: '100000' })),
-    getBalance: vi.fn(async () => ({ denom: 'uvna', amount: options.balance ?? '1000' })),
   }
   const grant = options.grant === undefined ? { withFeegrant: false } : options.grant
   const agent = {
@@ -45,20 +46,27 @@ describe('triggerResolver', () => {
 
     await triggerResolver(agent, 42, 'test')
 
-    expect(chain.estimateFee).toHaveBeenCalledWith([{ typeUrl: TRIGGER, value: { id: 42 } }], 'verana1corp')
-    expect(chain.getBalance).not.toHaveBeenCalled()
     expect(chain.triggerResolver).toHaveBeenCalledWith(42, { granter: 'verana1corp' })
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('tx AB12, fee granter verana1corp'))
     expect(logger.error).not.toHaveBeenCalled()
   })
 
-  it('lets the agent pay without a grant, and logs an error with the reason instead of throwing', async () => {
-    const { agent, chain, logger } = makeAgent({ balance: '100' })
+  it('names no granter without a grant, so the agent account pays', async () => {
+    const { agent, chain } = makeAgent()
+
+    await triggerResolver(agent, 42, 'test')
+
+    expect(chain.triggerResolver).toHaveBeenCalledWith(42, { granter: undefined })
+  })
+
+  it('logs the reason of a fee the payer cannot pay, instead of throwing', async () => {
+    const { agent, chain, logger } = makeAgent()
+    chain.triggerResolver.mockRejectedValue(
+      new FeePreflightError(VtFlowTxReason.InsufficientFundsAgent, 'the agent account holds 100uvna'),
+    )
 
     await expect(triggerResolver(agent, 42, 'the credential was published')).resolves.toBeUndefined()
 
-    expect(chain.estimateFee).toHaveBeenCalledWith(expect.anything(), undefined)
-    expect(chain.triggerResolver).not.toHaveBeenCalled()
     expect(logger.error).toHaveBeenCalledWith(
       '[TriggerResolver] TriggerResolver for participant 42 (the credential was published) not sent: INSUFFICIENT_FUNDS_AGENT: the agent account holds 100uvna',
     )
@@ -108,5 +116,38 @@ describe('triggerResolverForOwnDid', () => {
     ).indexer.listParticipants.mockRejectedValue(new Error('indexer down'))
     await expect(triggerResolverForOwnDid(down.agent, 'test')).resolves.toBeUndefined()
     expect(down.logger.error).toHaveBeenCalledWith(expect.stringContaining('indexer down'))
+  })
+})
+
+// [IDX-VT-EVAL-3]: the trigger is the only signal of a publication change, so the window must not
+// swallow one when the agent stops
+describe('flushPendingTriggerResolvers', () => {
+  const holder = {
+    id: 7,
+    did: 'did:web:agent.example',
+    effective_from: past,
+    effective_until: null,
+    revoked: null,
+    slashed: null,
+  }
+
+  it('sends the trigger a coalescing window still holds, once for a burst of writes', async () => {
+    const { agent, chain } = makeAgent({ participants: [holder] })
+
+    scheduleTriggerResolverForOwnDid(agent, 'the first write')
+    scheduleTriggerResolverForOwnDid(agent, 'the second write')
+    expect(chain.triggerResolver).not.toHaveBeenCalled()
+
+    await flushPendingTriggerResolvers()
+
+    expect(chain.triggerResolver).toHaveBeenCalledOnce()
+  })
+
+  it('sends nothing when no window holds a trigger', async () => {
+    const { chain } = makeAgent({ participants: [holder] })
+
+    await flushPendingTriggerResolvers()
+
+    expect(chain.triggerResolver).not.toHaveBeenCalled()
   })
 })

@@ -1,4 +1,4 @@
-import { DidDocumentService, DidRecord, DidRepository, W3cCredentialSchema } from '@credo-ts/core'
+import { DidDocumentService, DidRecord, W3cCredentialSchema } from '@credo-ts/core'
 import { ecsRequiresValidUntil } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../agent/VsAgent'
@@ -12,6 +12,7 @@ import {
   signerW3c,
   sortKeysDeep,
 } from './setupSelfTr'
+import { updateDidRecord } from './publishedDidRecord'
 import { createW3cV2Credential, isDataIntegrityVcdm2Credential } from './vcdm2'
 
 const buildIntegrityData = (data: Record<string, unknown>) => {
@@ -165,7 +166,6 @@ export async function publishSelfIssuedEcsPresentation(
   // Resolvers only discover the credential through the [VT-CRED-W3C-LINKED-VP] fragment, and
   // #whois does not match it. The rename above only covers documents that already carry the
   // service, so publish it here when nothing declared it yet.
-  let didDocumentChanged = false
   if (attached && !didDocument.service?.some(s => s.id === didDocumentServiceId)) {
     didDocument.service = [
       ...(didDocument.service ?? []),
@@ -175,22 +175,17 @@ export async function publishSelfIssuedEcsPresentation(
         type: 'LinkedVerifiablePresentation',
       }),
     ]
-    didDocumentChanged = true
   }
   const whoisId = `${agent.did}#whois`
   if (attached && schemaKey === 'ecs-service') {
     const whois = didDocument.service?.find(s => s.id === whoisId)
     if (whois) {
-      if (whois.serviceEndpoint !== id) {
-        whois.serviceEndpoint = id
-        didDocumentChanged = true
-      }
+      whois.serviceEndpoint = id
     } else {
       didDocument.service = [
         ...(didDocument.service ?? []),
         new DidDocumentService({ id: whoisId, serviceEndpoint: id, type: 'LinkedVerifiablePresentation' }),
       ]
-      didDocumentChanged = true
     }
   }
   const [credential] = verifiablePresentation.verifiableCredential
@@ -202,9 +197,9 @@ export async function publishSelfIssuedEcsPresentation(
     attached,
   }
   didRecord.metadata.set('_vt/vtc', record)
-  await agent.context.dependencyManager.resolve(DidRepository).update(agent.context, didRecord)
-  if (didDocumentChanged) {
-    await agent.dids.update({ did: didRecord.did, didDocument })
-  }
+  // the write point publishes the document when it changed, and triggers the resolver when the
+  // published material did ([VSA-VT-LVP-5]): an ECS credential re-issued under the same URL changes
+  // the presentation a resolver reads, without changing the entry that announces it
+  await updateDidRecord(agent, didRecord)
   return verifiablePresentation
 }
