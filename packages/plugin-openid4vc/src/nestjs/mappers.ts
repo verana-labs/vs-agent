@@ -1,7 +1,6 @@
 import type { OpenId4VcIssuanceSessionSummary } from '../services/IssuerService'
 import type { OpenId4VcVerificationSessionSummary } from '../services/VerifierService'
-
-import { OpenId4VcCredentialExchangeRecordDto, OpenId4VcPresentationRecordDto } from './dto'
+import type { OpenId4VcCredentialExchangeRecordDto, OpenId4VcPresentationRecordDto } from './dto'
 
 export function toCredentialExchangeDto(
   session: OpenId4VcIssuanceSessionSummary,

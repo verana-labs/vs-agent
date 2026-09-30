@@ -388,7 +388,7 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
     })
     await agent.initialize()
     service = input.createService(agent, options)
-    await service.ensureInitialized()
+    await service.onModuleInit()
     return {
       agent,
       service,

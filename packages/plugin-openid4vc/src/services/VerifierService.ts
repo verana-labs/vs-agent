@@ -1,7 +1,11 @@
 import type { OpenId4VcAgent, OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../types'
 import type { OnModuleInit } from '@nestjs/common'
 import type { SdJwtVc } from '@credo-ts/core'
-import type { OpenId4VcVerificationSessionRecord, OpenId4VcVerifierApi } from '@credo-ts/openid4vc'
+import type {
+  OpenId4VcVerificationSessionRecord,
+  OpenId4VcVerificationSessionStateChangedEvent,
+  OpenId4VcVerifierApi,
+} from '@credo-ts/openid4vc'
 import type { DidTrustResolver } from '@verana-labs/vs-agent-sdk'
 
 import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
@@ -9,6 +13,7 @@ import { Inject, Injectable } from '@nestjs/common'
 import {
   OpenId4VcVerificationSessionRepository,
   OpenId4VcVerificationSessionState,
+  OpenId4VcVerifierEvents,
 } from '@credo-ts/openid4vc'
 import {
   AdminApiError,
@@ -19,6 +24,8 @@ import {
 } from '@verana-labs/vs-agent-sdk'
 
 import { VERIFIER_CAPABILITY_ID } from '../config'
+import { emitStateUpdated, OpenId4VcEventType } from '../events/openId4VcEvents'
+import { toPresentationDto } from '../nestjs/mappers'
 import { findBoundVerificationMethodId, verifyKeyBoundToDid } from '../trust/keyBinding'
 import { trustedIssuersForPresentation } from '../trust/presentedIssuer'
 import { decidePresentationTrust, type PresentationTrustRequest } from '../trust/trustDecision'
@@ -97,6 +104,7 @@ export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
 export class VerifierService implements OnModuleInit {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
+  private readonly decisions = new Map<string, Promise<PresentationDecision>>()
 
   public constructor(
     @Inject('VSAGENT') private readonly agent: OpenId4VcAgent,
@@ -105,6 +113,14 @@ export class VerifierService implements OnModuleInit {
   ) {}
 
   public async onModuleInit(): Promise<void> {
+    this.agent.events.on<OpenId4VcVerificationSessionStateChangedEvent>(
+      OpenId4VcVerifierEvents.VerificationSessionStateChanged,
+      ({ payload: { verificationSession, previousState } }) => {
+        // credo announces a new session before createRequest tags it with its type, so createRequest announces it
+        if (verificationSession.verifierId !== VERIFIER_CAPABILITY_ID || previousState === null) return
+        this.presentationStateUpdated(verificationSession, previousState)
+      },
+    )
     await this.ensureInitialized()
   }
 
@@ -159,6 +175,7 @@ export class VerifierService implements OnModuleInit {
     verificationSession.setTag(CREDENTIAL_SCHEMA_ID_TAG, String(configuration.credentialSchemaId))
     verificationSession.setTag(REQUESTED_CLAIMS_TAG, claims)
     await this.sessionRepository().update(this.agent.context, verificationSession)
+    this.presentationStateUpdated(verificationSession, null)
 
     return {
       authorizationRequest,
@@ -212,10 +229,44 @@ export class VerifierService implements OnModuleInit {
     return session
   }
 
+  // [VSA-EVT-CAT]: the event carries the record as getPresentation returns it, so it decides like a read
+  private presentationStateUpdated(
+    session: OpenId4VcVerificationSessionRecord,
+    previousState: OpenId4VcVerificationSessionState | null,
+  ): void {
+    emitStateUpdated(
+      this.agent,
+      OpenId4VcEventType.PresentationStateUpdated,
+      async () => {
+        const decision = await this.decide(session).catch(error => {
+          this.agent.config.logger.error(`[OpenID4VC] presentation ${session.id} could not be decided`, {
+            cause: error,
+          })
+          return UNDECIDED
+        })
+        return toPresentationDto(this.toSummary(session, decision))
+      },
+      previousState,
+    )
+  }
+
   // [VSA-ADM-OID-PR-GET]: the verdict is computed once, on the first read of a verified session, and
   // stored with it; RESOLVER_UNAVAILABLE is never stored, so the next read retries the resolver
   private async decide(session: OpenId4VcVerificationSessionRecord): Promise<PresentationDecision> {
     const stored = this.storedDecision(session)
+    if (stored) return stored
+
+    let decision = this.decisions.get(session.id)
+    if (!decision) {
+      decision = this.decideAndStore(session).finally(() => this.decisions.delete(session.id))
+      this.decisions.set(session.id, decision)
+    }
+    return decision
+  }
+
+  private async decideAndStore(session: OpenId4VcVerificationSessionRecord): Promise<PresentationDecision> {
+    // a caller can hold a copy read before a concurrent decision stored its verdict
+    const stored = this.storedDecision(await this.verifierApi().getVerificationSessionById(session.id))
     if (stored) return stored
 
     const decision = await decidePresentationTrust(
