@@ -49,7 +49,14 @@ function makeMocks() {
     startParticipantOP: vi.fn().mockResolvedValue({ participantId: 77, txHash: 'AA' }),
     selfCreateParticipant: vi.fn().mockResolvedValue({ participantId: 88, txHash: 'BB' }),
     setParticipantOPToValidated: vi.fn().mockResolvedValue(undefined),
-    triggerResolver: vi.fn().mockResolvedValue(undefined),
+    triggerResolverMsg: vi.fn((id: number) => ({
+      typeUrl: '/verana.pp.v1.MsgTriggerResolver',
+      value: { id },
+    })),
+    triggerResolver: vi.fn().mockResolvedValue({ txHash: 'CC' }),
+    feeAllowance: vi.fn().mockResolvedValue({ unlimited: true }),
+    estimateFee: vi.fn().mockResolvedValue({ amount: [{ denom: 'uvna', amount: '500' }], gas: '200000' }),
+    getAccountBalance: vi.fn().mockResolvedValue({ denom: 'uvna', amount: '1000000' }),
   }
   const indexer = {
     listOperatorAuthorizations: vi.fn().mockResolvedValue([{ msgTypes: [START_OP] }]),
@@ -233,6 +240,7 @@ describe('EcsBootstrapService standalone', () => {
         effectiveUntil: new Date('2030-01-01T00:00:00Z'),
       }),
     )
+    expect(mocks.chain.triggerResolver).toHaveBeenCalledWith(88, { granter: undefined })
   })
 
   it('fails OPEN self-creation when the operator lacks the MsgSelfCreateParticipant authorization', async () => {
