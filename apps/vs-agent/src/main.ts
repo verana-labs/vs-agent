@@ -78,7 +78,6 @@ import {
   VERANA_INDEXER_DEFAULT_HANDLERS_OVERRIDE,
   VERANA_CORPORATION_ID,
   VERANA_INDEXER_SUBSCRIPTION_SCOPE,
-  VERANA_AUTO_TRIGGER_RESOLVER,
   VERANA_GAS_ADJUSTMENT,
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
@@ -343,7 +342,6 @@ const run = async () => {
       mnemonic: VERANA_ACCOUNT_MNEMONIC,
       corporationAddress,
       logger: serverLogger,
-      autoTriggerResolver: VERANA_AUTO_TRIGGER_RESOLVER,
       gasAdjustment: VERANA_GAS_ADJUSTMENT,
     })
     await veranaChain.start()

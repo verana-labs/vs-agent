@@ -398,7 +398,10 @@ describe('EcsBootstrapService onboarding resume', () => {
     await makeService(mocks).run()
 
     expect(startOnboardingProcess).not.toHaveBeenCalled()
-    expect(mocks.chain.setParticipantOPToValidated).toHaveBeenCalledWith(expect.objectContaining({ id: 42 }))
+    expect(mocks.chain.setParticipantOPToValidated).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 42 }),
+      { granter: undefined },
+    )
   })
 
   it('resumes a non-ECS schema onboarding without claims, as a normal case', async () => {

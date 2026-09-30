@@ -21,6 +21,8 @@ import type { DataIntegrityCredential } from '@credo-ts/didcomm'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { VsAgent } from '../agent/VsAgent'
+import { feeGranterFor } from '../blockchain/feePreflight'
+import { scheduleTriggerResolverForOwnDid } from '../blockchain/triggerResolver'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
 
 import {
@@ -138,11 +140,68 @@ async function signLinkedDataProofPresentation(
   })
 }
 
+/**
+ * The one write point of the published Verifiable Trust material. [VSA-VT-LVP-5] asks for a
+ * `TriggerResolver` after each change of a `LinkedVerifiablePresentation` entry, so the decision
+ * lives here rather than in each caller: the stored record is compared with the one written.
+ */
 async function updateDidRecord(agent: VsAgent, didRecord: DidRecord) {
   const repo = agent.context.dependencyManager.resolve(DidRepository)
   applyAdminApiServiceEntry(didRecord.didDocument!, agent.adminApiServiceEndpoint)
+  const before = await storedPublicationFingerprint(agent, repo, didRecord.id)
   await repo.update(agent.context, didRecord)
   await agent.dids.update({ did: didRecord.did, didDocument: didRecord.didDocument! })
+  if (before !== publicationFingerprint(didRecord)) {
+    scheduleTriggerResolverForOwnDid(agent, 'the published Verifiable Trust material changed')
+  }
+}
+
+async function storedPublicationFingerprint(
+  agent: VsAgent,
+  repo: DidRepository,
+  id: string,
+): Promise<string> {
+  try {
+    return publicationFingerprint(await repo.findById(agent.context, id))
+  } catch (error) {
+    agent.config.logger.debug(
+      `[trust-credential] cannot read the stored DID record: ${(error as Error).message}`,
+    )
+    return ''
+  }
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
+/**
+ * What a trust resolver reads of the agent: its `LinkedVerifiablePresentation` entries, and the
+ * presentations behind them. Two records with the same fingerprint resolve the same way.
+ */
+export function publicationFingerprint(didRecord: DidRecord | null): string {
+  if (!didRecord) return ''
+  const services = (didRecord.didDocument?.service ?? [])
+    .filter(service => service.type === 'LinkedVerifiablePresentation')
+    .map(service => ({ id: service.id, serviceEndpoint: service.serviceEndpoint }))
+    .sort((a, b) => a.id.localeCompare(b.id))
+  const presentations = (['_vt/vtc', '_vt/jsc'] as const).map(key =>
+    Object.entries(didRecord.metadata.get(key) ?? {})
+      .map(([schemaId, entry]) => ({
+        schemaId,
+        presentation: (entry as { verifiablePresentation?: unknown }).verifiablePresentation,
+      }))
+      .sort((a, b) => a.schemaId.localeCompare(b.schemaId)),
+  )
+  // a presentation saved as a class instance reads back from storage as JSON, so both go through JSON
+  return stableStringify(JSON.parse(JSON.stringify({ services, presentations })))
 }
 
 export function findMetadataEntry(
@@ -531,13 +590,16 @@ async function anchorCredentialDigest(
   if (await agent.indexer.getDigest(digest)) return
 
   // A self-issued credential has no counterparty, so the session names only the issuer.
-  const { txHash } = await chain.createOrUpdateParticipantSession({
-    id: utils.uuid(),
-    issuerParticipantId,
-    agentParticipantId: 0,
-    walletAgentParticipantId: 0,
-    digest,
-  })
+  const { txHash } = await chain.createOrUpdateParticipantSession(
+    {
+      id: utils.uuid(),
+      issuerParticipantId,
+      agentParticipantId: 0,
+      walletAgentParticipantId: 0,
+      digest,
+    },
+    { granter: feeGranterFor(agent, issuerParticipantId) },
+  )
   agent.config.logger.info(
     `[DigestAnchor] Anchored digest ${digest} for schema ${schemaId} against issuer participant ${issuerParticipantId} (tx ${txHash})`,
   )

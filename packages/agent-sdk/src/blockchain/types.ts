@@ -290,7 +290,6 @@ export interface VeranaChainConfig {
   gasPrice?: string
   gasAdjustment?: number
   corporationAddress?: string
-  autoTriggerResolver?: boolean
 }
 
 /** Wrapper for optional uint64 values per `verana.pp.v1.OptionalUInt64`. */

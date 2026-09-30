@@ -108,3 +108,28 @@ describe('VeranaChainService.feeAllowance', () => {
     await expect(chain.feeAllowance('verana1corp')).rejects.toThrow('fetch failed')
   })
 })
+
+describe('VeranaChainService.broadcastMsg', () => {
+  it('broadcasts with the simulated fee, and names the granter the caller gives', async () => {
+    const signAndBroadcast = vi.fn(async () => ({ code: 0, transactionHash: 'AB12', msgResponses: [] }))
+    const fee = { amount: [{ denom: 'uvna', amount: '500' }], gas: '200000', granter: 'verana1corp' }
+    const estimateFee = vi.fn(async () => fee)
+    const chain = new VeranaChainService({ logger: { debug: vi.fn(), info: vi.fn() } } as never)
+    Object.assign(chain, {
+      operatorAddress: 'verana1agent',
+      corporationAddress: 'verana1corp',
+      signingClient: { signAndBroadcast },
+      estimateFee,
+    })
+
+    await expect(chain.triggerResolver(42, { granter: 'verana1corp' })).resolves.toEqual({ txHash: 'AB12' })
+    expect(estimateFee).toHaveBeenCalledWith(
+      [expect.objectContaining({ typeUrl: '/verana.pp.v1.MsgTriggerResolver' })],
+      'verana1corp',
+    )
+    expect(signAndBroadcast).toHaveBeenCalledWith('verana1agent', expect.any(Array), fee)
+
+    await chain.triggerResolver(42)
+    expect(estimateFee).toHaveBeenLastCalledWith(expect.any(Array), undefined)
+  })
+})
