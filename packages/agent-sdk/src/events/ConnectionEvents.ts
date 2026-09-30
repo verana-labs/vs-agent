@@ -60,10 +60,6 @@ async function discardExtraConnection(
 /**
  * The DIDs under which a peer can address this agent: its public DID and the alternative DIDs
  * of the DID record, such as the parallel did:web of a did:webvh.
- *
- * Resolved on each call, never at registration. VsAgent.initialize registers the listeners
- * before it creates or loads the DID record, and a did:webvh agent holds only the SCID-less form
- * of its DID until then. A list captured at that moment matches no request a wallet ever sends.
  */
 async function publicDidsOf(agent: VsAgent<any>): Promise<string[]> {
   if (!agent.did) return []
