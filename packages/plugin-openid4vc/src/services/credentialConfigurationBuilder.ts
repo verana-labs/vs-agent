@@ -99,7 +99,7 @@ async function buildCredentialConfiguration(
     credentialSchemaId,
     chainId,
   )
-  const { title, attrNames } = readJsonSchema(schema.json_schema)
+  const { title, description, attrNames } = readJsonSchema(schema.json_schema)
   const envelope = attrNames.filter(isEnvelopeClaim)
   if (envelope.length > 0) {
     agent.config.logger.warn(
@@ -115,6 +115,9 @@ async function buildCredentialConfiguration(
     format: 'dc+sd-jwt',
     vct: typeMetadataUrl(baseUrl, credentialSchemaId),
     name: title ?? `vpr:verana:${chainId}:cs:${credentialSchemaId}`,
+    // The issuer metadata carries it as the display description, which wallets show on the
+    // credential. The served Type Metadata keeps it as its top-level `description` only.
+    ...(typeof description === 'string' && description.trim() ? { description: description.trim() } : {}),
     vtjscId: jsonSchemaCredentialId,
     credentialSchemaId,
     jsonSchema: schema.json_schema,

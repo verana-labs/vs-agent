@@ -46,6 +46,15 @@ const SCHEMAS: Record<number, { ecosystem_id: number; json_schema: string }> = {
       properties: { credentialSubject: { type: 'object', properties: { name: { type: 'string' } } } },
     }),
   },
+  6: {
+    ecosystem_id: 10,
+    json_schema: JSON.stringify({
+      title: 'Described credential',
+      description: '  The credential of the example ecosystem.  ',
+      type: 'object',
+      properties: { credentialSubject: { type: 'object', properties: { name: { type: 'string' } } } },
+    }),
+  },
 }
 
 const ECOSYSTEMS: Record<number, string> = { 10: 'did:web:ecosystem.example', 20: 'did:example:ecosystem' }
@@ -170,6 +179,13 @@ describe('buildCredentialConfigurations', () => {
 
     expect(configurations?.[0].name).toBe(`vpr:verana:${CHAIN_ID}:cs:5`)
     expect(configurations?.[0].claims).toEqual(['name'])
+  })
+
+  it('carries the description of the JSON Schema, for the display of the issuer metadata', async () => {
+    const configurations = await buildCredentialConfigurations(fakeAgent(fakeIndexer([6, 1])))
+
+    expect(configurations?.[0].description).toBe('The credential of the example ecosystem.')
+    expect(configurations?.[1]).not.toHaveProperty('description')
   })
 
   it('reads each CredentialSchema and each Ecosystem of a rebuild once', async () => {
