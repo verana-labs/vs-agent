@@ -30,7 +30,7 @@ import {
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
-import { connectionOf, createInvitation, ParticipantRole, sendMessage } from '@verana-labs/vs-agent-sdk'
+import { connectionOf, createInvitation, ParticipantRole } from '@verana-labs/vs-agent-sdk'
 
 import {
   AdminApiError,
@@ -133,9 +133,7 @@ export class V2DidcommCredentialExchangesController {
     } = body
     const autoAccept = body.autoAccept ?? false
 
-    // Resolve the connection first: an unknown id then answers UNKNOWN_ID before the agent
-    // creates an exchange record that no peer would ever receive.
-    const connection = connectionId ? await connectionOf(agent, connectionId) : undefined
+    if (connectionId) await connectionOf(agent, connectionId)
 
     const [record] = await agent.modules.anoncreds.getCreatedCredentialDefinitions({
       credentialDefinitionId,
@@ -187,8 +185,8 @@ export class V2DidcommCredentialExchangesController {
 
     // The specification makes the caller run the issuer steps, unless the caller sets
     // `autoAccept`. The exchange carries the policy, which the module default does not override.
-    const offer = await agent.didcomm.credentials.createOffer({
-      protocolVersion: 'v2',
+    const offerOptions = {
+      protocolVersion: 'v2' as const,
       autoAcceptCredential: autoAccept
         ? DidCommAutoAcceptCredential.ContentApproved
         : DidCommAutoAcceptCredential.Never,
@@ -204,15 +202,20 @@ export class V2DidcommCredentialExchangesController {
           })),
         },
       },
-    })
+    }
 
     // An established connection carries the offer itself, so the agent makes no invitation and
     // answers with neither `invitation` nor `shortUrl`. `useLegacyDid` and `didcommVersion`
     // describe an invitation only, so the agent ignores them here.
-    if (connection) {
-      await sendMessage(agent, connection, offer.message, offer.credentialExchangeRecord)
-      return { credentialExchangeId: offer.credentialExchangeRecord.id }
+    if (connectionId) {
+      const credentialExchangeRecord = await agent.didcomm.credentials.offerCredential({
+        ...offerOptions,
+        connectionId,
+      })
+      return { credentialExchangeId: credentialExchangeRecord.id }
     }
+
+    const offer = await agent.didcomm.credentials.createOffer(offerOptions)
 
     const { invitation } = await createInvitation({
       agent,

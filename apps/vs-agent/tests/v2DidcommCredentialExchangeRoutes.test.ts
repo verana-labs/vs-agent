@@ -14,7 +14,6 @@ import {
   AnonCredsTrustErrorReason,
   createInvitation,
   ParticipantRole,
-  sendMessage,
 } from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
@@ -25,7 +24,7 @@ import { VsAgentService } from '../src/services/VsAgentService'
 
 vi.mock('@verana-labs/vs-agent-sdk', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>()
-  return { ...actual, createInvitation: vi.fn(), sendMessage: vi.fn() }
+  return { ...actual, createInvitation: vi.fn() }
 })
 
 const schema = { name: 'phoneNumber', version: '1.0', attrNames: ['phoneNumber', 'issuedAt'] }
@@ -107,6 +106,7 @@ const agent = {
     },
     credentials: {
       createOffer: vi.fn(),
+      offerCredential: vi.fn(),
       getAll: vi.fn().mockResolvedValue(records),
       declineOffer: vi.fn(),
       sendProblemReport: vi.fn(),
@@ -322,11 +322,7 @@ describe('v2 didcomm credential exchange routes', () => {
   })
 
   it('sends the offer on the connection that the caller names, and makes no invitation', async () => {
-    const credentialExchangeRecord = { id: 'ce-new' }
-    agent.didcomm.credentials.createOffer.mockResolvedValue({
-      message: { id: 'msg-1' },
-      credentialExchangeRecord,
-    })
+    agent.didcomm.credentials.offerCredential.mockResolvedValue({ id: 'ce-new' })
 
     const response = await request(app.getHttpServer())
       .post('/v2/didcomm/credential-offer')
@@ -341,19 +337,14 @@ describe('v2 didcomm credential exchange routes', () => {
     expect(response.body).toEqual({ credentialExchangeId: 'ce-new' })
     expect(createInvitation).not.toHaveBeenCalled()
     expect(urlShorteningService.createShortUrl).not.toHaveBeenCalled()
-    expect(sendMessage).toHaveBeenCalledWith(
-      agent,
-      { id: 'conn-1' },
-      { id: 'msg-1' },
-      credentialExchangeRecord,
+    expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
+    expect(agent.didcomm.credentials.offerCredential).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionId: 'conn-1', protocolVersion: 'v2' }),
     )
   })
 
   it('ignores useLegacyDid and didcommVersion when the caller names a connection', async () => {
-    agent.didcomm.credentials.createOffer.mockResolvedValue({
-      message: { id: 'msg-1' },
-      credentialExchangeRecord: { id: 'ce-new' },
-    })
+    agent.didcomm.credentials.offerCredential.mockResolvedValue({ id: 'ce-new' })
 
     const response = await request(app.getHttpServer())
       .post('/v2/didcomm/credential-offer')
@@ -383,8 +374,7 @@ describe('v2 didcomm credential exchange routes', () => {
     expect(response.status).toBe(404)
     expect(response.body.error.code).toBe('UNKNOWN_ID')
     // The agent leaves no exchange record that no peer would ever receive.
-    expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
-    expect(sendMessage).not.toHaveBeenCalled()
+    expect(agent.didcomm.credentials.offerCredential).not.toHaveBeenCalled()
   })
 
   it('answers UNKNOWN_ID for an unknown credential definition', async () => {

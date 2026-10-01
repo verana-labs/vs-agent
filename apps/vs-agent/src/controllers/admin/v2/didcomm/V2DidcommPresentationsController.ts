@@ -44,7 +44,6 @@ import {
   ParticipantRole,
   SUPPORTED_PUBLIC_DID_METHODS,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
-  sendMessage,
   toRequestedCredentialSchema,
   type BaseAgentModules,
   type RequestedCredentialSchemas,
@@ -150,9 +149,7 @@ export class V2DidcommPresentationsController {
       throw invalidInput('`requestedCredentials` must name at least one credential')
     }
 
-    // Resolve the connection first: an unknown id then answers UNKNOWN_ID before the agent
-    // creates an exchange record that no peer would ever receive.
-    const connection = connectionId ? await connectionOf(agent, connectionId) : undefined
+    if (connectionId) await connectionOf(agent, connectionId)
 
     // One requested-attribute group per entry, so a request may span several credentials. Groups are
     // keyed by schema name, suffixed when two entries resolve to schemas that share a name.
@@ -193,8 +190,8 @@ export class V2DidcommPresentationsController {
 
     // Credo acknowledges a presentation before the trust decision runs. The agent sends the
     // acknowledgement itself, per [VSA-VTI-FLOW-VERIFY-AC-7].
-    const request = await agent.didcomm.proofs.createRequest({
-      protocolVersion: 'v2',
+    const requestOptions = {
+      protocolVersion: 'v2' as const,
       autoAcceptProof: DidCommAutoAcceptProof.Never,
       proofFormats: {
         anoncreds: {
@@ -204,23 +201,26 @@ export class V2DidcommPresentationsController {
           non_revoked: nonRevoked,
         },
       },
-    })
+    }
 
-    request.proofRecord.metadata.set(REQUESTED_CREDENTIALS_METADATA, requestedCredentials)
-    request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, requestedCredentialSchemas)
-    request.proofRecord.metadata.set(AUTO_ACCEPT_PRESENTATION_METADATA, { autoAccept })
-    await agent.didcomm.proofs.update(request.proofRecord)
+    const storeRequestMetadata = async (proofRecord: DidCommProofExchangeRecord) => {
+      proofRecord.metadata.set(REQUESTED_CREDENTIALS_METADATA, requestedCredentials)
+      proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, requestedCredentialSchemas)
+      proofRecord.metadata.set(AUTO_ACCEPT_PRESENTATION_METADATA, { autoAccept })
+      await agent.didcomm.proofs.update(proofRecord)
+    }
 
     // An established connection carries the request itself, so the agent makes no invitation and
     // answers with neither `invitation` nor `shortUrl`. `useLegacyDid` and `didcommVersion`
     // describe an invitation only, so the agent ignores them here.
-    //
-    // The send follows the metadata update above on purpose: the trust decision of
-    // [VSA-VTI-FLOW-VERIFY-AC-7] reads that metadata, and a holder can answer at once.
-    if (connection) {
-      await sendMessage(agent, connection, request.message, request.proofRecord)
-      return { proofExchangeId: request.proofRecord.id }
+    if (connectionId) {
+      const proofRecord = await agent.didcomm.proofs.requestProof({ ...requestOptions, connectionId })
+      await storeRequestMetadata(proofRecord)
+      return { proofExchangeId: proofRecord.id }
     }
+
+    const request = await agent.didcomm.proofs.createRequest(requestOptions)
+    await storeRequestMetadata(request.proofRecord)
 
     const { invitation } = await createInvitation({
       agent,
