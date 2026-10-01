@@ -26,8 +26,8 @@ interface VtjscPresentation {
  * controller's DID Document instead, and follows the Linked Verifiable Presentation that carries
  * the VTJSC of this schema.
  *
- * An agent that controls the Ecosystem itself already stores the same presentation, so it answers
- * from its own record and makes no network call.
+ * An agent that controls the Ecosystem itself, under its DID or its did:web alias, already stores
+ * the same presentation, so it answers from its own record and resolves no DID Document.
  *
  * Returns the id of the JsonSchemaCredential, which is the value a credential carries in
  * `credentialSchema.id`.
@@ -47,11 +47,12 @@ export async function resolveJsonSchemaCredentialId(
     throw new Error(`Ecosystem ${schema.ecosystem_id} of schema ${schemaId} has no DID`)
   }
 
-  if (agent.did === ecosystem.did) {
-    const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
-    const localId = didRecord
-      ? findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)?.data?.verifiableCredential?.[0]?.id
-      : undefined
+  const [didRecord] = agent.did ? await agent.dids.getCreatedDids({ did: agent.did }) : []
+  const alternativeDids = didRecord?.getTag('alternativeDids')
+  const ownDids = [agent.did, ...(Array.isArray(alternativeDids) ? alternativeDids : [])]
+  if (didRecord && ownDids.includes(ecosystem.did)) {
+    const presentation = findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)?.data
+    const localId = presentation?.verifiableCredential?.[0]?.id
     if (localId) return localId
   }
 

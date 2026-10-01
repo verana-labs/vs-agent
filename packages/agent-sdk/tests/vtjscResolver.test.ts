@@ -13,7 +13,12 @@ const VP_URL = 'https://ecosystem.example/vt/schemas-5-vtjsc-vp.json'
 const SERVICE_ID = `${ECOSYSTEM_DID}#vpr-schemas-${SCHEMA_ID}-vtjsc-vp`
 
 function makeAgent(
-  options: { did?: string; jsc?: Record<string, unknown>; service?: Record<string, unknown> } = {},
+  options: {
+    did?: string
+    alternativeDids?: string[]
+    jsc?: Record<string, unknown>
+    service?: Record<string, unknown>
+  } = {},
 ) {
   const did = options.did ?? AGENT_DID
   const metadata = new Map<string, Record<string, unknown>>()
@@ -24,7 +29,13 @@ function makeAgent(
   return {
     did,
     dids: {
-      getCreatedDids: async () => [{ did, metadata: { get: (k: string) => metadata.get(k) } }],
+      getCreatedDids: async () => [
+        {
+          did,
+          metadata: { get: (k: string) => metadata.get(k) },
+          getTag: (name: string) => (name === 'alternativeDids' ? options.alternativeDids : undefined),
+        },
+      ],
       resolve,
     },
     resolve,
@@ -46,6 +57,24 @@ describe('resolveJsonSchemaCredentialId', () => {
   it('answers from the local record when this agent controls the Ecosystem', async () => {
     const agent = makeAgent({
       did: ECOSYSTEM_DID,
+      jsc: { [SCHEMA_REF]: { verifiablePresentation: { verifiableCredential: [{ id: JSC_ID }] } } },
+    })
+
+    const id = await resolveJsonSchemaCredentialId(
+      agent as never,
+      makeIndexer() as never,
+      SCHEMA_ID,
+      CHAIN_ID,
+    )
+
+    expect(id).toBe(JSC_ID)
+    expect(agent.resolve).not.toHaveBeenCalled()
+  })
+
+  it('answers from the local record when the Ecosystem names this agent by its did:web alias', async () => {
+    const agent = makeAgent({
+      did: 'did:webvh:QmScid:ecosystem.example',
+      alternativeDids: [ECOSYSTEM_DID],
       jsc: { [SCHEMA_REF]: { verifiablePresentation: { verifiableCredential: [{ id: JSC_ID }] } } },
     })
 
