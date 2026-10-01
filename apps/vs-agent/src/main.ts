@@ -44,6 +44,7 @@ import {
   ADMIN_API_LOG_LEVEL_NAME,
   ADMIN_API_PORT,
   AGENT_LOG_LEVEL_NAME,
+  AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION,
   PUBLIC_API_PORT,
   AGENT_PUBLIC_DID_METHOD,
   AGENT_WALLET_ID,
@@ -546,6 +547,12 @@ const run = async () => {
   if (!VERANA_CHAIN_ID) {
     serverLogger.warn(
       'VERANA_CHAIN_ID not set. The VS-CONN-VS trust gate is disabled and every peer will be accepted. Set this environment variable to enforce trust resolution.',
+    )
+  }
+
+  if (AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION) {
+    serverLogger.warn(
+      'AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION is true. The agent mints credential offers and presentation requests without its own ISSUER or VERIFIER Participant, which does not conform to [VSA-VTI-FLOW-VERIFY-AC-5]. Use it only for demo services.',
     )
   }
 

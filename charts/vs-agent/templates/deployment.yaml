@@ -191,6 +191,10 @@ spec:
             - name: AGENT_DELEGATED_PARENT_VS_DID
               value: {{ .Values.delegatedParentVsDid | quote }}
             {{- end }}
+            {{- if .Values.unsafeSkipOwnAuthorization }}
+            - name: AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION
+              value: "true"
+            {{- end }}
             - name: ADMIN_API_AUTH_MODE
               value: {{ .Values.adminApiAuthMode | default "internal" | quote }}
             {{- if .Values.adminApiPublicUrl }}

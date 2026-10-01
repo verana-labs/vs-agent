@@ -25,6 +25,7 @@ import WebSocket from 'ws'
 
 import { ErrorEnvelopeFilter } from '../common'
 import {
+  AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION,
   ENABLE_PUBLIC_API_SWAGGER,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
   AGENT_MODE,
@@ -189,6 +190,7 @@ export const setupAgent = async ({
     authorizationService,
     discoveryOptions,
     adminApiServiceEndpoint,
+    skipOwnAuthorization: AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION,
   })
 
   orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl })

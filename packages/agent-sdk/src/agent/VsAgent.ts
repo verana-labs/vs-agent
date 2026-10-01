@@ -105,6 +105,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       authorizationService?: AuthorizationService
       discoveryOptions?: DidCommFeatureQueryOptions[]
       anonCredsTrust?: AnonCredsTrustService
+      /** DEMO ONLY: see AnonCredsTrustServiceOptions.skipOwnAuthorization. */
+      skipOwnAuthorization?: boolean
     },
   ) {
     super(options)
@@ -117,7 +119,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.ecsClaims = options.ecsClaims
     this.authorizationService = options.authorizationService
     this.discoveryOptions = options.discoveryOptions
-    this.anonCredsTrust = options.anonCredsTrust ?? new AnonCredsTrustService(this as VsAgent)
+    this.anonCredsTrust =
+      options.anonCredsTrust ??
+      new AnonCredsTrustService(this as VsAgent, { skipOwnAuthorization: options.skipOwnAuthorization })
   }
 
   private get hasUserProfile(): boolean {

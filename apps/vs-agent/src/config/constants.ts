@@ -82,6 +82,11 @@ export const ADMIN_API_LOG_LEVEL_NAME = logLevelName(
 )
 
 export const USE_CORS = process.env.USE_CORS === 'true'
+
+// DEMO ONLY, NOT IN THE SPEC. When true, the agent mints credential offers and presentation
+// requests although it holds no active ISSUER or VERIFIER Participant for the CredentialSchema.
+// Use it only for demo services that wallets must refuse.
+export const AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION = process.env.AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION === 'true'
 export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER === 'false')
 
 // Placeholder resources the agent serves under /vt/default, so an operator can point an

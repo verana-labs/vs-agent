@@ -40,6 +40,8 @@ export interface CreateVsAgentOptions<T extends Plugin[]> {
   authorizationService?: AuthorizationService
   discoveryOptions?: DidCommFeatureQueryOptions[]
   anonCredsTrust?: AnonCredsTrustService
+  /** DEMO ONLY: see AnonCredsTrustServiceOptions.skipOwnAuthorization. */
+  skipOwnAuthorization?: boolean
 }
 
 /**
@@ -90,5 +92,6 @@ export function createVsAgent<T extends Plugin[]>(
     authorizationService: options.authorizationService,
     discoveryOptions: options.discoveryOptions,
     anonCredsTrust: options.anonCredsTrust,
+    skipOwnAuthorization: options.skipOwnAuthorization,
   })
 }
