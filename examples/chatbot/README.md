@@ -30,7 +30,9 @@ Services:
 
 `issue`, `proof` and `/revoke` need an agent enrolled on a Verana ecosystem: `createCredentialOffer` and `createPresentationRequest` require an active ISSUER or VERIFIER Participant for the credential schema behind `CREDENTIAL_DEFINITION_ID`. See [examples/vt-flow-demo](../vt-flow-demo/README.md) for the setup. On startup the bot picks the first revocation registry of the definition or creates one.
 
-Both methods return an out of band invitation. The bot sends its `shortUrl` to the chat and the wallet opens it, which creates a second connection for the exchange. The bot keeps the chat connection per exchange id so the result lands in the chat the user typed in.
+Both methods take the `connectionId` of the chat, so the offer and the request go out on that connection and the wallet shows them in the same conversation. The bot sends no link, and the exchange needs no second connection. The bot still keeps the chat connection per exchange id, because an event carries the exchange id.
+
+Omit `connectionId` and each method answers an out of band invitation instead, with a `shortUrl` for a QR code. That form suits a web page, where no connection exists yet.
 
 ## Commands
 

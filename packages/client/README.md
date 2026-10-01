@@ -78,4 +78,3 @@ The spec lists these, main does not serve them yet:
 
 - `deleteCredentialExchange` (`DELETE /didcomm/credential-exchanges/{id}`)
 - every OpenID4VC method under `/openid4vc`
-- `connectionId` on `createPresentationRequest` and `createCredentialOffer`, both mint an out-of-band invitation and reject the field

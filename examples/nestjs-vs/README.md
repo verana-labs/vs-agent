@@ -35,7 +35,7 @@ EventsModule.register({
 - `closeConnection` resets the session.
 - `onEvent` handles the chat events that carry a `connectionId` (basic messages, menu performs, profiles, media, MRTD data) and ends by resending the menu. Every other event is ignored.
 
-`/credential` calls `credentialService.issue` and sends the returned `shortUrl` as a basic message. The wallet opens it to receive the credential. `/revoke` calls `credentialService.revoke` on the latest accepted credential of the session's connection.
+`/credential` calls `credentialService.issue` with the connection of the session. The agent sends the offer on that connection, and the wallet shows it in the conversation. `/revoke` calls `credentialService.revoke` on the latest accepted credential of the session's connection.
 
 The credential definition is created on startup by `createCredentialDefinition(JSON_SCHEMA_CREDENTIAL_ID, { supportRevocation: true, maximumCredentialNumber: 5 })`. The agent needs an active ISSUER Participant for that schema on a Verana ecosystem, see [examples/vt-flow-demo](../vt-flow-demo/README.md). Without `JSON_SCHEMA_CREDENTIAL_ID` the startup logs a warning and `/credential` fails.
 
