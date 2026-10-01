@@ -86,29 +86,36 @@ describe('triggerResolverForOwnDid', () => {
   const holder = {
     id: 7,
     did: 'did:web:agent.example',
+    role: 'HOLDER',
     effective_from: past,
     effective_until: null,
     revoked: null,
     slashed: null,
   }
   const expired = { ...holder, id: 5, effective_until: past }
-  const issuer = { ...holder, id: 9 }
+  const issuer = { ...holder, id: 9, role: 'ISSUER' }
 
-  it('targets the active entry the agent may sign for, or else the first active one', async () => {
-    const authorized = makeAgent({ participants: [expired, issuer, holder], canSign: id => id === 7 })
+  // [VSA-VPR-TX-5]: only a HOLDER record can list TriggerResolver, so any other entry fails Path 1
+  it('targets the active HOLDER entry whose record lists TriggerResolver, and no other entry', async () => {
+    const authorized = makeAgent({ participants: [expired, issuer, holder] })
     await triggerResolverForOwnDid(authorized.agent, 'test')
     expect(authorized.chain.triggerResolver).toHaveBeenCalledWith(7, { granter: undefined })
 
-    const unauthorized = makeAgent({ participants: [expired, issuer, holder], canSign: () => false })
+    const unauthorized = makeAgent({ participants: [expired, issuer, holder], canSign: id => id !== 7 })
     await triggerResolverForOwnDid(unauthorized.agent, 'test')
-    expect(unauthorized.chain.triggerResolver).toHaveBeenCalledWith(9, { granter: undefined })
+    expect(unauthorized.chain.triggerResolver).not.toHaveBeenCalled()
+
+    const issuerOnly = makeAgent({ participants: [issuer] })
+    await triggerResolverForOwnDid(issuerOnly.agent, 'test')
+    expect(issuerOnly.chain.triggerResolver).not.toHaveBeenCalled()
+    expect(issuerOnly.logger.warn).toHaveBeenCalledWith(expect.stringContaining('no active HOLDER entry'))
   })
 
   it('warns when the agent has no active entry, and logs an error when the indexer fails', async () => {
     const none = makeAgent({ participants: [expired] })
     await triggerResolverForOwnDid(none.agent, 'test')
     expect(none.chain.triggerResolver).not.toHaveBeenCalled()
-    expect(none.logger.warn).toHaveBeenCalledWith(expect.stringContaining('no active Participant entry'))
+    expect(none.logger.warn).toHaveBeenCalledWith(expect.stringContaining('no active HOLDER entry'))
 
     const down = makeAgent()
     ;(
@@ -125,6 +132,7 @@ describe('flushPendingTriggerResolvers', () => {
   const holder = {
     id: 7,
     did: 'did:web:agent.example',
+    role: 'HOLDER',
     effective_from: past,
     effective_until: null,
     revoked: null,
