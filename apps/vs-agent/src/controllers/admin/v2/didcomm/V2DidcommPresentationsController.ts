@@ -36,6 +36,7 @@ import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
   AUTO_ACCEPT_PRESENTATION_METADATA,
+  connectionOf,
   createInvitation,
   DerivedCredentialSchema,
   fetchJson,
@@ -43,6 +44,7 @@ import {
   ParticipantRole,
   SUPPORTED_PUBLIC_DID_METHODS,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+  sendMessage,
   toRequestedCredentialSchema,
   type BaseAgentModules,
   type RequestedCredentialSchemas,
@@ -77,7 +79,8 @@ import { REQUESTED_CREDENTIALS_METADATA, toPresentationDto } from './mappers'
 /**
  * Presentation flows this agent requested over DIDComm.
  *
- * `createPresentationRequest` mints the Out-of-Band invitation that starts a flow; the accept
+ * `createPresentationRequest` sends the request on a connection that the body names, and mints an
+ * Out-of-Band invitation when the body names none; either way it starts a flow. The accept
  * methods run the protocol steps of that flow, as verifier or as prover, and the remaining
  * methods read and delete the proof exchange record that the flow leaves behind.
  */
@@ -98,9 +101,11 @@ export class V2DidcommPresentationsController {
   @ApiOperation({
     summary: 'Create a presentation request',
     description:
-      'Creates a Presentation Request invitation. The body names the credentials, and the attributes ' +
-      'of them, that the holder is asked to present. An entry that omits `attributes` asks for every ' +
-      'attribute the schema defines.',
+      'Creates a Presentation Request. The body names the credentials, and the attributes of them, ' +
+      'that the holder is asked to present. An entry that omits `attributes` asks for every ' +
+      'attribute the schema defines. With a `connectionId` the agent sends the request on that ' +
+      'connection and answers with neither `invitation` nor `shortUrl`; without one it mints an ' +
+      'Out-of-Band invitation.',
   })
   @ApiBody({
     type: CreatePresentationRequestBodyDto,
@@ -137,13 +142,17 @@ export class V2DidcommPresentationsController {
   ): Promise<CreatePresentationRequestResponseDto> {
     const agent = await this.vsAgentService.getAgent()
 
-    const { requestedCredentials, useLegacyDid, didcommVersion } = body
+    const { requestedCredentials, connectionId, useLegacyDid, didcommVersion } = body
     const requireNonRevocation = body.requireNonRevocation ?? false
     const autoAccept = body.autoAccept ?? false
 
     if (!requestedCredentials?.length) {
       throw invalidInput('`requestedCredentials` must name at least one credential')
     }
+
+    // Resolve the connection first: an unknown id then answers UNKNOWN_ID before the agent
+    // creates an exchange record that no peer would ever receive.
+    const connection = connectionId ? await connectionOf(agent, connectionId) : undefined
 
     // One requested-attribute group per entry, so a request may span several credentials. Groups are
     // keyed by schema name, suffixed when two entries resolve to schemas that share a name.
@@ -201,6 +210,17 @@ export class V2DidcommPresentationsController {
     request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, requestedCredentialSchemas)
     request.proofRecord.metadata.set(AUTO_ACCEPT_PRESENTATION_METADATA, { autoAccept })
     await agent.didcomm.proofs.update(request.proofRecord)
+
+    // An established connection carries the request itself, so the agent makes no invitation and
+    // answers with neither `invitation` nor `shortUrl`. `useLegacyDid` and `didcommVersion`
+    // describe an invitation only, so the agent ignores them here.
+    //
+    // The send follows the metadata update above on purpose: the trust decision of
+    // [VSA-VTI-FLOW-VERIFY-AC-7] reads that metadata, and a holder can answer at once.
+    if (connection) {
+      await sendMessage(agent, connection, request.message, request.proofRecord)
+      return { proofExchangeId: request.proofRecord.id }
+    }
 
     const { invitation } = await createInvitation({
       agent,

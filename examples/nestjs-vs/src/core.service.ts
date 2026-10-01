@@ -151,14 +151,12 @@ export class CoreService implements EventHandler, OnModuleInit {
             issuanceDate: new Date().toISOString().split('T')[0],
           }
 
-          const offer = await this.credentialService.issue(claims, {
+          // The offer goes out on the connection, so the holder sees it in this
+          // conversation and the service sends no link.
+          await this.credentialService.issue(claims, {
             connectionId: session.connectionId,
             refId: claims.fullName,
             revokeIfAlreadyIssued: true,
-          })
-          await this.client.didcomm.sendBasicMessage({
-            connectionId: session.connectionId,
-            content: offer.shortUrl,
           })
         }
         if (selectionId === Cmd.REVOKE) {

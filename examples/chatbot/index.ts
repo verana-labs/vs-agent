@@ -108,9 +108,12 @@ const issueCredential = async (connectionId: string): Promise<void> => {
     revocationRegistryIndex += 1
     index = revocationRegistryIndex
   }
+  // The offer goes out on the chat connection, so the wallet shows it in this
+  // conversation and no link is needed.
   const offer = await client.didcomm.createCredentialOffer({
     credentialDefinitionId: CREDENTIAL_DEFINITION_ID,
     claims: [{ name: 'phoneNumber', value: '+5712345678', mimeType: 'text/plain' }],
+    connectionId,
     revocationRegistryDefinitionId,
     revocationRegistryIndex: index,
     autoAccept: true,
@@ -120,7 +123,6 @@ const issueCredential = async (connectionId: string): Promise<void> => {
     revocationRegistryDefinitionId,
     revocationRegistryIndex: index,
   })
-  await sendText(connectionId, `Open this link to receive your credential: ${offer.shortUrl}`)
 }
 
 const requestProof = async (connectionId: string): Promise<void> => {
@@ -129,12 +131,14 @@ const requestProof = async (connectionId: string): Promise<void> => {
     return
   }
   await sendText(connectionId, 'In order to start a new chat, we need some verifiable information from you')
+  // The request goes out on the chat connection, so the wallet answers in this
+  // conversation and no link is needed.
   const request = await client.didcomm.createPresentationRequest({
     requestedCredentials: [{ credentialDefinitionId: CREDENTIAL_DEFINITION_ID, attributes: ['phoneNumber'] }],
+    connectionId,
     autoAccept: true,
   })
   proofRequests.set(request.proofExchangeId, connectionId)
-  await sendText(connectionId, `Open this link to present your credential: ${request.shortUrl}`)
 }
 
 const revokeCredential = async (connectionId: string, credentialExchangeId: string): Promise<void> => {

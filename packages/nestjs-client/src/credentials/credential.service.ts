@@ -113,9 +113,13 @@ export class CredentialService {
       })
     })
 
+    // With a connection the offer goes out on it, and the holder sees it in that
+    // conversation. Without one the agent answers an invitation, and the caller
+    // shows its `shortUrl`.
     const offer = await this.client.didcomm.createCredentialOffer({
       credentialDefinitionId,
       claims: Object.entries(claims).map(([name, value]) => ({ name, value: String(value) })),
+      connectionId,
       revocationRegistryDefinitionId: cred.revocationRegistry?.revocationDefinitionId,
       revocationRegistryIndex: cred.revocationRegistryIndex,
       autoAccept: true,

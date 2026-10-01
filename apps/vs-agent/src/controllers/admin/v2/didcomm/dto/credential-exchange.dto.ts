@@ -81,6 +81,17 @@ export class CreateCredentialOfferBodyDto {
 
   @ApiPropertyOptional({
     description:
+      'An established connection to send the offer on. The agent creates an Out-of-Band ' +
+      'invitation when the caller omits it.',
+    example: 'conn-1234-5678',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  connectionId?: string
+
+  @ApiPropertyOptional({
+    description:
       'Complete the issuer steps without a call: the agent issues the credential on ' +
       '`request-received`, with no `acceptCredentialRequest` call.',
     default: false,
@@ -90,7 +101,9 @@ export class CreateCredentialOfferBodyDto {
   autoAccept?: boolean
 
   @ApiPropertyOptional({
-    description: 'Advertise the legacy did:web form when the DID of the agent is did:webvh',
+    description:
+      'Advertise the legacy did:web form when the DID of the agent is did:webvh. The agent ' +
+      'ignores it when `connectionId` is present.',
   })
   @IsOptional()
   @IsBoolean()
@@ -98,7 +111,9 @@ export class CreateCredentialOfferBodyDto {
 
   @ApiPropertyOptional({
     enum: ['v1', 'v2'],
-    description: "DIDComm envelope version of the invitation. Defaults to 'v2' when omitted.",
+    description:
+      "DIDComm envelope version of the invitation. Defaults to 'v2' when omitted. The agent " +
+      'ignores it when `connectionId` is present.',
   })
   @IsOptional()
   @IsIn(['v1', 'v2'])
@@ -112,18 +127,22 @@ export class CreateCredentialOfferResponseDto {
   @ApiProperty({ description: 'Flow identifier, for later tracking', example: 'cred-1234-5678' })
   credentialExchangeId!: string
 
-  @ApiProperty({
-    description: 'The Out-of-Band invitation, in the envelope that didcommVersion selects',
+  @ApiPropertyOptional({
+    description:
+      'The Out-of-Band invitation, in the envelope that didcommVersion selects. Absent when the ' +
+      'request names a `connectionId`, because the agent sends the offer on that connection.',
     type: 'object',
     additionalProperties: true,
   })
-  invitation!: Record<string, unknown>
+  invitation?: Record<string, unknown>
 
-  @ApiProperty({
-    description: 'A URL under PUBLIC_API_BASE_URL that resolves to the same invitation, for a QR code',
+  @ApiPropertyOptional({
+    description:
+      'A URL under PUBLIC_API_BASE_URL that resolves to the same invitation, for a QR code. ' +
+      'Absent when the request names a `connectionId`.',
     example: 'https://mydomain.com/s?id=abcd',
   })
-  shortUrl!: string
+  shortUrl?: string
 }
 
 /**

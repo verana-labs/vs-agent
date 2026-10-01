@@ -18,6 +18,7 @@ import {
   fetchJson,
   ParticipantRole,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+  sendMessage,
 } from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
@@ -31,6 +32,7 @@ vi.mock('@verana-labs/vs-agent-sdk', async importOriginal => ({
   ...(await importOriginal<typeof import('@verana-labs/vs-agent-sdk')>()),
   createInvitation: vi.fn(),
   fetchJson: vi.fn(),
+  sendMessage: vi.fn(),
 }))
 
 // A metadata bag that reads back what the controller wrote, so a record round-trips like a real one.
@@ -256,6 +258,74 @@ describe('v2 didcomm presentation routes', () => {
       )
 
       expect(errors.map(error => error.property).sort()).toEqual(['callbackUrl', 'ref'])
+    })
+
+    it('sends the request on the connection that the caller names, and makes no invitation', async () => {
+      const proofRecordSpy = { id: 'proof-1', metadata: metadata() }
+      proofs.createRequest.mockResolvedValue({ proofRecord: proofRecordSpy, message: { id: 'msg-1' } })
+      connections.findById.mockResolvedValue({ id: 'conn-1' })
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({
+          requestedCredentials: [{ credentialDefinitionId: 'cred-def-1', attributes: ['firstName'] }],
+          connectionId: 'conn-1',
+          didcommVersion: 'v1',
+          useLegacyDid: true,
+        })
+
+      expect(response.status).toBe(201)
+      // The specification leaves out both invitation fields on this path, and the agent ignores
+      // the two invitation parameters.
+      expect(response.body).toEqual({ proofExchangeId: 'proof-1' })
+      expect(createInvitation).not.toHaveBeenCalled()
+      expect(urlShortenerService.createShortUrl).not.toHaveBeenCalled()
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        { id: 'conn-1' },
+        { id: 'msg-1' },
+        proofRecordSpy,
+      )
+    })
+
+    it('stores the metadata of the request before it sends it', async () => {
+      const proofRecordSpy = { id: 'proof-1', metadata: metadata() }
+      proofs.createRequest.mockResolvedValue({ proofRecord: proofRecordSpy, message: { id: 'msg-1' } })
+      connections.findById.mockResolvedValue({ id: 'conn-1' })
+
+      // The trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] reads this metadata, and a holder on an
+      // established connection can answer at once, so the order matters.
+      let metadataAtSend: unknown
+      vi.mocked(sendMessage).mockImplementation(async () => {
+        metadataAtSend = proofRecordSpy.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA)
+        return 'msg-1'
+      })
+
+      await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({
+          requestedCredentials: [{ credentialDefinitionId: 'cred-def-1', attributes: ['firstName'] }],
+          connectionId: 'conn-1',
+        })
+
+      expect(metadataAtSend).toBeTruthy()
+      expect(proofs.update).toHaveBeenCalledWith(proofRecordSpy)
+    })
+
+    it('answers UNKNOWN_ID for an unknown connection, and requests nothing', async () => {
+      connections.findById.mockResolvedValue(null)
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({
+          requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }],
+          connectionId: 'conn-absent',
+        })
+
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
+      expect(proofs.createRequest).not.toHaveBeenCalled()
+      expect(sendMessage).not.toHaveBeenCalled()
     })
 
     it('carries the requested credentials onto the record and the envelope choice onto the invitation', async () => {

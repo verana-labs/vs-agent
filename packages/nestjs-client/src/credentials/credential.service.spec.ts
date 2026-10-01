@@ -124,6 +124,7 @@ describe('CredentialService', () => {
           { name: 'name', value: 'John' },
           { name: 'age', value: '42' },
         ],
+        connectionId: 'conn-1',
         revocationRegistryDefinitionId: 'rev-def-id',
         revocationRegistryIndex: 3,
         autoAccept: true,
