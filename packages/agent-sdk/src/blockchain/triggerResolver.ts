@@ -1,5 +1,5 @@
 import type { VsAgent } from '../agent/VsAgent'
-import type { ParticipantDto } from './types'
+import { ParticipantRole, type ParticipantDto } from './types'
 
 import { veranaTypeUrls } from '@verana-labs/verana-types'
 
@@ -22,18 +22,21 @@ function isActiveParticipant(participant: ParticipantDto): boolean {
 }
 
 /**
- * MOD-PP-MSG-15 re-evaluates the DID of the entry, so any active entry of the agent serves.
- * Path 1 of the message needs a `ParticipantAuthorizationRecord`, so an entry with one comes first.
+ * [VSA-VPR-TX-5]: an active HOLDER entry of the agent whose `ParticipantAuthorizationRecord` lists
+ * `TriggerResolver`. Path 1 of MOD-PP-MSG-15 needs that record, and only a HOLDER record can list
+ * the message (MOD-PP-MSG-1-1, MOD-PP-MSG-14-1), so any other entry always fails on chain.
  */
 export async function findResolverParticipantId(agent: VsAgent): Promise<number | undefined> {
   const did = agent.did
   if (!did) return undefined
-  const participants = await agent.indexer.listParticipants({ did })
-  const active = participants.filter(p => p.did === did && isActiveParticipant(p))
-  const authorized = active.find(p =>
-    agent.authorizationService?.canSign(p.id, veranaTypeUrls.MsgTriggerResolver),
-  )
-  return (authorized ?? active[0])?.id
+  const participants = await agent.indexer.listParticipants({ did, role: ParticipantRole.Holder })
+  return participants.find(
+    p =>
+      p.did === did &&
+      p.role === ParticipantRole.Holder &&
+      isActiveParticipant(p) &&
+      agent.authorizationService?.canSign(p.id, veranaTypeUrls.MsgTriggerResolver),
+  )?.id
 }
 
 /**
@@ -75,7 +78,7 @@ export async function triggerResolverForOwnDid(agent: VsAgent, cause: string): P
   }
   if (participantId === undefined) {
     agent.config.logger.warn(
-      `[TriggerResolver] no active Participant entry of ${agent.did}: nothing sent (${cause})`,
+      `[TriggerResolver] no active HOLDER entry of ${agent.did} whose authorization lists TriggerResolver: nothing sent (${cause})`,
     )
     return
   }
