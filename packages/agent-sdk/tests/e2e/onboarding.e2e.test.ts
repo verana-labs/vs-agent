@@ -15,7 +15,13 @@ import {
   PP_TRIGGER_RESOLVER,
   VeranaTestChain,
 } from './VeranaTestChain'
-import { COOLUSER_MNEMONIC, SETUP_TIMEOUT_MS, startStack, type StartedStack } from './helpers'
+import {
+  COOLUSER_MNEMONIC,
+  EVENT_TIMEOUT_MS,
+  SETUP_TIMEOUT_MS,
+  startStack,
+  type StartedStack,
+} from './helpers'
 
 const RUN_ID = String(Date.now())
 
@@ -107,7 +113,15 @@ describe('vt-flow onboarding chain integration (V4)', () => {
         logger: new ConsoleLogger(LogLevel.Warn),
       })
 
-      expect((await indexer.listVsOperatorAuthorizations(vsoaChain.address)).length).toBeGreaterThan(0)
+      // MOD-PP-MSG-1 grants the VSOA of the entry, and the indexer indexes it asynchronously
+      let vsoa: Awaited<ReturnType<VeranaIndexerService['listVsOperatorAuthorizations']>> = []
+      const vsoaDeadline = Date.now() + EVENT_TIMEOUT_MS
+      while (Date.now() < vsoaDeadline) {
+        vsoa = await indexer.listVsOperatorAuthorizations(vsoaChain.address).catch(() => [])
+        if (vsoa.length > 0) break
+        await new Promise(resolve => setTimeout(resolve, 3_000))
+      }
+      expect(vsoa.length).toBeGreaterThan(0)
       expect(await indexer.listVsOperatorAuthorizations(veranaChain.address)).toEqual([])
       let indexed: Awaited<ReturnType<VeranaIndexerService['getParticipant']>> | undefined
       const deadline = Date.now() + 120_000

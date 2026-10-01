@@ -183,7 +183,6 @@ export const VERANA_CORPORATION_ID = process.env.VERANA_CORPORATION_ID
 export const VERANA_INDEXER_SUBSCRIPTION_SCOPE = (process.env.VERANA_INDEXER_SUBSCRIPTION_SCOPE ?? 'did')
   .trim()
   .toLowerCase()
-export const VERANA_AUTO_TRIGGER_RESOLVER = process.env.VERANA_AUTO_TRIGGER_RESOLVER !== 'false'
 export const VERANA_GAS_ADJUSTMENT = process.env.VERANA_GAS_ADJUSTMENT
   ? Number(process.env.VERANA_GAS_ADJUSTMENT)
   : undefined

@@ -1,6 +1,6 @@
 import { DidDocument, DidDocumentService, DidRepository, NewDidCommV2Service } from '@credo-ts/core'
 import { BadRequestException, Inject, Injectable } from '@nestjs/common'
-import { VsAgent } from '@verana-labs/vs-agent-sdk'
+import { VsAgent, triggerResolverForOwnDid } from '@verana-labs/vs-agent-sdk'
 
 import { VsAgentService } from '../../../../services/VsAgentService'
 
@@ -284,20 +284,7 @@ export class ServiceEndpointsService {
     const didRepository = agent.context.dependencyManager.resolve(DidRepository)
     await didRepository.update(agent.context, didRecord)
     await agent.dids.update({ did: didRecord.did, didDocument: didRecord.didDocument! })
-    await this.triggerResolverAfterMutation(agent)
-  }
-
-  private async triggerResolverAfterMutation(agent: VsAgent): Promise<void> {
-    const chain = agent.veranaChain
-    if (!chain || !chain.autoTriggerResolverEnabled || !agent.did) return
-    try {
-      const participantId = await agent.indexer.findActiveHolderParticipantIdByDid(agent.did)
-      if (participantId === undefined) return
-      await chain.triggerResolver(participantId)
-    } catch (error) {
-      agent.config.logger.warn('[ServiceEndpoints] TriggerResolver failed; will refresh on next change', {
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
+    // [VSA-ADM-VT-SE]: the helper logs a failure, and never throws
+    await triggerResolverForOwnDid(agent, 'a service endpoint mutation')
   }
 }
