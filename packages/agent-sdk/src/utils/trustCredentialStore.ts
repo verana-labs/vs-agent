@@ -21,7 +21,7 @@ import type { DataIntegrityCredential } from '@credo-ts/didcomm'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
 import { VsAgent } from '../agent/VsAgent'
-import { applyAdminApiServiceEntry } from '../did/adminApiService'
+import { feeGranterFor } from '../blockchain/feePreflight'
 
 import {
   addDigestSRI,
@@ -34,6 +34,7 @@ import {
   signerW3c,
 } from './setupSelfTr'
 import { publishSelfIssuedEcsPresentation } from './selfIssuedEcsCredential'
+import { updateDidRecord } from './publishedDidRecord'
 import { EcsClaims } from './ecsClaims'
 import { getEcsSchemas } from './data'
 
@@ -136,13 +137,6 @@ async function signLinkedDataProofPresentation(
     verificationMethod: options.verificationMethodId,
     proofPurpose: new purposes.AssertionProofPurpose(),
   })
-}
-
-async function updateDidRecord(agent: VsAgent, didRecord: DidRecord) {
-  const repo = agent.context.dependencyManager.resolve(DidRepository)
-  applyAdminApiServiceEntry(didRecord.didDocument!, agent.adminApiServiceEndpoint)
-  await repo.update(agent.context, didRecord)
-  await agent.dids.update({ did: didRecord.did, didDocument: didRecord.didDocument! })
 }
 
 export function findMetadataEntry(
@@ -531,13 +525,16 @@ async function anchorCredentialDigest(
   if (await agent.indexer.getDigest(digest)) return
 
   // A self-issued credential has no counterparty, so the session names only the issuer.
-  const { txHash } = await chain.createOrUpdateParticipantSession({
-    id: utils.uuid(),
-    issuerParticipantId,
-    agentParticipantId: 0,
-    walletAgentParticipantId: 0,
-    digest,
-  })
+  const { txHash } = await chain.createOrUpdateParticipantSession(
+    {
+      id: utils.uuid(),
+      issuerParticipantId,
+      agentParticipantId: 0,
+      walletAgentParticipantId: 0,
+      digest,
+    },
+    { granter: feeGranterFor(agent, issuerParticipantId) },
+  )
   agent.config.logger.info(
     `[DigestAnchor] Anchored digest ${digest} for schema ${schemaId} against issuer participant ${issuerParticipantId} (tx ${txHash})`,
   )
