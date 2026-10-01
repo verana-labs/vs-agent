@@ -418,7 +418,6 @@ export async function startParticipantOPAutoFlow(agent: VsAgent, activity: Index
 export async function reconcileVtjscPublications(
   agent: VsAgent,
   indexer: VeranaIndexerService,
-  corporationId: number,
   ecsClaims?: EcsClaims,
 ): Promise<void> {
   if (!agent.did || !agent.publicApiBaseUrl) return
@@ -429,8 +428,10 @@ export async function reconcileVtjscPublications(
     return
   }
 
+  // [VSA-VTI-VTJSC]: the Ecosystem controller is the agent whose DID is `Ecosystem.did`. Another
+  // agent of the same Corporation does not control the Ecosystem and publishes no VTJSC for it.
   const ecosystems = await indexer.listEcosystems()
-  const controlled = ecosystems.filter(entry => Number(entry.corporation_id) === corporationId)
+  const controlled = ecosystems.filter(entry => entry.did === agent.did)
   const reconciled = new Set<string>()
 
   for (const ecosystem of controlled) {
@@ -502,7 +503,7 @@ export async function reconcileVtjscPublications(
     }
   }
 
-  await detachUncontrolledVtjscPublications(agent, indexer, corporationId, chainId, reconciled)
+  await detachUncontrolledVtjscPublications(agent, indexer, chainId, reconciled)
 
   if (ecsClaims) await reconcileSelfIssuedEcsCredentials(agent, indexer, ecsClaims)
 }
@@ -511,8 +512,11 @@ export async function reconcileVtjscPublications(
 const onChainSchemaRefPrefix = (chainId: string): string => `vpr:verana:${chainId}:cs:`
 
 /**
- * VSA-VTI-VTJSC: only the controller of an Ecosystem advertises a VTJSC for its schemas. Archival
- * is not a loss of control — the agent keeps it, and [VSA-VTI-NOTIF-ES] gives it no handler.
+ * VSA-VTI-VTJSC: only the controller of an Ecosystem, the agent whose DID is `Ecosystem.did`,
+ * advertises a VTJSC for its schemas. This takes out of the DID Document every VTJSC of an
+ * Ecosystem that another DID controls, including the copies that earlier agents published for the
+ * Ecosystems of their Corporation. Archival is not a loss of control — the agent keeps it, and
+ * [VSA-VTI-NOTIF-ES] gives it no handler.
  *
  * Each entry is resolved against the VPR one by one rather than diffed against `listEcosystems`:
  * that endpoint is unpaginated here, and a truncated page reads like a loss of control.
@@ -520,7 +524,6 @@ const onChainSchemaRefPrefix = (chainId: string): string => `vpr:verana:${chainI
 async function detachUncontrolledVtjscPublications(
   agent: VsAgent,
   indexer: VeranaIndexerService,
-  corporationId: number,
   chainId: string,
   reconciled: ReadonlySet<string>,
 ): Promise<void> {
@@ -547,11 +550,11 @@ async function detachUncontrolledVtjscPublications(
       }
       const ecosystem = ecosystemCache.get(ecosystemId)
       if (!ecosystem) continue
-      if (Number(ecosystem.corporation_id) === corporationId) continue
+      if (ecosystem.did === agent.did) continue
 
       agent.config.logger.info(
-        `[VTJSC] Detaching the VTJSC of schema ${schemaId}: ecosystem ${ecosystemId} belongs to ` +
-          `corporation ${ecosystem.corporation_id}`,
+        `[VTJSC] Detaching the VTJSC of schema ${schemaId}: ecosystem ${ecosystemId} is controlled by ` +
+          `${ecosystem.did}`,
       )
       stale.push(schemaRef)
     } catch (error) {
@@ -727,7 +730,6 @@ export async function publishVtjscIfOwner(
   state: VeranaSyncState,
   agent: VsAgent,
   schemaEntityId: string,
-  agentCorporationId?: number,
 ): Promise<void> {
   const schema = state.credentialSchemas[schemaEntityId]
   if (!schema) {
@@ -741,9 +743,10 @@ export async function publishVtjscIfOwner(
     return
   }
 
-  if (ecosystem.corporationId !== agentCorporationId) {
+  // [VSA-VTI-VTJSC]: only the agent whose DID is `Ecosystem.did` publishes the VTJSC.
+  if (!agent.did || ecosystem.did !== agent.did) {
     agent.config.logger.debug(
-      `[VTJSC] Skipping schema ${schema.id}: ecosystem ${ecosystem.id} belongs to corporation ${ecosystem.corporationId}`,
+      `[VTJSC] Skipping schema ${schema.id}: ecosystem ${ecosystem.id} is controlled by ${ecosystem.did}`,
     )
     return
   }

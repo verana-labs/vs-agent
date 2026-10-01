@@ -35,7 +35,6 @@ import {
   agentDisplayName,
   createJsc,
   EcsBootstrapService,
-  findAttestedResources,
   getEcsSchemas,
   ParticipantRole,
   ParticipantState,
@@ -148,7 +147,6 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
   let applicantEvents: ReturnType<typeof vi.spyOn>
   let applicantOrchestrator: VtFlowOrchestrator
   let ecosystemDid: string
-  let ecosystemId: number
   let orgSchemaId: number
   let serviceSchemaId: number
   let validatorParticipantId: number
@@ -198,7 +196,6 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
     await chainA.fundCorporation(corp.policyAddress)
     await chainA.grantOperatorAuthorization(corp.policyAddress)
     const eco = await chainA.createEcosystem(corp.policyAddress, { did: ecosystemDid })
-    ecosystemId = eco.ecosystemId
     const orgSchema = await chainA.createCredentialSchema(corp.policyAddress, {
       ecosystemId: eco.ecosystemId,
       jsonSchema: ecsSchema('OrganizationCredential'),
@@ -656,7 +653,7 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
   )
 
   it(
-    'detaches the VTJSCs of an ecosystem it stops controlling, keeps serving them, and re-attaches on return',
+    'detaches a VTJSC of an Ecosystem that another DID controls, keeps serving it, and publishes nothing for it',
     async () => {
       const chainId = validatorChain.getChainId
       const schemaRef = `vpr:verana:${chainId}:cs:${orgSchemaId}`
@@ -671,7 +668,9 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
         return (didRecord.didDocument?.service ?? []).map(service => service.id)
       }
 
-      // beforeAll published this one with createJsc, against the ecosystem of corporation 1.
+      // beforeAll published this one with createJsc, against the Ecosystem of corporation 1. That
+      // Ecosystem's DID is not the validator's, so the entry is the kind of copy that earlier agents
+      // published for every Ecosystem of their Corporation.
       expect(await jscKeys()).toContain(schemaRef)
       expect(await serviceIds()).toContain(serviceId)
 
@@ -689,62 +688,30 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       expect(selfTrKeys).toContain(selfTrKey)
       const otherServiceIds = (await serviceIds()).filter(id => id !== serviceId)
 
-      const ownCorporationId = Number((await indexer.getEcosystem(ecosystemId)).corporation_id)
+      // [VSA-VTI-VTJSC]: control follows Ecosystem.did, not the Corporation. The validator shares
+      // the Corporation of the Ecosystem, but the Ecosystem's DID is not its own.
+      await reconcileVtjscPublications(validator, indexer)
 
-      // Rebinding the agent to another Corporation is exactly this: VERANA_CORPORATION_ID changes.
-      const otherCorp = await chainA.createCorporation({ did: `did:example:corp2-${RUN_ID}` })
-      await chainA.fundCorporation(otherCorp.policyAddress)
-      await chainA.grantOperatorAuthorization(otherCorp.policyAddress)
-      const otherEco = await chainA.createEcosystem(otherCorp.policyAddress, {
-        did: `did:example:eco2-${RUN_ID}`,
-      })
-      const otherCorporationId = await until(async () => {
-        const id = Number((await indexer.getEcosystem(otherEco.ecosystemId)).corporation_id)
-        return Number.isFinite(id) && id !== ownCorporationId ? id : undefined
-      })
-
-      await reconcileVtjscPublications(validator, indexer, otherCorporationId)
-
-      // The DID Document stops advertising it...
+      // The DID Document stops advertising the copy...
       expect(await serviceIds()).not.toContain(serviceId)
       expect(await serviceIds()).toEqual(expect.arrayContaining(otherServiceIds))
 
-      // ...but keeps serving it, so credentials naming that URL stay verifiable.
+      // ...but keeps serving it, so a credential that already names that URL stays verifiable.
       expect(await jscKeys()).toContain(schemaRef)
       expect(await jscKeys()).toEqual(expect.arrayContaining(selfTrKeys))
 
-      // Coming back re-attaches what it already holds; the digest matches, so nothing is rebuilt.
-      await reconcileVtjscPublications(validator, indexer, ownCorporationId)
-
-      expect(await serviceIds()).toContain(serviceId)
-      expect(await jscKeys()).toContain(schemaRef)
-
-      // The pass also publishes the AnonCreds schema of the VTJSC, per [VSA-PUB-AC-5]. beforeAll
-      // built the VTJSC with createJsc alone, so this agent stands for one deployed before the rule.
+      // The pass publishes no AnonCreds schema for a VTJSC of an Ecosystem it does not control.
       const jsonSchemaCredentialId = `${validator.publicApiBaseUrl}/vt/schemas-${orgSchemaId}-jsc.json`
-      const publishedSchemas = () =>
-        validator.modules.anoncreds.getCreatedSchemas({
+      expect(
+        await validator.modules.anoncreds.getCreatedSchemas({
           relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
-        })
+        }),
+      ).toHaveLength(0)
 
-      const [anonCredsSchema] = await publishedSchemas()
-      expect(anonCredsSchema.schema).toMatchObject({
-        name: 'OrganizationCredential',
-        attrNames: ['id', 'name'],
-        issuerId: validator.did,
-      })
-
-      // An issuer of another DID reads the schema from this listing, so it must carry the tag.
-      const listed = await findAttestedResources(validator, {
-        resourceType: 'anonCredsSchema',
-        relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
-      })
-      expect(listed.map(record => (record.content as { id: string }).id)).toEqual([anonCredsSchema.schemaId])
-
-      // A second run must leave it attached, which is what proves the two passes agree.
-      await reconcileVtjscPublications(validator, indexer, ownCorporationId)
-      expect(await serviceIds()).toContain(serviceId)
-      expect(await publishedSchemas()).toHaveLength(1)
+      // A second run changes nothing, which is what proves the two passes agree.
+      await reconcileVtjscPublications(validator, indexer)
+      expect(await serviceIds()).not.toContain(serviceId)
+      expect(await jscKeys()).toContain(schemaRef)
     },
     SETUP_TIMEOUT_MS,
   )
