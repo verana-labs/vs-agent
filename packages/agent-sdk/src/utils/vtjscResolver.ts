@@ -41,18 +41,18 @@ export async function resolveJsonSchemaCredentialId(
   const schemaId = String(credentialSchemaId)
   const schemaRef = `vpr:verana:${chainId}:cs:${schemaId}`
 
-  if (agent.did) {
+  const schema = await indexer.getCredentialSchema(schemaId)
+  const ecosystem = await indexer.getEcosystem(schema.ecosystem_id)
+  if (!ecosystem?.did) {
+    throw new Error(`Ecosystem ${schema.ecosystem_id} of schema ${schemaId} has no DID`)
+  }
+
+  if (agent.did === ecosystem.did) {
     const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
     const localId = didRecord
       ? findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)?.data?.verifiableCredential?.[0]?.id
       : undefined
     if (localId) return localId
-  }
-
-  const schema = await indexer.getCredentialSchema(schemaId)
-  const ecosystem = await indexer.getEcosystem(schema.ecosystem_id)
-  if (!ecosystem?.did) {
-    throw new Error(`Ecosystem ${schema.ecosystem_id} of schema ${schemaId} has no DID`)
   }
 
   // createJsc registers the presentation under this exact service id.
