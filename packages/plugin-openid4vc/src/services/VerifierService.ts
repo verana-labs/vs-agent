@@ -163,7 +163,7 @@ export class VerifierService implements OnModuleInit {
   public async getVerificationSession(id: string): Promise<OpenId4VcVerificationSessionSummary> {
     await this.ensureInitialized()
     const session = await this.findOwnedSession(id)
-    return this.toSummary(session, this.storedDecision(session) ?? UNDECIDED_TRUST_DECISION)
+    return summarizeVerificationSession(session)
   }
 
   public async listVerificationSessions(
@@ -176,10 +176,7 @@ export class VerifierService implements OnModuleInit {
       [JSON_SCHEMA_CREDENTIAL_ID_TAG]: filters.jsonSchemaCredentialId,
     })
     return sessions.map(session =>
-      this.toSummary(
-        session,
-        this.storedDecision(session) ?? { cryptographicVerified: true, accepted: false },
-      ),
+      toSummary(session, storedDecision(session) ?? { cryptographicVerified: true, accepted: false }),
     )
   }
 
@@ -203,42 +200,6 @@ export class VerifierService implements OnModuleInit {
       throw new AdminApiError(AdminApiErrorCode.UnknownId, NOT_FOUND, `no presentation with id "${id}"`)
     }
     return session
-  }
-
-  private toSummary(
-    session: OpenId4VcVerificationSessionRecord,
-    decision: PresentationDecision,
-  ): OpenId4VcVerificationSessionSummary {
-    const { jsonSchemaCredentialId, requestedClaims } = this.storedRequest(session)
-    return {
-      id: session.id,
-      ...(jsonSchemaCredentialId ? { jsonSchemaCredentialId } : {}),
-      ...(requestedClaims ? { requestedClaims } : {}),
-      state: session.state,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt ?? session.createdAt,
-      ...(session.errorMessage ? { errorMessage: session.errorMessage } : {}),
-      ...decision,
-    }
-  }
-
-  private storedRequest(session: OpenId4VcVerificationSessionRecord): {
-    jsonSchemaCredentialId?: string
-    requestedClaims?: string[]
-  } {
-    const jsonSchemaCredentialId = session.getTag(JSON_SCHEMA_CREDENTIAL_ID_TAG)
-    const requestedClaims = session.getTag(REQUESTED_CLAIMS_TAG)
-    return {
-      ...(typeof jsonSchemaCredentialId === 'string' ? { jsonSchemaCredentialId } : {}),
-      ...(Array.isArray(requestedClaims) ? { requestedClaims } : {}),
-    }
-  }
-
-  private storedDecision(session: OpenId4VcVerificationSessionRecord): PresentationDecision | undefined {
-    if (session.state !== OpenId4VcVerificationSessionState.ResponseVerified) {
-      return { cryptographicVerified: false, accepted: false }
-    }
-    return session.metadata.get<PresentationDecision>(OUTCOME_METADATA_KEY) ?? undefined
   }
 
   private sessionRepository(): OpenId4VcVerificationSessionRepository {
@@ -361,4 +322,46 @@ function assertRequestedClaims(requestedClaims: string[], configuredClaims: stri
   if (unknownClaim) {
     throw new AdminApiError(AdminApiErrorCode.InvalidInput, BAD_REQUEST, `unknown claim '${unknownClaim}'`)
   }
+}
+
+export function summarizeVerificationSession(
+  session: OpenId4VcVerificationSessionRecord,
+): OpenId4VcVerificationSessionSummary {
+  return toSummary(session, storedDecision(session) ?? UNDECIDED_TRUST_DECISION)
+}
+
+function toSummary(
+  session: OpenId4VcVerificationSessionRecord,
+  decision: PresentationDecision,
+): OpenId4VcVerificationSessionSummary {
+  const { jsonSchemaCredentialId, requestedClaims } = storedRequest(session)
+  return {
+    id: session.id,
+    ...(jsonSchemaCredentialId ? { jsonSchemaCredentialId } : {}),
+    ...(requestedClaims ? { requestedClaims } : {}),
+    state: session.state,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt ?? session.createdAt,
+    ...(session.errorMessage ? { errorMessage: session.errorMessage } : {}),
+    ...decision,
+  }
+}
+
+function storedRequest(session: OpenId4VcVerificationSessionRecord): {
+  jsonSchemaCredentialId?: string
+  requestedClaims?: string[]
+} {
+  const jsonSchemaCredentialId = session.getTag(JSON_SCHEMA_CREDENTIAL_ID_TAG)
+  const requestedClaims = session.getTag(REQUESTED_CLAIMS_TAG)
+  return {
+    ...(typeof jsonSchemaCredentialId === 'string' ? { jsonSchemaCredentialId } : {}),
+    ...(Array.isArray(requestedClaims) ? { requestedClaims } : {}),
+  }
+}
+
+function storedDecision(session: OpenId4VcVerificationSessionRecord): PresentationDecision | undefined {
+  if (session.state !== OpenId4VcVerificationSessionState.ResponseVerified) {
+    return { cryptographicVerified: false, accepted: false }
+  }
+  return session.metadata.get<PresentationDecision>(OUTCOME_METADATA_KEY) ?? undefined
 }

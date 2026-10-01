@@ -508,7 +508,9 @@ function sameCredentialConfigurations(
   return serialize(one) === serialize(other)
 }
 
-function summarizeIssuanceSession(session: OpenId4VcIssuanceSessionRecord): OpenId4VcIssuanceSessionSummary {
+export function summarizeIssuanceSession(
+  session: OpenId4VcIssuanceSessionRecord,
+): OpenId4VcIssuanceSessionSummary {
   const jsonSchemaCredentialId = session.getTag(JSON_SCHEMA_CREDENTIAL_ID_TAG)
   return {
     id: session.id,
