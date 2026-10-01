@@ -61,30 +61,37 @@ function fakeIndexer(schemaIds: number[]) {
   }
 }
 
+// The issuer does not control the Ecosystem, so it reads each VTJSC from the Ecosystem DID Document.
 function fakeAgent(indexer: ReturnType<typeof fakeIndexer>, overrides: Record<string, unknown> = {}) {
-  const jsc = Object.fromEntries(
-    Object.keys(SCHEMAS).map(schemaId => [
-      `vpr:verana:${CHAIN_ID}:cs:${schemaId}`,
-      { verifiablePresentation: { verifiableCredential: [{ id: `https://vtjsc.example/${schemaId}` }] } },
-    ]),
-  )
+  const service = Object.keys(SCHEMAS).map(schemaId => ({
+    id: `${ECOSYSTEMS[10]}#vpr-schemas-${schemaId}-vtjsc-vp`,
+    serviceEndpoint: `https://ecosystem.example/vt/jsc/${schemaId}`,
+  }))
 
   return {
     did: AGENT_DID,
     veranaChain: { getChainId: CHAIN_ID },
     config: { logger },
     indexer,
-    dids: {
-      getCreatedDids: vi
-        .fn()
-        .mockResolvedValue([{ metadata: { get: (key: string) => (key === '_vt/jsc' ? jsc : undefined) } }]),
-    },
+    dids: { resolve: vi.fn().mockResolvedValue({ didDocument: { service } }) },
     ...overrides,
   } as unknown as VsAgent
 }
 
+function fakeVtjscFetch() {
+  return vi.fn(async (url: string) => {
+    const schemaId = url.split('/').pop()
+    return new Response(
+      JSON.stringify({ verifiableCredential: [{ id: `https://vtjsc.example/${schemaId}` }] }),
+    )
+  })
+}
+
 describe('buildCredentialConfigurations', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('fetch', fakeVtjscFetch())
+  })
 
   afterEach(() => vi.unstubAllGlobals())
 
