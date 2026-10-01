@@ -83,6 +83,7 @@ function makeMocks() {
     label: 'Agent',
     publicApiBaseUrl: 'https://agent',
     veranaChain: chain,
+    indexer,
     config: { logger },
     events: {
       on: (_type: string, cb: (event: { payload: Record<string, unknown> }) => void) => {
@@ -218,7 +219,17 @@ describe('EcsBootstrapService standalone', () => {
       async (filter: { role?: string; schemaId?: number; did?: string }) => {
         if (filter.did === 'did:web:agent') {
           return filter.role === ParticipantRole.Holder
-            ? [{ id: 9, participant_state: ParticipantState.Active, revoked: null, slashed: null }]
+            ? [
+                {
+                  id: 9,
+                  did: 'did:web:agent',
+                  role: ParticipantRole.Holder,
+                  participant_state: ParticipantState.Active,
+                  effective_from: '2026-01-01T00:00:00Z',
+                  revoked: null,
+                  slashed: null,
+                },
+              ]
             : []
         }
         if (filter.role === ParticipantRole.Ecosystem) {
@@ -230,6 +241,11 @@ describe('EcsBootstrapService standalone', () => {
       },
     )
 
+    // the record of the HOLDER entry lists TriggerResolver
+    Object.assign(mocks.agent, {
+      authorizationService: { canSign: () => true, getVsOperatorAuthorizationRecord: () => undefined },
+    })
+
     await makeService(mocks).run()
 
     expect(mocks.chain.startParticipantOP).not.toHaveBeenCalled()
@@ -240,7 +256,8 @@ describe('EcsBootstrapService standalone', () => {
         effectiveUntil: new Date('2030-01-01T00:00:00Z'),
       }),
     )
-    expect(mocks.chain.triggerResolver).toHaveBeenCalledWith(88, { granter: undefined })
+    // [VSA-VPR-TX-5]: the new ISSUER entry cannot carry TriggerResolver, so the HOLDER entry is the target
+    expect(mocks.chain.triggerResolver).toHaveBeenCalledWith(9, { granter: undefined })
   })
 
   it('fails OPEN self-creation when the operator lacks the MsgSelfCreateParticipant authorization', async () => {
