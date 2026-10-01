@@ -131,8 +131,6 @@ const requestProof = async (connectionId: string): Promise<void> => {
     return
   }
   await sendText(connectionId, 'In order to start a new chat, we need some verifiable information from you')
-  // The request goes out on the chat connection, so the wallet answers in this
-  // conversation and no link is needed.
   const request = await client.didcomm.createPresentationRequest({
     requestedCredentials: [{ credentialDefinitionId: CREDENTIAL_DEFINITION_ID, attributes: ['phoneNumber'] }],
     connectionId,

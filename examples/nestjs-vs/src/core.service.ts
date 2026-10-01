@@ -151,8 +151,6 @@ export class CoreService implements EventHandler, OnModuleInit {
             issuanceDate: new Date().toISOString().split('T')[0],
           }
 
-          // The offer goes out on the connection, so the holder sees it in this
-          // conversation and the service sends no link.
           await this.credentialService.issue(claims, {
             connectionId: session.connectionId,
             refId: claims.fullName,
