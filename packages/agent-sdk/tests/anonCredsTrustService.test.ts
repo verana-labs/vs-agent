@@ -84,6 +84,7 @@ function makeAgent(options: AgentOptions = {}) {
 
   const agent = {
     did: AGENT_DID,
+    config: { logger: { warn: vi.fn() } },
     veranaChain: { getChainId: options.chainId ?? CHAIN_ID },
     indexer: {
       getCredentialSchema: vi.fn(async () => ({
@@ -382,6 +383,41 @@ describe('assertAuthorized', () => {
     expect(
       await reasonOf(service.assertAuthorized({ ...authorization, did: 'did:webvh:Qm1:agent.example' })),
     ).toBe(AnonCredsTrustErrorReason.NotAuthorized)
+  })
+})
+
+describe('assertOwnAuthorization', () => {
+  const ownAuthorization = { role: ParticipantRole.Issuer, credentialSchemaId: CREDENTIAL_SCHEMA_ID }
+
+  it('fails without an own Participant entry by default', async () => {
+    const { service } = makeAgent({ participants: [] })
+
+    expect(service.skipsOwnAuthorization).toBe(false)
+    expect(await reasonOf(service.assertOwnAuthorization(ownAuthorization))).toBe(
+      AnonCredsTrustErrorReason.NotAuthorized,
+    )
+  })
+
+  it('logs and continues without an own Participant entry when skipOwnAuthorization is set', async () => {
+    const { agent } = makeAgent({ participants: [] })
+    const service = new AnonCredsTrustService(agent as never, { skipOwnAuthorization: true })
+
+    expect(service.skipsOwnAuthorization).toBe(true)
+    await expect(service.assertOwnAuthorization(ownAuthorization)).resolves.toBeUndefined()
+    expect(agent.config.logger.warn).toHaveBeenCalledWith(expect.stringContaining('[UNSAFE]'))
+  })
+
+  it('still reports an indexer failure as unavailable when skipOwnAuthorization is set', async () => {
+    const { agent } = makeAgent({
+      listParticipants: vi.fn(async () => {
+        throw new Error('the indexer is unreachable')
+      }),
+    })
+    const service = new AnonCredsTrustService(agent as never, { skipOwnAuthorization: true })
+
+    expect(await reasonOf(service.assertOwnAuthorization(ownAuthorization))).toBe(
+      AnonCredsTrustErrorReason.Unavailable,
+    )
   })
 })
 

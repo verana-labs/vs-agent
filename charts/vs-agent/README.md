@@ -49,6 +49,7 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 | `agentMode`                | How the agent obtains its ECS credentials: `standalone` or `delegated` | `standalone` |
 | `trustedEcsEcosystemDids`  | Comma-separated ECS ecosystem DIDs. Required when `agentMode` is `standalone` | `""` |
 | `delegatedParentVsDid`     | DID of the parent Verifiable Service. Required when `agentMode` is `delegated` | `""` |
+| `unsafeSkipOwnAuthorization` | DEMO ONLY, not in the spec. Mint credential offers and presentation requests without an own ISSUER or VERIFIER Participant | `false` |
 | `extraEnv`                 | Additional environment variables for the agent   | `[]`                            |
 | `openid4vc.config`         | OpenID4VC configuration JSON, as a string. When set, the chart mounts it read-only and sets `OID4VC_CONFIG_FILE_LOCATION`, which enables the `/v2/openid4vc` scope and the public OpenID4VC endpoints. It is rendered into a ConfigMap, so it is for development signing only | `""` |
 | `openid4vc.existingSecret` | Name of a pre-existing Secret whose `openid4vc.json` key holds the same configuration. Mounted at the same path, and mutually exclusive with `openid4vc.config`: setting both fails the render. Use it whenever the configuration carries configured signing material | `""` |

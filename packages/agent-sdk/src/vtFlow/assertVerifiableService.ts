@@ -4,11 +4,31 @@ import type { ResolverConfig, TrustResolution } from '@verana-labs/verre'
 
 import { resolveDID, TrustResolutionOutcome } from '@verana-labs/verre'
 
-export interface AssertVerifiableServiceOptions {
-  verifiablePublicRegistries: NonNullable<ResolverConfig['verifiablePublicRegistries']>
-  logger?: BaseLogger
+export { TrustResolutionOutcome }
+
+export type VerifiablePublicRegistries = NonNullable<ResolverConfig['verifiablePublicRegistries']>
+
+export interface DidTrustResolverOptions {
+  verifiablePublicRegistries: VerifiablePublicRegistries
   positiveTtlMs?: number
 }
+
+export interface AssertVerifiableServiceOptions extends DidTrustResolverOptions {
+  logger?: BaseLogger
+}
+
+/** What the Verifiable Trust resolution of a DID answers, as [TR] defines it. */
+export interface DidTrustResolution {
+  /** `verified` with the outcome `VERIFIED`: a production registry vouches for the DID. */
+  trusted: boolean
+  verified: boolean
+  outcome: TrustResolutionOutcome
+  /** Whether the verdict came from the positive-verdict cache of the resolver. */
+  source: 'cache' | 'fresh'
+  errorMessage?: string
+}
+
+export type DidTrustResolver = (did: string) => Promise<DidTrustResolution>
 
 class VerdictCache implements NonNullable<ResolverConfig['cache']> {
   private map = new Map<string, { value: Promise<TrustResolution>; expiresAt: number }>()
@@ -49,23 +69,42 @@ class VerdictCache implements NonNullable<ResolverConfig['cache']> {
   }
 }
 
+/**
+ * The Verifiable Trust resolution of a DID through `@verana-labs/verre` (`resolveDID`), the one
+ * resolution the agent applies to every peer: a DIDComm connection ([VS-CONN-VS]) and the issuer
+ * of a presented credential ([VSA-VTI-FLOW-VERIFY-OID] step 7) alike. A positive verdict is cached
+ * for `positiveTtlMs`; a negative one is not.
+ */
+export function createDidTrustResolver(options: DidTrustResolverOptions): DidTrustResolver {
+  const cache = new VerdictCache(options.positiveTtlMs)
+  return async did => {
+    const source = cache.get(did) ? 'cache' : 'fresh'
+    const { verified, outcome, metadata } = await resolveDID(did, {
+      verifiablePublicRegistries: options.verifiablePublicRegistries,
+      cache,
+    })
+    return {
+      trusted: verified && outcome === TrustResolutionOutcome.VERIFIED,
+      verified,
+      outcome,
+      source,
+      ...(metadata?.errorMessage ? { errorMessage: metadata.errorMessage } : {}),
+    }
+  }
+}
+
 // VS-CONN-VS gate: delegates trust resolution to `@verana-labs/verre` (`resolveDID`)
 export function assertVerifiableService(
   options: AssertVerifiableServiceOptions,
 ): VtFlowAssertVerifiableServiceHook {
-  const cache = new VerdictCache(options.positiveTtlMs)
+  const resolve = createDidTrustResolver(options)
   return async ({ agentContext, peerDid }) => {
     const logger = options.logger ?? agentContext.config.logger
     try {
-      const source = cache.get(peerDid) ? 'cache' : 'fresh'
-      const { verified, outcome, metadata } = await resolveDID(peerDid, {
-        verifiablePublicRegistries: options.verifiablePublicRegistries,
-        cache,
-      })
-      const trusted = verified && outcome === TrustResolutionOutcome.VERIFIED
+      const { trusted, verified, outcome, source, errorMessage } = await resolve(peerDid)
       if (!trusted) {
         logger.warn(
-          `[vt-flow] VS-CONN-VS rejected '${peerDid}': verified=${verified} outcome=${outcome} source=${source} ${metadata?.errorMessage ?? ''}`,
+          `[vt-flow] VS-CONN-VS rejected '${peerDid}': verified=${verified} outcome=${outcome} source=${source} ${errorMessage ?? ''}`,
         )
       } else {
         logger.debug(`[vt-flow] VS-CONN-VS accepted '${peerDid}' source=${source}`)

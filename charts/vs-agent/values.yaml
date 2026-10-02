@@ -33,6 +33,9 @@ agentMode: "standalone"
 trustedEcsEcosystemDids: "" # Comma-separated ECS ecosystem DIDs, required when agentMode is standalone
 delegatedParentVsDid: "" # DID of the parent Verifiable Service, required when agentMode is delegated
 
+# DEMO ONLY, not in the spec: mint offers and requests without an own ISSUER or VERIFIER Participant
+unsafeSkipOwnAuthorization: false
+
 resources:
   requests:
     cpu: 100m

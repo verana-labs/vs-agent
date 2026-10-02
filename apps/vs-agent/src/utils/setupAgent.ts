@@ -17,6 +17,7 @@ import {
   readEcsClaimsFromEnv,
   VsAgentWsInboundTransport,
   VtFlowOrchestrator,
+  type VerifiablePublicRegistries,
   type VsAgentNestPlugin,
 } from '@verana-labs/vs-agent-sdk'
 import express from 'express'
@@ -24,6 +25,7 @@ import WebSocket from 'ws'
 
 import { ErrorEnvelopeFilter } from '../common'
 import {
+  AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION,
   ENABLE_PUBLIC_API_SWAGGER,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
   AGENT_MODE,
@@ -36,6 +38,19 @@ import {
 
 import { TsLogger } from './logger'
 import { credoPluginsFromNestPlugins } from './pluginLifecycle'
+
+/** The VPR the agent resolves Verifiable Trust against: the indexer and the chain of its environment. */
+export function verifiablePublicRegistriesFromEnv(): VerifiablePublicRegistries | undefined {
+  if (!VERANA_INDEXER_BASE_URL || !VERANA_CHAIN_ID) return undefined
+  return [
+    {
+      id: `vpr:verana:${VERANA_CHAIN_ID}`,
+      scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
+      api: [VERANA_INDEXER_BASE_URL],
+      production: true,
+    },
+  ]
+}
 
 export const setupAgent = async ({
   port,
@@ -73,17 +88,7 @@ export const setupAgent = async ({
     throw new Error('There are no DIDComm endpoints defined. Please set at least one (e.g. wss://myhost)')
   }
 
-  const verifiablePublicRegistries =
-    VERANA_INDEXER_BASE_URL && VERANA_CHAIN_ID
-      ? [
-          {
-            id: `vpr:verana:${VERANA_CHAIN_ID}`,
-            scheme: `vpr:verana:${VERANA_CHAIN_ID}`,
-            api: [VERANA_INDEXER_BASE_URL],
-            production: true,
-          },
-        ]
-      : undefined
+  const verifiablePublicRegistries = verifiablePublicRegistriesFromEnv()
 
   // eslint-disable-next-line prefer-const
   let orchestrator: VtFlowOrchestrator | undefined
@@ -185,6 +190,7 @@ export const setupAgent = async ({
     authorizationService,
     discoveryOptions,
     adminApiServiceEndpoint,
+    skipOwnAuthorization: AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION,
   })
 
   orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl })

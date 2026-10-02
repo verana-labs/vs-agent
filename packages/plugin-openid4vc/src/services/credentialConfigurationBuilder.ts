@@ -9,6 +9,8 @@ import type {
 import { isReservedClaimName } from '../config'
 
 import {
+  AnonCredsTrustError,
+  AnonCredsTrustErrorReason,
   getDidWebHttpsBaseUrl,
   ParticipantRole,
   ParticipantState,
@@ -55,6 +57,29 @@ export async function buildCredentialConfigurations(
   return configurations
 }
 
+/**
+ * The credential type of one VTJSC, reached from its `jsonSchemaCredentialId` through the VTJSC
+ * link: the same configuration the issuers of the type derive, for a verifier that asks for it.
+ * Throws the `AnonCredsTrustError` of the link when the VTJSC cannot be read or binds to no
+ * `CredentialSchema` of this chain.
+ */
+export async function resolveCredentialType(
+  agent: VsAgent,
+  jsonSchemaCredentialId: string,
+): Promise<OpenId4VcCredentialConfiguration> {
+  const { credentialSchemaId } =
+    await agent.anonCredsTrust.resolveCredentialSchemaLink(jsonSchemaCredentialId)
+  // the link names a schema of this chain, so the agent runs on one
+  const chainId = agent.veranaChain?.getChainId
+  if (!chainId) {
+    throw new AnonCredsTrustError(
+      AnonCredsTrustErrorReason.Unavailable,
+      `the agent runs on no chain, so it cannot read the CredentialSchema ${credentialSchemaId}`,
+    )
+  }
+  return await buildCredentialConfiguration(agent, agent.indexer, credentialSchemaId, chainId)
+}
+
 async function buildCredentialConfiguration(
   agent: VsAgent,
   reader: IndexerSchemaReader,
@@ -74,7 +99,7 @@ async function buildCredentialConfiguration(
     credentialSchemaId,
     chainId,
   )
-  const { title, attrNames } = readJsonSchema(schema.json_schema)
+  const { title, description, attrNames } = readJsonSchema(schema.json_schema)
   const envelope = attrNames.filter(isEnvelopeClaim)
   if (envelope.length > 0) {
     agent.config.logger.warn(
@@ -90,6 +115,9 @@ async function buildCredentialConfiguration(
     format: 'dc+sd-jwt',
     vct: typeMetadataUrl(baseUrl, credentialSchemaId),
     name: title ?? `vpr:verana:${chainId}:cs:${credentialSchemaId}`,
+    // The issuer metadata carries it as the display description, which wallets show on the
+    // credential. The served Type Metadata keeps it as its top-level `description` only.
+    ...(typeof description === 'string' && description.trim() ? { description: description.trim() } : {}),
     vtjscId: jsonSchemaCredentialId,
     credentialSchemaId,
     jsonSchema: schema.json_schema,

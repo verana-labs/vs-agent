@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { IssuerService } from '../src/services/IssuerService'
 import { VerifierService } from '../src/services/VerifierService'
-import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../src/types'
+import { OPENID4VC_DID_TRUST_RESOLVER, OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../src/types'
 
 import { OpenId4VcPlugin } from '../src/nestjs/OpenId4VcPlugin'
 import { V2OpenId4VcCredentialExchangesController } from '../src/nestjs/V2OpenId4VcCredentialExchangesController'
@@ -76,6 +76,7 @@ describe('OpenId4VcPlugin', () => {
     expect(OpenId4VcPlugin(options()).providers).toEqual([
       { provide: OPENID4VC_OPTIONS, useValue: options() },
       { provide: OPENID4VC_ISSUER_SINK, useValue: expect.any(Function) },
+      { provide: OPENID4VC_DID_TRUST_RESOLVER, useValue: expect.any(Function) },
       IssuerService,
       VerifierService,
     ])

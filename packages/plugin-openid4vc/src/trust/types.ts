@@ -7,7 +7,7 @@ export const TRUST_VERDICT_NAMES = [
 
 export type TrustVerdictName = (typeof TRUST_VERDICT_NAMES)[number]
 
-export const VERANA_TRUST_STATUSES = ['TRUSTED', 'PARTIAL', 'UNTRUSTED'] as const
+export const VERANA_TRUST_STATUSES = ['TRUSTED', 'UNTRUSTED'] as const
 
 export type VeranaTrustStatus = (typeof VERANA_TRUST_STATUSES)[number]
 
