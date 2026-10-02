@@ -14,7 +14,7 @@ import { classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../../types'
-import { saveAttestedResource } from '../../utils/agent'
+import { publicDidsOf, saveAttestedResource } from '../../utils/agent'
 import { getEcsSchemas } from '../../utils/data'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../../utils/didReadiness'
 import { generateDigestSRI } from '../../utils/setupSelfTr'
@@ -430,8 +430,9 @@ export async function reconcileVtjscPublications(
 
   // [VSA-VTI-VTJSC]: the Ecosystem controller is the agent whose DID is `Ecosystem.did`. Another
   // agent of the same Corporation does not control the Ecosystem and publishes no VTJSC for it.
+  const ownDids = await publicDidsOf(agent)
   const ecosystems = await indexer.listEcosystems()
-  const controlled = ecosystems.filter(entry => entry.did === agent.did)
+  const controlled = ecosystems.filter(entry => ownDids.includes(entry.did))
   const reconciled = new Set<string>()
 
   for (const ecosystem of controlled) {
@@ -503,7 +504,7 @@ export async function reconcileVtjscPublications(
     }
   }
 
-  await detachUncontrolledVtjscPublications(agent, indexer, chainId, reconciled)
+  await detachUncontrolledVtjscPublications(agent, indexer, chainId, reconciled, ownDids)
 
   if (ecsClaims) await reconcileSelfIssuedEcsCredentials(agent, indexer, ecsClaims)
 }
@@ -526,6 +527,7 @@ async function detachUncontrolledVtjscPublications(
   indexer: VeranaIndexerService,
   chainId: string,
   reconciled: ReadonlySet<string>,
+  ownDids: readonly string[],
 ): Promise<void> {
   const [didRecord] = await agent.dids.getCreatedDids({ did: agent.did })
   if (!didRecord) return
@@ -550,7 +552,7 @@ async function detachUncontrolledVtjscPublications(
       }
       const ecosystem = ecosystemCache.get(ecosystemId)
       if (!ecosystem) continue
-      if (ecosystem.did === agent.did) continue
+      if (ownDids.includes(ecosystem.did)) continue
 
       agent.config.logger.info(
         `[VTJSC] Detaching the VTJSC of schema ${schemaId}: ecosystem ${ecosystemId} is controlled by ` +
@@ -744,7 +746,7 @@ export async function publishVtjscIfOwner(
   }
 
   // [VSA-VTI-VTJSC]: only the agent whose DID is `Ecosystem.did` publishes the VTJSC.
-  if (!agent.did || ecosystem.did !== agent.did) {
+  if (!(await publicDidsOf(agent)).includes(ecosystem.did)) {
     agent.config.logger.debug(
       `[VTJSC] Skipping schema ${schema.id}: ecosystem ${ecosystem.id} is controlled by ${ecosystem.did}`,
     )
