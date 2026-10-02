@@ -35,6 +35,7 @@ import {
   agentDisplayName,
   createJsc,
   EcsBootstrapService,
+  findAttestedResources,
   getEcsSchemas,
   ParticipantRole,
   ParticipantState,
@@ -712,6 +713,56 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
       await reconcileVtjscPublications(validator, indexer)
       expect(await serviceIds()).not.toContain(serviceId)
       expect(await jscKeys()).toContain(schemaRef)
+    },
+    SETUP_TIMEOUT_MS,
+  )
+
+  it(
+    'publishes the VTJSC and its AnonCreds schema for a CredentialSchema of the Ecosystem it controls',
+    async () => {
+      if (!validator.did) throw new Error('the validator agent has no public DID')
+
+      // [VSA-VTI-VTJSC]: the validator controls this Ecosystem, because the Ecosystem's DID is its own.
+      const ecosystem = await chainA.createEcosystem(corpPolicyAddress, { did: validator.did })
+      const schema = await chainA.createCredentialSchema(corpPolicyAddress, {
+        ecosystemId: ecosystem.ecosystemId,
+        jsonSchema: ecsSchema('ControlledCredential'),
+      })
+      await until(async () =>
+        (await indexer.listCredentialSchemas(ecosystem.ecosystemId)).length === 1 ? true : undefined,
+      )
+
+      await reconcileVtjscPublications(validator, indexer)
+
+      const [didRecord] = await validator.dids.getCreatedDids({ did: validator.did })
+      expect((didRecord.didDocument?.service ?? []).map(service => service.id)).toContain(
+        `${validator.did}#vpr-schemas-${schema.schemaId}-vtjsc-vp`,
+      )
+
+      // The pass also publishes the AnonCreds schema of the VTJSC, per [VSA-PUB-AC-5].
+      const jsonSchemaCredentialId = `${validator.publicApiBaseUrl}/vt/schemas-${schema.schemaId}-jsc.json`
+      const publishedSchemas = () =>
+        validator.modules.anoncreds.getCreatedSchemas({
+          relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+        })
+
+      const [anonCredsSchema] = await publishedSchemas()
+      expect(anonCredsSchema.schema).toMatchObject({
+        name: 'ControlledCredential',
+        attrNames: ['id', 'name'],
+        issuerId: validator.did,
+      })
+
+      // An issuer of another DID reads the schema from this listing, so it must carry the tag.
+      const listed = await findAttestedResources(validator, {
+        resourceType: 'anonCredsSchema',
+        relatedJsonSchemaCredentialId: jsonSchemaCredentialId,
+      })
+      expect(listed.map(record => (record.content as { id: string }).id)).toEqual([anonCredsSchema.schemaId])
+
+      // A second run registers no second schema.
+      await reconcileVtjscPublications(validator, indexer)
+      expect(await publishedSchemas()).toHaveLength(1)
     },
     SETUP_TIMEOUT_MS,
   )
