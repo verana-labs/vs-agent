@@ -65,6 +65,7 @@ const proofRecord = (id: string, createdAt: string, extra: Record<string, unknow
 
 const proofs = {
   createRequest: vi.fn(),
+  requestProof: vi.fn(),
   update: vi.fn(),
   findAllByQuery: vi.fn(),
   declineRequest: vi.fn(),
@@ -259,6 +260,50 @@ describe('v2 didcomm presentation routes', () => {
       )
 
       expect(errors.map(error => error.property).sort()).toEqual(['callbackUrl', 'ref'])
+    })
+
+    it('sends the request on the connection that the caller names, and makes no invitation', async () => {
+      const proofRecordSpy = { id: 'proof-1', metadata: metadata() }
+      proofs.requestProof.mockResolvedValue(proofRecordSpy)
+      connections.findById.mockResolvedValue({ id: 'conn-1' })
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({
+          requestedCredentials: [{ credentialDefinitionId: 'cred-def-1', attributes: ['firstName'] }],
+          connectionId: 'conn-1',
+          didcommVersion: 'v1',
+          useLegacyDid: true,
+        })
+
+      expect(response.status).toBe(201)
+      // The specification leaves out both invitation fields on this path, and the agent ignores
+      // the two invitation parameters.
+      expect(response.body).toEqual({ proofExchangeId: 'proof-1' })
+      expect(createInvitation).not.toHaveBeenCalled()
+      expect(urlShortenerService.createShortUrl).not.toHaveBeenCalled()
+      expect(proofs.createRequest).not.toHaveBeenCalled()
+      expect(proofs.requestProof).toHaveBeenCalledWith(
+        expect.objectContaining({ connectionId: 'conn-1', protocolVersion: 'v2' }),
+      )
+      // The trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] reads this metadata.
+      expect(proofRecordSpy.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA)).toBeTruthy()
+      expect(proofs.update).toHaveBeenCalledWith(proofRecordSpy)
+    })
+
+    it('answers UNKNOWN_ID for an unknown connection, and requests nothing', async () => {
+      connections.findById.mockResolvedValue(null)
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({
+          requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }],
+          connectionId: 'conn-absent',
+        })
+
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
+      expect(proofs.requestProof).not.toHaveBeenCalled()
     })
 
     it('carries the requested credentials onto the record and the envelope choice onto the invitation', async () => {

@@ -73,7 +73,10 @@ function fakeAgent(indexer: ReturnType<typeof fakeIndexer>, overrides: Record<st
     veranaChain: { getChainId: CHAIN_ID },
     config: { logger },
     indexer,
-    dids: { resolve: vi.fn().mockResolvedValue({ didDocument: { service } }) },
+    dids: {
+      getCreatedDids: vi.fn().mockResolvedValue([]),
+      resolve: vi.fn().mockResolvedValue({ didDocument: { service } }),
+    },
     ...overrides,
   } as unknown as VsAgent
 }
