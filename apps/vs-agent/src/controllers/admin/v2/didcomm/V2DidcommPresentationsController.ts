@@ -389,7 +389,8 @@ export class V2DidcommPresentationsController {
   @Get('presentations')
   @ApiOperation({
     summary: 'List presentations',
-    description: 'Returns the presentation flows that the agent created.',
+    description:
+      'Returns the presentation flows that the agent created, filtered when the caller supplies a filter.',
   })
   @ApiOkResponse({ description: 'A page of presentation records', type: PresentationRecordPageDto })
   public async listPresentations(
@@ -397,9 +398,15 @@ export class V2DidcommPresentationsController {
   ): Promise<Page<PresentationRecordDto>> {
     const agent = await this.vsAgentService.getAgent()
 
-    const records = await agent.didcomm.proofs.getAll()
+    const filters = {
+      connectionId: query.connectionId,
+      threadId: query.threadId,
+      role: query.role,
+      state: query.state,
+    }
+    const records = await agent.didcomm.proofs.findAllByQuery(filters)
 
-    const page = paginate(records, query, { method: 'listPresentations' }, createdAtKey)
+    const page = paginate(records, query, { method: 'listPresentations', filters }, createdAtKey)
 
     return mapPageAsync(page, record => toPresentationDto(agent, record))
   }

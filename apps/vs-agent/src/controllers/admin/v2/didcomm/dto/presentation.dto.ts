@@ -6,6 +6,7 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsIn,
   IsOptional,
   IsString,
@@ -118,9 +119,33 @@ export class CreatePresentationRequestResponseDto {
 }
 
 /**
- * Query of [VSA-ADM-DC-PR-LIST] listPresentations. The spec defines no filter beyond pagination.
+ * Query of [VSA-ADM-DC-PR-LIST] listPresentations. Each filter is optional, and the spec adds
+ * them to the pagination parameters.
  */
-export class ListPresentationsQueryDto extends PaginationQueryDto {}
+export class ListPresentationsQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ description: 'Filter by connection' })
+  @IsOptional()
+  @IsString()
+  connectionId?: string
+
+  @ApiPropertyOptional({ description: 'Filter by DIDComm thread identifier' })
+  @IsOptional()
+  @IsString()
+  threadId?: string
+
+  @ApiPropertyOptional({
+    description: 'Filter by the role of the agent in the flow',
+    enum: DidCommProofRole,
+  })
+  @IsOptional()
+  @IsEnum(DidCommProofRole)
+  role?: DidCommProofRole
+
+  @ApiPropertyOptional({ description: 'Filter by presentation state', enum: DidCommProofState })
+  @IsOptional()
+  @IsEnum(DidCommProofState)
+  state?: DidCommProofState
+}
 
 /**
  * A presentation exchange record, as returned by listPresentations and getPresentation.

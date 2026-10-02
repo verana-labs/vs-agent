@@ -6,6 +6,7 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -127,10 +128,36 @@ export class CreateCredentialOfferResponseDto {
 }
 
 /**
- * This is the query of [VSA-ADM-DC-CE-LIST] listCredentialExchanges. The specification defines
- * only the pagination parameters for this method.
+ * This is the query of [VSA-ADM-DC-CE-LIST] listCredentialExchanges. Each filter is optional,
+ * and the specification adds them to the pagination parameters.
  */
-export class ListCredentialExchangesQueryDto extends PaginationQueryDto {}
+export class ListCredentialExchangesQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ description: 'Filter by connection' })
+  @IsOptional()
+  @IsString()
+  connectionId?: string
+
+  @ApiPropertyOptional({ description: 'Filter by DIDComm thread identifier' })
+  @IsOptional()
+  @IsString()
+  threadId?: string
+
+  @ApiPropertyOptional({
+    description: 'Filter by the role of the agent in the exchange',
+    enum: DidCommCredentialRole,
+  })
+  @IsOptional()
+  @IsEnum(DidCommCredentialRole)
+  role?: DidCommCredentialRole
+
+  @ApiPropertyOptional({
+    description: 'Filter by credential exchange state',
+    enum: DidCommCredentialState,
+  })
+  @IsOptional()
+  @IsEnum(DidCommCredentialState)
+  state?: DidCommCredentialState
+}
 
 /**
  * This is a credential exchange record. The methods `listCredentialExchanges` and

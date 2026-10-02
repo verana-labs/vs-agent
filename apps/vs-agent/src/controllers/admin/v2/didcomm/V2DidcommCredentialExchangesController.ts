@@ -442,7 +442,9 @@ export class V2DidcommCredentialExchangesController {
   @Get('credential-exchanges')
   @ApiOperation({
     summary: 'List credential exchanges',
-    description: 'Returns the credential exchange records that the agent tracks.',
+    description:
+      'Returns the credential exchange records that the agent tracks, filtered when the caller ' +
+      'supplies a filter.',
   })
   @ApiOkResponse({
     description: 'A page of credential exchange records',
@@ -453,9 +455,15 @@ export class V2DidcommCredentialExchangesController {
   ): Promise<Page<CredentialExchangeRecordDto>> {
     const agent = await this.vsAgentService.getAgent()
 
-    const records = await agent.didcomm.credentials.getAll()
+    const filters = {
+      connectionId: query.connectionId,
+      threadId: query.threadId,
+      role: query.role,
+      state: query.state,
+    }
+    const records = await agent.didcomm.credentials.findAllByQuery(filters)
 
-    const page = paginate(records, query, { method: 'listCredentialExchanges' }, createdAtKey)
+    const page = paginate(records, query, { method: 'listCredentialExchanges', filters }, createdAtKey)
 
     const results = await Promise.allSettled(
       page.items.map(record => toCredentialExchangeDto(agent, record, this.logger)),
