@@ -5,6 +5,7 @@ export interface ChallengeRequest {
 export interface ChallengeResponse {
   nonce: string
   expiresAt: string
+  audience: string
 }
 
 export interface TokenRequest {
