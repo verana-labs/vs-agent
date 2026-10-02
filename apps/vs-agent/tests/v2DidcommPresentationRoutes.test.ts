@@ -23,7 +23,10 @@ import {
 import { ErrorEnvelopeFilter } from '../src/common'
 import { CredentialTypesService } from '../src/services'
 import { V2DidcommPresentationsController } from '../src/controllers/admin/v2/didcomm/V2DidcommPresentationsController'
-import { CreatePresentationRequestBodyDto } from '../src/controllers/admin/v2/didcomm/dto'
+import {
+  CreatePresentationRequestBodyDto,
+  ListPresentationsQueryDto,
+} from '../src/controllers/admin/v2/didcomm/dto'
 import { UrlShorteningService } from '../src/services/UrlShorteningService'
 import { VsAgentService } from '../src/services/VsAgentService'
 
@@ -63,7 +66,7 @@ const proofRecord = (id: string, createdAt: string, extra: Record<string, unknow
 const proofs = {
   createRequest: vi.fn(),
   update: vi.fn(),
-  getAll: vi.fn(),
+  findAllByQuery: vi.fn(),
   declineRequest: vi.fn(),
   sendProblemReport: vi.fn(),
   findById: vi.fn(),
@@ -309,7 +312,7 @@ describe('v2 didcomm presentation routes', () => {
     ]
 
     beforeEach(() => {
-      proofs.getAll.mockResolvedValue(records)
+      proofs.findAllByQuery.mockResolvedValue(records)
     })
 
     it('walks the presentations with the keyset cursor and ends with a null cursor', async () => {
@@ -330,6 +333,50 @@ describe('v2 didcomm presentation routes', () => {
         'p-3',
       ])
       expect(second.body.nextCursor).toBeNull()
+    })
+
+    it.each([
+      ['connectionId', 'conn-p-1'],
+      ['threadId', 'thread-p-1'],
+      ['role', 'prover'],
+      ['state', 'presentation-received'],
+    ])('passes the %s filter to the repository', async (name, value) => {
+      const response = await request(app.getHttpServer()).get(`/v2/didcomm/presentations?${name}=${value}`)
+
+      expect(response.status).toBe(200)
+      expect(proofs.findAllByQuery).toHaveBeenCalledWith({
+        connectionId: undefined,
+        threadId: undefined,
+        role: undefined,
+        state: undefined,
+        [name]: value,
+      })
+    })
+
+    it('rejects a role and a state outside the protocol values', async () => {
+      const pipe = new ValidationPipe()
+      const queryMetadata = { type: 'query', metatype: ListPresentationsQueryDto } as const
+
+      await expect(pipe.transform({ role: 'owner' }, queryMetadata)).rejects.toMatchObject({
+        status: 400,
+      })
+      await expect(pipe.transform({ state: 'requested' }, queryMetadata)).rejects.toMatchObject({
+        status: 400,
+      })
+      await expect(
+        pipe.transform({ role: 'prover', state: 'presentation-received' }, queryMetadata),
+      ).resolves.toBeDefined()
+    })
+
+    it('refuses a cursor replayed against another filter set', async () => {
+      const first = await request(app.getHttpServer()).get('/v2/didcomm/presentations?limit=1')
+
+      const replayed = await request(app.getHttpServer()).get(
+        `/v2/didcomm/presentations?limit=1&role=prover&cursor=${encodeURIComponent(first.body.nextCursor)}`,
+      )
+
+      expect(replayed.status).toBe(400)
+      expect(replayed.body.error.code).toBe('INVALID_CURSOR')
     })
 
     it('flattens the revealed attributes and the revealed attribute groups into one claim list', async () => {

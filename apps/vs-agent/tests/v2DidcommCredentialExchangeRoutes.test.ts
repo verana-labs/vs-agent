@@ -17,7 +17,10 @@ import {
 } from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
-import { CreateCredentialOfferBodyDto } from '../src/controllers/admin/v2/didcomm/dto'
+import {
+  CreateCredentialOfferBodyDto,
+  ListCredentialExchangesQueryDto,
+} from '../src/controllers/admin/v2/didcomm/dto'
 import { V2DidcommCredentialExchangesController } from '../src/controllers/admin/v2/didcomm/V2DidcommCredentialExchangesController'
 import { UrlShorteningService } from '../src/services/UrlShorteningService'
 import { VsAgentService } from '../src/services/VsAgentService'
@@ -35,6 +38,7 @@ function exchangeRecord(options: {
   credentialDefinitionId?: string
   schemaId?: string
   state?: string
+  role?: string
 }) {
   const metadata: Record<string, unknown> = {}
   if (options.credentialDefinitionId || options.schemaId) {
@@ -47,6 +51,7 @@ function exchangeRecord(options: {
   const record = {
     id: options.id,
     state: options.state ?? 'offer-sent',
+    role: options.role ?? 'issuer',
     threadId: `thread-${options.id}`,
     connectionId: `conn-${options.id}`,
     errorMessage: undefined as string | undefined,
@@ -103,7 +108,7 @@ const agent = {
   didcomm: {
     credentials: {
       createOffer: vi.fn(),
-      getAll: vi.fn().mockResolvedValue(records),
+      findAllByQuery: vi.fn().mockResolvedValue(records),
       declineOffer: vi.fn(),
       sendProblemReport: vi.fn(),
       update: vi.fn(),
@@ -152,7 +157,7 @@ describe('v2 didcomm credential exchange routes', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    agent.didcomm.credentials.getAll.mockResolvedValue(records)
+    agent.didcomm.credentials.findAllByQuery.mockResolvedValue(records)
     agent.didcomm.credentials.getFormatData.mockResolvedValue({
       offerAttributes: [{ name: 'phoneNumber', value: '+57128348520' }],
     })
@@ -203,6 +208,7 @@ describe('v2 didcomm credential exchange routes', () => {
         'createdAt',
         'credentialDefinitionId',
         'credentialExchangeId',
+        'role',
         'schemaId',
         'state',
         'threadId',
@@ -224,6 +230,41 @@ describe('v2 didcomm credential exchange routes', () => {
     expect(response.status).toBe(200)
     expect(response.body.items).toHaveLength(3)
     expect(response.body.items[0].claims).toEqual([])
+  })
+
+  it.each([
+    ['connectionId', 'conn-ce-a'],
+    ['threadId', 'thread-ce-a'],
+    ['role', 'holder'],
+    ['state', 'offer-received'],
+  ])('passes the %s filter to the repository', async (name, value) => {
+    const response = await request(app.getHttpServer()).get(
+      `/v2/didcomm/credential-exchanges?${name}=${value}`,
+    )
+
+    expect(response.status).toBe(200)
+    expect(agent.didcomm.credentials.findAllByQuery).toHaveBeenCalledWith({
+      connectionId: undefined,
+      threadId: undefined,
+      role: undefined,
+      state: undefined,
+      [name]: value,
+    })
+  })
+
+  it('rejects a role and a state outside the protocol values', async () => {
+    const pipe = new ValidationPipe()
+    const queryMetadata = { type: 'query', metatype: ListCredentialExchangesQueryDto } as const
+
+    await expect(pipe.transform({ role: 'verifier' }, queryMetadata)).rejects.toMatchObject({
+      status: 400,
+    })
+    await expect(pipe.transform({ state: 'offered' }, queryMetadata)).rejects.toMatchObject({
+      status: 400,
+    })
+    await expect(
+      pipe.transform({ role: 'holder', state: 'offer-received' }, queryMetadata),
+    ).resolves.toBeDefined()
   })
 
   it('rejects a malformed cursor with the INVALID_CURSOR envelope', async () => {
