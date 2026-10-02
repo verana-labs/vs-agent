@@ -64,12 +64,16 @@ function makeAnonCreds() {
   }
 }
 
-function makeAgent() {
+/** The `alternativeDids` tag of a DID record, as `publicDidsOf` reads it. */
+const getTagOf = (alternativeDids: string[]) => (name: string) =>
+  name === 'alternativeDids' ? alternativeDids : undefined
+
+function makeAgent(alternativeDids: string[] = []) {
   const anoncreds = makeAnonCreds()
   return {
     anoncreds,
     agent: {
-      did: 'did:webvh:QmEco:agent.example',
+      did: AGENT_DID,
       context: {},
       config: { logger: makeLogger() },
       publicApiBaseUrl: 'https://agent.example',
@@ -77,18 +81,24 @@ function makeAgent() {
       modules: { anoncreds },
       genericRecords: { save: vi.fn() },
       dependencyManager: { resolve: () => ({ findBySchemaId: vi.fn(async () => null) }) },
+      dids: { getCreatedDids: async () => [{ getTag: getTagOf(alternativeDids) }] },
     },
   }
 }
 
-function stateWith(ecosystemCorporationId: number): VeranaSyncState {
+const AGENT_DID = 'did:webvh:QmEco:agent.example'
+const AGENT_DID_WEB = 'did:web:agent.example'
+const OTHER_DID = 'did:example:eco'
+
+/** The Ecosystem of schema 5 is controlled by `ecosystemDid` and belongs to `corporationId`. */
+function stateWith(ecosystemDid: string, corporationId = 7): VeranaSyncState {
   return {
     lastBlockHeight: 10,
     ecosystems: {
       '1': {
         id: 1,
-        did: 'did:example:eco',
-        corporationId: ecosystemCorporationId,
+        did: ecosystemDid,
+        corporationId,
         archived: false,
         lastModifiedBlock: 10,
       },
@@ -106,33 +116,48 @@ describe('publishVtjscIfOwner', () => {
     createJsc.mockResolvedValue({ id: jscId(5) })
   })
 
-  it('publishes a schema owned by the agent corporation', async () => {
+  it('publishes a schema of the Ecosystem whose DID is the agent DID', async () => {
     const { agent } = makeAgent()
-    await publishVtjscIfOwner(stateWith(7), agent as never, '5', 7)
+    await publishVtjscIfOwner(stateWith(AGENT_DID), agent as never, '5')
     expect(createJsc).toHaveBeenCalledTimes(1)
   })
 
-  it('skips a schema owned by another corporation', async () => {
+  it('publishes a schema of the Ecosystem that names the agent by its did:web alias', async () => {
+    const { agent } = makeAgent([AGENT_DID_WEB])
+    await publishVtjscIfOwner(stateWith(AGENT_DID_WEB), agent as never, '5')
+    expect(createJsc).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips a schema of an Ecosystem of another Corporation', async () => {
     const { agent } = makeAgent()
-    await publishVtjscIfOwner(stateWith(8), agent as never, '5', 7)
+    await publishVtjscIfOwner(stateWith(OTHER_DID, 8), agent as never, '5')
     expect(createJsc).not.toHaveBeenCalled()
+  })
+
+  it('skips a schema of an Ecosystem of its own Corporation that another DID controls', async () => {
+    // [VSA-VTI-VTJSC]: the controller is the agent whose DID is Ecosystem.did, not every agent
+    // of the Corporation. Another agent publishing the VTJSC would publish a copy under its own DID.
+    const { agent, anoncreds } = makeAgent()
+    await publishVtjscIfOwner(stateWith(OTHER_DID, 7), agent as never, '5')
+    expect(createJsc).not.toHaveBeenCalled()
+    expect(anoncreds.registerSchema).not.toHaveBeenCalled()
   })
 
   it('skips publication when the agent is not connected to a chain', async () => {
     const { agent } = makeAgent()
-    await publishVtjscIfOwner(stateWith(7), { ...agent, veranaChain: undefined } as never, '5', 7)
+    await publishVtjscIfOwner(stateWith(AGENT_DID), { ...agent, veranaChain: undefined } as never, '5')
     expect(createJsc).not.toHaveBeenCalled()
   })
 
   it('returns without throwing when the schema is not in state', async () => {
     const { agent } = makeAgent()
-    await expect(publishVtjscIfOwner(stateWith(7), agent as never, '404', 7)).resolves.toBeUndefined()
+    await expect(publishVtjscIfOwner(stateWith(AGENT_DID), agent as never, '404')).resolves.toBeUndefined()
     expect(createJsc).not.toHaveBeenCalled()
   })
 
   it('publishes the AnonCreds schema of the VTJSC it just published', async () => {
     const { agent, anoncreds } = makeAgent()
-    await publishVtjscIfOwner(stateWith(7), agent as never, '5', 7)
+    await publishVtjscIfOwner(stateWith(AGENT_DID), agent as never, '5')
 
     expect(anoncreds.registerSchema).toHaveBeenCalledWith({
       schema: { attrNames: ['name'], name: 'x', version: '5', issuerId: agent.did },
@@ -144,7 +169,7 @@ describe('publishVtjscIfOwner', () => {
     const { agent, anoncreds } = makeAgent()
     anoncreds.getCreatedSchemas.mockResolvedValue([{ schemaId: 'zQmAlready' }] as never)
 
-    await publishVtjscIfOwner(stateWith(7), agent as never, '5', 7)
+    await publishVtjscIfOwner(stateWith(AGENT_DID), agent as never, '5')
 
     expect(anoncreds.getCreatedSchemas).toHaveBeenCalledWith({ relatedJsonSchemaCredentialId: jscId(5) })
     expect(anoncreds.registerSchema).not.toHaveBeenCalled()
@@ -153,7 +178,7 @@ describe('publishVtjscIfOwner', () => {
   it('stores the Type Metadata of the VTJSC it just published, at the fixed vct URL', async () => {
     saveVtjscTypeMetadata.mockClear()
     const { agent } = makeAgent()
-    await publishVtjscIfOwner(stateWith(7), agent as never, '5', 7)
+    await publishVtjscIfOwner(stateWith(AGENT_DID), agent as never, '5')
 
     expect(saveVtjscTypeMetadata).toHaveBeenCalledWith(agent, schemaRef(5), typeMetadataOf(5, 'x'))
   })
@@ -161,7 +186,7 @@ describe('publishVtjscIfOwner', () => {
   it('still publishes the AnonCreds schema when the Type Metadata cannot be stored', async () => {
     saveVtjscTypeMetadata.mockRejectedValueOnce(new Error('record gone'))
     const { agent, anoncreds } = makeAgent()
-    await publishVtjscIfOwner(stateWith(7), agent as never, '5', 7)
+    await publishVtjscIfOwner(stateWith(AGENT_DID), agent as never, '5')
 
     expect(anoncreds.registerSchema).toHaveBeenCalledTimes(1)
     expect(agent.config.logger.error).toHaveBeenCalledWith(
@@ -172,15 +197,15 @@ describe('publishVtjscIfOwner', () => {
 
   it('keeps the schemas of two VTJSCs apart when both derive the same name and attributes', async () => {
     const { agent, anoncreds } = makeAgent()
-    const state = stateWith(7)
+    const state = stateWith(AGENT_DID)
     state.credentialSchemas['6'] = {
       ...state.credentialSchemas['5'],
       id: 6,
     }
 
     createJsc.mockResolvedValueOnce({ id: jscId(5) }).mockResolvedValueOnce({ id: jscId(6) })
-    await publishVtjscIfOwner(state, agent as never, '5', 7)
-    await publishVtjscIfOwner(state, agent as never, '6', 7)
+    await publishVtjscIfOwner(state, agent as never, '5')
+    await publishVtjscIfOwner(state, agent as never, '6')
 
     expect(anoncreds.registerSchema).toHaveBeenCalledWith({
       schema: { attrNames: ['name'], name: 'x', version: '5', issuerId: agent.did },
@@ -192,9 +217,9 @@ describe('publishVtjscIfOwner', () => {
     })
   })
 
-  it('publishes no schema for an ecosystem of another corporation', async () => {
+  it('publishes no schema for an Ecosystem that another DID controls', async () => {
     const { agent, anoncreds } = makeAgent()
-    await publishVtjscIfOwner(stateWith(8), agent as never, '5', 7)
+    await publishVtjscIfOwner(stateWith(OTHER_DID, 8), agent as never, '5')
     expect(anoncreds.registerSchema).not.toHaveBeenCalled()
   })
 })
@@ -202,9 +227,15 @@ describe('publishVtjscIfOwner', () => {
 /**
  * Holds the given `_vt/jsc` keys as createJsc writes them today (data model 2.0, Data Integrity
  * proof). A key listed in `digests` reads as current, not to rebuild; a key in `legacy` is still
- * the data model 1.1 credential an older agent published.
+ * the data model 1.1 credential an older agent published. The agent is `did:web:agent.example`,
+ * unless `publicDids` gives it another DID and alternative DIDs.
  */
-function agentPublishing(jscKeys: string[], digests: Record<string, string> = {}, legacy: string[] = []) {
+function agentPublishing(
+  jscKeys: string[],
+  digests: Record<string, string> = {},
+  legacy: string[] = [],
+  publicDids: { did?: string; alternativeDids?: string[] } = {},
+) {
   const metadata = Object.fromEntries(
     jscKeys.map(key => [
       key,
@@ -228,7 +259,7 @@ function agentPublishing(jscKeys: string[], digests: Record<string, string> = {}
   )
   const anoncreds = makeAnonCreds()
   return {
-    did: 'did:web:agent.example',
+    did: publicDids.did ?? AGENT_DID_WEB,
     context: {},
     publicApiBaseUrl: 'https://agent.example',
     config: { logger: makeLogger() },
@@ -240,23 +271,32 @@ function agentPublishing(jscKeys: string[], digests: Record<string, string> = {}
     dependencyManager: { resolve: () => ({ findBySchemaId: vi.fn(async () => null) }) },
     dids: {
       getCreatedDids: async () => [
-        { metadata: { get: () => metadata, set: vi.fn() }, didDocument: { service: [] } },
+        {
+          metadata: { get: () => metadata, set: vi.fn() },
+          didDocument: { service: [] },
+          getTag: getTagOf(publicDids.alternativeDids ?? []),
+        },
       ],
     },
   }
 }
 
-/** Ecosystem 1 is the agent's, 2 moved to another corporation, 3 is the agent's but archived. */
+/**
+ * Ecosystem 1 is the agent's, 2 belongs to another Corporation, 3 is the agent's but archived, and
+ * 4 belongs to the agent's Corporation but another DID controls it.
+ */
 function makeIndexer(overrides: Record<string, unknown> = {}) {
   const ecosystems: Record<string, unknown> = {
     '1': { id: 1, did: 'did:web:agent.example', corporation_id: 7, archived: null },
     '2': { id: 2, did: 'did:web:other.example', corporation_id: 8, archived: null },
     '3': { id: 3, did: 'did:web:agent.example', corporation_id: 7, archived: '2026-01-01T00:00:00Z' },
+    '4': { id: 4, did: 'did:web:sibling.example', corporation_id: 7, archived: null },
   }
   const schemas: Record<string, unknown> = {
     '5': { id: 5, ecosystem_id: 1, json_schema: jsonSchema('kept') },
     '9': { id: 9, ecosystem_id: 2, json_schema: jsonSchema('other-corp') },
     '11': { id: 11, ecosystem_id: 3, json_schema: jsonSchema('archived') },
+    '13': { id: 13, ecosystem_id: 4, json_schema: jsonSchema('sibling') },
   }
   return {
     listEcosystems: vi.fn(async () => Object.values(ecosystems)),
@@ -281,37 +321,83 @@ describe('reconcileVtjscPublications', () => {
     reattachVtjscPublication.mockClear()
   })
 
-  it('detaches the VTJSC of an ecosystem that moved to another corporation, and keeps its own', async () => {
+  it('detaches the VTJSC of an ecosystem that another DID controls, and keeps its own', async () => {
     const agent = agentPublishing([schemaRef(5), schemaRef(9)])
-    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never)
 
     expect(detachVtjscPublications).toHaveBeenCalledWith(expect.anything(), [schemaRef(9)])
+  })
+
+  it('publishes no VTJSC for an Ecosystem of its own Corporation that another DID controls', async () => {
+    createJsc.mockImplementation(
+      async (_a: unknown, _b: unknown, _c: unknown, options: { schemaBaseId: string }) => ({
+        id: jscId(options.schemaBaseId),
+      }),
+    )
+    const agent = agentPublishing([])
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never)
+
+    const published = createJsc.mock.calls.map(call => (call[3] as { jsonSchemaRef: string }).jsonSchemaRef)
+    expect(published).toEqual(expect.arrayContaining([schemaRef(5), schemaRef(11)]))
+    expect(published).not.toContain(schemaRef(13))
+  })
+
+  it('publishes the VTJSC of an Ecosystem that names the agent by its did:web alias', async () => {
+    createJsc.mockImplementation(
+      async (_a: unknown, _b: unknown, _c: unknown, options: { schemaBaseId: string }) => ({
+        id: jscId(options.schemaBaseId),
+      }),
+    )
+    const agent = agentPublishing([], {}, [], { did: AGENT_DID, alternativeDids: [AGENT_DID_WEB] })
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never)
+
+    const published = createJsc.mock.calls.map(call => (call[3] as { jsonSchemaRef: string }).jsonSchemaRef)
+    expect(published).toEqual(expect.arrayContaining([schemaRef(5), schemaRef(11)]))
+  })
+
+  it('keeps the VTJSC of an Ecosystem that names the agent by its did:web alias', async () => {
+    // Nothing is reconciled, so the detach pass resolves the Ecosystem of schema 5 itself.
+    const agent = agentPublishing([schemaRef(5)], {}, [], {
+      did: AGENT_DID,
+      alternativeDids: [AGENT_DID_WEB],
+    })
+    const indexer = makeIndexer({ listEcosystems: vi.fn(async () => []) })
+    await reconcileVtjscPublications(agent as never, indexer as never)
+
+    expect(detachVtjscPublications).not.toHaveBeenCalled()
+  })
+
+  it('detaches the copy that an earlier agent published for an Ecosystem of its own Corporation', async () => {
+    const agent = agentPublishing([schemaRef(5), schemaRef(13)])
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never)
+
+    expect(detachVtjscPublications).toHaveBeenCalledWith(expect.anything(), [schemaRef(13)])
   })
 
   it('detaches without dropping the entry, so the VTJSC keeps being served', async () => {
     // Issued credentials name this VTJSC in `credentialSchema.id`; losing the entry would 404 it.
     const agent = agentPublishing([schemaRef(9)])
-    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never)
 
     expect(Object.keys(agent.metadata)).toContain(schemaRef(9))
   })
 
-  it('leaves an archived ecosystem of its own corporation alone', async () => {
+  it('leaves an archived ecosystem of its own alone', async () => {
     // The agent still controls it, and [VSA-VTI-NOTIF-ES] gives ArchiveEcosystem no handler.
     const agent = agentPublishing([schemaRef(5), schemaRef(11)])
-    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never)
 
     expect(detachVtjscPublications).not.toHaveBeenCalled()
     expect(Object.keys(agent.metadata)).toContain(schemaRef(11))
   })
 
-  it('re-attaches a detached VTJSC once the ecosystem is under its corporation again', async () => {
+  it('re-attaches a detached VTJSC once the ecosystem is under its control again', async () => {
     // The digest still matches, so the publication pass skips createJsc and announces nothing.
     reattachVtjscPublication.mockResolvedValueOnce(true)
     const agent = agentPublishing([schemaRef(5)], {
       [schemaRef(5)]: generateDigestSRI(jsonSchema('kept')),
     })
-    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never)
 
     expect(reattachVtjscPublication).toHaveBeenCalledWith(expect.anything(), schemaRef(5))
     expect(createJsc).not.toHaveBeenCalledWith(
@@ -326,7 +412,7 @@ describe('reconcileVtjscPublications', () => {
     // the digest matches, so only the data model check can trigger the rebuild
     const digest = generateDigestSRI(jsonSchema('kept'))
     const agent = agentPublishing([schemaRef(5)], { [schemaRef(5)]: digest }, [schemaRef(5)])
-    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never)
 
     expect(createJsc).toHaveBeenCalledWith(
       expect.anything(),
@@ -342,7 +428,7 @@ describe('reconcileVtjscPublications', () => {
     const agent = agentPublishing([schemaRef(5)], {
       [schemaRef(5)]: generateDigestSRI(jsonSchema('kept')),
     })
-    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never)
 
     expect(createJsc).not.toHaveBeenCalledWith(
       expect.anything(),
@@ -362,7 +448,7 @@ describe('reconcileVtjscPublications', () => {
     const agent = agentPublishing([schemaRef(5)], {
       [schemaRef(5)]: generateDigestSRI(jsonSchema('kept')),
     })
-    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never)
 
     expect(saveVtjscTypeMetadata).toHaveBeenCalledWith(agent, schemaRef(5), typeMetadataOf(5, 'kept'))
   })
@@ -370,7 +456,7 @@ describe('reconcileVtjscPublications', () => {
   it('never touches the self-issued schema credentials stored in the same bucket', async () => {
     const selfTrKey = 'https://agent.example/vt/schemas-example-service-jsc.json'
     const agent = agentPublishing([selfTrKey, schemaRef(9)])
-    await reconcileVtjscPublications(agent as never, makeIndexer() as never, 7)
+    await reconcileVtjscPublications(agent as never, makeIndexer() as never)
 
     expect(detachVtjscPublications).toHaveBeenCalledWith(expect.anything(), [schemaRef(9)])
   })
@@ -382,7 +468,7 @@ describe('reconcileVtjscPublications', () => {
         throw new Error('indexer unreachable')
       }),
     })
-    await reconcileVtjscPublications(agent as never, indexer as never, 7)
+    await reconcileVtjscPublications(agent as never, indexer as never)
 
     expect(detachVtjscPublications).not.toHaveBeenCalled()
   })
@@ -391,7 +477,7 @@ describe('reconcileVtjscPublications', () => {
     // Nothing is reconciled, so a diff-based pass would detach schema 5 here.
     const agent = agentPublishing([schemaRef(5)])
     const indexer = makeIndexer({ listEcosystems: vi.fn(async () => []) })
-    await reconcileVtjscPublications(agent as never, indexer as never, 7)
+    await reconcileVtjscPublications(agent as never, indexer as never)
 
     expect(detachVtjscPublications).not.toHaveBeenCalled()
   })
@@ -436,7 +522,7 @@ describe('self-issued ECS credentials', () => {
       { id: 6, title: 'OrganizationCredential' },
     ])
 
-    await reconcileVtjscPublications(agent as never, indexer as never, 7, ecsClaims as never)
+    await reconcileVtjscPublications(agent as never, indexer as never, ecsClaims as never)
 
     const keys = rebindEcsCredentialSchema.mock.calls.map(call => call[3])
     expect(keys).toContain('ecs-service')
@@ -458,7 +544,7 @@ describe('self-issued ECS credentials', () => {
       ),
     })
 
-    await reconcileVtjscPublications(agent as never, indexer as never, 7, ecsClaims as never)
+    await reconcileVtjscPublications(agent as never, indexer as never, ecsClaims as never)
 
     expect(rebindEcsCredentialSchema.mock.calls[0][8]).toBe('2027-09-25T10:00:00Z')
   })
@@ -467,7 +553,7 @@ describe('self-issued ECS credentials', () => {
     const agent = chainAgent([])
     const indexer = indexerWithIssuerOn([{ id: 7, title: 'ExampleCredential' }])
 
-    await reconcileVtjscPublications(agent as never, indexer as never, 7, ecsClaims as never)
+    await reconcileVtjscPublications(agent as never, indexer as never, ecsClaims as never)
 
     expect(rebindEcsCredentialSchema).not.toHaveBeenCalled()
   })
@@ -485,7 +571,7 @@ describe('self-issued ECS credentials', () => {
       ),
     })
 
-    await reconcileVtjscPublications(agent as never, indexer as never, 7, ecsClaims as never)
+    await reconcileVtjscPublications(agent as never, indexer as never, ecsClaims as never)
 
     expect(rebindEcsCredentialSchema).not.toHaveBeenCalled()
   })

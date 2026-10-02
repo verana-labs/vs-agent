@@ -461,12 +461,7 @@ const run = async () => {
     }
     if (authorizationService) registerAuthorizationHandlers(handlerRegistry, authorizationService)
     if (VERANA_CORPORATION_ID) {
-      registerSelfIssuanceAnchorHandlers(
-        handlerRegistry,
-        indexerService,
-        Number(VERANA_CORPORATION_ID),
-        ecsClaims,
-      )
+      registerSelfIssuanceAnchorHandlers(handlerRegistry, indexerService, ecsClaims)
     }
     registerNestPluginIndexerHandlers(nestPlugins, handlerRegistry)
 
@@ -480,7 +475,6 @@ const run = async () => {
         agent,
         handlerRegistry,
         corporationId: indexerCorporationId,
-        agentCorporationId: Number(VERANA_CORPORATION_ID),
       })
       bootstrapState.watchIndexer(() => indexerWs.syncStatus)
       bootstrapState.complete('indexer-subscription')
@@ -493,8 +487,8 @@ const run = async () => {
     }
 
     if (VERANA_CORPORATION_ID) {
-      void reconcileVtjscPublications(agent, indexerService, Number(VERANA_CORPORATION_ID), ecsClaims).catch(
-        (error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`),
+      void reconcileVtjscPublications(agent, indexerService, ecsClaims).catch((error: Error) =>
+        serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`),
       )
     }
 
