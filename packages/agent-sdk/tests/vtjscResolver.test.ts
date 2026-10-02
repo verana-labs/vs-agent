@@ -29,13 +29,10 @@ function makeAgent(
   return {
     did,
     dids: {
-      getCreatedDids: async () => [
-        {
-          did,
-          metadata: { get: (k: string) => metadata.get(k) },
-          getTag: (name: string) => (name === 'alternativeDids' ? options.alternativeDids : undefined),
-        },
-      ],
+      getCreatedDids: async (query: { did: string }) =>
+        [did, ...(options.alternativeDids ?? [])].includes(query.did)
+          ? [{ did, metadata: { get: (k: string) => metadata.get(k) } }]
+          : [],
       resolve,
     },
     resolve,

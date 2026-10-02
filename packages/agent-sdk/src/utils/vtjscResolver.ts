@@ -47,14 +47,12 @@ export async function resolveJsonSchemaCredentialId(
     throw new Error(`Ecosystem ${schema.ecosystem_id} of schema ${schemaId} has no DID`)
   }
 
-  const [didRecord] = agent.did ? await agent.dids.getCreatedDids({ did: agent.did }) : []
-  const alternativeDids = didRecord?.getTag('alternativeDids')
-  const ownDids = [agent.did, ...(Array.isArray(alternativeDids) ? alternativeDids : [])]
-  if (didRecord && ownDids.includes(ecosystem.did)) {
-    const presentation = findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)?.data
-    const localId = presentation?.verifiableCredential?.[0]?.id
-    if (localId) return localId
-  }
+  // Credo matches a created DID by its alternative DIDs too, such as the did:web of a did:webvh.
+  const [didRecord] = await agent.dids.getCreatedDids({ did: ecosystem.did })
+  const localId = didRecord
+    ? findMetadataEntry(didRecord, '_vt/jsc', '', schemaRef)?.data?.verifiableCredential?.[0]?.id
+    : undefined
+  if (localId) return localId
 
   // createJsc registers the presentation under this exact service id.
   const serviceId = `${ecosystem.did}#vpr-schemas-${schemaId}-vtjsc-vp`
