@@ -151,14 +151,10 @@ export class CoreService implements EventHandler, OnModuleInit {
             issuanceDate: new Date().toISOString().split('T')[0],
           }
 
-          const offer = await this.credentialService.issue(claims, {
+          await this.credentialService.issue(claims, {
             connectionId: session.connectionId,
             refId: claims.fullName,
             revokeIfAlreadyIssued: true,
-          })
-          await this.client.didcomm.sendBasicMessage({
-            connectionId: session.connectionId,
-            content: offer.shortUrl,
           })
         }
         if (selectionId === Cmd.REVOKE) {

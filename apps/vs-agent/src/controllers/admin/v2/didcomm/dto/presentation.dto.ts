@@ -7,6 +7,7 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsNotEmpty,
   IsOptional,
   IsString,
   ValidateNested,
@@ -63,6 +64,17 @@ export class CreatePresentationRequestBodyDto {
   requestedCredentials!: RequestedCredentialDto[]
 
   @ApiPropertyOptional({
+    description:
+      'An established connection to send the request on. The agent creates an Out-of-Band ' +
+      'invitation when the caller omits it.',
+    example: 'conn-1234-5678',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  connectionId?: string
+
+  @ApiPropertyOptional({
     description: 'Ask the holder for a non-revocation proof at verification time',
     default: false,
   })
@@ -103,18 +115,22 @@ export class CreatePresentationRequestResponseDto {
   @ApiProperty({ description: 'Flow identifier, for later tracking', example: 'proof-1234-5678' })
   proofExchangeId!: string
 
-  @ApiProperty({
-    description: 'The Out-of-Band invitation, in the envelope that didcommVersion selects',
+  @ApiPropertyOptional({
+    description:
+      'The Out-of-Band invitation, in the envelope that didcommVersion selects. Absent when the ' +
+      'request names a `connectionId`, because the agent sends the request on that connection.',
     type: 'object',
     additionalProperties: true,
   })
-  invitation!: Record<string, unknown>
+  invitation?: Record<string, unknown>
 
-  @ApiProperty({
-    description: 'A URL under PUBLIC_API_BASE_URL that resolves to the same invitation, for a QR code',
+  @ApiPropertyOptional({
+    description:
+      'A URL under PUBLIC_API_BASE_URL that resolves to the same invitation, for a QR code. ' +
+      'Absent when the request names a `connectionId`.',
     example: 'https://mydomain.com/s?id=abcd',
   })
-  shortUrl!: string
+  shortUrl?: string
 }
 
 /**

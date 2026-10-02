@@ -101,8 +101,12 @@ const agent = {
     },
   },
   didcomm: {
+    connections: {
+      findById: vi.fn(),
+    },
     credentials: {
       createOffer: vi.fn(),
+      offerCredential: vi.fn(),
       getAll: vi.fn().mockResolvedValue(records),
       declineOffer: vi.fn(),
       sendProblemReport: vi.fn(),
@@ -168,6 +172,7 @@ describe('v2 didcomm credential exchange routes', () => {
     anonCredsTrust.assertAuthorized.mockResolvedValue(undefined)
     agent.modules.anoncreds.getCreatedCredentialDefinitions.mockResolvedValue([credentialDefinition(false)])
     urlShorteningService.createShortUrl.mockResolvedValue('short-1')
+    agent.didcomm.connections.findById.mockResolvedValue({ id: 'conn-1' })
     vi.mocked(createInvitation).mockResolvedValue({
       invitation: { '@type': 'https://didcomm.org/out-of-band/2.0/invitation', '@id': 'inv-1' },
     } as never)
@@ -314,6 +319,62 @@ describe('v2 didcomm credential exchange routes', () => {
 
     // The specification tells the agent to use v2 if the caller sends no value. The SDK does this.
     expect(vi.mocked(createInvitation).mock.calls[1][0].didCommVersion).toBeUndefined()
+  })
+
+  it('sends the offer on the connection that the caller names, and makes no invitation', async () => {
+    agent.didcomm.credentials.offerCredential.mockResolvedValue({ id: 'ce-new' })
+
+    const response = await request(app.getHttpServer())
+      .post('/v2/didcomm/credential-offer')
+      .send({
+        credentialDefinitionId: 'credDef:a',
+        claims: [{ name: 'phoneNumber', value: '+57128348520' }],
+        connectionId: 'conn-1',
+      })
+
+    expect(response.status).toBe(201)
+    // The specification leaves out both invitation fields on this path.
+    expect(response.body).toEqual({ credentialExchangeId: 'ce-new' })
+    expect(createInvitation).not.toHaveBeenCalled()
+    expect(urlShorteningService.createShortUrl).not.toHaveBeenCalled()
+    expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
+    expect(agent.didcomm.credentials.offerCredential).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionId: 'conn-1', protocolVersion: 'v2' }),
+    )
+  })
+
+  it('ignores useLegacyDid and didcommVersion when the caller names a connection', async () => {
+    agent.didcomm.credentials.offerCredential.mockResolvedValue({ id: 'ce-new' })
+
+    const response = await request(app.getHttpServer())
+      .post('/v2/didcomm/credential-offer')
+      .send({
+        credentialDefinitionId: 'credDef:a',
+        claims: [{ name: 'phoneNumber', value: '+57128348520' }],
+        connectionId: 'conn-1',
+        didcommVersion: 'v1',
+        useLegacyDid: true,
+      })
+
+    expect(response.status).toBe(201)
+    expect(createInvitation).not.toHaveBeenCalled()
+  })
+
+  it('answers UNKNOWN_ID for an unknown connection, and offers nothing', async () => {
+    agent.didcomm.connections.findById.mockResolvedValue(null)
+
+    const response = await request(app.getHttpServer())
+      .post('/v2/didcomm/credential-offer')
+      .send({
+        credentialDefinitionId: 'credDef:a',
+        claims: [{ name: 'phoneNumber', value: '+57128348520' }],
+        connectionId: 'conn-absent',
+      })
+
+    expect(response.status).toBe(404)
+    expect(response.body.error.code).toBe('UNKNOWN_ID')
+    // The agent leaves no exchange record that no peer would ever receive.
+    expect(agent.didcomm.credentials.offerCredential).not.toHaveBeenCalled()
   })
 
   it('answers UNKNOWN_ID for an unknown credential definition', async () => {
