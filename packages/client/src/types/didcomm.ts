@@ -253,16 +253,22 @@ export interface RequestedCredentialInput {
 
 export interface CreatePresentationRequestBody {
   requestedCredentials: RequestedCredentialInput[]
+  /** An established connection to send the request on, in place of an invitation. */
+  connectionId?: string
   requireNonRevocation?: boolean
   autoAccept?: boolean
+  /** The agent ignores it when `connectionId` is present. */
   useLegacyDid?: boolean
+  /** The agent ignores it when `connectionId` is present. */
   didcommVersion?: DidCommVersion
 }
 
 export interface CreatePresentationRequestResponse {
   proofExchangeId: string
-  invitation: Record<string, unknown>
-  shortUrl: string
+  /** Absent when the request named a `connectionId`. */
+  invitation?: Record<string, unknown>
+  /** Absent when the request named a `connectionId`. */
+  shortUrl?: string
 }
 
 export interface DeclineExchangeBody {
@@ -286,15 +292,21 @@ export interface CredentialExchangeRecord {
 export interface CreateCredentialOfferBody {
   credentialDefinitionId: string
   claims: Claim[]
+  /** An established connection to send the offer on, in place of an invitation. */
+  connectionId?: string
   revocationRegistryDefinitionId?: string
   revocationRegistryIndex?: number
   autoAccept?: boolean
+  /** The agent ignores it when `connectionId` is present. */
   useLegacyDid?: boolean
+  /** The agent ignores it when `connectionId` is present. */
   didcommVersion?: DidCommVersion
 }
 
 export interface CreateCredentialOfferResponse {
   credentialExchangeId: string
-  invitation: Record<string, unknown>
-  shortUrl: string
+  /** Absent when the request named a `connectionId`. */
+  invitation?: Record<string, unknown>
+  /** Absent when the request named a `connectionId`. */
+  shortUrl?: string
 }
