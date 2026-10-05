@@ -82,7 +82,7 @@ The public listener serves a dashboard at `/`. It renders the service profile (n
 | Variable                    | Description                                                                                                                                                | Default value |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | UI_NETWORK_BADGE            | Text of the network badge in the header (e.g. `Testnet`). Its LED reflects the reachability of `VERANA_INDEXER_BASE_URL`. No badge when unset.           | none          |
-| UI_SHOW_PLACEHOLDER_MESSAGE | Show the banner presenting the page as the placeholder of a Verana business wallet. Set it to `false` to hide it.                                         | true          |
+| UI_SHOW_PLACEHOLDER_MESSAGE | Set it to `true` to show a banner presenting the page as the placeholder of a Verana business wallet (as the playground demos do).                       | false         |
 
 The accreditations of the agent and the deep links into the Verana app are read from `VERANA_CHAIN_ID` and `VERANA_INDEXER_BASE_URL`; the footer shows the release version and the image variant (`VS_AGENT_BUILD`, set by the Docker image).
 

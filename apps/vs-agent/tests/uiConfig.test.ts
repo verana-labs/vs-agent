@@ -8,12 +8,12 @@ import { buildUiConfig, injectUiConfig, serveUiIndex } from '../src/utils/uiConf
 const sources = {
   build: 'vs-agent',
   version: '2.0.0',
-  showPlaceholderMessage: true,
+  showPlaceholderMessage: false,
 }
 
 describe('buildUiConfig', () => {
   it('carries the build, version, badge and banner flag', () => {
-    expect(buildUiConfig({ ...sources, networkBadge: 'Testnet' })).toEqual({
+    expect(buildUiConfig({ ...sources, networkBadge: 'Testnet', showPlaceholderMessage: true })).toEqual({
       build: 'vs-agent',
       version: '2.0.0',
       networkBadge: 'Testnet',
@@ -67,9 +67,28 @@ describe('serveUiIndex', () => {
       expect(paths).toEqual(['/', '/index.html'])
 
       const res = { type: vi.fn().mockReturnThis(), send: vi.fn() }
-      handler({}, res)
+      const next = vi.fn()
+      handler({}, res, next)
       expect(res.type).toHaveBeenCalledWith('html')
       expect(res.send.mock.calls[0][0]).toContain('window.__VS_AGENT__=')
+      expect(next).not.toHaveBeenCalled()
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('falls through when no UI is built, so / answers 404 rather than 500', () => {
+    const get = vi.fn()
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vsa-ui-'))
+    try {
+      serveUiIndex({ get }, dir, buildUiConfig(sources))
+      const handler = get.mock.calls[0][1]
+
+      const res = { type: vi.fn().mockReturnThis(), send: vi.fn() }
+      const next = vi.fn()
+      handler({}, res, next)
+      expect(next).toHaveBeenCalledOnce()
+      expect(res.send).not.toHaveBeenCalled()
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })
     }

@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from 'express'
+import type { Express, NextFunction, Request, Response } from 'express'
 
 import * as fs from 'fs'
 import * as path from 'path'
@@ -52,11 +52,12 @@ export const injectUiConfig = (indexHtml: string, config: UiConfig): string =>
 /**
  * Serves the UI entry point with the runtime config injected. Mount it before
  * the static middleware so that `/` and `/index.html` never reach the plain file.
+ * Without a built UI (no index.html) the request falls through, so it answers 404.
  */
 export const serveUiIndex = (app: Pick<Express, 'get'>, publicDir: string, config: UiConfig): void => {
   const indexPath = path.join(publicDir, 'index.html')
-  app.get(['/', '/index.html'], (_req: Request, res: Response) => {
-    const html = injectUiConfig(fs.readFileSync(indexPath, 'utf-8'), config)
-    res.type('html').send(html)
+  app.get(['/', '/index.html'], (_req: Request, res: Response, next: NextFunction) => {
+    if (!fs.existsSync(indexPath)) return next()
+    res.type('html').send(injectUiConfig(fs.readFileSync(indexPath, 'utf-8'), config))
   })
 }

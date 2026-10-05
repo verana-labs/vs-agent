@@ -89,8 +89,8 @@ export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER
 // Dashboard UI
 // Network badge text in the header (e.g. "Testnet"); no badge when unset.
 export const UI_NETWORK_BADGE = process.env.UI_NETWORK_BADGE
-// Banner that presents the page as the placeholder of a Verana business wallet.
-export const UI_SHOW_PLACEHOLDER_MESSAGE = process.env.UI_SHOW_PLACEHOLDER_MESSAGE !== 'false'
+// Banner that presents the page as the placeholder of a Verana business wallet; opt-in.
+export const UI_SHOW_PLACEHOLDER_MESSAGE = process.env.UI_SHOW_PLACEHOLDER_MESSAGE === 'true'
 
 // Placeholder resources the agent serves under /vt/default, so an operator can point an
 // ECS_CLAIMS_*_URI at the agent itself.

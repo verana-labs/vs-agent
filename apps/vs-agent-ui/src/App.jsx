@@ -7,7 +7,7 @@ export default function App() {
   return (
     <div className="layout">
       <Header />
-      {showPlaceholderMessage !== false && (
+      {showPlaceholderMessage && (
         <div className="notice-band">
           This page is the placeholder of your Verana business wallet.
         </div>

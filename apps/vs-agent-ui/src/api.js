@@ -12,7 +12,7 @@ export function getAgentConfig() {
       build: null,
       version: null,
       networkBadge: null,
-      showPlaceholderMessage: true,
+      showPlaceholderMessage: false,
       network: null,
     }
   )
