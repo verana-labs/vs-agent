@@ -231,6 +231,13 @@ export interface RequestMrtdBody {
   connectionId: string
 }
 
+export interface ListPresentationsQuery extends PaginationQuery {
+  connectionId?: string
+  threadId?: string
+  role?: ProofRole
+  state?: ProofState
+}
+
 export interface PresentationRecord {
   proofExchangeId: string
   state: ProofState
@@ -273,6 +280,13 @@ export interface CreatePresentationRequestResponse {
 
 export interface DeclineExchangeBody {
   reason?: string
+}
+
+export interface ListCredentialExchangesQuery extends PaginationQuery {
+  connectionId?: string
+  threadId?: string
+  role?: CredentialRole
+  state?: CredentialState
 }
 
 export interface CredentialExchangeRecord {

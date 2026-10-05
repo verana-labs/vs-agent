@@ -45,6 +45,10 @@ import {
   ADMIN_API_PORT,
   AGENT_LOG_LEVEL_NAME,
   AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION,
+  AGENT_VERSION,
+  VS_AGENT_BUILD,
+  UI_NETWORK_BADGE,
+  UI_SHOW_PLACEHOLDER_MESSAGE,
   PUBLIC_API_PORT,
   AGENT_PUBLIC_DID_METHOD,
   AGENT_WALLET_ID,
@@ -101,6 +105,8 @@ import {
   TsLogger,
   ecsServiceProfile,
   webhookEvent,
+  buildUiConfig,
+  serveUiIndex,
 } from './utils'
 
 const SELECTABLE_PLUGINS = ['chat', 'mrtd']
@@ -141,7 +147,21 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   commonAppConfig(publicApp, cors, true)
   mountPublicPluginMiddleware(publicApp.getHttpAdapter().getInstance(), nestPlugins)
 
-  publicApp.use(express.static(path.join(__dirname, '../../public')))
+  // The dashboard reads its runtime config from index.html, so serve that one with it injected
+  const publicDir = path.join(__dirname, '../../public')
+  serveUiIndex(
+    publicApp.getHttpAdapter().getInstance(),
+    publicDir,
+    buildUiConfig({
+      build: VS_AGENT_BUILD,
+      version: AGENT_VERSION,
+      networkBadge: UI_NETWORK_BADGE,
+      showPlaceholderMessage: UI_SHOW_PLACEHOLDER_MESSAGE,
+      chainId: VERANA_CHAIN_ID,
+      indexerBaseUrl: VERANA_INDEXER_BASE_URL,
+    }),
+  )
+  publicApp.use(express.static(publicDir))
   publicApp.getHttpAdapter().getInstance().set('json spaces', 2)
 
   const webSocketServer = agent.didcomm.inboundTransports
@@ -467,12 +487,7 @@ const run = async () => {
     }
     if (authorizationService) registerAuthorizationHandlers(handlerRegistry, authorizationService)
     if (VERANA_CORPORATION_ID) {
-      registerSelfIssuanceAnchorHandlers(
-        handlerRegistry,
-        indexerService,
-        Number(VERANA_CORPORATION_ID),
-        ecsClaims,
-      )
+      registerSelfIssuanceAnchorHandlers(handlerRegistry, indexerService, ecsClaims)
     }
     registerNestPluginIndexerHandlers(nestPlugins, handlerRegistry)
 
@@ -486,7 +501,6 @@ const run = async () => {
         agent,
         handlerRegistry,
         corporationId: indexerCorporationId,
-        agentCorporationId: Number(VERANA_CORPORATION_ID),
       })
       bootstrapState.watchIndexer(() => indexerWs.syncStatus)
       bootstrapState.complete('indexer-subscription')
@@ -499,8 +513,8 @@ const run = async () => {
     }
 
     if (VERANA_CORPORATION_ID) {
-      void reconcileVtjscPublications(agent, indexerService, Number(VERANA_CORPORATION_ID), ecsClaims).catch(
-        (error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`),
+      void reconcileVtjscPublications(agent, indexerService, ecsClaims).catch((error: Error) =>
+        serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`),
       )
     }
 
