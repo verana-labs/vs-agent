@@ -107,6 +107,13 @@ export class OpenId4VcTrustEvidenceDto {
   jsonSchemaCredentialId!: string | null
 
   @ApiProperty({
+    type: Number,
+    nullable: true,
+    description: 'CredentialSchema of the request, which the authorized read names',
+  })
+  credentialSchemaId!: number | null
+
+  @ApiProperty({
     type: Boolean,
     nullable: true,
     description: 'Whether the resolver authorizes the issuer for the credential type',

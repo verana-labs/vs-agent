@@ -3,12 +3,13 @@ import type { SdJwtVc } from '@credo-ts/core'
 import type { DidTrustResolution } from '@verana-labs/vs-agent-sdk'
 
 import { ClaimFormat, Kms } from '@credo-ts/core'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
   digestOfBytes,
+  TrustErrorCode,
   TrustResolutionOutcome,
 } from '@verana-labs/vs-agent-sdk'
 
@@ -39,6 +40,16 @@ const trustResolution = (trusted: boolean): DidTrustResolution => ({
   verified: trusted,
   outcome: trusted ? TrustResolutionOutcome.VERIFIED : TrustResolutionOutcome.NOT_TRUSTED,
   source: 'fresh',
+})
+
+/** What verre answers when it did not verify the DID: no throw, the outcome INVALID and a code. */
+const invalidResolution = (errorCode: TrustErrorCode, errorMessage: string): DidTrustResolution => ({
+  trusted: false,
+  verified: false,
+  outcome: TrustResolutionOutcome.INVALID,
+  source: 'fresh',
+  errorCode,
+  errorMessage,
 })
 
 const issuerKey = Kms.PublicJwk.fromUnknown(ISSUER_JWK)
@@ -76,6 +87,8 @@ function dependencies(overrides: Partial<PresentationTrustDependencies> = {}): P
 }
 
 describe('decidePresentationTrust', () => {
+  afterEach(() => vi.useRealTimers())
+
   it('accepts a credential that passes every step, with the reads it ran as evidence', async () => {
     await expect(decidePresentationTrust(credential(), REQUEST, dependencies())).resolves.toEqual({
       cryptographicVerified: true,
@@ -86,6 +99,7 @@ describe('decidePresentationTrust', () => {
           did: ISSUER_DID,
           trustStatus: 'TRUSTED',
           jsonSchemaCredentialId: VTJSC_ID,
+          credentialSchemaId: 1,
           authorized: true,
           queries: [
             `resolve ${ISSUER_DID}`,
@@ -156,6 +170,22 @@ describe('decidePresentationTrust', () => {
         queries: [`resolve ${ISSUER_DID}`],
         note: expect.stringContaining('could not be resolved'),
       },
+    })
+  })
+
+  it('answers UNTRUSTED when the resolved DID Document carries another id', async () => {
+    const didDocument = didDocumentWithKey('did:web:other.example', ISSUER_JWK, ['assertionMethod'])
+    const agent = { dids: { resolve: async () => ({ didDocument, didResolutionMetadata: {} }) } }
+
+    const decision = await decidePresentationTrust(
+      credential(),
+      REQUEST,
+      dependencies({ agent: agent as never }),
+    )
+
+    expect(decision.trust).toMatchObject({
+      verdict: 'UNTRUSTED',
+      evidence: { queries: [`resolve ${ISSUER_DID}`], note: expect.stringContaining('another id') },
     })
   })
 
@@ -237,6 +267,44 @@ describe('decidePresentationTrust', () => {
     expect(decision.trust).toMatchObject({
       verdict: 'UNTRUSTED',
       evidence: { trustStatus: 'UNTRUSTED', authorized: null },
+    })
+  })
+
+  it('answers UNTRUSTED when the trust resolution finds a rule the issuer broke', async () => {
+    const resolveDidTrust = async () =>
+      invalidResolution(TrustErrorCode.VERIFICATION_FAILED, 'the service credential failed verification')
+
+    const decision = await decidePresentationTrust(credential(), REQUEST, dependencies({ resolveDidTrust }))
+
+    expect(decision.trust).toMatchObject({
+      verdict: 'UNTRUSTED',
+      evidence: { trustStatus: 'UNTRUSTED', note: expect.stringContaining('failed verification') },
+    })
+  })
+
+  it('answers RESOLVER_UNAVAILABLE when the trust resolution could not read a registry', async () => {
+    const resolveDidTrust = async () => invalidResolution(TrustErrorCode.INVALID, 'fetch failed')
+
+    const decision = await decidePresentationTrust(credential(), REQUEST, dependencies({ resolveDidTrust }))
+
+    expect(decision.trust).toMatchObject({
+      verdict: 'RESOLVER_UNAVAILABLE',
+      evidence: { trustStatus: null, note: expect.stringContaining('fetch failed') },
+    })
+  })
+
+  it('answers RESOLVER_UNAVAILABLE when the trust resolution does not answer within 15 seconds', async () => {
+    vi.useFakeTimers()
+    const resolveDidTrust = () => new Promise<DidTrustResolution>(() => {})
+
+    const pending = decidePresentationTrust(credential(), REQUEST, dependencies({ resolveDidTrust }))
+    await vi.advanceTimersByTimeAsync(15_000)
+
+    await expect(pending).resolves.toMatchObject({
+      trust: {
+        verdict: 'RESOLVER_UNAVAILABLE',
+        evidence: { trustStatus: null, note: expect.stringContaining('timed out') },
+      },
     })
   })
 

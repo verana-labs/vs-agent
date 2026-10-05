@@ -165,23 +165,26 @@ The first `getPresentation` of a `ResponseVerified` session runs the rest and st
 | Step | Check | Verdict on failure |
 | --- | --- | --- |
 | 2 | issuer DID: `iss` when it is a DID, else the URI SAN of the leaf certificate | `UNTRUSTED` |
-| 3 | a well-formed `did:web` or `did:webvh`, resolved fresh within 5 seconds, with the requested `id` | `UNTRUSTED`, or `RESOLVER_UNAVAILABLE` when the DID does not resolve |
+| 3 | a well-formed `did:web` or `did:webvh`, resolved fresh within 5 seconds, with the requested `id` | `UNTRUSTED` (another method, or a document with another `id`), or `RESOLVER_UNAVAILABLE` when the DID does not resolve |
 | 4 | the signing key under `assertionMethod` of that DID Document | `UNTRUSTED` |
 | 5 | the Type Metadata at `vct`, read over `https` without a redirect, hashes to `vct#integrity` and names the VTJSC of the request | `UNTRUSTED`, or `RESOLVER_UNAVAILABLE` when the document cannot be read |
 | 6 | the `status` claim, verified by credo in step 1 against the issuer chain | the session ends in `Error` |
-| 7 | the Verifiable Trust resolution of the issuer DID answers `TRUSTED`, and the VPR holds an active ISSUER `Participant` of it for the `CredentialSchema` | `UNTRUSTED`, `TRUSTED_NOT_AUTHORIZED`, or `RESOLVER_UNAVAILABLE` |
+| 7 | the Verifiable Trust resolution of the issuer DID answers `TRUSTED` within 15 seconds (a positive answer is cached for 5 minutes, as for a DIDComm peer), and the VPR holds an active ISSUER `Participant` of it for the `CredentialSchema` | `UNTRUSTED`, `TRUSTED_NOT_AUTHORIZED`, or `RESOLVER_UNAVAILABLE` when a registry, an endpoint or the indexer does not answer |
 | 8 | `accepted` is `true` for `TRUSTED_AUTHORIZED` only | |
 
 `RESOLVER_UNAVAILABLE` is never stored, so the next read retries. `listPresentations` never
 decides: it reports the stored verdict, and a verified session nobody read yet shows
 `cryptographicVerified: true`, `accepted: false` and no `trust`. The `evidence` of a verdict
-carries the issuer `did`, the `trustStatus` of the resolution, the `jsonSchemaCredentialId` of the
-request, `authorized`, the `queries` the agent ran and, when the verdict is not
+carries the issuer `did`, the `trustStatus` of the resolution, the `jsonSchemaCredentialId` and the
+`credentialSchemaId` of the request, `authorized`, the `queries` the agent ran and, when the verdict is not
 `TRUSTED_AUTHORIZED`, a `note` that names the failed step.
 
-Two points where credo, not the plugin, decides step 6, and where the spec reads differently: credo
-fetches the Status List Token with its own client, not under the network boundary of step 3, and a
-failure ends the session in `Error` instead of the verdict `UNTRUSTED`.
+Credo, not the plugin, runs step 6, and the spec asks for two things credo does not do yet: it
+fetches the Status List Token with its own client, not under the network boundary of step 3, and it
+does not compare the `sub` of the token with the `uri` of the claim.
+[credo-ts#3015](https://github.com/openwallet-foundation/credo-ts/pull/3015) adds the option that
+lets the plugin take the fetch over; [#754](https://github.com/verana-labs/vs-agent/issues/754)
+carries the address ban.
 
 ## Wallet accommodations
 

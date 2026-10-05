@@ -419,16 +419,16 @@ export class IssuerService implements OnModuleInit {
     return [...base, ...extra]
   }
 
-  /**
-   * DEMO ONLY (AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION): derive the credential type of a VTJSC for
-   * which the agent holds no ISSUER Participant, add it to the issuer metadata, and return it.
-   * Returns undefined when the flag is off.
-   */
   /** DEMO ONLY: AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION, read from the trust service of the agent. */
   private get skipsOwnAuthorization(): boolean {
     return this.agent.anonCredsTrust?.skipsOwnAuthorization === true
   }
 
+  /**
+   * DEMO ONLY (AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION): derive the credential type of a VTJSC for
+   * which the agent holds no ISSUER Participant, add it to the issuer metadata, and return it.
+   * Returns undefined when the flag is off.
+   */
   private async addUnaccreditedConfiguration(
     jsonSchemaCredentialId: string,
   ): Promise<OpenId4VcCredentialConfiguration | undefined> {

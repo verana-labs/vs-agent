@@ -11,13 +11,23 @@ import {
   digestOfBytes,
   getDidWebHttpsBaseUrl,
   ParticipantRole,
+  TrustErrorCode,
 } from '@verana-labs/vs-agent-sdk'
 
 import { isReservedClaimName } from '../config'
 import { didFromValidatedCertificate } from '../services/CertificateService'
 import { isRecord } from '../utils/isRecord'
 
-import { boundVerificationMethod, resolveDidDocument } from './keyBinding'
+import { boundVerificationMethod, resolveDidDocument, withTimeout } from './keyBinding'
+
+/** The Verifiable Trust resolution reads the DID Document, its linked VPs and the VPR; 5 s is too tight. */
+const TRUST_RESOLUTION_TIMEOUT_MS = 15_000
+
+// verre answers these codes for a read that failed, not for a rule the DID broke.
+const UNAVAILABLE_RESOLUTION_CODES: readonly TrustErrorCode[] = [
+  TrustErrorCode.INVALID,
+  TrustErrorCode.INVALID_REQUEST,
+]
 
 /** What the verification session stored when it created the request ([VSA-ADM-OID-PR-CREATE]). */
 export interface PresentationTrustRequest {
@@ -55,6 +65,7 @@ export async function decidePresentationTrust(
     did: null,
     trustStatus: null,
     jsonSchemaCredentialId: request.jsonSchemaCredentialId,
+    credentialSchemaId: request.credentialSchemaId,
     authorized: null,
     queries: [],
   }
@@ -128,7 +139,12 @@ async function assertIssuerKeyBound(
 
   evidence.queries.push(`resolve ${did}`)
   const didDocument = await resolveDidDocument(dependencies.agent, did)
-  if (!didDocument) fail('RESOLVER_UNAVAILABLE', `the issuer DID "${did}" could not be resolved`)
+  if (didDocument === 'unresolvable') {
+    fail('RESOLVER_UNAVAILABLE', `the issuer DID "${did}" could not be resolved`)
+  }
+  if (didDocument === 'other-id') {
+    fail('UNTRUSTED', `the DID Document of the issuer DID "${did}" carries another id`)
+  }
 
   const issuer = credential.issuer
   let issuerKey: Kms.PublicJwk
@@ -189,14 +205,33 @@ async function assertIssuerTrusted(
   evidence: TrustEvidence,
 ): Promise<void> {
   evidence.queries.push(`resolveDID ${did}`)
-  let trusted: boolean
+  let resolution: Awaited<ReturnType<DidTrustResolver>>
   try {
-    trusted = (await dependencies.resolveDidTrust(did)).trusted
+    resolution = await withTimeout(
+      dependencies.resolveDidTrust(did),
+      TRUST_RESOLUTION_TIMEOUT_MS,
+      'the trust resolution timed out',
+    )
   } catch (error) {
     return fail('RESOLVER_UNAVAILABLE', `the trust resolution of "${did}" failed: ${messageOf(error)}`)
   }
-  evidence.trustStatus = trusted ? 'TRUSTED' : 'UNTRUSTED'
-  if (!trusted) fail('UNTRUSTED', `the trust resolution of "${did}" answered UNTRUSTED`)
+  if (resolution.trusted) {
+    evidence.trustStatus = 'TRUSTED'
+    return
+  }
+  // verre does not throw when a registry or an endpoint does not answer: the outcome is INVALID
+  // with a code of a failed read, and the next read of the session retries it
+  if (resolution.errorCode && UNAVAILABLE_RESOLUTION_CODES.includes(resolution.errorCode)) {
+    fail(
+      'RESOLVER_UNAVAILABLE',
+      `the trust resolution of "${did}" could not complete: ${resolution.errorMessage ?? resolution.errorCode}`,
+    )
+  }
+  evidence.trustStatus = 'UNTRUSTED'
+  fail(
+    'UNTRUSTED',
+    `the trust resolution of "${did}" answered UNTRUSTED${resolution.errorMessage ? `: ${resolution.errorMessage}` : ''}`,
+  )
 }
 
 // Step 7, second half: an active ISSUER Participant of the issuer DID for the CredentialSchema.
