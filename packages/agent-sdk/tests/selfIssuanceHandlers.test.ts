@@ -37,7 +37,7 @@ async function dispatch(msg: string, participant: unknown) {
   const original = vi.fn()
   registry.register({ msg, handle: original })
   const indexer = makeIndexer(participant)
-  registerSelfIssuanceAnchorHandlers(registry, indexer, 7, ecsClaims)
+  registerSelfIssuanceAnchorHandlers(registry, indexer, ecsClaims)
   await registry.dispatch({ msg, entity_id: 42 } as never, makeContext())
   return { original, indexer }
 }
@@ -60,7 +60,6 @@ describe('self-issuance anchor handlers', () => {
     expect(reconcileVtjscPublications).toHaveBeenCalledWith(
       expect.objectContaining({ did: DID }),
       expect.anything(),
-      7,
       ecsClaims,
     )
   })
