@@ -1,6 +1,7 @@
 import type { OpenId4VcIssuerRuntime, OpenId4VcIssuerSink, OpenId4VcPluginOptions } from '../types'
 import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
+import { openId4VcEvents } from '../events/openId4VcEvents'
 import { IssuerService } from '../services/IssuerService'
 import { VerifierService } from '../services/VerifierService'
 import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
@@ -26,6 +27,7 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlu
     name: 'openid4vc',
     credoPlugin: sdkPlugin,
     publicMiddleware: sdkPlugin.publicMiddleware,
+    registerEvents: (agent, logger) => openId4VcEvents(agent, logger),
     registerIndexerHandlers: registry =>
       registerCredentialConfigurationHandlers(registry, options, () => issuerService),
     controllers: [
