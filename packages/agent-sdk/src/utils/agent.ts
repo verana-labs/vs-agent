@@ -121,6 +121,17 @@ export async function connectToPublicDid(agent: VsAgent, peerPublicDid: string):
   }
 }
 
+/**
+ * The DIDs that name this agent: its public DID and the alternative DIDs of the DID record, such
+ * as the parallel did:web of a did:webvh.
+ */
+export async function publicDidsOf(agent: VsAgent): Promise<string[]> {
+  if (!agent.did) return []
+  const [agentPublicDidRecord] = await agent.dids.getCreatedDids({ did: agent.did })
+  const alternativeDids = agentPublicDidRecord?.getTag('alternativeDids')
+  return [agent.did, ...(Array.isArray(alternativeDids) ? alternativeDids : [])]
+}
+
 export async function getRecordId(agent: VsAgent, id: string): Promise<string> {
   const record = await agent.genericRecords.findById(id)
   return (record?.getTag('messageId') as string) ?? id
