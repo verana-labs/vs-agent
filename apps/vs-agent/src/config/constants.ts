@@ -22,6 +22,8 @@ dotenv.config()
 export const SUPERSEDED_VAR_WARNINGS = applySupersededVars(process.env)
 
 export const AGENT_VERSION: string = packageJson.version
+// Container build variant, set by the Docker image (vs-agent or vs-agent-mrtd); shown in the UI footer.
+export const VS_AGENT_BUILD = process.env.VS_AGENT_BUILD || 'vs-agent'
 
 // Basic parameters
 
@@ -83,6 +85,12 @@ export const ADMIN_API_LOG_LEVEL_NAME = logLevelName(
 
 export const USE_CORS = process.env.USE_CORS === 'true'
 export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER === 'false')
+
+// Dashboard UI
+// Network badge text in the header (e.g. "Testnet"); no badge when unset.
+export const UI_NETWORK_BADGE = process.env.UI_NETWORK_BADGE
+// Banner that presents the page as the placeholder of a Verana business wallet; opt-in.
+export const UI_SHOW_PLACEHOLDER_MESSAGE = process.env.UI_SHOW_PLACEHOLDER_MESSAGE === 'true'
 
 // Placeholder resources the agent serves under /vt/default, so an operator can point an
 // ECS_CLAIMS_*_URI at the agent itself.
