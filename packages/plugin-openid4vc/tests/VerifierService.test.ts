@@ -406,6 +406,31 @@ describe('VerifierService', () => {
     )
   })
 
+  it('signs a presentation_exchange request with x509_san_dns, the x5c prefix draft 21 defines', async () => {
+    const { service, api } = await initializedVerifier()
+    api.createAuthorizationRequest.mockResolvedValue({
+      authorizationRequest: 'openid4vp://?request_uri=opaque',
+      verificationSession: session('RequestCreated'),
+    })
+
+    await service.createRequest({
+      jsonSchemaCredentialId: VTJSC_ID,
+      requestedClaims: ['name'],
+      queryLanguage: 'presentation_exchange',
+    })
+
+    expect(api.createAuthorizationRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestSigner: {
+          method: 'x5c',
+          x5c: [signingLeaf, signingRoot],
+          clientIdPrefix: 'x509_san_dns',
+        },
+        responseMode: 'direct_post',
+      }),
+    )
+  })
+
   it('answers UNKNOWN_ID for a VTJSC that binds to no CredentialSchema', async () => {
     const { service, api } = await initializedVerifier()
     resolveCredentialType.mockRejectedValue(
