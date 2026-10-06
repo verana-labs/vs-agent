@@ -73,6 +73,7 @@ Here is a couple of variables that you may want to take care in case of troubles
 | AGENT_LOG_LEVEL | Agent log level: trace, debug, info, warn, error or off              | warn          |
 | ADMIN_API_LOG_LEVEL | Administration API log level, same values                        | info          |
 | USE_CORS        | Enable Cross-Origin Resource Sharing, set it to `true` (only for development purposes) | false         |
+| AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION | DEMO ONLY, not in the spec. Set it to `true` to mint credential offers and presentation requests without an own active ISSUER or VERIFIER Participant. The check still runs and logs its failure. Use it only for demo services that wallets must refuse | false |
 | ENABLE_PUBLIC_API_SWAGGER  | Enable Swagger documentation for public API (recommended only for development environments) | false |
 
 #### Dashboard UI variables

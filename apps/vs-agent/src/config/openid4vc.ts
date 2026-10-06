@@ -1,4 +1,5 @@
 import type { OpenId4VcPluginOptions } from '@verana-labs/vs-agent-plugin-openid4vc'
+import type { VerifiablePublicRegistries } from '@verana-labs/vs-agent-sdk'
 
 import { parseOpenId4VcConfiguration } from '@verana-labs/vs-agent-plugin-openid4vc'
 import { readFile } from 'fs/promises'
@@ -13,6 +14,7 @@ export interface OpenId4VcOptionsResult {
 export async function readOpenId4VcOptions(
   location: string,
   publicApiBaseUrl: string,
+  verifiablePublicRegistries?: VerifiablePublicRegistries,
 ): Promise<OpenId4VcOptionsResult> {
   const url = parseAbsoluteUrl(location)
   const name = url ? `${url.protocol}//${url.host}${url.pathname}` : location
@@ -21,7 +23,12 @@ export async function readOpenId4VcOptions(
     const contents = url ? await fetchConfiguration(url, name) : await readConfiguration(location)
     const parsed = parseConfiguration(contents, name)
     return {
-      options: { ...parseOpenId4VcConfiguration(parsed), publicApiBaseUrl, credentialConfigurations: [] },
+      options: {
+        ...parseOpenId4VcConfiguration(parsed),
+        publicApiBaseUrl,
+        credentialConfigurations: [],
+        verifiablePublicRegistries,
+      },
       errors: [],
     }
   } catch (error) {

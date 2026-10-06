@@ -7,7 +7,7 @@ export const TRUST_VERDICT_NAMES = [
 
 export type TrustVerdictName = (typeof TRUST_VERDICT_NAMES)[number]
 
-export const VERANA_TRUST_STATUSES = ['TRUSTED', 'PARTIAL', 'UNTRUSTED'] as const
+export const VERANA_TRUST_STATUSES = ['TRUSTED', 'UNTRUSTED'] as const
 
 export type VeranaTrustStatus = (typeof VERANA_TRUST_STATUSES)[number]
 
@@ -17,6 +17,8 @@ export interface TrustEvidence {
   did: string | null
   trustStatus: VeranaTrustStatus | null
   jsonSchemaCredentialId: string | null
+  /** The `CredentialSchema` the session stored, which the `authorized` read names. */
+  credentialSchemaId: number | null
   authorized: boolean | null
   queries: string[]
   note?: string

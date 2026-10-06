@@ -1,9 +1,11 @@
 import type { OpenId4VcIssuerRuntime, OpenId4VcIssuerSink, OpenId4VcPluginOptions } from '../types'
-import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
+import type { DidTrustResolver, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
+
+import { createDidTrustResolver } from '@verana-labs/vs-agent-sdk'
 
 import { IssuerService } from '../services/IssuerService'
 import { VerifierService } from '../services/VerifierService'
-import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
+import { OPENID4VC_DID_TRUST_RESOLVER, OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 
 import { registerCredentialConfigurationHandlers } from '../sdk/credentialConfigurationHandlers'
 import { setupOpenId4Vc } from '../sdk/setupOpenId4Vc'
@@ -21,6 +23,11 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlu
   const publishIssuerService: OpenId4VcIssuerSink = service => {
     issuerService = service
   }
+  const resolveDidTrust: DidTrustResolver = options.verifiablePublicRegistries
+    ? createDidTrustResolver({ verifiablePublicRegistries: options.verifiablePublicRegistries })
+    : async did => {
+        throw new Error(`the agent has no VPR to resolve "${did}" against`)
+      }
 
   return {
     name: 'openid4vc',
@@ -36,6 +43,7 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlu
     providers: [
       { provide: OPENID4VC_OPTIONS, useValue: options },
       { provide: OPENID4VC_ISSUER_SINK, useValue: publishIssuerService },
+      { provide: OPENID4VC_DID_TRUST_RESOLVER, useValue: resolveDidTrust },
       IssuerService,
       VerifierService,
     ],

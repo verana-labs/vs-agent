@@ -1,7 +1,7 @@
 import type { OpenId4VcIssuerRequestMapper } from './sdk/setupOpenId4Vc'
 import type { Kms, X509Module } from '@credo-ts/core'
 import type { OpenId4VcModule } from '@credo-ts/openid4vc'
-import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { BaseAgentModules, VerifiablePublicRegistries, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 export type OpenId4VcVsAgentModules = BaseAgentModules & {
   openId4Vc: OpenId4VcModule<null, null>
@@ -45,6 +45,7 @@ export interface OpenId4VcConfigurationFile {
 
 export const OPENID4VC_OPTIONS = 'OPENID4VC_OPTIONS'
 export const OPENID4VC_ISSUER_SINK = 'OPENID4VC_ISSUER_SINK'
+export const OPENID4VC_DID_TRUST_RESOLVER = 'OPENID4VC_DID_TRUST_RESOLVER'
 
 export interface OpenId4VcIssuerRuntime extends OpenId4VcIssuerRequestMapper {
   refreshCredentialConfigurations(updatedCredentialSchemaId?: number): Promise<void>
@@ -55,4 +56,6 @@ export type OpenId4VcIssuerSink = (service: OpenId4VcIssuerRuntime) => void
 export interface OpenId4VcPluginOptions extends OpenId4VcConfigurationFile {
   publicApiBaseUrl: string
   credentialConfigurations: OpenId4VcCredentialConfiguration[]
+  /** The VPR the verifier resolves a presented issuer against; absent when the agent has no indexer. */
+  verifiablePublicRegistries?: VerifiablePublicRegistries
 }

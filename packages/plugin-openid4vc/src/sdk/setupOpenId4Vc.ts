@@ -13,7 +13,6 @@ import {
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 
 import { ISSUER_CAPABILITY_ID } from '../config'
-import { assertCredentialExpires } from '../services/presentationVerification'
 import { trustedCertificatesForVerification } from '../trust/CertificateTrust'
 import { isRecord } from '../utils/isRecord'
 
@@ -73,12 +72,8 @@ export function setupOpenId4Vc(
     modules: {
       openId4Vc: new OpenId4VcModule(moduleOptions),
       x509: new X509Module({
-        getTrustedCertificatesForVerification: (_agentContext, { verification }) => {
-          // Credo accepts an SD-JWT VC without `exp`, and this callback is the only hook inside its
-          // presentation verification.
-          if (verification.type === 'credential') assertCredentialExpires(verification.credential)
-          return trustedCertificatesForVerification(options, verification.type)
-        },
+        getTrustedCertificatesForVerification: (_agentContext, { verification }) =>
+          trustedCertificatesForVerification(options, verification.type),
       }),
     },
     publicMiddleware: app,

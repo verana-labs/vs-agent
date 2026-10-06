@@ -42,14 +42,8 @@ following a redirect, to bind every credential to its `vct#integrity`. It answer
 
 ## Not wired up yet
 
-The configuration file carries no trust setting and the agent hosts no status list. So
-`createPresentationRequest` answers `404 UNKNOWN_ID` for every `jsonSchemaCredentialId`,
-`createCredentialOffer` answers it for every `statusListId`, and reading a verified presentation
-answers the `RESOLVER_UNAVAILABLE` verdict. Two issues carry the rest:
-
-- [#712](https://github.com/verana-labs/vs-agent/issues/712): the verifier trust decision on the
-  eight steps the spec now defines, with no `trust` block anywhere;
-- [#713](https://github.com/verana-labs/vs-agent/issues/713): status lists.
+The agent hosts no status list, so `createCredentialOffer` answers `404 UNKNOWN_ID` for every
+`statusListId`. [#713](https://github.com/verana-labs/vs-agent/issues/713) carries it.
 
 ## Enable it
 
@@ -123,7 +117,7 @@ answers in the v2 error envelope. Without `OID4VC_CONFIG_FILE_LOCATION`, every p
 | `listCredentialExchanges` | `GET /credential-exchanges` | Filters `jsonSchemaCredentialId`, `state`. Keyset pagination. |
 | `getCredentialExchange` | `GET /credential-exchanges/{credentialExchangeId}` | `credentialExchangeId`, `jsonSchemaCredentialId`, `state`, `createdAt`, `updatedAt`, `expiresAt`, `errorMessage`. Never the claims, the offer URL or the pre-authorized code. |
 | `deleteCredentialExchange` | `DELETE /credential-exchanges/{credentialExchangeId}` | `204`. Deletes the record only, never a credential that a wallet holds. |
-| `createPresentationRequest` | `POST /presentation-request` | `jsonSchemaCredentialId`, optional `requestedClaims` (defaults to every claim of the type), optional `queryLanguage` (`dcql`, `presentation_exchange`), optional `requestSigner` (`x5c`, `did`). Returns `proofExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`, `409 INVALID_STATE`. The credential type has to be one the agent derived from the VPR. |
+| `createPresentationRequest` | `POST /presentation-request` | `jsonSchemaCredentialId`, optional `requestedClaims` (defaults to every claim of the type), optional `queryLanguage` (`dcql`, `presentation_exchange`), optional `requestSigner` (`x5c`, `did`). Returns `proofExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`, `409 NOT_AUTHORIZED`, `503 RESOLVER_UNAVAILABLE`, `409 INVALID_STATE`. The agent has to hold an active VERIFIER `Participant` for the `CredentialSchema` of the type. |
 | `listPresentations` | `GET /presentations` | Filters `jsonSchemaCredentialId`, `state`. Keyset pagination. |
 | `getPresentation` | `GET /presentations/{proofExchangeId}` | Adds the stored `jsonSchemaCredentialId` and `requestedClaims` of the request, then `cryptographicVerified`, `accepted`, `trust` and `credential` once the wallet answered. |
 | `deletePresentation` | `DELETE /presentations/{proofExchangeId}` | `204`. |
@@ -152,16 +146,45 @@ Admin API and the metadata return; it never builds a path itself.
 
 ## Trust decision
 
-There is none yet. Nothing configures a resolver URL, allowed `did:web` hosts, credential-issuer
-roots or development fingerprints: the file rejects a `trust` block, and
-[#712](https://github.com/verana-labs/vs-agent/issues/712) builds the decision on the eight steps
-the spec now defines, on the indexer and on DID key binding, without one. Until it lands, a
-verified presentation answers `cryptographicVerified: true`, `accepted: false` and the verdict
-`RESOLVER_UNAVAILABLE`, and is never accepted.
+Nothing configures it: no resolver URL, no allowed `did:web` host, no credential-issuer root and no
+development fingerprint. The agent decides on the eight steps of [[VSA-VTI-FLOW-VERIFY-OID]](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-vti-flow-verify-oid-openid4vp-trust-decision),
+on its DID resolver and on the VPR, and fails closed at every one of them.
 
-What the agent still enforces before that point: credo verifies the OpenID4VP response, the
-nonce, the audience, the holder binding, the SD-JWT disclosures and the signature, and the plugin
-fails a presented credential that carries no numeric `exp`. The session then ends in `Error`.
+`createPresentationRequest` resolves the `jsonSchemaCredentialId` to its `CredentialSchema`
+through the VTJSC (`404 UNKNOWN_ID` when it binds to none), requires an active VERIFIER
+`Participant` of the agent for that schema (`409 NOT_AUTHORIZED`, `503 RESOLVER_UNAVAILABLE`), and
+stores the type and the requested claims on the session. The wallet then answers, and credo runs
+step 1: the nonce, the audience, the holder binding, the disclosures, the signature, the validity
+period (`exp` is required) and the `status` claim, if the credential carries one. For an `x5c`
+issuer credo trusts the leaf certificate the wallet presented and nothing above it: step 4 binds
+the key through the DID Document, so no certificate authority takes part. A failure of step 1 ends
+the session in `Error`, with `cryptographicVerified: false`.
+
+The first `getPresentation` of a `ResponseVerified` session runs the rest and stores the verdict:
+
+| Step | Check | Verdict on failure |
+| --- | --- | --- |
+| 2 | issuer DID: `iss` when it is a DID, else the URI SAN of the leaf certificate | `UNTRUSTED` |
+| 3 | a well-formed `did:web` or `did:webvh`, resolved fresh within 5 seconds, with the requested `id` | `UNTRUSTED` (another method, or a document with another `id`), or `RESOLVER_UNAVAILABLE` when the DID does not resolve |
+| 4 | the signing key under `assertionMethod` of that DID Document | `UNTRUSTED` |
+| 5 | the Type Metadata at `vct`, read over `https` without a redirect, hashes to `vct#integrity` and names the VTJSC of the request | `UNTRUSTED`, or `RESOLVER_UNAVAILABLE` when the document cannot be read |
+| 6 | the `status` claim, verified by credo in step 1 against the issuer chain | the session ends in `Error` |
+| 7 | the Verifiable Trust resolution of the issuer DID answers `TRUSTED` within 15 seconds (a positive answer is cached for 5 minutes, as for a DIDComm peer), and the VPR holds an active ISSUER `Participant` of it for the `CredentialSchema` | `UNTRUSTED`, `TRUSTED_NOT_AUTHORIZED`, or `RESOLVER_UNAVAILABLE` when a registry, an endpoint or the indexer does not answer |
+| 8 | `accepted` is `true` for `TRUSTED_AUTHORIZED` only | |
+
+`RESOLVER_UNAVAILABLE` is never stored, so the next read retries. `listPresentations` never
+decides: it reports the stored verdict, and a verified session nobody read yet shows
+`cryptographicVerified: true`, `accepted: false` and no `trust`. The `evidence` of a verdict
+carries the issuer `did`, the `trustStatus` of the resolution, the `jsonSchemaCredentialId` and the
+`credentialSchemaId` of the request, `authorized`, the `queries` the agent ran and, when the verdict is not
+`TRUSTED_AUTHORIZED`, a `note` that names the failed step.
+
+Credo, not the plugin, runs step 6, and the spec asks for two things credo does not do yet: it
+fetches the Status List Token with its own client, not under the network boundary of step 3, and it
+does not compare the `sub` of the token with the `uri` of the claim.
+[credo-ts#3015](https://github.com/openwallet-foundation/credo-ts/pull/3015) adds the option that
+lets the plugin take the fetch over; [#754](https://github.com/verana-labs/vs-agent/issues/754)
+carries the address ban.
 
 ## Wallet accommodations
 
@@ -176,7 +199,6 @@ the code it changes, with a one-line note.
 
 `pnpm --filter @verana-labs/vs-agent-plugin-openid4vc exec vitest run` runs the unit tests and the
 in-process end-to-end tests, which start real credo agents for the issuer, the holder and the
-verifier and drive a pre-authorized issuance through to a stored holder-bound credential. The
-presentation round trip comes back with #712, which gives the verifier a trust anchor for the
-credential it receives. No external wallet or conformance evidence is recorded here; see the
-Verana Playground for recorded wallet scenarios.
+verifier, drive a pre-authorized issuance through to a stored holder-bound credential, and present
+it back to the verifier through to a stored trust verdict. No external wallet or conformance
+evidence is recorded here; see the Verana Playground for recorded wallet scenarios.

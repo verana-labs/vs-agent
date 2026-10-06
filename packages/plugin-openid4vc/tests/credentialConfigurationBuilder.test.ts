@@ -2,9 +2,17 @@ import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ParticipantRole, ParticipantState } from '@verana-labs/vs-agent-sdk'
+import {
+  AnonCredsTrustError,
+  AnonCredsTrustErrorReason,
+  ParticipantRole,
+  ParticipantState,
+} from '@verana-labs/vs-agent-sdk'
 
-import { buildCredentialConfigurations } from '../src/services/credentialConfigurationBuilder'
+import {
+  buildCredentialConfigurations,
+  resolveCredentialType,
+} from '../src/services/credentialConfigurationBuilder'
 
 const AGENT_DID = 'did:web:issuer.example'
 const CHAIN_ID = 'vpr-test-1'
@@ -34,6 +42,15 @@ const SCHEMAS: Record<number, { ecosystem_id: number; json_schema: string }> = {
   5: {
     ecosystem_id: 10,
     json_schema: JSON.stringify({
+      type: 'object',
+      properties: { credentialSubject: { type: 'object', properties: { name: { type: 'string' } } } },
+    }),
+  },
+  6: {
+    ecosystem_id: 10,
+    json_schema: JSON.stringify({
+      title: 'Described credential',
+      description: '  The credential of the example ecosystem.  ',
       type: 'object',
       properties: { credentialSubject: { type: 'object', properties: { name: { type: 'string' } } } },
     }),
@@ -167,6 +184,13 @@ describe('buildCredentialConfigurations', () => {
     expect(configurations?.[0].claims).toEqual(['name'])
   })
 
+  it('carries the description of the JSON Schema, for the display of the issuer metadata', async () => {
+    const configurations = await buildCredentialConfigurations(fakeAgent(fakeIndexer([6, 1])))
+
+    expect(configurations?.[0].description).toBe('The credential of the example ecosystem.')
+    expect(configurations?.[1]).not.toHaveProperty('description')
+  })
+
   it('reads each CredentialSchema and each Ecosystem of a rebuild once', async () => {
     const indexer = fakeIndexer([1, 2])
 
@@ -230,5 +254,49 @@ describe('buildCredentialConfigurations', () => {
       buildCredentialConfigurations(fakeAgent(indexer, { veranaChain: undefined })),
     ).resolves.toBeUndefined()
     expect(indexer.listParticipants).not.toHaveBeenCalled()
+  })
+})
+
+describe('resolveCredentialType', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('fetch', fakeVtjscFetch())
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('resolves the type of a VTJSC through its CredentialSchema link', async () => {
+    const indexer = fakeIndexer([])
+    const anonCredsTrust = {
+      resolveCredentialSchemaLink: vi
+        .fn()
+        .mockResolvedValue({ credentialSchemaId: 1, ecosystemDid: ECOSYSTEMS[10] }),
+    }
+
+    const configuration = await resolveCredentialType(
+      fakeAgent(indexer, { anonCredsTrust }),
+      'https://vtjsc.example/1',
+    )
+
+    expect(anonCredsTrust.resolveCredentialSchemaLink).toHaveBeenCalledWith('https://vtjsc.example/1')
+    expect(configuration).toMatchObject({
+      id: 'https://vtjsc.example/1',
+      vct: 'https://ecosystem.example/vt/vct/1',
+      credentialSchemaId: 1,
+      claims: ['name', 'role'],
+    })
+    expect(indexer.listParticipants).not.toHaveBeenCalled()
+  })
+
+  it('passes the error of a VTJSC that binds to no CredentialSchema through', async () => {
+    const anonCredsTrust = {
+      resolveCredentialSchemaLink: vi
+        .fn()
+        .mockRejectedValue(new AnonCredsTrustError(AnonCredsTrustErrorReason.NotDerivable, 'binds to none')),
+    }
+
+    await expect(
+      resolveCredentialType(fakeAgent(fakeIndexer([]), { anonCredsTrust }), 'https://vtjsc.example/9'),
+    ).rejects.toMatchObject({ reason: AnonCredsTrustErrorReason.NotDerivable })
   })
 })
