@@ -1,26 +1,17 @@
-import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { ChatAgentModules } from '../types'
+import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import type { AgentContext, BaseRecord } from '@credo-ts/core'
-import type { DidCommConnectionRecord, DidCommMessage } from '@credo-ts/didcomm'
-
-import { ActionMenu, ActionMenuApi } from '@credo-ts/action-menu'
+import { ActionMenu } from '@credo-ts/action-menu'
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
 import { SendMenuBodyDto, SentMessageDto } from './dto'
-import { connectionOf, moduleService, sendMessage } from '@verana-labs/vs-agent-sdk'
-
-interface MenuCreator {
-  createMenu(
-    agentContext: AgentContext,
-    options: { connection: DidCommConnectionRecord; menu: ActionMenu },
-  ): Promise<{ message: DidCommMessage; record: BaseRecord<any, any, any> }>
-}
+import { connectionOf } from '@verana-labs/vs-agent-sdk'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/action-menu', version: '2' })
 export class V2DidcommActionMenuController {
-  public constructor(@Inject('VSAGENT') private readonly vsAgent: VsAgent<BaseAgentModules>) {}
+  public constructor(@Inject('VSAGENT') private readonly agent: VsAgent<ChatAgentModules>) {}
 
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
@@ -28,21 +19,13 @@ export class V2DidcommActionMenuController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async sendMenu(@Body() body: SendMenuBodyDto): Promise<SentMessageDto> {
-    const agent = await this.agent()
-    const api = moduleService(agent, ActionMenuApi, 'action-menu')
-    const connection = await connectionOf(agent, body.connectionId)
+    await connectionOf(this.agent, body.connectionId)
 
-    const service = (api as unknown as { actionMenuService: MenuCreator }).actionMenuService
-    const { message, record } = await service.createMenu(agent.context, {
-      connection,
+    const { messageId } = await this.agent.modules.actionMenu.sendMenuWithMessageId({
+      connectionId: body.connectionId,
       menu: new ActionMenu(body.menu),
     })
 
-    return { id: await sendMessage(agent, connection, message, record) }
-  }
-
-  private async agent(): Promise<VsAgent<BaseAgentModules>> {
-    if (!this.vsAgent.isInitialized) await this.vsAgent.initialize()
-    return this.vsAgent
+    return { id: messageId }
   }
 }
