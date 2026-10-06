@@ -69,6 +69,7 @@ describe('in-process OpenID4VP presentation', () => {
           did: TEST_ISSUER_DID,
           trustStatus: 'TRUSTED',
           jsonSchemaCredentialId: testCredentialConfiguration.id,
+          credentialSchemaId: testCredentialConfiguration.credentialSchemaId,
           authorized: true,
         },
       },

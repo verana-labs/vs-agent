@@ -2,9 +2,9 @@ import type { BaseLogger } from '@credo-ts/core'
 import type { VtFlowAssertVerifiableServiceHook } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import type { ResolverConfig, TrustResolution } from '@verana-labs/verre'
 
-import { resolveDID, TrustResolutionOutcome } from '@verana-labs/verre'
+import { resolveDID, TrustErrorCode, TrustResolutionOutcome } from '@verana-labs/verre'
 
-export { TrustResolutionOutcome }
+export { TrustErrorCode, TrustResolutionOutcome }
 
 export type VerifiablePublicRegistries = NonNullable<ResolverConfig['verifiablePublicRegistries']>
 
@@ -25,6 +25,11 @@ export interface DidTrustResolution {
   outcome: TrustResolutionOutcome
   /** Whether the verdict came from the positive-verdict cache of the resolver. */
   source: 'cache' | 'fresh'
+  /**
+   * Why the resolution did not verify the DID. `INVALID` and `INVALID_REQUEST` name a read that
+   * failed (a registry or an endpoint did not answer); every other code names a rule the DID broke.
+   */
+  errorCode?: TrustErrorCode
   errorMessage?: string
 }
 
@@ -88,6 +93,7 @@ export function createDidTrustResolver(options: DidTrustResolverOptions): DidTru
       verified,
       outcome,
       source,
+      ...(metadata?.errorCode ? { errorCode: metadata.errorCode } : {}),
       ...(metadata?.errorMessage ? { errorMessage: metadata.errorMessage } : {}),
     }
   }

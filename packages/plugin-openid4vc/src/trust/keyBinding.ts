@@ -49,7 +49,7 @@ async function lookupBoundVerificationMethod(
   }
 
   const didDocument = await resolveDidDocument(agent, did)
-  if (!didDocument) return { result: 'unresolvable' }
+  if (typeof didDocument === 'string') return { result: 'unresolvable' }
 
   const verificationMethodId = boundVerificationMethod(didDocument, certificateKey, purposes)
   return verificationMethodId ? { result: 'bound', verificationMethodId } : { result: 'unbound' }
@@ -69,23 +69,30 @@ export function boundVerificationMethod(
   return undefined
 }
 
+/** `unresolvable`: no DID Document within the bound; `other-id`: a document with another `id`. */
+export type DidDocumentFailure = 'unresolvable' | 'other-id'
+
 /**
  * Resolves a did:web or did:webvh, fresh, within 5 seconds, and only when the document carries the
- * requested DID as its id ([VSA-VTI-FLOW-VERIFY-OID] step 3). Null when any of that fails.
+ * requested DID as its id ([VSA-VTI-FLOW-VERIFY-OID] step 3).
  */
-export async function resolveDidDocument(agent: DidResolverAgent, did: string): Promise<DidDocument | null> {
-  if (!isDidWebTarget(did)) return null
+export async function resolveDidDocument(
+  agent: DidResolverAgent,
+  did: string,
+): Promise<DidDocument | DidDocumentFailure> {
+  if (!isDidWebTarget(did)) return 'unresolvable'
 
   try {
     const resolution = await withTimeout(
       agent.dids.resolve(did, { useCache: false, persistInCache: false }),
       DID_RESOLUTION_TIMEOUT_MS,
+      'DID resolution timed out',
     )
-    if (resolution.didResolutionMetadata?.error || !resolution.didDocument) return null
-    if (resolution.didDocument.id !== did) return null
+    if (resolution.didResolutionMetadata?.error || !resolution.didDocument) return 'unresolvable'
+    if (resolution.didDocument.id !== did) return 'other-id'
     return resolution.didDocument
   } catch {
-    return null
+    return 'unresolvable'
   }
 }
 
@@ -116,10 +123,11 @@ function isDidWebTarget(did: string): boolean {
   }
 }
 
-async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
+/** Rejects with `message` when `operation` does not settle within `timeoutMs`. */
+export async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined
   const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timeout = setTimeout(() => reject(new Error('DID resolution timed out')), timeoutMs)
+    timeout = setTimeout(() => reject(new Error(message)), timeoutMs)
   })
 
   try {

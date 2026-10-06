@@ -197,6 +197,7 @@ const acceptedDecision = {
       did: ISSUER_DID,
       trustStatus: 'TRUSTED',
       jsonSchemaCredentialId: VTJSC_ID,
+      credentialSchemaId: 1,
       authorized: true,
       queries: [],
     },

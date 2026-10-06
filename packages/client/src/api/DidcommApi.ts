@@ -12,9 +12,10 @@ import {
   DeclineExchangeBody,
   ListBasicMessagesQuery,
   ListConnectionsQuery,
+  ListCredentialExchangesQuery,
+  ListPresentationsQuery,
   OfferCallBody,
   Page,
-  PaginationQuery,
   PresentationRecord,
   ProtocolModule,
   RequestMrtdBody,
@@ -145,7 +146,7 @@ export class DidcommApi {
     )
   }
 
-  public listPresentations(query?: PaginationQuery): Promise<Page<PresentationRecord>> {
+  public listPresentations(query?: ListPresentationsQuery): Promise<Page<PresentationRecord>> {
     return this.http.request('GET', '/didcomm/presentations', { query })
   }
 
@@ -193,7 +194,9 @@ export class DidcommApi {
     )
   }
 
-  public listCredentialExchanges(query?: PaginationQuery): Promise<Page<CredentialExchangeRecord>> {
+  public listCredentialExchanges(
+    query?: ListCredentialExchangesQuery,
+  ): Promise<Page<CredentialExchangeRecord>> {
     return this.http.request('GET', '/didcomm/credential-exchanges', { query })
   }
 

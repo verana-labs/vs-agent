@@ -76,6 +76,16 @@ Here is a couple of variables that you may want to take care in case of troubles
 | AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION | DEMO ONLY, not in the spec. Set it to `true` to mint credential offers and presentation requests without an own active ISSUER or VERIFIER Participant. The check still runs and logs its failure. Use it only for demo services that wallets must refuse | false |
 | ENABLE_PUBLIC_API_SWAGGER  | Enable Swagger documentation for public API (recommended only for development environments) | false |
 
+#### Dashboard UI variables
+
+The public listener serves a dashboard at `/`. It renders the service profile (name, logo, operator, trust information) from the agent's own DID document and linked presentations, so nothing about the service is configured here; these variables only adjust its chrome.
+
+| Variable                    | Description                                                                                                                                                | Default value |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| UI_NETWORK_BADGE            | Text of the network badge in the header (e.g. `Testnet`). Its LED reflects the reachability of `VERANA_INDEXER_BASE_URL`. No badge when unset.           | none          |
+| UI_SHOW_PLACEHOLDER_MESSAGE | Set it to `true` to show a banner presenting the page as the placeholder of a Verana business wallet (as the playground demos do).                       | false         |
+
+The accreditations of the agent and the deep links into the Verana app are read from `VERANA_CHAIN_ID` and `VERANA_INDEXER_BASE_URL`; the footer shows the release version and the image variant (`VS_AGENT_BUILD`, set by the Docker image).
 
 #### Advanced/specific use variables
 

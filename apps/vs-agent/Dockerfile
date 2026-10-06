@@ -97,6 +97,7 @@ WORKDIR /www
 ENV RUN_MODE="docker"
 ENV NODE_ENV=production
 ENV VS_AGENT_PLUGINS=chat
+ENV VS_AGENT_BUILD=vs-agent
 
 COPY --from=build-vs-agent /www/node_modules ./node_modules
 COPY --from=build-vs-agent /www/packages/model/package.json ./packages/model/package.json
@@ -126,6 +127,7 @@ WORKDIR /www
 ENV RUN_MODE="docker"
 ENV NODE_ENV=production
 ENV VS_AGENT_PLUGINS=chat,mrtd
+ENV VS_AGENT_BUILD=vs-agent-mrtd
 
 COPY --from=build-mrtd /www/node_modules ./node_modules
 COPY --from=build-mrtd /www/packages/model/package.json ./packages/model/package.json

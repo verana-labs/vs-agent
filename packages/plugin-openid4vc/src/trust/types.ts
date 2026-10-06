@@ -17,6 +17,8 @@ export interface TrustEvidence {
   did: string | null
   trustStatus: VeranaTrustStatus | null
   jsonSchemaCredentialId: string | null
+  /** The `CredentialSchema` the session stored, which the `authorized` read names. */
+  credentialSchemaId: number | null
   authorized: boolean | null
   queries: string[]
   note?: string

@@ -18,6 +18,8 @@ import {
   PresentationStateUpdated,
 } from '@verana-labs/vs-agent-model'
 
+import { publicDidsOf } from '../utils/agent'
+
 import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 
 // TODO: Fix single-use invitations for DIDComm v2 in Credo, then remove this function.
@@ -65,17 +67,6 @@ async function discardExtraConnection(
   }
   await agent.didcomm.connections.deleteById(record.id)
   return true
-}
-
-/**
- * The DIDs under which a peer can address this agent: its public DID and the alternative DIDs
- * of the DID record, such as the parallel did:web of a did:webvh.
- */
-async function publicDidsOf(agent: VsAgent<any>): Promise<string[]> {
-  if (!agent.did) return []
-  const [agentPublicDidRecord] = await agent.dids.getCreatedDids({ did: agent.did })
-  const alternativeDids = agentPublicDidRecord?.getTag('alternativeDids')
-  return [agent.did, ...(Array.isArray(alternativeDids) ? alternativeDids : [])]
 }
 
 export const connectionEvents = async (

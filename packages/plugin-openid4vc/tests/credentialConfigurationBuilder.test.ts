@@ -258,7 +258,12 @@ describe('buildCredentialConfigurations', () => {
 })
 
 describe('resolveCredentialType', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('fetch', fakeVtjscFetch())
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
 
   it('resolves the type of a VTJSC through its CredentialSchema link', async () => {
     const indexer = fakeIndexer([])
