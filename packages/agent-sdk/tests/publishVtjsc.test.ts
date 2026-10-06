@@ -32,7 +32,8 @@ const typeMetadataOf = (schemaId: number, title: string) =>
   JSON.stringify({
     vct: `https://agent.example/vt/vct/${schemaId}`,
     name: title,
-    claims: [{ path: ['name'], sd: 'always' }],
+    display: [{ locale: 'en', name: title }],
+    claims: [{ path: ['name'], display: [{ locale: 'en', label: 'name' }], sd: 'always' }],
     relatedJsonSchemaCredentialId: jscId(schemaId),
   })
 

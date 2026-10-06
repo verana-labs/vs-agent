@@ -17,7 +17,9 @@ const jsonSchema = (overrides: Record<string, unknown> = {}) =>
     title: 'EmployeeCredential',
     description: 'Proves employment',
     properties: {
-      credentialSubject: { properties: { name: { type: 'string' }, since: { type: 'string' } } },
+      credentialSubject: {
+        properties: { name: { type: 'string', title: 'Full name' }, since: { type: 'string' } },
+      },
     },
     ...overrides,
   })
@@ -37,14 +39,15 @@ describe('composeTypeMetadata', () => {
       jsonSchemaCredentialId: JSC_ID,
     })
 
-  it('carries vct, the schema title, its claims and the VTJSC id', () => {
+  it('carries vct, the schema title, its display, its claims and the VTJSC id', () => {
     expect(JSON.parse(build())).toEqual({
       vct: VCT,
       name: 'EmployeeCredential',
       description: 'Proves employment',
+      display: [{ locale: 'en', name: 'EmployeeCredential', description: 'Proves employment' }],
       claims: [
-        { path: ['name'], sd: 'always' },
-        { path: ['since'], sd: 'always' },
+        { path: ['name'], display: [{ locale: 'en', label: 'Full name' }], sd: 'always' },
+        { path: ['since'], display: [{ locale: 'en', label: 'since' }], sd: 'always' },
       ],
       relatedJsonSchemaCredentialId: JSC_ID,
     })
@@ -54,12 +57,41 @@ describe('composeTypeMetadata', () => {
     const document = JSON.parse(build(jsonSchema({ title: undefined, description: undefined })))
     expect(document.name).toBe(SCHEMA_REF)
     expect(document).not.toHaveProperty('description')
+    expect(document.display).toEqual([{ locale: 'en', name: SCHEMA_REF }])
+  })
+
+  it('names the type after the on-chain schema id when the schema title is blank or not a string', () => {
+    for (const title of ['  ', 42]) {
+      const document = JSON.parse(build(jsonSchema({ title } as never)))
+      expect(document.name).toBe(SCHEMA_REF)
+      expect(document.display[0].name).toBe(SCHEMA_REF)
+    }
+  })
+
+  it('labels a claim with its property name when the property title is blank or not a string', () => {
+    const schema = jsonSchema({
+      properties: {
+        credentialSubject: {
+          properties: { name: { title: '  ' }, since: { title: 42 }, role: true, constructor: {} },
+        },
+      },
+    })
+    expect(JSON.parse(build(schema)).claims.map((claim: { display: unknown }) => claim.display)).toEqual([
+      [{ locale: 'en', label: 'name' }],
+      [{ locale: 'en', label: 'since' }],
+      [{ locale: 'en', label: 'role' }],
+      [{ locale: 'en', label: 'constructor' }],
+    ])
   })
 
   it('validates as SD-JWT VC Type Metadata and keeps the extension property', () => {
     const parsed = TypeMetadataFormatSchema.parse(JSON.parse(build()))
     expect(parsed.vct).toBe(VCT)
     expect(parsed.claims?.map(claim => claim.path)).toEqual([['name'], ['since']])
+    expect(parsed.display).toEqual([
+      { locale: 'en', name: 'EmployeeCredential', description: 'Proves employment' },
+    ])
+    expect(parsed.claims?.[0].display).toEqual([{ locale: 'en', label: 'Full name' }])
     expect((parsed as Record<string, unknown>).relatedJsonSchemaCredentialId).toBe(JSC_ID)
   })
 })
