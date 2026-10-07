@@ -92,7 +92,7 @@ describe('AuthorizationService', () => {
           id: 1,
           corporationId: 7,
           vsOperator: 'verana1agent',
-          records: [{ participantId: 10, msgTypes: [PP_SESSION], withFeegrant: false, expiration: future }],
+          records: [{ participantId: 10, msgTypes: [PP_SESSION], withFeegrant: false, expiration: past }],
         },
       ],
     })
