@@ -194,6 +194,7 @@ export const VERANA_INDEXER_SUBSCRIPTION_SCOPE = (process.env.VERANA_INDEXER_SUB
 export const VERANA_GAS_ADJUSTMENT = process.env.VERANA_GAS_ADJUSTMENT
   ? Number(process.env.VERANA_GAS_ADJUSTMENT)
   : undefined
+export const VERANA_GAS_PRICE = process.env.VERANA_GAS_PRICE?.trim() || undefined
 
 export const TRUSTED_ECS_ECOSYSTEM_DIDS = (process.env.TRUSTED_ECS_ECOSYSTEM_DIDS ?? '')
   .split(',')

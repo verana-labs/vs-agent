@@ -84,6 +84,7 @@ import {
   VERANA_CORPORATION_ID,
   VERANA_INDEXER_SUBSCRIPTION_SCOPE,
   VERANA_GAS_ADJUSTMENT,
+  VERANA_GAS_PRICE,
   AGENT_MODE,
   AGENT_DELEGATED_PARENT_VS_DID,
   TRUSTED_ECS_ECOSYSTEM_DIDS,
@@ -238,6 +239,15 @@ const run = async () => {
   ) {
     configErrors.push('VERANA_GAS_ADJUSTMENT must be a positive number')
   }
+  // The format of a cosmjs GasPrice: a decimal amount and a denom, for example 0.01uvna.
+  if (
+    VERANA_GAS_PRICE !== undefined &&
+    !/^\d+(\.\d+)?[a-zA-Z][a-zA-Z0-9/:._-]{2,127}$/.test(VERANA_GAS_PRICE)
+  ) {
+    configErrors.push(
+      `VERANA_GAS_PRICE must be an amount and a denom, for example 0.01uvna (got '${VERANA_GAS_PRICE}')`,
+    )
+  }
   if (!['standalone', 'delegated'].includes(AGENT_MODE)) {
     configErrors.push(`AGENT_MODE must be 'standalone' or 'delegated' (got '${AGENT_MODE}')`)
   }
@@ -369,6 +379,7 @@ const run = async () => {
       corporationAddress,
       logger: serverLogger,
       gasAdjustment: VERANA_GAS_ADJUSTMENT,
+      gasPrice: VERANA_GAS_PRICE,
     })
     await veranaChain.start()
     configureChainIndexers({ [veranaChain.getChainId]: VERANA_INDEXER_BASE_URL })
