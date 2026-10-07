@@ -1123,23 +1123,25 @@ export class VtFlowService {
     try {
       await this.checkIsVerifiableService(agentContext, connection, purpose)
     } catch (error) {
+      if (!(error instanceof VtFlowError)) throw error
+      // the check above awaits, and a chain notification can move the flow meanwhile
+      const latest = isNew ? record : await this.repository.getById(agentContext, record.id)
       if (
-        error instanceof VtFlowError &&
-        (isNew ||
-          (!isVtFlowTerminalState(record.state) && (await this.isSamePeer(agentContext, record, connection))))
+        isNew ||
+        (!isVtFlowTerminalState(latest.state) && (await this.isSamePeer(agentContext, latest, connection)))
       ) {
-        record.errorMessage = error.message
-        this.appendMessage(record, {
+        latest.errorMessage = error.message
+        this.appendMessage(latest, {
           type: VtFlowMessageType.ProblemReport,
           text: defaultEnglishDescription(error.code),
           at: new Date().toISOString(),
         })
         if (isNew) {
-          record.state = VtFlowState.Error
-          await this.repository.save(agentContext, record)
-          this.emitStateChanged(agentContext, record, null)
+          latest.state = VtFlowState.Error
+          await this.repository.save(agentContext, latest)
+          this.emitStateChanged(agentContext, latest, null)
         } else {
-          await this.updateState(agentContext, record, VtFlowState.Error)
+          await this.updateState(agentContext, latest, VtFlowState.Error)
         }
       }
       throw error

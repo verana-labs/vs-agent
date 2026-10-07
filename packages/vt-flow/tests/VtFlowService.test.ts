@@ -492,6 +492,34 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(eventEmitter.emit).not.toHaveBeenCalled()
   })
 
+  it('validator fails the copy a notification moved to VALIDATED while the VS-CONN-VS check ran', async () => {
+    const stored = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    let release!: () => void
+    const held = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const assertVerifiableService = vi.fn(async () => {
+      await held
+      return false
+    })
+    const { service, repository, agentContext } = makeService(
+      JsonTransformer.clone(stored),
+      { id: 'conn-old', theirDid: 'did:web:agent-peer' },
+      { assertVerifiableService },
+    )
+    repository.getById.mockResolvedValue(stored)
+    const validation = { decidedAt: '2026-01-01T00:00:00.000Z', submission: VtFlowSubmission.Agent }
+
+    const receiving = service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+    await vi.waitFor(() => expect(assertVerifiableService).toHaveBeenCalled())
+    Object.assign(stored, { state: VtFlowState.Validated, validation })
+    release()
+
+    await expect(receiving).rejects.toMatchObject({ code: VtFlowErrorCode.NotAVerifiableService })
+    expect(repository.update).toHaveBeenCalledExactlyOnceWith(agentContext, stored)
+    expect(stored).toMatchObject({ state: VtFlowState.Error, validation })
+  })
+
   it('validator rejects a session id colliding with a terminated flow', async () => {
     const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.TerminatedByValidator })
     const { service, agentContext } = makeService(existing)
