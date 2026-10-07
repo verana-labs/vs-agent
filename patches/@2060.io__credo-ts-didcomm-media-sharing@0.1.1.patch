@@ -1,35 +1,5 @@
-diff --git a/build/index.d.mts b/build/index.d.mts
-index dc08de84255682390167560294e1604ae128079a..86162748aaff5b39b873593beb28e0722ad36844 100644
---- a/build/index.d.mts
-+++ b/build/index.d.mts
-@@ -1,4 +1,4 @@
--import { AgentContext, BaseEvent, BaseRecord, DependencyManager, EventEmitter, Module, Query, QueryOptions, Repository, StorageService } from "@credo-ts/core";
-+import { AgentContext, BaseEvent, BaseRecord, DependencyManager, EventEmitter, JsonValue, Module, Query, QueryOptions, Repository, StorageService } from "@credo-ts/core";
- import * as _credo_ts_didcomm0 from "@credo-ts/didcomm";
- import { DidCommConnectionRecord, DidCommConnectionService, DidCommInboundMessageContext, DidCommMessage, DidCommMessageHandler, DidCommMessageHandlerInboundMessage, DidCommMessageSender, DidCommOutboundMessageContext } from "@credo-ts/didcomm";
- 
-@@ -31,7 +31,8 @@ interface CipheringInfo {
- }
- interface SharedMediaItemOptions {
-   id?: string;
--  uri: string;
-+  uri?: string;
-+  json?: JsonValue;
-   mimeType: string;
-   description?: string;
-   byteCount?: number;
-@@ -41,7 +42,8 @@ interface SharedMediaItemOptions {
- }
- declare class SharedMediaItem {
-   id: string;
--  uri: string;
-+  uri?: string;
-+  json?: JsonValue;
-   mimeType: string;
-   description?: string;
-   byteCount?: number;
 diff --git a/build/index.mjs b/build/index.mjs
-index 5dff6bdce0a904bad5b22288040302d627c7b058..776cac2efd8ba888cb28bcf1b3ed1434f6d36214 100644
+index 5dff6bd..511a834 100644
 --- a/build/index.mjs
 +++ b/build/index.mjs
 @@ -48,8 +48,10 @@ function __decorate(decorators, target, key, desc) {
@@ -71,3 +41,73 @@ index 5dff6bdce0a904bad5b22288040302d627c7b058..776cac2efd8ba888cb28bcf1b3ed1434
  					byteCount: relatedAttachment.byteCount,
  					description: relatedAttachment.description,
  					fileName: relatedAttachment.filename
+@@ -479,6 +484,13 @@ let DidCommMediaSharingApi = class DidCommMediaSharingApi$1 {
+ 	* Sender role: share media, providing actual file description details
+ 	*/
+ 	async share(options) {
++		const { record } = await this.shareWithMessageId(options);
++		return record;
++	}
++	/**
++	* Sender role: share media, answering with the identifier of the sent message
++	*/
++	async shareWithMessageId(options) {
+ 		const record = await this.mediaSharingService.getById(this.agentContext, options.recordId);
+ 		const connection = await this.connectionService.getById(this.agentContext, record.connectionId);
+ 		const { message: payload } = await this.mediaSharingService.createMediaShare(this.agentContext, {
+@@ -492,7 +504,10 @@ let DidCommMediaSharingApi = class DidCommMediaSharingApi$1 {
+ 			connection,
+ 			associatedRecord: record
+ 		}));
+-		return record;
++		return {
++			record,
++			messageId: payload.id
++		};
+ 	}
+ 	/**
+ 	* Receiver role: request media
+diff --git a/build/index.d.mts b/build/index.d.mts
+index dc08de8..0137442 100644
+--- a/build/index.d.mts
++++ b/build/index.d.mts
+@@ -1,4 +1,4 @@
+-import { AgentContext, BaseEvent, BaseRecord, DependencyManager, EventEmitter, Module, Query, QueryOptions, Repository, StorageService } from "@credo-ts/core";
++import { AgentContext, BaseEvent, BaseRecord, DependencyManager, EventEmitter, JsonValue, Module, Query, QueryOptions, Repository, StorageService } from "@credo-ts/core";
+ import * as _credo_ts_didcomm0 from "@credo-ts/didcomm";
+ import { DidCommConnectionRecord, DidCommConnectionService, DidCommInboundMessageContext, DidCommMessage, DidCommMessageHandler, DidCommMessageHandlerInboundMessage, DidCommMessageSender, DidCommOutboundMessageContext } from "@credo-ts/didcomm";
+ 
+@@ -31,7 +31,8 @@ interface CipheringInfo {
+ }
+ interface SharedMediaItemOptions {
+   id?: string;
+-  uri: string;
++  uri?: string;
++  json?: JsonValue;
+   mimeType: string;
+   description?: string;
+   byteCount?: number;
+@@ -41,7 +42,8 @@ interface SharedMediaItemOptions {
+ }
+ declare class SharedMediaItem {
+   id: string;
+-  uri: string;
++  uri?: string;
++  json?: JsonValue;
+   mimeType: string;
+   description?: string;
+   byteCount?: number;
+@@ -283,6 +285,13 @@ declare class DidCommMediaSharingApi {
+    * Sender role: share media, providing actual file description details
+    */
+   share(options: DidCommMediaSharingShareOptions): Promise<DidCommMediaSharingRecord>;
++  /**
++   * Sender role: share media, answering with the identifier of the sent message
++   */
++  shareWithMessageId(options: DidCommMediaSharingShareOptions): Promise<{
++    record: DidCommMediaSharingRecord;
++    messageId: string;
++  }>;
+   /**
+    * Receiver role: request media
+    */

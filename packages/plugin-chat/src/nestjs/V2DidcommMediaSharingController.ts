@@ -1,16 +1,17 @@
-import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { ChatAgentModules } from '../types'
+import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { DidCommMediaSharingService, SharedMediaItem } from '@2060.io/credo-ts-didcomm-media-sharing'
+import { SharedMediaItem } from '@2060.io/credo-ts-didcomm-media-sharing'
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
 import { SentMessageDto, ShareMediaBodyDto } from './dto'
-import { connectionOf, moduleService, sendMessage } from '@verana-labs/vs-agent-sdk'
+import { connectionOf } from '@verana-labs/vs-agent-sdk'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/media-sharing', version: '2' })
 export class V2DidcommMediaSharingController {
-  public constructor(@Inject('VSAGENT') private readonly vsAgent: VsAgent<BaseAgentModules>) {}
+  public constructor(@Inject('VSAGENT') private readonly agent: VsAgent<ChatAgentModules>) {}
 
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
@@ -21,29 +22,22 @@ export class V2DidcommMediaSharingController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async shareMedia(@Body() body: ShareMediaBodyDto): Promise<SentMessageDto> {
-    const agent = await this.agent()
-    const service = moduleService(agent, DidCommMediaSharingService, 'media-sharing')
-    const connection = await connectionOf(agent, body.connectionId)
+    await connectionOf(this.agent, body.connectionId)
 
     const items = body.items.map(item => new SharedMediaItem(item))
-    const record = await service.createRecord(agent.context, {
-      connectionRecord: connection,
+    const record = await this.agent.modules.media.create({
+      connectionId: body.connectionId,
       parentThreadId: body.threadId,
       description: body.description,
       items,
     })
-    const { message } = await service.createMediaShare(agent.context, {
-      record,
+    const { messageId } = await this.agent.modules.media.shareWithMessageId({
+      recordId: record.id,
       parentThreadId: body.threadId,
       description: body.description,
       items,
     })
 
-    return { id: await sendMessage(agent, connection, message, record) }
-  }
-
-  private async agent(): Promise<VsAgent<BaseAgentModules>> {
-    if (!this.vsAgent.isInitialized) await this.vsAgent.initialize()
-    return this.vsAgent
+    return { id: messageId }
   }
 }

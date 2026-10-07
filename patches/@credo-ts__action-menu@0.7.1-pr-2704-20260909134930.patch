@@ -1,0 +1,54 @@
+diff --git a/build/ActionMenuApi.mjs b/build/ActionMenuApi.mjs
+index 0bbd695..66b6bf5 100644
+--- a/build/ActionMenuApi.mjs
++++ b/build/ActionMenuApi.mjs
+@@ -40,6 +40,16 @@ let ActionMenuApi = class ActionMenuApi {
+ 	* @returns Action Menu record associated to this action
+ 	*/
+ 	async sendMenu(options) {
++		const { record } = await this.sendMenuWithMessageId(options);
++		return record;
++	}
++	/**
++	* Send a new Action Menu as responder, answering with the identifier of the sent message.
++	*
++	* @param options options for sending menu
++	* @returns the Action Menu record and the id of the sent message
++	*/
++	async sendMenuWithMessageId(options) {
+ 		const connection = await this.connectionService.getById(this.agentContext, options.connectionId);
+ 		const { message, record } = await this.actionMenuService.createMenu(this.agentContext, {
+ 			connection,
+@@ -51,7 +61,10 @@ let ActionMenuApi = class ActionMenuApi {
+ 			connectionRecord: connection
+ 		});
+ 		await this.messageSender.sendMessage(outboundMessageContext);
+-		return record;
++		return {
++			record,
++			messageId: message.id
++		};
+ 	}
+ 	/**
+ 	* Perform action in active Action Menu, as a requester. The related
+diff --git a/build/ActionMenuApi.d.mts b/build/ActionMenuApi.d.mts
+index 8f8b982..f755623 100644
+--- a/build/ActionMenuApi.d.mts
++++ b/build/ActionMenuApi.d.mts
+@@ -31,6 +31,16 @@ declare class ActionMenuApi {
+    * @returns Action Menu record associated to this action
+    */
+   sendMenu(options: SendMenuOptions): Promise<ActionMenuRecord>;
++  /**
++   * Send a new Action Menu as responder, answering with the identifier of the sent message.
++   *
++   * @param options options for sending menu
++   * @returns the Action Menu record and the id of the sent message
++   */
++  sendMenuWithMessageId(options: SendMenuOptions): Promise<{
++    record: ActionMenuRecord;
++    messageId: string;
++  }>;
+   /**
+    * Perform action in active Action Menu, as a requester. The related
+    * menu will be closed.
