@@ -74,12 +74,13 @@ describe('the single use of a v2 invitation', () => {
   const deleteById = vi.fn()
   const findAllByOutOfBandId = vi.fn()
   const findById = vi.fn()
+  const getCreatedDids = vi.fn()
   const emit = vi.fn()
 
   const makeConnectedAgent = () => ({
     did: DID,
     context: {},
-    dids: { getCreatedDids: vi.fn(async () => []) },
+    dids: { getCreatedDids },
     events: { on: vi.fn(), emit },
     didcomm: {
       oob: { findById },
@@ -99,10 +100,42 @@ describe('the single use of a v2 invitation', () => {
   const stateUpdates = () =>
     emit.mock.calls.filter(([, event]) => event.type === VsAgentEventTypes.ConnectionStateUpdated)
 
+  const outOfBandRecord = (recipientDid?: string, reusable = false) => ({
+    id: OOB_ID,
+    reusable,
+    getTag: vi.fn(() => undefined),
+    getTags: vi.fn(() => ({ recipientDid })),
+    outOfBandInvitation: { v2Invitation: recipientDid ? { from: recipientDid } : undefined },
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
-    findById.mockResolvedValue({ id: OOB_ID, reusable: false, getTag: vi.fn(() => undefined) })
+    getCreatedDids.mockResolvedValue([])
+    findById.mockResolvedValue(outOfBandRecord('did:peer:4zQmInvitation'))
     findAllByOutOfBandId.mockResolvedValue([first, second])
+  })
+
+  it('keeps every connection of an invitation issued under the public DID of the agent', async () => {
+    findById.mockResolvedValue(outOfBandRecord(DID))
+    const handler = await stateChangeHandler()
+
+    await handler({ payload: { connectionRecord: second } })
+
+    expect(hangup).not.toHaveBeenCalled()
+    expect(deleteById).not.toHaveBeenCalled()
+    expect(stateUpdates()).toHaveLength(1)
+  })
+
+  it('keeps every connection of an invitation issued under an alternative DID of the agent', async () => {
+    const alternativeDid = 'did:web:agent.example'
+    findById.mockResolvedValue(outOfBandRecord(alternativeDid))
+    const handler = await stateChangeHandler()
+    getCreatedDids.mockResolvedValue([{ getTag: vi.fn(() => [alternativeDid]) }])
+
+    await handler({ payload: { connectionRecord: second } })
+
+    expect(hangup).not.toHaveBeenCalled()
+    expect(stateUpdates()).toHaveLength(1)
   })
 
   it('closes the connection that comes after the first one, and reports no state for it', async () => {

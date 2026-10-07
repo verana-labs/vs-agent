@@ -71,6 +71,8 @@ async function startAdminApi(agent: VsAgent<BaseAgentModules>): Promise<INestApp
   app.useGlobalPipes(new ValidationPipe())
   app.useGlobalFilters(new ErrorEnvelopeFilter(app.get(HttpAdapterHost).httpAdapter))
   await app.init()
+  // without a listener supertest opens and closes a server per request, which resets the stubbed in-process resource fetches
+  await app.listen(0)
 
   return app
 }
