@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 
+import { RecordNotFoundError } from '@credo-ts/core'
 import { ArgumentsHost, Catch, HttpException, HttpStatus, Logger } from '@nestjs/common'
 import { BaseExceptionFilter } from '@nestjs/core'
 
@@ -35,6 +36,10 @@ export class ErrorEnvelopeFilter extends BaseExceptionFilter {
     const envelope = this.envelopeFor(exception)
     if (envelope.code === AdminApiErrorCode.Internal) {
       this.logger.error(`${request.method} ${this.pathOf(request)} failed`, exception as Error)
+    } else if (exception instanceof RecordNotFoundError) {
+      this.logger.warn(
+        `${request.method} ${this.pathOf(request)} answered ${HttpStatus.NOT_FOUND}: ${exception.message}`,
+      )
     }
 
     const response = http.getResponse<Response>()
@@ -68,6 +73,14 @@ export class ErrorEnvelopeFilter extends BaseExceptionFilter {
         status: this.statusForServiceEndpointCode(exception.code),
         code: this.codeForServiceEndpointCode(exception.code),
         message: exception.message,
+      }
+    }
+
+    if (exception instanceof RecordNotFoundError) {
+      return {
+        status: HttpStatus.NOT_FOUND,
+        code: AdminApiErrorCode.UnknownId,
+        message: 'no record with the supplied identifier',
       }
     }
 

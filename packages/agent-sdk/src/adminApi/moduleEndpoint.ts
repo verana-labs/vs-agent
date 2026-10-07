@@ -8,15 +8,9 @@ import {
   DidCommOutboundMessageContext,
 } from '@credo-ts/didcomm'
 
-import { moduleNotServed, unknownConnection } from './AdminApiError'
+import { unknownConnection } from './AdminApiError'
 
 type Agent = VsAgent<BaseAgentModules>
-
-export function moduleService<T>(agent: Agent, service: new (...args: any[]) => T, module: string): T {
-  const { dependencyManager } = agent.context
-  if (!dependencyManager.isRegistered(service)) throw moduleNotServed(module)
-  return dependencyManager.resolve(service)
-}
 
 export async function connectionOf(agent: Agent, connectionId: string): Promise<DidCommConnectionRecord> {
   const connection = await agent.didcomm.connections.findById(connectionId)

@@ -5,7 +5,6 @@ import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestj
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
 import { SendQuestionBodyDto, SentMessageDto } from './dto'
-import { connectionOf } from '@verana-labs/vs-agent-sdk'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/question-answer', version: '2' })
@@ -21,8 +20,6 @@ export class V2DidcommQuestionAnswerController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async sendQuestion(@Body() body: SendQuestionBodyDto): Promise<SentMessageDto> {
-    await connectionOf(this.agent, body.connectionId)
-
     const record = await this.agent.modules.questionAnswer.sendQuestion(body.connectionId, {
       question: body.question,
       detail: body.detail,

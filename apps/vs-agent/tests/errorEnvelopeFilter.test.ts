@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 
+import { RecordNotFoundError } from '@credo-ts/core'
 import { Body, Controller, Get, HttpStatus, NotFoundException, Post, ValidationPipe } from '@nestjs/common'
 import { APP_GUARD } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
@@ -55,6 +56,13 @@ class V2DidcommFixtureController {
   @Post('send-message')
   sendMessage(@Body(new ValidationPipe({ expectedType: SendMessageDto })) body: SendMessageDto) {
     return body
+  }
+
+  @Post('basic-messages')
+  sendBasicMessage(): never {
+    throw new RecordNotFoundError('record with id "nope" not found', {
+      recordType: 'DidCommConnectionRecord',
+    })
   }
 
   @Get('boom')
@@ -133,6 +141,15 @@ describe('v2 error envelope', () => {
     expect(response.status).toBe(404)
     expect(response.body).toEqual({
       error: { code: 'UNKNOWN_ID', message: 'no connection with the given id' },
+    })
+  })
+
+  it('answers UNKNOWN_ID for the record that the agent did not find, and names no record type', async () => {
+    const response = await request(app.getHttpServer()).post('/v2/didcomm/basic-messages')
+
+    expect(response.status).toBe(404)
+    expect(response.body).toEqual({
+      error: { code: 'UNKNOWN_ID', message: 'no record with the supplied identifier' },
     })
   })
 
