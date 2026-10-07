@@ -107,6 +107,7 @@ describe('ECS credential digest anchoring', () => {
 
     expect(chain.createOrUpdateParticipantSession).toHaveBeenCalledWith(
       expect.objectContaining({ digest: DIGEST, issuerParticipantId: ISSUER_PARTICIPANT_ID }),
+      { granter: undefined },
     )
   })
 

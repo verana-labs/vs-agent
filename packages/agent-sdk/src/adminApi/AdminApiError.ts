@@ -70,9 +70,11 @@ export function trustDecisionError(
 
   const code = notDerivableCode ?? unauthorizedCode
 
-  return new AdminApiError(
-    code,
-    code === AdminApiErrorCode.InvalidInput ? BAD_REQUEST : CONFLICT,
-    error.message,
-  )
+  return new AdminApiError(code, statusOfNotDerivable(code), error.message)
+}
+
+function statusOfNotDerivable(code: AdminApiErrorCode): number {
+  if (code === AdminApiErrorCode.InvalidInput) return BAD_REQUEST
+  if (code === AdminApiErrorCode.UnknownId) return NOT_FOUND
+  return CONFLICT
 }

@@ -20,6 +20,8 @@ import {
   VeranaChainService,
   VeranaIndexerService,
 } from '../blockchain'
+import { feeGranterFor } from '../blockchain/feePreflight'
+import { triggerResolverForOwnDid } from '../blockchain/triggerResolver'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../utils/didReadiness'
 import { VtFlowOrchestrator } from '../vtFlow/VtFlowOrchestrator'
@@ -180,13 +182,11 @@ export class EcsBootstrapService {
     if (await this.isSelfValidated(participant)) {
       const chain = this.agent.veranaChain
       if (!chain) return
-      await chain.setParticipantOPToValidated({
-        id: participant.id,
-        validationFees: 0,
-        issuanceFees: 0,
-        verificationFees: 0,
-      })
-      await this.triggerResolverBestEffort(chain, participant.id)
+      await chain.setParticipantOPToValidated(
+        { id: participant.id, validationFees: 0, issuanceFees: 0, verificationFees: 0 },
+        { granter: feeGranterFor(this.agent, participant.id) },
+      )
+      await this.triggerResolverBestEffort()
       this.logger.info(`[EcsBootstrap] validated the interrupted self-issued participant ${participant.id}`)
       return
     }
@@ -340,13 +340,11 @@ export class EcsBootstrapService {
       validatorParticipantId: root.id,
       did: this.agent.did!,
     })
-    await chain.setParticipantOPToValidated({
-      id: participantId,
-      validationFees: 0,
-      issuanceFees: 0,
-      verificationFees: 0,
-    })
-    await this.triggerResolverBestEffort(chain, participantId)
+    await chain.setParticipantOPToValidated(
+      { id: participantId, validationFees: 0, issuanceFees: 0, verificationFees: 0 },
+      { granter: feeGranterFor(this.agent, participantId) },
+    )
+    await this.triggerResolverBestEffort()
     this.logger.info(
       `[EcsBootstrap] self-issued ISSUER participant ${participantId} for the ECS ${credentialType} schema (ecosystem root ${root.id})`,
     )
@@ -391,7 +389,7 @@ export class EcsBootstrapService {
         did: this.agent.did!,
         effectiveUntil: root.effective_until ? new Date(root.effective_until) : undefined,
       })
-      await this.triggerResolverBestEffort(chain, participantId)
+      await this.triggerResolverBestEffort()
       this.logger.info(`[EcsBootstrap] self-created Service ISSUER participant ${participantId}`)
       return
     }
@@ -428,14 +426,10 @@ export class EcsBootstrapService {
     return candidates.find(p => !p.revoked && !p.slashed && p.did !== this.agent.did)
   }
 
-  private async triggerResolverBestEffort(chain: VeranaChainService, participantId: number): Promise<void> {
-    try {
-      await chain.triggerResolver(participantId)
-    } catch (error) {
-      this.logger.warn(
-        `[EcsBootstrap] TriggerResolver failed for participant ${participantId}: ${(error as Error).message}`,
-      )
-    }
+  // [VSA-VPR-TX-5]: the new entry is an ISSUER entry, which cannot carry TriggerResolver, so the
+  // trigger names the HOLDER entry of the agent. The helper logs the outcome, and never throws
+  private async triggerResolverBestEffort(): Promise<void> {
+    await triggerResolverForOwnDid(this.agent, 'the agent became a Verifiable Service')
   }
 
   private isUsableParticipant(p: ParticipantDto): boolean {

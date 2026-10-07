@@ -73,7 +73,8 @@ export interface UnaccreditedDidsResult {
   unchecked: string[]
 }
 
-interface CredentialSchemaLink {
+/** The on-chain `CredentialSchema` a VTJSC binds to, and the Ecosystem that owns it. */
+export interface CredentialSchemaLink {
   credentialSchemaId: number
   ecosystemDid: string
 }
@@ -111,11 +112,29 @@ function relatedJsonSchemaCredentialIdOf(metadata: Record<string, unknown>): str
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
+export interface AnonCredsTrustServiceOptions {
+  /**
+   * DEMO ONLY, NOT IN THE SPEC. When true, the agent mints credential offers and presentation
+   * requests although it holds no active ISSUER or VERIFIER Participant for the CredentialSchema.
+   * The check still runs and its failure is logged. This does not conform to
+   * [VSA-VTI-FLOW-VERIFY-AC-5]; use it only for demo services that wallets must refuse.
+   */
+  skipOwnAuthorization?: boolean
+}
+
 export class AnonCredsTrustService {
   private readonly derivations = new Map<string, DerivedCredentialSchema>()
   private readonly credentialSchemaLinks = new Map<string, CredentialSchemaLink>()
 
-  public constructor(private readonly agent: VsAgent<BaseAgentModules>) {}
+  public constructor(
+    private readonly agent: VsAgent<BaseAgentModules>,
+    private readonly options: AnonCredsTrustServiceOptions = {},
+  ) {}
+
+  /** True when the agent mints without its own accreditation (demo only, see the options). */
+  public get skipsOwnAuthorization(): boolean {
+    return this.options.skipOwnAuthorization === true
+  }
 
   public async deriveCredentialSchema(reference: AnonCredsObjectReference): Promise<DerivedCredentialSchema> {
     const key =
@@ -185,7 +204,20 @@ export class AnonCredsTrustService {
       throw unavailable('the agent has no public DID, so it cannot check its own Participant entry')
     }
 
-    await this.assertAuthorized({ did: this.agent.did, ...options })
+    try {
+      await this.assertAuthorized({ did: this.agent.did, ...options })
+    } catch (error) {
+      if (
+        !this.skipsOwnAuthorization ||
+        !(error instanceof AnonCredsTrustError) ||
+        error.reason !== AnonCredsTrustErrorReason.NotAuthorized
+      ) {
+        throw error
+      }
+      this.agent.config.logger.warn(
+        `[UNSAFE] ${error.message}. The agent continues because AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION is true (demo only).`,
+      )
+    }
   }
 
   public async findUnaccreditedDids(
@@ -275,7 +307,12 @@ export class AnonCredsTrustService {
     return { jsonSchemaCredentialId, anonCredsSchemaId: schemaId }
   }
 
-  private async resolveCredentialSchemaLink(jsonSchemaCredentialId: string): Promise<CredentialSchemaLink> {
+  /**
+   * Dereferences a VTJSC, verifies its proof and its issuer per [TR-3], and returns the on-chain
+   * `CredentialSchema` it binds to. Throws an `AnonCredsTrustError`: `not-derivable` when the VTJSC
+   * binds to no `CredentialSchema` of this chain, `unavailable` when a read fails.
+   */
+  public async resolveCredentialSchemaLink(jsonSchemaCredentialId: string): Promise<CredentialSchemaLink> {
     const cached = this.credentialSchemaLinks.get(jsonSchemaCredentialId)
     if (cached) return cached
 

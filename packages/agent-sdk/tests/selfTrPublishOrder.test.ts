@@ -6,8 +6,11 @@ import {
   W3cV2DataIntegrityVerifiableCredential,
   W3cV2Presentation,
 } from '@credo-ts/core'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('../src/blockchain/triggerResolver', () => ({ scheduleTriggerResolverForOwnDid: vi.fn() }))
+
+import { scheduleTriggerResolverForOwnDid } from '../src/blockchain/triggerResolver'
 import { getEcsSchemas } from '../src/utils/data'
 import { publishSelfIssuedEcsPresentation } from '../src/utils/selfIssuedEcsCredential'
 import { sortKeysDeep } from '../src/utils/setupSelfTr'
@@ -72,14 +75,29 @@ function makeAgent() {
       set: (key: string, value: Record<string, unknown>) => metadata.set(key, value),
     },
   }
-  const repositoryUpdate = vi.fn()
+  // the write point reads the stored record back to see what changed, so the repository keeps a JSON
+  // copy of each write, as storage does
+  let stored: { didDocument?: unknown; metadata: Record<string, unknown> } | null = null
+  const repositoryUpdate = vi.fn(() => {
+    stored = JSON.parse(
+      JSON.stringify({ didDocument: didRecord.didDocument, metadata: Object.fromEntries(metadata) }),
+    )
+  })
+  const repository = {
+    update: repositoryUpdate,
+    findById: async () =>
+      stored && {
+        didDocument: stored.didDocument,
+        metadata: { get: (key: string) => (stored?.metadata as Record<string, unknown>)[key] },
+      },
+  }
   const didsUpdate = vi.fn()
   const agent = {
     did: DID,
     config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
     dids: { getCreatedDids: async () => [didRecord], update: didsUpdate },
     context: {
-      dependencyManager: { isRegistered: () => false, resolve: () => ({ update: repositoryUpdate }) },
+      dependencyManager: { isRegistered: () => false, resolve: () => repository },
     },
     w3cV2Credentials: {
       signCredential: async ({ credential }: { credential: W3cV2Credential }) =>
@@ -217,6 +235,34 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
 describe('stored self-issued VTC revalidation', () => {
   // integrityData never changes here: only the checks on the stored credential can regenerate it
   const beforePublish = async () => {}
+
+  beforeEach(() => vi.mocked(scheduleTriggerResolverForOwnDid).mockClear())
+
+  // [VSA-VT-LVP-5]: the presentation a resolver fetches changed, although the entry that announces
+  // it did not, so the trigger cannot depend on a DID Document change
+  it('triggers the resolver when it re-issues the credential under the same URL', async () => {
+    const { agent } = makeAgent()
+
+    await publish(agent, beforePublish, JSC_URL, '2027-09-25T10:00:00Z')
+    expect(scheduleTriggerResolverForOwnDid).toHaveBeenCalledTimes(1)
+
+    await publish(agent, beforePublish, JSC_URL, '2028-09-25T10:00:00Z')
+
+    expect(scheduleTriggerResolverForOwnDid).toHaveBeenCalledTimes(2)
+  })
+
+  it('triggers nothing when it stores the credential it already published', async () => {
+    const { agent, didsUpdate } = makeAgent()
+
+    await publish(agent, beforePublish, JSC_URL, '2027-09-25T10:00:00Z')
+    vi.mocked(scheduleTriggerResolverForOwnDid).mockClear()
+    didsUpdate.mockClear()
+
+    await publish(agent, beforePublish, JSC_URL, '2027-09-25T10:00:00Z')
+
+    expect(scheduleTriggerResolverForOwnDid).not.toHaveBeenCalled()
+    expect(didsUpdate).not.toHaveBeenCalled()
+  })
 
   it('rebuilds when the proof names a verification method the DID Document no longer asserts', async () => {
     const { agent, metadata, repositoryUpdate } = makeAgent()

@@ -18,6 +18,8 @@ import {
   PresentationStateUpdated,
 } from '@verana-labs/vs-agent-model'
 
+import { publicDidsOf } from '../utils/agent'
+
 import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 
 // TODO: Fix single-use invitations for DIDComm v2 in Credo, then remove this function.
@@ -61,11 +63,6 @@ export const connectionEvents = async (
   agent: VsAgent<any>,
   config: { discoveryOptions?: DidCommFeatureQueryOptions[]; logger: BaseLogger },
 ) => {
-  // Get the first record matching agent's DID and obtain all alternatives for it
-  const [agentPublicDidRecord] = await agent.dids.getCreatedDids({ did: agent.did })
-  const alternativeDids = agentPublicDidRecord?.getTag('alternativeDids')
-  const agentPublicDids = [agent.did, ...(Array.isArray(alternativeDids) ? alternativeDids : [])]
-
   agent.events.on(
     DidCommConnectionEventTypes.DidCommConnectionStateChanged,
     async ({ payload }: DidCommConnectionStateChangedEvent) => {
@@ -191,25 +188,35 @@ export const connectionEvents = async (
     },
   )
 
-  // Auto-accept connections that go to the public did
+  // Auto-accept connections that go to the public did.
+  //
+  // This listener is the only path that answers a DID Exchange Request sent to the public DID.
+  // Credo creates the implicit invitation of such a request with autoAcceptConnection: false, the
+  // connection record inherits that value, and the request handler never falls back to the
+  // autoAcceptConnections setting of the connections module.
   agent.events.on(
     DidCommConnectionEventTypes.DidCommConnectionStateChanged,
     async (data: DidCommConnectionStateChangedEvent) => {
       // an event listener is never awaited, so a rejection here would surface as an
       // unhandled rejection and take the process down
       try {
-        config.logger.debug(`Incoming connection event: ${data.payload.connectionRecord.state}`)
-        const outOfBandId = data.payload.connectionRecord.outOfBandId
-        if (!outOfBandId) return
-        const oob = await agent.didcomm.oob.findById(outOfBandId)
-        if (
-          agentPublicDids.includes(oob?.outOfBandInvitation.id) &&
-          data.payload.connectionRecord.state === DidCommDidExchangeState.RequestReceived
-        ) {
-          config.logger.debug(`Incoming connection request for ${agent.did}`)
-          await agent.didcomm.connections.acceptRequest(data.payload.connectionRecord.id)
-          config.logger.debug(`Accepted request for ${agent.did}`)
+        const record = data.payload.connectionRecord
+        config.logger.debug(`Incoming connection event: ${record.state}`)
+        if (record.state !== DidCommDidExchangeState.RequestReceived || !record.outOfBandId) return
+        const oob = await agent.didcomm.oob.findById(record.outOfBandId)
+        const invitationId = oob?.outOfBandInvitation.id
+        if (!invitationId || !invitationId.startsWith('did:')) return
+
+        const agentPublicDids = await publicDidsOf(agent)
+        if (!agentPublicDids.includes(invitationId)) {
+          config.logger.warn(
+            `Connection request ${record.id} addresses ${invitationId}, which is none of the DIDs of this agent (${agentPublicDids.join(', ')}). The request stays unanswered.`,
+          )
+          return
         }
+        config.logger.debug(`Incoming connection request for ${invitationId}`)
+        await agent.didcomm.connections.acceptRequest(record.id)
+        config.logger.debug(`Accepted request ${record.id} for ${invitationId}`)
       } catch (error) {
         config.logger.error(
           `[connection-events] incoming connection handler failed: ${(error as Error).message}`,

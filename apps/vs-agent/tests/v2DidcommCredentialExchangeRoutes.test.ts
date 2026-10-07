@@ -17,7 +17,10 @@ import {
 } from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
-import { CreateCredentialOfferBodyDto } from '../src/controllers/admin/v2/didcomm/dto'
+import {
+  CreateCredentialOfferBodyDto,
+  ListCredentialExchangesQueryDto,
+} from '../src/controllers/admin/v2/didcomm/dto'
 import { V2DidcommCredentialExchangesController } from '../src/controllers/admin/v2/didcomm/V2DidcommCredentialExchangesController'
 import { UrlShorteningService } from '../src/services/UrlShorteningService'
 import { VsAgentService } from '../src/services/VsAgentService'
@@ -35,6 +38,7 @@ function exchangeRecord(options: {
   credentialDefinitionId?: string
   schemaId?: string
   state?: string
+  role?: string
 }) {
   const metadata: Record<string, unknown> = {}
   if (options.credentialDefinitionId || options.schemaId) {
@@ -47,6 +51,7 @@ function exchangeRecord(options: {
   const record = {
     id: options.id,
     state: options.state ?? 'offer-sent',
+    role: options.role ?? 'issuer',
     threadId: `thread-${options.id}`,
     connectionId: `conn-${options.id}`,
     errorMessage: undefined as string | undefined,
@@ -101,8 +106,13 @@ const agent = {
     },
   },
   didcomm: {
+    connections: {
+      findById: vi.fn(),
+    },
     credentials: {
       createOffer: vi.fn(),
+      findAllByQuery: vi.fn().mockResolvedValue(records),
+      offerCredential: vi.fn(),
       getAll: vi.fn().mockResolvedValue(records),
       declineOffer: vi.fn(),
       sendProblemReport: vi.fn(),
@@ -152,7 +162,7 @@ describe('v2 didcomm credential exchange routes', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    agent.didcomm.credentials.getAll.mockResolvedValue(records)
+    agent.didcomm.credentials.findAllByQuery.mockResolvedValue(records)
     agent.didcomm.credentials.getFormatData.mockResolvedValue({
       offerAttributes: [{ name: 'phoneNumber', value: '+57128348520' }],
     })
@@ -168,6 +178,7 @@ describe('v2 didcomm credential exchange routes', () => {
     anonCredsTrust.assertAuthorized.mockResolvedValue(undefined)
     agent.modules.anoncreds.getCreatedCredentialDefinitions.mockResolvedValue([credentialDefinition(false)])
     urlShorteningService.createShortUrl.mockResolvedValue('short-1')
+    agent.didcomm.connections.findById.mockResolvedValue({ id: 'conn-1' })
     vi.mocked(createInvitation).mockResolvedValue({
       invitation: { '@type': 'https://didcomm.org/out-of-band/2.0/invitation', '@id': 'inv-1' },
     } as never)
@@ -203,6 +214,7 @@ describe('v2 didcomm credential exchange routes', () => {
         'createdAt',
         'credentialDefinitionId',
         'credentialExchangeId',
+        'role',
         'schemaId',
         'state',
         'threadId',
@@ -224,6 +236,41 @@ describe('v2 didcomm credential exchange routes', () => {
     expect(response.status).toBe(200)
     expect(response.body.items).toHaveLength(3)
     expect(response.body.items[0].claims).toEqual([])
+  })
+
+  it.each([
+    ['connectionId', 'conn-ce-a'],
+    ['threadId', 'thread-ce-a'],
+    ['role', 'holder'],
+    ['state', 'offer-received'],
+  ])('passes the %s filter to the repository', async (name, value) => {
+    const response = await request(app.getHttpServer()).get(
+      `/v2/didcomm/credential-exchanges?${name}=${value}`,
+    )
+
+    expect(response.status).toBe(200)
+    expect(agent.didcomm.credentials.findAllByQuery).toHaveBeenCalledWith({
+      connectionId: undefined,
+      threadId: undefined,
+      role: undefined,
+      state: undefined,
+      [name]: value,
+    })
+  })
+
+  it('rejects a role and a state outside the protocol values', async () => {
+    const pipe = new ValidationPipe()
+    const queryMetadata = { type: 'query', metatype: ListCredentialExchangesQueryDto } as const
+
+    await expect(pipe.transform({ role: 'verifier' }, queryMetadata)).rejects.toMatchObject({
+      status: 400,
+    })
+    await expect(pipe.transform({ state: 'offered' }, queryMetadata)).rejects.toMatchObject({
+      status: 400,
+    })
+    await expect(
+      pipe.transform({ role: 'holder', state: 'offer-received' }, queryMetadata),
+    ).resolves.toBeDefined()
   })
 
   it('rejects a malformed cursor with the INVALID_CURSOR envelope', async () => {
@@ -314,6 +361,62 @@ describe('v2 didcomm credential exchange routes', () => {
 
     // The specification tells the agent to use v2 if the caller sends no value. The SDK does this.
     expect(vi.mocked(createInvitation).mock.calls[1][0].didCommVersion).toBeUndefined()
+  })
+
+  it('sends the offer on the connection that the caller names, and makes no invitation', async () => {
+    agent.didcomm.credentials.offerCredential.mockResolvedValue({ id: 'ce-new' })
+
+    const response = await request(app.getHttpServer())
+      .post('/v2/didcomm/credential-offer')
+      .send({
+        credentialDefinitionId: 'credDef:a',
+        claims: [{ name: 'phoneNumber', value: '+57128348520' }],
+        connectionId: 'conn-1',
+      })
+
+    expect(response.status).toBe(201)
+    // The specification leaves out both invitation fields on this path.
+    expect(response.body).toEqual({ credentialExchangeId: 'ce-new' })
+    expect(createInvitation).not.toHaveBeenCalled()
+    expect(urlShorteningService.createShortUrl).not.toHaveBeenCalled()
+    expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
+    expect(agent.didcomm.credentials.offerCredential).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionId: 'conn-1', protocolVersion: 'v2' }),
+    )
+  })
+
+  it('ignores useLegacyDid and didcommVersion when the caller names a connection', async () => {
+    agent.didcomm.credentials.offerCredential.mockResolvedValue({ id: 'ce-new' })
+
+    const response = await request(app.getHttpServer())
+      .post('/v2/didcomm/credential-offer')
+      .send({
+        credentialDefinitionId: 'credDef:a',
+        claims: [{ name: 'phoneNumber', value: '+57128348520' }],
+        connectionId: 'conn-1',
+        didcommVersion: 'v1',
+        useLegacyDid: true,
+      })
+
+    expect(response.status).toBe(201)
+    expect(createInvitation).not.toHaveBeenCalled()
+  })
+
+  it('answers UNKNOWN_ID for an unknown connection, and offers nothing', async () => {
+    agent.didcomm.connections.findById.mockResolvedValue(null)
+
+    const response = await request(app.getHttpServer())
+      .post('/v2/didcomm/credential-offer')
+      .send({
+        credentialDefinitionId: 'credDef:a',
+        claims: [{ name: 'phoneNumber', value: '+57128348520' }],
+        connectionId: 'conn-absent',
+      })
+
+    expect(response.status).toBe(404)
+    expect(response.body.error.code).toBe('UNKNOWN_ID')
+    // The agent leaves no exchange record that no peer would ever receive.
+    expect(agent.didcomm.credentials.offerCredential).not.toHaveBeenCalled()
   })
 
   it('answers UNKNOWN_ID for an unknown credential definition', async () => {

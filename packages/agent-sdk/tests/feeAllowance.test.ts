@@ -108,3 +108,62 @@ describe('VeranaChainService.feeAllowance', () => {
     await expect(chain.feeAllowance('verana1corp')).rejects.toThrow('fetch failed')
   })
 })
+
+describe('VeranaChainService.broadcastMsg', () => {
+  const fee = { amount: [{ denom: 'uvna', amount: '500' }], gas: '200000', granter: 'verana1corp' }
+
+  function chainWith(overrides: Record<string, unknown> = {}) {
+    const signAndBroadcast = vi.fn(async () => ({ code: 0, transactionHash: 'AB12', msgResponses: [] }))
+    const estimateFee = vi.fn(async () => fee)
+    const chain = new VeranaChainService({ logger: { debug: vi.fn(), info: vi.fn() } } as never)
+    Object.assign(chain, {
+      operatorAddress: 'verana1agent',
+      corporationAddress: 'verana1corp',
+      signingClient: { signAndBroadcast },
+      estimateFee,
+      feeAllowance: async () => ({ unlimited: true }),
+      getAccountBalance: async () => ({ denom: 'uvna', amount: '10000' }),
+      getBalance: async () => ({ denom: 'uvna', amount: '10000' }),
+      ...overrides,
+    })
+    return { chain, signAndBroadcast, estimateFee }
+  }
+
+  it('broadcasts with the simulated fee, and names the granter the caller gives', async () => {
+    const { chain, signAndBroadcast, estimateFee } = chainWith()
+
+    await expect(chain.triggerResolver(42, { granter: 'verana1corp' })).resolves.toEqual({ txHash: 'AB12' })
+    expect(estimateFee).toHaveBeenCalledWith(
+      [expect.objectContaining({ typeUrl: '/verana.pp.v1.MsgTriggerResolver' })],
+      'verana1corp',
+    )
+    expect(signAndBroadcast).toHaveBeenCalledWith('verana1agent', expect.any(Array), fee)
+
+    await chain.triggerResolver(42)
+    expect(estimateFee).toHaveBeenLastCalledWith(expect.any(Array), undefined)
+  })
+
+  // [VSA-ADM-VT-FL-VALIDATE-6] on every transaction: no call site can reach the chain unchecked
+  it('signs nothing when the fee payer cannot pay, and names the reason', async () => {
+    const { chain, signAndBroadcast } = chainWith({
+      getBalance: async () => ({ denom: 'uvna', amount: '0' }),
+    })
+
+    await expect(chain.triggerResolver(42)).rejects.toMatchObject({
+      name: 'FeePreflightError',
+      reason: 'INSUFFICIENT_FUNDS_AGENT',
+      message: 'the agent account holds 0uvna',
+    })
+    expect(signAndBroadcast).not.toHaveBeenCalled()
+  })
+
+  it('signs nothing when the Corporation grants no active allowance', async () => {
+    const { chain, signAndBroadcast } = chainWith({ feeAllowance: async () => undefined })
+
+    await expect(chain.triggerResolver(42, { granter: 'verana1corp' })).rejects.toMatchObject({
+      name: 'FeePreflightError',
+      reason: 'FEEGRANT_EXPIRED',
+    })
+    expect(signAndBroadcast).not.toHaveBeenCalled()
+  })
+})

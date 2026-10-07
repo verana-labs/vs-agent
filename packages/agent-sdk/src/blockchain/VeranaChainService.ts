@@ -25,6 +25,7 @@ import type { Timestamp } from 'cosmjs-types/google/protobuf/timestamp'
 import { connectComet } from '@cosmjs/tendermint-rpc'
 import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
 
+import { FeePreflightError, preflightFee } from './feePreflight'
 import {
   Coin,
   CreateOrUpdateParticipantSessionParams,
@@ -48,6 +49,11 @@ const {
 } = require('@verana-labs/verana-types/codec/verana/pp/v1/tx')
 
 export type FeeAllowance = { unlimited: true } | { unlimited: false; remaining: bigint }
+
+/** [VSA-VPR-TX-3]: `granter` names the Corporation when its fee grant pays the transaction. */
+export interface TxOptions {
+  granter?: string
+}
 
 const ALLOWED_MSG_ALLOWANCE = '/cosmos.feegrant.v1beta1.AllowedMsgAllowance'
 const BASIC_ALLOWANCE = '/cosmos.feegrant.v1beta1.BasicAllowance'
@@ -124,10 +130,6 @@ export class VeranaChainService {
     return this.corporationAddress
   }
 
-  get autoTriggerResolverEnabled(): boolean {
-    return this.config.autoTriggerResolver !== false
-  }
-
   async start(): Promise<void> {
     const { rpcUrl, mnemonic, chainId, logger, gasPrice } = this.config
 
@@ -167,6 +169,7 @@ export class VeranaChainService {
   // Transaction API (signed)
   async startParticipantOP(
     params: StartParticipantOPParams,
+    options: TxOptions = {},
   ): Promise<{ participantId: number; txHash: string }> {
     const value = MsgStartParticipantOP.fromPartial({
       corporation: this.corporationAddress,
@@ -180,24 +183,32 @@ export class VeranaChainService {
       vsOperator: params.vsOperator ?? '',
       vsOperatorAuthzMsgTypes: params.vsOperatorAuthzMsgTypes ?? [],
     })
-    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgStartParticipantOP, value })
+    const result = await this.broadcastMsg({
+      typeUrl: veranaTypeUrls.MsgStartParticipantOP,
+      value,
+      ...options,
+    })
     const participantId = Number(
       MsgStartParticipantOPResponse.decode(result.msgResponses[0].value).participantId,
     )
     return { participantId, txHash: result.transactionHash }
   }
 
-  async renewParticipantOP(id: number): Promise<{ txHash: string }> {
+  async renewParticipantOP(id: number, options: TxOptions = {}): Promise<{ txHash: string }> {
     const value = MsgRenewParticipantOP.fromPartial({
       corporation: this.corporationAddress,
       operator: this.operatorAddress,
       id,
     })
-    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgRenewParticipantOP, value })
+    const result = await this.broadcastMsg({
+      typeUrl: veranaTypeUrls.MsgRenewParticipantOP,
+      value,
+      ...options,
+    })
     return { txHash: result.transactionHash }
   }
 
-  async cancelParticipantOPLastRequest(id: number): Promise<{ txHash: string }> {
+  async cancelParticipantOPLastRequest(id: number, options: TxOptions = {}): Promise<{ txHash: string }> {
     const value = MsgCancelParticipantOPLastRequest.fromPartial({
       corporation: this.corporationAddress,
       operator: this.operatorAddress,
@@ -206,12 +217,14 @@ export class VeranaChainService {
     const result = await this.broadcastMsg({
       typeUrl: veranaTypeUrls.MsgCancelParticipantOPLastRequest,
       value,
+      ...options,
     })
     return { txHash: result.transactionHash }
   }
 
   async selfCreateParticipant(
     params: SelfCreateParticipantParams,
+    options: TxOptions = {},
   ): Promise<{ participantId: number; txHash: string }> {
     const value = MsgSelfCreateParticipant.fromPartial({
       corporation: this.corporationAddress,
@@ -230,7 +243,11 @@ export class VeranaChainService {
       vsOperatorAuthzFeeSpendLimit: params.vsOperatorAuthzFeeSpendLimit ?? [],
       vsOperatorAuthzPeriod: params.vsOperatorAuthzPeriod,
     })
-    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgSelfCreateParticipant, value })
+    const result = await this.broadcastMsg({
+      typeUrl: veranaTypeUrls.MsgSelfCreateParticipant,
+      value,
+      ...options,
+    })
     const participantId = Number(MsgSelfCreateParticipantResponse.decode(result.msgResponses[0].value).id)
     return { participantId, txHash: result.transactionHash }
   }
@@ -308,7 +325,10 @@ export class VeranaChainService {
     return feeAllowanceOf(response?.allowance?.allowance, denom)
   }
 
-  async setParticipantOPToValidated(params: SetParticipantOPToValidatedParams): Promise<{ txHash: string }> {
+  async setParticipantOPToValidated(
+    params: SetParticipantOPToValidatedParams,
+    options: TxOptions = {},
+  ): Promise<{ txHash: string }> {
     const value = MsgSetParticipantOPToValidated.fromPartial({
       corporation: this.corporationAddress,
       operator: this.operatorAddress,
@@ -321,7 +341,11 @@ export class VeranaChainService {
       issuanceFeeDiscount: params.issuanceFeeDiscount ?? 0,
       verificationFeeDiscount: params.verificationFeeDiscount ?? 0,
     })
-    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgSetParticipantOPToValidated, value })
+    const result = await this.broadcastMsg({
+      typeUrl: veranaTypeUrls.MsgSetParticipantOPToValidated,
+      value,
+      ...options,
+    })
     return { txHash: result.transactionHash }
   }
 
@@ -343,26 +367,49 @@ export class VeranaChainService {
 
   async createOrUpdateParticipantSession(
     params: CreateOrUpdateParticipantSessionParams,
+    options: TxOptions = {},
   ): Promise<{ txHash: string }> {
-    const result = await this.broadcastMsg(this.createOrUpdateParticipantSessionMsg(params))
-    return { txHash: result.transactionHash }
-  }
-
-  async triggerResolver(participantId: number): Promise<{ txHash: string }> {
-    const value = MsgTriggerResolver.fromPartial({
-      corporation: this.corporationAddress,
-      operator: this.operatorAddress,
-      id: participantId,
+    const result = await this.broadcastMsg({
+      ...this.createOrUpdateParticipantSessionMsg(params),
+      ...options,
     })
-    const result = await this.broadcastMsg({ typeUrl: veranaTypeUrls.MsgTriggerResolver, value })
     return { txHash: result.transactionHash }
   }
 
-  private async broadcastMsg(options: { typeUrl: string; value: object }): Promise<DeliverTxResponse> {
-    const { typeUrl, value } = options
-    const msg = { typeUrl, value }
-    this.config.logger.debug(`[VeranaChain] Broadcasting ${typeUrl} as ${this.operatorAddress}`)
-    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, [msg], this.gasAdjustment)
+  triggerResolverMsg(participantId: number): EncodeObject {
+    return {
+      typeUrl: veranaTypeUrls.MsgTriggerResolver,
+      value: MsgTriggerResolver.fromPartial({
+        corporation: this.corporationAddress,
+        operator: this.operatorAddress,
+        id: participantId,
+      }),
+    }
+  }
+
+  async triggerResolver(participantId: number, options: TxOptions = {}): Promise<{ txHash: string }> {
+    const result = await this.broadcastMsg({ ...this.triggerResolverMsg(participantId), ...options })
+    return { txHash: result.transactionHash }
+  }
+
+  // [VSA-VPR-TX-1], [VSA-VPR-TX-3]: the fee comes from a simulation of the transaction as broadcast,
+  // granter included. The signer pays unless the transaction names the Corporation as granter.
+  private async broadcastMsg(options: {
+    typeUrl: string
+    value: unknown
+    granter?: string
+  }): Promise<DeliverTxResponse> {
+    const { typeUrl, value, granter } = options
+    const messages = [{ typeUrl, value }]
+    // [VSA-ADM-VT-FL-VALIDATE-6] on every transaction this service sends: the funnel checks that the
+    // fee payer can pay before it signs, so no call site can forget it
+    const checked = await preflightFee(this, messages[0], granter)
+    if ('reason' in checked) throw new FeePreflightError(checked.reason, checked.error)
+    const fee = checked.fee
+    this.config.logger.debug(
+      `[VeranaChain] Broadcasting ${typeUrl} as ${this.operatorAddress}${granter ? ` with fee granter ${granter}` : ''}`,
+    )
+    const result = await this.signingClient.signAndBroadcast(this.operatorAddress, messages, fee)
     assertIsDeliverTxSuccess(result)
     this.config.logger.info(`[VeranaChain] Tx success: ${result.transactionHash}`)
     return result

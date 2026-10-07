@@ -21,6 +21,7 @@ function didRecordWith(entries: Record<string, Record<string, unknown>>) {
 
 function agentWith(didRecord: ReturnType<typeof didRecordWith>) {
   return {
+    config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
     context: { dependencyManager: { resolve: () => ({ update: vi.fn() }) } },
     dids: { getCreatedDids: async () => [didRecord], update: vi.fn() },
   }

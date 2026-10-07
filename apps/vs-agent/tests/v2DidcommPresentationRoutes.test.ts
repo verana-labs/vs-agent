@@ -23,7 +23,10 @@ import {
 import { ErrorEnvelopeFilter } from '../src/common'
 import { CredentialTypesService } from '../src/services'
 import { V2DidcommPresentationsController } from '../src/controllers/admin/v2/didcomm/V2DidcommPresentationsController'
-import { CreatePresentationRequestBodyDto } from '../src/controllers/admin/v2/didcomm/dto'
+import {
+  CreatePresentationRequestBodyDto,
+  ListPresentationsQueryDto,
+} from '../src/controllers/admin/v2/didcomm/dto'
 import { UrlShorteningService } from '../src/services/UrlShorteningService'
 import { VsAgentService } from '../src/services/VsAgentService'
 
@@ -62,8 +65,9 @@ const proofRecord = (id: string, createdAt: string, extra: Record<string, unknow
 
 const proofs = {
   createRequest: vi.fn(),
+  requestProof: vi.fn(),
   update: vi.fn(),
-  getAll: vi.fn(),
+  findAllByQuery: vi.fn(),
   declineRequest: vi.fn(),
   sendProblemReport: vi.fn(),
   findById: vi.fn(),
@@ -258,6 +262,50 @@ describe('v2 didcomm presentation routes', () => {
       expect(errors.map(error => error.property).sort()).toEqual(['callbackUrl', 'ref'])
     })
 
+    it('sends the request on the connection that the caller names, and makes no invitation', async () => {
+      const proofRecordSpy = { id: 'proof-1', metadata: metadata() }
+      proofs.requestProof.mockResolvedValue(proofRecordSpy)
+      connections.findById.mockResolvedValue({ id: 'conn-1' })
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({
+          requestedCredentials: [{ credentialDefinitionId: 'cred-def-1', attributes: ['firstName'] }],
+          connectionId: 'conn-1',
+          didcommVersion: 'v1',
+          useLegacyDid: true,
+        })
+
+      expect(response.status).toBe(201)
+      // The specification leaves out both invitation fields on this path, and the agent ignores
+      // the two invitation parameters.
+      expect(response.body).toEqual({ proofExchangeId: 'proof-1' })
+      expect(createInvitation).not.toHaveBeenCalled()
+      expect(urlShortenerService.createShortUrl).not.toHaveBeenCalled()
+      expect(proofs.createRequest).not.toHaveBeenCalled()
+      expect(proofs.requestProof).toHaveBeenCalledWith(
+        expect.objectContaining({ connectionId: 'conn-1', protocolVersion: 'v2' }),
+      )
+      // The trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] reads this metadata.
+      expect(proofRecordSpy.metadata.get(REQUESTED_CREDENTIAL_SCHEMAS_METADATA)).toBeTruthy()
+      expect(proofs.update).toHaveBeenCalledWith(proofRecordSpy)
+    })
+
+    it('answers UNKNOWN_ID for an unknown connection, and requests nothing', async () => {
+      connections.findById.mockResolvedValue(null)
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({
+          requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }],
+          connectionId: 'conn-absent',
+        })
+
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
+      expect(proofs.requestProof).not.toHaveBeenCalled()
+    })
+
     it('carries the requested credentials onto the record and the envelope choice onto the invitation', async () => {
       const proofRecordSpy = { id: 'proof-1', metadata: metadata() }
       proofs.createRequest.mockResolvedValue({ proofRecord: proofRecordSpy, message: { id: 'msg-1' } })
@@ -309,7 +357,7 @@ describe('v2 didcomm presentation routes', () => {
     ]
 
     beforeEach(() => {
-      proofs.getAll.mockResolvedValue(records)
+      proofs.findAllByQuery.mockResolvedValue(records)
     })
 
     it('walks the presentations with the keyset cursor and ends with a null cursor', async () => {
@@ -330,6 +378,50 @@ describe('v2 didcomm presentation routes', () => {
         'p-3',
       ])
       expect(second.body.nextCursor).toBeNull()
+    })
+
+    it.each([
+      ['connectionId', 'conn-p-1'],
+      ['threadId', 'thread-p-1'],
+      ['role', 'prover'],
+      ['state', 'presentation-received'],
+    ])('passes the %s filter to the repository', async (name, value) => {
+      const response = await request(app.getHttpServer()).get(`/v2/didcomm/presentations?${name}=${value}`)
+
+      expect(response.status).toBe(200)
+      expect(proofs.findAllByQuery).toHaveBeenCalledWith({
+        connectionId: undefined,
+        threadId: undefined,
+        role: undefined,
+        state: undefined,
+        [name]: value,
+      })
+    })
+
+    it('rejects a role and a state outside the protocol values', async () => {
+      const pipe = new ValidationPipe()
+      const queryMetadata = { type: 'query', metatype: ListPresentationsQueryDto } as const
+
+      await expect(pipe.transform({ role: 'owner' }, queryMetadata)).rejects.toMatchObject({
+        status: 400,
+      })
+      await expect(pipe.transform({ state: 'requested' }, queryMetadata)).rejects.toMatchObject({
+        status: 400,
+      })
+      await expect(
+        pipe.transform({ role: 'prover', state: 'presentation-received' }, queryMetadata),
+      ).resolves.toBeDefined()
+    })
+
+    it('refuses a cursor replayed against another filter set', async () => {
+      const first = await request(app.getHttpServer()).get('/v2/didcomm/presentations?limit=1')
+
+      const replayed = await request(app.getHttpServer()).get(
+        `/v2/didcomm/presentations?limit=1&role=prover&cursor=${encodeURIComponent(first.body.nextCursor)}`,
+      )
+
+      expect(replayed.status).toBe(400)
+      expect(replayed.body.error.code).toBe('INVALID_CURSOR')
     })
 
     it('flattens the revealed attributes and the revealed attribute groups into one claim list', async () => {

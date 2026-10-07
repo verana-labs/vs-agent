@@ -30,7 +30,7 @@ import {
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
-import { createInvitation, ParticipantRole } from '@verana-labs/vs-agent-sdk'
+import { connectionOf, createInvitation, ParticipantRole } from '@verana-labs/vs-agent-sdk'
 
 import {
   AdminApiError,
@@ -58,10 +58,11 @@ import { toCredentialExchangeDto } from './mappers'
  * This controller has the credential exchanges of this agent on DIDComm.
  * Refer to [VSA-ADM-DC-CE].
  *
- * `createCredentialOffer` makes the Out-of-Band invitation. The invitation starts an issuance
- * flow. The accept methods run the protocol steps of that flow, as issuer or as holder, and the
- * read methods show the credential exchange record. The AnonCreds scope has the credential
- * definition and the revocation registry.
+ * `createCredentialOffer` sends the offer on a connection that the body names, and makes an
+ * Out-of-Band invitation when the body names none. Either way the offer starts an issuance flow.
+ * The accept methods run the protocol steps of that flow, as issuer or as holder, and the read
+ * methods show the credential exchange record. The AnonCreds scope has the credential definition
+ * and the revocation registry.
  */
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm', version: '2' })
@@ -79,8 +80,10 @@ export class V2DidcommCredentialExchangesController {
   @ApiOperation({
     summary: 'Create a credential offer',
     description:
-      'Creates an AnonCreds credential offer invitation, with a preview of the offered claims. ' +
-      'A revocable credential definition also needs `revocationRegistryDefinitionId` and ' +
+      'Creates an AnonCreds credential offer, with a preview of the offered claims. With a ' +
+      '`connectionId` the agent sends the offer on that connection and answers with neither ' +
+      '`invitation` nor `shortUrl`; without one it makes an Out-of-Band invitation. A revocable ' +
+      'credential definition also needs `revocationRegistryDefinitionId` and ' +
       '`revocationRegistryIndex`.',
   })
   @ApiBody({
@@ -111,7 +114,9 @@ export class V2DidcommCredentialExchangesController {
     description: 'The credential offer invitation',
     type: CreateCredentialOfferResponseDto,
   })
-  @ApiNotFoundResponse({ description: 'No credential definition with the given id' })
+  @ApiNotFoundResponse({
+    description: 'No credential definition with the given id, or no connection with the given id',
+  })
   public async createCredentialOffer(
     @Body() body: CreateCredentialOfferBodyDto,
   ): Promise<CreateCredentialOfferResponseDto> {
@@ -120,12 +125,15 @@ export class V2DidcommCredentialExchangesController {
     const {
       credentialDefinitionId,
       claims,
+      connectionId,
       revocationRegistryDefinitionId,
       revocationRegistryIndex,
       useLegacyDid,
       didcommVersion,
     } = body
     const autoAccept = body.autoAccept ?? false
+
+    if (connectionId) await connectionOf(agent, connectionId)
 
     const [record] = await agent.modules.anoncreds.getCreatedCredentialDefinitions({
       credentialDefinitionId,
@@ -177,8 +185,8 @@ export class V2DidcommCredentialExchangesController {
 
     // The specification makes the caller run the issuer steps, unless the caller sets
     // `autoAccept`. The exchange carries the policy, which the module default does not override.
-    const offer = await agent.didcomm.credentials.createOffer({
-      protocolVersion: 'v2',
+    const offerOptions = {
+      protocolVersion: 'v2' as const,
       autoAcceptCredential: autoAccept
         ? DidCommAutoAcceptCredential.ContentApproved
         : DidCommAutoAcceptCredential.Never,
@@ -194,7 +202,20 @@ export class V2DidcommCredentialExchangesController {
           })),
         },
       },
-    })
+    }
+
+    // An established connection carries the offer itself, so the agent makes no invitation and
+    // answers with neither `invitation` nor `shortUrl`. `useLegacyDid` and `didcommVersion`
+    // describe an invitation only, so the agent ignores them here.
+    if (connectionId) {
+      const credentialExchangeRecord = await agent.didcomm.credentials.offerCredential({
+        ...offerOptions,
+        connectionId,
+      })
+      return { credentialExchangeId: credentialExchangeRecord.id }
+    }
+
+    const offer = await agent.didcomm.credentials.createOffer(offerOptions)
 
     const { invitation } = await createInvitation({
       agent,
@@ -442,7 +463,9 @@ export class V2DidcommCredentialExchangesController {
   @Get('credential-exchanges')
   @ApiOperation({
     summary: 'List credential exchanges',
-    description: 'Returns the credential exchange records that the agent tracks.',
+    description:
+      'Returns the credential exchange records that the agent tracks, filtered when the caller ' +
+      'supplies a filter.',
   })
   @ApiOkResponse({
     description: 'A page of credential exchange records',
@@ -453,9 +476,15 @@ export class V2DidcommCredentialExchangesController {
   ): Promise<Page<CredentialExchangeRecordDto>> {
     const agent = await this.vsAgentService.getAgent()
 
-    const records = await agent.didcomm.credentials.getAll()
+    const filters = {
+      connectionId: query.connectionId,
+      threadId: query.threadId,
+      role: query.role,
+      state: query.state,
+    }
+    const records = await agent.didcomm.credentials.findAllByQuery(filters)
 
-    const page = paginate(records, query, { method: 'listCredentialExchanges' }, createdAtKey)
+    const page = paginate(records, query, { method: 'listCredentialExchanges', filters }, createdAtKey)
 
     const results = await Promise.allSettled(
       page.items.map(record => toCredentialExchangeDto(agent, record, this.logger)),

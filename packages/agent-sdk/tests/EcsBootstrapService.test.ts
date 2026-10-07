@@ -49,7 +49,14 @@ function makeMocks() {
     startParticipantOP: vi.fn().mockResolvedValue({ participantId: 77, txHash: 'AA' }),
     selfCreateParticipant: vi.fn().mockResolvedValue({ participantId: 88, txHash: 'BB' }),
     setParticipantOPToValidated: vi.fn().mockResolvedValue(undefined),
-    triggerResolver: vi.fn().mockResolvedValue(undefined),
+    triggerResolverMsg: vi.fn((id: number) => ({
+      typeUrl: '/verana.pp.v1.MsgTriggerResolver',
+      value: { id },
+    })),
+    triggerResolver: vi.fn().mockResolvedValue({ txHash: 'CC' }),
+    feeAllowance: vi.fn().mockResolvedValue({ unlimited: true }),
+    estimateFee: vi.fn().mockResolvedValue({ amount: [{ denom: 'uvna', amount: '500' }], gas: '200000' }),
+    getAccountBalance: vi.fn().mockResolvedValue({ denom: 'uvna', amount: '1000000' }),
   }
   const indexer = {
     listOperatorAuthorizations: vi.fn().mockResolvedValue([{ msgTypes: [START_OP] }]),
@@ -76,6 +83,7 @@ function makeMocks() {
     label: 'Agent',
     publicApiBaseUrl: 'https://agent',
     veranaChain: chain,
+    indexer,
     config: { logger },
     events: {
       on: (_type: string, cb: (event: { payload: Record<string, unknown> }) => void) => {
@@ -211,7 +219,17 @@ describe('EcsBootstrapService standalone', () => {
       async (filter: { role?: string; schemaId?: number; did?: string }) => {
         if (filter.did === 'did:web:agent') {
           return filter.role === ParticipantRole.Holder
-            ? [{ id: 9, participant_state: ParticipantState.Active, revoked: null, slashed: null }]
+            ? [
+                {
+                  id: 9,
+                  did: 'did:web:agent',
+                  role: ParticipantRole.Holder,
+                  participant_state: ParticipantState.Active,
+                  effective_from: '2026-01-01T00:00:00Z',
+                  revoked: null,
+                  slashed: null,
+                },
+              ]
             : []
         }
         if (filter.role === ParticipantRole.Ecosystem) {
@@ -223,6 +241,11 @@ describe('EcsBootstrapService standalone', () => {
       },
     )
 
+    // the record of the HOLDER entry lists TriggerResolver
+    Object.assign(mocks.agent, {
+      authorizationService: { canSign: () => true, getVsOperatorAuthorizationRecord: () => undefined },
+    })
+
     await makeService(mocks).run()
 
     expect(mocks.chain.startParticipantOP).not.toHaveBeenCalled()
@@ -233,6 +256,8 @@ describe('EcsBootstrapService standalone', () => {
         effectiveUntil: new Date('2030-01-01T00:00:00Z'),
       }),
     )
+    // [VSA-VPR-TX-5]: the new ISSUER entry cannot carry TriggerResolver, so the HOLDER entry is the target
+    expect(mocks.chain.triggerResolver).toHaveBeenCalledWith(9, { granter: undefined })
   })
 
   it('fails OPEN self-creation when the operator lacks the MsgSelfCreateParticipant authorization', async () => {
@@ -398,7 +423,10 @@ describe('EcsBootstrapService onboarding resume', () => {
     await makeService(mocks).run()
 
     expect(startOnboardingProcess).not.toHaveBeenCalled()
-    expect(mocks.chain.setParticipantOPToValidated).toHaveBeenCalledWith(expect.objectContaining({ id: 42 }))
+    expect(mocks.chain.setParticipantOPToValidated).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 42 }),
+      { granter: undefined },
+    )
   })
 
   it('resumes a non-ECS schema onboarding without claims, as a normal case', async () => {

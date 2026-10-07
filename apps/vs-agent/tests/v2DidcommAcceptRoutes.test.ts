@@ -436,6 +436,47 @@ describe('v2 didcomm accept routes, over two agents', () => {
       ]),
     )
   }, 120_000)
+
+  it('runs an issuance and a presentation on an established connection', async () => {
+    // The issuance over the invitation left a connection between the two agents.
+    const issued = (await recordsOf(faberApp, 'credential-exchanges')).find(record => record.state === 'done')
+    const connectionId = issued?.connectionId
+    expect(connectionId).toBeDefined()
+
+    const knownOffers = await idsOf(aliceApp, 'credential-exchanges')
+    const offer = await faber()
+      .post('/v2/didcomm/credential-offer')
+      .send({ credentialDefinitionId, claims, connectionId })
+    expect(offer.status).toBe(201)
+    expect(offer.body).toEqual({ credentialExchangeId: expect.any(String) })
+    const faberId = offer.body.credentialExchangeId
+
+    const sent = await faber().get(`/v2/didcomm/credential-exchanges/${faberId}`)
+    expect(sent.body.connectionId).toBe(connectionId)
+
+    const aliceId = await untilNewRecord(aliceApp, 'credential-exchanges', 'offer-received', knownOffers)
+    const acceptedOffer = await alice().post(`/v2/didcomm/credential-exchanges/${aliceId}/accept-offer`)
+    expect(acceptedOffer.body.error ?? acceptedOffer.status).toBe(200)
+    await untilRecordState(faberApp, 'credential-exchanges', faberId, 'request-received')
+
+    const knownRequests = await idsOf(aliceApp, 'presentations')
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }], connectionId })
+    expect(created.status).toBe(201)
+    expect(created.body).toEqual({ proofExchangeId: expect.any(String) })
+    const faberProofId = created.body.proofExchangeId
+
+    const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', knownRequests)
+    const accepted = await alice().post(`/v2/didcomm/presentations/${aliceProofId}/accept-request`)
+    expect(accepted.body.error ?? accepted.status).toBe(200)
+    await untilRecordState(faberApp, 'presentations', faberProofId, 'presentation-received')
+
+    const received = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(received.body.connectionId).toBe(connectionId)
+    expect(received.body.verified).toBe(true)
+  }, 120_000)
+
   it('abandons a presentation whose issuer holds no active ISSUER Participant', async () => {
     const created = await faber()
       .post('/v2/didcomm/presentation-request')

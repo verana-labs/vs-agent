@@ -36,6 +36,7 @@ import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
   AUTO_ACCEPT_PRESENTATION_METADATA,
+  connectionOf,
   createInvitation,
   DerivedCredentialSchema,
   fetchJson,
@@ -77,7 +78,8 @@ import { REQUESTED_CREDENTIALS_METADATA, toPresentationDto } from './mappers'
 /**
  * Presentation flows this agent requested over DIDComm.
  *
- * `createPresentationRequest` mints the Out-of-Band invitation that starts a flow; the accept
+ * `createPresentationRequest` sends the request on a connection that the body names, and mints an
+ * Out-of-Band invitation when the body names none; either way it starts a flow. The accept
  * methods run the protocol steps of that flow, as verifier or as prover, and the remaining
  * methods read and delete the proof exchange record that the flow leaves behind.
  */
@@ -98,9 +100,11 @@ export class V2DidcommPresentationsController {
   @ApiOperation({
     summary: 'Create a presentation request',
     description:
-      'Creates a Presentation Request invitation. The body names the credentials, and the attributes ' +
-      'of them, that the holder is asked to present. An entry that omits `attributes` asks for every ' +
-      'attribute the schema defines.',
+      'Creates a Presentation Request. The body names the credentials, and the attributes of them, ' +
+      'that the holder is asked to present. An entry that omits `attributes` asks for every ' +
+      'attribute the schema defines. With a `connectionId` the agent sends the request on that ' +
+      'connection and answers with neither `invitation` nor `shortUrl`; without one it mints an ' +
+      'Out-of-Band invitation.',
   })
   @ApiBody({
     type: CreatePresentationRequestBodyDto,
@@ -137,13 +141,15 @@ export class V2DidcommPresentationsController {
   ): Promise<CreatePresentationRequestResponseDto> {
     const agent = await this.vsAgentService.getAgent()
 
-    const { requestedCredentials, useLegacyDid, didcommVersion } = body
+    const { requestedCredentials, connectionId, useLegacyDid, didcommVersion } = body
     const requireNonRevocation = body.requireNonRevocation ?? false
     const autoAccept = body.autoAccept ?? false
 
     if (!requestedCredentials?.length) {
       throw invalidInput('`requestedCredentials` must name at least one credential')
     }
+
+    if (connectionId) await connectionOf(agent, connectionId)
 
     // One requested-attribute group per entry, so a request may span several credentials. Groups are
     // keyed by schema name, suffixed when two entries resolve to schemas that share a name.
@@ -184,8 +190,8 @@ export class V2DidcommPresentationsController {
 
     // Credo acknowledges a presentation before the trust decision runs. The agent sends the
     // acknowledgement itself, per [VSA-VTI-FLOW-VERIFY-AC-7].
-    const request = await agent.didcomm.proofs.createRequest({
-      protocolVersion: 'v2',
+    const requestOptions = {
+      protocolVersion: 'v2' as const,
       autoAcceptProof: DidCommAutoAcceptProof.Never,
       proofFormats: {
         anoncreds: {
@@ -195,12 +201,26 @@ export class V2DidcommPresentationsController {
           non_revoked: nonRevoked,
         },
       },
-    })
+    }
 
-    request.proofRecord.metadata.set(REQUESTED_CREDENTIALS_METADATA, requestedCredentials)
-    request.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, requestedCredentialSchemas)
-    request.proofRecord.metadata.set(AUTO_ACCEPT_PRESENTATION_METADATA, { autoAccept })
-    await agent.didcomm.proofs.update(request.proofRecord)
+    const storeRequestMetadata = async (proofRecord: DidCommProofExchangeRecord) => {
+      proofRecord.metadata.set(REQUESTED_CREDENTIALS_METADATA, requestedCredentials)
+      proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, requestedCredentialSchemas)
+      proofRecord.metadata.set(AUTO_ACCEPT_PRESENTATION_METADATA, { autoAccept })
+      await agent.didcomm.proofs.update(proofRecord)
+    }
+
+    // An established connection carries the request itself, so the agent makes no invitation and
+    // answers with neither `invitation` nor `shortUrl`. `useLegacyDid` and `didcommVersion`
+    // describe an invitation only, so the agent ignores them here.
+    if (connectionId) {
+      const proofRecord = await agent.didcomm.proofs.requestProof({ ...requestOptions, connectionId })
+      await storeRequestMetadata(proofRecord)
+      return { proofExchangeId: proofRecord.id }
+    }
+
+    const request = await agent.didcomm.proofs.createRequest(requestOptions)
+    await storeRequestMetadata(request.proofRecord)
 
     const { invitation } = await createInvitation({
       agent,
@@ -389,7 +409,8 @@ export class V2DidcommPresentationsController {
   @Get('presentations')
   @ApiOperation({
     summary: 'List presentations',
-    description: 'Returns the presentation flows that the agent created.',
+    description:
+      'Returns the presentation flows that the agent created, filtered when the caller supplies a filter.',
   })
   @ApiOkResponse({ description: 'A page of presentation records', type: PresentationRecordPageDto })
   public async listPresentations(
@@ -397,9 +418,15 @@ export class V2DidcommPresentationsController {
   ): Promise<Page<PresentationRecordDto>> {
     const agent = await this.vsAgentService.getAgent()
 
-    const records = await agent.didcomm.proofs.getAll()
+    const filters = {
+      connectionId: query.connectionId,
+      threadId: query.threadId,
+      role: query.role,
+      state: query.state,
+    }
+    const records = await agent.didcomm.proofs.findAllByQuery(filters)
 
-    const page = paginate(records, query, { method: 'listPresentations' }, createdAtKey)
+    const page = paginate(records, query, { method: 'listPresentations', filters }, createdAtKey)
 
     return mapPageAsync(page, record => toPresentationDto(agent, record))
   }

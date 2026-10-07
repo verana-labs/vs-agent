@@ -41,6 +41,7 @@ import { AnonCredsTrustService } from '../blockchain/AnonCredsTrustService'
 import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
+import { flushPendingTriggerResolvers } from '../blockchain/triggerResolver'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
 import { applyArtifactServices, artifactServicesMatch } from '../did/artifactServices'
 import { getLegacyDidWeb } from '../did/legacyDidWeb'
@@ -104,6 +105,9 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       ecsClaims?: EcsClaims
       authorizationService?: AuthorizationService
       discoveryOptions?: DidCommFeatureQueryOptions[]
+      anonCredsTrust?: AnonCredsTrustService
+      /** DEMO ONLY: see AnonCredsTrustServiceOptions.skipOwnAuthorization. */
+      skipOwnAuthorization?: boolean
     },
   ) {
     super(options)
@@ -116,11 +120,24 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     this.ecsClaims = options.ecsClaims
     this.authorizationService = options.authorizationService
     this.discoveryOptions = options.discoveryOptions
-    this.anonCredsTrust = new AnonCredsTrustService(this as VsAgent)
+    this.anonCredsTrust =
+      options.anonCredsTrust ??
+      new AnonCredsTrustService(this as VsAgent, { skipOwnAuthorization: options.skipOwnAuthorization })
   }
 
   private get hasUserProfile(): boolean {
     return 'userProfile' in this.modules
+  }
+
+  /**
+   * [VSA-VT-LVP-5]: a `TriggerResolver` that the coalescing window still holds is the only signal of
+   * the publication change behind it, so the agent sends it before it stops.
+   */
+  public override async shutdown(): Promise<void> {
+    await flushPendingTriggerResolvers().catch(error =>
+      this.config.logger.error(`[TriggerResolver] the pending trigger was not sent: ${error}`),
+    )
+    await super.shutdown()
   }
 
   public async initialize() {

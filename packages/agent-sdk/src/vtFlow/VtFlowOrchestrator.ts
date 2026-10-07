@@ -34,6 +34,7 @@ import { ECS, classifyEcsSchema, ecsRequiresValidUntil } from '@verana-labs/vs-a
 import { AdminApiError, AdminApiErrorCode } from '../adminApi'
 import { BaseAgentModules, VsAgent } from '../agent'
 import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
+import { feeGranterFor, preflightFee } from '../blockchain/feePreflight'
 import {
   Participant,
   ParticipantDto,
@@ -41,7 +42,6 @@ import {
   ParticipantState,
   ValidationState,
 } from '../blockchain/types'
-import type { FeeAllowance } from '../blockchain/VeranaChainService'
 import {
   HOLDER_PARTICIPANT_TYPE,
   ISSUER_GRANTOR_PARTICIPANT_TYPE,
@@ -68,7 +68,6 @@ import {
 const DISCOUNT_SCALE = 10_000
 const TX_LOOKUP_TIMEOUT_MS = 60_000
 const TX_LOOKUP_INTERVAL_MS = 3_000
-const FEE_DENOM = 'uvna'
 // the notification handler and the tx lookup can both reach markValidated for one flow at the same time
 const markingValidated = new Set<string>()
 
@@ -605,73 +604,11 @@ export class VtFlowOrchestrator {
   }
 
   // [VSA-ADM-VT-FL-VALIDATE-6]: the fee payer is the Corporation when the grant of the entry has with_feegrant
-  private async preflight(
+  private preflight(
     message: EncodeObject,
     participantId: number | null | undefined,
   ): Promise<{ fee: StdFee } | { reason: VtFlowTxReason; error: string }> {
-    const chain = this.requireChain()
-    const grant =
-      participantId == null
-        ? undefined
-        : this.agent.authorizationService?.getVsOperatorAuthorizationRecord(participantId)
-    const granter = grant?.withFeegrant ? chain.corporation : undefined
-    const failed = (reason: VtFlowTxReason, error: string): { reason: VtFlowTxReason; error: string } => ({
-      reason,
-      error,
-    })
-
-    let allowance: FeeAllowance | undefined
-    try {
-      allowance = granter ? await chain.feeAllowance(granter, FEE_DENOM) : undefined
-    } catch (error) {
-      return failed(VtFlowTxReason.PreflightError, errorMessage(error))
-    }
-    if (granter && !allowance) {
-      return failed(
-        VtFlowTxReason.FeegrantExpired,
-        'the Corporation grants the agent no active fee allowance',
-      )
-    }
-
-    let fee: StdFee
-    try {
-      fee = await chain.estimateFee([message], granter)
-    } catch (error) {
-      return failed(VtFlowTxReason.PreflightError, errorMessage(error))
-    }
-    const amount = BigInt(fee.amount.find(coin => coin.denom === FEE_DENOM)?.amount ?? '0')
-
-    if (granter && allowance) {
-      if (!allowance.unlimited && allowance.remaining < amount) {
-        return failed(
-          VtFlowTxReason.FeegrantExhausted,
-          `the fee allowance has ${allowance.remaining}${FEE_DENOM} left`,
-        )
-      }
-      let corporation: bigint
-      try {
-        corporation = BigInt((await chain.getAccountBalance(granter, FEE_DENOM)).amount)
-      } catch (error) {
-        return failed(VtFlowTxReason.PreflightError, errorMessage(error))
-      }
-      if (corporation < amount) {
-        return failed(
-          VtFlowTxReason.InsufficientFundsCorporation,
-          `the Corporation holds ${corporation}${FEE_DENOM}`,
-        )
-      }
-    } else {
-      let own: bigint
-      try {
-        own = BigInt((await chain.getBalance(FEE_DENOM)).amount)
-      } catch (error) {
-        return failed(VtFlowTxReason.PreflightError, errorMessage(error))
-      }
-      if (own < amount) {
-        return failed(VtFlowTxReason.InsufficientFundsAgent, `the agent account holds ${own}${FEE_DENOM}`)
-      }
-    }
-    return { fee }
+    return preflightFee(this.requireChain(), message, feeGranterFor(this.agent, participantId))
   }
 
   // [VSA-VTI-FLOW-ISSUE-1]: [VSA-ADM-VT-FL-VALIDATE-6] to -9 applied to the anchoring, which the delivery waits for.
@@ -1155,15 +1092,8 @@ export class VtFlowOrchestrator {
     if (record.role !== VtFlowRole.Applicant) return
     if (!this.options.publicApiBaseUrl) return
 
+    // [VSA-VT-LVP-5]: the publication writes the DID record, and that write sends TriggerResolver
     await this.publishCredentialAsLinkedVp(vtFlowRecordId)
-    await this.triggerResolver(record)
-  }
-
-  private async triggerResolver(record: VtFlowRecord): Promise<void> {
-    const chain = this.agent.veranaChain
-    if (!chain || !chain.autoTriggerResolverEnabled) return
-    if (record.applicantParticipantId == null) return
-    await chain.triggerResolver(Number(record.applicantParticipantId))
   }
 
   /** The signed credential as the issuer attached it, which is the exact JSON its digest covers. */

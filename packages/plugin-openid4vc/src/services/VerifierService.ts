@@ -1,18 +1,28 @@
-import type { OpenId4VcAgent, OpenId4VcPluginOptions } from '../types'
+import type { OpenId4VcAgent, OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../types'
 import type { OnModuleInit } from '@nestjs/common'
+import type { SdJwtVc } from '@credo-ts/core'
 import type { OpenId4VcVerificationSessionRecord, OpenId4VcVerifierApi } from '@credo-ts/openid4vc'
+import type { DidTrustResolver } from '@verana-labs/vs-agent-sdk'
 
-import { RecordNotFoundError } from '@credo-ts/core'
+import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import { Inject, Injectable } from '@nestjs/common'
 import {
   OpenId4VcVerificationSessionRepository,
   OpenId4VcVerificationSessionState,
 } from '@credo-ts/openid4vc'
-import { AdminApiError, AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
+import {
+  AdminApiError,
+  AdminApiErrorCode,
+  fetchBoundedBytes,
+  ParticipantRole,
+  trustDecisionError,
+} from '@verana-labs/vs-agent-sdk'
 
-import { findCredentialConfiguration, VERIFIER_CAPABILITY_ID } from '../config'
+import { VERIFIER_CAPABILITY_ID } from '../config'
 import { findBoundVerificationMethodId, verifyKeyBoundToDid } from '../trust/keyBinding'
-import { OPENID4VC_OPTIONS } from '../types'
+import { trustedIssuersForPresentation } from '../trust/presentedIssuer'
+import { decidePresentationTrust, type PresentationTrustRequest } from '../trust/trustDecision'
+import { OPENID4VC_DID_TRUST_RESOLVER, OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
 import {
@@ -24,6 +34,7 @@ import {
   type SigningCertificateInfo,
   x5cCertificateChain,
 } from './CertificateService'
+import { resolveCredentialType } from './credentialConfigurationBuilder'
 import { presentationQueryFor, type OpenId4VcQueryLanguage } from './presentationRequest'
 import type { PresentationDecision } from './presentationVerification'
 
@@ -34,6 +45,7 @@ type VerifierApi = Pick<
   | 'updateVerifierMetadata'
   | 'createAuthorizationRequest'
   | 'getVerificationSessionById'
+  | 'getVerifiedAuthorizationResponse'
   | 'findVerificationSessionsByQuery'
   | 'deleteVerificationSessionById'
 >
@@ -64,24 +76,12 @@ const NOT_FOUND = 404
 const CONFLICT = 409
 
 const JSON_SCHEMA_CREDENTIAL_ID_TAG = 'jsonSchemaCredentialId'
+const CREDENTIAL_SCHEMA_ID_TAG = 'credentialSchemaId'
 const REQUESTED_CLAIMS_TAG = 'requestedClaims'
 const OUTCOME_METADATA_KEY = 'openid4vc/verificationOutcome'
 
-const UNDECIDED_TRUST_DECISION: PresentationDecision = {
-  cryptographicVerified: true,
-  accepted: false,
-  trust: {
-    verdict: 'RESOLVER_UNAVAILABLE',
-    evidence: {
-      did: null,
-      trustStatus: null,
-      jsonSchemaCredentialId: null,
-      authorized: null,
-      queries: [],
-      note: 'the agent does not decide OpenID4VP trust yet',
-    },
-  },
-}
+const UNVERIFIED: PresentationDecision = { cryptographicVerified: false, accepted: false }
+const UNDECIDED: PresentationDecision = { cryptographicVerified: true, accepted: false }
 
 export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
   id: string
@@ -101,6 +101,7 @@ export class VerifierService implements OnModuleInit {
   public constructor(
     @Inject('VSAGENT') private readonly agent: OpenId4VcAgent,
     @Inject(OPENID4VC_OPTIONS) private readonly options: OpenId4VcPluginOptions,
+    @Inject(OPENID4VC_DID_TRUST_RESOLVER) private readonly resolveDidTrust: DidTrustResolver,
   ) {}
 
   public async onModuleInit(): Promise<void> {
@@ -123,17 +124,26 @@ export class VerifierService implements OnModuleInit {
   }: OpenId4VcCreatePresentationRequestOptions): Promise<OpenId4VcVerificationRequest> {
     await this.ensureInitialized()
 
-    const configuration = findCredentialConfiguration(this.options, jsonSchemaCredentialId)
-    if (!configuration) {
-      throw new AdminApiError(
-        AdminApiErrorCode.UnknownId,
-        NOT_FOUND,
-        `no credential type with id "${jsonSchemaCredentialId}"`,
-      )
+    let configuration: OpenId4VcCredentialConfiguration
+    try {
+      configuration = await resolveCredentialType(this.agent, jsonSchemaCredentialId)
+    } catch (error) {
+      throw trustDecisionError(error, 'agent', AdminApiErrorCode.UnknownId)
     }
 
     const claims = requestedClaims ?? configuration.claims
     assertRequestedClaims(claims, configuration.claims)
+
+    // [VSA-VTI-FLOW-VERIFY-AC-5] for OpenID4VP: the agent asks for a type only where the Ecosystem
+    // accredits it as a verifier
+    try {
+      await this.agent.anonCredsTrust.assertOwnAuthorization({
+        role: ParticipantRole.Verifier,
+        credentialSchemaId: configuration.credentialSchemaId,
+      })
+    } catch (error) {
+      throw trustDecisionError(error, 'agent')
+    }
 
     const { authorizationRequest, verificationSession } = await this.verifierApi().createAuthorizationRequest(
       {
@@ -146,6 +156,7 @@ export class VerifierService implements OnModuleInit {
     )
 
     verificationSession.setTag(JSON_SCHEMA_CREDENTIAL_ID_TAG, jsonSchemaCredentialId)
+    verificationSession.setTag(CREDENTIAL_SCHEMA_ID_TAG, String(configuration.credentialSchemaId))
     verificationSession.setTag(REQUESTED_CLAIMS_TAG, claims)
     await this.sessionRepository().update(this.agent.context, verificationSession)
 
@@ -163,9 +174,10 @@ export class VerifierService implements OnModuleInit {
   public async getVerificationSession(id: string): Promise<OpenId4VcVerificationSessionSummary> {
     await this.ensureInitialized()
     const session = await this.findOwnedSession(id)
-    return this.toSummary(session, this.storedDecision(session) ?? UNDECIDED_TRUST_DECISION)
+    return this.toSummary(session, await this.decide(session))
   }
 
+  // [VSA-ADM-OID-PR-LIST]: a list reports the stored verdict and never decides
   public async listVerificationSessions(
     filters: OpenId4VcVerificationSessionFilters = {},
   ): Promise<OpenId4VcVerificationSessionSummary[]> {
@@ -175,12 +187,7 @@ export class VerifierService implements OnModuleInit {
       state: filters.state,
       [JSON_SCHEMA_CREDENTIAL_ID_TAG]: filters.jsonSchemaCredentialId,
     })
-    return sessions.map(session =>
-      this.toSummary(
-        session,
-        this.storedDecision(session) ?? { cryptographicVerified: true, accepted: false },
-      ),
-    )
+    return sessions.map(session => this.toSummary(session, this.storedDecision(session) ?? UNDECIDED))
   }
 
   public async deleteVerificationSession(id: string): Promise<void> {
@@ -205,15 +212,52 @@ export class VerifierService implements OnModuleInit {
     return session
   }
 
+  // [VSA-ADM-OID-PR-GET]: the verdict is computed once, on the first read of a verified session, and
+  // stored with it; RESOLVER_UNAVAILABLE is never stored, so the next read retries the resolver
+  private async decide(session: OpenId4VcVerificationSessionRecord): Promise<PresentationDecision> {
+    const stored = this.storedDecision(session)
+    if (stored) return stored
+
+    const decision = await decidePresentationTrust(
+      await this.presentedCredential(session),
+      this.storedRequest(session),
+      {
+        agent: this.agent,
+        readTypeMetadata: vct => fetchBoundedBytes(vct),
+        resolveDidTrust: this.resolveDidTrust,
+        assertAuthorized: options => this.agent.anonCredsTrust.assertAuthorized(options),
+      },
+    )
+    if (decision.trust?.verdict !== 'RESOLVER_UNAVAILABLE') {
+      session.metadata.set(OUTCOME_METADATA_KEY, decision)
+      await this.sessionRepository().update(this.agent.context, session)
+    }
+    return decision
+  }
+
+  private async presentedCredential(session: OpenId4VcVerificationSessionRecord): Promise<SdJwtVc> {
+    const verified = await this.verifierApi().getVerifiedAuthorizationResponse(session.id)
+    const presentations = [
+      ...Object.values(verified.dcql?.presentations ?? {}).flat(),
+      ...(verified.presentationExchange?.presentations ?? []),
+    ]
+    const credential = presentations.find(
+      (presentation): presentation is SdJwtVc => presentation.claimFormat === ClaimFormat.SdJwtDc,
+    )
+    if (!credential) throw new Error(`the verification session "${session.id}" carries no SD-JWT VC`)
+    return credential
+  }
+
   private toSummary(
     session: OpenId4VcVerificationSessionRecord,
     decision: PresentationDecision,
   ): OpenId4VcVerificationSessionSummary {
-    const { jsonSchemaCredentialId, requestedClaims } = this.storedRequest(session)
+    const jsonSchemaCredentialId = session.getTag(JSON_SCHEMA_CREDENTIAL_ID_TAG)
+    const requestedClaims = session.getTag(REQUESTED_CLAIMS_TAG)
     return {
       id: session.id,
-      ...(jsonSchemaCredentialId ? { jsonSchemaCredentialId } : {}),
-      ...(requestedClaims ? { requestedClaims } : {}),
+      ...(typeof jsonSchemaCredentialId === 'string' ? { jsonSchemaCredentialId } : {}),
+      ...(Array.isArray(requestedClaims) ? { requestedClaims } : {}),
       state: session.state,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt ?? session.createdAt,
@@ -222,22 +266,17 @@ export class VerifierService implements OnModuleInit {
     }
   }
 
-  private storedRequest(session: OpenId4VcVerificationSessionRecord): {
-    jsonSchemaCredentialId?: string
-    requestedClaims?: string[]
-  } {
+  private storedRequest(session: OpenId4VcVerificationSessionRecord): PresentationTrustRequest {
     const jsonSchemaCredentialId = session.getTag(JSON_SCHEMA_CREDENTIAL_ID_TAG)
-    const requestedClaims = session.getTag(REQUESTED_CLAIMS_TAG)
-    return {
-      ...(typeof jsonSchemaCredentialId === 'string' ? { jsonSchemaCredentialId } : {}),
-      ...(Array.isArray(requestedClaims) ? { requestedClaims } : {}),
+    const credentialSchemaId = session.getTag(CREDENTIAL_SCHEMA_ID_TAG)
+    if (typeof jsonSchemaCredentialId !== 'string' || typeof credentialSchemaId !== 'string') {
+      throw new Error(`the verification session "${session.id}" carries no credential type`)
     }
+    return { jsonSchemaCredentialId, credentialSchemaId: Number(credentialSchemaId) }
   }
 
   private storedDecision(session: OpenId4VcVerificationSessionRecord): PresentationDecision | undefined {
-    if (session.state !== OpenId4VcVerificationSessionState.ResponseVerified) {
-      return { cryptographicVerified: false, accepted: false }
-    }
+    if (session.state !== OpenId4VcVerificationSessionState.ResponseVerified) return UNVERIFIED
     return session.metadata.get<PresentationDecision>(OUTCOME_METADATA_KEY) ?? undefined
   }
 
@@ -274,6 +313,7 @@ export class VerifierService implements OnModuleInit {
       throw new Error('OpenID4VC verifier certificate key is not bound to the agent DID authentication')
     }
 
+    this.agent.config.setTrustedIssuersForVerification(trustedIssuersForPresentation)
     await this.createOrUpdateVerifier()
     this.signingCertificate = signingCertificate
     this.agent.config.logger.info(

@@ -6,6 +6,12 @@ export const OPENID4VC_QUERY_LANGUAGES = ['dcql', 'presentation_exchange'] as co
 
 export type OpenId4VcQueryLanguage = (typeof OPENID4VC_QUERY_LANGUAGES)[number]
 
+// DCQL restricts a credential query id to `[a-zA-Z0-9_-]`, which the `jsonSchemaCredentialId` URL is not;
+// the schema number names the one credential of the request.
+function requestedCredentialId(configuration: OpenId4VcCredentialConfiguration): string {
+  return `cs-${configuration.credentialSchemaId}`
+}
+
 export function presentationQueryFor(
   configuration: OpenId4VcCredentialConfiguration,
   requestedClaims: string[],
@@ -24,7 +30,7 @@ export function presentationQueryFor(
       query: {
         credentials: [
           {
-            id: configuration.id,
+            id: requestedCredentialId(configuration),
             format: 'dc+sd-jwt' as const,
             meta: { vct_values: [configuration.vct] },
             claims: requestedClaims.map(name => ({ path: [name] })),
@@ -44,7 +50,7 @@ function presentationDefinitionFor(
   requestedClaims: string[],
 ) {
   return {
-    id: `${configuration.id}-presentation-exchange`,
+    id: `${requestedCredentialId(configuration)}-presentation-exchange`,
     format: {
       // vc+sd-jwt: Presentation Exchange has no dc+sd-jwt format key.
       'vc+sd-jwt': {
@@ -54,7 +60,7 @@ function presentationDefinitionFor(
     },
     input_descriptors: [
       {
-        id: configuration.id,
+        id: requestedCredentialId(configuration),
         constraints: {
           // 'preferred': holders that can't enforce 'required' refuse it; the verifier re-checks the claims.
           limit_disclosure: 'preferred' as const,

@@ -63,7 +63,7 @@ export interface EventHandler {
 `CredentialService` wraps the v2 credential offer flow.
 
 - `createCredentialDefinition(jsonSchemaCredentialId, { supportRevocation, maximumCredentialNumber })` returns the definition for that schema, creating it and two revocation registries when missing. Call it once at startup.
-- `issue(claims, { connectionId, refId, credentialDefinitionId, jsonSchemaCredentialId, revokeIfAlreadyIssued })` picks a definition, reserves a revocation index and calls `createCredentialOffer` with `autoAccept: true`. It returns the offer, hand its `shortUrl` to the user. `connectionId` is bookkeeping only, it is the connection `revoke(connectionId)` looks up by. `issue` no longer registers a credential definition, run `createCredentialDefinition` first.
+- `issue(claims, { connectionId, refId, credentialDefinitionId, jsonSchemaCredentialId, revokeIfAlreadyIssued })` picks a definition, reserves a revocation index and calls `createCredentialOffer` with `autoAccept: true`. It returns the offer. With a `connectionId` the agent sends the offer on that connection, and the holder sees it in that conversation. Without one the agent answers an out of band invitation, and the caller hands its `shortUrl` to the user. `connectionId` is also the connection `revoke(connectionId)` looks up by. `issue` no longer registers a credential definition, run `createCredentialDefinition` first.
 - `didcomm.credential-exchanges.state-updated` with `role: 'issuer'` marks the row accepted on `done` and rejected on `declined` or `abandoned`.
 - `revoke(connectionId, credentialExchangeId?)` revokes the latest accepted credential of the connection, or the given exchange, through `revokeCredential`.
 

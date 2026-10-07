@@ -36,7 +36,7 @@ import { verifyKeyBoundToDid } from '../trust/keyBinding'
 import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
-import { buildCredentialConfigurations } from './credentialConfigurationBuilder'
+import { buildCredentialConfigurations, resolveCredentialType } from './credentialConfigurationBuilder'
 import { createTypeMetadataIntegrity } from './typeMetadataIntegrity'
 
 import {
@@ -101,6 +101,11 @@ export class IssuerService implements OnModuleInit {
   private signingCertificate?: SigningCertificateHandle
   private replacement: Promise<void> = Promise.resolve()
   private readonly typeMetadataIntegrity = createTypeMetadataIntegrity()
+  /**
+   * DEMO ONLY (AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION): the credential types the agent offers
+   * without an ISSUER Participant, keyed by `jsonSchemaCredentialId`. Each refresh keeps them.
+   */
+  private readonly unaccreditedConfigurations = new Map<string, OpenId4VcCredentialConfiguration>()
 
   public constructor(
     @Inject('VSAGENT') private readonly agent: OpenId4VcAgent,
@@ -138,7 +143,9 @@ export class IssuerService implements OnModuleInit {
     statusListIndex,
   }: OpenId4VcCreateOfferOptions): Promise<OpenId4VcOfferResult> {
     await this.ensureInitialized()
-    const configuration = findCredentialConfiguration(this.options, jsonSchemaCredentialId)
+    const configuration =
+      findCredentialConfiguration(this.options, jsonSchemaCredentialId) ??
+      (await this.addUnaccreditedConfiguration(jsonSchemaCredentialId))
     if (!configuration) {
       throw new AdminApiError(
         AdminApiErrorCode.UnknownId,
@@ -331,6 +338,7 @@ export class IssuerService implements OnModuleInit {
     }
 
     this.signingCertificate = signingCertificate
+    await this.restoreUnaccreditedConfigurations()
     try {
       await this.replaceCredentialConfigurations(true)
     } catch (error) {
@@ -390,15 +398,82 @@ export class IssuerService implements OnModuleInit {
   }
 
   private async deriveCredentialConfigurations(): Promise<OpenId4VcCredentialConfiguration[] | undefined> {
+    let derived: OpenId4VcCredentialConfiguration[] | undefined
     try {
-      return await buildCredentialConfigurations(this.agent)
+      derived = await buildCredentialConfigurations(this.agent)
     } catch (error) {
       this.agent.config.logger.warn(
         `[OpenID4VC] the credential configuration set keeps its last known contents: ${
           error instanceof Error ? error.message : String(error)
         }`,
       )
-      return undefined
+    }
+    if (this.unaccreditedConfigurations.size === 0) return derived
+
+    // DEMO ONLY: keep the types the agent offers without an ISSUER Participant, also when the
+    // derivation fails and the set keeps its last known contents.
+    const base = derived ?? this.options.credentialConfigurations
+    const extra = [...this.unaccreditedConfigurations.values()].filter(
+      configuration => !base.some(existing => existing.id === configuration.id),
+    )
+    return [...base, ...extra]
+  }
+
+  /** DEMO ONLY: AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION, read from the trust service of the agent. */
+  private get skipsOwnAuthorization(): boolean {
+    return this.agent.anonCredsTrust?.skipsOwnAuthorization === true
+  }
+
+  /**
+   * DEMO ONLY (AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION): derive the credential type of a VTJSC for
+   * which the agent holds no ISSUER Participant, add it to the issuer metadata, and return it.
+   * Returns undefined when the flag is off.
+   */
+  private async addUnaccreditedConfiguration(
+    jsonSchemaCredentialId: string,
+  ): Promise<OpenId4VcCredentialConfiguration | undefined> {
+    if (!this.skipsOwnAuthorization) return undefined
+
+    let configuration: OpenId4VcCredentialConfiguration
+    try {
+      configuration = await resolveCredentialType(this.agent, jsonSchemaCredentialId)
+    } catch (error) {
+      throw trustDecisionError(error, 'agent', AdminApiErrorCode.UnknownId)
+    }
+    this.unaccreditedConfigurations.set(configuration.id, configuration)
+    this.agent.config.logger.warn(
+      `[UNSAFE] the agent offers "${configuration.id}" without an ISSUER Participant, because AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION is true (demo only)`,
+    )
+    await this.replaceCredentialConfigurations(true)
+    return findCredentialConfiguration(this.options, jsonSchemaCredentialId)
+  }
+
+  /**
+   * DEMO ONLY (AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION): after a restart, add again the credential
+   * types of the existing issuance sessions, so that a wallet can still redeem a pending offer.
+   */
+  private async restoreUnaccreditedConfigurations(): Promise<void> {
+    if (!this.skipsOwnAuthorization) return
+
+    const sessions = await this.sessionRepository().findByQuery(this.agent.context, {
+      issuerId: ISSUER_CAPABILITY_ID,
+    })
+    const ids = new Set(
+      sessions
+        .map(session => session.getTag(JSON_SCHEMA_CREDENTIAL_ID_TAG))
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    )
+    for (const id of ids) {
+      try {
+        const configuration = await resolveCredentialType(this.agent, id)
+        this.unaccreditedConfigurations.set(configuration.id, configuration)
+      } catch (error) {
+        this.agent.config.logger.warn(
+          `[OpenID4VC] could not restore the credential type "${id}": ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      }
     }
   }
 

@@ -32,7 +32,6 @@ const ISSUER_REVOKED_MSGS = ['RevokeParticipant', 'SlashParticipantTrustDeposit'
 export function registerSelfIssuanceAnchorHandlers(
   registry: IndexerHandlerRegistry,
   indexer: VeranaIndexerService,
-  corporationId: number,
   ecsClaims: EcsClaims,
 ): void {
   // Events arrive in bursts, and each reconciliation writes the DID record, so they run in turn.
@@ -61,7 +60,7 @@ export function registerSelfIssuanceAnchorHandlers(
           `[SelfTR] own ISSUER participant ${activity.entity_id} is ready; reconciling the ECS credentials`,
         )
         queue = queue
-          .then(() => reconcileVtjscPublications(agent, indexer, corporationId, ecsClaims))
+          .then(() => reconcileVtjscPublications(agent, indexer, ecsClaims))
           .catch((error: Error) =>
             agent.config.logger.error(`[SelfTR] reconciliation failed: ${error.message}`),
           )

@@ -22,6 +22,8 @@ dotenv.config()
 export const SUPERSEDED_VAR_WARNINGS = applySupersededVars(process.env)
 
 export const AGENT_VERSION: string = packageJson.version
+// Container build variant, set by the Docker image (vs-agent or vs-agent-mrtd); shown in the UI footer.
+export const VS_AGENT_BUILD = process.env.VS_AGENT_BUILD || 'vs-agent'
 
 // Basic parameters
 
@@ -82,7 +84,18 @@ export const ADMIN_API_LOG_LEVEL_NAME = logLevelName(
 )
 
 export const USE_CORS = process.env.USE_CORS === 'true'
+
+// DEMO ONLY, NOT IN THE SPEC. When true, the agent mints credential offers and presentation
+// requests although it holds no active ISSUER or VERIFIER Participant for the CredentialSchema.
+// Use it only for demo services that wallets must refuse.
+export const AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION = process.env.AGENT_UNSAFE_SKIP_OWN_AUTHORIZATION === 'true'
 export const ENABLE_PUBLIC_API_SWAGGER = !(process.env.ENABLE_PUBLIC_API_SWAGGER === 'false')
+
+// Dashboard UI
+// Network badge text in the header (e.g. "Testnet"); no badge when unset.
+export const UI_NETWORK_BADGE = process.env.UI_NETWORK_BADGE
+// Banner that presents the page as the placeholder of a Verana business wallet; opt-in.
+export const UI_SHOW_PLACEHOLDER_MESSAGE = process.env.UI_SHOW_PLACEHOLDER_MESSAGE === 'true'
 
 // Placeholder resources the agent serves under /vt/default, so an operator can point an
 // ECS_CLAIMS_*_URI at the agent itself.
@@ -178,7 +191,6 @@ export const VERANA_CORPORATION_ID = process.env.VERANA_CORPORATION_ID
 export const VERANA_INDEXER_SUBSCRIPTION_SCOPE = (process.env.VERANA_INDEXER_SUBSCRIPTION_SCOPE ?? 'did')
   .trim()
   .toLowerCase()
-export const VERANA_AUTO_TRIGGER_RESOLVER = process.env.VERANA_AUTO_TRIGGER_RESOLVER !== 'false'
 export const VERANA_GAS_ADJUSTMENT = process.env.VERANA_GAS_ADJUSTMENT
   ? Number(process.env.VERANA_GAS_ADJUSTMENT)
   : undefined
