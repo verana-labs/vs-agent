@@ -70,6 +70,7 @@ const TX_LOOKUP_TIMEOUT_MS = 60_000
 const TX_LOOKUP_INTERVAL_MS = 3_000
 // the notification handler and the tx lookup can both reach markValidated for one flow at the same time
 const markingValidated = new Set<string>()
+const continuingAfterValidated = new Map<string, Promise<void>>()
 
 const FEE_KEYS = ['validationFees', 'issuanceFees', 'verificationFees'] as const
 const DISCOUNT_KEYS = ['issuanceFeeDiscount', 'verificationFeeDiscount'] as const
@@ -788,7 +789,23 @@ export class VtFlowOrchestrator {
     return latest?.id === record.id
   }
 
+  // one run at a time per flow: two callers at once would both read VALIDATED and offer twice
   async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {
+    const previous = continuingAfterValidated.get(recordId) ?? Promise.resolve()
+    const run = previous.then(() => this.issuanceAfterValidated(recordId))
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    continuingAfterValidated.set(recordId, settled)
+    try {
+      return await run
+    } finally {
+      if (continuingAfterValidated.get(recordId) === settled) continuingAfterValidated.delete(recordId)
+    }
+  }
+
+  private async issuanceAfterValidated(recordId: string): Promise<VtFlowRecord> {
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(recordId)
     if (!record) throw new Error(`vt-flow record ${recordId} not found`)
