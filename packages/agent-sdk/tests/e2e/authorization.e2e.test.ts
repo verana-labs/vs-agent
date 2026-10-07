@@ -7,6 +7,7 @@ import {
   IndexerEventRecord,
   IndexerHandlerContext,
   IndexerHandlerRegistry,
+  isActiveParticipant,
   registerAuthorizationHandlers,
   VeranaChainService,
   VeranaIndexerService,
@@ -25,6 +26,16 @@ const RUN_ID = String(Date.now())
 const PP_START_OP = '/verana.pp.v1.MsgStartParticipantOP'
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
 const PP_SESSION = '/verana.pp.v1.MsgCreateOrUpdateParticipantSession'
+
+async function until<T>(read: () => Promise<T | undefined>, what: string, timeoutMs = 120_000): Promise<T> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const value = await read().catch(() => undefined)
+    if (value !== undefined) return value
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`)
+    await new Promise(resolve => setTimeout(resolve, 2_000))
+  }
+}
 
 const MINIMAL_SCHEMA = JSON.stringify({
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -149,7 +160,10 @@ describe('authorization cache (V4): indexer events drive grant -> activate -> re
       expect(granted?.msgTypes).toEqual(expect.arrayContaining([PP_VALIDATE, PP_SESSION]))
       expect(granted?.withFeegrant).toBe(true)
       expect(granted?.expiration).toBeInstanceOf(Date)
-      const pending = await indexer.getParticipant(applicant.participantId)
+      const pending = await until(
+        () => indexer.getParticipant(applicant.participantId),
+        'the applicant entry',
+      )
       expect(authz.canSign(pending, PP_SESSION)).toBe(false)
       expect(authz.hasFeegrant(pending)).toBe(false)
 
@@ -165,7 +179,11 @@ describe('authorization cache (V4): indexer events drive grant -> activate -> re
         ),
       )
 
-      const active = await indexer.getParticipant(applicant.participantId)
+      // effective_from is the block time, which can run ahead of this clock
+      const active = await until(async () => {
+        const entry = await indexer.getParticipant(applicant.participantId)
+        return isActiveParticipant(entry) ? entry : undefined
+      }, 'the applicant entry to turn active')
       expect(authz.canSign(active, PP_VALIDATE)).toBe(true)
       expect(authz.canSign(active, PP_SESSION)).toBe(true)
       expect(authz.canSign(active, PP_START_OP)).toBe(false)
