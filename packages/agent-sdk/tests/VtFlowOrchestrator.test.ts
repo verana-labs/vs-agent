@@ -725,6 +725,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
       ...options.applicant,
     }
     const validator = { id: 93, effective_from: past, effective_until: null, revoked: null, slashed: null }
+    const grant = options.grant ?? { msgTypes: [SET_VALIDATED], withFeegrant: false }
     const chain = {
       corporation: 'verana1corp',
       setParticipantOPToValidatedMsg: vi.fn(params => ({ typeUrl: SET_VALIDATED, value: params })),
@@ -744,9 +745,8 @@ describe('VtFlowOrchestrator validateFlow', () => {
           ? undefined
           : {
               refreshForOperator: vi.fn(async () => undefined),
-              getVsOperatorAuthorizationRecord: vi.fn(
-                () => options.grant ?? { msgTypes: [SET_VALIDATED], withFeegrant: false },
-              ),
+              getVsOperatorAuthorizationRecord: vi.fn(() => grant),
+              canSign: vi.fn((_participant: unknown, msgType: string) => grant.msgTypes.includes(msgType)),
             },
       indexer: {
         getParticipant: vi.fn(async (id: string | number) => (Number(id) === 93 ? validator : applicant)),
@@ -796,6 +796,10 @@ describe('VtFlowOrchestrator validateFlow', () => {
       submission: 'AGENT',
       tx: { hash: 'AB12', status: 'SUBMITTED' },
     })
+    expect(agent.authorizationService?.canSign).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 93 }),
+      SET_VALIDATED,
+    )
   })
 
   it('records a failed pre-flight without broadcasting', async () => {

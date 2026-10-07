@@ -92,12 +92,13 @@ describe('authorization cache (V4): indexer events drive grant -> activate -> re
       })
       await authzChain.start()
 
+      const indexer = new VeranaIndexerService({
+        baseUrl: stack.indexerWsUrl.replace(/^ws/, 'http'),
+        logger: new ConsoleLogger(LogLevel.Warn),
+      })
       const authz = new AuthorizationService({
         chain: authzChain,
-        indexer: new VeranaIndexerService({
-          baseUrl: stack.indexerWsUrl.replace(/^ws/, 'http'),
-          logger: new ConsoleLogger(LogLevel.Warn),
-        }),
+        indexer,
         logger: new ConsoleLogger(LogLevel.Warn),
         minRefreshIntervalMs: 0,
       })
@@ -148,11 +149,9 @@ describe('authorization cache (V4): indexer events drive grant -> activate -> re
       expect(granted?.msgTypes).toEqual(expect.arrayContaining([PP_VALIDATE, PP_SESSION]))
       expect(granted?.withFeegrant).toBe(true)
       expect(granted?.expiration).toBeInstanceOf(Date)
-      // The record starts disabled (expiration = block time); wait out clock skew before asserting.
-      const skewWait = granted!.expiration!.getTime() - Date.now()
-      if (skewWait > 0) await new Promise(r => setTimeout(r, Math.min(skewWait + 500, 10_000)))
-      expect(authz.canSign(applicant.participantId, PP_SESSION)).toBe(false)
-      expect(authz.hasFeegrant(applicant.participantId)).toBe(false)
+      const pending = await indexer.getParticipant(applicant.participantId)
+      expect(authz.canSign(pending, PP_SESSION)).toBe(false)
+      expect(authz.hasFeegrant(pending)).toBe(false)
 
       const digest = `sha384-${createHash('sha384').update(`cred-${RUN_ID}`).digest('base64')}`
       const validated = await veranaChain.setParticipantOPToValidated({
@@ -166,10 +165,11 @@ describe('authorization cache (V4): indexer events drive grant -> activate -> re
         ),
       )
 
-      expect(authz.canSign(applicant.participantId, PP_VALIDATE)).toBe(true)
-      expect(authz.canSign(applicant.participantId, PP_SESSION)).toBe(true)
-      expect(authz.canSign(applicant.participantId, PP_START_OP)).toBe(false)
-      expect(authz.hasFeegrant(applicant.participantId)).toBe(true)
+      const active = await indexer.getParticipant(applicant.participantId)
+      expect(authz.canSign(active, PP_VALIDATE)).toBe(true)
+      expect(authz.canSign(active, PP_SESSION)).toBe(true)
+      expect(authz.canSign(active, PP_START_OP)).toBe(false)
+      expect(authz.hasFeegrant(active)).toBe(true)
 
       await expect(authz.callerHoldsOperatorGrant(chainA.address, PP_START_OP)).resolves.toBe(true)
       await expect(authz.callerHoldsOperatorGrant(opB.address, PP_START_OP)).resolves.toBe(false)
@@ -184,7 +184,7 @@ describe('authorization cache (V4): indexer events drive grant -> activate -> re
       )
 
       expect(authz.getVsOperatorAuthorizationRecord(applicant.participantId)).toBeUndefined()
-      expect(authz.canSign(applicant.participantId, PP_SESSION)).toBe(false)
+      expect(authz.canSign(active, PP_SESSION)).toBe(false)
     },
     SETUP_TIMEOUT_MS,
   )

@@ -84,14 +84,6 @@ function invalidState(message: string): AdminApiError {
   return new AdminApiError(AdminApiErrorCode.InvalidState, 409, message)
 }
 
-// AUTHZ-CHECK-3 step 1. A record's expiration is only its budget clock, not a validity window.
-function isActiveParticipant(participant: ParticipantDto): boolean {
-  const now = Date.now()
-  if (!participant.effective_from || Date.parse(participant.effective_from) > now) return false
-  if (participant.effective_until && Date.parse(participant.effective_until) <= now) return false
-  return !participant.revoked && !participant.slashed
-}
-
 function sameTerm(key: string, given: number, onEntry: number): boolean {
   const scale = (DISCOUNT_KEYS as readonly string[]).includes(key) ? DISCOUNT_SCALE : 1
   return Math.round(given * scale) === Math.round(onEntry * scale)
@@ -543,11 +535,10 @@ export class VtFlowOrchestrator {
     const validator = await this.agent.indexer
       .getParticipant(applicant.validator_participant_id)
       .catch(() => undefined)
-    if (!validator || !isActiveParticipant(validator)) return VtFlowSubmission.Operator
+    if (!validator) return VtFlowSubmission.Operator
 
     await authorization.refreshForOperator().catch(() => undefined)
-    const grant = authorization.getVsOperatorAuthorizationRecord(validator.id)
-    return grant?.msgTypes.includes(veranaTypeUrls.MsgSetParticipantOPToValidated)
+    return authorization.canSign(validator, veranaTypeUrls.MsgSetParticipantOPToValidated)
       ? VtFlowSubmission.Agent
       : VtFlowSubmission.Operator
   }
