@@ -361,6 +361,14 @@ export class VerifierService implements OnModuleInit {
   private async buildRequestSigner(queryLanguage: OpenId4VcQueryLanguage, override?: OpenId4VcRequestSigner) {
     const certificate = this.signingCertificateHandle()
     if (override !== 'did') {
+      const host = new URL(this.options.publicApiBaseUrl).hostname
+      if (queryLanguage === 'presentation_exchange' && !certificate.certificate.sanDnsNames.includes(host)) {
+        throw new AdminApiError(
+          AdminApiErrorCode.InvalidState,
+          CONFLICT,
+          `a presentation_exchange request needs a verifier certificate that carries ${host} as a DNS SAN`,
+        )
+      }
       return {
         method: 'x5c' as const,
         x5c: x5cCertificateChain(certificate),
