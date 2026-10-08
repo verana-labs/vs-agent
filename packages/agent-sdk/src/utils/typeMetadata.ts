@@ -4,6 +4,9 @@ import { getLegacyDidWeb } from '../did/legacyDidWeb'
 
 import { readJsonSchema } from './util'
 
+// [VSA-PUB-VT-6]: neither the VTJSC nor its JSON schema names a language
+export const DISPLAY_LOCALE = 'en'
+
 /** The URL of the SD-JWT VC Type Metadata of a `CredentialSchema`, per [VSA-PUB-VT-5]. */
 export function typeMetadataUrl(publicApiBaseUrl: string, credentialSchemaId: string | number): string {
   return `${publicApiBaseUrl}/vt/vct/${credentialSchemaId}`
@@ -91,14 +94,21 @@ export interface TypeMetadataInput {
  * and never composes it again for the same schema.
  */
 export function composeTypeMetadata(input: TypeMetadataInput): string {
-  const { title, description, attrNames } = readJsonSchema(input.jsonSchema)
+  const { title, description, attrNames, attrTitles } = readJsonSchema(input.jsonSchema)
+  const name = typeof title === 'string' && title.trim() ? title : input.credentialSchemaRef
+  const describedBy = description ? { description } : {}
 
   return JSON.stringify({
     vct: input.vct,
-    name: title ?? input.credentialSchemaRef,
-    ...(description ? { description } : {}),
+    name,
+    ...describedBy,
+    display: [{ locale: DISPLAY_LOCALE, name, ...describedBy }],
     // every claim of an SD-JWT VTC is selectively disclosable, so the type says so to every issuer
-    claims: attrNames.map(name => ({ path: [name], sd: 'always' })),
+    claims: attrNames.map(attr => ({
+      path: [attr],
+      display: [{ locale: DISPLAY_LOCALE, label: attrTitles.get(attr) ?? attr }],
+      sd: 'always',
+    })),
     relatedJsonSchemaCredentialId: input.jsonSchemaCredentialId,
   })
 }

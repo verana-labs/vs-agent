@@ -20,6 +20,7 @@ import { OpenId4VcIssuanceSessionRepository } from '@credo-ts/openid4vc'
 import {
   AdminApiError,
   AdminApiErrorCode,
+  DISPLAY_LOCALE,
   ParticipantRole,
   trustDecisionError,
 } from '@verana-labs/vs-agent-sdk'
@@ -486,7 +487,7 @@ export class IssuerService implements OnModuleInit {
             display: [
               {
                 name: display.name,
-                locale: 'en',
+                locale: DISPLAY_LOCALE,
                 ...(display.logoUri ? { logo: { uri: display.logoUri } } : {}),
               },
             ],
@@ -547,7 +548,7 @@ export class IssuerService implements OnModuleInit {
               {
                 name: configuration.name,
                 ...(configuration.description ? { description: configuration.description } : {}),
-                locale: 'en',
+                locale: DISPLAY_LOCALE,
               },
             ],
             claims: configuration.claims.map(claim => ({ path: [claim] })),
