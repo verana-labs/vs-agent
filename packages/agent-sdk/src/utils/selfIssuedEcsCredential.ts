@@ -1,5 +1,5 @@
 import { DidDocumentService, DidRecord, W3cCredentialSchema } from '@credo-ts/core'
-import { ecsRequiresValidUntil } from '@verana-labs/vs-agent-model'
+import { schemaRequiresValidUntil } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../agent/VsAgent'
 import { EcsClaims } from './ecsClaims'
@@ -114,9 +114,9 @@ export async function publishSelfIssuedEcsPresentation(
   const didDocument = didRecord.didDocument
   if (!didDocument) throw Error('The DID Document must be set up')
   const claims = await getClaims(agent.config.logger, ecsSchemas, { id: agent.did }, schemaKey, ecsClaims)
-  if (!validUntil && ecsRequiresValidUntil(schemaKey)) {
+  if (!validUntil && schemaRequiresValidUntil(ecsSchemas[schemaKey])) {
     throw new Error(
-      `Not issuing the ${schemaKey} credential: its VTJSC requires validUntil and the ISSUER participant has no effective_until, which SetParticipantEffectiveUntil sets`,
+      `Not issuing the ${schemaKey} credential: its schema requires validUntil and the ISSUER participant has no effective_until`,
     )
   }
   const didDocumentServiceId = `${agent.did}#${linkedVpFragment(schemaKey)}`
