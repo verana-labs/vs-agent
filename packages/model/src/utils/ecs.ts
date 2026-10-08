@@ -122,9 +122,25 @@ export async function classifyEcsSchema(jsonSchema: string): Promise<ECS | null>
   }
 }
 
-// [VT-ECS-ORG-JSON-SCHEMA-CRED-W3C] and [VT-ECS-PERSONA-JSON-SCHEMA-CRED-W3C] require validUntil
-export function ecsRequiresValidUntil(ecsKey: string | null): boolean {
-  return ecsKey === ECS.ORG || ecsKey === ECS.PERSONA
+/**
+ * Tells whether the JSON schema of a credential lists `validUntil` among its required properties.
+ *
+ * [VSA-VTI-ECS-SELF-2] and [VSA-ADM-VT-FL-VALIDATE-2] make a `validUntil` mandatory only when the
+ * schema requires it. The published ECS schemas require none, so an Organization or a Persona
+ * credential without an `effective_until` is issued without a `validUntil`.
+ *
+ * @param jsonSchema the schema as the VPR `CredentialSchema` entry stores it, or already parsed
+ * @returns true when the top-level `required` list of the schema contains `validUntil`
+ */
+export function schemaRequiresValidUntil(jsonSchema: string | Record<string, unknown> | undefined): boolean {
+  try {
+    const parsed =
+      typeof jsonSchema === 'string' ? (JSON.parse(jsonSchema) as Record<string, unknown>) : jsonSchema
+    const required = parsed?.required
+    return Array.isArray(required) && required.includes('validUntil')
+  } catch {
+    return false
+  }
 }
 
 type W3CCred = {
