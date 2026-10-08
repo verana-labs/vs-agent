@@ -39,10 +39,11 @@ describe('in-process OpenID4VP presentation', () => {
     await agents?.stop()
   })
 
-  async function present(requestedClaims: string[]) {
+  async function present(requestedClaims: string[], queryLanguage?: 'dcql' | 'presentation_exchange') {
     const request = await agents.verifier.service.createRequest({
       jsonSchemaCredentialId: testCredentialConfiguration.id,
       requestedClaims,
+      queryLanguage,
     })
     const resolved = await agents.holder.resolvePresentationRequest(request.authorizationRequest, [
       agents.rootCertificate,
@@ -73,6 +74,19 @@ describe('in-process OpenID4VP presentation', () => {
           authorized: true,
         },
       },
+      credential: { vct: testCredentialConfiguration.vct, disclosedClaims: { name: 'Ada Lovelace' } },
+    })
+  }, 60_000)
+
+  it('accepts a Presentation Exchange response to a request signed with x5c', async () => {
+    const proofExchangeId = await present(['name'], 'presentation_exchange')
+
+    const presentation = await agents.verifier.service.getVerificationSession(proofExchangeId)
+
+    expect(presentation).toMatchObject({
+      state: 'ResponseVerified',
+      cryptographicVerified: true,
+      accepted: true,
       credential: { vct: testCredentialConfiguration.vct, disclosedClaims: { name: 'Ada Lovelace' } },
     })
   }, 60_000)

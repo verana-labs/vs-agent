@@ -47,7 +47,7 @@ export class OpenId4VcCreatePresentationRequestBodyDto {
   @ApiPropertyOptional({
     enum: OPENID4VC_REQUEST_SIGNERS,
     description:
-      'Signer of this request only. x5c yields an x509_hash client identifier for a wallet that cannot resolve a DID.',
+      'Signer of this request only. x5c yields an x509_hash client identifier for a wallet that cannot resolve a DID, or x509_san_dns on a presentation_exchange request, whose draft predates x509_hash.',
   })
   @IsOptional()
   @IsIn(OPENID4VC_REQUEST_SIGNERS)
