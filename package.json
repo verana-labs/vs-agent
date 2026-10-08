@@ -49,10 +49,12 @@
   },
   "packageManager": "pnpm@9.15.3",
   "pnpm": {
-    "allowNonAppliedPatches": true,
+    "allowNonAppliedPatches": false,
     "patchedDependencies": {
       "@2060.io/credo-ts-didcomm-reactions@0.1.1": "patches/@2060.io__credo-ts-didcomm-reactions@0.1.1.patch",
       "@2060.io/credo-ts-didcomm-receipts@0.1.1": "patches/@2060.io__credo-ts-didcomm-receipts@0.1.1.patch",
+      "@2060.io/credo-ts-didcomm-user-profile@0.1.0": "patches/@2060.io__credo-ts-didcomm-user-profile@0.1.0.patch",
+      "@credo-ts/action-menu@0.7.1-pr-2704-20260909134930": "patches/@credo-ts__action-menu@0.7.1-pr-2704-20260909134930.patch",
       "@credo-ts/anoncreds@0.7.1-pr-2704-20260909134930": "patches/@credo-ts__anoncreds@0.7.1-pr-2704-20260909134930.patch",
       "@credo-ts/core@0.7.1-pr-2704-20260909134930": "patches/@credo-ts__core@0.7.1-pr-2704-20260909134930.patch",
       "@credo-ts/didcomm@0.7.1-pr-2704-20260909134930": "patches/@credo-ts__didcomm@0.7.1-pr-2704-20260909134930.patch",

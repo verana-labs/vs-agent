@@ -148,7 +148,7 @@ export class VerifierService implements OnModuleInit {
     const { authorizationRequest, verificationSession } = await this.verifierApi().createAuthorizationRequest(
       {
         verifierId: VERIFIER_CAPABILITY_ID,
-        requestSigner: await this.buildRequestSigner(requestSigner),
+        requestSigner: await this.buildRequestSigner(queryLanguage, requestSigner),
         // JARM (direct_post.jwt) is DCQL-only: Presentation Exchange wallets can't build the JWE it needs.
         responseMode: queryLanguage === 'presentation_exchange' ? 'direct_post' : 'direct_post.jwt',
         ...presentationQueryFor(configuration, claims, queryLanguage),
@@ -358,13 +358,23 @@ export class VerifierService implements OnModuleInit {
     return signingCertificate
   }
 
-  private async buildRequestSigner(override?: OpenId4VcRequestSigner) {
+  private async buildRequestSigner(queryLanguage: OpenId4VcQueryLanguage, override?: OpenId4VcRequestSigner) {
     const certificate = this.signingCertificateHandle()
     if (override !== 'did') {
+      const host = new URL(this.options.publicApiBaseUrl).hostname
+      if (queryLanguage === 'presentation_exchange' && !certificate.certificate.sanDnsNames.includes(host)) {
+        throw new AdminApiError(
+          AdminApiErrorCode.InvalidState,
+          CONFLICT,
+          `a presentation_exchange request needs a verifier certificate that carries ${host} as a DNS SAN`,
+        )
+      }
       return {
         method: 'x5c' as const,
         x5c: x5cCertificateChain(certificate),
-        clientIdPrefix: 'x509_hash' as const,
+        // Draft 21 predates x509_hash: Credo would send client_id_scheme=x509_hash and then refuse to parse its own request.
+        clientIdPrefix:
+          queryLanguage === 'presentation_exchange' ? ('x509_san_dns' as const) : ('x509_hash' as const),
       }
     }
 

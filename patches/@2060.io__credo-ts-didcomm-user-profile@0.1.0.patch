@@ -1,0 +1,53 @@
+diff --git a/build/index.mjs b/build/index.mjs
+index 162351b..14e9238 100644
+--- a/build/index.mjs
++++ b/build/index.mjs
+@@ -308,11 +308,12 @@ let DidCommUserProfileApi = class DidCommUserProfileApi$1 {
+ 	async requestUserProfile(options) {
+ 		const connection = await this.connectionService.getById(this.agentContext, options.connectionId);
+ 		connection.assertReady();
+-		const message = await this.userProfileService.createRequestProfileMessage({});
++		const message = await this.userProfileService.createRequestProfileMessage({ query: options.query });
+ 		await this.messageSender.sendMessage(new DidCommOutboundMessageContext(message, {
+ 			agentContext: this.agentContext,
+ 			connection
+ 		}));
++		return { messageId: message.id };
+ 	}
+ 	/**
+ 	* Sends User Profile to a given connection. It will send our own stored profile data if `profileData` is not specified.
+@@ -343,6 +344,7 @@ let DidCommUserProfileApi = class DidCommUserProfileApi$1 {
+ 			agentContext: this.agentContext,
+ 			connection
+ 		}));
++		return { messageId: message.id };
+ 	}
+ 	/**
+ 	* Update editable properties of user profile record and persist in repository
+diff --git a/build/index.d.mts b/build/index.d.mts
+index ee012f2..c8b5d5c 100644
+--- a/build/index.d.mts
++++ b/build/index.d.mts
+@@ -158,7 +158,10 @@ declare class DidCommUserProfileApi {
+    */
+   requestUserProfile(options: {
+     connectionId: string;
+-  }): Promise<void>;
++    query?: DidCommUserProfileKey[];
++  }): Promise<{
++    messageId: string;
++  }>;
+   /**
+    * Sends User Profile to a given connection. It will send our own stored profile data if `profileData` is not specified.
+    *
+@@ -173,7 +176,9 @@ declare class DidCommUserProfileApi {
+     parentThreadId?: string;
+     profileData?: Partial<DidCommUserProfileData> | Record<string, unknown>;
+     sendBackYours?: boolean;
+-  }): Promise<void>;
++  }): Promise<{
++    messageId: string;
++  }>;
+   /**
+    * Update editable properties of user profile record and persist in repository
+    *
