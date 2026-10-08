@@ -1,20 +1,11 @@
-import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { ChatAgentModules } from '../types'
+import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import {
-  DidCommUserProfileData,
-  DidCommUserProfileKey,
-  DidCommUserProfileService,
-} from '@2060.io/credo-ts-didcomm-user-profile'
+import type { DidCommUserProfileData, DidCommUserProfileKey } from '@2060.io/credo-ts-didcomm-user-profile'
 import { Body, Controller, HttpStatus, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
-import {
-  AdminApiError,
-  AdminApiErrorCode,
-  connectionOf,
-  moduleService,
-  sendMessage,
-} from '@verana-labs/vs-agent-sdk'
+import { AdminApiError, AdminApiErrorCode, connectionOf } from '@verana-labs/vs-agent-sdk'
 
 import { DEFAULT_PROFILE, type DefaultProfile } from './defaultProfile'
 import { RequestProfileBodyDto, SendProfileBodyDto, SentMessageDto } from './dto'
@@ -24,7 +15,7 @@ import { RequestProfileBodyDto, SendProfileBodyDto, SentMessageDto } from './dto
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class V2DidcommUserProfileController {
   public constructor(
-    @Inject('VSAGENT') private readonly vsAgent: VsAgent<BaseAgentModules>,
+    @Inject('VSAGENT') private readonly agent: VsAgent<ChatAgentModules>,
     @Inject(DEFAULT_PROFILE) private readonly defaultProfile: DefaultProfile | undefined,
   ) {}
 
@@ -36,12 +27,10 @@ export class V2DidcommUserProfileController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async sendProfile(@Body() body: SendProfileBodyDto): Promise<SentMessageDto> {
-    const agent = await this.agent()
-    const service = moduleService(agent, DidCommUserProfileService, 'user-profile')
-    const connection = await connectionOf(agent, body.connectionId)
+    await connectionOf(this.agent, body.connectionId)
 
     const profile =
-      (body.profile as DidCommUserProfileData | undefined) ?? (await this.defaultProfile?.(agent))
+      (body.profile as DidCommUserProfileData | undefined) ?? (await this.defaultProfile?.(this.agent))
     if (!profile) {
       throw new AdminApiError(
         AdminApiErrorCode.InvalidState,
@@ -50,13 +39,14 @@ export class V2DidcommUserProfileController {
       )
     }
 
-    const message = await service.createProfileMessage({
-      profile,
+    const { messageId } = await this.agent.modules.userProfile.sendUserProfile({
+      connectionId: body.connectionId,
+      profileData: profile,
       threadId: body.threadId,
       sendBackYours: body.sendBackYours,
     })
 
-    return { id: await sendMessage(agent, connection, message) }
+    return { id: messageId }
   }
 
   @Post('request')
@@ -67,19 +57,13 @@ export class V2DidcommUserProfileController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async requestProfile(@Body() body: RequestProfileBodyDto): Promise<SentMessageDto> {
-    const agent = await this.agent()
-    const service = moduleService(agent, DidCommUserProfileService, 'user-profile')
-    const connection = await connectionOf(agent, body.connectionId)
+    await connectionOf(this.agent, body.connectionId)
 
-    const message = await service.createRequestProfileMessage({
+    const { messageId } = await this.agent.modules.userProfile.requestUserProfile({
+      connectionId: body.connectionId,
       query: body.query as DidCommUserProfileKey[] | undefined,
     })
 
-    return { id: await sendMessage(agent, connection, message) }
-  }
-
-  private async agent(): Promise<VsAgent<BaseAgentModules>> {
-    if (!this.vsAgent.isInitialized) await this.vsAgent.initialize()
-    return this.vsAgent
+    return { id: messageId }
   }
 }

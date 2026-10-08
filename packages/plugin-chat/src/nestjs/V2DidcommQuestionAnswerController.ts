@@ -1,16 +1,16 @@
-import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { ChatAgentModules } from '../types'
+import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
 import { SendQuestionBodyDto, SentMessageDto } from './dto'
 import { connectionOf } from '@verana-labs/vs-agent-sdk'
-import { chatModuleApi } from './chatModuleApi'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/question-answer', version: '2' })
 export class V2DidcommQuestionAnswerController {
-  public constructor(@Inject('VSAGENT') private readonly vsAgent: VsAgent<BaseAgentModules>) {}
+  public constructor(@Inject('VSAGENT') private readonly agent: VsAgent<ChatAgentModules>) {}
 
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
@@ -21,21 +21,14 @@ export class V2DidcommQuestionAnswerController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async sendQuestion(@Body() body: SendQuestionBodyDto): Promise<SentMessageDto> {
-    const agent = await this.agent()
-    const api = chatModuleApi(agent, 'questionAnswer', 'question-answer')
-    await connectionOf(agent, body.connectionId)
+    await connectionOf(this.agent, body.connectionId)
 
-    const record = await api.sendQuestion(body.connectionId, {
+    const record = await this.agent.modules.questionAnswer.sendQuestion(body.connectionId, {
       question: body.question,
       detail: body.detail,
       validResponses: body.validResponses,
     })
 
     return { id: record.threadId }
-  }
-
-  private async agent(): Promise<VsAgent<BaseAgentModules>> {
-    if (!this.vsAgent.isInitialized) await this.vsAgent.initialize()
-    return this.vsAgent
   }
 }

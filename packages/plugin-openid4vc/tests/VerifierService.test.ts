@@ -134,6 +134,7 @@ function verifierService(agent: ReturnType<typeof verifierAgent>, options = veri
 
 const signingLeaf = {
   sanUriNames: [AGENT_DID],
+  sanDnsNames: ['agent.example'],
   publicJwk: { toJson: () => PUBLIC_JWK },
   rawCertificate: Buffer.from('signing-leaf'),
 }
@@ -403,6 +404,53 @@ describe('VerifierService', () => {
           clientIdPrefix: 'x509_hash',
         },
       }),
+    )
+  })
+
+  it('signs a presentation_exchange request with x509_san_dns, the x5c prefix draft 21 defines', async () => {
+    const { service, api } = await initializedVerifier()
+    api.createAuthorizationRequest.mockResolvedValue({
+      authorizationRequest: 'openid4vp://?request_uri=opaque',
+      verificationSession: session('RequestCreated'),
+    })
+
+    await service.createRequest({
+      jsonSchemaCredentialId: VTJSC_ID,
+      requestedClaims: ['name'],
+      queryLanguage: 'presentation_exchange',
+    })
+
+    expect(api.createAuthorizationRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestSigner: {
+          method: 'x5c',
+          x5c: [signingLeaf, signingRoot],
+          clientIdPrefix: 'x509_san_dns',
+        },
+        responseMode: 'direct_post',
+      }),
+    )
+  })
+
+  it('answers INVALID_STATE for a presentation_exchange request when the certificate lacks the host as a DNS SAN', async () => {
+    loadSigningCertificate.mockResolvedValue({
+      ...verifierSigningHandle(),
+      certificate: { ...signingLeaf, sanDnsNames: ['other.example'] },
+    })
+    const { service, api } = await initializedVerifier()
+    api.createAuthorizationRequest.mockResolvedValue({
+      authorizationRequest: 'openid4vp://?request_uri=opaque',
+      verificationSession: session('RequestCreated'),
+    })
+
+    await expect(
+      service.createRequest({ jsonSchemaCredentialId: VTJSC_ID, queryLanguage: 'presentation_exchange' }),
+    ).rejects.toMatchObject({ code: AdminApiErrorCode.InvalidState, status: 409 })
+    expect(api.createAuthorizationRequest).not.toHaveBeenCalled()
+
+    await service.createRequest({ jsonSchemaCredentialId: VTJSC_ID, queryLanguage: 'dcql' })
+    expect(api.createAuthorizationRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ requestSigner: expect.objectContaining({ clientIdPrefix: 'x509_hash' }) }),
     )
   })
 

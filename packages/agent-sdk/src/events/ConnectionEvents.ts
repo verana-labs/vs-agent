@@ -25,6 +25,12 @@ import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 // TODO: Fix single-use invitations for DIDComm v2 in Credo, then remove this function.
 // In Credo, multiUseInvitation: false only sets reusable: false on the OOB record. It does not
 // refuse a second connection from a v2 invitation, because v2 has no handshake.
+//
+// The guard does not apply to an invitation issued under the public DID of this agent. Credo
+// binds every first message that a peer sends to the public DID to the newest out-of-band
+// record of that DID, also when that record is single-use. A second connection on such a
+// record is then not a second use of the invitation: it is a peer that connects to the public
+// DID, and a hangup would close a valid connection.
 async function discardExtraConnection(
   agent: VsAgent<any>,
   record: DidCommConnectionRecord,
@@ -34,6 +40,10 @@ async function discardExtraConnection(
 
   const outOfBandRecord = await agent.didcomm.oob.findById(record.outOfBandId)
   if (!outOfBandRecord || outOfBandRecord.reusable) return false
+
+  const invitationDid =
+    outOfBandRecord.getTags().recipientDid ?? outOfBandRecord.outOfBandInvitation.v2Invitation?.from
+  if (invitationDid && (await publicDidsOf(agent)).includes(invitationDid)) return false
 
   const siblings = await agent.didcomm.connections.findAllByOutOfBandId(record.outOfBandId)
   if (siblings.length < 2) return false

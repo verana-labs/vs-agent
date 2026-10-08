@@ -1,7 +1,7 @@
-import { DidCommMrtdApi, DidCommMrtdService } from '@2060.io/credo-ts-didcomm-mrtd'
+import { DidCommMrtdApi } from '@2060.io/credo-ts-didcomm-mrtd'
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger'
-import { moduleNotServed, unknownConnection, VsAgent } from '@verana-labs/vs-agent-sdk'
+import { connectionOf, moduleService, VsAgent } from '@verana-labs/vs-agent-sdk'
 import { IsNotEmpty, IsString } from 'class-validator'
 
 export class RequestMrtdBodyDto {
@@ -54,16 +54,9 @@ export class V2DidcommMrtdController {
   }
 
   private async mrtdApi(connectionId: string): Promise<DidCommMrtdApi> {
-    if (!this.agent.isInitialized) await this.agent.initialize()
+    const api = moduleService(this.agent, DidCommMrtdApi, 'mrtd')
+    await connectionOf(this.agent, connectionId)
 
-    const { dependencyManager } = this.agent.context
-    if (!dependencyManager.isRegistered(DidCommMrtdService)) {
-      throw moduleNotServed('mrtd')
-    }
-    if (!(await this.agent.didcomm.connections.findById(connectionId))) {
-      throw unknownConnection(connectionId)
-    }
-
-    return dependencyManager.resolve(DidCommMrtdApi)
+    return api
   }
 }
