@@ -37,8 +37,9 @@ export class ErrorEnvelopeFilter extends BaseExceptionFilter {
     if (envelope.code === AdminApiErrorCode.Internal) {
       this.logger.error(`${request.method} ${this.pathOf(request)} failed`, exception as Error)
     } else if (exception instanceof RecordNotFoundError) {
-      this.logger.warn(
-        `${request.method} ${this.pathOf(request)} answered ${HttpStatus.NOT_FOUND}: ${exception.message}`,
+      this.logger.error(
+        `${request.method} ${this.pathOf(request)} answered ${HttpStatus.NOT_FOUND}`,
+        exception as Error,
       )
     }
 
