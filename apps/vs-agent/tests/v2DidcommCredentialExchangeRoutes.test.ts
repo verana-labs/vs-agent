@@ -9,6 +9,7 @@ import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
+import { RecordNotFoundError } from '@credo-ts/core'
 import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
@@ -122,6 +123,7 @@ const agent = {
       acceptOffer: vi.fn(),
       acceptRequest: vi.fn(),
       acceptCredential: vi.fn(),
+      deleteById: vi.fn(),
     },
   },
 }
@@ -876,6 +878,50 @@ describe('v2 didcomm credential exchange routes', () => {
       expect(response.status).toBe(200)
       expect(anonCredsTrust.deriveCredentialSchema).not.toHaveBeenCalled()
       expect(agent.didcomm.credentials.acceptOffer).toHaveBeenCalled()
+    })
+  })
+
+  describe('deleteCredentialExchange', () => {
+    it('deletes the record and its DIDComm messages, and keeps the stored credential', async () => {
+      agent.didcomm.credentials.deleteById.mockResolvedValue(undefined)
+
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/ce-a')
+
+      expect(response.status).toBe(204)
+      expect(response.text).toBe('')
+      expect(agent.didcomm.credentials.deleteById).toHaveBeenCalledWith('ce-a', {
+        deleteAssociatedCredentials: false,
+        deleteAssociatedDidCommMessages: true,
+      })
+    })
+
+    it('emits no event for a deletion', async () => {
+      agent.didcomm.credentials.deleteById.mockResolvedValue(undefined)
+
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/ce-a')
+
+      expect(response.status).toBe(204)
+      expect(events.emit).not.toHaveBeenCalled()
+    })
+
+    it('reports a delete of an unknown credential exchange as UNKNOWN_ID', async () => {
+      agent.didcomm.credentials.deleteById.mockRejectedValue(
+        new RecordNotFoundError('not found', { recordType: 'DidCommCredentialExchangeRecord' }),
+      )
+
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/nope')
+
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
+    })
+
+    it('does not collapse an unexpected storage failure into UNKNOWN_ID', async () => {
+      agent.didcomm.credentials.deleteById.mockRejectedValue(new Error('askar rejected the write'))
+
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/ce-a')
+
+      expect(response.status).toBe(500)
+      expect(response.body.error.code).toBe('INTERNAL')
     })
   })
 })
