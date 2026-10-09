@@ -5,7 +5,7 @@ import WebSocket from 'ws'
 import { VsAgent } from '../agent/VsAgent'
 import { emitVsAgentEvent, VsAgentEventTypes } from '../events'
 
-import { loadSyncState, resetSyncState, saveSyncState } from './VeranaHelpers'
+import { loadSyncState, resetSyncState, saveSyncState, syncStateUpdatedAt } from './VeranaHelpers'
 import { VeranaIndexerService } from './VeranaIndexerService'
 import { applyStateMutation, buildDefaultIndexerHandlerRegistry } from './handlers'
 import { IndexerHandlerRegistry } from './handlers/IndexerHandlerRegistry'
@@ -34,6 +34,7 @@ const MAX_SYNC_BUFFER = 10_000
 const SUBSCRIBE_TIMEOUT_MS = 5_000
 type SubscribeOutcome = 'acknowledged' | 'timed-out' | 'disconnected'
 type ConnectionPhase = 'connecting' | 'catching-up' | 'synced'
+type ChainView = { fingerprint: string; startedAt: Date; height: number }
 
 export type IndexerSyncStatus = 'never-synced' | 'catching-up' | 'disconnected' | 'synced'
 const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
@@ -242,15 +243,43 @@ export class IndexerWebSocketService {
   }
 
   private async resumeHeight(): Promise<number> {
-    const { lastBlockHeight } = await loadSyncState(this.options.agent)
-    const chainHeight = await this.options.agent.veranaChain?.getHeight()
-    if (chainHeight === undefined || lastBlockHeight <= chainHeight) return lastBlockHeight
+    const { agent } = this.options
+    const state = await loadSyncState(agent)
+    const chain = await this.readChain()
+    if (!chain || chain.fingerprint === state.chainFingerprint) return state.lastBlockHeight
+
+    if (state.chainFingerprint === undefined && !(await this.resetBeforeFingerprint(state, chain))) {
+      state.chainFingerprint = chain.fingerprint
+      await saveSyncState(agent, state)
+      return state.lastBlockHeight
+    }
 
     this.logger.warn(
-      `[IndexerWS] Saved block height ${lastBlockHeight} is above the chain height ${chainHeight}, the chain was reset: syncing again from block 0`,
+      `[IndexerWS] Block 1 changed to ${chain.fingerprint}: the chain was reset, syncing again from block 0`,
     )
-    await resetSyncState(this.options.agent)
+    await resetSyncState(agent, chain.fingerprint)
     return 0
+  }
+
+  // Block 1 newer than the last saved progress cannot belong to the chain that progress came from.
+  private async resetBeforeFingerprint(state: VeranaSyncState, chain: ChainView): Promise<boolean> {
+    if (state.lastBlockHeight <= chain.height) return false
+    const syncedAt = await syncStateUpdatedAt(this.options.agent)
+    return syncedAt !== undefined && chain.startedAt > syncedAt
+  }
+
+  private async readChain(): Promise<ChainView | undefined> {
+    const chain = this.options.agent.veranaChain
+    if (!chain) return undefined
+    try {
+      const [first, height] = await Promise.all([chain.getBlock(1), chain.getHeight()])
+      return { fingerprint: first.id, startedAt: new Date(first.header.time), height }
+    } catch (error) {
+      this.logger.warn(
+        `[IndexerWS] Cannot read block 1 to check for a chain reset, keeping the saved height: ${(error as Error).message}`,
+      )
+      return undefined
+    }
   }
 
   private drainSyncBuffer(generation: number): void {

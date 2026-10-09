@@ -142,6 +142,7 @@ export interface VeranaSyncState {
   participants: Record<string, SyncedParticipant>
   partialBlock?: number
   partialKeys?: string[]
+  chainFingerprint?: string
 }
 
 export interface EcosystemDto {

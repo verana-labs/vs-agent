@@ -4,7 +4,7 @@ import { VsAgent } from '../src/agent/VsAgent'
 import { IndexerWebSocketService } from '../src/blockchain/IndexerWebSocketService'
 import { loadSyncState, saveSyncState } from '../src/blockchain/VeranaHelpers'
 import { IndexerHandlerRegistry } from '../src/blockchain/handlers/IndexerHandlerRegistry'
-import { IndexerActivity, IndexerEventRecord } from '../src/blockchain/types'
+import { IndexerActivity, IndexerEventRecord, RECORD_ID } from '../src/blockchain/types'
 import { VsAgentEventTypes } from '../src/events'
 import { fetchJson } from '../src/utils/util'
 
@@ -414,15 +414,19 @@ describe('IndexerWebSocketService', () => {
   })
 
   describe('after a chain reset', () => {
-    const chainAt = (getHeight: () => Promise<number>): void => {
-      Object.assign(agent, { veranaChain: { getHeight } })
+    const chainAt = (block1: string, height: number, startedAt = '2026-01-01T00:00:00Z'): void => {
+      Object.assign(agent, {
+        veranaChain: {
+          getBlock: async () => ({ id: block1, header: { time: startedAt } }),
+          getHeight: async () => height,
+        },
+      })
     }
     const catchUpCursors = (): number[] =>
       fetchJsonMock.mock.calls.map(([url]) =>
         Number(new URL(url as string).searchParams.get('after_block_height')),
       )
-
-    beforeEach(async () => {
+    const saveOldChainState = async (chainFingerprint?: string): Promise<void> => {
       await saveSyncState(agent, {
         lastBlockHeight: 100,
         ecosystems: {},
@@ -440,11 +444,12 @@ describe('IndexerWebSocketService', () => {
         },
         partialBlock: 101,
         partialKeys: ['old:0:TestMsg'],
+        ...(chainFingerprint ? { chainFingerprint } : {}),
       })
-    })
-
-    it('syncs again from block 0 when the saved height is above the chain height', async () => {
-      chainAt(async () => 40)
+      const record = await agent.genericRecords.findById(RECORD_ID)
+      if (record) record.updatedAt = new Date('2026-09-01T00:00:00Z')
+    }
+    const serveNewChain = (): void => {
       fetchJsonMock.mockImplementation(async (url: string) => {
         const after = Number(new URL(url).searchParams.get('after_block_height'))
         if (after === 0) {
@@ -456,6 +461,12 @@ describe('IndexerWebSocketService', () => {
         }
         return { events: [], count: 0, after_block_height: after }
       })
+    }
+
+    it('syncs again from block 0 when block 1 changed', async () => {
+      await saveOldChainState('OLD')
+      chainAt('NEW', 5000)
+      serveNewChain()
       const dispatched: string[] = []
       await startWith(async a => {
         dispatched.push(String(a.entity_id))
@@ -472,13 +483,15 @@ describe('IndexerWebSocketService', () => {
 
       const state = await loadSyncState(agent)
       expect(state.lastBlockHeight).toBe(40)
+      expect(state.chainFingerprint).toBe('NEW')
       expect(state.participants).toEqual({})
       expect(state.partialKeys).toEqual(['new41:0:TestMsg'])
       expect(agent.config.logger.warn).toHaveBeenCalledWith(expect.stringContaining('the chain was reset'))
     })
 
-    it.each([100, 500])('keeps the saved height when the chain is at block %i', async chainHeight => {
-      chainAt(async () => chainHeight)
+    it('keeps the saved height on a node that lags behind the same chain', async () => {
+      await saveOldChainState('OLD')
+      chainAt('OLD', 40)
       const dispatched: string[] = []
       await startWith(async a => {
         dispatched.push(String(a.entity_id))
@@ -497,18 +510,48 @@ describe('IndexerWebSocketService', () => {
       expect(Object.keys(state.participants)).toEqual(['9'])
     })
 
-    it('reconnects instead of catching up when the chain height cannot be read', async () => {
-      vi.useFakeTimers()
-      chainAt(async () => {
-        throw new Error('rpc down')
+    it('records block 1 for a wallet synced before the fingerprint existed', async () => {
+      await saveOldChainState()
+      chainAt('OLD', 40)
+      await startWith(async () => undefined)
+
+      expect(catchUpCursors()).toEqual([100])
+      const state = await loadSyncState(agent)
+      expect(state.chainFingerprint).toBe('OLD')
+      expect(state.lastBlockHeight).toBe(100)
+      expect(Object.keys(state.participants)).toEqual(['9'])
+    })
+
+    it('resets a wallet synced before the fingerprint existed when the chain started after its last sync', async () => {
+      await saveOldChainState()
+      chainAt('NEW', 40, '2026-10-09T00:00:00Z')
+      serveNewChain()
+      const dispatched: string[] = []
+      await startWith(async a => {
+        dispatched.push(String(a.entity_id))
+      })
+
+      expect(catchUpCursors()).toEqual([0])
+      expect(dispatched).toEqual(['NEW'])
+      expect((await loadSyncState(agent)).chainFingerprint).toBe('NEW')
+    })
+
+    it('keeps the saved height when block 1 cannot be read', async () => {
+      await saveOldChainState('OLD')
+      Object.assign(agent, {
+        veranaChain: {
+          getBlock: async () => {
+            throw new Error('height 1 is not available')
+          },
+          getHeight: async () => 40,
+        },
       })
       await startWith(async () => undefined)
-      const before = FakeWebSocket.instances.length
 
-      expect(catchUpCursors()).toEqual([])
-      await vi.advanceTimersByTimeAsync(2000)
-      expect(FakeWebSocket.instances.length).toBeGreaterThan(before)
-      expect((await loadSyncState(agent)).lastBlockHeight).toBe(100)
+      expect(catchUpCursors()).toEqual([100])
+      const state = await loadSyncState(agent)
+      expect(state.lastBlockHeight).toBe(100)
+      expect(state.chainFingerprint).toBe('OLD')
     })
   })
 

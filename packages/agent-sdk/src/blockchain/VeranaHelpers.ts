@@ -18,8 +18,13 @@ export async function loadSyncState(agent: VsAgent): Promise<VeranaSyncState> {
   return (record.content as unknown as VeranaSyncState) ?? emptyState()
 }
 
-export async function resetSyncState(agent: VsAgent): Promise<void> {
-  await saveSyncState(agent, emptyState())
+export async function syncStateUpdatedAt(agent: VsAgent): Promise<Date | undefined> {
+  const record = await agent.genericRecords.findById(RECORD_ID)
+  return record?.updatedAt ?? record?.createdAt
+}
+
+export async function resetSyncState(agent: VsAgent, chainFingerprint: string): Promise<void> {
+  await saveSyncState(agent, { ...emptyState(), chainFingerprint })
 }
 
 export async function saveSyncState(agent: VsAgent, state: VeranaSyncState): Promise<void> {

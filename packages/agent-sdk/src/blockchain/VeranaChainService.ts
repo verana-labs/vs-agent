@@ -8,6 +8,7 @@ import {
   assertIsDeliverTxSuccess,
   calculateFee,
   setupFeegrantExtension,
+  type Block,
   type DeliverTxResponse,
   type StdFee,
 } from '@cosmjs/stargate'
@@ -168,6 +169,10 @@ export class VeranaChainService {
 
   async getHeight(): Promise<number> {
     return this.signingClient.getHeight()
+  }
+
+  async getBlock(height: number): Promise<Block> {
+    return this.signingClient.getBlock(height)
   }
 
   // Transaction API (signed)
