@@ -18,7 +18,6 @@ import {
   SentMessageDto,
 } from './dto'
 import { toBasicMessageDto } from './mappers'
-import { connectionOf } from '@verana-labs/vs-agent-sdk'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/basic-messages', version: '2' })
@@ -35,7 +34,6 @@ export class V2DidcommBasicMessagesController {
   @ApiNotFoundResponse({ description: 'No connection with the given id' })
   public async sendBasicMessage(@Body() body: SendBasicMessageBodyDto): Promise<SentMessageDto> {
     const agent = await this.vsAgentService.getAgent()
-    await connectionOf(agent, body.connectionId)
 
     const record = await agent.didcomm.basicMessages.sendMessage(body.connectionId, body.content)
 
