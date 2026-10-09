@@ -159,35 +159,6 @@ describe('AuthorizationService', () => {
     expect(listVsOperatorAuthorizations).toHaveBeenCalledTimes(2)
   })
 
-  it('reports a feegrant for a with_feegrant record on an active entry, lapsed cycle included', async () => {
-    const { chain, indexer } = makeChain({
-      vsoas: [
-        {
-          id: 1,
-          corporationId: 7,
-          vsOperator: 'verana1agent',
-          records: [
-            {
-              participantId: 10,
-              msgTypes: [PP_SESSION],
-              withFeegrant: true,
-              expiration: past,
-              period: { seconds: 3600 },
-            },
-            { participantId: 11, msgTypes: [PP_SESSION], withFeegrant: false, expiration: future },
-          ],
-        },
-      ],
-    })
-    const authz = makeAuthz(chain, indexer)
-    await authz.refreshForOperator()
-
-    expect(authz.hasFeegrant(entry(10))).toBe(true)
-    expect(authz.hasFeegrant(entry(10, { revoked: past.toISOString() }))).toBe(false)
-    expect(authz.hasFeegrant(entry(11))).toBe(false)
-    expect(authz.hasFeegrant(entry(99))).toBe(false)
-  })
-
   it('checks operator and vs-operator grants on demand for the given account', async () => {
     const { chain, indexer, listOperatorAuthorizations } = makeChain()
     const authz = makeAuthz(chain, indexer)

@@ -165,7 +165,6 @@ describe('authorization cache (V4): indexer events drive grant -> activate -> re
         'the applicant entry',
       )
       expect(authz.canSign(pending, PP_SESSION)).toBe(false)
-      expect(authz.hasFeegrant(pending)).toBe(false)
 
       const digest = `sha384-${createHash('sha384').update(`cred-${RUN_ID}`).digest('base64')}`
       const validated = await veranaChain.setParticipantOPToValidated({
@@ -187,7 +186,6 @@ describe('authorization cache (V4): indexer events drive grant -> activate -> re
       expect(authz.canSign(active, PP_VALIDATE)).toBe(true)
       expect(authz.canSign(active, PP_SESSION)).toBe(true)
       expect(authz.canSign(active, PP_START_OP)).toBe(false)
-      expect(authz.hasFeegrant(active)).toBe(true)
 
       await expect(authz.callerHoldsOperatorGrant(chainA.address, PP_START_OP)).resolves.toBe(true)
       await expect(authz.callerHoldsOperatorGrant(opB.address, PP_START_OP)).resolves.toBe(false)

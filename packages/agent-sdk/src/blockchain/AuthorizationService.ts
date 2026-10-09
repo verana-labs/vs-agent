@@ -99,11 +99,6 @@ export class AuthorizationService {
     return [...this.vsoaByParticipant.values()]
   }
 
-  hasFeegrant(participant: ParticipantDto): boolean {
-    const record = this.vsoaByParticipant.get(participant.id)
-    return !!record && record.withFeegrant && isActiveParticipant(participant)
-  }
-
   async agentHoldsOperatorGrant(msgType: string): Promise<boolean> {
     return this.callerHoldsOperatorGrant(this.chain.address, msgType)
   }
