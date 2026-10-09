@@ -126,6 +126,22 @@ describe('setupOpenId4Vc', () => {
     )
   })
 
+  it('ignores an unsolicited wallet attestation only when no attestation roots are configured', () => {
+    const options = {
+      ...setupOptions(),
+      issuer: { walletAttestationCertificates: [fixtures.root.toString('base64')] },
+    }
+
+    expect(setupOpenId4Vc(setupOptions(), noIssuerService).modules.openId4Vc.config).toHaveProperty(
+      'issuer.ignoreWalletAttestationsWhenNotRequired',
+      true,
+    )
+    expect(setupOpenId4Vc(options, noIssuerService).modules.openId4Vc.config).toHaveProperty(
+      'issuer.ignoreWalletAttestationsWhenNotRequired',
+      false,
+    )
+  })
+
   it('mounts no type metadata, credential-offer or credential-exchange route', async () => {
     const setup = setupOpenId4Vc(setupOptions(), () => ({
       getJwtVcIssuerMetadata: () => ({}),
