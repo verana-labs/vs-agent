@@ -32,10 +32,10 @@ export class AdminAuthService {
   }): Promise<{ token: string; expiresAt: string } | undefined> {
     this.prune()
     const challenge = this.nonces.get(input.nonce)
+    this.nonces.delete(input.nonce)
     if (!challenge || challenge.account !== input.account || challenge.expiresAt < Date.now()) {
       return undefined
     }
-    this.nonces.delete(input.nonce)
 
     const valid = await verifyAdr036Signature({
       signer: input.account,

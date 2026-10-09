@@ -726,6 +726,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
       ...options.applicant,
     }
     const validator = { id: 93, effective_from: past, effective_until: null, revoked: null, slashed: null }
+    const grant = options.grant ?? { msgTypes: [SET_VALIDATED], withFeegrant: false }
     const chain = {
       corporation: 'verana1corp',
       setParticipantOPToValidatedMsg: vi.fn(params => ({ typeUrl: SET_VALIDATED, value: params })),
@@ -745,9 +746,8 @@ describe('VtFlowOrchestrator validateFlow', () => {
           ? undefined
           : {
               refreshForOperator: vi.fn(async () => undefined),
-              getVsOperatorAuthorizationRecord: vi.fn(
-                () => options.grant ?? { msgTypes: [SET_VALIDATED], withFeegrant: false },
-              ),
+              getVsOperatorAuthorizationRecord: vi.fn(() => grant),
+              canSign: vi.fn((_participant: unknown, msgType: string) => grant.msgTypes.includes(msgType)),
             },
       indexer: {
         getParticipant: vi.fn(async (id: string | number) => (Number(id) === 93 ? validator : applicant)),
@@ -797,6 +797,10 @@ describe('VtFlowOrchestrator validateFlow', () => {
       submission: 'AGENT',
       tx: { hash: 'AB12', status: 'SUBMITTED' },
     })
+    expect(agent.authorizationService?.canSign).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 93 }),
+      SET_VALIDATED,
+    )
   })
 
   it('records a failed pre-flight without broadcasting', async () => {
@@ -1416,6 +1420,64 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(markPendingClaims).toHaveBeenCalledWith('rec-v')
     expect(offer).not.toHaveBeenCalled()
     expect(agent.config.logger.error).toHaveBeenCalledWith(expect.stringContaining('/name must be string'))
+  })
+
+  function makeHolderOffer() {
+    const setup = makeValidateAgent({ state: 'VALIDATED' })
+    setup.agent.indexer.findParticipant.mockResolvedValue({
+      id: 94,
+      role: 6,
+      schemaId: 22,
+      did: 'did:web:applicant',
+      validatorParticipantId: 93,
+    } as never)
+    let release!: () => void
+    const held = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const offerCredentialForSession = vi.fn(async () => {
+      await held
+      Object.assign(setup.current(), { state: 'CRED_OFFERED' })
+      return { record: setup.current() }
+    })
+    Object.assign(setup.vtFlowApi, { offerCredentialForSession })
+    const orchestrator = (): VtFlowOrchestrator => {
+      const instance = new VtFlowOrchestrator(setup.agent as never)
+      ;(instance as unknown as { resolveJsonSchemaCredentialId: unknown }).resolveJsonSchemaCredentialId =
+        async () => JSC_ID
+      return instance
+    }
+    return { ...setup, orchestrator, offerCredentialForSession, release }
+  }
+
+  it('offers once when two callers continue the same VALIDATED HOLDER flow together', async () => {
+    const { orchestrator, offerCredentialForSession, release } = makeHolderOffer()
+
+    const runs = [
+      orchestrator().continueAfterValidated('rec-v'),
+      orchestrator().continueAfterValidated('rec-v'),
+    ]
+    await vi.waitFor(() => expect(offerCredentialForSession).toHaveBeenCalled())
+    release()
+    const records = await Promise.all(runs)
+
+    expect(offerCredentialForSession).toHaveBeenCalledTimes(1)
+    expect(records.map(record => record.state)).toEqual(['CRED_OFFERED', 'CRED_OFFERED'])
+  })
+
+  it('runs the next caller after a failed one instead of holding the flow', async () => {
+    const { agent, orchestrator, offerCredentialForSession, release } = makeHolderOffer()
+    agent.indexer.findParticipant.mockRejectedValueOnce(new Error('indexer unavailable'))
+    release()
+
+    const [failed, continued] = await Promise.allSettled([
+      orchestrator().continueAfterValidated('rec-v'),
+      orchestrator().continueAfterValidated('rec-v'),
+    ])
+
+    expect(failed).toMatchObject({ status: 'rejected', reason: { message: 'indexer unavailable' } })
+    expect(continued).toMatchObject({ status: 'fulfilled', value: { state: 'CRED_OFFERED' } })
+    expect(offerCredentialForSession).toHaveBeenCalledTimes(1)
   })
 
   it('repeats the anchoring of a credential only while its issuance transaction is FAILED', async () => {

@@ -4,6 +4,7 @@ import type { VeranaIndexerService } from '../src/blockchain/VeranaIndexerServic
 import { describe, expect, it, vi } from 'vitest'
 
 import { AuthorizationService } from '../src/blockchain/AuthorizationService'
+import { ParticipantRole, type ParticipantDto } from '../src/blockchain/types'
 
 const PP_VALIDATE = '/verana.pp.v1.MsgSetParticipantOPToValidated'
 const PP_SESSION = '/verana.pp.v1.MsgCreateOrUpdateParticipantSession'
@@ -34,8 +35,23 @@ function makeAuthz(chain: VeranaChainService, indexer: VeranaIndexerService) {
 const future = new Date(Date.now() + 3_600_000)
 const past = new Date(Date.now() - 1_000)
 
+function entry(id: number, overrides: Partial<ParticipantDto> = {}): ParticipantDto {
+  return {
+    id,
+    schema_id: 1,
+    did: null,
+    role: ParticipantRole.Issuer,
+    revoked: null,
+    slashed: null,
+    effective_from: past.toISOString(),
+    effective_until: null,
+    modified: past.toISOString(),
+    ...overrides,
+  }
+}
+
 describe('AuthorizationService', () => {
-  it('caches VSOA records per participant and gates canSign on msg type and expiration', async () => {
+  it('caches VSOA records per participant and gates canSign on msg type and an active entry', async () => {
     const { chain, indexer } = makeChain({
       vsoas: [
         {
@@ -58,50 +74,37 @@ describe('AuthorizationService', () => {
     const authz = makeAuthz(chain, indexer)
     await authz.refreshForOperator()
 
-    expect(authz.canSign(10, PP_VALIDATE)).toBe(true)
-    expect(authz.canSign(10, PP_SESSION)).toBe(true)
-    expect(authz.canSign(10, PP_START_OP)).toBe(false)
-    // Record 11 is disabled: StartParticipantOP grants expire immediately until validated.
-    expect(authz.canSign(11, PP_SESSION)).toBe(false)
-    expect(authz.canSign(12, PP_SESSION)).toBe(true)
-    expect(authz.canSign(99, PP_SESSION)).toBe(false)
+    expect(authz.canSign(entry(10), PP_VALIDATE)).toBe(true)
+    expect(authz.canSign(entry(10), PP_SESSION)).toBe(true)
+    expect(authz.canSign(entry(10), PP_START_OP)).toBe(false)
+    // a lapsed expiration ends a budget cycle, not the grant ([VSA-ADM-VT-FL-VALIDATE-4])
+    expect(authz.canSign(entry(11), PP_SESSION)).toBe(true)
+    expect(authz.canSign(entry(12), PP_SESSION)).toBe(true)
+    expect(authz.canSign(entry(99), PP_SESSION)).toBe(false)
     expect(authz.getVsOperatorAuthorizationRecord(10)?.corporationId).toBe(7)
     expect(authz.listVsOperatorAuthorizationRecords()).toHaveLength(3)
   })
 
-  it('treats a lapsed record with a period as active (chain auto-renews at check time)', async () => {
+  it('signs only for an active entry, whatever the record expiration says', async () => {
     const { chain, indexer } = makeChain({
       vsoas: [
         {
           id: 1,
           corporationId: 7,
           vsOperator: 'verana1agent',
-          records: [
-            {
-              participantId: 10,
-              msgTypes: [PP_SESSION],
-              withFeegrant: true,
-              expiration: past,
-              period: { seconds: 3600 },
-            },
-            {
-              participantId: 11,
-              msgTypes: [PP_SESSION],
-              withFeegrant: true,
-              expiration: past,
-              period: { seconds: 0 },
-            },
-          ],
+          records: [{ participantId: 10, msgTypes: [PP_SESSION], withFeegrant: false, expiration: past }],
         },
       ],
     })
     const authz = makeAuthz(chain, indexer)
     await authz.refreshForOperator()
 
-    expect(authz.canSign(10, PP_SESSION)).toBe(true)
-    expect(authz.hasFeegrant(10)).toBe(false)
-    expect(authz.canSign(11, PP_SESSION)).toBe(false)
-    expect(authz.hasFeegrant(11)).toBe(false)
+    expect(authz.canSign(entry(10), PP_SESSION)).toBe(true)
+    expect(authz.canSign(entry(10, { effective_from: null }), PP_SESSION)).toBe(false)
+    expect(authz.canSign(entry(10, { effective_from: future.toISOString() }), PP_SESSION)).toBe(false)
+    expect(authz.canSign(entry(10, { effective_until: past.toISOString() }), PP_SESSION)).toBe(false)
+    expect(authz.canSign(entry(10, { revoked: past.toISOString() }), PP_SESSION)).toBe(false)
+    expect(authz.canSign(entry(10, { slashed: past.toISOString() }), PP_SESSION)).toBe(false)
   })
 
   it('drops revoked records on refresh and immediately on invalidateParticipant', async () => {
@@ -116,10 +119,10 @@ describe('AuthorizationService', () => {
     ])
     const authz = makeAuthz(chain, indexer)
     await authz.refreshForOperator()
-    expect(authz.canSign(10, PP_SESSION)).toBe(true)
+    expect(authz.canSign(entry(10), PP_SESSION)).toBe(true)
 
     authz.invalidateParticipant(10)
-    expect(authz.canSign(10, PP_SESSION)).toBe(false)
+    expect(authz.canSign(entry(10), PP_SESSION)).toBe(false)
 
     listVsOperatorAuthorizations.mockResolvedValueOnce([])
     await authz.refreshForOperator()
@@ -154,29 +157,6 @@ describe('AuthorizationService', () => {
     // a revoke one block later must not be swallowed by the throttle
     await authz.refreshForOperator(413)
     expect(listVsOperatorAuthorizations).toHaveBeenCalledTimes(2)
-  })
-
-  it('reports feegrant presence only for active with_feegrant records', async () => {
-    const { chain, indexer } = makeChain({
-      vsoas: [
-        {
-          id: 1,
-          corporationId: 7,
-          vsOperator: 'verana1agent',
-          records: [
-            { participantId: 10, msgTypes: [PP_SESSION], withFeegrant: true, expiration: future },
-            { participantId: 11, msgTypes: [PP_SESSION], withFeegrant: true, expiration: past },
-            { participantId: 12, msgTypes: [PP_SESSION], withFeegrant: false, expiration: future },
-          ],
-        },
-      ],
-    })
-    const authz = makeAuthz(chain, indexer)
-    await authz.refreshForOperator()
-
-    expect(authz.hasFeegrant(10)).toBe(true)
-    expect(authz.hasFeegrant(11)).toBe(false)
-    expect(authz.hasFeegrant(12)).toBe(false)
   })
 
   it('checks operator and vs-operator grants on demand for the given account', async () => {

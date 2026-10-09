@@ -261,7 +261,7 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
     operatorChain = await startChain(COOLUSER_MNEMONIC)
     const validatorChain = await startChain(validatorOperator.mnemonic)
 
-    validator = await startFlowAgent('validator', validatorChain, [resolver])
+    validator = await startFlowAgent('validator', validatorChain, [resolver, ecosystemResolver])
     validator.authorizationService = new AuthorizationService({ chain: validatorChain, indexer, logger })
     // its own account keeps the TriggerResolver of the applicant off the sequence of the test signer
     applicant = await startFlowAgent('applicant', await startChain(applicantOperator.mnemonic), [

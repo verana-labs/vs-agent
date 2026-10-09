@@ -275,12 +275,7 @@ export class VtFlowService {
     })
 
     if (existing) {
-      if (isVtFlowTerminalState(existing.state)) {
-        throw new VtFlowError(
-          VtFlowErrorCode.InvalidParticipantSessionId,
-          `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
-        )
-      }
+      this.assertNotTerminated(existing)
       if (existing.applicantParticipantId !== message.participantId) {
         throw new VtFlowError(
           VtFlowErrorCode.InvalidParticipantSessionId,
@@ -288,34 +283,37 @@ export class VtFlowService {
         )
       }
       await this.assertSamePeer(agentContext, existing, connection)
-      const reconnected = existing.connectionTerminated
-      existing.connectionId = connection.id
-      existing.connectionTerminated = undefined
-      if (existing.threadId !== message.threadId) {
-        existing.threadId = message.threadId
-        if (message.claims) existing.claims = message.claims
-        if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
+      // the checks above await, and a chain notification can move the flow meanwhile
+      const fresh = await this.repository.getById(agentContext, existing.id)
+      this.assertNotTerminated(fresh)
+      const reconnected = fresh.connectionTerminated
+      fresh.connectionId = connection.id
+      fresh.connectionTerminated = undefined
+      if (fresh.threadId !== message.threadId) {
+        fresh.threadId = message.threadId
+        if (message.claims) fresh.claims = message.claims
+        if (message.proofsAttach) fresh.proofsAttach = message.proofsAttach
       }
-      if (isVtFlowRenewable(existing)) {
+      if (isVtFlowRenewable(fresh)) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
-        existing.oobLink = undefined
-        existing.validation = undefined
-        existing.issuance = undefined
-        await this.updateState(agentContext, existing, VtFlowState.AwaitingOr)
-      } else if (existing.state === VtFlowState.CredOffered) {
-        await this.releaseCredentialExchange(agentContext, existing)
-        await this.updateState(agentContext, existing, VtFlowState.Validated)
+        fresh.oobLink = undefined
+        fresh.validation = undefined
+        fresh.issuance = undefined
+        await this.updateState(agentContext, fresh, VtFlowState.AwaitingOr)
+      } else if (fresh.state === VtFlowState.CredOffered) {
+        await this.releaseCredentialExchange(agentContext, fresh)
+        await this.updateState(agentContext, fresh, VtFlowState.Validated)
       } else {
-        await this.repository.update(agentContext, existing)
+        await this.repository.update(agentContext, fresh)
         // [VSA-VTI-FLOW-OP-OR] checks every request, and [VSA-ADM-VT-FL-REJECT-2] issuance waits for this reconnection
         if (
-          existing.state === VtFlowState.AwaitingOr ||
-          (reconnected && existing.state === VtFlowState.Validated)
+          fresh.state === VtFlowState.AwaitingOr ||
+          (reconnected && fresh.state === VtFlowState.Validated)
         ) {
-          this.emitStateChanged(agentContext, existing, existing.state)
+          this.emitStateChanged(agentContext, fresh, fresh.state)
         }
       }
-      return existing
+      return fresh
     }
 
     await this.repository.save(agentContext, record)
@@ -353,12 +351,7 @@ export class VtFlowService {
     })
 
     if (existing) {
-      if (isVtFlowTerminalState(existing.state)) {
-        throw new VtFlowError(
-          VtFlowErrorCode.InvalidParticipantSessionId,
-          `vt-flow: participant_session_id '${message.participantSessionId}' collides with a terminated flow`,
-        )
-      }
+      this.assertNotTerminated(existing)
       if (existing.variant !== VtFlowVariant.DirectIssuance || existing.schemaId !== message.schemaId) {
         throw new VtFlowError(
           VtFlowErrorCode.InvalidParticipantSessionId,
@@ -366,15 +359,18 @@ export class VtFlowService {
         )
       }
       await this.assertSamePeer(agentContext, existing, connection)
-      existing.connectionId = connection.id
-      existing.threadId = message.threadId
-      if (existing.state === VtFlowState.CredOffered) {
-        await this.releaseCredentialExchange(agentContext, existing)
-        await this.updateState(agentContext, existing, VtFlowState.Validating)
+      // the checks above await, and an auto accept can move the flow meanwhile
+      const fresh = await this.repository.getById(agentContext, existing.id)
+      this.assertNotTerminated(fresh)
+      fresh.connectionId = connection.id
+      fresh.threadId = message.threadId
+      if (fresh.state === VtFlowState.CredOffered) {
+        await this.releaseCredentialExchange(agentContext, fresh)
+        await this.updateState(agentContext, fresh, VtFlowState.Validating)
       } else {
-        await this.repository.update(agentContext, existing)
+        await this.repository.update(agentContext, fresh)
       }
-      return existing
+      return fresh
     }
 
     await this.repository.save(agentContext, record)
@@ -1094,6 +1090,15 @@ export class VtFlowService {
     return !(previous?.theirDid && connection.theirDid && previous.theirDid !== connection.theirDid)
   }
 
+  private assertNotTerminated(record: VtFlowRecord): void {
+    if (isVtFlowTerminalState(record.state)) {
+      throw new VtFlowError(
+        VtFlowErrorCode.InvalidParticipantSessionId,
+        `vt-flow: participant_session_id '${record.participantSessionId}' collides with a terminated flow`,
+      )
+    }
+  }
+
   private async assertSamePeer(
     agentContext: AgentContext,
     record: VtFlowRecord,
@@ -1118,23 +1123,25 @@ export class VtFlowService {
     try {
       await this.checkIsVerifiableService(agentContext, connection, purpose)
     } catch (error) {
+      if (!(error instanceof VtFlowError)) throw error
+      // the check above awaits, and a chain notification can move the flow meanwhile
+      const latest = isNew ? record : await this.repository.getById(agentContext, record.id)
       if (
-        error instanceof VtFlowError &&
-        (isNew ||
-          (!isVtFlowTerminalState(record.state) && (await this.isSamePeer(agentContext, record, connection))))
+        isNew ||
+        (!isVtFlowTerminalState(latest.state) && (await this.isSamePeer(agentContext, latest, connection)))
       ) {
-        record.errorMessage = error.message
-        this.appendMessage(record, {
+        latest.errorMessage = error.message
+        this.appendMessage(latest, {
           type: VtFlowMessageType.ProblemReport,
           text: defaultEnglishDescription(error.code),
           at: new Date().toISOString(),
         })
         if (isNew) {
-          record.state = VtFlowState.Error
-          await this.repository.save(agentContext, record)
-          this.emitStateChanged(agentContext, record, null)
+          latest.state = VtFlowState.Error
+          await this.repository.save(agentContext, latest)
+          this.emitStateChanged(agentContext, latest, null)
         } else {
-          await this.updateState(agentContext, record, VtFlowState.Error)
+          await this.updateState(agentContext, latest, VtFlowState.Error)
         }
       }
       throw error
