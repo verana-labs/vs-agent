@@ -401,6 +401,23 @@ describe('v2 didcomm accept routes, over two agents', () => {
     expect(acceptedCredential.body.state).toBe('done')
 
     await untilRecordState(faberApp, 'credential-exchanges', faberId, 'done')
+
+    // The holder deletes the record. The credential stays in the store, per [VSA-ADM-DC-CE-DELETE].
+    const storedBefore = await aliceAgent.modules.anoncreds.getCredentials({ credentialDefinitionId })
+    expect(storedBefore.length).toBeGreaterThan(0)
+
+    const deleted = await alice().delete(`/v2/didcomm/credential-exchanges/${aliceId}`)
+    expect(deleted.status).toBe(204)
+    expect(deleted.text).toBe('')
+
+    const gone = await alice().get(`/v2/didcomm/credential-exchanges/${aliceId}`)
+    expect(gone.status).toBe(404)
+    expect(gone.body.error.code).toBe('UNKNOWN_ID')
+
+    const storedAfter = await aliceAgent.modules.anoncreds.getCredentials({ credentialDefinitionId })
+    expect(storedAfter.map(credential => credential.credentialId)).toEqual(
+      storedBefore.map(credential => credential.credentialId),
+    )
   }, 120_000)
 
   it('runs a presentation where each caller takes its own step', async () => {
