@@ -76,5 +76,4 @@ The event set is open. `EventEnvelope` covers the types the agent emits today an
 
 The spec lists these, main does not serve them yet:
 
-- `deleteCredentialExchange` (`DELETE /didcomm/credential-exchanges/{id}`)
 - every OpenID4VC method under `/openid4vc`
