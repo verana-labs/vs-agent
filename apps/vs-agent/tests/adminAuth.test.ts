@@ -16,6 +16,8 @@ import {
   parseTrustedNetworks,
 } from '../src/security/trustedNetworks'
 
+const AUDIENCE = 'https://admin.example.io'
+
 async function makeSigner() {
   const keypair = await Secp256k1.makeKeypair(sha256(toUtf8('admin-auth-test-seed')))
   const pubkey = Secp256k1.compressPubkey(keypair.pubkey)
@@ -38,7 +40,7 @@ async function makeSigner() {
 async function issueToken(authService: AdminAuthService) {
   const { signer, pubKey, sign } = await makeSigner()
   const { nonce } = authService.createChallenge(signer)
-  const signature = await sign(challengePayload(nonce))
+  const signature = await sign(challengePayload(AUDIENCE, nonce))
   const issued = await authService.issueToken({ account: signer, pubKey, signature, nonce })
   return { account: signer, token: issued!.token }
 }
@@ -73,7 +75,7 @@ function makeGuard(
 ): AdminAuthGuard {
   return new AdminAuthGuard(
     reflector,
-    options.authService ?? new AdminAuthService(),
+    options.authService ?? new AdminAuthService(AUDIENCE),
     options.authMode ?? 'internal',
     parseTrustedNetworks(options.trustedNetworks ?? DEFAULT_ADMIN_API_TRUSTED_NETWORKS),
     options.allowedAccounts ?? [],
@@ -82,10 +84,10 @@ function makeGuard(
 
 describe('AdminAuthService', () => {
   it('issues a token for a correctly signed challenge and rejects nonce reuse', async () => {
-    const authService = new AdminAuthService()
+    const authService = new AdminAuthService(AUDIENCE)
     const { signer, pubKey, sign } = await makeSigner()
     const { nonce } = authService.createChallenge(signer)
-    const signature = await sign(challengePayload(nonce))
+    const signature = await sign(`vs-agent-admin-auth:${AUDIENCE}:${nonce}`)
 
     const issued = await authService.issueToken({ account: signer, pubKey, signature, nonce })
     expect(issued?.token).toBeTruthy()
@@ -96,10 +98,28 @@ describe('AdminAuthService', () => {
   })
 
   it('rejects a signature over the wrong challenge', async () => {
-    const authService = new AdminAuthService()
+    const authService = new AdminAuthService(AUDIENCE)
     const { signer, pubKey, sign } = await makeSigner()
     const { nonce } = authService.createChallenge(signer)
-    const signature = await sign(challengePayload('other-nonce'))
+    const signature = await sign(challengePayload(AUDIENCE, 'other-nonce'))
+
+    await expect(authService.issueToken({ account: signer, pubKey, signature, nonce })).resolves.toBe(
+      undefined,
+    )
+  })
+
+  it('returns its own audience with the challenge', () => {
+    expect(new AdminAuthService(AUDIENCE).createChallenge('verana1caller').audience).toBe(AUDIENCE)
+  })
+
+  it.each([
+    ['another audience', (nonce: string) => challengePayload('https://other.example.io', nonce)],
+    ['the payload without an audience', (nonce: string) => `vs-agent-admin-auth:${nonce}`],
+  ])('rejects a signature over %s', async (_, payload) => {
+    const authService = new AdminAuthService(AUDIENCE)
+    const { signer, pubKey, sign } = await makeSigner()
+    const { nonce } = authService.createChallenge(signer)
+    const signature = await sign(payload(nonce))
 
     await expect(authService.issueToken({ account: signer, pubKey, signature, nonce })).resolves.toBe(
       undefined,
@@ -176,7 +196,7 @@ describe('AdminAuthGuard', () => {
   })
 
   it('rejects an external request with 403 in internal mode even when authenticated', async () => {
-    const authService = new AdminAuthService()
+    const authService = new AdminAuthService(AUDIENCE)
     const { token } = await issueToken(authService)
     const { reflector, context } = makeContext(undefined, { headers: { authorization: `Bearer ${token}` } })
     expect(() => makeGuard(reflector, { authService }).canActivate(context)).toThrow(ForbiddenException)
@@ -190,7 +210,7 @@ describe('AdminAuthGuard', () => {
   })
 
   it('denies an authenticated account when the allowlist is empty', async () => {
-    const authService = new AdminAuthService()
+    const authService = new AdminAuthService(AUDIENCE)
     const { token } = await issueToken(authService)
     const { reflector, context } = makeContext(undefined, { headers: { authorization: `Bearer ${token}` } })
     expect(() =>
@@ -201,7 +221,7 @@ describe('AdminAuthGuard', () => {
   })
 
   it('denies an authenticated account outside the allowlist and serves one inside it', async () => {
-    const authService = new AdminAuthService()
+    const authService = new AdminAuthService(AUDIENCE)
     const { account, token } = await issueToken(authService)
 
     const denied = makeContext(undefined, { headers: { authorization: `Bearer ${token}` } })
@@ -229,6 +249,11 @@ describe('AdminAuthGuard', () => {
 
     const rejected = makeContext('corporation')
     expect(() => makeGuard(rejected.reflector).canActivate(rejected.context)).toThrow(ForbiddenException)
+  })
+
+  it('refuses a corporation-exempt method in internal mode, to a trusted peer too', () => {
+    const { reflector, context } = makeContext('corporation', { remoteAddress: '127.0.0.1' })
+    expect(() => makeGuard(reflector).canActivate(context)).toThrow(ForbiddenException)
   })
 
   it('serves an always-exempt method to an external caller in both modes', () => {
