@@ -114,7 +114,8 @@ async function buildCredentialConfiguration(
     id: jsonSchemaCredentialId,
     format: 'dc+sd-jwt',
     vct: typeMetadataUrl(baseUrl, credentialSchemaId),
-    name: title ?? `vpr:verana:${chainId}:cs:${credentialSchemaId}`,
+    name:
+      typeof title === 'string' && title.trim() ? title : `vpr:verana:${chainId}:cs:${credentialSchemaId}`,
     // The issuer metadata carries it as the display description, which wallets show on the
     // credential. The served Type Metadata keeps it as its top-level `description` only.
     ...(typeof description === 'string' && description.trim() ? { description: description.trim() } : {}),

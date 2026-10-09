@@ -170,6 +170,7 @@ export interface JsonSchemaShape {
   description?: string
   /** The `credentialSubject` properties, in schema order. */
   attrNames: string[]
+  attrTitles: Map<string, string>
 }
 
 /** Reads the title, the description and the `credentialSubject` properties of a JSON Schema. */
@@ -177,13 +178,20 @@ export function readJsonSchema(jsonSchema: string | object): JsonSchemaShape {
   const parsed = (typeof jsonSchema === 'string' ? JSON.parse(jsonSchema) : jsonSchema) as {
     title?: string
     description?: string
-    properties?: { credentialSubject?: { properties?: Record<string, unknown> } }
+    properties?: { credentialSubject?: { properties?: Record<string, { title?: unknown } | null> } }
   }
+  const properties = parsed?.properties?.credentialSubject?.properties ?? {}
 
   return {
     title: parsed?.title,
     description: parsed?.description,
-    attrNames: Object.keys(parsed?.properties?.credentialSubject?.properties ?? {}).map(String),
+    attrNames: Object.keys(properties).map(String),
+    attrTitles: new Map(
+      Object.entries(properties).flatMap(([name, property]): [string, string][] => {
+        const title = property?.title
+        return typeof title === 'string' && title.trim() ? [[name, title]] : []
+      }),
+    ),
   }
 }
 

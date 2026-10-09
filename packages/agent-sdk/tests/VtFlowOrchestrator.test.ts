@@ -689,6 +689,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
       balance?: string
       claims?: Record<string, unknown>
       jsonSchema?: Record<string, unknown>
+      validityPeriod?: number
     } = {},
   ) {
     let flowRecord: Record<string, unknown> = {
@@ -763,7 +764,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
               },
             },
           ),
-          holder_validation_validity_period: 365,
+          holder_validation_validity_period: options.validityPeriod ?? 365,
         })),
       },
     }
@@ -884,6 +885,28 @@ describe('VtFlowOrchestrator validateFlow', () => {
       details: { violations: [expect.objectContaining({ message: expect.stringContaining('name') })] },
     })
     expect(vtFlowApi.recordValidation).not.toHaveBeenCalled()
+  })
+
+  it('requires effectiveUntil only when the schema requires validUntil and the role has no validity period', async () => {
+    const subject = {
+      type: 'object',
+      required: ['id', 'name'],
+      properties: { id: { type: 'string' }, name: { type: 'string' } },
+    }
+    const refused = makeValidateAgent({
+      applicant: { role: 'HOLDER' },
+      jsonSchema: { required: ['validUntil'], properties: { credentialSubject: subject } },
+      validityPeriod: 0,
+    })
+    await expect(
+      new VtFlowOrchestrator(refused.agent as never).validateFlow({ vtFlowRecordId: 'rec-v' }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    expect(refused.vtFlowApi.recordValidation).not.toHaveBeenCalled()
+
+    // the published ECS Organization schema requires no validUntil
+    const accepted = makeValidateAgent({ applicant: { role: 'HOLDER' }, validityPeriod: 0 })
+    await new VtFlowOrchestrator(accepted.agent as never).validateFlow({ vtFlowRecordId: 'rec-v' })
+    expect(accepted.vtFlowApi.recordValidation).toHaveBeenCalled()
   })
 
   it('keeps the agreed terms on a renewal and refuses a different one', async () => {

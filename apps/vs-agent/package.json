@@ -69,7 +69,7 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/swagger": "^8.0.7",
     "@openwallet-foundation/askar-nodejs": "^0.6.0",
-    "@verana-labs/verre": "0.4.2-dev.1",
+    "@verana-labs/verre": "0.4.2-dev.2",
     "@verana-labs/vs-agent-model": "workspace:*",
     "@verana-labs/vs-agent-plugin-openid4vc": "workspace:*",
     "@verana-labs/vs-agent-sdk": "workspace:*",

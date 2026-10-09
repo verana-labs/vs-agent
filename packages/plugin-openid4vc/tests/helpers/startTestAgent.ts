@@ -168,7 +168,7 @@ export async function createVerifierCertificate(
         new KeyUsagesExtension(KeyUsageFlags.digitalSignature, true),
         new SubjectAlternativeNameExtension([
           { type: 'url', value: did },
-          { type: 'dns', value: 'verifier.example' },
+          { type: 'dns', value: '127.0.0.1' },
         ]),
       ],
     },
@@ -459,6 +459,15 @@ async function startHolderAgent(
     resolvePresentationRequest: (authorizationRequest, trustedCertificates) =>
       holder.resolveOpenId4VpAuthorizationRequest(authorizationRequest, { trustedCertificates }),
     submitPresentation: async resolved => {
+      if (resolved.presentationExchange) {
+        const credentials = holder.selectCredentialsForPresentationExchangeRequest(
+          resolved.presentationExchange.credentialsForRequest,
+        )
+        return (await holder.acceptOpenId4VpAuthorizationRequest({
+          authorizationRequestPayload: resolved.authorizationRequestPayload,
+          presentationExchange: { credentials },
+        })) as TestHolderPresentation
+      }
       if (!resolved.dcql) throw new Error('authorization request did not contain a DCQL query')
       const credentials = holder.selectCredentialsForDcqlRequest(resolved.dcql.queryResult)
       return (await holder.acceptOpenId4VpAuthorizationRequest({

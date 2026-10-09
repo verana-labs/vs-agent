@@ -10,7 +10,8 @@ What it does:
   agent hosts no status list yet, so a credential carries no `status` claim and the `ttlSeconds`
   of its offer is its only bound;
 - OpenID4VP requests in DCQL (`direct_post.jwt`, `x509_hash` or DID client identifier) or, for a
-  wallet that predates DCQL, Presentation Exchange (`direct_post`);
+  wallet that predates DCQL, Presentation Exchange (`direct_post`, `x509_san_dns` or DID client
+  identifier, since draft 21 predates `x509_hash`);
 - the `/v2/openid4vc` Administration API scope: create an offer or a request, then list, read
   and delete.
 
