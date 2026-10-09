@@ -43,6 +43,14 @@ export class ChallengeResponseDto {
   audience!: string
 }
 
+export class TokenResponseDto {
+  @ApiProperty({ type: String, description: 'Bearer token for the Authorization header' })
+  token!: string
+
+  @ApiProperty({ type: String, description: 'ISO 8601 UTC datetime after which the token is rejected' })
+  expiresAt!: string
+}
+
 @ApiTags('v2/auth')
 @Controller({ path: 'auth', version: '2' })
 export class V2AuthController {
@@ -60,7 +68,8 @@ export class V2AuthController {
   @Post('token')
   @AdminAuthExempt('corporation')
   @ApiOperation({ summary: 'Exchange a signed challenge for a short-lived bearer token' })
-  async token(@Body() body: TokenRequestDto): Promise<{ token: string; expiresAt: string }> {
+  @ApiCreatedResponse({ type: TokenResponseDto })
+  async token(@Body() body: TokenRequestDto): Promise<TokenResponseDto> {
     const issued = await this.authService.issueToken(body)
     if (!issued) throw new UnauthorizedException('challenge verification failed')
     return issued
