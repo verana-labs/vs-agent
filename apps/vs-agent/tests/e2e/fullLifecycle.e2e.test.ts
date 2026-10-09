@@ -12,7 +12,7 @@ import {
   DidCommProofState,
   type DidCommProofStateChangedEvent,
 } from '@credo-ts/didcomm'
-import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh/anoncreds'
 import {
   ConsoleLogger,
   DidDocument,

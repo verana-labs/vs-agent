@@ -2,7 +2,10 @@ import type { BaseAgentModules, VsAgent } from '../agent/VsAgent'
 import type { AnonCredsProof } from '@credo-ts/anoncreds'
 import type { DidCommConnectionRecord, DidCommProofExchangeRecord } from '@credo-ts/didcomm'
 
-import { DidCommPresentationV1Message, DidCommPresentationV1ProblemReportMessage } from '@credo-ts/anoncreds'
+import {
+  DidCommPresentationV1Message,
+  DidCommPresentationV1ProblemReportMessage,
+} from '@credo-ts/anoncreds/didcomm'
 import { BaseLogger, CredoError } from '@credo-ts/core'
 import {
   DidCommCredentialEventTypes,
