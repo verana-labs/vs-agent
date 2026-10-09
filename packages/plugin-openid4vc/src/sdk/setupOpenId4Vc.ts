@@ -63,6 +63,7 @@ export function setupOpenId4Vc(
     issuer: {
       baseUrl: `${options.publicApiBaseUrl}/oid4vci`,
       walletAttestationsRequired: walletAttestationEnabled,
+      ignoreWalletAttestationsWhenNotRequired: !walletAttestationEnabled,
       credentialRequestToCredentialMapper: input => getIssuerService().mapCredentialRequest(input),
     },
     verifier: { baseUrl: `${options.publicApiBaseUrl}/oid4vp` },
