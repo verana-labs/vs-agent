@@ -492,6 +492,22 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(eventEmitter.emit).not.toHaveBeenCalled()
   })
 
+  it('validator refuses a request whose flow was terminated while the peer check ran', async () => {
+    const stored = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    const { service, repository, agentContext, eventEmitter, connectionRepository, release } =
+      holdPeerCheck(stored)
+
+    const receiving = service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+    await vi.waitFor(() => expect(connectionRepository.findById).toHaveBeenCalled())
+    stored.state = VtFlowState.TerminatedByValidator
+    release()
+
+    await expect(receiving).rejects.toMatchObject({ code: VtFlowErrorCode.InvalidParticipantSessionId })
+    expect(repository.update).not.toHaveBeenCalled()
+    expect(repository.save).not.toHaveBeenCalled()
+    expect(eventEmitter.emit).not.toHaveBeenCalled()
+  })
+
   it('validator fails the copy a notification moved to VALIDATED while the VS-CONN-VS check ran', async () => {
     const stored = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
     let release!: () => void
