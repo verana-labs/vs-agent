@@ -413,6 +413,105 @@ describe('IndexerWebSocketService', () => {
     expect((await loadSyncState(agent)).lastBlockHeight).toBe(100)
   })
 
+  describe('after a chain reset', () => {
+    const chainAt = (getHeight: () => Promise<number>): void => {
+      Object.assign(agent, { veranaChain: { getHeight } })
+    }
+    const catchUpCursors = (): number[] =>
+      fetchJsonMock.mock.calls.map(([url]) =>
+        Number(new URL(url as string).searchParams.get('after_block_height')),
+      )
+
+    beforeEach(async () => {
+      await saveSyncState(agent, {
+        lastBlockHeight: 100,
+        ecosystems: {},
+        credentialSchemas: {},
+        participants: {
+          '9': {
+            id: 9,
+            schemaId: 4,
+            did: 'did:web:agent.test',
+            role: 1,
+            revoked: false,
+            slashed: false,
+            lastModifiedBlock: 90,
+          },
+        },
+        partialBlock: 101,
+        partialKeys: ['old:0:TestMsg'],
+      })
+    })
+
+    it('syncs again from block 0 when the saved height is above the chain height', async () => {
+      chainAt(async () => 40)
+      fetchJsonMock.mockImplementation(async (url: string) => {
+        const after = Number(new URL(url).searchParams.get('after_block_height'))
+        if (after === 0) {
+          return {
+            events: [mkEvent({ block_height: 30, tx_hash: 'new30', entity_id: 'NEW' })],
+            count: 1,
+            after_block_height: 0,
+          }
+        }
+        return { events: [], count: 0, after_block_height: after }
+      })
+      const dispatched: string[] = []
+      await startWith(async a => {
+        dispatched.push(String(a.entity_id))
+      })
+
+      expect(catchUpCursors()).toEqual([0])
+      expect(dispatched).toEqual(['NEW'])
+
+      lastWs().emit(
+        'message',
+        blockFrame(41, [mkEvent({ block_height: 41, tx_hash: 'new41', entity_id: 'LIVE' })]),
+      )
+      await vi.waitFor(() => expect(dispatched).toEqual(['NEW', 'LIVE']))
+
+      const state = await loadSyncState(agent)
+      expect(state.lastBlockHeight).toBe(40)
+      expect(state.participants).toEqual({})
+      expect(state.partialKeys).toEqual(['new41:0:TestMsg'])
+      expect(agent.config.logger.warn).toHaveBeenCalledWith(expect.stringContaining('the chain was reset'))
+    })
+
+    it.each([100, 500])('keeps the saved height when the chain is at block %i', async chainHeight => {
+      chainAt(async () => chainHeight)
+      const dispatched: string[] = []
+      await startWith(async a => {
+        dispatched.push(String(a.entity_id))
+      })
+
+      lastWs().emit(
+        'message',
+        blockFrame(50, [mkEvent({ block_height: 50, tx_hash: 'old', entity_id: 'OLD' })]),
+      )
+      await new Promise(r => setTimeout(r, 30))
+
+      expect(catchUpCursors()).toEqual([100])
+      expect(dispatched).toEqual([])
+      const state = await loadSyncState(agent)
+      expect(state.lastBlockHeight).toBe(100)
+      expect(Object.keys(state.participants)).toEqual(['9'])
+    })
+
+    it('reconnects instead of catching up when the chain height cannot be read', async () => {
+      vi.useFakeTimers()
+      chainAt(async () => {
+        throw new Error('rpc down')
+      })
+      await startWith(async () => undefined)
+      const before = FakeWebSocket.instances.length
+
+      expect(catchUpCursors()).toEqual([])
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(FakeWebSocket.instances.length).toBeGreaterThan(before)
+      expect((await loadSyncState(agent)).lastBlockHeight).toBe(100)
+    })
+  })
+
   it('notifies for an event the agent cannot resolve, without changes', async () => {
     await startWith(async () => undefined)
     const ws = lastWs()

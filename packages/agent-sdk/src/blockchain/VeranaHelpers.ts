@@ -18,6 +18,10 @@ export async function loadSyncState(agent: VsAgent): Promise<VeranaSyncState> {
   return (record.content as unknown as VeranaSyncState) ?? emptyState()
 }
 
+export async function resetSyncState(agent: VsAgent): Promise<void> {
+  await saveSyncState(agent, emptyState())
+}
+
 export async function saveSyncState(agent: VsAgent, state: VeranaSyncState): Promise<void> {
   const existing = await agent.genericRecords.findById(RECORD_ID)
   if (existing) {

@@ -5,7 +5,7 @@ import WebSocket from 'ws'
 import { VsAgent } from '../agent/VsAgent'
 import { emitVsAgentEvent, VsAgentEventTypes } from '../events'
 
-import { loadSyncState, saveSyncState } from './VeranaHelpers'
+import { loadSyncState, resetSyncState, saveSyncState } from './VeranaHelpers'
 import { VeranaIndexerService } from './VeranaIndexerService'
 import { applyStateMutation, buildDefaultIndexerHandlerRegistry } from './handlers'
 import { IndexerHandlerRegistry } from './handlers/IndexerHandlerRegistry'
@@ -220,8 +220,7 @@ export class IndexerWebSocketService {
   private async syncRest(generation: number): Promise<void> {
     if (!this.options.agent.did) throw new Error('Agent does not have any defined public DID')
     const did = this.options.agent.did
-    const { lastBlockHeight } = await loadSyncState(this.options.agent)
-    let cursor = lastBlockHeight
+    let cursor = await this.runExclusive(() => this.resumeHeight())
 
     for (;;) {
       if (this.stopped || generation !== this.generation) return
@@ -242,6 +241,18 @@ export class IndexerWebSocketService {
     }
   }
 
+  private async resumeHeight(): Promise<number> {
+    const { lastBlockHeight } = await loadSyncState(this.options.agent)
+    const chainHeight = await this.options.agent.veranaChain?.getHeight()
+    if (chainHeight === undefined || lastBlockHeight <= chainHeight) return lastBlockHeight
+
+    this.logger.warn(
+      `[IndexerWS] Saved block height ${lastBlockHeight} is above the chain height ${chainHeight}, the chain was reset: syncing again from block 0`,
+    )
+    await resetSyncState(this.options.agent)
+    return 0
+  }
+
   private drainSyncBuffer(generation: number): void {
     const events = this.syncBuffer.splice(0)
     for (const event of sortEventsByPosition(events)) {
@@ -258,7 +269,7 @@ export class IndexerWebSocketService {
     })
   }
 
-  private runExclusive(task: () => Promise<void>): Promise<void> {
+  private runExclusive<T>(task: () => Promise<T>): Promise<T> {
     const result = this.chain.then(task)
     this.chain = result.then(
       () => undefined,

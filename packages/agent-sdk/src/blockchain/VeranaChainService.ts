@@ -166,6 +166,10 @@ export class VeranaChainService {
     return this.signingClient.getBalance(this.operatorAddress, denom)
   }
 
+  async getHeight(): Promise<number> {
+    return this.signingClient.getHeight()
+  }
+
   // Transaction API (signed)
   async startParticipantOP(
     params: StartParticipantOPParams,
