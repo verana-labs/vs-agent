@@ -38,6 +38,6 @@ async function main() {
 }
 
 main().catch((error: unknown) => {
-  process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`)
+  process.stderr.write(`${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`)
   process.exit(1)
 })
