@@ -206,25 +206,46 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
     expect(storedEntry(metadata, otherJsc).credential.validUntil).toBeUndefined()
   })
 
-  it('stops an Organization issuance, and anchors nothing, when the ISSUER entry has no effective_until', async () => {
-    const { agent, metadata, repositoryUpdate } = makeAgent()
-    const orgJsc = 'https://agent.example/vt/schemas-6-jsc.json'
-    const publishOrg = (beforePublish: () => Promise<void>, validUntil?: string) =>
-      publishSelfIssuedEcsPresentation(
-        agent as never,
-        'https://agent.example/vt/ecs-org-vtc-vp.json',
-        getEcsSchemas('https://agent.example'),
-        'ecs-org',
-        ['VerifiableCredential', 'VerifiableTrustCredential'],
-        { id: orgJsc, type: 'JsonSchemaCredential' },
-        ecsClaims,
-        beforePublish,
-        validUntil,
-      )
-    await publishOrg(async () => {}, '2027-09-25T10:00:00Z')
+  const orgJsc = 'https://agent.example/vt/schemas-6-jsc.json'
+  const publishOrg = (
+    agent: unknown,
+    ecsSchemas: Record<string, string>,
+    beforePublish: () => Promise<void>,
+    validUntil?: string,
+  ) =>
+    publishSelfIssuedEcsPresentation(
+      agent as never,
+      'https://agent.example/vt/ecs-org-vtc-vp.json',
+      ecsSchemas,
+      'ecs-org',
+      ['VerifiableCredential', 'VerifiableTrustCredential'],
+      { id: orgJsc, type: 'JsonSchemaCredential' },
+      ecsClaims,
+      beforePublish,
+      validUntil,
+    )
+  const requireValidUntil = (schemas: Record<string, string>): Record<string, string> => ({
+    ...schemas,
+    'ecs-org': JSON.stringify({ ...JSON.parse(schemas['ecs-org']), required: ['validUntil'] }),
+  })
+
+  it('issues an Organization credential without validUntil when its schema requires none', async () => {
+    const { agent, metadata } = makeAgent()
     const beforePublish = vi.fn(async () => {})
 
-    await expect(publishOrg(beforePublish)).rejects.toThrow('requires validUntil')
+    await publishOrg(agent, getEcsSchemas('https://agent.example'), beforePublish)
+
+    expect(beforePublish).toHaveBeenCalledTimes(1)
+    expect(storedEntry(metadata, orgJsc).credential.validUntil).toBeUndefined()
+  })
+
+  it('stops the issuance, and anchors nothing, when the schema requires validUntil and the ISSUER entry has no effective_until', async () => {
+    const { agent, metadata, repositoryUpdate } = makeAgent()
+    const ecsSchemas = requireValidUntil(getEcsSchemas('https://agent.example'))
+    await publishOrg(agent, ecsSchemas, async () => {}, '2027-09-25T10:00:00Z')
+    const beforePublish = vi.fn(async () => {})
+
+    await expect(publishOrg(agent, ecsSchemas, beforePublish)).rejects.toThrow('requires validUntil')
 
     expect(beforePublish).not.toHaveBeenCalled()
     expect(repositoryUpdate).toHaveBeenCalledTimes(1)

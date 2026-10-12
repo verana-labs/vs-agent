@@ -39,7 +39,7 @@
     "vitest": "^4.0.14"
   },
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": ">=22.12.0"
   },
   "resolutions": {
     "@types/node": "20.11.19",
