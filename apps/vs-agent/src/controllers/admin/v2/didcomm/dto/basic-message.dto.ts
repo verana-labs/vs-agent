@@ -59,6 +59,13 @@ export class BasicMessageRecordDto {
   })
   sentTime!: string
 
+  @ApiPropertyOptional({
+    description:
+      'Thread of the message. A basic message without a thread decorator is its own thread, so this ' +
+      'is the DIDComm message id to name in receipts and reactions.',
+  })
+  threadId?: string
+
   @ApiProperty({ type: String, format: 'date-time', description: 'When the agent stored the message' })
   createdAt!: Date
 }

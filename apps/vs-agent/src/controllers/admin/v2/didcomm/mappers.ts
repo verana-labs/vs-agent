@@ -27,6 +27,7 @@ export function toBasicMessageDto(record: DidCommBasicMessageRecord): BasicMessa
     role: record.role,
     content: record.content,
     sentTime: record.sentTime,
+    threadId: record.threadId,
     createdAt: record.createdAt,
   }
 }
