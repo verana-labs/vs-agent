@@ -21,6 +21,8 @@ import {
   RequestMrtdBody,
   RequestProfileBody,
   SendBasicMessageBody,
+  CreateOutOfBandInvitationBody,
+  CreateOutOfBandInvitationResponse,
   SendInvitationBody,
   SendInvitationResponse,
   SendMenuBody,
@@ -53,6 +55,12 @@ export class DidcommApi {
 
   public sendInvitation(body: SendInvitationBody): Promise<SendInvitationResponse> {
     return this.http.request('POST', '/didcomm/invitations', { body })
+  }
+
+  public createOutOfBandInvitation(
+    body: CreateOutOfBandInvitationBody = {},
+  ): Promise<CreateOutOfBandInvitationResponse> {
+    return this.http.request('POST', '/didcomm/out-of-band', { body })
   }
 
   public sendBasicMessage(body: SendBasicMessageBody): Promise<SentMessage> {

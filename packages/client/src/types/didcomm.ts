@@ -324,3 +324,21 @@ export interface CreateCredentialOfferResponse {
   /** Absent when the request named a `connectionId`. */
   shortUrl?: string
 }
+
+export interface CreateOutOfBandInvitationBody {
+  label?: string
+  imageUrl?: string
+  goal?: string
+  goalCode?: string
+  didcommVersion?: 'v1' | 'v2'
+  multiUse?: boolean
+  shortUrl?: boolean
+}
+
+export interface CreateOutOfBandInvitationResponse {
+  outOfBandId: string
+  invitationId: string
+  invitation: Record<string, unknown>
+  url: string
+  shortUrl?: string
+}
