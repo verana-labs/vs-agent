@@ -1,4 +1,5 @@
 import type { DidCommCredentialExchangeRecord, DidCommCredentialStateChangedEvent } from '@credo-ts/didcomm'
+import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
   Body,
@@ -33,6 +34,7 @@ import {
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
+import { isVtFlowTerminalState, VtFlowApi } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { connectionOf, createInvitation, ParticipantRole } from '@verana-labs/vs-agent-sdk'
 
 import {
@@ -544,10 +546,13 @@ export class V2DidcommCredentialExchangesController {
   })
   @ApiNoContentResponse({ description: 'The credential exchange record is deleted' })
   @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
+  @ApiConflictResponse({ description: 'A trust credential flow that is not terminal names the exchange' })
   public async deleteCredentialExchange(
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<void> {
     const agent = await this.vsAgentService.getAgent()
+
+    await this.requireNoLiveVtFlow(agent, credentialExchangeId)
 
     try {
       await agent.didcomm.credentials.deleteById(credentialExchangeId, {
@@ -558,6 +563,19 @@ export class V2DidcommCredentialExchangesController {
       if (error instanceof RecordNotFoundError) throw unknownCredentialExchange(credentialExchangeId)
       throw error
     }
+  }
+
+  /** [VSA-VT-LVP-3]: a flow that is not terminal finds its credential only through this exchange. */
+  private async requireNoLiveVtFlow(agent: VsAgent, credentialExchangeId: string): Promise<void> {
+    const vtFlowApi = agent.dependencyManager.resolve(VtFlowApi)
+    const [flow] = await vtFlowApi.findAllByQuery({ credentialExchangeRecordId: credentialExchangeId })
+    if (!flow || isVtFlowTerminalState(flow.state)) return
+
+    throw new AdminApiError(
+      AdminApiErrorCode.InvalidState,
+      HttpStatus.CONFLICT,
+      `credential exchange "${credentialExchangeId}" belongs to the trust credential flow "${flow.id}", which is in state "${flow.state}"`,
+    )
   }
 }
 

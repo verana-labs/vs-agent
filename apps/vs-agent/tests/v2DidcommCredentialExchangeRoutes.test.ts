@@ -10,6 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import { RecordNotFoundError } from '@credo-ts/core'
+import { VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
@@ -96,10 +97,13 @@ const anonCredsTrust = {
 
 const anonCredsOffer = { offer: { anoncreds: { cred_def_id: 'credDef:a', schema_id: 'schema:phone' } } }
 
+const vtFlowApi = { findAllByQuery: vi.fn() }
+
 const agent = {
   events,
   context: {},
   anonCredsTrust,
+  dependencyManager: { resolve: vi.fn() },
   modules: {
     anoncreds: {
       getCreatedCredentialDefinitions: vi.fn(),
@@ -164,6 +168,8 @@ describe('v2 didcomm credential exchange routes', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    agent.dependencyManager.resolve.mockReturnValue(vtFlowApi)
+    vtFlowApi.findAllByQuery.mockResolvedValue([])
     agent.didcomm.credentials.findAllByQuery.mockResolvedValue(records)
     agent.didcomm.credentials.getFormatData.mockResolvedValue({
       offerAttributes: [{ name: 'phoneNumber', value: '+57128348520' }],
@@ -913,6 +919,32 @@ describe('v2 didcomm credential exchange routes', () => {
 
       expect(response.status).toBe(404)
       expect(response.body.error.code).toBe('UNKNOWN_ID')
+    })
+
+    it('refuses the delete with INVALID_STATE while a flow that is not terminal names the exchange', async () => {
+      vtFlowApi.findAllByQuery.mockResolvedValue([{ id: 'flow-1', state: VtFlowState.Completed }])
+
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/ce-a')
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('INVALID_STATE')
+      expect(response.body.error.message).toContain('flow-1')
+      expect(agent.didcomm.credentials.deleteById).not.toHaveBeenCalled()
+    })
+
+    it('deletes the record when the flow that names the exchange is terminal', async () => {
+      vtFlowApi.findAllByQuery.mockResolvedValue([
+        { id: 'flow-1', state: VtFlowState.TerminatedByApplicant },
+      ])
+      agent.didcomm.credentials.deleteById.mockResolvedValue(undefined)
+
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/ce-a')
+
+      expect(response.status).toBe(204)
+      expect(agent.didcomm.credentials.deleteById).toHaveBeenCalledWith('ce-a', {
+        deleteAssociatedCredentials: false,
+        deleteAssociatedDidCommMessages: true,
+      })
     })
 
     it('does not collapse an unexpected storage failure into UNKNOWN_ID', async () => {
