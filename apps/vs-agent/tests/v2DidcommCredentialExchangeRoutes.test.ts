@@ -10,7 +10,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import { RecordNotFoundError } from '@credo-ts/core'
-import { VtFlowState } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  VtFlowRecord,
+  VtFlowRole,
+  VtFlowService,
+  VtFlowState,
+  VtFlowVariant,
+} from '@verana-labs/credo-ts-didcomm-vt-flow'
 import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
@@ -97,7 +103,46 @@ const anonCredsTrust = {
 
 const anonCredsOffer = { offer: { anoncreds: { cred_def_id: 'credDef:a', schema_id: 'schema:phone' } } }
 
-const vtFlowApi = { findAllByQuery: vi.fn() }
+const vtFlowApi = { findAllByQuery: vi.fn(), detachCredentialExchange: vi.fn() }
+
+const CREDENTIAL_ID = 'https://validator.example/credentials/1'
+
+function applicantFlow(credentialId?: string) {
+  return new VtFlowRecord({
+    threadId: 'thread-1',
+    participantSessionId: 'sess-1',
+    connectionId: 'conn-1',
+    role: VtFlowRole.Applicant,
+    state: VtFlowState.TerminatedByValidator,
+    variant: VtFlowVariant.OnboardingProcess,
+    agentParticipantId: '0',
+    walletAgentParticipantId: '0',
+    applicantParticipantId: '12',
+    credentialExchangeRecordId: 'ce-a',
+    credentialId,
+  })
+}
+
+// The real service writes the record, so the test sees what the endpoint leaves for the cleanup.
+function vtFlowApiOver(flow: VtFlowRecord) {
+  const repository = {
+    getById: async () => flow,
+    findById: async () => flow,
+    findByQuery: async () => [flow],
+    update: vi.fn(),
+  }
+  const service = new VtFlowService(
+    repository as never,
+    { emit: vi.fn() } as never,
+    { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+    {} as never,
+  )
+  return {
+    findAllByQuery: () => service.findAllByQuery({} as never, {}),
+    detachCredentialExchange: (id: string, credentialId?: string) =>
+      service.detachCredentialExchange({} as never, id, credentialId),
+  }
+}
 
 const agent = {
   events,
@@ -952,6 +997,53 @@ describe('v2 didcomm credential exchange routes', () => {
 
       expect(response.status).toBe(500)
       expect(response.body.error.code).toBe('INTERNAL')
+    })
+
+    it('refuses the delete when the flow that is not terminal is not the first match', async () => {
+      vtFlowApi.findAllByQuery.mockResolvedValue([
+        { id: 'flow-old', state: VtFlowState.TerminatedByApplicant },
+        { id: 'flow-live', state: VtFlowState.CredOffered },
+      ])
+
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/ce-a')
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('INVALID_STATE')
+      expect(response.body.error.message).toContain('flow-live')
+      expect(agent.didcomm.credentials.deleteById).not.toHaveBeenCalled()
+    })
+
+    it('keeps the credential id of an older applicant flow and releases the exchange', async () => {
+      const flow = applicantFlow()
+      agent.dependencyManager.resolve.mockReturnValue(vtFlowApiOver(flow))
+      agent.didcomm.credentials.getFormatData.mockResolvedValue({
+        credential: { dataIntegrity: { credential: { id: CREDENTIAL_ID } } },
+      })
+      agent.didcomm.credentials.deleteById.mockResolvedValue(undefined)
+
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/ce-a')
+
+      expect(response.status).toBe(204)
+      expect(agent.didcomm.credentials.getFormatData).toHaveBeenCalledWith('ce-a')
+      expect(agent.didcomm.credentials.deleteById).toHaveBeenCalledWith('ce-a', {
+        deleteAssociatedCredentials: false,
+        deleteAssociatedDidCommMessages: true,
+      })
+      expect(flow.credentialId).toBe(CREDENTIAL_ID)
+      expect(flow.credentialExchangeRecordId).toBeUndefined()
+    })
+
+    it('reads no exchange when the applicant flow already has the credential id', async () => {
+      const flow = applicantFlow(CREDENTIAL_ID)
+      agent.dependencyManager.resolve.mockReturnValue(vtFlowApiOver(flow))
+      agent.didcomm.credentials.deleteById.mockResolvedValue(undefined)
+
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/ce-a')
+
+      expect(response.status).toBe(204)
+      expect(agent.didcomm.credentials.getFormatData).not.toHaveBeenCalled()
+      expect(flow.credentialId).toBe(CREDENTIAL_ID)
+      expect(flow.credentialExchangeRecordId).toBeUndefined()
     })
   })
 })
