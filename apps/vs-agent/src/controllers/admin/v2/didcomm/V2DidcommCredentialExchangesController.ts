@@ -1,5 +1,4 @@
 import type { DidCommCredentialExchangeRecord, DidCommCredentialStateChangedEvent } from '@credo-ts/didcomm'
-import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import {
   Body,
@@ -34,8 +33,13 @@ import {
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
-import { isVtFlowTerminalState, VtFlowApi } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { connectionOf, createInvitation, ParticipantRole } from '@verana-labs/vs-agent-sdk'
+import { isVtFlowTerminalState, VtFlowApi, VtFlowRole } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  connectionOf,
+  createInvitation,
+  findExchangeCredentialId,
+  ParticipantRole,
+} from '@verana-labs/vs-agent-sdk'
 
 import {
   AdminApiError,
@@ -551,8 +555,25 @@ export class V2DidcommCredentialExchangesController {
     @Param('credentialExchangeId') credentialExchangeId: string,
   ): Promise<void> {
     const agent = await this.vsAgentService.getAgent()
+    const vtFlowApi = agent.dependencyManager.resolve(VtFlowApi)
 
-    await this.requireNoLiveVtFlow(agent, credentialExchangeId)
+    const flows = await vtFlowApi.findAllByQuery({ credentialExchangeRecordId: credentialExchangeId })
+
+    // [VSA-VT-LVP-3]: this exchange is the only link to the credential of a flow that is not in a
+    // terminal state.
+    const liveFlow = flows.find(flow => !isVtFlowTerminalState(flow.state))
+    if (liveFlow) {
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidState,
+        HttpStatus.CONFLICT,
+        `credential exchange "${credentialExchangeId}" belongs to the trust credential flow "${liveFlow.id}", which is in state "${liveFlow.state}"`,
+      )
+    }
+
+    const applicantFlows = flows.filter(flow => flow.role === VtFlowRole.Applicant)
+    const retainedCredentialId = applicantFlows.some(flow => !flow.credentialId)
+      ? await findExchangeCredentialId(agent, credentialExchangeId)
+      : undefined
 
     try {
       await agent.didcomm.credentials.deleteById(credentialExchangeId, {
@@ -563,19 +584,10 @@ export class V2DidcommCredentialExchangesController {
       if (error instanceof RecordNotFoundError) throw unknownCredentialExchange(credentialExchangeId)
       throw error
     }
-  }
 
-  /** [VSA-VT-LVP-3]: a flow that is not terminal finds its credential only through this exchange. */
-  private async requireNoLiveVtFlow(agent: VsAgent, credentialExchangeId: string): Promise<void> {
-    const vtFlowApi = agent.dependencyManager.resolve(VtFlowApi)
-    const [flow] = await vtFlowApi.findAllByQuery({ credentialExchangeRecordId: credentialExchangeId })
-    if (!flow || isVtFlowTerminalState(flow.state)) return
-
-    throw new AdminApiError(
-      AdminApiErrorCode.InvalidState,
-      HttpStatus.CONFLICT,
-      `credential exchange "${credentialExchangeId}" belongs to the trust credential flow "${flow.id}", which is in state "${flow.state}"`,
-    )
+    for (const flow of applicantFlows) {
+      await vtFlowApi.detachCredentialExchange(flow.id, flow.credentialId ?? retainedCredentialId)
+    }
   }
 }
 
