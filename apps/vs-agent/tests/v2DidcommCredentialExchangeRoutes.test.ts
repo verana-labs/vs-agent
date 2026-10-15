@@ -933,9 +933,7 @@ describe('v2 didcomm credential exchange routes', () => {
     })
 
     it('deletes the record when the flow that names the exchange is terminal', async () => {
-      vtFlowApi.findAllByQuery.mockResolvedValue([
-        { id: 'flow-1', state: VtFlowState.TerminatedByApplicant },
-      ])
+      vtFlowApi.findAllByQuery.mockResolvedValue([{ id: 'flow-1', state: VtFlowState.TerminatedByApplicant }])
       agent.didcomm.credentials.deleteById.mockResolvedValue(undefined)
 
       const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/ce-a')
