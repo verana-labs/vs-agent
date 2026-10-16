@@ -131,6 +131,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
   const adminApp = await NestFactory.create(
     VsAgentModule.register(agent, publicApiBaseUrl, nestPlugins, {
       authMode: ADMIN_API_AUTH_MODE,
+      publicUrl: ADMIN_API_PUBLIC_URL,
       allowedAccounts: ADMIN_API_CORPORATION_ALLOWED_ACCOUNTS,
       trustedNetworks,
       bootstrapState,
