@@ -510,6 +510,14 @@ export class VtFlowApi {
     return this.vtFlowService.setEcsSchemaKey(this.agentContext, vtFlowRecordId, ecsSchemaKey)
   }
 
+  public setCredentialId(vtFlowRecordId: string, credentialId: string): Promise<VtFlowRecord> {
+    return this.vtFlowService.setCredentialId(this.agentContext, vtFlowRecordId, credentialId)
+  }
+
+  public detachCredentialExchange(vtFlowRecordId: string, credentialId?: string): Promise<VtFlowRecord> {
+    return this.vtFlowService.detachCredentialExchange(this.agentContext, vtFlowRecordId, credentialId)
+  }
+
   public updateClaims(vtFlowRecordId: string, claims: Record<string, unknown>): Promise<VtFlowRecord> {
     return this.vtFlowService.updateClaims(this.agentContext, vtFlowRecordId, claims)
   }

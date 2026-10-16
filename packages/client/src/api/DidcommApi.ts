@@ -207,5 +207,10 @@ export class DidcommApi {
     )
   }
 
-  // deleteCredentialExchange [VSA-ADM-DC-CE-DELETE] has no handler on main yet
+  public deleteCredentialExchange(credentialExchangeId: string): Promise<void> {
+    return this.http.request(
+      'DELETE',
+      `/didcomm/credential-exchanges/${encodeURIComponent(credentialExchangeId)}`,
+    )
+  }
 }

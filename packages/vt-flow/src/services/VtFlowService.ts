@@ -293,8 +293,10 @@ export class VtFlowService {
       existing.connectionTerminated = undefined
       if (existing.threadId !== message.threadId) {
         existing.threadId = message.threadId
-        if (message.claims) existing.claims = message.claims
-        if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
+        if (existing.state === VtFlowState.AwaitingOr || isVtFlowRenewable(existing)) {
+          if (message.claims) existing.claims = message.claims
+          if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
+        }
       }
       if (isVtFlowRenewable(existing)) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
@@ -835,6 +837,36 @@ export class VtFlowService {
     const record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Applicant)
     record.ecsSchemaKey = ecsSchemaKey
+    await this.repository.update(agentContext, record)
+    return record
+  }
+
+  /** The applicant keeps the id of the credential that the flow delivered. A renewal replaces it. */
+  public async setCredentialId(
+    agentContext: AgentContext,
+    recordId: string,
+    credentialId: string,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Applicant)
+    record.credentialId = credentialId
+    await this.repository.update(agentContext, record)
+    return record
+  }
+
+  /**
+   * The applicant keeps the credential id and releases the exchange.
+   * The caller then deletes that exchange.
+   */
+  public async detachCredentialExchange(
+    agentContext: AgentContext,
+    recordId: string,
+    credentialId?: string,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Applicant)
+    if (credentialId) record.credentialId = credentialId
+    record.credentialExchangeRecordId = undefined
     await this.repository.update(agentContext, record)
     return record
   }

@@ -57,8 +57,6 @@ export class V2DidcommUserProfileController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async requestProfile(@Body() body: RequestProfileBodyDto): Promise<SentMessageDto> {
-    await connectionOf(this.agent, body.connectionId)
-
     const { messageId } = await this.agent.modules.userProfile.requestUserProfile({
       connectionId: body.connectionId,
       query: body.query as DidCommUserProfileKey[] | undefined,

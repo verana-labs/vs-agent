@@ -3,6 +3,7 @@ import type { DidCommCredentialExchangeRecord, DidCommCredentialStateChangedEven
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -19,10 +20,12 @@ import {
   DidCommCredentialEventTypes,
   DidCommCredentialState,
 } from '@credo-ts/didcomm'
+import { RecordNotFoundError } from '@credo-ts/core'
 import {
   ApiBody,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -30,7 +33,13 @@ import {
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger'
-import { connectionOf, createInvitation, ParticipantRole } from '@verana-labs/vs-agent-sdk'
+import { isVtFlowTerminalState, VtFlowApi, VtFlowRole } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import {
+  connectionOf,
+  createInvitation,
+  findExchangeCredentialId,
+  ParticipantRole,
+} from '@verana-labs/vs-agent-sdk'
 
 import {
   AdminApiError,
@@ -523,6 +532,65 @@ export class V2DidcommCredentialExchangesController {
     if (!record) throw unknownCredentialExchange(credentialExchangeId)
 
     return toCredentialExchangeDto(agent, record, this.logger)
+  }
+
+  @Delete('credential-exchanges/:credentialExchangeId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Delete a credential exchange',
+    description:
+      'Deletes a credential exchange record, along with the DIDComm messages it accumulated. It ' +
+      'does not delete a stored credential, and it does not revoke an issued credential.',
+  })
+  @ApiParam({
+    name: 'credentialExchangeId',
+    type: String,
+    description: 'Exchange identifier',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  @ApiNoContentResponse({ description: 'The credential exchange record is deleted' })
+  @ApiNotFoundResponse({ description: 'No credential exchange with the given id' })
+  @ApiConflictResponse({ description: 'A trust credential flow that is not terminal names the exchange' })
+  public async deleteCredentialExchange(
+    @Param('credentialExchangeId') credentialExchangeId: string,
+  ): Promise<void> {
+    const agent = await this.vsAgentService.getAgent()
+    const vtFlowApi = agent.dependencyManager.resolve(VtFlowApi)
+
+    const flows = await vtFlowApi.findAllByQuery({ credentialExchangeRecordId: credentialExchangeId })
+
+    // [VSA-VT-LVP-3]: this exchange is the only link to the credential of a flow that is not in a
+    // terminal state.
+    const liveFlow = flows.find(flow => !isVtFlowTerminalState(flow.state))
+    if (liveFlow) {
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidState,
+        HttpStatus.CONFLICT,
+        `credential exchange "${credentialExchangeId}" belongs to the trust credential flow "${liveFlow.id}", which is in state "${liveFlow.state}"`,
+      )
+    }
+
+    const exchange = await agent.didcomm.credentials.findById(credentialExchangeId)
+    if (!exchange) throw unknownCredentialExchange(credentialExchangeId)
+
+    const applicantFlows = flows.filter(flow => flow.role === VtFlowRole.Applicant)
+    const retainedCredentialId = applicantFlows.some(flow => !flow.credentialId)
+      ? await findExchangeCredentialId(agent, credentialExchangeId)
+      : undefined
+
+    for (const flow of applicantFlows) {
+      await vtFlowApi.detachCredentialExchange(flow.id, flow.credentialId ?? retainedCredentialId)
+    }
+
+    try {
+      await agent.didcomm.credentials.deleteById(credentialExchangeId, {
+        deleteAssociatedCredentials: false,
+        deleteAssociatedDidCommMessages: true,
+      })
+    } catch (error) {
+      if (error instanceof RecordNotFoundError) throw unknownCredentialExchange(credentialExchangeId)
+      throw error
+    }
   }
 }
 
