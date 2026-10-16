@@ -31,6 +31,7 @@ import {
   DidCommFeatureQueryOptions,
   DidCommModule,
   DidCommModuleConfigOptions,
+  DidCommOutOfBandRole,
   DidCommProofsModuleConfigOptions,
   DidCommProofV2Protocol,
 } from '@credo-ts/didcomm'
@@ -49,6 +50,7 @@ import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { ParentConnectionModule } from '../connections/ParentConnectionModule'
 import { connectionEvents } from '../events/ConnectionEvents'
 import { vtFlowEvents } from '../events/VtFlowEvents'
+import { createInvitation } from '../utils/agent'
 import { EcsClaims } from '../utils/ecsClaims'
 
 const MANAGED_DIDCOMM_SERVICE_TYPES: readonly string[] = [DidCommV1Service.type, NewDidCommV2Service.type]
@@ -248,6 +250,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           throw new CredoError(`Agent DID method not supported: ${parsedDid.method}`)
         }
 
+        await this.ensureSharedPublicDidInvitation()
         return
       }
 
@@ -297,7 +300,21 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         this.logger?.debug('Existing DID record found. No updates')
       }
       this.did = existingRecord.did
+      await this.ensureSharedPublicDidInvitation()
     }
+  }
+
+  // Credo refuses implicit connections to a public DID that the agent dialed peers from, unless a
+  // shared invitation names it. This one keeps the public DID open and is never shown.
+  private async ensureSharedPublicDidInvitation(): Promise<void> {
+    const agent = this as VsAgent
+    if (!agent.did || !agent.didcomm.config.didcommVersions.includes('v2')) return
+
+    const [invitation] = await agent.didcomm.oob.findAllByQuery(
+      { role: DidCommOutOfBandRole.Sender, recipientDid: agent.did, sharedRecipientDid: true },
+      { limit: 1 },
+    )
+    if (!invitation) await createInvitation({ agent })
   }
 
   private async findCreatedDid(parsedDid: ParsedDid) {

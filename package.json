@@ -54,7 +54,7 @@
       "@2060.io/credo-ts-didcomm-reactions@0.1.1": "patches/@2060.io__credo-ts-didcomm-reactions@0.1.1.patch",
       "@2060.io/credo-ts-didcomm-receipts@0.1.1": "patches/@2060.io__credo-ts-didcomm-receipts@0.1.1.patch",
       "@2060.io/credo-ts-didcomm-user-profile@0.1.0": "patches/@2060.io__credo-ts-didcomm-user-profile@0.1.0.patch",
-      "@credo-ts/action-menu@0.8.0-pr-2704-20261008215556": "patches/@credo-ts__action-menu@0.8.0-pr-2704-20261008215556.patch",
+      "@credo-ts/action-menu@0.8.0-pr-2704-20261016160242": "patches/@credo-ts__action-menu@0.8.0-pr-2704-20261016160242.patch",
       "@2060.io/credo-ts-didcomm-media-sharing@0.1.1": "patches/@2060.io__credo-ts-didcomm-media-sharing@0.1.1.patch"
     },
     "overrides": {

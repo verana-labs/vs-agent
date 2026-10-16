@@ -22,7 +22,7 @@ import { WebVhAnonCredsRegistry } from '@credo-ts/webvh/anoncreds'
 import { ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
-import { Subject } from 'rxjs'
+import { filter, firstValueFrom, Subject } from 'rxjs'
 import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -954,19 +954,6 @@ describe('v2 didcomm accept routes, over two agents', () => {
       return connectionRecord
     }
 
-    /**
-     * The inviter closes a connection with a rotation to nothing. Therefore the peer keeps the
-     * record, but without the DID of the inviter.
-     */
-    const untilTerminated = async (agent: VsAgent<BaseAgentModules>, name: string, connectionId: string) => {
-      for (let attempt = 0; attempt < 80; attempt++) {
-        const record = await agent.didcomm.connections.findById(connectionId)
-        if (record && record.theirDid === undefined) return record
-        await new Promise(resolve => setTimeout(resolve, 250))
-      }
-      throw new Error(`${name} keeps connection ${connectionId} open`)
-    }
-
     const sentBy = async (app: () => request.SuperTest<request.Test>, body: Record<string, unknown>) => {
       const sendMessage = vi.spyOn(faberAgent.dependencyManager.resolve(DidCommMessageSender), 'sendMessage')
       try {
@@ -1084,10 +1071,15 @@ describe('v2 didcomm accept routes, over two agents', () => {
       const child = await untilFaberConnection({ outOfBandId: response.body.outOfBandId })
       expect(child.getTag('parentConnectionId')).toBe(v2Parent.id)
 
+      const refusal = firstValueFrom(
+        faberAgent.events
+          .observable('AgentReceiveMessageError')
+          .pipe(filter(({ payload }) => String(payload).includes('No connection associated'))),
+      )
       const refused = await connectFromUrl(charlieAgent, 'Charlie', url, 'the second use')
+      await refusal
 
-      const terminated = await untilTerminated(charlieAgent, 'Charlie', refused.id)
-      expect(terminated.previousTheirDids?.length).toBeGreaterThan(0)
+      expect(await faberAgent.didcomm.connections.findAllByQuery({ theirDid: refused.did })).toHaveLength(0)
 
       const surviving = await faberAgent.didcomm.connections.findAllByOutOfBandId(response.body.outOfBandId)
       expect(surviving.map(record => record.id)).toEqual([child.id])
