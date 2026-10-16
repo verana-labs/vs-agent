@@ -6,7 +6,6 @@ import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestj
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
 import { AcceptCallBodyDto, CallThreadBodyDto, OfferCallBodyDto, SentMessageDto } from './dto'
-import { connectionOf } from '@verana-labs/vs-agent-sdk'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/calls', version: '2' })
@@ -19,8 +18,7 @@ export class V2DidcommCallsController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async offerCall(@Body() body: OfferCallBodyDto): Promise<SentMessageDto> {
-    const api = await this.callsApi(body.connectionId)
-    const { messageId } = await api.offer({
+    const { messageId } = await this.agent.modules.calls.offer({
       connectionId: body.connectionId,
       callType: body.callType as DidCommCallType,
       parameters: body.parameters,
@@ -37,8 +35,7 @@ export class V2DidcommCallsController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async acceptCall(@Body() body: AcceptCallBodyDto): Promise<SentMessageDto> {
-    const api = await this.callsApi(body.connectionId)
-    const { messageId } = await api.accept({
+    const { messageId } = await this.agent.modules.calls.accept({
       connectionId: body.connectionId,
       threadId: body.threadId,
       parameters: body.parameters,
@@ -52,8 +49,10 @@ export class V2DidcommCallsController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async rejectCall(@Body() body: CallThreadBodyDto): Promise<SentMessageDto> {
-    const api = await this.callsApi(body.connectionId)
-    const { messageId } = await api.reject({ connectionId: body.connectionId, threadId: body.threadId })
+    const { messageId } = await this.agent.modules.calls.reject({
+      connectionId: body.connectionId,
+      threadId: body.threadId,
+    })
 
     return { id: messageId }
   }
@@ -63,15 +62,11 @@ export class V2DidcommCallsController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async endCall(@Body() body: CallThreadBodyDto): Promise<SentMessageDto> {
-    const api = await this.callsApi(body.connectionId)
-    const { messageId } = await api.hangup({ connectionId: body.connectionId, threadId: body.threadId })
+    const { messageId } = await this.agent.modules.calls.hangup({
+      connectionId: body.connectionId,
+      threadId: body.threadId,
+    })
 
     return { id: messageId }
-  }
-
-  private async callsApi(connectionId: string) {
-    await connectionOf(this.agent, connectionId)
-
-    return this.agent.modules.calls
   }
 }

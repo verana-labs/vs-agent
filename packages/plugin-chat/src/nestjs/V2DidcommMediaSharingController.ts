@@ -6,7 +6,6 @@ import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestj
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
 import { SentMessageDto, ShareMediaBodyDto } from './dto'
-import { connectionOf } from '@verana-labs/vs-agent-sdk'
 
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/media-sharing', version: '2' })
@@ -22,8 +21,6 @@ export class V2DidcommMediaSharingController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async shareMedia(@Body() body: ShareMediaBodyDto): Promise<SentMessageDto> {
-    await connectionOf(this.agent, body.connectionId)
-
     const items = body.items.map(item => new SharedMediaItem(item))
     const record = await this.agent.modules.media.create({
       connectionId: body.connectionId,
