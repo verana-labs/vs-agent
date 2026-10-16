@@ -933,6 +933,10 @@ describe('v2 didcomm credential exchange routes', () => {
   })
 
   describe('deleteCredentialExchange', () => {
+    beforeEach(() => {
+      agent.didcomm.credentials.findById.mockResolvedValue(records[0])
+    })
+
     it('deletes the record and its DIDComm messages, and keeps the stored credential', async () => {
       agent.didcomm.credentials.deleteById.mockResolvedValue(undefined)
 
@@ -955,12 +959,26 @@ describe('v2 didcomm credential exchange routes', () => {
       expect(events.emit).not.toHaveBeenCalled()
     })
 
-    it('reports a delete of an unknown credential exchange as UNKNOWN_ID', async () => {
+    it('reports a delete of an unknown credential exchange as UNKNOWN_ID, and writes no flow', async () => {
+      const flow = applicantFlow()
+      agent.dependencyManager.resolve.mockReturnValue(vtFlowApiOver(flow))
+      agent.didcomm.credentials.findById.mockResolvedValue(null)
+
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/nope')
+
+      expect(response.status).toBe(404)
+      expect(response.body.error.code).toBe('UNKNOWN_ID')
+      expect(agent.didcomm.credentials.deleteById).not.toHaveBeenCalled()
+      expect(flow.credentialId).toBeUndefined()
+      expect(flow.credentialExchangeRecordId).toBe('ce-a')
+    })
+
+    it('reports UNKNOWN_ID when the exchange goes away between the check and the delete', async () => {
       agent.didcomm.credentials.deleteById.mockRejectedValue(
         new RecordNotFoundError('not found', { recordType: 'DidCommCredentialExchangeRecord' }),
       )
 
-      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/nope')
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/ce-a')
 
       expect(response.status).toBe(404)
       expect(response.body.error.code).toBe('UNKNOWN_ID')
@@ -1031,6 +1049,20 @@ describe('v2 didcomm credential exchange routes', () => {
       })
       expect(flow.credentialId).toBe(CREDENTIAL_ID)
       expect(flow.credentialExchangeRecordId).toBeUndefined()
+    })
+
+    it('keeps the credential id on the flow when the delete fails', async () => {
+      const flow = applicantFlow()
+      agent.dependencyManager.resolve.mockReturnValue(vtFlowApiOver(flow))
+      agent.didcomm.credentials.getFormatData.mockResolvedValue({
+        credential: { dataIntegrity: { credential: { id: CREDENTIAL_ID } } },
+      })
+      agent.didcomm.credentials.deleteById.mockRejectedValue(new Error('askar rejected the write'))
+
+      const response = await request(app.getHttpServer()).delete('/v2/didcomm/credential-exchanges/ce-a')
+
+      expect(response.status).toBe(500)
+      expect(flow.credentialId).toBe(CREDENTIAL_ID)
     })
 
     it('reads no exchange when the applicant flow already has the credential id', async () => {

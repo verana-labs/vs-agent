@@ -570,10 +570,17 @@ export class V2DidcommCredentialExchangesController {
       )
     }
 
+    const exchange = await agent.didcomm.credentials.findById(credentialExchangeId)
+    if (!exchange) throw unknownCredentialExchange(credentialExchangeId)
+
     const applicantFlows = flows.filter(flow => flow.role === VtFlowRole.Applicant)
     const retainedCredentialId = applicantFlows.some(flow => !flow.credentialId)
       ? await findExchangeCredentialId(agent, credentialExchangeId)
       : undefined
+
+    for (const flow of applicantFlows) {
+      await vtFlowApi.detachCredentialExchange(flow.id, flow.credentialId ?? retainedCredentialId)
+    }
 
     try {
       await agent.didcomm.credentials.deleteById(credentialExchangeId, {
@@ -583,10 +590,6 @@ export class V2DidcommCredentialExchangesController {
     } catch (error) {
       if (error instanceof RecordNotFoundError) throw unknownCredentialExchange(credentialExchangeId)
       throw error
-    }
-
-    for (const flow of applicantFlows) {
-      await vtFlowApi.detachCredentialExchange(flow.id, flow.credentialId ?? retainedCredentialId)
     }
   }
 }
