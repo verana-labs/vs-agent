@@ -1,7 +1,8 @@
-import { DidCommMrtdApi } from '@2060.io/credo-ts-didcomm-mrtd'
+import type { MrtdAgentModules } from '../types'
+import type { VsAgent } from '@verana-labs/vs-agent-sdk'
+
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger'
-import { connectionOf, moduleService, VsAgent } from '@verana-labs/vs-agent-sdk'
 import { IsNotEmpty, IsString } from 'class-validator'
 
 export class RequestMrtdBodyDto {
@@ -23,7 +24,7 @@ export class SentMrtdMessageDto {
 @Controller({ path: 'didcomm/mrtd', version: '2' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class V2DidcommMrtdController {
-  public constructor(@Inject('VSAGENT') private readonly agent: VsAgent<any>) {}
+  public constructor(@Inject('VSAGENT') private readonly agent: VsAgent<MrtdAgentModules>) {}
 
   @Post('request-mrz')
   @ApiOperation({
@@ -33,8 +34,7 @@ export class V2DidcommMrtdController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMrtdMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async requestMrz(@Body() body: RequestMrtdBodyDto): Promise<SentMrtdMessageDto> {
-    const api = await this.mrtdApi(body.connectionId)
-    const { messageId } = await api.requestMrzString({ connectionId: body.connectionId })
+    const { messageId } = await this.agent.modules.mrtd.requestMrzString({ connectionId: body.connectionId })
 
     return { id: messageId }
   }
@@ -47,16 +47,8 @@ export class V2DidcommMrtdController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMrtdMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async requestEmrtdData(@Body() body: RequestMrtdBodyDto): Promise<SentMrtdMessageDto> {
-    const api = await this.mrtdApi(body.connectionId)
-    const { messageId } = await api.requestEMrtdData({ connectionId: body.connectionId })
+    const { messageId } = await this.agent.modules.mrtd.requestEMrtdData({ connectionId: body.connectionId })
 
     return { id: messageId }
-  }
-
-  private async mrtdApi(connectionId: string): Promise<DidCommMrtdApi> {
-    const api = moduleService(this.agent, DidCommMrtdApi, 'mrtd')
-    await connectionOf(this.agent, connectionId)
-
-    return api
   }
 }

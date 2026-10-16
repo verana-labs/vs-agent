@@ -1083,9 +1083,13 @@ export class VtFlowOrchestrator {
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(vtFlowRecordId)
     if (!record || record.role !== VtFlowRole.Applicant) return
-    if (!this.options.publicApiBaseUrl || !record.credentialExchangeRecordId) return
+    if (!this.options.publicApiBaseUrl) return
+    if (!record.credentialId && !record.credentialExchangeRecordId) return
 
-    const credentialId = await removeStoredTrustCredential(this.agent, record.credentialExchangeRecordId)
+    const credentialId = await removeStoredTrustCredential(this.agent, {
+      credentialId: record.credentialId,
+      credentialExchangeRecordId: record.credentialExchangeRecordId,
+    })
     if (credentialId) {
       this.agent.config.logger.info(
         `[vt-flow] removed revoked credential and its linked VP (${credentialId})`,
@@ -1192,6 +1196,11 @@ export class VtFlowOrchestrator {
       record.ecsSchemaKey ? linkedVpSchemaId(record.ecsSchemaKey) : schemaBaseId,
       credential,
     )
+
+    // [VSA-VT-LVP-3]: the record keeps the id of the published credential.
+    // Then the agent can remove that credential without the exchange.
+    const credentialId = (credentialJson as { id?: unknown }).id
+    if (typeof credentialId === 'string') await vtFlowApi.setCredentialId(record.id, credentialId)
   }
 
   private extractSchemaBaseId(jscUrl: string): string | undefined {

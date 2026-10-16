@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 
+import { RecordNotFoundError } from '@credo-ts/core'
 import { ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
@@ -30,8 +31,7 @@ const records = [
 ]
 
 const basicMessages = { sendMessage: vi.fn(), findAllByQuery: vi.fn() }
-const connections = { findById: vi.fn() }
-const vsAgentService = { getAgent: vi.fn().mockResolvedValue({ didcomm: { basicMessages, connections } }) }
+const vsAgentService = { getAgent: vi.fn().mockResolvedValue({ didcomm: { basicMessages } }) }
 
 const idsOf = (body: { items: { id: string }[] }) => body.items.map(item => item.id)
 
@@ -58,7 +58,6 @@ describe('v2 didcomm basic message routes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     basicMessages.findAllByQuery.mockResolvedValue(records)
-    connections.findById.mockResolvedValue({ id: 'conn-1' })
   })
 
   it('sends a message on the connection and answers with the record id', async () => {
@@ -75,16 +74,22 @@ describe('v2 didcomm basic message routes', () => {
     expect(basicMessages.sendMessage).toHaveBeenCalledWith('conn-1', 'hello')
   })
 
-  it('reports an unknown connection as UNKNOWN_ID and sends nothing', async () => {
-    connections.findById.mockResolvedValue(null)
+  it('reports the connection that the agent did not find as UNKNOWN_ID', async () => {
+    basicMessages.sendMessage.mockRejectedValue(
+      new RecordNotFoundError('record with id "nope" not found', {
+        recordType: 'DidCommConnectionRecord',
+      }),
+    )
 
     const response = await request(app.getHttpServer())
       .post('/v2/didcomm/basic-messages')
       .send({ connectionId: 'nope', content: 'hello' })
 
     expect(response.status).toBe(404)
-    expect(response.body.error.code).toBe('UNKNOWN_ID')
-    expect(basicMessages.sendMessage).not.toHaveBeenCalled()
+    expect(response.body.error).toEqual({
+      code: 'UNKNOWN_ID',
+      message: 'no record with the supplied identifier',
+    })
   })
 
   it('rejects a body without content, or with an empty one', async () => {

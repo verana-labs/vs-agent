@@ -332,7 +332,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     [VtFlowState.Completed, 6],
     [VtFlowState.Validated, 1],
     [VtFlowState.CredRevoked, 6],
-  ])('validator renewal from %s drops the validation and issuance of the previous round', async (state, role) => {
+  ])('validator renewal from %s drops the previous round and takes the new claims', async (state, role) => {
     const messages = [{ type: VtFlowMessageType.Validating, text: 'ok', at: '2026-01-01T00:00:00.000Z' }]
     const tx = { hash: 'AA', status: VtFlowTxStatus.Succeeded }
     const existing = makeRecord({
@@ -349,13 +349,16 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
       theirDid: 'did:web:agent-peer',
     })
 
-    const record = await service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+    const context = makeMessageContext(agentContext)
+    context.message.claims = { name: 'Acme Renewed' }
+
+    const record = await service.processReceiveOnboardingRequest(context as never)
 
     expect(record.state).toBe(VtFlowState.AwaitingOr)
     expect(record.validation).toBeUndefined()
     expect(record.issuance).toBeUndefined()
     expect(record.messages).toEqual(messages)
-    expect(record.claims).toEqual({ name: 'Acme' })
+    expect(record.claims).toEqual({ name: 'Acme Renewed' })
   })
 
   it('validator keeps a flow in VALIDATED when the applicant resends its request', async () => {
@@ -555,6 +558,31 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     await expect(
       service.processReceiveOnboardingRequest(makeMessageContext(agentContext, 'did:web:attacker') as never),
     ).rejects.toThrow(/peer does not match/)
+  })
+
+  it.each([
+    VtFlowState.Validating,
+    VtFlowState.AwaitingValidationTx,
+    VtFlowState.ValidatedPendingClaims,
+    VtFlowState.Validated,
+  ])('validator keeps its claims when the applicant resends on a new thread in %s', async state => {
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state,
+      applicantParticipantRole: 6,
+      claims: { name: 'Acme' },
+    })
+    const { service, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+    const context = makeMessageContext(agentContext)
+    context.message.claims = { name: 'Someone Else' }
+
+    const record = await service.processReceiveOnboardingRequest(context as never)
+
+    expect(record.claims).toEqual({ name: 'Acme' })
+    expect(record.state).toBe(state)
   })
 
   it('validator keeps its edited claims when the applicant resends the same thread', async () => {

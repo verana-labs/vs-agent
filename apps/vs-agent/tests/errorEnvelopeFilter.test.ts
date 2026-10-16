@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 
+import { RecordNotFoundError } from '@credo-ts/core'
 import { Body, Controller, Get, HttpStatus, NotFoundException, Post, ValidationPipe } from '@nestjs/common'
 import { APP_GUARD } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
@@ -57,6 +58,13 @@ class V2DidcommFixtureController {
     return body
   }
 
+  @Post('basic-messages')
+  sendBasicMessage(): never {
+    throw new RecordNotFoundError('record with id "nope" not found', {
+      recordType: 'DidCommConnectionRecord',
+    })
+  }
+
   @Get('boom')
   boom(): never {
     throw new Error('askar storage is corrupted at /var/lib/agent/wallet.db')
@@ -106,6 +114,7 @@ describe('v2 error envelope', () => {
         VsAgentService,
         { provide: 'VSAGENT', useValue: { isInitialized: true } },
         { provide: 'ADMIN_AUTH_MODE', useValue: 'internal' },
+        { provide: 'ADMIN_API_PUBLIC_URL', useValue: undefined },
         { provide: 'ADMIN_TRUSTED_NETWORKS', useValue: parseTrustedNetworks(['127.0.0.0/8', '::1/128']) },
         { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: [] },
         { provide: BOOTSTRAP_STATE, useValue: bootstrapState },
@@ -133,6 +142,15 @@ describe('v2 error envelope', () => {
     expect(response.status).toBe(404)
     expect(response.body).toEqual({
       error: { code: 'UNKNOWN_ID', message: 'no connection with the given id' },
+    })
+  })
+
+  it('answers UNKNOWN_ID for the record that the agent did not find, and names no record type', async () => {
+    const response = await request(app.getHttpServer()).post('/v2/didcomm/basic-messages')
+
+    expect(response.status).toBe(404)
+    expect(response.body).toEqual({
+      error: { code: 'UNKNOWN_ID', message: 'no record with the supplied identifier' },
     })
   })
 
@@ -205,6 +223,7 @@ describe('v2 error envelope', () => {
         VsAgentService,
         { provide: 'VSAGENT', useValue: { isInitialized: true } },
         { provide: 'ADMIN_AUTH_MODE', useValue: 'corporation' },
+        { provide: 'ADMIN_API_PUBLIC_URL', useValue: 'https://admin.example.io' },
         { provide: 'ADMIN_TRUSTED_NETWORKS', useValue: [] },
         { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: [] },
         { provide: BOOTSTRAP_STATE, useValue: new BootstrapState() },

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import { verifyAdr036Signature } from '@verana-labs/vs-agent-sdk'
 import { randomBytes } from 'crypto'
 
@@ -6,14 +6,17 @@ const NONCE_TTL_MS = 120_000
 const MAX_PENDING_NONCES = 1_000
 const TOKEN_TTL_MS = 900_000
 
-export const challengePayload = (nonce: string): string => `vs-agent-admin-auth:${nonce}`
+export const challengePayload = (audience: string, nonce: string): string =>
+  `vs-agent-admin-auth:${audience}:${nonce}`
 
 @Injectable()
 export class AdminAuthService {
   private readonly nonces = new Map<string, { account: string; expiresAt: number }>()
   private readonly tokens = new Map<string, { account: string; expiresAt: number }>()
 
-  createChallenge(account: string): { nonce: string; expiresAt: string } {
+  constructor(@Inject('ADMIN_API_PUBLIC_URL') private readonly audience: string) {}
+
+  createChallenge(account: string): { nonce: string; expiresAt: string; audience: string } {
     this.prune()
     if (this.nonces.size >= MAX_PENDING_NONCES) {
       this.nonces.delete(this.nonces.keys().next().value as string)
@@ -21,7 +24,7 @@ export class AdminAuthService {
     const nonce = randomBytes(32).toString('base64url')
     const expiresAt = Date.now() + NONCE_TTL_MS
     this.nonces.set(nonce, { account, expiresAt })
-    return { nonce, expiresAt: new Date(expiresAt).toISOString() }
+    return { nonce, expiresAt: new Date(expiresAt).toISOString(), audience: this.audience }
   }
 
   async issueToken(input: {
@@ -41,7 +44,7 @@ export class AdminAuthService {
       signer: input.account,
       pubKey: input.pubKey,
       signature: input.signature,
-      data: challengePayload(input.nonce),
+      data: challengePayload(this.audience, input.nonce),
     })
     if (!valid) return undefined
 
