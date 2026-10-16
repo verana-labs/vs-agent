@@ -293,8 +293,10 @@ export class VtFlowService {
       existing.connectionTerminated = undefined
       if (existing.threadId !== message.threadId) {
         existing.threadId = message.threadId
-        if (message.claims) existing.claims = message.claims
-        if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
+        if (existing.state === VtFlowState.AwaitingOr || isVtFlowRenewable(existing)) {
+          if (message.claims) existing.claims = message.claims
+          if (message.proofsAttach) existing.proofsAttach = message.proofsAttach
+        }
       }
       if (isVtFlowRenewable(existing)) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
