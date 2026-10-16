@@ -841,6 +841,36 @@ export class VtFlowService {
     return record
   }
 
+  /** The applicant keeps the id of the credential that the flow delivered. A renewal replaces it. */
+  public async setCredentialId(
+    agentContext: AgentContext,
+    recordId: string,
+    credentialId: string,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Applicant)
+    record.credentialId = credentialId
+    await this.repository.update(agentContext, record)
+    return record
+  }
+
+  /**
+   * The applicant keeps the credential id and releases the exchange.
+   * The caller then deletes that exchange.
+   */
+  public async detachCredentialExchange(
+    agentContext: AgentContext,
+    recordId: string,
+    credentialId?: string,
+  ): Promise<VtFlowRecord> {
+    const record = await this.repository.getById(agentContext, recordId)
+    record.assertRole(VtFlowRole.Applicant)
+    if (credentialId) record.credentialId = credentialId
+    record.credentialExchangeRecordId = undefined
+    await this.repository.update(agentContext, record)
+    return record
+  }
+
   public async setCredentialDigest(
     agentContext: AgentContext,
     recordId: string,

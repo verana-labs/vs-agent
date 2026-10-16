@@ -314,9 +314,13 @@ export async function removeHolderTrustCredentialIfRevoked(
   const service = agentContext.dependencyManager.resolve(VtFlowService)
   const records = await service.findAllByQuery(agentContext, { applicantParticipantId: participantId })
   for (const record of records) {
-    if (record.role !== VtFlowRole.Applicant || !record.credentialExchangeRecordId) continue
+    if (record.role !== VtFlowRole.Applicant) continue
+    if (!record.credentialId && !record.credentialExchangeRecordId) continue
     try {
-      const credentialId = await removeStoredTrustCredential(agent, record.credentialExchangeRecordId)
+      const credentialId = await removeStoredTrustCredential(agent, {
+        credentialId: record.credentialId,
+        credentialExchangeRecordId: record.credentialExchangeRecordId,
+      })
       if (credentialId) {
         agent.config.logger.info(
           `[IndexerWS] Removed linked VP and stored credential ${credentialId} (participant=${participantId})`,
