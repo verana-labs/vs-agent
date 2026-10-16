@@ -221,6 +221,23 @@ export const setupAgent = async ({
   return { agent, verifyPeer }
 }
 
+/**
+ * The OpenAPI document of a Nest app of the agent. Served at /api by commonAppConfig, and
+ * exported to docs/api/openapi.json by scripts/export-openapi.ts for the Admin API.
+ */
+export function buildOpenApiDocument(app: INestApplication, adminTags: Record<string, string> = {}) {
+  const builder = new DocumentBuilder()
+    .setTitle('API Documentation')
+    .setDescription('API Documentation')
+    .setVersion('1.0')
+
+  for (const [name, description] of Object.entries(adminTags)) {
+    builder.addTag(name, description)
+  }
+
+  return SwaggerModule.createDocument(app, builder.build())
+}
+
 export function commonAppConfig(
   app: INestApplication,
   cors?: boolean,
@@ -234,18 +251,7 @@ export function commonAppConfig(
   })
 
   // Swagger
-  const builder = new DocumentBuilder()
-    .setTitle('API Documentation')
-    .setDescription('API Documentation')
-    .setVersion('1.0')
-
-  if (!publicApp) {
-    for (const [name, description] of Object.entries(adminTags)) {
-      builder.addTag(name, description)
-    }
-  }
-
-  const document = SwaggerModule.createDocument(app, builder.build())
+  const document = buildOpenApiDocument(app, publicApp ? {} : adminTags)
 
   if (serveSwagger && (!publicApp || ENABLE_PUBLIC_API_SWAGGER)) SwaggerModule.setup('api', app, document)
 

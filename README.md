@@ -83,6 +83,10 @@ This can be used regardless the software stack you use in your backend. The API 
 
 ---
 
+## Admin API reference
+
+A running agent serves the Swagger UI of its Admin API at `/api` on the admin port. The same OpenAPI document, with every optional scope enabled, is committed at [`docs/api/openapi.json`](./docs/api/openapi.json) so that [docs.verana.io](https://docs.verana.io) and other consumers read it from the repository. Regenerate it with `pnpm build && pnpm openapi:export`; CI fails when the committed file is stale.
+
 ## Example implementations
 
 See [examples](./examples) for fully working demos that can be run locally using Docker.

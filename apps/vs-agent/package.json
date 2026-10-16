@@ -53,7 +53,8 @@
     "start:prod": "node build/src/main",
     "version": "pnpm version --allow-same-version",
     "test": "vitest",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "openapi:export": "node build/src/scripts/export-openapi.js"
   },
   "dependencies": {
     "@2060.io/credo-ts-didcomm-media-sharing": "0.1.1",

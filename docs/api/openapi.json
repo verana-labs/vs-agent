@@ -1,0 +1,4638 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/v2/auth/challenge": {
+      "post": {
+        "operationId": "V2AuthController_challenge_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChallengeRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Request an ADR-036 signature challenge for a Verana account",
+        "tags": [
+          "v2/auth"
+        ]
+      }
+    },
+    "/v2/auth/token": {
+      "post": {
+        "operationId": "V2AuthController_token_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Exchange a signed challenge for a short-lived bearer token",
+        "tags": [
+          "v2/auth"
+        ]
+      }
+    },
+    "/v2/agent/info": {
+      "get": {
+        "description": "Identifies this VS Agent instance by the DID it created on its first startup.",
+        "operationId": "V2AgentController_getAgentInfo_v2",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The agent identified itself",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentInfoDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get agent information",
+        "tags": [
+          "v2/agent"
+        ]
+      }
+    },
+    "/v2/agent/health/live": {
+      "get": {
+        "description": "Answers as soon as the HTTP listener accepts a connection. Never fails because an external dependency failed.",
+        "operationId": "V2AgentController_getLiveness_v2",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The agent process is alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivenessDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A bootstrap step failed beyond recovery"
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "v2/agent"
+        ]
+      }
+    },
+    "/v2/agent/health/ready": {
+      "get": {
+        "description": "Answers 200 once every bootstrap step completed and the agent is up to date with the indexer.",
+        "operationId": "V2AgentController_getReadiness_v2",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The agent is ready to serve",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A bootstrap step is still pending"
+          }
+        },
+        "summary": "Readiness probe",
+        "tags": [
+          "v2/agent"
+        ]
+      }
+    },
+    "/v2/didcomm/protocols": {
+      "get": {
+        "description": "Returns the protocol modules that this deployment serves.",
+        "operationId": "V2DidcommController_listProtocols_v2",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "One record per served module",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProtocolModuleDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List protocols",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/basic-messages": {
+      "post": {
+        "description": "Sends a text message on an established connection.",
+        "operationId": "V2DidcommBasicMessagesController_sendBasicMessage_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendBasicMessageBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The message record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id"
+          }
+        },
+        "summary": "Send a basic message",
+        "tags": [
+          "v2/didcomm"
+        ]
+      },
+      "get": {
+        "description": "Returns the message records, filtered when the caller supplies a filter.",
+        "operationId": "V2DidcommBasicMessagesController_listBasicMessages_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by connection",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the role of the agent in the message",
+            "schema": {
+              "enum": [
+                "sender",
+                "receiver"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of message records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasicMessageRecordPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List basic messages",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/presentation-request": {
+      "post": {
+        "description": "Creates a Presentation Request. The body names the credentials, and the attributes of them, that the holder is asked to present. An entry that omits `attributes` asks for every attribute the schema defines. With a `connectionId` the agent sends the request on that connection and answers with neither `invitation` nor `shortUrl`; without one it mints an Out-of-Band invitation.",
+        "operationId": "V2DidcommPresentationsController_createPresentationRequest_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePresentationRequestBodyDto"
+              },
+              "examples": {
+                "byCredentialDefinition": {
+                  "summary": "By credentialDefinitionId",
+                  "value": {
+                    "requestedCredentials": [
+                      {
+                        "credentialDefinitionId": "did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmevazUUyXBhGoXJwJNNEqXgvPPQ5WrwTE8G5MdhfWsmxM",
+                        "attributes": [
+                          "phoneNumber"
+                        ]
+                      }
+                    ],
+                    "requireNonRevocation": false
+                  }
+                },
+                "byJsonSchemaCredential": {
+                  "summary": "By jsonSchemaCredentialId, every attribute",
+                  "value": {
+                    "requestedCredentials": [
+                      {
+                        "jsonSchemaCredentialId": "https://dm.gov-id-tr.demos.dev.2060.io/vt/schemas-gov-id-jsc.json"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The presentation request invitation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePresentationRequestResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create a presentation request",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/presentations/{proofExchangeId}/accept-request": {
+      "post": {
+        "description": "Accepts a presentation request that a peer sent to this agent, and presents the matching credentials from the credential store of the agent. The agent selects the credentials.",
+        "operationId": "V2DidcommPresentationsController_acceptPresentationRequest_v2",
+        "parameters": [
+          {
+            "name": "proofExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Presentation flow identifier",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The updated presentation record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresentationRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No presentation with the given id"
+          },
+          "409": {
+            "description": "The exchange is not in state `request-received`, no credential set satisfies the request, or `PEER_NOT_AUTHORIZED`: the verifier holds no active VERIFIER `Participant` for the `CredentialSchema` of a requested credential"
+          },
+          "503": {
+            "description": "`RESOLVER_UNAVAILABLE`: the agent cannot complete the check"
+          }
+        },
+        "summary": "Accept a presentation request",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/presentations/{proofExchangeId}/accept-presentation": {
+      "post": {
+        "description": "Acknowledges a received presentation as verifier, and completes the exchange. This method does not change the verification result: the agent verified the presentation when it received it, and stored the result in `verified`.",
+        "operationId": "V2DidcommPresentationsController_acceptPresentation_v2",
+        "parameters": [
+          {
+            "name": "proofExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Presentation flow identifier",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The updated presentation record, in state `done`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresentationRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No presentation with the given id"
+          },
+          "409": {
+            "description": "The exchange is not in state `presentation-received`"
+          }
+        },
+        "summary": "Accept a presentation",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/presentations": {
+      "get": {
+        "description": "Returns the presentation flows that the agent created, filtered when the caller supplies a filter.",
+        "operationId": "V2DidcommPresentationsController_listPresentations_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by connection",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "threadId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by DIDComm thread identifier",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the role of the agent in the flow",
+            "schema": {
+              "enum": [
+                "verifier",
+                "prover"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "Filter by presentation state",
+            "schema": {
+              "enum": [
+                "proposal-sent",
+                "proposal-received",
+                "request-sent",
+                "request-received",
+                "presentation-sent",
+                "presentation-received",
+                "declined",
+                "abandoned",
+                "done"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of presentation records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresentationRecordPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List presentations",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/presentations/{proofExchangeId}": {
+      "get": {
+        "description": "Retrieves one presentation by `proofExchangeId`.",
+        "operationId": "V2DidcommPresentationsController_getPresentation_v2",
+        "parameters": [
+          {
+            "name": "proofExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Presentation flow identifier",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The presentation record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresentationRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No presentation with the given id"
+          }
+        },
+        "summary": "Get a presentation",
+        "tags": [
+          "v2/didcomm"
+        ]
+      },
+      "delete": {
+        "description": "Deletes a presentation exchange record, along with the DIDComm messages it accumulated.",
+        "operationId": "V2DidcommPresentationsController_deletePresentation_v2",
+        "parameters": [
+          {
+            "name": "proofExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Presentation flow identifier",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The presentation record is deleted"
+          },
+          "404": {
+            "description": "No presentation with the given id"
+          }
+        },
+        "summary": "Delete a presentation",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/presentations/{proofExchangeId}/decline": {
+      "post": {
+        "description": "Refuses the pending step of a presentation exchange, in either role. The agent sends a problem report to the peer and ends the exchange in state `declined`.",
+        "operationId": "V2DidcommPresentationsController_declinePresentationExchange_v2",
+        "parameters": [
+          {
+            "name": "proofExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Presentation flow identifier",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineExchangeBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated presentation record, in state `declined`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresentationRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No presentation with the given id"
+          },
+          "409": {
+            "description": "The exchange is in a terminal state"
+          }
+        },
+        "summary": "Decline a presentation exchange",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/connections": {
+      "get": {
+        "description": "Returns the connection records, filtered when the caller supplies a filter.",
+        "operationId": "V2DidcommConnectionsController_listConnections_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "outOfBandId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Out-of-Band identifier",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parentConnectionId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the connection that carried the invitation which produced this one",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "Filter by connection state",
+            "schema": {
+              "enum": [
+                "start",
+                "invitation-sent",
+                "invitation-received",
+                "request-sent",
+                "request-received",
+                "response-sent",
+                "response-received",
+                "abandoned",
+                "completed"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "description": "Filter by DID exchange role",
+            "schema": {
+              "enum": [
+                "requester",
+                "responder"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "did",
+            "required": false,
+            "in": "query",
+            "description": "Filter by my DID for this connection",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "theirDid",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the DID of the peer",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "threadId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by DIDComm thread identifier",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "invitationDid",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the invitation DID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "didcommVersion",
+            "required": false,
+            "in": "query",
+            "description": "Filter by negotiated DIDComm version. `v1` selects the connections established through a handshake protocol, which the store leaves without an explicit version.",
+            "schema": {
+              "enum": [
+                "v1",
+                "v2"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "mediatorId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by mediator identifier",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of connection records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionRecordPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List connections",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/connections/{connectionId}": {
+      "get": {
+        "description": "Retrieves one connection record by identifier.",
+        "operationId": "V2DidcommConnectionsController_getConnection_v2",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "description": "UUID of the connection",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The connection record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id"
+          }
+        },
+        "summary": "Get a connection",
+        "tags": [
+          "v2/didcomm"
+        ]
+      },
+      "delete": {
+        "description": "Deletes a connection record, and drops the routing it held on its mediator when it had one. The connections opened from invitations sent on it stay, each with its `parentConnectionId`.",
+        "operationId": "V2DidcommConnectionsController_deleteConnection_v2",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "description": "UUID of the connection to delete",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The connection record is deleted"
+          },
+          "404": {
+            "description": "No connection with the given id"
+          }
+        },
+        "summary": "Delete a connection",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/credential-offer": {
+      "post": {
+        "description": "Creates an AnonCreds credential offer, with a preview of the offered claims. With a `connectionId` the agent sends the offer on that connection and answers with neither `invitation` nor `shortUrl`; without one it makes an Out-of-Band invitation. A revocable credential definition also needs `revocationRegistryDefinitionId` and `revocationRegistryIndex`.",
+        "operationId": "V2DidcommCredentialExchangesController_createCredentialOffer_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCredentialOfferBodyDto"
+              },
+              "examples": {
+                "phoneNumber": {
+                  "summary": "Phone Number VC",
+                  "value": {
+                    "credentialDefinitionId": "did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmevazUUyXBhGoXJwJNNEqXgvPPQ5WrwTE8G5MdhfWsmxM",
+                    "claims": [
+                      {
+                        "name": "phoneNumber",
+                        "value": "+57128348520"
+                      }
+                    ]
+                  }
+                },
+                "revocable": {
+                  "summary": "Revocable credential",
+                  "value": {
+                    "credentialDefinitionId": "did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmevazUUyXBhGoXJwJNNEqXgvPPQ5WrwTE8G5MdhfWsmxM",
+                    "claims": [
+                      {
+                        "name": "phoneNumber",
+                        "value": "+57128348520"
+                      }
+                    ],
+                    "revocationRegistryDefinitionId": "did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmRDLcQ3jZvK4PfcDcf3sbvPzV4Ww5X7Sn2pzyHqUrZp2Z",
+                    "revocationRegistryIndex": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The credential offer invitation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateCredentialOfferResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential definition with the given id, or no connection with the given id"
+          }
+        },
+        "summary": "Create a credential offer",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/credential-exchanges/{credentialExchangeId}/decline": {
+      "post": {
+        "description": "Refuses the pending step of a credential exchange, in either role. The agent sends a problem report to the peer and ends the exchange in state `declined`.",
+        "operationId": "V2DidcommCredentialExchangesController_declineCredentialExchange_v2",
+        "parameters": [
+          {
+            "name": "credentialExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Exchange identifier",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineExchangeBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated credential exchange record, in state `declined`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialExchangeRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential exchange with the given id"
+          },
+          "409": {
+            "description": "The exchange is in a terminal state"
+          }
+        },
+        "summary": "Decline a credential exchange",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/credential-exchanges/{credentialExchangeId}/accept-offer": {
+      "post": {
+        "description": "Accepts a credential offer that a peer sent to this agent, and requests the credential.",
+        "operationId": "V2DidcommCredentialExchangesController_acceptCredentialOffer_v2",
+        "parameters": [
+          {
+            "name": "credentialExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Exchange identifier",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The updated credential exchange record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialExchangeRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential exchange with the given id"
+          },
+          "409": {
+            "description": "The exchange is not in state `offer-received`, or `PEER_NOT_AUTHORIZED`: the issuer of the offered credential definition holds no active ISSUER `Participant` for its `CredentialSchema`"
+          },
+          "503": {
+            "description": "`RESOLVER_UNAVAILABLE`: the agent cannot complete the check"
+          }
+        },
+        "summary": "Accept a credential offer",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/credential-exchanges/{credentialExchangeId}/accept-request": {
+      "post": {
+        "description": "Accepts a credential request as issuer, and issues the credential. The agent issues the claims that the offer previewed. A caller that wants other claims declines this exchange and starts a new offer.",
+        "operationId": "V2DidcommCredentialExchangesController_acceptCredentialRequest_v2",
+        "parameters": [
+          {
+            "name": "credentialExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Exchange identifier",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The updated credential exchange record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialExchangeRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential exchange with the given id"
+          },
+          "409": {
+            "description": "The exchange is not in state `request-received`"
+          }
+        },
+        "summary": "Accept a credential request",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/credential-exchanges/{credentialExchangeId}/accept-credential": {
+      "post": {
+        "description": "Accepts a received credential as holder: the agent stores the credential in its credential store and acknowledges it to the issuer.",
+        "operationId": "V2DidcommCredentialExchangesController_acceptCredential_v2",
+        "parameters": [
+          {
+            "name": "credentialExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Exchange identifier",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The updated credential exchange record, in state `done`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialExchangeRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential exchange with the given id"
+          },
+          "409": {
+            "description": "The exchange is not in state `credential-received`"
+          }
+        },
+        "summary": "Accept a credential",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/credential-exchanges": {
+      "get": {
+        "description": "Returns the credential exchange records that the agent tracks, filtered when the caller supplies a filter.",
+        "operationId": "V2DidcommCredentialExchangesController_listCredentialExchanges_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by connection",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "threadId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by DIDComm thread identifier",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the role of the agent in the exchange",
+            "schema": {
+              "enum": [
+                "issuer",
+                "holder"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "Filter by credential exchange state",
+            "schema": {
+              "enum": [
+                "proposal-sent",
+                "proposal-received",
+                "offer-sent",
+                "offer-received",
+                "declined",
+                "request-sent",
+                "request-received",
+                "credential-issued",
+                "credential-received",
+                "done",
+                "abandoned"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of credential exchange records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialExchangeRecordPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List credential exchanges",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/credential-exchanges/{credentialExchangeId}": {
+      "get": {
+        "description": "Retrieves one credential exchange record by identifier.",
+        "operationId": "V2DidcommCredentialExchangesController_getCredentialExchange_v2",
+        "parameters": [
+          {
+            "name": "credentialExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Exchange identifier",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The credential exchange record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialExchangeRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential exchange with the given id"
+          }
+        },
+        "summary": "Get a credential exchange",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/invitations": {
+      "post": {
+        "description": "Sends an Out-of-Band invitation on an established connection. A v1 connection carries the Out-of-Band 1.1 message. A v2 connection carries the Out-of-Band 2.0 invitation in the `application/didcomm-plain+json` attachment of a Media Sharing share-media message. Without `did`, the invitation opens a single-use sub-connection to this agent, correlated through `parentConnectionId`. With `did`, it refers the peer to that service and creates no record.",
+        "operationId": "V2DidcommInvitationsController_sendInvitation_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendInvitationBodyDto"
+              },
+              "examples": {
+                "subConnection": {
+                  "summary": "Sub-connection to this agent",
+                  "value": {
+                    "connectionId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                    "label": "Support",
+                    "imageUrl": "https://example.com/support.png",
+                    "goal": "Open a support chat",
+                    "goalCode": "support-chat"
+                  }
+                },
+                "referral": {
+                  "summary": "Referral to another service",
+                  "value": {
+                    "connectionId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                    "did": "did:webvh:QmbfsYcjFS2bnouwXBSoZZ65jREEgZGSPdcatcwY7i1Gq2:verifier.example.com",
+                    "goal": "Verify your identity",
+                    "goalCode": "identity-verification"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The invitation is sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendInvitationResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body fails validation"
+          },
+          "404": {
+            "description": "No connection with the given id"
+          }
+        },
+        "summary": "Send an invitation",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/anoncreds/revoke-credential": {
+      "post": {
+        "description": "Revokes one AnonCreds credential at registry level, addressed by revocation registry definition and index. The agent updates and republishes the revocation status list. This method has no DIDComm and no Flow State effect.",
+        "operationId": "V2AnoncredsController_revokeCredential_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeCredentialBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeCredentialResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "summary": "Revoke an AnonCreds credential",
+        "tags": [
+          "v2/anoncreds"
+        ]
+      }
+    },
+    "/v2/anoncreds/credential-definitions": {
+      "get": {
+        "description": "Returns the credential definitions that this agent knows.",
+        "operationId": "V2AnoncredsCredentialDefinitionsController_listCredentialDefinitions_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of credential definition records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialDefinitionPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List credential definitions",
+        "tags": [
+          "v2/anoncreds"
+        ]
+      },
+      "post": {
+        "description": "Creates a new AnonCreds credential definition governed by a Verifiable Trust JSON Schema Credential.",
+        "operationId": "V2AnoncredsCredentialDefinitionsController_createCredentialDefinition_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCredentialDefinitionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The created credential definition record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialDefinitionDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The agent cannot resolve relatedJsonSchemaCredentialId"
+          },
+          "409": {
+            "description": "A credential definition already governs that JSON Schema Credential, or the registry of its issuer lists no AnonCreds schema for it yet"
+          },
+          "503": {
+            "description": "The JSON Schema Credential, or the registry of its issuer, cannot be reached"
+          }
+        },
+        "summary": "Create a credential definition",
+        "tags": [
+          "v2/anoncreds"
+        ]
+      }
+    },
+    "/v2/anoncreds/credential-definitions/import": {
+      "post": {
+        "description": "Imports a credential definition package that exportCredentialDefinition produced.",
+        "operationId": "V2AnoncredsCredentialDefinitionsController_importCredentialDefinition_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialDefinitionPackageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The imported credential definition record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialDefinitionDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The credential definition already exists"
+          }
+        },
+        "summary": "Import a credential definition",
+        "tags": [
+          "v2/anoncreds"
+        ]
+      }
+    },
+    "/v2/anoncreds/credential-definitions/{credentialDefinitionId}/export": {
+      "get": {
+        "description": "Exports a credential definition as a portable package, for import on another agent.",
+        "operationId": "V2AnoncredsCredentialDefinitionsController_exportCredentialDefinition_v2",
+        "parameters": [
+          {
+            "name": "credentialDefinitionId",
+            "required": true,
+            "in": "path",
+            "description": "Identifier of the credential definition to export",
+            "schema": {
+              "example": "did:webvh:Qm...:issuer.example.com/resources/zQm...",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The exported package",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialDefinitionPackageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential definition with the given id"
+          }
+        },
+        "summary": "Export a credential definition",
+        "tags": [
+          "v2/anoncreds"
+        ]
+      }
+    },
+    "/v2/anoncreds/credential-definitions/{credentialDefinitionId}": {
+      "delete": {
+        "description": "Deletes a credential definition and all its related cryptographic data.",
+        "operationId": "V2AnoncredsCredentialDefinitionsController_deleteCredentialDefinition_v2",
+        "parameters": [
+          {
+            "name": "credentialDefinitionId",
+            "required": true,
+            "in": "path",
+            "description": "Identifier of the credential definition to delete",
+            "schema": {
+              "example": "did:webvh:Qm...:issuer.example.com/resources/zQm...",
+              "type": "string"
+            }
+          },
+          {
+            "name": "deleteAssociatedRevocationRegistries",
+            "required": false,
+            "in": "query",
+            "description": "Also delete each revocation registry and status list related to this credential definition",
+            "schema": {
+              "default": false,
+              "example": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The credential definition is deleted"
+          },
+          "404": {
+            "description": "No credential definition with the given id"
+          }
+        },
+        "summary": "Delete a credential definition",
+        "tags": [
+          "v2/anoncreds"
+        ]
+      }
+    },
+    "/v2/anoncreds/revocation-registries": {
+      "get": {
+        "description": "Returns the revocation registry definitions this agent knows, restricted to one credential definition when the caller supplies the filter.",
+        "operationId": "V2AnoncredsRevocationRegistriesController_listRevocationRegistries_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "credentialDefinitionId",
+            "required": false,
+            "in": "query",
+            "description": "Return only the registries bound to this credential definition",
+            "schema": {
+              "example": "did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of revocation registry definition identifiers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevocationRegistryDefinitionIdPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List revocation registries",
+        "tags": [
+          "v2/anoncreds"
+        ]
+      },
+      "post": {
+        "description": "Creates a revocation registry definition, and its first status list, for a credential definition that supports revocation.",
+        "operationId": "V2AnoncredsRevocationRegistriesController_createRevocationRegistry_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRevocationRegistryBodyDto"
+              },
+              "examples": {
+                "default": {
+                  "summary": "Default capacity",
+                  "value": {
+                    "credentialDefinitionId": "did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p"
+                  }
+                },
+                "withCapacity": {
+                  "summary": "Explicit capacity",
+                  "value": {
+                    "credentialDefinitionId": "did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p",
+                    "maximumCredentialNumber": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created revocation registry definition identifier",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateRevocationRegistryResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential definition with the given id"
+          },
+          "409": {
+            "description": "The credential definition does not support revocation"
+          }
+        },
+        "summary": "Create a revocation registry",
+        "tags": [
+          "v2/anoncreds"
+        ]
+      }
+    },
+    "/v2/anoncreds/revocation-registries/{revocationRegistryDefinitionId}": {
+      "delete": {
+        "description": "Deletes a revocation registry definition, its status lists, and its tails file.",
+        "operationId": "V2AnoncredsRevocationRegistriesController_deleteRevocationRegistry_v2",
+        "parameters": [
+          {
+            "name": "revocationRegistryDefinitionId",
+            "required": true,
+            "in": "path",
+            "description": "Percent-encoded identifier of the revocation registry definition to delete",
+            "schema": {
+              "example": "did%3Aweb%3Achatbot-demo.dev.2060.io%3Fservice%3Danoncreds%26relativeRef%3D%2FrevRegDef%2F8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The revocation registry definition is deleted"
+          },
+          "404": {
+            "description": "No revocation registry definition with the given id"
+          }
+        },
+        "summary": "Delete a revocation registry",
+        "tags": [
+          "v2/anoncreds"
+        ]
+      }
+    },
+    "/v2/vt/service-endpoints": {
+      "get": {
+        "description": "Returns the consumable service entries of the DID Document, excluding agent-managed entries.",
+        "operationId": "V2VtServiceEndpointsController_listServiceEndpoints_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of consumable service entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceEndpointPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List consumable service endpoints",
+        "tags": [
+          "v2/vt"
+        ]
+      },
+      "post": {
+        "operationId": "V2VtServiceEndpointsController_addServiceEndpoint_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddServiceEndpointDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The created service entry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceEndpointDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Add a consumable service endpoint",
+        "tags": [
+          "v2/vt"
+        ]
+      }
+    },
+    "/v2/vt/service-endpoints/{serviceEndpointId}": {
+      "patch": {
+        "operationId": "V2VtServiceEndpointsController_updateServiceEndpoint_v2",
+        "parameters": [
+          {
+            "name": "serviceEndpointId",
+            "required": true,
+            "in": "path",
+            "description": "Percent-encoded entry id (e.g. %23mcp for #mcp)",
+            "schema": {
+              "example": "%23mcp",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateServiceEndpointDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated service entry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceEndpointDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Update a consumable service endpoint",
+        "tags": [
+          "v2/vt"
+        ]
+      },
+      "delete": {
+        "operationId": "V2VtServiceEndpointsController_deleteServiceEndpoint_v2",
+        "parameters": [
+          {
+            "name": "serviceEndpointId",
+            "required": true,
+            "in": "path",
+            "description": "Percent-encoded entry id (e.g. %23mcp for #mcp)",
+            "schema": {
+              "example": "%23mcp",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The deleted service entry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceEndpointDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a consumable service endpoint",
+        "tags": [
+          "v2/vt"
+        ]
+      }
+    },
+    "/v2/openid4vc/credential-offer": {
+      "post": {
+        "description": "Creates a pre-authorized OpenID4VCI credential offer for one credential configuration. The credential expires after ttlSeconds.",
+        "operationId": "V2OpenId4VcCredentialExchangesController_createCredentialOffer_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenId4VcCreateCredentialOfferBodyDto"
+              },
+              "examples": {
+                "employee": {
+                  "summary": "Employee credential",
+                  "value": {
+                    "jsonSchemaCredentialId": "employee",
+                    "claims": {
+                      "name": "Ada Lovelace",
+                      "role": "engineer"
+                    },
+                    "ttlSeconds": 3600
+                  }
+                },
+                "statusList": {
+                  "summary": "Credential registered on a status list",
+                  "value": {
+                    "jsonSchemaCredentialId": "employee",
+                    "claims": {
+                      "name": "Ada Lovelace",
+                      "role": "engineer"
+                    },
+                    "ttlSeconds": 7776000,
+                    "statusListId": "list-1",
+                    "statusListIndex": 42
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The credential offer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenId4VcCredentialOfferResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The agent cannot resolve the credential type or the status list"
+          }
+        },
+        "summary": "Create a credential offer",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      }
+    },
+    "/v2/openid4vc/credential-exchanges": {
+      "get": {
+        "description": "Returns the OpenID4VCI issuance sessions that the agent tracks.",
+        "operationId": "V2OpenId4VcCredentialExchangesController_listCredentialExchanges_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jsonSchemaCredentialId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by credential type",
+            "schema": {
+              "example": "employee",
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "Filter by issuance session state",
+            "schema": {
+              "enum": [
+                "OfferCreated",
+                "OfferUriRetrieved",
+                "AuthorizationInitiated",
+                "AuthorizationGranted",
+                "AccessTokenRequested",
+                "AccessTokenCreated",
+                "CredentialRequestReceived",
+                "CredentialsPartiallyIssued",
+                "Completed",
+                "Error"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of credential exchange records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenId4VcCredentialExchangeRecordPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List credential exchanges",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      }
+    },
+    "/v2/openid4vc/credential-exchanges/{credentialExchangeId}": {
+      "get": {
+        "description": "Retrieves one issuance session by identifier.",
+        "operationId": "V2OpenId4VcCredentialExchangesController_getCredentialExchange_v2",
+        "parameters": [
+          {
+            "name": "credentialExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Identifier of the issuance session",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The credential exchange record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenId4VcCredentialExchangeRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential exchange with the given id"
+          }
+        },
+        "summary": "Get a credential exchange",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      },
+      "delete": {
+        "description": "Deletes an issuance session record. It does not delete a credential that a wallet holds.",
+        "operationId": "V2OpenId4VcCredentialExchangesController_deleteCredentialExchange_v2",
+        "parameters": [
+          {
+            "name": "credentialExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Identifier of the issuance session",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The credential exchange record is deleted"
+          },
+          "404": {
+            "description": "No credential exchange with the given id"
+          }
+        },
+        "summary": "Delete a credential exchange",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      }
+    },
+    "/v2/openid4vc/presentation-request": {
+      "post": {
+        "description": "Creates an OpenID4VP authorization request for one credential type, and for the claims of that type the caller asks the wallet to disclose.",
+        "operationId": "V2OpenId4VcPresentationsController_createPresentationRequest_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenId4VcCreatePresentationRequestBodyDto"
+              },
+              "examples": {
+                "everyClaim": {
+                  "summary": "Every claim of the type",
+                  "value": {
+                    "jsonSchemaCredentialId": "employee"
+                  }
+                },
+                "selectedClaims": {
+                  "summary": "Selected claims, for a wallet without DCQL",
+                  "value": {
+                    "jsonSchemaCredentialId": "employee",
+                    "requestedClaims": [
+                      "name",
+                      "role"
+                    ],
+                    "queryLanguage": "presentation_exchange",
+                    "requestSigner": "x5c"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The presentation request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenId4VcPresentationRequestResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The agent cannot resolve the credential type"
+          },
+          "409": {
+            "description": "The DID does not publish the signing key"
+          }
+        },
+        "summary": "Create a presentation request",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      }
+    },
+    "/v2/openid4vc/presentations": {
+      "get": {
+        "description": "Returns the OpenID4VP verification sessions that the agent created.",
+        "operationId": "V2OpenId4VcPresentationsController_listPresentations_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jsonSchemaCredentialId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by credential type",
+            "schema": {
+              "example": "employee",
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "Filter by verification session state",
+            "schema": {
+              "enum": [
+                "RequestCreated",
+                "RequestUriRetrieved",
+                "ResponseVerified",
+                "Error"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of presentation records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenId4VcPresentationRecordPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List presentations",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      }
+    },
+    "/v2/openid4vc/presentations/{proofExchangeId}": {
+      "get": {
+        "description": "Retrieves one verification session by identifier, with its trust result once the wallet answered.",
+        "operationId": "V2OpenId4VcPresentationsController_getPresentation_v2",
+        "parameters": [
+          {
+            "name": "proofExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Identifier of the verification session",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The presentation record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenId4VcPresentationRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No presentation with the given id"
+          }
+        },
+        "summary": "Get a presentation",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      },
+      "delete": {
+        "description": "Deletes a verification session record.",
+        "operationId": "V2OpenId4VcPresentationsController_deletePresentation_v2",
+        "parameters": [
+          {
+            "name": "proofExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Identifier of the verification session",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The presentation record is deleted"
+          },
+          "404": {
+            "description": "No presentation with the given id"
+          }
+        },
+        "summary": "Delete a presentation",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      }
+    },
+    "/v2/openid4vc/signing-certificates": {
+      "get": {
+        "description": "Returns the public signing certificate of each capability, so that an operator can pin a fingerprint on a peer verifier. Not paginated: one record for the issuer and one for the verifier.",
+        "operationId": "V2OpenId4VcSigningCertificatesController_listSigningCertificates_v2",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The signing certificates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OpenId4VcSigningCertificateDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List signing certificates",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      }
+    },
+    "/v2/vt/flows": {
+      "get": {
+        "description": "Lists flows handled by the agent, with optional role, state, peer, and identifier filters.",
+        "operationId": "V2VtFlowsController_listFlows_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "applicant",
+                "validator"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionState",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "NOT_CONNECTED",
+                "ESTABLISHED",
+                "TERMINATED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "flowState",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "AWAITING_OP",
+                "OR_SENT",
+                "AWAITING_OR",
+                "IR_SENT",
+                "AWAITING_IR",
+                "OOB_PENDING",
+                "VALIDATING",
+                "AWAITING_VALIDATION_TX",
+                "VALIDATION_TX_SUBMITTED",
+                "VALIDATION_TX_FAILED",
+                "VALIDATED",
+                "VALIDATED_PENDING_CLAIMS",
+                "CRED_OFFERED",
+                "COMPLETED",
+                "CRED_REVOKED",
+                "TERMINATED_BY_VALIDATOR",
+                "TERMINATED_BY_APPLICANT",
+                "ERROR",
+                "PARTICIPANT_REVOKED",
+                "PARTICIPANT_SLASHED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "peerDid",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "applicantParticipantId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "validatorParticipantId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "schemaId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "participantSessionId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2VtFlowRecordPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List credential-acquisition flows",
+        "tags": [
+          "v2/vt"
+        ]
+      }
+    },
+    "/v2/vt/flows/{participantSessionId}": {
+      "get": {
+        "description": "Returns one flow record, in the shape that listFlows returns.",
+        "operationId": "V2VtFlowsController_getFlow_v2",
+        "parameters": [
+          {
+            "name": "participantSessionId",
+            "required": true,
+            "in": "path",
+            "description": "DIDComm session identifier of the target flow",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2VtFlowRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No flow with the given participantSessionId"
+          }
+        },
+        "summary": "Get one credential-acquisition flow",
+        "tags": [
+          "v2/vt"
+        ]
+      }
+    },
+    "/v2/vt/flows/{participantSessionId}/claims": {
+      "put": {
+        "description": "Validator action. Replaces the credential claims stored on the flow before the credential is offered.",
+        "operationId": "V2VtFlowsController_editCredentialClaims_v2",
+        "parameters": [
+          {
+            "name": "participantSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditClaimsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated claim set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        },
+        "summary": "Edit the credential claims of a flow",
+        "tags": [
+          "v2/vt"
+        ]
+      }
+    },
+    "/v2/vt/flows/{participantSessionId}/oob-link": {
+      "post": {
+        "description": "Validator action. Sends or resends an out-of-band URL for information collection.",
+        "operationId": "V2VtFlowsController_sendOobLink_v2",
+        "parameters": [
+          {
+            "name": "participantSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendOobLinkV2Dto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2VtFlowRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        },
+        "summary": "Send an OOB_LINK message to the applicant",
+        "tags": [
+          "v2/vt"
+        ]
+      }
+    },
+    "/v2/vt/flows/{participantSessionId}/start-validation": {
+      "post": {
+        "description": "Validator action. Tells the applicant with a validating message once it has completed the out-of-band step.",
+        "operationId": "V2VtFlowsController_startValidation_v2",
+        "parameters": [
+          {
+            "name": "participantSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartValidationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2VtFlowRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        },
+        "summary": "Move a flow back to VALIDATING",
+        "tags": [
+          "v2/vt"
+        ]
+      }
+    },
+    "/v2/vt/flows/{participantSessionId}/validate": {
+      "post": {
+        "description": "Validator action. Checks the claim set, records the fee terms, and submits SetParticipantOPtoValidated under the agent VS operator authorization, or leaves it to an operator of the Corporation. A transaction failure is not an error: the flow reports it in validation.tx.",
+        "operationId": "V2VtFlowsController_validateFlow_v2",
+        "parameters": [
+          {
+            "name": "participantSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateFlowDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2VtFlowRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        },
+        "summary": "Record the validation decision of a flow",
+        "tags": [
+          "v2/vt"
+        ]
+      }
+    },
+    "/v2/vt/flows/{participantSessionId}/reject": {
+      "post": {
+        "description": "Validator action. Sends a problem-report and moves the flow to TERMINATED_BY_VALIDATOR, with no on-chain transaction.",
+        "operationId": "V2VtFlowsController_rejectFlow_v2",
+        "parameters": [
+          {
+            "name": "participantSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectFlowDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2VtFlowRecordDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        },
+        "summary": "Reject a flow",
+        "tags": [
+          "v2/vt"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "API Documentation",
+    "description": "API Documentation",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "v2/auth",
+      "description": "Exchanges an account signature for a bearer token. Reserved for the v2 migration; no methods implemented yet."
+    },
+    {
+      "name": "v2/agent",
+      "description": "Identifies the agent and reports its state to an orchestrator."
+    },
+    {
+      "name": "v2/didcomm",
+      "description": "Operates on the wire-level DIDComm state of the agent."
+    },
+    {
+      "name": "v2/openid4vc",
+      "description": "Operates on the OpenID4VC state of the agent."
+    },
+    {
+      "name": "v2/anoncreds",
+      "description": "Manages the AnonCreds artifacts of the agent."
+    },
+    {
+      "name": "v2/vt",
+      "description": "Manages the Verifiable Trust state of the agent."
+    }
+  ],
+  "servers": [],
+  "components": {
+    "schemas": {
+      "ChallengeRequestDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "TokenRequestDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "AgentInfoDto": {
+        "type": "object",
+        "properties": {
+          "did": {
+            "type": "string",
+            "description": "DID of the agent, created on its first startup",
+            "example": "did:webvh:QmScid:agent.example.com"
+          },
+          "version": {
+            "type": "string",
+            "description": "Running application version",
+            "example": "1.8.1"
+          }
+        },
+        "required": [
+          "version"
+        ]
+      },
+      "LivenessDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "live"
+            ],
+            "description": "Fixed marker that the agent process accepted the request",
+            "example": "live"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "ReadinessDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready"
+            ],
+            "description": "Fixed marker that every bootstrap step completed and the agent is up to date",
+            "example": "ready"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "ProtocolModuleDto": {
+        "type": "object",
+        "properties": {
+          "module": {
+            "type": "string",
+            "description": "Path segment of the module under /v2/didcomm",
+            "example": "basic-messages"
+          },
+          "protocols": {
+            "description": "Protocol URIs the module implements",
+            "example": [
+              "https://didcomm.org/basicmessage/1.0",
+              "https://didcomm.org/basicmessage/2.0"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "module",
+          "protocols"
+        ]
+      },
+      "SendBasicMessageBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to send the message on",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "content": {
+            "type": "string",
+            "description": "Text of the message",
+            "example": "Hello"
+          }
+        },
+        "required": [
+          "connectionId",
+          "content"
+        ]
+      },
+      "SentMessageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier of the sent message",
+            "example": "a1b2c3d4-5678-90ab-cdef-1234567890ab"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "BasicMessageRecordDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier of the message record",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "connectionId": {
+            "type": "string",
+            "description": "Connection the message travelled on"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "sender",
+              "receiver"
+            ],
+            "description": "Whether this agent sent or received the message"
+          },
+          "content": {
+            "type": "string",
+            "description": "Text of the message"
+          },
+          "sentTime": {
+            "type": "string",
+            "description": "When the sender sent the message, ISO 8601",
+            "example": "2026-09-10T12:00:00.000Z"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the agent stored the message"
+          }
+        },
+        "required": [
+          "id",
+          "connectionId",
+          "role",
+          "content",
+          "sentTime",
+          "createdAt"
+        ]
+      },
+      "BasicMessageRecordPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BasicMessageRecordDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "RequestedCredentialDto": {
+        "type": "object",
+        "properties": {
+          "credentialDefinitionId": {
+            "type": "string",
+            "description": "AnonCreds credential definition the presentation is restricted to",
+            "example": "did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmevazUUyXBhGoXJwJNNEqXgvPPQ5WrwTE8G5MdhfWsmxM"
+          },
+          "jsonSchemaCredentialId": {
+            "type": "string",
+            "description": "JSON Schema Credential the presentation is restricted to",
+            "example": "https://dm.gov-id-tr.demos.dev.2060.io/vt/schemas-gov-id-jsc.json"
+          },
+          "attributes": {
+            "description": "Attributes asked of this credential. Every attribute of the schema when omitted.",
+            "example": [
+              "firstName",
+              "lastName"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CreatePresentationRequestBodyDto": {
+        "type": "object",
+        "properties": {
+          "requestedCredentials": {
+            "description": "The credentials, and the attributes of them, that the holder is asked to present",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequestedCredentialDto"
+            }
+          },
+          "connectionId": {
+            "type": "string",
+            "description": "An established connection to send the request on. The agent creates an Out-of-Band invitation when the caller omits it.",
+            "example": "conn-1234-5678"
+          },
+          "requireNonRevocation": {
+            "type": "boolean",
+            "description": "Ask the holder for a non-revocation proof at verification time",
+            "default": false
+          },
+          "autoAccept": {
+            "type": "boolean",
+            "description": "Complete the verifier steps without a call: the agent acknowledges a presentation after it verifies it, with no `acceptPresentation` call.",
+            "default": false
+          },
+          "useLegacyDid": {
+            "type": "boolean",
+            "description": "Advertise the legacy did:web form when the DID of the agent is did:webvh"
+          },
+          "didcommVersion": {
+            "type": "string",
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "description": "DIDComm envelope version of the invitation. Defaults to 'v2' when omitted."
+          }
+        },
+        "required": [
+          "requestedCredentials"
+        ]
+      },
+      "CreatePresentationRequestResponseDto": {
+        "type": "object",
+        "properties": {
+          "proofExchangeId": {
+            "type": "string",
+            "description": "Flow identifier, for later tracking",
+            "example": "proof-1234-5678"
+          },
+          "invitation": {
+            "type": "object",
+            "description": "The Out-of-Band invitation, in the envelope that didcommVersion selects. Absent when the request names a `connectionId`, because the agent sends the request on that connection.",
+            "additionalProperties": true
+          },
+          "shortUrl": {
+            "type": "string",
+            "description": "A URL under PUBLIC_API_BASE_URL that resolves to the same invitation, for a QR code. Absent when the request names a `connectionId`.",
+            "example": "https://mydomain.com/s?id=abcd"
+          }
+        },
+        "required": [
+          "proofExchangeId"
+        ]
+      },
+      "PresentationRecordDto": {
+        "type": "object",
+        "properties": {
+          "proofExchangeId": {
+            "type": "string",
+            "description": "Identifier of the proof exchange",
+            "example": "proof-1234-5678"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "proposal-sent",
+              "proposal-received",
+              "request-sent",
+              "request-received",
+              "presentation-sent",
+              "presentation-received",
+              "declined",
+              "abandoned",
+              "done"
+            ],
+            "description": "Current state of the presentation flow"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "verifier",
+              "prover"
+            ],
+            "description": "Role of this agent in the flow"
+          },
+          "connectionId": {
+            "type": "string",
+            "description": "Connection the flow runs on",
+            "example": "conn-1234-5678"
+          },
+          "requestedCredentials": {
+            "description": "The credentials, and attributes of them, that this flow asked for",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequestedCredentialDto"
+            }
+          },
+          "claims": {
+            "description": "The claims revealed by the presentation. Empty until the holder answers.",
+            "example": [
+              {
+                "name": "firstName",
+                "value": "Alice"
+              }
+            ],
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "Whether the presentation verified. Set when the presentation is received, false with an `errorMessage` when the flow is `abandoned`.",
+            "example": true
+          },
+          "threadId": {
+            "type": "string",
+            "description": "DIDComm thread identifier",
+            "example": "thread-8765-4321"
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "Error message on the exchange. The agent sets it when the exchange stops. The agent also sets it when it declines an exchange and the peer gets no problem report."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the flow was created"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the flow was last updated"
+          }
+        },
+        "required": [
+          "proofExchangeId",
+          "state",
+          "role",
+          "requestedCredentials",
+          "claims",
+          "verified",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PresentationRecordPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PresentationRecordDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "DeclineExchangeBodyDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Text for the problem report. The agent sends the report to the peer.",
+            "example": "The operator refused the exchange"
+          }
+        }
+      },
+      "ConnectionRecordDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique connection identifier",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "start",
+              "invitation-sent",
+              "invitation-received",
+              "request-sent",
+              "request-received",
+              "response-sent",
+              "response-received",
+              "abandoned",
+              "completed"
+            ],
+            "description": "Current state of the DID exchange"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "requester",
+              "responder"
+            ],
+            "description": "Role in the DID exchange"
+          },
+          "did": {
+            "type": "string",
+            "description": "My DID for this connection",
+            "example": "did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:agent.example.com"
+          },
+          "theirDid": {
+            "type": "string",
+            "description": "DID of the peer",
+            "example": "did:webvh:QmbfsYcjFS2bnouwXBSoZZ65jREEgZGSPdcatcwY7i1Gq2:peer.example.com"
+          },
+          "theirLabel": {
+            "type": "string",
+            "description": "Human-readable label of the peer",
+            "example": "Alice"
+          },
+          "alias": {
+            "type": "string",
+            "description": "Local alias for this connection",
+            "example": "Work Chat"
+          },
+          "threadId": {
+            "type": "string",
+            "description": "DIDComm thread identifier",
+            "example": "thread-abc-123"
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "Avatar URL advertised by the peer"
+          },
+          "outOfBandId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Out-of-Band identifier this connection started from, or null when it has none"
+          },
+          "parentConnectionId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Connection on which the agent sent the invitation that produced this connection, or null for every other connection"
+          },
+          "invitationDid": {
+            "type": "string",
+            "description": "DID of the invitation this connection started from"
+          },
+          "didcommVersion": {
+            "type": "string",
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "description": "DIDComm version negotiated for this connection. Set only for connections established through the v2 out-of-band flow; absent otherwise."
+          },
+          "mediatorId": {
+            "type": "string",
+            "description": "Mediator that routes messages for this connection"
+          },
+          "previousDids": {
+            "description": "Prior values of `did` after rotations",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "previousTheirDids": {
+            "description": "Prior values of `theirDid` after rotations",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the connection was created"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the connection was last updated"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "role",
+          "outOfBandId",
+          "parentConnectionId",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "ConnectionRecordPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionRecordDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "ClaimDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the attribute",
+            "example": "phoneNumber"
+          },
+          "value": {
+            "type": "string",
+            "description": "Value of the attribute",
+            "example": "+57128348520"
+          },
+          "mimeType": {
+            "type": "string",
+            "description": "MIME type of the value",
+            "example": "image/png"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ]
+      },
+      "CreateCredentialOfferBodyDto": {
+        "type": "object",
+        "properties": {
+          "credentialDefinitionId": {
+            "type": "string",
+            "description": "AnonCreds credential definition identifier",
+            "example": "did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmevazUUyXBhGoXJwJNNEqXgvPPQ5WrwTE8G5MdhfWsmxM"
+          },
+          "claims": {
+            "description": "Name and value pairs that preview the attributes of the credential",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClaimDto"
+            }
+          },
+          "revocationRegistryDefinitionId": {
+            "type": "string",
+            "description": "Revocation registry that holds the status of this credential",
+            "example": "did:webvh:QmaZYZ:issuer.example.com/resources/zQmRDLcQ3jZvK4PfcDcf3sbvPzV4Ww5X7Sn2pzyHqUrZp2Z"
+          },
+          "revocationRegistryIndex": {
+            "type": "number",
+            "description": "Index of this credential in the revocation registry",
+            "example": 1
+          },
+          "connectionId": {
+            "type": "string",
+            "description": "An established connection to send the offer on. The agent creates an Out-of-Band invitation when the caller omits it.",
+            "example": "conn-1234-5678"
+          },
+          "autoAccept": {
+            "type": "boolean",
+            "description": "Complete the issuer steps without a call: the agent issues the credential on `request-received`, with no `acceptCredentialRequest` call.",
+            "default": false
+          },
+          "useLegacyDid": {
+            "type": "boolean",
+            "description": "Advertise the legacy did:web form when the DID of the agent is did:webvh. The agent ignores it when `connectionId` is present."
+          },
+          "didcommVersion": {
+            "type": "string",
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "description": "DIDComm envelope version of the invitation. Defaults to 'v2' when omitted. The agent ignores it when `connectionId` is present."
+          }
+        },
+        "required": [
+          "credentialDefinitionId",
+          "claims"
+        ]
+      },
+      "CreateCredentialOfferResponseDto": {
+        "type": "object",
+        "properties": {
+          "credentialExchangeId": {
+            "type": "string",
+            "description": "Flow identifier, for later tracking",
+            "example": "cred-1234-5678"
+          },
+          "invitation": {
+            "type": "object",
+            "description": "The Out-of-Band invitation, in the envelope that didcommVersion selects. Absent when the request names a `connectionId`, because the agent sends the offer on that connection.",
+            "additionalProperties": true
+          },
+          "shortUrl": {
+            "type": "string",
+            "description": "A URL under PUBLIC_API_BASE_URL that resolves to the same invitation, for a QR code. Absent when the request names a `connectionId`.",
+            "example": "https://mydomain.com/s?id=abcd"
+          }
+        },
+        "required": [
+          "credentialExchangeId"
+        ]
+      },
+      "CredentialExchangeRecordDto": {
+        "type": "object",
+        "properties": {
+          "credentialExchangeId": {
+            "type": "string",
+            "description": "Identifier of the credential exchange",
+            "example": "cred-1234-5678"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "proposal-sent",
+              "proposal-received",
+              "offer-sent",
+              "offer-received",
+              "declined",
+              "request-sent",
+              "request-received",
+              "credential-issued",
+              "credential-received",
+              "done",
+              "abandoned"
+            ],
+            "description": "Current state of the issuance flow"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "issuer",
+              "holder"
+            ],
+            "description": "Role of this agent in the exchange"
+          },
+          "threadId": {
+            "type": "string",
+            "description": "DIDComm thread identifier",
+            "example": "thread-8765-4321"
+          },
+          "connectionId": {
+            "type": "string",
+            "description": "Connection identifier",
+            "example": "conn-1234"
+          },
+          "credentialDefinitionId": {
+            "type": "string",
+            "description": "AnonCreds credential definition identifier, if the agent knows it",
+            "example": "did:webvh:QmaZYZF4aaHUTWzaKu23TowgvsX7JWfCRgQZX488EAssPQ:dm.chatbot.demos.dev.2060.io/resources/zQmevazUUyXBhGoXJwJNNEqXgvPPQ5WrwTE8G5MdhfWsmxM"
+          },
+          "schemaId": {
+            "type": "string",
+            "description": "AnonCreds schema identifier, if the agent knows it"
+          },
+          "claims": {
+            "description": "The offered attributes. The list is empty if the agent cannot read the offer.",
+            "example": [
+              {
+                "name": "phoneNumber",
+                "value": "+57128348520"
+              }
+            ],
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "Error message on the exchange. The agent sets it if the flow stops."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the flow was created"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the flow was last updated"
+          }
+        },
+        "required": [
+          "credentialExchangeId",
+          "state",
+          "role",
+          "threadId",
+          "claims",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CredentialExchangeRecordPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CredentialExchangeRecordDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "SendInvitationBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to send the invitation on",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "did": {
+            "type": "string",
+            "description": "DID of the service the peer is invited to connect to (referral). When absent, the invitation opens a sub-connection to this agent.",
+            "example": "did:webvh:QmbfsYcjFS2bnouwXBSoZZ65jREEgZGSPdcatcwY7i1Gq2:verifier.example.com"
+          },
+          "label": {
+            "type": "string",
+            "description": "Text the peer shows for the invitation. On a v2 connection it travels as the `description` of the share-media message and as the `metadata.title` of its item. Sub-connection default: the `name` of the ECS-Service credential of the agent, omitted when it holds none.",
+            "example": "My Service"
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "URL of an image the peer shows for the invitation. On a v2 connection it travels as the `metadata.icon` of the item of the share-media message.",
+            "example": "https://example.com/logo.png"
+          },
+          "goal": {
+            "type": "string",
+            "description": "The `goal` of the invitation",
+            "example": "Open a support chat"
+          },
+          "goalCode": {
+            "type": "string",
+            "description": "The `goal_code` of the invitation",
+            "example": "support-chat"
+          }
+        },
+        "required": [
+          "connectionId"
+        ]
+      },
+      "SendInvitationResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier of the sent message: the Out-of-Band 1.1 invitation on a v1 connection, the share-media message that carries the Out-of-Band 2.0 invitation on a v2 connection.",
+            "example": "b6a2f0d4-7c1e-4f6a-9d2b-0f3c5e8a1b7d"
+          },
+          "outOfBandId": {
+            "type": "string",
+            "description": "Identifier of the Out-of-Band record created for a sub-connection invitation. Absent for a referral. The connection the invitation produces carries this value as `outOfBandId`.",
+            "example": "8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "RevokeCredentialBodyDto": {
+        "type": "object",
+        "properties": {
+          "revocationRegistryDefinitionId": {
+            "type": "string",
+            "description": "Revocation registry definition the credential is registered in",
+            "example": "did:webvh:QmQmBtfboNvDrs5SDaDDK3VmUq6ji4yUgLnYaMFo8furUe:2060.io/resources/zQmVXd5K7oTJGiXR88vzKoubQWbNxM5U8s4xBkRtCTgfmHq"
+          },
+          "revocationRegistryIndex": {
+            "type": "number",
+            "description": "Index of the credential in the revocation registry. The first credential of a registry lives at index 0, and the last one at `maxCredNum - 1`.",
+            "example": 0,
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revocationRegistryDefinitionId",
+          "revocationRegistryIndex"
+        ]
+      },
+      "RevokeCredentialResponseDto": {
+        "type": "object",
+        "properties": {
+          "revocationRegistryDefinitionId": {
+            "type": "string",
+            "description": "Revocation registry definition the credential was revoked in"
+          },
+          "revocationRegistryIndex": {
+            "type": "number",
+            "description": "Index of the revoked credential in the registry"
+          },
+          "revokedAt": {
+            "type": "string",
+            "description": "Timestamp of the published revocation status list that carries the revocation",
+            "example": "2026-08-28T10:15:30.000Z"
+          }
+        },
+        "required": [
+          "revocationRegistryDefinitionId",
+          "revocationRegistryIndex",
+          "revokedAt"
+        ]
+      },
+      "CredentialDefinitionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier of the credential definition"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the underlying AnonCreds schema"
+          },
+          "version": {
+            "type": "string",
+            "description": "Version of the underlying AnonCreds schema"
+          },
+          "attributes": {
+            "description": "Attribute names the schema defines",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "supportRevocation": {
+            "type": "boolean",
+            "description": "Whether the credential definition supports revocation"
+          },
+          "relatedJsonSchemaCredentialId": {
+            "type": "string",
+            "description": "Verifiable Trust JSON Schema Credential that governs the credential definition"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "attributes",
+          "supportRevocation",
+          "relatedJsonSchemaCredentialId"
+        ]
+      },
+      "CredentialDefinitionPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CredentialDefinitionDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "CreateCredentialDefinitionDto": {
+        "type": "object",
+        "properties": {
+          "relatedJsonSchemaCredentialId": {
+            "type": "string",
+            "description": "URL of the Verifiable Trust JSON Schema Credential that governs the credential definition.",
+            "example": "https://example.2060.io/vt/schemas-example-service-jsc.json"
+          },
+          "supportRevocation": {
+            "type": "boolean",
+            "description": "When true, the agent can revoke the credentials issued from this definition.",
+            "default": false
+          }
+        },
+        "required": [
+          "relatedJsonSchemaCredentialId"
+        ]
+      },
+      "CredentialDefinitionPackageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier of the exported credential definition"
+          },
+          "data": {
+            "type": "object",
+            "description": "Opaque payload that carries the credential definition and its cryptographic data",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "data"
+        ]
+      },
+      "RevocationRegistryDefinitionIdPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "example": [
+              "did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/revRegDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "CreateRevocationRegistryBodyDto": {
+        "type": "object",
+        "properties": {
+          "credentialDefinitionId": {
+            "type": "string",
+            "description": "Credential definition the registry is bound to",
+            "example": "did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/credDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p"
+          },
+          "maximumCredentialNumber": {
+            "type": "number",
+            "description": "Capacity of the registry",
+            "default": 1000,
+            "example": 1000,
+            "minimum": 1
+          }
+        },
+        "required": [
+          "credentialDefinitionId"
+        ]
+      },
+      "CreateRevocationRegistryResponseDto": {
+        "type": "object",
+        "properties": {
+          "revocationRegistryDefinitionId": {
+            "type": "string",
+            "description": "Identifier of the created revocation registry definition",
+            "example": "did:web:chatbot-demo.dev.2060.io?service=anoncreds&relativeRef=/revRegDef/8TsGLaSPVKPVMXK8APzBRcXZryxutvQuZnnTcDmbqd9p"
+          }
+        },
+        "required": [
+          "revocationRegistryDefinitionId"
+        ]
+      },
+      "ServiceEndpointDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "did:web:agent.example.com#mcp"
+          },
+          "type": {
+            "type": "string",
+            "example": "MCP"
+          },
+          "serviceEndpoint": {
+            "type": "object",
+            "example": "https://mcp.agent.example.com"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "serviceEndpoint"
+        ]
+      },
+      "ServiceEndpointPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceEndpointDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "AddServiceEndpointDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Consumable service type. MUST NOT be DIDCommMessaging, LinkedVerifiablePresentation or VsAgentAdminAPI.",
+            "example": "MCP"
+          },
+          "serviceEndpoint": {
+            "type": "object",
+            "description": "Service endpoint: a URI string, an object, or an array of those (per DID-CORE).",
+            "example": "https://mcp.agent.example.com"
+          },
+          "id": {
+            "type": "string",
+            "description": "DID-relative fragment for the new entry (e.g. #mcp). Generated from the type when omitted.",
+            "example": "#mcp"
+          }
+        },
+        "required": [
+          "type",
+          "serviceEndpoint"
+        ]
+      },
+      "UpdateServiceEndpointDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "New consumable service type.",
+            "example": "MCP"
+          },
+          "serviceEndpoint": {
+            "type": "object",
+            "description": "New service endpoint: a URI string, an object, or an array of those (per DID-CORE).",
+            "example": "https://mcp.agent.example.com"
+          }
+        }
+      },
+      "OpenId4VcCreateCredentialOfferBodyDto": {
+        "type": "object",
+        "properties": {
+          "jsonSchemaCredentialId": {
+            "type": "string",
+            "description": "Credential type of the offer. The agent derives no credential type yet, so every identifier answers UNKNOWN_ID.",
+            "example": "employee"
+          },
+          "claims": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Claim values of the offered credential. Any subset of the configured claims, at least one, each non-empty; an omitted claim is left out of the credential.",
+            "example": {
+              "name": "Ada Lovelace",
+              "role": "engineer"
+            }
+          },
+          "ttlSeconds": {
+            "type": "number",
+            "minimum": 60,
+            "maximum": 7776000,
+            "description": "Lifetime of the credential in seconds, from 60 up to 7776000 (90 days). Nothing revokes the credential, so this lifetime is its only bound.",
+            "example": 3600
+          },
+          "statusListId": {
+            "type": "string",
+            "description": "Status list the credential is registered on, with statusListIndex. The agent hosts no status list yet, so every identifier answers UNKNOWN_ID.",
+            "example": "list-1"
+          },
+          "statusListIndex": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Index of the credential on that status list. Required whenever statusListId is present.",
+            "example": 42
+          }
+        },
+        "required": [
+          "jsonSchemaCredentialId",
+          "claims",
+          "ttlSeconds"
+        ]
+      },
+      "OpenId4VcCredentialOfferResponseDto": {
+        "type": "object",
+        "properties": {
+          "credentialExchangeId": {
+            "type": "string",
+            "description": "Identifier of the issuance session, for later tracking",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "url": {
+            "type": "string",
+            "description": "Credential offer URI, ready to render as a QR code or to send as a link",
+            "example": "openid-credential-offer://?credential_offer_uri=https%3A%2F%2Fagent.example%2Foid4vci%2Fissuer%2Foffers%2F1"
+          }
+        },
+        "required": [
+          "credentialExchangeId",
+          "url"
+        ]
+      },
+      "OpenId4VcCredentialExchangeRecordDto": {
+        "type": "object",
+        "properties": {
+          "credentialExchangeId": {
+            "type": "string",
+            "description": "Identifier of the issuance session",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "jsonSchemaCredentialId": {
+            "type": "string",
+            "description": "Credential type of the offer",
+            "example": "employee"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "OfferCreated",
+              "OfferUriRetrieved",
+              "AuthorizationInitiated",
+              "AuthorizationGranted",
+              "AccessTokenRequested",
+              "AccessTokenCreated",
+              "CredentialRequestReceived",
+              "CredentialsPartiallyIssued",
+              "Completed",
+              "Error"
+            ],
+            "description": "State of the issuance session"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the agent created the offer"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the session last changed"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the offer stops being valid"
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "Error message on the session. The agent sets it if the flow stops."
+          }
+        },
+        "required": [
+          "credentialExchangeId",
+          "jsonSchemaCredentialId",
+          "state",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "OpenId4VcCredentialExchangeRecordPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenId4VcCredentialExchangeRecordDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "OpenId4VcCreatePresentationRequestBodyDto": {
+        "type": "object",
+        "properties": {
+          "jsonSchemaCredentialId": {
+            "type": "string",
+            "description": "Credential type the request asks for: the jsonSchemaCredentialId of a VTJSC whose CredentialSchema the agent holds an active VERIFIER Participant for.",
+            "example": "employee"
+          },
+          "requestedClaims": {
+            "description": "Claim names the request asks the wallet to disclose, without a duplicate. Defaults to every claim of the type.",
+            "example": [
+              "name",
+              "role"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "queryLanguage": {
+            "type": "string",
+            "enum": [
+              "dcql",
+              "presentation_exchange"
+            ],
+            "description": "Query language of the request. Defaults to dcql; presentation_exchange serves a wallet that never implemented DCQL."
+          },
+          "requestSigner": {
+            "type": "string",
+            "enum": [
+              "x5c",
+              "did"
+            ],
+            "description": "Signer of this request only. x5c yields an x509_hash client identifier for a wallet that cannot resolve a DID, or x509_san_dns on a presentation_exchange request, whose draft predates x509_hash."
+          }
+        },
+        "required": [
+          "jsonSchemaCredentialId"
+        ]
+      },
+      "OpenId4VcPresentationRequestResponseDto": {
+        "type": "object",
+        "properties": {
+          "proofExchangeId": {
+            "type": "string",
+            "description": "Identifier of the verification session, for later tracking",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "url": {
+            "type": "string",
+            "description": "Authorization request URI, ready to render as a QR code or to send as a link",
+            "example": "openid4vp://authorize?request_uri=https%3A%2F%2Fagent.example%2Foid4vp%2Fverifier%2Fauthorization-requests%2F1"
+          }
+        },
+        "required": [
+          "proofExchangeId",
+          "url"
+        ]
+      },
+      "OpenId4VcTrustEvidenceDto": {
+        "type": "object",
+        "properties": {
+          "did": {
+            "type": "string",
+            "nullable": true,
+            "description": "DID of the issuer: iss when it is a DID, else the URI SAN of the leaf certificate"
+          },
+          "trustStatus": {
+            "type": "string",
+            "enum": [
+              "TRUSTED",
+              "UNTRUSTED"
+            ],
+            "nullable": true,
+            "description": "Trust status the resolver returned"
+          },
+          "jsonSchemaCredentialId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Credential type of the request"
+          },
+          "credentialSchemaId": {
+            "type": "number",
+            "nullable": true,
+            "description": "CredentialSchema of the request, which the authorized read names"
+          },
+          "authorized": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Whether the resolver authorizes the issuer for the credential type"
+          },
+          "queries": {
+            "description": "Resolver queries the agent ran",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string",
+            "description": "Why the verdict was not TRUSTED_AUTHORIZED"
+          }
+        },
+        "required": [
+          "did",
+          "trustStatus",
+          "jsonSchemaCredentialId",
+          "credentialSchemaId",
+          "authorized",
+          "queries"
+        ]
+      },
+      "OpenId4VcTrustVerdictDto": {
+        "type": "object",
+        "properties": {
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "TRUSTED_AUTHORIZED",
+              "TRUSTED_NOT_AUTHORIZED",
+              "UNTRUSTED",
+              "RESOLVER_UNAVAILABLE"
+            ],
+            "description": "The trust verdict"
+          },
+          "evidence": {
+            "description": "The basis of the verdict",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OpenId4VcTrustEvidenceDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "verdict",
+          "evidence"
+        ]
+      },
+      "OpenId4VcPresentedCredentialDto": {
+        "type": "object",
+        "properties": {
+          "vct": {
+            "type": "string",
+            "description": "SD-JWT VC type of the presented credential",
+            "example": "https://ecosystem.example/vt/vct/144"
+          },
+          "disclosedClaims": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The claims the wallet disclosed",
+            "example": {
+              "name": "Ada Lovelace"
+            }
+          }
+        },
+        "required": [
+          "vct",
+          "disclosedClaims"
+        ]
+      },
+      "OpenId4VcPresentationRecordDto": {
+        "type": "object",
+        "properties": {
+          "proofExchangeId": {
+            "type": "string",
+            "description": "Identifier of the verification session",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "jsonSchemaCredentialId": {
+            "type": "string",
+            "description": "Credential type of the request",
+            "example": "employee"
+          },
+          "requestedClaims": {
+            "description": "Claim names the request asked for",
+            "example": [
+              "name",
+              "role"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "RequestCreated",
+              "RequestUriRetrieved",
+              "ResponseVerified",
+              "Error"
+            ],
+            "description": "State of the verification session"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the agent created the request"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the session last changed"
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "Error message on the session. The agent sets it if the flow stops."
+          },
+          "cryptographicVerified": {
+            "type": "boolean",
+            "description": "True once the agent verified the response, the holder binding, the signature and the chain"
+          },
+          "accepted": {
+            "type": "boolean",
+            "description": "True only for the verdict TRUSTED_AUTHORIZED"
+          },
+          "trust": {
+            "description": "The trust verdict, once the agent verified the response",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OpenId4VcTrustVerdictDto"
+              }
+            ]
+          },
+          "credential": {
+            "description": "The presented credential, once verified",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OpenId4VcPresentedCredentialDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "proofExchangeId",
+          "state",
+          "createdAt",
+          "updatedAt",
+          "cryptographicVerified",
+          "accepted"
+        ]
+      },
+      "OpenId4VcPresentationRecordPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenId4VcPresentationRecordDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "OpenId4VcSigningCertificateDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "issuer",
+              "verifier"
+            ],
+            "description": "The capability that signs with this certificate"
+          },
+          "development": {
+            "type": "boolean",
+            "description": "True when the agent generated the certificate itself (development signing)"
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "SHA-256 fingerprint of the leaf, for an operator to pin it on a peer verifier",
+            "example": "SHA256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "certificateChain": {
+            "description": "Certificate chain, base64 DER, leaf first",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "role",
+          "development",
+          "fingerprint",
+          "certificateChain"
+        ]
+      },
+      "V2VtFlowOobLinkDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "expires_time of the message, when the sender set one."
+          },
+          "at": {
+            "type": "string",
+            "description": "When the agent sent or received the message."
+          }
+        },
+        "required": [
+          "url",
+          "description",
+          "at"
+        ]
+      },
+      "V2VtFlowMessageDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "oob-link",
+              "validating",
+              "problem-report"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "description": "Absent for a validating sent without a comment."
+          },
+          "at": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "description": "Set for an oob-link only."
+          }
+        },
+        "required": [
+          "type",
+          "at"
+        ]
+      },
+      "V2VtFlowTxDto": {
+        "type": "object",
+        "properties": {
+          "hash": {
+            "type": "string"
+          },
+          "submittedAt": {
+            "type": "string"
+          },
+          "height": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "SUCCEEDED",
+              "FAILED"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Set when the transaction failed."
+          },
+          "error": {
+            "type": "string",
+            "description": "Raw node or chain message."
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "V2VtFlowValidationDto": {
+        "type": "object",
+        "properties": {
+          "decidedAt": {
+            "type": "string"
+          },
+          "submission": {
+            "type": "string",
+            "enum": [
+              "AGENT",
+              "OPERATOR"
+            ]
+          },
+          "validationFees": {
+            "type": "number"
+          },
+          "issuanceFees": {
+            "type": "number"
+          },
+          "verificationFees": {
+            "type": "number"
+          },
+          "issuanceFeeDiscount": {
+            "type": "number",
+            "description": "Decimal between 0 and 1."
+          },
+          "verificationFeeDiscount": {
+            "type": "number",
+            "description": "Decimal between 0 and 1."
+          },
+          "effectiveUntil": {
+            "type": "string"
+          },
+          "opSummaryDigest": {
+            "type": "string"
+          },
+          "tx": {
+            "$ref": "#/components/schemas/V2VtFlowTxDto"
+          }
+        },
+        "required": [
+          "decidedAt",
+          "submission"
+        ]
+      },
+      "V2VtFlowIssuanceDto": {
+        "type": "object",
+        "properties": {
+          "tx": {
+            "$ref": "#/components/schemas/V2VtFlowTxDto"
+          }
+        }
+      },
+      "V2VtFlowRecordDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier of the flow record."
+          },
+          "participantSessionId": {
+            "type": "string",
+            "description": "DIDComm session identifier of the flow."
+          },
+          "flowState": {
+            "type": "string",
+            "description": "Current Flow State.",
+            "enum": [
+              "AWAITING_OP",
+              "OR_SENT",
+              "AWAITING_OR",
+              "IR_SENT",
+              "AWAITING_IR",
+              "OOB_PENDING",
+              "VALIDATING",
+              "AWAITING_VALIDATION_TX",
+              "VALIDATION_TX_SUBMITTED",
+              "VALIDATION_TX_FAILED",
+              "VALIDATED",
+              "VALIDATED_PENDING_CLAIMS",
+              "CRED_OFFERED",
+              "COMPLETED",
+              "CRED_REVOKED",
+              "TERMINATED_BY_VALIDATOR",
+              "TERMINATED_BY_APPLICANT",
+              "ERROR",
+              "PARTICIPANT_REVOKED",
+              "PARTICIPANT_SLASHED"
+            ]
+          },
+          "connectionState": {
+            "type": "string",
+            "description": "Current Connection State.",
+            "enum": [
+              "NOT_CONNECTED",
+              "ESTABLISHED",
+              "TERMINATED"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "description": "Role of the agent in the flow.",
+            "enum": [
+              "applicant",
+              "validator"
+            ]
+          },
+          "variant": {
+            "type": "string",
+            "description": "Flow variant that the agent runs.",
+            "enum": [
+              "onboarding-process",
+              "direct-issuance"
+            ]
+          },
+          "threadId": {
+            "type": "string",
+            "description": "DIDComm thread identifier of the flow."
+          },
+          "connectionId": {
+            "type": "string",
+            "description": "Identifier of the DIDComm connection of the flow."
+          },
+          "agentParticipantId": {
+            "type": "string",
+            "description": "Participant identifier of this agent."
+          },
+          "walletAgentParticipantId": {
+            "type": "string",
+            "description": "Participant identifier of the wallet agent of this agent."
+          },
+          "peerDid": {
+            "type": "string",
+            "description": "DID of the remote peer."
+          },
+          "applicantParticipantId": {
+            "type": "string",
+            "description": "Participant identifier of the applicant entry being onboarded."
+          },
+          "validatorParticipantId": {
+            "type": "string",
+            "description": "Participant identifier of the validator entry the applicant is onboarding under."
+          },
+          "schemaId": {
+            "type": "string",
+            "description": "Credential schema identifier of the flow."
+          },
+          "claims": {
+            "type": "object",
+            "description": "Credential claims that the applicant submitted."
+          },
+          "proofs": {
+            "description": "Proofs that the applicant submitted.",
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "oobLink": {
+            "description": "The outstanding oob-link, when one exists. Cleared on every transition out of OOB_PENDING. An expired link stays on the record until then and pendingAction reports it.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/V2VtFlowOobLinkDto"
+              }
+            ]
+          },
+          "messages": {
+            "description": "Human-readable messages of the flow, in order. A validator lists what it sent, an applicant what it received.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/V2VtFlowMessageDto"
+            }
+          },
+          "pendingAction": {
+            "type": "string",
+            "enum": [
+              "APPLICANT",
+              "VALIDATOR",
+              "AGENT",
+              "CHAIN",
+              "NONE"
+            ],
+            "description": "The party that must act for the flow to progress."
+          },
+          "validation": {
+            "description": "Validation decision of an Onboarding Process flow, set by validateFlow.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/V2VtFlowValidationDto"
+              }
+            ]
+          },
+          "issuance": {
+            "description": "Outcome of the transaction that anchors the issued credential.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/V2VtFlowIssuanceDto"
+              }
+            ]
+          },
+          "credentialExchangeRecordId": {
+            "type": "string",
+            "description": "Identifier of the credential exchange of the offered credential."
+          },
+          "credentialId": {
+            "type": "string",
+            "description": "Identifier of the offered credential."
+          },
+          "credentialDigest": {
+            "type": "string",
+            "description": "digestJCS of the offered credential."
+          },
+          "subprotocolThid": {
+            "type": "string",
+            "description": "DIDComm thread identifier of the subprotocol in flight."
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "Message of the error that stopped the flow."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Time when the agent created the flow."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Time when the agent last changed the flow."
+          },
+          "lastEventAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Time of the last event of the flow."
+          }
+        },
+        "required": [
+          "id",
+          "participantSessionId",
+          "flowState",
+          "connectionState",
+          "role",
+          "variant",
+          "threadId",
+          "connectionId",
+          "agentParticipantId",
+          "walletAgentParticipantId",
+          "messages",
+          "pendingAction",
+          "createdAt",
+          "updatedAt",
+          "lastEventAt"
+        ]
+      },
+      "V2VtFlowRecordPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/V2VtFlowRecordDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "EditClaimsDto": {
+        "type": "object",
+        "properties": {
+          "claims": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "claims"
+        ]
+      },
+      "SendOobLinkV2Dto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Absolute https:// URL where the applicant completes the step."
+          },
+          "description": {
+            "type": "string",
+            "description": "The text the applicant reads."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "ISO 8601 UTC datetime, the expires_time of the message."
+          }
+        },
+        "required": [
+          "url",
+          "description"
+        ]
+      },
+      "StartValidationDto": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": "string",
+            "description": "The text the applicant reads."
+          }
+        }
+      },
+      "ValidateFlowDto": {
+        "type": "object",
+        "properties": {
+          "validationFees": {
+            "type": "number",
+            "description": "Non-negative integer, in the unit of the schema pricing asset."
+          },
+          "issuanceFees": {
+            "type": "number",
+            "description": "Non-negative integer, in the unit of the schema pricing asset."
+          },
+          "verificationFees": {
+            "type": "number",
+            "description": "Non-negative integer, in the unit of the schema pricing asset."
+          },
+          "issuanceFeeDiscount": {
+            "type": "number",
+            "description": "Decimal between 0 and 1."
+          },
+          "verificationFeeDiscount": {
+            "type": "number",
+            "description": "Decimal between 0 and 1."
+          },
+          "effectiveUntil": {
+            "type": "string",
+            "description": "effective_until of the entry. When absent the VPR uses the expiration of the onboarding process, or no limit when the validity period of the role is 0."
+          },
+          "opSummaryDigest": {
+            "type": "string"
+          }
+        }
+      },
+      "RejectFlowDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "vt-flow.validation-refused",
+              "vt-flow.session-terminated",
+              "vt-flow.oob-expired"
+            ],
+            "default": "vt-flow.validation-refused"
+          },
+          "description": {
+            "type": "string",
+            "description": "The reason, sent to the applicant in the problem-report."
+          }
+        },
+        "required": [
+          "description"
+        ]
+      }
+    }
+  }
+}
