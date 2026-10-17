@@ -70,6 +70,7 @@ const TX_LOOKUP_TIMEOUT_MS = 60_000
 const TX_LOOKUP_INTERVAL_MS = 3_000
 // the notification handler and the tx lookup can both reach markValidated for one flow at the same time
 const markingValidated = new Set<string>()
+const continuingAfterValidated = new Map<string, Promise<void>>()
 
 const FEE_KEYS = ['validationFees', 'issuanceFees', 'verificationFees'] as const
 const DISCOUNT_KEYS = ['issuanceFeeDiscount', 'verificationFeeDiscount'] as const
@@ -82,14 +83,6 @@ function invalidInput(message: string): AdminApiError {
 
 function invalidState(message: string): AdminApiError {
   return new AdminApiError(AdminApiErrorCode.InvalidState, 409, message)
-}
-
-// AUTHZ-CHECK-3 step 1. A record's expiration is only its budget clock, not a validity window.
-function isActiveParticipant(participant: ParticipantDto): boolean {
-  const now = Date.now()
-  if (!participant.effective_from || Date.parse(participant.effective_from) > now) return false
-  if (participant.effective_until && Date.parse(participant.effective_until) <= now) return false
-  return !participant.revoked && !participant.slashed
 }
 
 function sameTerm(key: string, given: number, onEntry: number): boolean {
@@ -543,11 +536,10 @@ export class VtFlowOrchestrator {
     const validator = await this.agent.indexer
       .getParticipant(applicant.validator_participant_id)
       .catch(() => undefined)
-    if (!validator || !isActiveParticipant(validator)) return VtFlowSubmission.Operator
+    if (!validator) return VtFlowSubmission.Operator
 
     await authorization.refreshForOperator().catch(() => undefined)
-    const grant = authorization.getVsOperatorAuthorizationRecord(validator.id)
-    return grant?.msgTypes.includes(veranaTypeUrls.MsgSetParticipantOPToValidated)
+    return authorization.canSign(validator, veranaTypeUrls.MsgSetParticipantOPToValidated)
       ? VtFlowSubmission.Agent
       : VtFlowSubmission.Operator
   }
@@ -797,7 +789,23 @@ export class VtFlowOrchestrator {
     return latest?.id === record.id
   }
 
+  // one run at a time per flow: two callers at once would both read VALIDATED and offer twice
   async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {
+    const previous = continuingAfterValidated.get(recordId) ?? Promise.resolve()
+    const run = previous.then(() => this.issuanceAfterValidated(recordId))
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    continuingAfterValidated.set(recordId, settled)
+    try {
+      return await run
+    } finally {
+      if (continuingAfterValidated.get(recordId) === settled) continuingAfterValidated.delete(recordId)
+    }
+  }
+
+  private async issuanceAfterValidated(recordId: string): Promise<VtFlowRecord> {
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(recordId)
     if (!record) throw new Error(`vt-flow record ${recordId} not found`)
