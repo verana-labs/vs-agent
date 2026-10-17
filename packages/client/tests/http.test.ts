@@ -117,4 +117,28 @@ describe('ApiClient', () => {
     expect(url).toBe('http://localhost:3000/v2/vt/service-endpoints/did%3Aweb%3Aagent%23mcp')
     expect(init.method).toBe('DELETE')
   })
+
+  it('maps the invitation methods to the invitations routes', async () => {
+    const client = new ApiClient('http://localhost:3000')
+
+    fetchMock.mockResolvedValue(respond(201, { id: 'i-1', invitation: {}, shortUrl: 'https://agent/s?id=1' }))
+    await client.didcomm.createInvitation({ reusable: true })
+    expect(lastRequest().url).toBe('http://localhost:3000/v2/didcomm/invitations')
+    expect(lastRequest().init).toMatchObject({ method: 'POST', body: JSON.stringify({ reusable: true }) })
+
+    fetchMock.mockResolvedValue(respond(200, { items: [], nextCursor: null }))
+    await client.didcomm.listInvitations({ reusable: false, connectionId: 'c-1' })
+    expect(lastRequest().url).toBe(
+      'http://localhost:3000/v2/didcomm/invitations?reusable=false&connectionId=c-1',
+    )
+
+    fetchMock.mockResolvedValue(respond(200, { id: 'i/1' }))
+    await client.didcomm.getInvitation('i/1')
+    expect(lastRequest().url).toBe('http://localhost:3000/v2/didcomm/invitations/i%2F1')
+
+    fetchMock.mockResolvedValue(respond(204))
+    await client.didcomm.deleteInvitation('i-1')
+    expect(lastRequest().url).toBe('http://localhost:3000/v2/didcomm/invitations/i-1')
+    expect(lastRequest().init.method).toBe('DELETE')
+  })
 })

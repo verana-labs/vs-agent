@@ -12,9 +12,11 @@ import {
   CreatePresentationRequestResponse,
   CredentialExchangeRecord,
   DeclineExchangeBody,
+  InvitationRecord,
   ListBasicMessagesQuery,
   ListConnectionsQuery,
   ListCredentialExchangesQuery,
+  ListInvitationsQuery,
   ListPresentationsQuery,
   OfferCallBody,
   Page,
@@ -53,6 +55,18 @@ export class DidcommApi {
 
   public createInvitation(body: CreateInvitationBody): Promise<CreateInvitationResponse> {
     return this.http.request('POST', '/didcomm/invitations', { body })
+  }
+
+  public listInvitations(query?: ListInvitationsQuery): Promise<Page<InvitationRecord>> {
+    return this.http.request('GET', '/didcomm/invitations', { query })
+  }
+
+  public getInvitation(invitationId: string): Promise<InvitationRecord> {
+    return this.http.request('GET', `/didcomm/invitations/${encodeURIComponent(invitationId)}`)
+  }
+
+  public deleteInvitation(invitationId: string): Promise<void> {
+    return this.http.request('DELETE', `/didcomm/invitations/${encodeURIComponent(invitationId)}`)
   }
 
   public sendBasicMessage(body: SendBasicMessageBody): Promise<SentMessage> {

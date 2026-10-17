@@ -6,6 +6,7 @@ import {
   DidCommVersion,
   DidExchangeRole,
   DidExchangeState,
+  InvitationState,
   PaginationQuery,
   ProofRole,
   ProofState,
@@ -79,6 +80,35 @@ export interface CreateInvitationResponse {
   shortUrl?: string
   /** Present when the request named a `connectionId`. */
   messageId?: string
+}
+
+export interface InvitationAcceptance {
+  connectionId: string
+  /** True when the peer accepted the invitation on a connection that it already held. */
+  reused: boolean
+  acceptedAt: string
+}
+
+export interface InvitationRecord {
+  id: string
+  state: InvitationState
+  didcommVersion: DidCommVersion
+  reusable: boolean
+  invitation: Record<string, unknown>
+  shortUrl: string | null
+  parentConnectionId: string | null
+  acceptances: InvitationAcceptance[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ListInvitationsQuery extends PaginationQuery {
+  state?: InvitationState
+  parentConnectionId?: string
+  /** A connection that appears in `acceptances`. */
+  connectionId?: string
+  reusable?: boolean
+  didcommVersion?: DidCommVersion
 }
 
 export interface SendBasicMessageBody {

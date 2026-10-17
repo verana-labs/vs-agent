@@ -23,9 +23,12 @@ import {
   sendMessage,
 } from '@verana-labs/vs-agent-sdk'
 
-import { AdminApiError, AdminApiErrorCode } from '../../../../common'
+import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
 import { UrlShorteningService } from '../../../../services/UrlShorteningService'
 import { VsAgentService } from '../../../../services/VsAgentService'
+
+import { InvitationRecordDto, ListInvitationsQueryDto } from './dto'
+import { toInvitationDto } from './mappers'
 
 const invitationMediaType = 'application/didcomm-plain+json'
 
@@ -99,6 +102,54 @@ export class InvitationsService {
     return { id: record.id, messageId }
   }
 
+  public async listInvitations(query: ListInvitationsQueryDto): Promise<Page<InvitationRecordDto>> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const records = await agent.dependencyManager.resolve(InvitationRepository).findByQuery(agent.context, {
+      state: query.state,
+      parentConnectionId: query.parentConnectionId,
+      connectionIds: query.connectionId ? [query.connectionId] : undefined,
+      reusable: query.reusable === undefined ? undefined : query.reusable === 'true',
+      didcommVersion: query.didcommVersion,
+    })
+
+    const filters = {
+      state: query.state,
+      parentConnectionId: query.parentConnectionId,
+      connectionId: query.connectionId,
+      reusable: query.reusable,
+      didcommVersion: query.didcommVersion,
+    }
+    return mapPage(
+      paginate(records, query, { method: 'listInvitations', filters }, createdAtKey),
+      toInvitationDto,
+    )
+  }
+
+  public async getInvitation(invitationId: string): Promise<InvitationRecordDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const record = await agent.dependencyManager
+      .resolve(InvitationRepository)
+      .findById(agent.context, invitationId)
+    if (!record) throw unknownInvitation(invitationId)
+
+    return toInvitationDto(record)
+  }
+
+  public async deleteInvitation(invitationId: string): Promise<void> {
+    const agent = await this.vsAgentService.getAgent()
+    const repository = agent.dependencyManager.resolve(InvitationRepository)
+
+    const record = await repository.findById(agent.context, invitationId)
+    if (!record) throw unknownInvitation(invitationId)
+
+    // Credo stops accepting the invitation first, and the record goes last, so a failed step can be retried
+    if (await agent.didcomm.oob.findById(record.id)) await agent.didcomm.oob.deleteById(record.id)
+    await this.urlShortenerService.deleteShortUrlByRelatedFlowId(record.id)
+    await repository.delete(agent.context, record)
+  }
+
   private async createStandaloneInvitation(
     agent: VsAgent<BaseAgentModules>,
     options: CreateInvitationOptions,
@@ -117,6 +168,7 @@ export class InvitationsService {
     const shortUrlId = await this.urlShortenerService.createShortUrl({
       invitation,
       relatedFlowId: outOfBandRecord.id,
+      invitationRecord: true,
     })
     const shortUrl = `${this.publicApiBaseUrl}/s?id=${shortUrlId}`
 
@@ -164,4 +216,12 @@ export class InvitationsService {
 
 function invalidInput(message: string): AdminApiError {
   return new AdminApiError(AdminApiErrorCode.InvalidInput, HttpStatus.BAD_REQUEST, message)
+}
+
+function unknownInvitation(invitationId: string): AdminApiError {
+  return new AdminApiError(
+    AdminApiErrorCode.UnknownId,
+    HttpStatus.NOT_FOUND,
+    `no invitation with id "${invitationId}"`,
+  )
 }

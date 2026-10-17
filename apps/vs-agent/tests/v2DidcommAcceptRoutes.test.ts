@@ -1158,6 +1158,12 @@ describe('v2 didcomm accept routes, over two agents', () => {
       expect(connection.theirDid).toBe(scanned.did)
       const fetched = await faber().get(`/v2/didcomm/connections/${connection.id}`)
       expect(fetched.body).toMatchObject({ invitationId: response.body.id, parentConnectionId: null })
+
+      const deleted = await faber().delete(`/v2/didcomm/invitations/${response.body.id}`)
+      expect(deleted.status).toBe(204)
+      expect((await faber().get(`/s${new URL(response.body.shortUrl).search}`)).status).toBe(404)
+      const kept = await faber().get(`/v2/didcomm/connections/${connection.id}`)
+      expect(kept.body.invitationId).toBe(response.body.id)
     }, 120_000)
 
     it('connects a peer to a v1 standalone invitation over DID Exchange', async () => {
@@ -1183,6 +1189,45 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       const connection = await untilFaberConnection({ invitationId: response.body.id, state: 'completed' })
       expect(connection.getTag('parentConnectionId')).toBeUndefined()
+    }, 120_000)
+
+    it('lists, reads and deletes invitation records from the store', async () => {
+      const created = await faber().post('/v2/didcomm/invitations').send({ reusable: true })
+      expect(created.status).toBe(201)
+
+      const fetched = await faber().get(`/v2/didcomm/invitations/${created.body.id}`)
+      expect(fetched.status).toBe(200)
+      expect(fetched.body).toMatchObject({
+        id: created.body.id,
+        state: 'created',
+        didcommVersion: 'v2',
+        reusable: true,
+        invitation: created.body.invitation,
+        shortUrl: created.body.shortUrl,
+        parentConnectionId: null,
+        acceptances: [],
+      })
+
+      const idsOfPage = (body: { items: { id: string }[] }) => body.items.map(item => item.id)
+      const reusable = await faber().get(
+        '/v2/didcomm/invitations?reusable=true&state=created&didcommVersion=v2',
+      )
+      expect(idsOfPage(reusable.body)).toContain(created.body.id)
+      const singleUse = await faber().get('/v2/didcomm/invitations?reusable=false')
+      expect(idsOfPage(singleUse.body)).not.toContain(created.body.id)
+
+      const subConnections = await faber().get(`/v2/didcomm/invitations?parentConnectionId=${v2Parent.id}`)
+      expect(subConnections.body.items.length).toBeGreaterThan(0)
+      for (const item of subConnections.body.items) {
+        expect(item).toMatchObject({ parentConnectionId: v2Parent.id, shortUrl: null, reusable: false })
+      }
+
+      const deleted = await faber().delete(`/v2/didcomm/invitations/${created.body.id}`)
+      expect(deleted.status).toBe(204)
+      expect((await faber().get(`/v2/didcomm/invitations/${created.body.id}`)).status).toBe(404)
+      expect(await faberAgent.didcomm.oob.findById(created.body.id)).toBeNull()
+      expect((await faber().get(`/s${new URL(created.body.shortUrl).search}`)).status).toBe(404)
+      expect((await faber().delete(`/v2/didcomm/invitations/${created.body.id}`)).status).toBe(404)
     }, 120_000)
 
     it('reports an unknown connection as UNKNOWN_ID', async () => {

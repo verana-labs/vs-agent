@@ -1,14 +1,38 @@
-import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Param,
+  Post,
+  Query,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common'
 import {
   ApiBadRequestResponse,
   ApiBody,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
+  ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
 
-import { CreateInvitationBodyDto, CreateInvitationResponseDto } from './dto'
+import { Page } from '../../../../common'
+
+import {
+  CreateInvitationBodyDto,
+  CreateInvitationResponseDto,
+  InvitationRecordDto,
+  InvitationRecordPageDto,
+  ListInvitationsQueryDto,
+} from './dto'
 import { InvitationsService } from './InvitationsService'
 
 @ApiTags('v2/didcomm')
@@ -64,5 +88,46 @@ export class V2DidcommInvitationsController {
   @ApiNotFoundResponse({ description: 'No connection with the given id' })
   public async createInvitation(@Body() body: CreateInvitationBodyDto): Promise<CreateInvitationResponseDto> {
     return this.invitationsService.createInvitation(body)
+  }
+
+  @Get()
+  @ApiOperation({
+    summary: 'List invitations',
+    description: 'Returns the invitation records, filtered when the caller supplies a filter.',
+  })
+  @ApiOkResponse({ description: 'A page of invitation records', type: InvitationRecordPageDto })
+  public async listInvitations(@Query() query: ListInvitationsQueryDto): Promise<Page<InvitationRecordDto>> {
+    return this.invitationsService.listInvitations(query)
+  }
+
+  @Get(':invitationId')
+  @ApiOperation({
+    summary: 'Get an invitation',
+    description: 'Retrieves one invitation record by identifier.',
+  })
+  @ApiParam({ name: 'invitationId', type: String, description: 'Identifier of the invitation record' })
+  @ApiOkResponse({ description: 'The invitation record', type: InvitationRecordDto })
+  @ApiNotFoundResponse({ description: 'No invitation with the given id' })
+  public async getInvitation(@Param('invitationId') invitationId: string): Promise<InvitationRecordDto> {
+    return this.invitationsService.getInvitation(invitationId)
+  }
+
+  @Delete(':invitationId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Delete an invitation',
+    description:
+      'Deletes an invitation record. The agent stops accepting the invitation, and its short URL ' +
+      'answers 404. A connection that the invitation produced keeps its `invitationId`.',
+  })
+  @ApiParam({
+    name: 'invitationId',
+    type: String,
+    description: 'Identifier of the invitation record to delete',
+  })
+  @ApiNoContentResponse({ description: 'The invitation record is deleted' })
+  @ApiNotFoundResponse({ description: 'No invitation with the given id' })
+  public async deleteInvitation(@Param('invitationId') invitationId: string): Promise<void> {
+    await this.invitationsService.deleteInvitation(invitationId)
   }
 }
