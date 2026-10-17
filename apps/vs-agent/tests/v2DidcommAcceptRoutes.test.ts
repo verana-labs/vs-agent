@@ -885,6 +885,15 @@ describe('v2 didcomm accept routes, over two agents', () => {
         return event.data
       })
 
+    const invitationEvents = (invitationId: string) =>
+      vi.waitFor(() => {
+        const events = webhookFetch.mock.calls
+          .map(([, init]) => JSON.parse((init as RequestInit).body as string))
+          .filter(body => body.type === 'didcomm.invitations.state-updated' && body.data.id === invitationId)
+        expect(events.length).toBeGreaterThan(0)
+        return events
+      })
+
     const aliceReceives = async (invitation: DidCommOutOfBandInvitation) => {
       const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitation(invitation, {
         label: 'Alice',
@@ -1014,6 +1023,15 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       const listed = await faber().get(`/v2/didcomm/connections?invitationId=${response.body.id}`)
       expect(listed.body.items.map((item: { id: string }) => item.id)).toEqual([child.id])
+
+      const [created] = await invitationEvents(response.body.id)
+      expect(created.data).toMatchObject({
+        state: 'created',
+        previousState: null,
+        didcommVersion: 'v2',
+        parentConnectionId: parent.id,
+        shortUrl: null,
+      })
     }, 120_000)
 
     it('opens a sub-connection over a v1 connection with an OOB 1.1 invitation that carries the label', async () => {
@@ -1146,6 +1164,13 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       const served = await servedInvitation(response.body.shortUrl)
       expect(served).toEqual(response.body.invitation)
+
+      const created = await invitationEvents(response.body.id)
+      expect(created).toHaveLength(1)
+      expect(created[0].data).toEqual({
+        ...(await faber().get(`/v2/didcomm/invitations/${response.body.id}`)).body,
+        previousState: null,
+      })
 
       const scanned = await connectFromUrl(
         charlieAgent,

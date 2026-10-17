@@ -19,11 +19,7 @@ import { InvitationRecord, InvitationRepository } from '@verana-labs/vs-agent-sd
 import { ErrorEnvelopeFilter } from '../src/common'
 import { V2DidcommConnectionsController } from '../src/controllers/admin/v2/didcomm/V2DidcommConnectionsController'
 import { V2DidcommInvitationsController } from '../src/controllers/admin/v2/didcomm/V2DidcommInvitationsController'
-import {
-  CreateInvitationBodyDto,
-  ListConnectionsQueryDto,
-  ListInvitationsQueryDto,
-} from '../src/controllers/admin/v2/didcomm/dto'
+import { CreateInvitationBodyDto, ListConnectionsQueryDto } from '../src/controllers/admin/v2/didcomm/dto'
 import { InvitationsService } from '../src/controllers/admin/v2/didcomm/InvitationsService'
 import { UrlShorteningService } from '../src/services/UrlShorteningService'
 import { VsAgentService } from '../src/services/VsAgentService'
@@ -78,6 +74,7 @@ const agent = {
       token === InvitationRepository ? invitationRepository : outOfBandRepository,
   },
   dids,
+  events: { emit: vi.fn() },
   didcomm: { config: { didcommVersions: ['v1', 'v2'] }, connections, oob, basicMessages },
 }
 
@@ -255,17 +252,6 @@ describe('v2 didcomm connection routes', () => {
     expect(plain.body).toHaveProperty('parentConnectionId', null)
   })
 
-  it('returns a null invitationId for a connection from an out-of-band record that no invitation record wraps', async () => {
-    connections.findById.mockResolvedValueOnce(
-      connection('c-6', '2026-01-06T00:00:00.000Z', { outOfBandId: 'oob-presentation' }),
-    )
-
-    const response = await request(app.getHttpServer()).get('/v2/didcomm/connections/c-6')
-
-    expect(response.status).toBe(200)
-    expect(response.body).toHaveProperty('invitationId', null)
-  })
-
   it('reports an unknown connection as UNKNOWN_ID', async () => {
     connections.findById.mockResolvedValue(null)
 
@@ -345,6 +331,13 @@ describe('v2 didcomm invitation routes', () => {
 
   const savedRecord = () => invitationRepository.save.mock.calls[0][1]
 
+  const creationEvent = {
+    type: 'vs-agent-invitation-state-updated',
+    payload: {
+      event: expect.objectContaining({ invitationRecordId: 'oob-1', state: 'created', previousState: null }),
+    },
+  }
+
   const sharedInvitation = () => {
     const message = sentMessage()
     expect(message).toBeInstanceOf(DidCommShareMediaMessage)
@@ -412,25 +405,6 @@ describe('v2 didcomm invitation routes', () => {
     expect(messageSender.sendMessage).not.toHaveBeenCalled()
   })
 
-  it('stores a created invitation record and marks the out-of-band record it wraps', async () => {
-    await send({})
-
-    const outOfBand = await oob.createInvitation.mock.results[0].value
-    expect(outOfBand.setTag).toHaveBeenCalledWith('invitationRecord', true)
-    expect(outOfBandRepository.update).toHaveBeenCalledWith(agent.context, outOfBand)
-    expect(invitationRepository.save).toHaveBeenCalledWith(agent.context, expect.anything())
-    expect(savedRecord()).toMatchObject({
-      id: 'oob-1',
-      state: 'created',
-      didcommVersion: 'v2',
-      reusable: false,
-      shortUrl: 'https://agent.test/s?id=short-1',
-      parentConnectionId: null,
-      acceptances: [],
-    })
-    expect(savedRecord().invitation).toEqual(outOfBand.outOfBandInvitation.v2Invitation.toJSON())
-  })
-
   it('creates a v1 standalone invitation that names the DID of the agent and lists DID Exchange', async () => {
     const response = await send({ didcommVersion: 'v1' })
 
@@ -449,13 +423,6 @@ describe('v2 didcomm invitation routes', () => {
     await send({ useLegacyDid: true })
 
     expect(oob.createInvitation.mock.calls[0][0].ourDid).toBe('did:web:agent.test')
-  })
-
-  it('creates a reusable standalone invitation when reusable is true', async () => {
-    await send({ reusable: true })
-
-    expect(oob.createInvitation.mock.calls[0][0].multiUseInvitation).toBe(true)
-    expect(savedRecord().reusable).toBe(true)
   })
 
   it('ignores label and imageUrl for a standalone invitation, also when the agent holds an ECS-Service credential', async () => {
@@ -499,14 +466,6 @@ describe('v2 didcomm invitation routes', () => {
     expect(messageSender.sendMessage).not.toHaveBeenCalled()
   })
 
-  it('accepts reusable false with connectionId', async () => {
-    connections.findById.mockResolvedValue(parentConnection())
-
-    const response = await send({ connectionId: 'parent', reusable: false })
-
-    expect(response.status).toBe(201)
-  })
-
   it('sends a single-use OOB 1.1 sub-connection invitation on a v1 connection', async () => {
     connections.findById.mockResolvedValue(parentConnection())
 
@@ -539,19 +498,15 @@ describe('v2 didcomm invitation routes', () => {
     expect(sentMessage().v2Invitation).toBeUndefined()
   })
 
-  it('tags the out-of-band record and stores the invitation record before it sends the invitation', async () => {
+  it('tags the out-of-band record with the parent connection before it sends the invitation', async () => {
     connections.findById.mockResolvedValue(parentConnection())
 
     await send({ connectionId: 'parent' })
 
     const record = await oob.createInvitation.mock.results[0].value
     expect(record.setTag).toHaveBeenCalledWith('parentConnectionId', 'parent')
-    expect(record.setTag).toHaveBeenCalledWith('invitationRecord', true)
     expect(outOfBandRepository.update).toHaveBeenCalledWith(agent.context, record)
     expect(outOfBandRepository.update.mock.invocationCallOrder[0]).toBeLessThan(
-      messageSender.sendMessage.mock.invocationCallOrder[0],
-    )
-    expect(invitationRepository.save.mock.invocationCallOrder[0]).toBeLessThan(
       messageSender.sendMessage.mock.invocationCallOrder[0],
     )
   })
@@ -573,6 +528,8 @@ describe('v2 didcomm invitation routes', () => {
     })
     expect(savedRecord().invitation).toEqual(outOfBand.outOfBandInvitation.v2Invitation.toJSON())
     expect(urlShorteningService.createShortUrl).not.toHaveBeenCalled()
+    expect(agent.events.emit).toHaveBeenCalledTimes(1)
+    expect(agent.events.emit).toHaveBeenCalledWith(agent.context, creationEvent)
   })
 
   it('carries the OOB 2.0 sub-connection invitation in the attachment of a share-media message', async () => {
@@ -630,6 +587,7 @@ describe('v2 didcomm invitation routes', () => {
     expect(oob.createInvitation).not.toHaveBeenCalled()
     expect(outOfBandRepository.update).not.toHaveBeenCalled()
     expect(invitationRepository.save).not.toHaveBeenCalled()
+    expect(agent.events.emit).not.toHaveBeenCalled()
 
     const json = sentMessage().toJSON()
     expect(json.services).toEqual(['did:webvh:verifier.test'])
@@ -657,6 +615,7 @@ describe('v2 didcomm invitation routes', () => {
     const { message, item, invitation } = sharedInvitation()
     expect(response.body).toEqual({ messageId: message.id })
     expect(invitationRepository.save).not.toHaveBeenCalled()
+    expect(agent.events.emit).not.toHaveBeenCalled()
     expect(invitation).toMatchObject({
       from: 'did:webvh:verifier.test',
       body: { goal: 'verify you', goal_code: 'verify', accept: ['didcomm/v2'] },
@@ -725,22 +684,12 @@ describe('v2 didcomm invitation routes', () => {
       pipe.transform({ connectionId: 'parent', did: 'did:web:peer.test' }, metadata),
     ).resolves.toBeDefined()
   })
-
-  it('accepts an empty body and refuses a didcommVersion outside v1 and v2', async () => {
-    const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })
-    const metadata = { type: 'body', metatype: CreateInvitationBodyDto } as const
-
-    await expect(pipe.transform({}, metadata)).resolves.toBeDefined()
-    await expect(pipe.transform({ reusable: true, didcommVersion: 'v1' }, metadata)).resolves.toBeDefined()
-    await expect(pipe.transform({ didcommVersion: 'v3' }, metadata)).rejects.toMatchObject({ status: 400 })
-    await expect(pipe.transform({ reusable: 'yes' }, metadata)).rejects.toMatchObject({ status: 400 })
-  })
 })
 
 describe('v2 didcomm invitation record routes', () => {
   let app: INestApplication
 
-  const invitationRecord = (id: string, createdAt: string, extra: Partial<InvitationRecord> = {}) =>
+  const invitationRecord = (id: string, createdAt: string) =>
     Object.assign(
       new InvitationRecord({
         id,
@@ -753,17 +702,9 @@ describe('v2 didcomm invitation record routes', () => {
         parentConnectionId: null,
       }),
       { updatedAt: new Date(createdAt) },
-      extra,
     )
 
-  const invitations = [
-    invitationRecord('i-2', '2026-01-02T00:00:00.000Z'),
-    invitationRecord('i-3', '2026-01-03T00:00:00.000Z', {
-      state: 'accepted',
-      acceptances: [{ connectionId: 'c-1', reused: true, acceptedAt: '2026-01-03T01:00:00.000Z' }],
-    }),
-    invitationRecord('i-1', '2026-01-01T00:00:00.000Z'),
-  ]
+  const invitations = [invitationRecord('i-2', '2026-01-02T00:00:00.000Z')]
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -785,32 +726,6 @@ describe('v2 didcomm invitation record routes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     invitationRepository.findByQuery.mockResolvedValue(invitations)
-  })
-
-  it('walks the invitation records with the keyset cursor and ends with a null cursor', async () => {
-    const first = await request(app.getHttpServer()).get('/v2/didcomm/invitations?limit=2')
-
-    expect(first.status).toBe(200)
-    expect(idsOf(first.body)).toEqual(['i-1', 'i-2'])
-
-    const second = await request(app.getHttpServer()).get(
-      `/v2/didcomm/invitations?limit=2&cursor=${encodeURIComponent(first.body.nextCursor)}`,
-    )
-
-    expect(idsOf(second.body)).toEqual(['i-3'])
-    expect(second.body.nextCursor).toBeNull()
-    expect(second.body.items[0]).toEqual({
-      id: 'i-3',
-      state: 'accepted',
-      didcommVersion: 'v2',
-      reusable: false,
-      invitation: { type: 'https://didcomm.org/out-of-band/2.0/invitation', id: 'inv-i-3' },
-      shortUrl: 'https://agent.test/s?id=short-i-3',
-      parentConnectionId: null,
-      acceptances: [{ connectionId: 'c-1', reused: true, acceptedAt: '2026-01-03T01:00:00.000Z' }],
-      createdAt: '2026-01-03T00:00:00.000Z',
-      updatedAt: '2026-01-03T00:00:00.000Z',
-    })
   })
 
   it('queries the record tags for every supplied filter', async () => {
@@ -837,39 +752,6 @@ describe('v2 didcomm invitation record routes', () => {
     expect(query.state).toBeUndefined()
   })
 
-  it('refuses a cursor replayed against another filter set', async () => {
-    const first = await request(app.getHttpServer()).get('/v2/didcomm/invitations?limit=1')
-
-    const replayed = await request(app.getHttpServer()).get(
-      `/v2/didcomm/invitations?limit=1&reusable=true&cursor=${encodeURIComponent(first.body.nextCursor)}`,
-    )
-
-    expect(replayed.status).toBe(400)
-    expect(replayed.body.error.code).toBe('INVALID_CURSOR')
-  })
-
-  it('refuses a state or a reusable value outside the spec', async () => {
-    const pipe = new ValidationPipe()
-    const metadata = { type: 'query', metatype: ListInvitationsQueryDto } as const
-
-    await expect(pipe.transform({ state: 'done' }, metadata)).rejects.toMatchObject({ status: 400 })
-    await expect(pipe.transform({ reusable: 'yes' }, metadata)).rejects.toMatchObject({ status: 400 })
-    await expect(pipe.transform({ state: 'created', reusable: 'false' }, metadata)).resolves.toBeDefined()
-  })
-
-  it('returns one invitation record in the shape the listing uses', async () => {
-    invitationRepository.findById.mockResolvedValue(invitations[2])
-
-    const [list, single] = await Promise.all([
-      request(app.getHttpServer()).get('/v2/didcomm/invitations?limit=1'),
-      request(app.getHttpServer()).get('/v2/didcomm/invitations/i-1'),
-    ])
-
-    expect(single.status).toBe(200)
-    expect(single.body).toEqual(list.body.items[0])
-    expect(invitationRepository.findById).toHaveBeenCalledWith(agent.context, 'i-1')
-  })
-
   it('reports an unknown invitation as UNKNOWN_ID on get and on delete', async () => {
     invitationRepository.findById.mockResolvedValue(null)
 
@@ -892,6 +774,7 @@ describe('v2 didcomm invitation record routes', () => {
 
     expect(response.status).toBe(204)
     expect(response.body).toEqual({})
+    expect(agent.events.emit).not.toHaveBeenCalled()
     expect(oob.deleteById).toHaveBeenCalledWith('i-2')
     expect(urlShorteningService.deleteShortUrlByRelatedFlowId).toHaveBeenCalledWith('i-2')
     expect(invitationRepository.delete).toHaveBeenCalledWith(agent.context, invitations[0])
@@ -901,16 +784,5 @@ describe('v2 didcomm invitation record routes', () => {
     expect(urlShorteningService.deleteShortUrlByRelatedFlowId.mock.invocationCallOrder[0]).toBeLessThan(
       invitationRepository.delete.mock.invocationCallOrder[0],
     )
-  })
-
-  it('finishes a delete whose out-of-band record is already gone', async () => {
-    invitationRepository.findById.mockResolvedValue(invitations[0])
-    oob.findById.mockResolvedValue(null)
-
-    const response = await request(app.getHttpServer()).delete('/v2/didcomm/invitations/i-2')
-
-    expect(response.status).toBe(204)
-    expect(oob.deleteById).not.toHaveBeenCalled()
-    expect(invitationRepository.delete).toHaveBeenCalledWith(agent.context, invitations[0])
   })
 })

@@ -1,4 +1,3 @@
-import type { CreateInvitationOptions, CreateInvitationResult } from '@verana-labs/vs-agent-model'
 import type { BaseAgentModules, InvitationRecordProps, VsAgent } from '@verana-labs/vs-agent-sdk'
 import type { JsonValue } from '@credo-ts/core'
 
@@ -13,14 +12,21 @@ import {
 } from '@credo-ts/didcomm'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import {
+  type CreateInvitationOptions,
+  type CreateInvitationResult,
+  InvitationStateUpdated,
+} from '@verana-labs/vs-agent-model'
+import {
   connectionOf,
   createInvitation,
   ecsServiceClaims,
+  emitVsAgentEvent,
   INVITATION_RECORD_TAG,
   InvitationRecord,
   InvitationRepository,
   PARENT_CONNECTION_TAG,
   sendMessage,
+  VsAgentEventTypes,
 } from '@verana-labs/vs-agent-sdk'
 
 import { AdminApiError, AdminApiErrorCode, createdAtKey, mapPage, Page, paginate } from '../../../../common'
@@ -193,6 +199,11 @@ export class InvitationsService {
 
     const record = new InvitationRecord({ ...props, id: outOfBandRecord.id, state: 'created' })
     await agent.dependencyManager.resolve(InvitationRepository).save(agent.context, record)
+    emitVsAgentEvent(
+      agent,
+      VsAgentEventTypes.InvitationStateUpdated,
+      new InvitationStateUpdated({ invitationRecordId: record.id, state: record.state, previousState: null }),
+    )
     return record
   }
 
