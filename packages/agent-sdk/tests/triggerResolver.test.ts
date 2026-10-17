@@ -1,6 +1,10 @@
+import type { ParticipantDto } from '../src/blockchain/types'
+
 import { VtFlowTxReason } from '@verana-labs/credo-ts-didcomm-vt-flow'
+import { veranaTypeUrls } from '@verana-labs/verana-types'
 import { describe, expect, it, vi } from 'vitest'
 
+import { isActiveParticipant } from '../src/blockchain/AuthorizationService'
 import { FeePreflightError } from '../src/blockchain/feePreflight'
 import {
   flushPendingTriggerResolvers,
@@ -15,7 +19,7 @@ function makeAgent(
   options: {
     grant?: { withFeegrant: boolean } | null
     participants?: Record<string, unknown>[]
-    canSign?: (id: number) => boolean
+    canSign?: (participant: ParticipantDto) => boolean
   } = {},
 ) {
   const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
@@ -25,19 +29,20 @@ function makeAgent(
     triggerResolver: vi.fn(async () => ({ txHash: 'AB12' })),
   }
   const grant = options.grant === undefined ? { withFeegrant: false } : options.grant
+  const canSign = vi.fn(
+    (participant: ParticipantDto) =>
+      isActiveParticipant(participant) && (options.canSign?.(participant) ?? true),
+  )
   const agent = {
     did: 'did:web:agent.example',
     config: { logger },
     veranaChain: chain,
     authorizationService: grant
-      ? {
-          getVsOperatorAuthorizationRecord: vi.fn(() => grant),
-          canSign: vi.fn((id: number) => options.canSign?.(id) ?? true),
-        }
+      ? { getVsOperatorAuthorizationRecord: vi.fn(() => grant), canSign }
       : undefined,
     indexer: { listParticipants: vi.fn(async () => options.participants ?? []) },
   }
-  return { agent: agent as never, chain, logger }
+  return { agent: agent as never, chain, logger, canSign }
 }
 
 describe('triggerResolver', () => {
@@ -100,8 +105,9 @@ describe('triggerResolverForOwnDid', () => {
     const authorized = makeAgent({ participants: [expired, issuer, holder] })
     await triggerResolverForOwnDid(authorized.agent, 'test')
     expect(authorized.chain.triggerResolver).toHaveBeenCalledWith(7, { granter: undefined })
+    expect(authorized.canSign).toHaveBeenCalledWith(holder, veranaTypeUrls.MsgTriggerResolver)
 
-    const unauthorized = makeAgent({ participants: [expired, issuer, holder], canSign: id => id !== 7 })
+    const unauthorized = makeAgent({ participants: [expired, issuer, holder], canSign: p => p.id !== 7 })
     await triggerResolverForOwnDid(unauthorized.agent, 'test')
     expect(unauthorized.chain.triggerResolver).not.toHaveBeenCalled()
 

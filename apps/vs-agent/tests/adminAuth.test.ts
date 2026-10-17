@@ -97,6 +97,20 @@ describe('AdminAuthService', () => {
     expect(replayed).toBeUndefined()
   })
 
+  it('consumes the nonce when it is presented with another account', async () => {
+    const authService = new AdminAuthService(AUDIENCE)
+    const { signer, pubKey, sign } = await makeSigner()
+    const { nonce } = authService.createChallenge(signer)
+    const signature = await sign(challengePayload(AUDIENCE, nonce))
+
+    await expect(
+      authService.issueToken({ account: 'verana1someoneelse', pubKey, signature, nonce }),
+    ).resolves.toBeUndefined()
+    await expect(
+      authService.issueToken({ account: signer, pubKey, signature, nonce }),
+    ).resolves.toBeUndefined()
+  })
+
   it('rejects a signature over the wrong challenge', async () => {
     const authService = new AdminAuthService(AUDIENCE)
     const { signer, pubKey, sign } = await makeSigner()
