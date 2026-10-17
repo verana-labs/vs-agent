@@ -49,6 +49,7 @@ import { getLegacyDidWeb } from '../did/legacyDidWeb'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { ParentConnectionModule } from '../connections/ParentConnectionModule'
 import { connectionEvents } from '../events/ConnectionEvents'
+import { invitationEvents } from '../events/InvitationEvents'
 import { vtFlowEvents } from '../events/VtFlowEvents'
 import { createInvitation } from '../utils/agent'
 import { EcsClaims } from '../utils/ecsClaims'
@@ -147,6 +148,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
 
     const logger = this.config.logger as BaseLogger
     await connectionEvents(this, { discoveryOptions: this.discoveryOptions, logger })
+    invitationEvents(this as VsAgent, logger)
     await baseMessageEvents(this as VsAgent, logger)
     await vtFlowEvents(this as VsAgent, logger)
 
