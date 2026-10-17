@@ -125,7 +125,7 @@ export const connectionEvents = async (
         // If discovery is enabled, send an empty 'completed' state so that the recipient knows to expect async features.
         const body = new ConnectionStateUpdated({
           connectionId: record.id,
-          invitationId: record.outOfBandId,
+          invitationId: record.getTag(INVITATION_ID_TAG) as string | undefined,
           state: record.state,
           metadata: config.discoveryOptions ? {} : undefined,
         })
@@ -150,7 +150,7 @@ export const connectionEvents = async (
 
         const body = new ConnectionStateUpdated({
           connectionId: record.id,
-          invitationId: record.outOfBandId,
+          invitationId: record.getTag(INVITATION_ID_TAG) as string | undefined,
           state: 'terminated',
         })
 
@@ -185,7 +185,7 @@ export const connectionEvents = async (
 
         const body = new ConnectionStateUpdated({
           connectionId: record.id,
-          invitationId: record.outOfBandId,
+          invitationId: record.getTag(INVITATION_ID_TAG) as string | undefined,
           state: ExtendedDidExchangeState.Updated,
           metadata,
         })

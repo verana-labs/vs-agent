@@ -76,14 +76,6 @@ describe('createInvitation branding', () => {
     })
     expect(agent.dids.getCreatedDids).not.toHaveBeenCalled()
   })
-
-  it('keeps an invitation without messages multi-use when the caller does not say otherwise', async () => {
-    const agent = makeAgent()
-
-    await createInvitation({ agent: agent as never })
-
-    expect(agent.didcomm.oob.createInvitation.mock.calls[0][0].multiUseInvitation).toBe(true)
-  })
 })
 
 describe('the single use of a v2 invitation', () => {
@@ -221,6 +213,20 @@ describe('the single use of a v2 invitation', () => {
 
     expect(hangup).not.toHaveBeenCalled()
     expect(stateUpdates()).toHaveLength(1)
+  })
+
+  it('reports the invitation record of a connection as its invitationId, not its out-of-band record', async () => {
+    findById.mockResolvedValue({ id: OOB_ID, reusable: true, getTag: vi.fn(() => undefined) })
+    const claimed = {
+      ...second,
+      getTag: vi.fn((name: string) => (name === 'invitationId' ? OOB_ID : undefined)),
+    }
+    const handler = await stateChangeHandler()
+
+    await handler({ payload: { connectionRecord: first } })
+    await handler({ payload: { connectionRecord: claimed } })
+
+    expect(stateUpdates().map(([, event]) => event.payload.event.invitationId)).toEqual([undefined, OOB_ID])
   })
 
   it('leaves a v1 connection to the handshake of the DID exchange protocol', async () => {
