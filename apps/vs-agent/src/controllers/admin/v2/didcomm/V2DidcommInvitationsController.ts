@@ -8,7 +8,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 
-import { SendInvitationBodyDto, SendInvitationResponseDto } from './dto'
+import { CreateInvitationBodyDto, CreateInvitationResponseDto } from './dto'
 import { InvitationsService } from './InvitationsService'
 
 @ApiTags('v2/didcomm')
@@ -28,7 +28,7 @@ export class V2DidcommInvitationsController {
       '`parentConnectionId`. With `did`, it refers the peer to that service and creates no record.',
   })
   @ApiBody({
-    type: SendInvitationBodyDto,
+    type: CreateInvitationBodyDto,
     examples: {
       subConnection: {
         summary: 'Sub-connection to this agent',
@@ -51,10 +51,10 @@ export class V2DidcommInvitationsController {
       },
     },
   })
-  @ApiCreatedResponse({ description: 'The invitation is sent', type: SendInvitationResponseDto })
+  @ApiCreatedResponse({ description: 'The invitation is sent', type: CreateInvitationResponseDto })
   @ApiBadRequestResponse({ description: 'The body fails validation' })
   @ApiNotFoundResponse({ description: 'No connection with the given id' })
-  public async sendInvitation(@Body() body: SendInvitationBodyDto): Promise<SendInvitationResponseDto> {
-    return this.invitationsService.sendInvitation(body)
+  public async createInvitation(@Body() body: CreateInvitationBodyDto): Promise<CreateInvitationResponseDto> {
+    return this.invitationsService.createInvitation(body)
   }
 }

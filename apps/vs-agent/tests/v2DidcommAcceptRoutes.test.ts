@@ -873,13 +873,13 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const webhookUrl = 'http://webhook.test/events'
     const webhookFetch = vi.fn()
 
-    const firstConnectionEvent = (outOfBandId: string) =>
+    const firstConnectionEvent = (invitationId: string) =>
       vi.waitFor(() => {
         const event = webhookFetch.mock.calls
           .map(([, init]) => JSON.parse((init as RequestInit).body as string))
           .find(
             body =>
-              body.type === 'didcomm.connections.state-updated' && body.data.outOfBandId === outOfBandId,
+              body.type === 'didcomm.connections.state-updated' && body.data.invitationId === invitationId,
           )
         expect(event).toBeDefined()
         return event.data
@@ -1004,14 +1004,14 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       const fetched = await faber().get(`/v2/didcomm/connections/${child.id}`)
       expect(fetched.body).toMatchObject({
-        outOfBandId: response.body.outOfBandId,
+        invitationId: response.body.outOfBandId,
         parentConnectionId: parent.id,
       })
 
       const firstEvent = await firstConnectionEvent(response.body.outOfBandId)
       expect(firstEvent).toMatchObject({ parentConnectionId: parent.id, previousState: null })
 
-      const listed = await faber().get(`/v2/didcomm/connections?outOfBandId=${response.body.outOfBandId}`)
+      const listed = await faber().get(`/v2/didcomm/connections?invitationId=${response.body.outOfBandId}`)
       expect(listed.body.items.map((item: { id: string }) => item.id)).toEqual([child.id])
     }, 120_000)
 

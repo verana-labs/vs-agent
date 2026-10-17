@@ -80,12 +80,12 @@ describe('Events API delivery', () => {
       id: 'conn-1',
       state: 'completed',
       previousState: null,
-      outOfBandId: null,
+      invitationId: null,
       parentConnectionId: null,
     })
   })
 
-  it('delivers a sub-connection with its outOfBandId and parentConnectionId', async () => {
+  it('delivers a sub-connection with its invitationId and parentConnectionId', async () => {
     const { agent, emit } = fakeAgent()
     webhookEvent(agent as never, { url: URL }, logger as never)
 
@@ -100,7 +100,7 @@ describe('Events API delivery', () => {
 
     const { body } = await delivered()
     expect(body.type).toBe('didcomm.connections.state-updated')
-    expect(body.data).toMatchObject({ id: 'conn-1', outOfBandId: 'oob-1', parentConnectionId: 'conn-0' })
+    expect(body.data).toMatchObject({ id: 'conn-1', invitationId: 'oob-1', parentConnectionId: 'conn-0' })
   })
 
   it('delivers a received basic message as its record and ignores sent ones', async () => {

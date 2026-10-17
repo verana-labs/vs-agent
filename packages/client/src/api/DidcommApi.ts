@@ -6,6 +6,8 @@ import {
   ConnectionRecord,
   CreateCredentialOfferBody,
   CreateCredentialOfferResponse,
+  CreateInvitationBody,
+  CreateInvitationResponse,
   CreatePresentationRequestBody,
   CreatePresentationRequestResponse,
   CredentialExchangeRecord,
@@ -21,8 +23,6 @@ import {
   RequestMrtdBody,
   RequestProfileBody,
   SendBasicMessageBody,
-  SendInvitationBody,
-  SendInvitationResponse,
   SendMenuBody,
   SendProfileBody,
   SendQuestionBody,
@@ -51,7 +51,7 @@ export class DidcommApi {
     return this.http.request('DELETE', `/didcomm/connections/${encodeURIComponent(connectionId)}`)
   }
 
-  public sendInvitation(body: SendInvitationBody): Promise<SendInvitationResponse> {
+  public createInvitation(body: CreateInvitationBody): Promise<CreateInvitationResponse> {
     return this.http.request('POST', '/didcomm/invitations', { body })
   }
 

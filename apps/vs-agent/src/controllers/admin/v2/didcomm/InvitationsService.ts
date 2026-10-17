@@ -1,4 +1,4 @@
-import type { SendInvitationOptions, SendInvitationResult } from '@verana-labs/vs-agent-model'
+import type { CreateInvitationOptions, CreateInvitationResult } from '@verana-labs/vs-agent-model'
 import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 import type { JsonValue } from '@credo-ts/core'
 
@@ -21,7 +21,7 @@ const invitationMediaType = 'application/didcomm-plain+json'
 export class InvitationsService {
   public constructor(@Inject(VsAgentService) private readonly vsAgentService: VsAgentService) {}
 
-  public async sendInvitation(options: SendInvitationOptions): Promise<SendInvitationResult> {
+  public async createInvitation(options: CreateInvitationOptions): Promise<CreateInvitationResult> {
     const agent = await this.vsAgentService.getAgent()
 
     const connection = await connectionOf(agent, options.connectionId)

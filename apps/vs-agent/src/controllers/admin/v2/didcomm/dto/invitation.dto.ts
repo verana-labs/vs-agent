@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsNotEmpty, IsOptional, IsString, IsUrl, Matches } from 'class-validator'
 
-export class SendInvitationBodyDto {
+export class CreateInvitationBodyDto {
   @ApiProperty({
     description: 'Connection to send the invitation on',
     example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
@@ -52,7 +52,7 @@ export class SendInvitationBodyDto {
   goalCode?: string
 }
 
-export class SendInvitationResponseDto {
+export class CreateInvitationResponseDto {
   @ApiProperty({
     description:
       'Identifier of the sent message: the Out-of-Band 1.1 invitation on a v1 connection, the ' +
@@ -64,7 +64,7 @@ export class SendInvitationResponseDto {
   @ApiPropertyOptional({
     description:
       'Identifier of the Out-of-Band record created for a sub-connection invitation. Absent for a ' +
-      'referral. The connection the invitation produces carries this value as `outOfBandId`.',
+      'referral. The connection the invitation produces carries this value as `invitationId`.',
     example: '8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f',
   })
   outOfBandId?: string

@@ -37,7 +37,7 @@ export class V2DidcommConnectionsController {
     const agent = await this.vsAgentService.getAgent()
 
     const filters = {
-      outOfBandId: query.outOfBandId,
+      outOfBandId: query.invitationId,
       parentConnectionId: query.parentConnectionId,
       state: query.state,
       role: query.role,

@@ -17,7 +17,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { ErrorEnvelopeFilter } from '../src/common'
 import { V2DidcommConnectionsController } from '../src/controllers/admin/v2/didcomm/V2DidcommConnectionsController'
 import { V2DidcommInvitationsController } from '../src/controllers/admin/v2/didcomm/V2DidcommInvitationsController'
-import { ListConnectionsQueryDto, SendInvitationBodyDto } from '../src/controllers/admin/v2/didcomm/dto'
+import { CreateInvitationBodyDto, ListConnectionsQueryDto } from '../src/controllers/admin/v2/didcomm/dto'
 import { InvitationsService } from '../src/controllers/admin/v2/didcomm/InvitationsService'
 import { VsAgentService } from '../src/services/VsAgentService'
 
@@ -221,16 +221,16 @@ describe('v2 didcomm connection routes', () => {
     expect(single.body).toEqual(list.body.items[0])
   })
 
-  it('returns parentConnectionId from the tag, and null for it and outOfBandId when absent', async () => {
+  it('returns parentConnectionId from the tag, and null for it and invitationId when absent', async () => {
     connections.findById.mockResolvedValueOnce(subConnection('c-4', '2026-01-04T00:00:00.000Z', 'c-1'))
     const child = await request(app.getHttpServer()).get('/v2/didcomm/connections/c-4')
     expect(child.status).toBe(200)
-    expect(child.body).toMatchObject({ id: 'c-4', outOfBandId: 'oob-c-4', parentConnectionId: 'c-1' })
+    expect(child.body).toMatchObject({ id: 'c-4', invitationId: 'oob-c-4', parentConnectionId: 'c-1' })
 
     connections.findById.mockResolvedValueOnce(records[2])
     const plain = await request(app.getHttpServer()).get('/v2/didcomm/connections/c-1')
     expect(plain.status).toBe(200)
-    expect(plain.body).toHaveProperty('outOfBandId', null)
+    expect(plain.body).toHaveProperty('invitationId', null)
     expect(plain.body).toHaveProperty('parentConnectionId', null)
   })
 
@@ -531,7 +531,7 @@ describe('v2 didcomm invitation routes', () => {
 
   it('refuses a referral target that is not a DID', async () => {
     const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })
-    const metadata = { type: 'body', metatype: SendInvitationBodyDto } as const
+    const metadata = { type: 'body', metatype: CreateInvitationBodyDto } as const
 
     await expect(
       pipe.transform({ connectionId: 'parent', did: 'https://not-a-did' }, metadata),

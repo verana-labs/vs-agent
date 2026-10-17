@@ -42,7 +42,7 @@ export function toConnectionDto(record: DidCommConnectionRecord): ConnectionReco
     alias: record.alias,
     threadId: record.threadId,
     imageUrl: record.imageUrl,
-    outOfBandId: record.outOfBandId ?? null,
+    invitationId: record.outOfBandId ?? null,
     parentConnectionId: (record.getTag(PARENT_CONNECTION_TAG) as string | undefined) ?? null,
     invitationDid: record.invitationDid,
     didcommVersion: record.didcommVersion,

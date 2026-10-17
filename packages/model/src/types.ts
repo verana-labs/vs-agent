@@ -106,11 +106,7 @@ export interface CreatePresentationRequestResult {
   shortUrl: string
 }
 
-export interface CreateInvitationResult {
-  url: string
-}
-
-export interface SendInvitationOptions {
+export interface CreateInvitationOptions {
   connectionId: string
   did?: string
   label?: string
@@ -119,7 +115,7 @@ export interface SendInvitationOptions {
   goalCode?: string
 }
 
-export interface SendInvitationResult {
+export interface CreateInvitationResult {
   id: string
   outOfBandId?: string
 }
@@ -134,7 +130,7 @@ export interface ConnectionRecord {
   alias?: string
   threadId?: string
   imageUrl?: string
-  outOfBandId: string | null
+  invitationId: string | null
   parentConnectionId: string | null
   invitationDid?: string
   didcommVersion?: DidCommVersion
