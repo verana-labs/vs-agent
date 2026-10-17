@@ -2,7 +2,6 @@ import type { BaseAgentModules, VsAgent } from '../agent/VsAgent'
 import type { AnonCredsProof } from '@credo-ts/anoncreds'
 import type { DidCommConnectionRecord, DidCommProofExchangeRecord } from '@credo-ts/didcomm'
 
-import { DidCommPresentationV1Message, DidCommPresentationV1ProblemReportMessage } from '@credo-ts/anoncreds'
 import { BaseLogger, CredoError } from '@credo-ts/core'
 import {
   DidCommCredentialEventTypes,
@@ -52,12 +51,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
 
       if (!connection) return
 
-      if (
-        [
-          DidCommPresentationV2ProblemReportMessage.type.messageTypeUri,
-          DidCommPresentationV1ProblemReportMessage.type.messageTypeUri,
-        ].includes(message.type)
-      ) {
+      if (message.type === DidCommPresentationV2ProblemReportMessage.type.messageTypeUri) {
         logger.info('Presentation problem report received')
         try {
           const record = await agent.didcomm.proofs.getByThreadAndConnectionId(
@@ -109,12 +103,7 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
         }
       }
 
-      if (
-        [
-          DidCommPresentationV1Message.type.messageTypeUri,
-          DidCommPresentationV2Message.type.messageTypeUri,
-        ].includes(message.type)
-      ) {
+      if (message.type === DidCommPresentationV2Message.type.messageTypeUri) {
         logger.info('Presentation received')
 
         try {
@@ -239,10 +228,7 @@ function registerAnonCredsTrustDecision(agent: VsAgent<BaseAgentModules>, logger
     await next()
 
     const { connection, message } = messageContext
-    const isPresentation = [
-      DidCommPresentationV1Message.type.messageTypeUri,
-      DidCommPresentationV2Message.type.messageTypeUri,
-    ].includes(message.type)
+    const isPresentation = message.type === DidCommPresentationV2Message.type.messageTypeUri
 
     if (!isPresentation || !connection) return
 
@@ -427,10 +413,9 @@ async function abandonPresentation(
     )
   }
 
-  const problemReport =
-    record.protocolVersion === 'v1'
-      ? new DidCommPresentationV1ProblemReportMessage({ description: { code, en: description } })
-      : new DidCommPresentationV2ProblemReportMessage({ description: { code, en: description } })
+  const problemReport = new DidCommPresentationV2ProblemReportMessage({
+    description: { code, en: description },
+  })
   problemReport.setThread({ threadId: record.threadId, parentThreadId: record.parentThreadId })
 
   try {

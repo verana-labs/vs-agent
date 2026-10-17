@@ -63,7 +63,7 @@
     "@credo-ts/didcomm": "catalog:",
     "@credo-ts/node": "catalog:",
     "@credo-ts/webvh": "catalog:",
-    "@hyperledger/anoncreds-nodejs": "^0.4.0",
+    "@hyperledger/anoncreds-nodejs": "^0.4.1",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",

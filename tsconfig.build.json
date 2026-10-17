@@ -14,6 +14,11 @@
     "skipLibCheck": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
+    // node10 resolution ignores package.json exports, so Credo 0.8 subpath imports need a mapping
+    "paths": {
+      "@credo-ts/anoncreds/didcomm": ["./node_modules/@credo-ts/anoncreds/build/didcomm/index.d.mts"],
+      "@credo-ts/webvh/anoncreds": ["./node_modules/@credo-ts/webvh/build/anoncreds/index.d.mts"]
+    },
     // TODO: we should update code to assume errors are of type 'unknown'
     "useUnknownInCatchVariables": false
   },

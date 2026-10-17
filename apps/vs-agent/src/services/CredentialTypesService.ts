@@ -6,7 +6,7 @@ import {
   AnonCredsSchemaRepository,
 } from '@credo-ts/anoncreds'
 import { JsonObject, parseDid, Proof, W3cCredential } from '@credo-ts/core'
-import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh/anoncreds'
 import { HttpStatus, Inject, Logger } from '@nestjs/common'
 import { mapToEcosystem } from '@verana-labs/vs-agent-model'
 import {
