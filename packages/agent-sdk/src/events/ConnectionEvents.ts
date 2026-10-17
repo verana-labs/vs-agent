@@ -18,6 +18,7 @@ import {
   PresentationStateUpdated,
 } from '@verana-labs/vs-agent-model'
 
+import { INVITATION_ID_TAG } from '../connections/InvitationRecord'
 import { publicDidsOf } from '../utils/agent'
 
 import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
@@ -44,13 +45,15 @@ async function discardExtraConnection(
   const siblings = await agent.didcomm.connections.findAllByOutOfBandId(record.outOfBandId)
   if (siblings.length < 2) return false
 
-  const accepted: DidCommConnectionRecord = siblings.reduce(
-    (oldest: DidCommConnectionRecord, candidate: DidCommConnectionRecord) =>
+  // only the connection that claimed an invitation record carries its invitationId, and its acceptance names it
+  const accepted: DidCommConnectionRecord =
+    siblings.find((sibling: DidCommConnectionRecord) => sibling.getTag(INVITATION_ID_TAG) !== undefined) ??
+    siblings.reduce((oldest: DidCommConnectionRecord, candidate: DidCommConnectionRecord) =>
       candidate.createdAt < oldest.createdAt ||
       (candidate.createdAt.getTime() === oldest.createdAt.getTime() && candidate.id < oldest.id)
         ? candidate
         : oldest,
-  )
+    )
   if (accepted.id === record.id) return false
 
   logger.warn(

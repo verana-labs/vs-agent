@@ -188,6 +188,22 @@ describe('the single use of a v2 invitation', () => {
     expect(stateUpdates()).toHaveLength(1)
   })
 
+  it('keeps the connection that claimed the invitation record, also when it is not the oldest', async () => {
+    const claimed = {
+      ...second,
+      getTag: vi.fn((name: string) => (name === 'invitationId' ? OOB_ID : undefined)),
+    }
+    findAllByOutOfBandId.mockResolvedValue([first, claimed])
+    const handler = await stateChangeHandler()
+
+    await handler({ payload: { connectionRecord: claimed } })
+    await handler({ payload: { connectionRecord: first } })
+
+    expect(hangup).toHaveBeenCalledOnce()
+    expect(hangup).toHaveBeenCalledWith({ connectionId: 'first' })
+    expect(deleteById).toHaveBeenCalledWith('first')
+  })
+
   it('deletes the connection although the hangup fails', async () => {
     hangup.mockRejectedValue(new Error('the peer is unreachable'))
     const handler = await stateChangeHandler()
