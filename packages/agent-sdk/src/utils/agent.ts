@@ -6,6 +6,8 @@ import {
   DidCommConnectionRepository,
   DidCommHandshakeProtocol,
   DidCommMessage,
+  type DidCommOutOfBandInvitation,
+  type DidCommOutOfBandRecord,
   type DidCommVersion,
 } from '@credo-ts/didcomm'
 import { peerAnchorDid } from '@verana-labs/credo-ts-didcomm-vt-flow'
@@ -30,7 +32,12 @@ export async function createInvitation(options: {
   multiUseInvitation?: boolean
   goal?: string
   goalCode?: string
-}) {
+}): Promise<{
+  invitation: Record<string, unknown>
+  outOfBandInvitation: DidCommOutOfBandInvitation
+  outOfBandRecord: DidCommOutOfBandRecord
+  url: string
+}> {
   const { agent, messages, useLegacyDid, didCommVersion, unbranded, goal, goalCode } = options
 
   const ourDid = (useLegacyDid && agent.did ? getLegacyDidWeb(agent.did) : undefined) ?? agent.did

@@ -9,7 +9,7 @@ export class UrlShorteningService {
     invitation: Record<string, unknown>
     relatedFlowId?: string
     invitationRecord?: boolean
-  }) {
+  }): Promise<string> {
     const { invitation, relatedFlowId, invitationRecord } = options
 
     const record = await this.agent.genericRecords.save({
@@ -19,7 +19,7 @@ export class UrlShorteningService {
     return record.id
   }
 
-  async getInvitation(id: string) {
+  async getInvitation(id: string): Promise<Record<string, unknown> | undefined> {
     const record = await this.agent.genericRecords.findById(id)
     if (!record) return undefined
 
@@ -40,7 +40,7 @@ export class UrlShorteningService {
     await this.agent.genericRecords.deleteById(id)
   }
 
-  async deleteShortUrlByRelatedFlowId(relatedFlowId: string) {
+  async deleteShortUrlByRelatedFlowId(relatedFlowId: string): Promise<void> {
     const records = await this.agent.genericRecords.findAllByQuery({ relatedFlowId })
     await Promise.all(records.map(record => this.agent.genericRecords.delete(record)))
   }
