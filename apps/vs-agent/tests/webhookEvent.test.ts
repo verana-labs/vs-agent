@@ -93,7 +93,7 @@ describe('Events API delivery', () => {
       connectionRecord: {
         ...connectionRecord,
         outOfBandId: 'oob-1',
-        getTag: (name: string) => (name === 'parentConnectionId' ? 'conn-0' : undefined),
+        getTag: (name: string) => ({ parentConnectionId: 'conn-0', invitationId: 'oob-1' })[name],
       },
       previousState: null,
     })

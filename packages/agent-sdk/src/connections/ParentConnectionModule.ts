@@ -4,11 +4,13 @@ import type { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { EventEmitter, inject, injectable, InjectionSymbols } from '@credo-ts/core'
 import { DidCommConnectionRepository, DidCommOutOfBandRepository } from '@credo-ts/didcomm'
 
+import { INVITATION_ID_TAG, INVITATION_RECORD_TAG, InvitationRepository } from './InvitationRecord'
+
 export const PARENT_CONNECTION_TAG = 'parentConnectionId'
 
 /**
- * Copies the `parentConnectionId` tag from the out-of-band record before the first save.
- * Credo emits the first state change after this save, so the first event has the tag.
+ * Copies the `parentConnectionId` and `invitationId` tags from the out-of-band record before the
+ * first save. Credo emits the first state change after this save, so the first event has the tags.
  */
 @injectable()
 export class ParentConnectionRepository extends DidCommConnectionRepository {
@@ -21,10 +23,13 @@ export class ParentConnectionRepository extends DidCommConnectionRepository {
   }
 
   public async save(agentContext: AgentContext, record: DidCommConnectionRecord): Promise<void> {
-    if (record.outOfBandId && !record.getTag(PARENT_CONNECTION_TAG)) {
+    if (record.outOfBandId) {
       const outOfBandRecord = await this.outOfBandRepository.findById(agentContext, record.outOfBandId)
       const parentConnectionId = outOfBandRecord?.getTag(PARENT_CONNECTION_TAG)
       if (typeof parentConnectionId === 'string') record.setTag(PARENT_CONNECTION_TAG, parentConnectionId)
+      if (outOfBandRecord?.getTag(INVITATION_RECORD_TAG) === true) {
+        record.setTag(INVITATION_ID_TAG, outOfBandRecord.id)
+      }
     }
     await super.save(agentContext, record)
   }
@@ -36,5 +41,6 @@ export class ParentConnectionRepository extends DidCommConnectionRepository {
 export class ParentConnectionModule implements Module {
   public register(dependencyManager: DependencyManager): void {
     dependencyManager.registerSingleton(DidCommConnectionRepository, ParentConnectionRepository)
+    dependencyManager.registerSingleton(InvitationRepository)
   }
 }

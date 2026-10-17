@@ -19,17 +19,23 @@ export class V2DidcommInvitationsController {
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   @ApiOperation({
-    summary: 'Send an invitation',
+    summary: 'Create an invitation',
     description:
-      'Sends an Out-of-Band invitation on an established connection. A v1 connection carries the ' +
-      'Out-of-Band 1.1 message. A v2 connection carries the Out-of-Band 2.0 invitation in the ' +
+      'Without `connectionId`, creates a standalone Out-of-Band invitation that names the DID of the ' +
+      'agent, with no label, no image and no attachment, and returns it with its short URL. With ' +
+      '`connectionId`, sends the invitation on that connection: a v1 connection carries the ' +
+      'Out-of-Band 1.1 message, and a v2 connection carries the Out-of-Band 2.0 invitation in the ' +
       '`application/didcomm-plain+json` attachment of a Media Sharing share-media message. Without ' +
-      '`did`, the invitation opens a single-use sub-connection to this agent, correlated through ' +
+      '`did`, that invitation opens a single-use sub-connection to this agent, correlated through ' +
       '`parentConnectionId`. With `did`, it refers the peer to that service and creates no record.',
   })
   @ApiBody({
     type: CreateInvitationBodyDto,
     examples: {
+      standalone: {
+        summary: 'Standalone invitation for a QR code',
+        value: { reusable: false, goalCode: 'login' },
+      },
       subConnection: {
         summary: 'Sub-connection to this agent',
         value: {
@@ -51,8 +57,10 @@ export class V2DidcommInvitationsController {
       },
     },
   })
-  @ApiCreatedResponse({ description: 'The invitation is sent', type: CreateInvitationResponseDto })
-  @ApiBadRequestResponse({ description: 'The body fails validation' })
+  @ApiCreatedResponse({ description: 'The invitation is created', type: CreateInvitationResponseDto })
+  @ApiBadRequestResponse({
+    description: 'The body fails validation, `did` comes without `connectionId`, or `reusable` with it',
+  })
   @ApiNotFoundResponse({ description: 'No connection with the given id' })
   public async createInvitation(@Body() body: CreateInvitationBodyDto): Promise<CreateInvitationResponseDto> {
     return this.invitationsService.createInvitation(body)

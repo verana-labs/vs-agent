@@ -9,7 +9,7 @@ import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
-import { PARENT_CONNECTION_TAG } from '@verana-labs/vs-agent-sdk'
+import { INVITATION_ID_TAG, PARENT_CONNECTION_TAG } from '@verana-labs/vs-agent-sdk'
 
 import {
   BasicMessageRecordDto,
@@ -42,7 +42,7 @@ export function toConnectionDto(record: DidCommConnectionRecord): ConnectionReco
     alias: record.alias,
     threadId: record.threadId,
     imageUrl: record.imageUrl,
-    invitationId: record.outOfBandId ?? null,
+    invitationId: (record.getTag(INVITATION_ID_TAG) as string | undefined) ?? null,
     parentConnectionId: (record.getTag(PARENT_CONNECTION_TAG) as string | undefined) ?? null,
     invitationDid: record.invitationDid,
     didcommVersion: record.didcommVersion,

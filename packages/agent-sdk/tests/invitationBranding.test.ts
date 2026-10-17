@@ -54,6 +54,36 @@ describe('createInvitation branding', () => {
     const [config] = agent.didcomm.oob.createInvitation.mock.calls[0]
     expect(config).toMatchObject({ label: undefined, imageUrl: undefined })
   })
+
+  it('sends no label and no image for an unbranded invitation, with the reuse and goal it is given', async () => {
+    const agent = makeAgent({ name: 'Acme Service', logoUri: 'https://cdn/logo.png' })
+
+    await createInvitation({
+      agent: agent as never,
+      unbranded: true,
+      multiUseInvitation: false,
+      goal: 'log in',
+      goalCode: 'login',
+    })
+
+    const [config] = agent.didcomm.oob.createInvitation.mock.calls[0]
+    expect(config).toMatchObject({
+      label: undefined,
+      imageUrl: undefined,
+      multiUseInvitation: false,
+      goal: 'log in',
+      goalCode: 'login',
+    })
+    expect(agent.dids.getCreatedDids).not.toHaveBeenCalled()
+  })
+
+  it('keeps an invitation without messages multi-use when the caller does not say otherwise', async () => {
+    const agent = makeAgent()
+
+    await createInvitation({ agent: agent as never })
+
+    expect(agent.didcomm.oob.createInvitation.mock.calls[0][0].multiUseInvitation).toBe(true)
+  })
 })
 
 describe('the single use of a v2 invitation', () => {

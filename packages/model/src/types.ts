@@ -107,17 +107,22 @@ export interface CreatePresentationRequestResult {
 }
 
 export interface CreateInvitationOptions {
-  connectionId: string
+  connectionId?: string
   did?: string
+  reusable?: boolean
   label?: string
   imageUrl?: string
   goal?: string
   goalCode?: string
+  useLegacyDid?: boolean
+  didcommVersion?: DidCommVersion
 }
 
 export interface CreateInvitationResult {
-  id: string
-  outOfBandId?: string
+  id?: string
+  invitation?: Record<string, unknown>
+  shortUrl?: string
+  messageId?: string
 }
 
 export interface ConnectionRecord {

@@ -52,17 +52,33 @@ export interface ListConnectionsQuery extends PaginationQuery {
 }
 
 export interface CreateInvitationBody {
-  connectionId: string
+  /** When absent, the agent creates a standalone invitation and returns it. */
+  connectionId?: string
+  /** A referral. Requires `connectionId`. */
   did?: string
+  /** Requires that `connectionId` is absent. */
+  reusable?: boolean
+  /** Ignored for a standalone invitation. */
   label?: string
+  /** Ignored for a standalone invitation. */
   imageUrl?: string
   goal?: string
   goalCode?: string
+  /** The agent ignores it when `connectionId` is present. */
+  useLegacyDid?: boolean
+  /** The agent ignores it when `connectionId` is present. */
+  didcommVersion?: DidCommVersion
 }
 
 export interface CreateInvitationResponse {
-  id: string
-  outOfBandId?: string
+  /** Absent for a referral. */
+  id?: string
+  /** Present for a standalone invitation only. */
+  invitation?: Record<string, unknown>
+  /** Present for a standalone invitation only. */
+  shortUrl?: string
+  /** Present when the request named a `connectionId`. */
+  messageId?: string
 }
 
 export interface SendBasicMessageBody {

@@ -14,11 +14,14 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { InvitationRepository } from '@verana-labs/vs-agent-sdk'
+
 import { ErrorEnvelopeFilter } from '../src/common'
 import { V2DidcommConnectionsController } from '../src/controllers/admin/v2/didcomm/V2DidcommConnectionsController'
 import { V2DidcommInvitationsController } from '../src/controllers/admin/v2/didcomm/V2DidcommInvitationsController'
 import { CreateInvitationBodyDto, ListConnectionsQueryDto } from '../src/controllers/admin/v2/didcomm/dto'
 import { InvitationsService } from '../src/controllers/admin/v2/didcomm/InvitationsService'
+import { UrlShorteningService } from '../src/services/UrlShorteningService'
 import { VsAgentService } from '../src/services/VsAgentService'
 
 const connection = (
@@ -40,7 +43,7 @@ const connection = (
 })
 
 const subConnection = (id: string, createdAt: string, parentConnectionId: string) =>
-  connection(id, createdAt, { outOfBandId: `oob-${id}` }, { parentConnectionId })
+  connection(id, createdAt, { outOfBandId: `oob-${id}` }, { parentConnectionId, invitationId: `oob-${id}` })
 
 // Deliberately out of order: the controller owes a deterministic order of its own.
 const records = [
@@ -58,19 +61,31 @@ const connections = {
 const oob = { createInvitation: vi.fn() }
 const basicMessages = { sendMessage: vi.fn().mockResolvedValue({ id: 'bm-1' }) }
 const outOfBandRepository = { update: vi.fn() }
+const invitationRepository = { save: vi.fn() }
 const messageSender = { sendMessage: vi.fn() }
 const dids = { getCreatedDids: vi.fn().mockResolvedValue([]) }
 
 const agent = {
-  did: 'did:webvh:agent.test',
+  did: 'did:webvh:QmAgent:agent.test',
   publicApiBaseUrl: 'https://agent.test',
   context: { dependencyManager: { resolve: () => messageSender } },
-  dependencyManager: { resolve: () => outOfBandRepository },
+  dependencyManager: {
+    resolve: (token: unknown) =>
+      token === InvitationRepository ? invitationRepository : outOfBandRepository,
+  },
   dids,
-  didcomm: { connections, oob, basicMessages },
+  didcomm: { config: { didcommVersions: ['v1', 'v2'] }, connections, oob, basicMessages },
 }
 
 const vsAgentService = { getAgent: vi.fn().mockResolvedValue(agent) }
+const urlShorteningService = { createShortUrl: vi.fn() }
+
+const invitationProviders = [
+  { provide: VsAgentService, useValue: vsAgentService },
+  { provide: UrlShorteningService, useValue: urlShorteningService },
+  { provide: 'PUBLIC_API_BASE_URL', useValue: 'https://agent.test' },
+  InvitationsService,
+]
 
 const idsOf = (body: { items: { id: string }[] }) => body.items.map(item => item.id)
 
@@ -80,7 +95,7 @@ describe('v2 didcomm connection routes', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [V2DidcommConnectionsController, V2DidcommInvitationsController],
-      providers: [{ provide: VsAgentService, useValue: vsAgentService }, InvitationsService],
+      providers: invitationProviders,
     }).compile()
 
     app = moduleRef.createNestApplication()
@@ -128,7 +143,7 @@ describe('v2 didcomm connection routes', () => {
 
   it('passes every supplied filter to the connection repository', async () => {
     const response = await request(app.getHttpServer()).get(
-      '/v2/didcomm/connections?state=completed&role=responder&theirDid=did:web:peer.test&mediatorId=med-1&didcommVersion=v2&parentConnectionId=c-1',
+      '/v2/didcomm/connections?state=completed&role=responder&theirDid=did:web:peer.test&mediatorId=med-1&didcommVersion=v2&parentConnectionId=c-1&invitationId=inv-1',
     )
 
     expect(response.status).toBe(200)
@@ -140,8 +155,10 @@ describe('v2 didcomm connection routes', () => {
         mediatorId: 'med-1',
         didcommVersion: 'v2',
         parentConnectionId: 'c-1',
+        invitationId: 'inv-1',
       }),
     )
+    expect(connections.findAllByQuery.mock.calls[0][0]).not.toHaveProperty('outOfBandId')
   })
 
   it('refuses a cursor replayed against another parentConnectionId', async () => {
@@ -221,7 +238,7 @@ describe('v2 didcomm connection routes', () => {
     expect(single.body).toEqual(list.body.items[0])
   })
 
-  it('returns parentConnectionId from the tag, and null for it and invitationId when absent', async () => {
+  it('returns invitationId and parentConnectionId from the tags, and null for both when absent', async () => {
     connections.findById.mockResolvedValueOnce(subConnection('c-4', '2026-01-04T00:00:00.000Z', 'c-1'))
     const child = await request(app.getHttpServer()).get('/v2/didcomm/connections/c-4')
     expect(child.status).toBe(200)
@@ -232,6 +249,17 @@ describe('v2 didcomm connection routes', () => {
     expect(plain.status).toBe(200)
     expect(plain.body).toHaveProperty('invitationId', null)
     expect(plain.body).toHaveProperty('parentConnectionId', null)
+  })
+
+  it('returns a null invitationId for a connection from an out-of-band record that no invitation record wraps', async () => {
+    connections.findById.mockResolvedValueOnce(
+      connection('c-6', '2026-01-06T00:00:00.000Z', { outOfBandId: 'oob-presentation' }),
+    )
+
+    const response = await request(app.getHttpServer()).get('/v2/didcomm/connections/c-6')
+
+    expect(response.status).toBe(200)
+    expect(response.body).toHaveProperty('invitationId', null)
   })
 
   it('reports an unknown connection as UNKNOWN_ID', async () => {
@@ -311,6 +339,8 @@ describe('v2 didcomm invitation routes', () => {
 
   const sentMessage = () => messageSender.sendMessage.mock.calls[0][0].message
 
+  const savedRecord = () => invitationRepository.save.mock.calls[0][1]
+
   const sharedInvitation = () => {
     const message = sentMessage()
     expect(message).toBeInstanceOf(DidCommShareMediaMessage)
@@ -331,7 +361,7 @@ describe('v2 didcomm invitation routes', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [V2DidcommInvitationsController],
-      providers: [{ provide: VsAgentService, useValue: vsAgentService }, InvitationsService],
+      providers: invitationProviders,
     }).compile()
 
     app = moduleRef.createNestApplication()
@@ -348,6 +378,128 @@ describe('v2 didcomm invitation routes', () => {
     vi.clearAllMocks()
     dids.getCreatedDids.mockResolvedValue([])
     oob.createInvitation.mockImplementation(async config => outOfBandRecord(config))
+    urlShorteningService.createShortUrl.mockResolvedValue('short-1')
+  })
+
+  it('creates a single-use v2 standalone invitation from the DID of the agent by default', async () => {
+    const response = await send({ goal: 'log in', goalCode: 'login' })
+
+    expect(response.status).toBe(201)
+    const [config] = oob.createInvitation.mock.calls[0]
+    expect(config).toMatchObject({
+      didCommVersion: 'v2',
+      ourDid: agent.did,
+      multiUseInvitation: false,
+      goal: 'log in',
+      goalCode: 'login',
+    })
+    expect(config.label).toBeUndefined()
+    expect(config.imageUrl).toBeUndefined()
+    expect(config.messages).toBeUndefined()
+
+    const record = await oob.createInvitation.mock.results[0].value
+    const invitation = JSON.parse(JSON.stringify(record.outOfBandInvitation.v2Invitation.toJSON()))
+    expect(response.body).toEqual({ id: 'oob-1', invitation, shortUrl: 'https://agent.test/s?id=short-1' })
+    expect(urlShorteningService.createShortUrl).toHaveBeenCalledWith({
+      invitation: record.outOfBandInvitation.v2Invitation.toJSON(),
+      relatedFlowId: 'oob-1',
+    })
+    expect(messageSender.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('stores a created invitation record and marks the out-of-band record it wraps', async () => {
+    await send({})
+
+    const outOfBand = await oob.createInvitation.mock.results[0].value
+    expect(outOfBand.setTag).toHaveBeenCalledWith('invitationRecord', true)
+    expect(outOfBandRepository.update).toHaveBeenCalledWith(agent.context, outOfBand)
+    expect(invitationRepository.save).toHaveBeenCalledWith(agent.context, expect.anything())
+    expect(savedRecord()).toMatchObject({
+      id: 'oob-1',
+      state: 'created',
+      didcommVersion: 'v2',
+      reusable: false,
+      shortUrl: 'https://agent.test/s?id=short-1',
+      parentConnectionId: null,
+      acceptances: [],
+    })
+    expect(savedRecord().invitation).toEqual(outOfBand.outOfBandInvitation.v2Invitation.toJSON())
+  })
+
+  it('creates a v1 standalone invitation that names the DID of the agent and lists DID Exchange', async () => {
+    const response = await send({ didcommVersion: 'v1' })
+
+    expect(response.status).toBe(201)
+    const [config] = oob.createInvitation.mock.calls[0]
+    expect(config).toMatchObject({
+      didCommVersion: 'v1',
+      invitationDid: agent.did,
+      multiUseInvitation: false,
+    })
+    expect(config.handshakeProtocols).toEqual([DidCommHandshakeProtocol.DidExchange])
+    expect(savedRecord().didcommVersion).toBe('v1')
+  })
+
+  it('advertises the legacy did:web form when useLegacyDid is set', async () => {
+    await send({ useLegacyDid: true })
+
+    expect(oob.createInvitation.mock.calls[0][0].ourDid).toBe('did:web:agent.test')
+  })
+
+  it('creates a reusable standalone invitation when reusable is true', async () => {
+    await send({ reusable: true })
+
+    expect(oob.createInvitation.mock.calls[0][0].multiUseInvitation).toBe(true)
+    expect(savedRecord().reusable).toBe(true)
+  })
+
+  it('ignores label and imageUrl for a standalone invitation, also when the agent holds an ECS-Service credential', async () => {
+    dids.getCreatedDids.mockResolvedValue([
+      {
+        metadata: {
+          get: () => ({
+            'https://ecosystem.test/vt/schemas-service-vtc-vp.json': {
+              credential: { credentialSubject: { name: 'Acme', logoUri: 'https://agent.test/logo.png' } },
+              didDocumentServiceId: 'did:webvh:QmAgent:agent.test#vpr-schemas-service-vtc-vp',
+            },
+          }),
+        },
+      },
+    ])
+
+    await send({ label: 'Support', imageUrl: 'https://agent.test/support.png' })
+
+    const [config] = oob.createInvitation.mock.calls[0]
+    expect(config.label).toBeUndefined()
+    expect(config.imageUrl).toBeUndefined()
+  })
+
+  it('refuses a did without connectionId as INVALID_INPUT and creates nothing', async () => {
+    const response = await send({ did: 'did:webvh:verifier.test' })
+
+    expect(response.status).toBe(400)
+    expect(response.body.error.code).toBe('INVALID_INPUT')
+    expect(oob.createInvitation).not.toHaveBeenCalled()
+    expect(invitationRepository.save).not.toHaveBeenCalled()
+  })
+
+  it('refuses reusable true with connectionId as INVALID_INPUT and sends nothing', async () => {
+    connections.findById.mockResolvedValue(parentConnection())
+
+    const response = await send({ connectionId: 'parent', reusable: true })
+
+    expect(response.status).toBe(400)
+    expect(response.body.error.code).toBe('INVALID_INPUT')
+    expect(oob.createInvitation).not.toHaveBeenCalled()
+    expect(messageSender.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('accepts reusable false with connectionId', async () => {
+    connections.findById.mockResolvedValue(parentConnection())
+
+    const response = await send({ connectionId: 'parent', reusable: false })
+
+    expect(response.status).toBe(201)
   })
 
   it('sends a single-use OOB 1.1 sub-connection invitation on a v1 connection', async () => {
@@ -362,8 +514,8 @@ describe('v2 didcomm invitation routes', () => {
     })
 
     expect(response.status).toBe(201)
-    expect(response.body).toEqual({ id: sentMessage().id, outOfBandId: 'oob-1' })
-    expect(response.body.id).not.toBe('oob-1')
+    expect(response.body).toEqual({ id: 'oob-1', messageId: sentMessage().id })
+    expect(response.body.messageId).not.toBe('oob-1')
 
     const [config] = oob.createInvitation.mock.calls[0]
     expect(config).toMatchObject({
@@ -382,17 +534,40 @@ describe('v2 didcomm invitation routes', () => {
     expect(sentMessage().v2Invitation).toBeUndefined()
   })
 
-  it('tags the out-of-band record with the parent connection before it sends the invitation', async () => {
+  it('tags the out-of-band record and stores the invitation record before it sends the invitation', async () => {
     connections.findById.mockResolvedValue(parentConnection())
 
     await send({ connectionId: 'parent' })
 
     const record = await oob.createInvitation.mock.results[0].value
     expect(record.setTag).toHaveBeenCalledWith('parentConnectionId', 'parent')
+    expect(record.setTag).toHaveBeenCalledWith('invitationRecord', true)
     expect(outOfBandRepository.update).toHaveBeenCalledWith(agent.context, record)
     expect(outOfBandRepository.update.mock.invocationCallOrder[0]).toBeLessThan(
       messageSender.sendMessage.mock.invocationCallOrder[0],
     )
+    expect(invitationRepository.save.mock.invocationCallOrder[0]).toBeLessThan(
+      messageSender.sendMessage.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('stores a sub-connection invitation record with the parent connection and the envelope of the connection', async () => {
+    connections.findById.mockResolvedValue(parentConnection('v2'))
+
+    await send({ connectionId: 'parent', label: 'Support' })
+
+    const outOfBand = await oob.createInvitation.mock.results[0].value
+    expect(savedRecord()).toMatchObject({
+      id: 'oob-1',
+      state: 'created',
+      didcommVersion: 'v2',
+      reusable: false,
+      shortUrl: null,
+      parentConnectionId: 'parent',
+      acceptances: [],
+    })
+    expect(savedRecord().invitation).toEqual(outOfBand.outOfBandInvitation.v2Invitation.toJSON())
+    expect(urlShorteningService.createShortUrl).not.toHaveBeenCalled()
   })
 
   it('carries the OOB 2.0 sub-connection invitation in the attachment of a share-media message', async () => {
@@ -414,7 +589,7 @@ describe('v2 didcomm invitation routes', () => {
     expect(config).not.toHaveProperty('ourDid')
 
     const { message, item, invitation } = sharedInvitation()
-    expect(response.body).toEqual({ id: message.id, outOfBandId: 'oob-1' })
+    expect(response.body).toEqual({ id: 'oob-1', messageId: message.id })
     expect(invitation).toMatchObject({
       type: 'https://didcomm.org/out-of-band/2.0/invitation',
       from: 'did:peer:4zQmFresh',
@@ -446,9 +621,10 @@ describe('v2 didcomm invitation routes', () => {
     })
 
     expect(response.status).toBe(201)
-    expect(response.body).toEqual({ id: sentMessage().id })
+    expect(response.body).toEqual({ messageId: sentMessage().id })
     expect(oob.createInvitation).not.toHaveBeenCalled()
     expect(outOfBandRepository.update).not.toHaveBeenCalled()
+    expect(invitationRepository.save).not.toHaveBeenCalled()
 
     const json = sentMessage().toJSON()
     expect(json.services).toEqual(['did:webvh:verifier.test'])
@@ -474,7 +650,8 @@ describe('v2 didcomm invitation routes', () => {
     expect(basicMessages.sendMessage).not.toHaveBeenCalled()
 
     const { message, item, invitation } = sharedInvitation()
-    expect(response.body).toEqual({ id: message.id })
+    expect(response.body).toEqual({ messageId: message.id })
+    expect(invitationRepository.save).not.toHaveBeenCalled()
     expect(invitation).toMatchObject({
       from: 'did:webvh:verifier.test',
       body: { goal: 'verify you', goal_code: 'verify', accept: ['didcomm/v2'] },
@@ -492,7 +669,7 @@ describe('v2 didcomm invitation routes', () => {
           get: () => ({
             'https://ecosystem.test/vt/schemas-service-vtc-vp.json': {
               credential: { credentialSubject: { name: 'Acme Support' } },
-              didDocumentServiceId: 'did:webvh:agent.test#vpr-schemas-service-vtc-vp',
+              didDocumentServiceId: 'did:webvh:QmAgent:agent.test#vpr-schemas-service-vtc-vp',
             },
           }),
         },
@@ -527,6 +704,7 @@ describe('v2 didcomm invitation routes', () => {
     expect(response.body.error.code).toBe('UNKNOWN_ID')
     expect(messageSender.sendMessage).not.toHaveBeenCalled()
     expect(basicMessages.sendMessage).not.toHaveBeenCalled()
+    expect(invitationRepository.save).not.toHaveBeenCalled()
   })
 
   it('refuses a referral target that is not a DID', async () => {
@@ -541,8 +719,15 @@ describe('v2 didcomm invitation routes', () => {
     await expect(
       pipe.transform({ connectionId: 'parent', did: 'did:web:peer.test' }, metadata),
     ).resolves.toBeDefined()
-    await expect(pipe.transform({ did: 'did:web:peer.test' }, metadata)).rejects.toMatchObject({
-      status: 400,
-    })
+  })
+
+  it('accepts an empty body and refuses a didcommVersion outside v1 and v2', async () => {
+    const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })
+    const metadata = { type: 'body', metatype: CreateInvitationBodyDto } as const
+
+    await expect(pipe.transform({}, metadata)).resolves.toBeDefined()
+    await expect(pipe.transform({ reusable: true, didcommVersion: 'v1' }, metadata)).resolves.toBeDefined()
+    await expect(pipe.transform({ didcommVersion: 'v3' }, metadata)).rejects.toMatchObject({ status: 400 })
+    await expect(pipe.transform({ reusable: 'yes' }, metadata)).rejects.toMatchObject({ status: 400 })
   })
 })

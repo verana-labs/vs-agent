@@ -26,8 +26,12 @@ export async function createInvitation(options: {
   messages?: DidCommMessage[]
   useLegacyDid?: boolean
   didCommVersion?: DidCommVersion
+  unbranded?: boolean
+  multiUseInvitation?: boolean
+  goal?: string
+  goalCode?: string
 }) {
-  const { agent, messages, useLegacyDid, didCommVersion } = options
+  const { agent, messages, useLegacyDid, didCommVersion, unbranded, goal, goalCode } = options
 
   const ourDid = (useLegacyDid && agent.did ? getLegacyDidWeb(agent.did) : undefined) ?? agent.did
 
@@ -42,25 +46,27 @@ export async function createInvitation(options: {
     )
   }
 
-  const claims = await ecsServiceClaims(agent)
-  const outOfBandInvitation = (
-    await agent.didcomm.oob.createInvitation({
-      label: claims?.name,
-      multiUseInvitation: !messages,
-      imageUrl: claims?.logoUri,
-      messages,
-      didCommVersion: effectiveVersion,
-      ...(isV2
-        ? { ourDid }
-        : {
-            handshakeProtocols: [DidCommHandshakeProtocol.DidExchange],
-            invitationDid: ourDid,
-          }),
-    })
-  ).outOfBandInvitation
+  const claims = unbranded ? undefined : await ecsServiceClaims(agent)
+  const outOfBandRecord = await agent.didcomm.oob.createInvitation({
+    label: claims?.name,
+    multiUseInvitation: options.multiUseInvitation ?? !messages,
+    imageUrl: claims?.logoUri,
+    goal,
+    goalCode,
+    messages,
+    didCommVersion: effectiveVersion,
+    ...(isV2
+      ? { ourDid }
+      : {
+          handshakeProtocols: [DidCommHandshakeProtocol.DidExchange],
+          invitationDid: ourDid,
+        }),
+  })
+  const { outOfBandInvitation } = outOfBandRecord
   return {
     invitation: outOfBandInvitation.v2Invitation?.toJSON() ?? outOfBandInvitation.toJSON(),
     outOfBandInvitation,
+    outOfBandRecord,
     url: outOfBandInvitation.toUrl({ domain: agent.publicApiBaseUrl }),
   }
 }
