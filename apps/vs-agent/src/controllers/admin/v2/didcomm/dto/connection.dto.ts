@@ -8,10 +8,10 @@ import { PageDto, PaginationQueryDto } from '../../../../../common'
  * Query filters of [VSA-ADM-DC-CN-LIST] listConnections
  */
 export class ListConnectionsQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Filter by Out-of-Band identifier' })
+  @ApiPropertyOptional({ description: 'Filter by the invitation record that produced the connection' })
   @IsOptional()
   @IsString()
-  outOfBandId?: string
+  invitationId?: string
 
   @ApiPropertyOptional({
     description: 'Filter by the connection that carried the invitation which produced this one',
@@ -109,9 +109,9 @@ export class ConnectionRecordDto {
   @ApiProperty({
     type: String,
     nullable: true,
-    description: 'Out-of-Band identifier this connection started from, or null when it has none',
+    description: 'Invitation record that produced this connection, or null for every other connection',
   })
-  outOfBandId!: string | null
+  invitationId!: string | null
 
   @ApiProperty({
     type: String,

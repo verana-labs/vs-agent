@@ -54,6 +54,28 @@ describe('createInvitation branding', () => {
     const [config] = agent.didcomm.oob.createInvitation.mock.calls[0]
     expect(config).toMatchObject({ label: undefined, imageUrl: undefined })
   })
+
+  it('sends no label and no image for an unbranded invitation, with the reuse and goal it is given', async () => {
+    const agent = makeAgent({ name: 'Acme Service', logoUri: 'https://cdn/logo.png' })
+
+    await createInvitation({
+      agent: agent as never,
+      unbranded: true,
+      multiUseInvitation: false,
+      goal: 'log in',
+      goalCode: 'login',
+    })
+
+    const [config] = agent.didcomm.oob.createInvitation.mock.calls[0]
+    expect(config).toMatchObject({
+      label: undefined,
+      imageUrl: undefined,
+      multiUseInvitation: false,
+      goal: 'log in',
+      goalCode: 'login',
+    })
+    expect(agent.dids.getCreatedDids).not.toHaveBeenCalled()
+  })
 })
 
 describe('the single use of a v2 invitation', () => {
@@ -158,6 +180,22 @@ describe('the single use of a v2 invitation', () => {
     expect(stateUpdates()).toHaveLength(1)
   })
 
+  it('keeps the connection that claimed the invitation record, also when it is not the oldest', async () => {
+    const claimed = {
+      ...second,
+      getTag: vi.fn((name: string) => (name === 'invitationId' ? OOB_ID : undefined)),
+    }
+    findAllByOutOfBandId.mockResolvedValue([first, claimed])
+    const handler = await stateChangeHandler()
+
+    await handler({ payload: { connectionRecord: claimed } })
+    await handler({ payload: { connectionRecord: first } })
+
+    expect(hangup).toHaveBeenCalledOnce()
+    expect(hangup).toHaveBeenCalledWith({ connectionId: 'first' })
+    expect(deleteById).toHaveBeenCalledWith('first')
+  })
+
   it('deletes the connection although the hangup fails', async () => {
     hangup.mockRejectedValue(new Error('the peer is unreachable'))
     const handler = await stateChangeHandler()
@@ -175,6 +213,20 @@ describe('the single use of a v2 invitation', () => {
 
     expect(hangup).not.toHaveBeenCalled()
     expect(stateUpdates()).toHaveLength(1)
+  })
+
+  it('reports the invitation record of a connection as its invitationId, not its out-of-band record', async () => {
+    findById.mockResolvedValue({ id: OOB_ID, reusable: true, getTag: vi.fn(() => undefined) })
+    const claimed = {
+      ...second,
+      getTag: vi.fn((name: string) => (name === 'invitationId' ? OOB_ID : undefined)),
+    }
+    const handler = await stateChangeHandler()
+
+    await handler({ payload: { connectionRecord: first } })
+    await handler({ payload: { connectionRecord: claimed } })
+
+    expect(stateUpdates().map(([, event]) => event.payload.event.invitationId)).toEqual([undefined, OOB_ID])
   })
 
   it('leaves a v1 connection to the handshake of the DID exchange protocol', async () => {

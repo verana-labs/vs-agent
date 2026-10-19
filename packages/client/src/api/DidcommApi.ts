@@ -6,13 +6,17 @@ import {
   ConnectionRecord,
   CreateCredentialOfferBody,
   CreateCredentialOfferResponse,
+  CreateInvitationBody,
+  CreateInvitationResponse,
   CreatePresentationRequestBody,
   CreatePresentationRequestResponse,
   CredentialExchangeRecord,
   DeclineExchangeBody,
+  InvitationRecord,
   ListBasicMessagesQuery,
   ListConnectionsQuery,
   ListCredentialExchangesQuery,
+  ListInvitationsQuery,
   ListPresentationsQuery,
   OfferCallBody,
   Page,
@@ -21,8 +25,6 @@ import {
   RequestMrtdBody,
   RequestProfileBody,
   SendBasicMessageBody,
-  SendInvitationBody,
-  SendInvitationResponse,
   SendMenuBody,
   SendProfileBody,
   SendQuestionBody,
@@ -51,8 +53,20 @@ export class DidcommApi {
     return this.http.request('DELETE', `/didcomm/connections/${encodeURIComponent(connectionId)}`)
   }
 
-  public sendInvitation(body: SendInvitationBody): Promise<SendInvitationResponse> {
+  public createInvitation(body: CreateInvitationBody): Promise<CreateInvitationResponse> {
     return this.http.request('POST', '/didcomm/invitations', { body })
+  }
+
+  public listInvitations(query?: ListInvitationsQuery): Promise<Page<InvitationRecord>> {
+    return this.http.request('GET', '/didcomm/invitations', { query })
+  }
+
+  public getInvitation(invitationId: string): Promise<InvitationRecord> {
+    return this.http.request('GET', `/didcomm/invitations/${encodeURIComponent(invitationId)}`)
+  }
+
+  public deleteInvitation(invitationId: string): Promise<void> {
+    return this.http.request('DELETE', `/didcomm/invitations/${encodeURIComponent(invitationId)}`)
   }
 
   public sendBasicMessage(body: SendBasicMessageBody): Promise<SentMessage> {

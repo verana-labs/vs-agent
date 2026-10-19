@@ -4,6 +4,7 @@ import {
   DidCommConnectionEventTypes,
   DidCommProofEventTypes,
 } from '@credo-ts/didcomm'
+import { InvitationRecord, InvitationRepository } from '@verana-labs/vs-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { webhookEvent } from '../src/utils/webhookEvent'
@@ -14,9 +15,15 @@ const URL = 'https://backend.example/events'
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 const fetchMock = vi.fn()
 
+const invitationRepository = { getById: vi.fn() }
+
 function fakeAgent() {
   const handlers = new Map<string, Handler>()
   const agent = {
+    context: {},
+    dependencyManager: {
+      resolve: (token: unknown) => (token === InvitationRepository ? invitationRepository : undefined),
+    },
     events: { on: (type: string, handler: Handler) => handlers.set(type, handler) },
     didcomm: {
       proofs: {
@@ -80,12 +87,12 @@ describe('Events API delivery', () => {
       id: 'conn-1',
       state: 'completed',
       previousState: null,
-      outOfBandId: null,
+      invitationId: null,
       parentConnectionId: null,
     })
   })
 
-  it('delivers a sub-connection with its outOfBandId and parentConnectionId', async () => {
+  it('delivers a sub-connection with its invitationId and parentConnectionId', async () => {
     const { agent, emit } = fakeAgent()
     webhookEvent(agent as never, { url: URL }, logger as never)
 
@@ -93,14 +100,51 @@ describe('Events API delivery', () => {
       connectionRecord: {
         ...connectionRecord,
         outOfBandId: 'oob-1',
-        getTag: (name: string) => (name === 'parentConnectionId' ? 'conn-0' : undefined),
+        getTag: (name: string) => ({ parentConnectionId: 'conn-0', invitationId: 'oob-1' })[name],
       },
       previousState: null,
     })
 
     const { body } = await delivered()
     expect(body.type).toBe('didcomm.connections.state-updated')
-    expect(body.data).toMatchObject({ id: 'conn-1', outOfBandId: 'oob-1', parentConnectionId: 'conn-0' })
+    expect(body.data).toMatchObject({ id: 'conn-1', invitationId: 'oob-1', parentConnectionId: 'conn-0' })
+  })
+
+  it('delivers an invitation record, read back from the store, with its previousState', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+    const record = new InvitationRecord({
+      id: 'inv-1',
+      createdAt: new Date('2026-09-01T00:00:00Z'),
+      state: 'created',
+      didcommVersion: 'v2',
+      reusable: true,
+      invitation: { type: 'https://didcomm.org/out-of-band/2.0/invitation', id: 'oob-msg-1' },
+      shortUrl: 'https://agent.example/s?id=abcd',
+      parentConnectionId: null,
+    })
+    invitationRepository.getById.mockResolvedValueOnce(record)
+
+    emit('vs-agent-invitation-state-updated', {
+      event: { invitationRecordId: 'inv-1', state: 'created', previousState: null },
+    })
+
+    const { body } = await delivered()
+    expect(invitationRepository.getById).toHaveBeenCalledWith(agent.context, 'inv-1')
+    expect(body.type).toBe('didcomm.invitations.state-updated')
+    expect(body.data).toEqual({
+      id: 'inv-1',
+      state: 'created',
+      didcommVersion: 'v2',
+      reusable: true,
+      invitation: { type: 'https://didcomm.org/out-of-band/2.0/invitation', id: 'oob-msg-1' },
+      shortUrl: 'https://agent.example/s?id=abcd',
+      parentConnectionId: null,
+      acceptances: [],
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
+      previousState: null,
+    })
   })
 
   it('delivers a received basic message as its record and ignores sent ones', async () => {

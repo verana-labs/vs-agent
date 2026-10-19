@@ -9,7 +9,7 @@ cd examples/chatbot
 docker-compose up --build
 ```
 
-Set `PUBLIC_API_BASE_URL` in `docker-compose.yml` to the public `https` URL that fronts port `3001`. The agent derives its DID and its DIDComm endpoint from it. Then connect your wallet (for example Hologram) to the agent's public DID. There is no invitation endpoint. When the connection completes the bot sends its context menu and a welcome message.
+Set `PUBLIC_API_BASE_URL` in `docker-compose.yml` to the public `https` URL that fronts port `3001`. The agent derives its DID and its DIDComm endpoint from it. Then connect your wallet (for example Hologram) to the agent's public DID, or create an invitation with `POST /v2/didcomm/invitations` and no `connectionId` and scan its `shortUrl` as a QR code. When the connection completes the bot sends its context menu and a welcome message.
 
 Services:
 

@@ -1,14 +1,38 @@
-import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Param,
+  Post,
+  Query,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common'
 import {
   ApiBadRequestResponse,
   ApiBody,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
+  ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
 
-import { SendInvitationBodyDto, SendInvitationResponseDto } from './dto'
+import { Page } from '../../../../common'
+
+import {
+  CreateInvitationBodyDto,
+  CreateInvitationResponseDto,
+  InvitationRecordDto,
+  InvitationRecordPageDto,
+  ListInvitationsQueryDto,
+} from './dto'
 import { InvitationsService } from './InvitationsService'
 
 @ApiTags('v2/didcomm')
@@ -19,17 +43,23 @@ export class V2DidcommInvitationsController {
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   @ApiOperation({
-    summary: 'Send an invitation',
+    summary: 'Create an invitation',
     description:
-      'Sends an Out-of-Band invitation on an established connection. A v1 connection carries the ' +
-      'Out-of-Band 1.1 message. A v2 connection carries the Out-of-Band 2.0 invitation in the ' +
+      'Without `connectionId`, creates a standalone Out-of-Band invitation that names the DID of the ' +
+      'agent, with no label, no image and no attachment, and returns it with its short URL. With ' +
+      '`connectionId`, sends the invitation on that connection: a v1 connection carries the ' +
+      'Out-of-Band 1.1 message, and a v2 connection carries the Out-of-Band 2.0 invitation in the ' +
       '`application/didcomm-plain+json` attachment of a Media Sharing share-media message. Without ' +
-      '`did`, the invitation opens a single-use sub-connection to this agent, correlated through ' +
+      '`did`, that invitation opens a single-use sub-connection to this agent, correlated through ' +
       '`parentConnectionId`. With `did`, it refers the peer to that service and creates no record.',
   })
   @ApiBody({
-    type: SendInvitationBodyDto,
+    type: CreateInvitationBodyDto,
     examples: {
+      standalone: {
+        summary: 'Standalone invitation for a QR code',
+        value: { reusable: false, goalCode: 'login' },
+      },
       subConnection: {
         summary: 'Sub-connection to this agent',
         value: {
@@ -51,10 +81,53 @@ export class V2DidcommInvitationsController {
       },
     },
   })
-  @ApiCreatedResponse({ description: 'The invitation is sent', type: SendInvitationResponseDto })
-  @ApiBadRequestResponse({ description: 'The body fails validation' })
+  @ApiCreatedResponse({ description: 'The invitation is created', type: CreateInvitationResponseDto })
+  @ApiBadRequestResponse({
+    description: 'The body fails validation, `did` comes without `connectionId`, or `reusable` with it',
+  })
   @ApiNotFoundResponse({ description: 'No connection with the given id' })
-  public async sendInvitation(@Body() body: SendInvitationBodyDto): Promise<SendInvitationResponseDto> {
-    return this.invitationsService.sendInvitation(body)
+  public async createInvitation(@Body() body: CreateInvitationBodyDto): Promise<CreateInvitationResponseDto> {
+    return this.invitationsService.createInvitation(body)
+  }
+
+  @Get()
+  @ApiOperation({
+    summary: 'List invitations',
+    description: 'Returns the invitation records, filtered when the caller supplies a filter.',
+  })
+  @ApiOkResponse({ description: 'A page of invitation records', type: InvitationRecordPageDto })
+  public async listInvitations(@Query() query: ListInvitationsQueryDto): Promise<Page<InvitationRecordDto>> {
+    return this.invitationsService.listInvitations(query)
+  }
+
+  @Get(':invitationId')
+  @ApiOperation({
+    summary: 'Get an invitation',
+    description: 'Retrieves one invitation record by identifier.',
+  })
+  @ApiParam({ name: 'invitationId', type: String, description: 'Identifier of the invitation record' })
+  @ApiOkResponse({ description: 'The invitation record', type: InvitationRecordDto })
+  @ApiNotFoundResponse({ description: 'No invitation with the given id' })
+  public async getInvitation(@Param('invitationId') invitationId: string): Promise<InvitationRecordDto> {
+    return this.invitationsService.getInvitation(invitationId)
+  }
+
+  @Delete(':invitationId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Delete an invitation',
+    description:
+      'Deletes an invitation record. The agent stops accepting the invitation, and its short URL ' +
+      'answers 404. A connection that the invitation produced keeps its `invitationId`.',
+  })
+  @ApiParam({
+    name: 'invitationId',
+    type: String,
+    description: 'Identifier of the invitation record to delete',
+  })
+  @ApiNoContentResponse({ description: 'The invitation record is deleted' })
+  @ApiNotFoundResponse({ description: 'No invitation with the given id' })
+  public async deleteInvitation(@Param('invitationId') invitationId: string): Promise<void> {
+    await this.invitationsService.deleteInvitation(invitationId)
   }
 }

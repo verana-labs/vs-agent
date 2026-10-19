@@ -19,9 +19,11 @@ import {
 } from '@credo-ts/didcomm'
 import { EventType } from '@verana-labs/vs-agent-model'
 import {
+  InvitationRepository,
   VsAgent,
   VsAgentEventTypes,
   VsAgentIndexerNotificationEvent,
+  VsAgentInvitationStateUpdatedEvent,
   VsAgentModuleMessageReceivedEvent,
   VsAgentVtFlowStateUpdatedEvent,
 } from '@verana-labs/vs-agent-sdk'
@@ -32,6 +34,7 @@ import {
   toBasicMessageDto,
   toConnectionDto,
   toCredentialExchangeDto,
+  toInvitationDto,
   toPresentationDto,
 } from '../controllers/admin/v2/didcomm/mappers'
 
@@ -78,6 +81,19 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
         EventType.ConnectionStateUpdated,
         toConnectionDto(payload.connectionRecord),
         payload.previousState,
+      ),
+  )
+
+  agent.events.on<VsAgentInvitationStateUpdatedEvent>(
+    VsAgentEventTypes.InvitationStateUpdated,
+    ({ payload }) =>
+      stateUpdated(
+        EventType.InvitationStateUpdated,
+        agent.dependencyManager
+          .resolve(InvitationRepository)
+          .getById(agent.context, payload.event.invitationRecordId)
+          .then(toInvitationDto),
+        payload.event.previousState,
       ),
   )
 

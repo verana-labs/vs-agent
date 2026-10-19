@@ -18,19 +18,16 @@ import {
   PresentationStateUpdated,
 } from '@verana-labs/vs-agent-model'
 
+import { INVITATION_ID_TAG } from '../connections/InvitationRecord'
 import { publicDidsOf } from '../utils/agent'
 
 import { emitVsAgentEvent, VsAgentEventTypes } from './VsAgentEvents'
 
-// TODO: Fix single-use invitations for DIDComm v2 in Credo, then remove this function.
-// In Credo, multiUseInvitation: false only sets reusable: false on the OOB record. It does not
-// refuse a second connection from a v2 invitation, because v2 has no handshake.
+// Credo marks a single-use v2 invitation done only after it creates the connection, with no lock in
+// between, so first messages from two DIDs that race can both bind to it.
 //
-// The guard does not apply to an invitation issued under the public DID of this agent. Credo
-// binds every first message that a peer sends to the public DID to the newest out-of-band
-// record of that DID, also when that record is single-use. A second connection on such a
-// record is then not a second use of the invitation: it is a peer that connects to the public
-// DID, and a hangup would close a valid connection.
+// An invitation under the public DID is left alone: a second connection there is a peer that
+// connects to the public DID ([VSA-DC-OOB-5]), and a hangup would close a valid connection.
 async function discardExtraConnection(
   agent: VsAgent<any>,
   record: DidCommConnectionRecord,
@@ -48,13 +45,15 @@ async function discardExtraConnection(
   const siblings = await agent.didcomm.connections.findAllByOutOfBandId(record.outOfBandId)
   if (siblings.length < 2) return false
 
-  const accepted: DidCommConnectionRecord = siblings.reduce(
-    (oldest: DidCommConnectionRecord, candidate: DidCommConnectionRecord) =>
+  // only the connection that claimed an invitation record carries its invitationId, and its acceptance names it
+  const accepted: DidCommConnectionRecord =
+    siblings.find((sibling: DidCommConnectionRecord) => sibling.getTag(INVITATION_ID_TAG) !== undefined) ??
+    siblings.reduce((oldest: DidCommConnectionRecord, candidate: DidCommConnectionRecord) =>
       candidate.createdAt < oldest.createdAt ||
       (candidate.createdAt.getTime() === oldest.createdAt.getTime() && candidate.id < oldest.id)
         ? candidate
         : oldest,
-  )
+    )
   if (accepted.id === record.id) return false
 
   logger.warn(
@@ -126,7 +125,7 @@ export const connectionEvents = async (
         // If discovery is enabled, send an empty 'completed' state so that the recipient knows to expect async features.
         const body = new ConnectionStateUpdated({
           connectionId: record.id,
-          invitationId: record.outOfBandId,
+          invitationId: record.getTag(INVITATION_ID_TAG) as string | undefined,
           state: record.state,
           metadata: config.discoveryOptions ? {} : undefined,
         })
@@ -151,7 +150,7 @@ export const connectionEvents = async (
 
         const body = new ConnectionStateUpdated({
           connectionId: record.id,
-          invitationId: record.outOfBandId,
+          invitationId: record.getTag(INVITATION_ID_TAG) as string | undefined,
           state: 'terminated',
         })
 
@@ -186,7 +185,7 @@ export const connectionEvents = async (
 
         const body = new ConnectionStateUpdated({
           connectionId: record.id,
-          invitationId: record.outOfBandId,
+          invitationId: record.getTag(INVITATION_ID_TAG) as string | undefined,
           state: ExtendedDidExchangeState.Updated,
           metadata,
         })

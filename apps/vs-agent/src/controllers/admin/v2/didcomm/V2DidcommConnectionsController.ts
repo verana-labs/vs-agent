@@ -18,9 +18,8 @@ import { toConnectionDto } from './mappers'
 /**
  * DIDComm connection records held by this agent.
  *
- * The agent has no method that creates a bare connection invitation: a connection starts either
- * from an invitation minted by `createPresentationRequest` / `createCredentialOffer`, or from a
- * peer that connects to the agent.
+ * A connection starts from an invitation minted by `createInvitation`, `createPresentationRequest`
+ * or `createCredentialOffer`, or from a peer that connects to the DID of the agent.
  */
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/connections', version: '2' })
@@ -37,7 +36,7 @@ export class V2DidcommConnectionsController {
     const agent = await this.vsAgentService.getAgent()
 
     const filters = {
-      outOfBandId: query.outOfBandId,
+      invitationId: query.invitationId,
       parentConnectionId: query.parentConnectionId,
       state: query.state,
       role: query.role,

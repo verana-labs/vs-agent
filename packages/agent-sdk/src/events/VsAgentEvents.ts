@@ -6,6 +6,7 @@ import {
   ConnectionStateUpdated,
   Event,
   IndexerNotification,
+  InvitationStateUpdated,
   MessageReceived,
   PresentationStateUpdated,
   VtFlowStateUpdated,
@@ -13,6 +14,7 @@ import {
 
 export enum VsAgentEventTypes {
   ConnectionStateUpdated = 'vs-agent-connection-state-updated',
+  InvitationStateUpdated = 'vs-agent-invitation-state-updated',
   MessageReceived = 'vs-agent-message-received',
   PresentationStateUpdated = 'vs-agent-presentation-state-updated',
   VtFlowStateUpdated = 'vs-agent-vt-flow-state-updated',
@@ -24,6 +26,12 @@ export interface VsAgentConnectionStateEvent extends BaseEvent {
   type: typeof VsAgentEventTypes.ConnectionStateUpdated
   payload: {
     event: ConnectionStateUpdated
+  }
+}
+export interface VsAgentInvitationStateUpdatedEvent extends BaseEvent {
+  type: typeof VsAgentEventTypes.InvitationStateUpdated
+  payload: {
+    event: InvitationStateUpdated
   }
 }
 export interface VsAgentMessageReceivedEvent extends BaseEvent {

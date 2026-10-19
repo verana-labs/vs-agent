@@ -6,6 +6,7 @@ import {
   DidCommVersion,
   DidExchangeRole,
   DidExchangeState,
+  InvitationState,
   PaginationQuery,
   ProofRole,
   ProofState,
@@ -27,7 +28,7 @@ export interface ConnectionRecord {
   alias?: string
   threadId?: string
   imageUrl?: string
-  outOfBandId: string | null
+  invitationId: string | null
   parentConnectionId: string | null
   invitationDid?: string
   didcommVersion?: DidCommVersion
@@ -39,7 +40,7 @@ export interface ConnectionRecord {
 }
 
 export interface ListConnectionsQuery extends PaginationQuery {
-  outOfBandId?: string
+  invitationId?: string
   parentConnectionId?: string
   state?: DidExchangeState
   role?: DidExchangeRole
@@ -51,18 +52,63 @@ export interface ListConnectionsQuery extends PaginationQuery {
   mediatorId?: string
 }
 
-export interface SendInvitationBody {
-  connectionId: string
+export interface CreateInvitationBody {
+  /** When absent, the agent creates a standalone invitation and returns it. */
+  connectionId?: string
+  /** A referral. Requires `connectionId`. */
   did?: string
+  /** Requires that `connectionId` is absent. */
+  reusable?: boolean
+  /** Ignored for a standalone invitation. */
   label?: string
+  /** Ignored for a standalone invitation. */
   imageUrl?: string
   goal?: string
   goalCode?: string
+  /** The agent ignores it when `connectionId` is present. */
+  useLegacyDid?: boolean
+  /** The agent ignores it when `connectionId` is present. */
+  didcommVersion?: DidCommVersion
 }
 
-export interface SendInvitationResponse {
+export interface CreateInvitationResponse {
+  /** Absent for a referral. */
+  id?: string
+  /** Present for a standalone invitation only. */
+  invitation?: Record<string, unknown>
+  /** Present for a standalone invitation only. */
+  shortUrl?: string
+  /** Present when the request named a `connectionId`. */
+  messageId?: string
+}
+
+export interface InvitationAcceptance {
+  connectionId: string
+  /** True when the peer accepted the invitation on a connection that it already held. */
+  reused: boolean
+  acceptedAt: string
+}
+
+export interface InvitationRecord {
   id: string
-  outOfBandId?: string
+  state: InvitationState
+  didcommVersion: DidCommVersion
+  reusable: boolean
+  invitation: Record<string, unknown>
+  shortUrl: string | null
+  parentConnectionId: string | null
+  acceptances: InvitationAcceptance[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ListInvitationsQuery extends PaginationQuery {
+  state?: InvitationState
+  parentConnectionId?: string
+  /** A connection that appears in `acceptances`. */
+  connectionId?: string
+  reusable?: boolean
+  didcommVersion?: DidCommVersion
 }
 
 export interface SendBasicMessageBody {

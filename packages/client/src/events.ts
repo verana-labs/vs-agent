@@ -4,6 +4,7 @@ type AnyHandler = (data: unknown, envelope: EventEnvelope | UnknownEventEnvelope
 
 const EVENT_TYPES: Record<EventType, true> = {
   'didcomm.connections.state-updated': true,
+  'didcomm.invitations.state-updated': true,
   'didcomm.basic-messages.message-received': true,
   'didcomm.receipts.message-receipts-received': true,
   'didcomm.reactions.message-reactions-received': true,

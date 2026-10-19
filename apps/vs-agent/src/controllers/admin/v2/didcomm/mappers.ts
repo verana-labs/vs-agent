@@ -5,16 +5,17 @@ import type {
   DidCommCredentialExchangeRecord,
   DidCommProofExchangeRecord,
 } from '@credo-ts/didcomm'
-import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { BaseAgentModules, InvitationRecord, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
-import { PARENT_CONNECTION_TAG } from '@verana-labs/vs-agent-sdk'
+import { INVITATION_ID_TAG, PARENT_CONNECTION_TAG } from '@verana-labs/vs-agent-sdk'
 
 import {
   BasicMessageRecordDto,
   ConnectionRecordDto,
   CredentialExchangeRecordDto,
+  InvitationRecordDto,
   PresentationRecordDto,
 } from './dto'
 
@@ -42,13 +43,28 @@ export function toConnectionDto(record: DidCommConnectionRecord): ConnectionReco
     alias: record.alias,
     threadId: record.threadId,
     imageUrl: record.imageUrl,
-    outOfBandId: record.outOfBandId ?? null,
+    invitationId: (record.getTag(INVITATION_ID_TAG) as string | undefined) ?? null,
     parentConnectionId: (record.getTag(PARENT_CONNECTION_TAG) as string | undefined) ?? null,
     invitationDid: record.invitationDid,
     didcommVersion: record.didcommVersion,
     mediatorId: record.mediatorId,
     previousDids: record.previousDids,
     previousTheirDids: record.previousTheirDids,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt ?? record.createdAt,
+  }
+}
+
+export function toInvitationDto(record: InvitationRecord): InvitationRecordDto {
+  return {
+    id: record.id,
+    state: record.state,
+    didcommVersion: record.didcommVersion,
+    reusable: record.reusable,
+    invitation: record.invitation,
+    shortUrl: record.shortUrl,
+    parentConnectionId: record.parentConnectionId,
+    acceptances: record.acceptances,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt ?? record.createdAt,
   }
