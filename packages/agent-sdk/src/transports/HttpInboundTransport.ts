@@ -4,6 +4,8 @@ import type { Server } from 'http'
 
 import { CredoError, utils } from '@credo-ts/core'
 import {
+  DIDCOMM_V2_ENCRYPTED_MIME_TYPE,
+  DIDCOMM_V2_SIGNED_MIME_TYPE,
   DidCommEncryptedMessage,
   DidCommInboundTransport,
   DidCommMessageReceiver,
@@ -14,7 +16,12 @@ import {
 } from '@credo-ts/didcomm'
 import express, { text } from 'express'
 
-const supportedContentTypes: string[] = [DidCommMimeType.V0, DidCommMimeType.V1]
+const supportedContentTypes: string[] = [
+  DidCommMimeType.V0,
+  DidCommMimeType.V1,
+  DIDCOMM_V2_ENCRYPTED_MIME_TYPE,
+  DIDCOMM_V2_SIGNED_MIME_TYPE,
+]
 
 export class HttpInboundTransport implements DidCommInboundTransport {
   public app?: Express
