@@ -9,6 +9,7 @@ import type { OnModuleInit } from '@nestjs/common'
 import type {
   OpenId4VcIssuanceSessionRecord,
   OpenId4VcIssuanceSessionState,
+  OpenId4VcIssuanceSessionStateChangedEvent,
   OpenId4VcIssuerApi,
   OpenId4VciCredentialConfigurationsSupportedWithFormats,
   OpenId4VciCredentialRequestToCredentialMapper,
@@ -16,7 +17,7 @@ import type {
 
 import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
 import { Inject, Injectable } from '@nestjs/common'
-import { OpenId4VcIssuanceSessionRepository } from '@credo-ts/openid4vc'
+import { OpenId4VcIssuanceSessionRepository, OpenId4VcIssuerEvents } from '@credo-ts/openid4vc'
 import {
   AdminApiError,
   AdminApiErrorCode,
@@ -33,6 +34,8 @@ import {
   parseOfferIssuanceMetadata,
   parseOfferTtlSeconds,
 } from '../config'
+import { emitStateUpdated, OpenId4VcEventType } from '../events/openId4VcEvents'
+import { toCredentialExchangeDto } from '../nestjs/mappers'
 import { verifyKeyBoundToDid } from '../trust/keyBinding'
 import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
@@ -116,6 +119,14 @@ export class IssuerService implements OnModuleInit {
 
   public async onModuleInit(): Promise<void> {
     this.publishIssuerService(this)
+    this.agent.events.on<OpenId4VcIssuanceSessionStateChangedEvent>(
+      OpenId4VcIssuerEvents.IssuanceSessionStateChanged,
+      ({ payload: { issuanceSession, previousState } }) => {
+        // credo announces a new session before createOffer tags it with its type, so createOffer announces it
+        if (issuanceSession.issuerId !== ISSUER_CAPABILITY_ID || previousState === null) return
+        this.credentialExchangeStateUpdated(issuanceSession, previousState)
+      },
+    )
     await this.ensureInitialized()
   }
 
@@ -205,6 +216,7 @@ export class IssuerService implements OnModuleInit {
 
     issuanceSession.setTag(JSON_SCHEMA_CREDENTIAL_ID_TAG, configuration.id)
     await this.sessionRepository().update(this.agent.context, issuanceSession)
+    this.credentialExchangeStateUpdated(issuanceSession, null)
 
     return { credentialOffer, issuanceSessionId: issuanceSession.id }
   }
@@ -254,6 +266,18 @@ export class IssuerService implements OnModuleInit {
       )
     }
     return session
+  }
+
+  private credentialExchangeStateUpdated(
+    session: OpenId4VcIssuanceSessionRecord,
+    previousState: OpenId4VcIssuanceSessionState | null,
+  ): void {
+    emitStateUpdated(
+      this.agent,
+      OpenId4VcEventType.CredentialExchangeStateUpdated,
+      () => toCredentialExchangeDto(summarizeIssuanceSession(session)),
+      previousState,
+    )
   }
 
   public async getCertificateInfo(): Promise<SigningCertificateInfo> {

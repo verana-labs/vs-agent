@@ -4,6 +4,7 @@ import { RecordNotFoundError } from '@credo-ts/core'
 import {
   OpenId4VcVerificationSessionRepository,
   OpenId4VcVerificationSessionState,
+  OpenId4VcVerifierEvents,
 } from '@credo-ts/openid4vc'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -113,6 +114,7 @@ function verifierAgent(
     did,
     ecsClaims,
     config: { logger, setTrustedIssuersForVerification },
+    events: { on: vi.fn(), emit: vi.fn() },
     dids: { resolve: () => undefined },
     anonCredsTrust,
     genericRecords: {},
@@ -671,6 +673,41 @@ describe('VerifierService', () => {
       expect(api.getVerifiedAuthorizationResponse).not.toHaveBeenCalled()
     })
 
+    it('returns the verdict a concurrent decision stored after this read fetched the session', async () => {
+      const { service, api } = await initializedVerifier()
+      const decided = verificationSession({ state: 'ResponseVerified' })
+      decided.metadata.set('openid4vc/verificationOutcome', acceptedDecision)
+      api.getVerificationSessionById
+        .mockResolvedValueOnce(verificationSession({ state: 'ResponseVerified' }))
+        .mockResolvedValueOnce(decided)
+
+      await expect(service.getVerificationSession('session-1')).resolves.toMatchObject(acceptedDecision)
+      expect(decidePresentationTrust).not.toHaveBeenCalled()
+      expect(verificationSessionRepository.update).not.toHaveBeenCalled()
+    })
+
+    it('stores the verdict on the session it reads before deciding, and reports that session', async () => {
+      const { service, api } = await initializedVerifier()
+      const callerCopy = verificationSession({ state: 'ResponseVerified' })
+      const fresh = verificationSession({
+        state: 'ResponseVerified',
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      })
+      api.getVerificationSessionById.mockResolvedValueOnce(callerCopy).mockResolvedValueOnce(fresh)
+      api.getVerifiedAuthorizationResponse.mockResolvedValue({
+        dcql: { presentations: { [VTJSC_ID]: [presentedCredential] } },
+      })
+      decidePresentationTrust.mockResolvedValue(acceptedDecision)
+
+      await expect(service.getVerificationSession('session-1')).resolves.toMatchObject({
+        updatedAt: fresh.updatedAt,
+        ...acceptedDecision,
+      })
+      expect(fresh.metadata.get('openid4vc/verificationOutcome')).toEqual(acceptedDecision)
+      expect(callerCopy.metadata.get('openid4vc/verificationOutcome')).toBeNull()
+      expect(verificationSessionRepository.update).toHaveBeenCalledWith(expect.anything(), fresh)
+    })
+
     it('stores nothing when the verdict is RESOLVER_UNAVAILABLE, so the next read retries', async () => {
       const { service, api } = await initializedVerifier()
       const session = verificationSession({ state: 'ResponseVerified' })
@@ -842,6 +879,84 @@ describe('VerifierService', () => {
         verifierId: 'verifier',
         clientMetadata: { client_name: 'Verana Demo' },
       })
+    })
+  })
+
+  describe('state events', () => {
+    async function listeningVerifier() {
+      const api = verifierApi()
+      api.getVerifierByVerifierId.mockResolvedValue({ verifierId: 'verifier' })
+      const agent = verifierAgent(api)
+      await verifierService(agent).onModuleInit()
+      const [, listener] =
+        agent.events.on.mock.calls.find(
+          ([type]) => type === OpenId4VcVerifierEvents.VerificationSessionStateChanged,
+        ) ?? []
+      return {
+        api,
+        fire: (verificationSession: unknown, previousState: string | null) =>
+          listener({ payload: { verificationSession, previousState } }),
+        emitted: () => agent.events.emit.mock.calls.map(([, event]) => event.payload),
+      }
+    }
+
+    it('announces a verified session whose decision fails as list reports an undecided one', async () => {
+      const { api, fire, emitted } = await listeningVerifier()
+      const verified = verificationSession({ state: 'ResponseVerified' })
+      api.getVerificationSessionById.mockResolvedValue(verified)
+      api.getVerifiedAuthorizationResponse.mockRejectedValue(new Error('the response cannot be read back'))
+
+      fire(verified, 'RequestUriRetrieved')
+
+      await vi.waitFor(() => expect(emitted()).toHaveLength(1))
+      expect(emitted()[0]).toEqual({
+        type: 'openid4vc.presentations.state-updated',
+        data: expect.objectContaining({
+          proofExchangeId: 'session-1',
+          state: 'ResponseVerified',
+          previousState: 'RequestUriRetrieved',
+          cryptographicVerified: true,
+          accepted: false,
+        }),
+      })
+      expect(emitted()[0].data.trust).toBeUndefined()
+      expect(logger.error).toHaveBeenCalledWith(
+        '[OpenID4VC] presentation session-1 could not be decided',
+        expect.objectContaining({ cause: expect.any(Error) }),
+      )
+    })
+
+    it('ignores the sessions of another verifier, and the creation that createRequest announces', async () => {
+      const { fire, emitted } = await listeningVerifier()
+
+      fire(
+        verificationSession({ verifierId: 'other-verifier', state: 'ResponseVerified' }),
+        'RequestUriRetrieved',
+      )
+      fire(verificationSession(), null)
+      await new Promise(resolve => setImmediate(resolve))
+
+      expect(emitted()).toEqual([])
+      expect(decidePresentationTrust).not.toHaveBeenCalled()
+    })
+
+    it('logs a session it cannot map instead of throwing into the credo state update', async () => {
+      const { fire, emitted } = await listeningVerifier()
+      const unreadable = verificationSession({
+        getTag: () => {
+          throw new Error('unreadable tag')
+        },
+      })
+
+      expect(() => fire(unreadable, 'RequestCreated')).not.toThrow()
+
+      await vi.waitFor(() =>
+        expect(logger.error).toHaveBeenCalledWith(
+          'event openid4vc.presentations.state-updated emission failed',
+          expect.objectContaining({ cause: expect.any(Error) }),
+        ),
+      )
+      expect(emitted()).toEqual([])
     })
   })
 })

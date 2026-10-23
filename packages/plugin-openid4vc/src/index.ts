@@ -7,6 +7,7 @@ export {
   parseOfferClaims,
   parseOpenId4VcConfiguration,
 } from './config'
+export { OpenId4VcEventType } from './events/openId4VcEvents'
 export { OpenId4VcPlugin } from './nestjs/OpenId4VcPlugin'
 export * from './nestjs/dto'
 export { V2OpenId4VcCredentialExchangesController } from './nestjs/V2OpenId4VcCredentialExchangesController'
