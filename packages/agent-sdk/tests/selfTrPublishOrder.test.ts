@@ -117,12 +117,14 @@ async function publish(
   beforePublish: (vp: unknown) => Promise<void>,
   credentialSchemaId = JSC_URL,
   validUntil?: string,
+  schemaId = '5',
 ) {
   return await publishSelfIssuedEcsPresentation(
     agent as never,
     VP_URL,
     getEcsSchemas('https://agent.example'),
     'ecs-service',
+    schemaId,
     ['VerifiableCredential', 'VerifiableTrustCredential'],
     { id: credentialSchemaId, type: 'JsonSchemaCredential' },
     ecsClaims,
@@ -187,6 +189,7 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
       VP_URL,
       getEcsSchemas('https://agent.example'),
       'ecs-service',
+      '5',
       ['VerifiableCredential', 'VerifiableTrustCredential'],
       { id: JSC_URL, type: 'JsonSchemaCredential' },
       changed,
@@ -200,7 +203,7 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
     const otherJsc = 'https://agent.example/vt/schemas-6-jsc.json'
 
     await publish(agent, async () => {}, JSC_URL, '2027-09-25T10:00:00Z')
-    await publish(agent, async () => {}, otherJsc)
+    await publish(agent, async () => {}, otherJsc, undefined, '6')
 
     expect(storedEntry(metadata, JSC_URL).credential.validUntil).toBe('2027-09-25T10:00:00Z')
     expect(storedEntry(metadata, otherJsc).credential.validUntil).toBeUndefined()
@@ -218,6 +221,7 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
       'https://agent.example/vt/ecs-org-vtc-vp.json',
       ecsSchemas,
       'ecs-org',
+      '6',
       ['VerifiableCredential', 'VerifiableTrustCredential'],
       { id: orgJsc, type: 'JsonSchemaCredential' },
       ecsClaims,

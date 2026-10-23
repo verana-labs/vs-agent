@@ -139,6 +139,7 @@ describe('self-issued VTC attach state', () => {
       VP_ID,
       schemas,
       schemaKey,
+      '5',
       TYPE,
       targetCredentialSchema,
       ecsClaims,
