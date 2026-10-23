@@ -1,7 +1,7 @@
 import type { ChatAgentModules } from '../types'
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import type { DidCommCallType } from '@2060.io/credo-ts-didcomm-calls'
+import type { DidCommCallType } from '@credo-ts/didcomm-calls'
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 

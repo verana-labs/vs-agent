@@ -245,7 +245,7 @@ The **eMRTD verification module** allows VS Agent to verify the authenticity and
 
 - If MRTD_MASTER_LIST_CSCA_LOCATION is not set, the eMRTD Authenticity & Integrity Verification remains disabled and the agent only send EMrtd data parsed.
 
-- For more information about authenticity & integrity verification, see: [credo-ts-didcomm-mrtd Authenticity & Integrity Verification](https://github.com/2060-io/credo-ts-didcomm-ext/blob/main/packages/mrtd/docs/mrtd-authenticity-integrity.md).
+- For more information about authenticity & integrity verification, see: [credo-ts-didcomm-mrtd Authenticity & Integrity Verification](https://github.com/openwallet-foundation/credo-ts-didcomm-ext/blob/main/packages/mrtd/docs/mrtd-authenticity-integrity.md).
 
 #### Enabling the module
 

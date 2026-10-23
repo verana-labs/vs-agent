@@ -35,10 +35,10 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@2060.io/credo-ts-didcomm-reactions": "0.1.1",
-    "@2060.io/credo-ts-didcomm-receipts": "0.1.1",
     "@credo-ts/core": "catalog:",
     "@credo-ts/didcomm": "catalog:",
+    "@credo-ts/didcomm-reactions": "catalog:",
+    "@credo-ts/didcomm-receipts": "catalog:",
     "class-transformer": "0.5.1",
     "class-validator": "0.14.1"
   },

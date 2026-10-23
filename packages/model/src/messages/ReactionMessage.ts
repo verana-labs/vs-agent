@@ -1,4 +1,4 @@
-import { DidCommMessageReactionAction } from '@2060.io/credo-ts-didcomm-reactions'
+import { DidCommMessageReactionAction } from '@credo-ts/didcomm-reactions'
 import { Expose, Type, Transform } from 'class-transformer'
 import { IsArray, IsDate, IsEnum, IsInstance, IsString, ValidateNested } from 'class-validator'
 
