@@ -686,6 +686,28 @@ describe('VerifierService', () => {
       expect(verificationSessionRepository.update).not.toHaveBeenCalled()
     })
 
+    it('stores the verdict on the session it reads before deciding, and reports that session', async () => {
+      const { service, api } = await initializedVerifier()
+      const callerCopy = verificationSession({ state: 'ResponseVerified' })
+      const fresh = verificationSession({
+        state: 'ResponseVerified',
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      })
+      api.getVerificationSessionById.mockResolvedValueOnce(callerCopy).mockResolvedValueOnce(fresh)
+      api.getVerifiedAuthorizationResponse.mockResolvedValue({
+        dcql: { presentations: { [VTJSC_ID]: [presentedCredential] } },
+      })
+      decidePresentationTrust.mockResolvedValue(acceptedDecision)
+
+      await expect(service.getVerificationSession('session-1')).resolves.toMatchObject({
+        updatedAt: fresh.updatedAt,
+        ...acceptedDecision,
+      })
+      expect(fresh.metadata.get('openid4vc/verificationOutcome')).toEqual(acceptedDecision)
+      expect(callerCopy.metadata.get('openid4vc/verificationOutcome')).toBeNull()
+      expect(verificationSessionRepository.update).toHaveBeenCalledWith(expect.anything(), fresh)
+    })
+
     it('stores nothing when the verdict is RESOLVER_UNAVAILABLE, so the next read retries', async () => {
       const { service, api } = await initializedVerifier()
       const session = verificationSession({ state: 'ResponseVerified' })

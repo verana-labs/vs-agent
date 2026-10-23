@@ -104,7 +104,7 @@ export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
 export class VerifierService implements OnModuleInit {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
-  private readonly decisions = new Map<string, Promise<PresentationDecision>>()
+  private readonly decisions = new Map<string, Promise<OpenId4VcVerificationSessionSummary>>()
 
   public constructor(
     @Inject('VSAGENT') private readonly agent: OpenId4VcAgent,
@@ -191,7 +191,7 @@ export class VerifierService implements OnModuleInit {
   public async getVerificationSession(id: string): Promise<OpenId4VcVerificationSessionSummary> {
     await this.ensureInitialized()
     const session = await this.findOwnedSession(id)
-    return this.toSummary(session, await this.decide(session))
+    return this.decide(session)
   }
 
   // [VSA-ADM-OID-PR-LIST]: a list reports the stored verdict and never decides
@@ -238,36 +238,41 @@ export class VerifierService implements OnModuleInit {
       this.agent,
       OpenId4VcEventType.PresentationStateUpdated,
       async () => {
-        const decision = await this.decide(session).catch(error => {
+        const summary = await this.decide(session).catch(error => {
           this.agent.config.logger.error(`[OpenID4VC] presentation ${session.id} could not be decided`, {
             cause: error,
           })
-          return UNDECIDED
+          return this.toSummary(session, UNDECIDED)
         })
-        return toPresentationDto(this.toSummary(session, decision))
+        return toPresentationDto(summary)
       },
       previousState,
     )
   }
 
-  // [VSA-ADM-OID-PR-GET]: the verdict is computed once, on the first read of a verified session, and
-  // stored with it; RESOLVER_UNAVAILABLE is never stored, so the next read retries the resolver
-  private async decide(session: OpenId4VcVerificationSessionRecord): Promise<PresentationDecision> {
+  // [VSA-ADM-OID-PR-GET]: the verdict is computed once, on the first read or the ResponseVerified event,
+  // and stored with the session; RESOLVER_UNAVAILABLE is never stored, so the next read retries the resolver
+  private async decide(
+    session: OpenId4VcVerificationSessionRecord,
+  ): Promise<OpenId4VcVerificationSessionSummary> {
     const stored = this.storedDecision(session)
-    if (stored) return stored
+    if (stored) return this.toSummary(session, stored)
 
-    let decision = this.decisions.get(session.id)
-    if (!decision) {
-      decision = this.decideAndStore(session).finally(() => this.decisions.delete(session.id))
-      this.decisions.set(session.id, decision)
+    let summary = this.decisions.get(session.id)
+    if (!summary) {
+      summary = this.decideAndStore(session).finally(() => this.decisions.delete(session.id))
+      this.decisions.set(session.id, summary)
     }
-    return decision
+    return summary
   }
 
-  private async decideAndStore(session: OpenId4VcVerificationSessionRecord): Promise<PresentationDecision> {
+  private async decideAndStore({
+    id,
+  }: OpenId4VcVerificationSessionRecord): Promise<OpenId4VcVerificationSessionSummary> {
     // a caller can hold a copy read before a concurrent decision stored its verdict
-    const stored = this.storedDecision(await this.verifierApi().getVerificationSessionById(session.id))
-    if (stored) return stored
+    const session = await this.verifierApi().getVerificationSessionById(id)
+    const stored = this.storedDecision(session)
+    if (stored) return this.toSummary(session, stored)
 
     const decision = await decidePresentationTrust(
       await this.presentedCredential(session),
@@ -283,7 +288,7 @@ export class VerifierService implements OnModuleInit {
       session.metadata.set(OUTCOME_METADATA_KEY, decision)
       await this.sessionRepository().update(this.agent.context, session)
     }
-    return decision
+    return this.toSummary(session, decision)
   }
 
   private async presentedCredential(session: OpenId4VcVerificationSessionRecord): Promise<SdJwtVc> {
