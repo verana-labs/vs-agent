@@ -93,7 +93,7 @@ describe('ECS credential digest anchoring', () => {
     // the real function calls the beforePublish step with the signed presentation
     publishSelfIssuedEcsPresentation.mockImplementation(async (...args: unknown[]) => {
       const verifiablePresentation = { id: 'vp', verifiableCredential: [{ id: 'credential' }] }
-      const beforePublish = args[7] as (vp: unknown) => Promise<void>
+      const beforePublish = args[8] as (vp: unknown) => Promise<void>
       await beforePublish?.(verifiablePresentation)
       return verifiablePresentation
     })
@@ -120,7 +120,7 @@ describe('ECS credential digest anchoring', () => {
     expect(publishSelfIssuedEcsPresentation).toHaveBeenCalledWith(
       expect.anything(),
       `https://agent.example/vt/${key}-vtc-vp.json`,
-      ...Array(6).fill(expect.anything()),
+      ...Array(7).fill(expect.anything()),
       undefined,
     )
     expect(chain.createOrUpdateParticipantSession).toHaveBeenCalledTimes(1)
@@ -141,7 +141,7 @@ describe('ECS credential digest anchoring', () => {
       '2027-09-25T10:00:00Z',
     )
 
-    expect(publishSelfIssuedEcsPresentation.mock.calls[0][8]).toBe('2027-09-25T10:00:00Z')
+    expect(publishSelfIssuedEcsPresentation.mock.calls[0][9]).toBe('2027-09-25T10:00:00Z')
   })
 
   it('names only the issuer, because a self-issued credential has no counterparty', async () => {
