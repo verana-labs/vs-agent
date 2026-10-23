@@ -6,7 +6,7 @@ import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 // itself into the shared module on import.
 import '@hyperledger/anoncreds-nodejs'
 
-import { DidCommMediaSharingService } from '@2060.io/credo-ts-didcomm-media-sharing'
+import { DidCommMediaSharingService } from '@credo-ts/didcomm-media-sharing'
 import { LogLevel } from '@credo-ts/core'
 import {
   DidCommHandshakeProtocol,

@@ -1,7 +1,7 @@
 import type { BaseAgentModules, InvitationRecordProps, VsAgent } from '@verana-labs/vs-agent-sdk'
 import type { JsonValue } from '@credo-ts/core'
 
-import { DidCommShareMediaMessage, SharedMediaItem } from '@2060.io/credo-ts-didcomm-media-sharing'
+import { DidCommShareMediaMessage, SharedMediaItem } from '@credo-ts/didcomm-media-sharing'
 import {
   DidCommConnectionRecord,
   DidCommHandshakeProtocol,

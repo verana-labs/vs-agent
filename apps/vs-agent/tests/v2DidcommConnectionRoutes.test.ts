@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 
-import { DidCommShareMediaMessage } from '@2060.io/credo-ts-didcomm-media-sharing'
+import { DidCommShareMediaMessage } from '@credo-ts/didcomm-media-sharing'
 import { RecordNotFoundError } from '@credo-ts/core'
 import {
   DidCommAttachment,

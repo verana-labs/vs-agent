@@ -1,7 +1,7 @@
 import type { ChatAgentModules } from '../types'
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { SharedMediaItem } from '@2060.io/credo-ts-didcomm-media-sharing'
+import { SharedMediaItem } from '@credo-ts/didcomm-media-sharing'
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
@@ -28,13 +28,14 @@ export class V2DidcommMediaSharingController {
       description: body.description,
       items,
     })
-    const { messageId } = await this.agent.modules.media.shareWithMessageId({
+    // The share method sets the thread id of the record to the id of the sent message.
+    const { threadId } = await this.agent.modules.media.share({
       recordId: record.id,
       parentThreadId: body.threadId,
       description: body.description,
       items,
     })
 
-    return { id: messageId }
+    return { id: threadId! }
   }
 }
