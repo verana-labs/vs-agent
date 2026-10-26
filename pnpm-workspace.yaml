@@ -4,18 +4,18 @@ packages:
   - 'examples/*'
 
 catalog:
-  '@credo-ts/action-menu': 0.8.0-pr-2704-20261016160242
-  '@credo-ts/anoncreds': 0.8.0-pr-2704-20261016160242
-  '@credo-ts/askar': 0.8.0-pr-2704-20261016160242
-  '@credo-ts/core': 0.8.0-pr-2704-20261016160242
-  '@credo-ts/didcomm': 0.8.0-pr-2704-20261016160242
+  '@credo-ts/action-menu': 0.8.0-pr-2704-20261026191309
+  '@credo-ts/anoncreds': 0.8.0-pr-2704-20261026191309
+  '@credo-ts/askar': 0.8.0-pr-2704-20261026191309
+  '@credo-ts/core': 0.8.0-pr-2704-20261026191309
+  '@credo-ts/didcomm': 0.8.0-pr-2704-20261026191309
   '@credo-ts/didcomm-calls': 0.2.0
   '@credo-ts/didcomm-media-sharing': 0.2.0
   '@credo-ts/didcomm-mrtd': 0.2.0
   '@credo-ts/didcomm-reactions': 0.2.0
   '@credo-ts/didcomm-receipts': 0.2.0
   '@credo-ts/didcomm-user-profile': 0.2.0
-  '@credo-ts/node': 0.8.0-pr-2704-20261016160242
-  '@credo-ts/openid4vc': 0.8.0-pr-2704-20261016160242
-  '@credo-ts/question-answer': 0.8.0-pr-2704-20261016160242
-  '@credo-ts/webvh': 0.8.0-pr-2704-20261016160242
+  '@credo-ts/node': 0.8.0-pr-2704-20261026191309
+  '@credo-ts/openid4vc': 0.8.0-pr-2704-20261026191309
+  '@credo-ts/question-answer': 0.8.0-pr-2704-20261026191309
+  '@credo-ts/webvh': 0.8.0-pr-2704-20261026191309
