@@ -6,7 +6,7 @@ import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 // itself into the shared module on import.
 import '@hyperledger/anoncreds-nodejs'
 
-import { DidCommMediaSharingService } from '@2060.io/credo-ts-didcomm-media-sharing'
+import { DidCommMediaSharingService } from '@credo-ts/didcomm-media-sharing'
 import { LogLevel } from '@credo-ts/core'
 import {
   DidCommHandshakeProtocol,
@@ -26,6 +26,7 @@ import { filter, firstValueFrom, Subject } from 'rxjs'
 import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { V2DidcommMediaSharingController, type ChatAgentModules } from '@verana-labs/vs-agent-plugin-chat'
 import {
   AUTO_ACCEPT_PRESENTATION_METADATA,
   createInvitation,
@@ -1060,6 +1061,32 @@ describe('v2 didcomm accept routes, over two agents', () => {
         acceptances: [acceptance(child.id, false)],
       })
     }, 120_000)
+
+    it('answers shareMedia with the id of the share-media message that the peer receives', async () => {
+      const known = await aliceKnownShares()
+      const controller = new V2DidcommMediaSharingController(
+        faberAgent as unknown as VsAgent<ChatAgentModules>,
+      )
+
+      const { id } = await controller.shareMedia({
+        connectionId: v2Parent.id,
+        description: 'The invoice',
+        items: [{ uri: 'https://faber.example/invoice.png', mimeType: 'image/png' }],
+      })
+
+      const received = await vi.waitFor(
+        async () => {
+          const [record] = (await aliceSharedMedia()).filter(shared => !known.has(shared.id))
+          expect(record).toBeDefined()
+          return record
+        },
+        { timeout: 20_000, interval: 250 },
+      )
+
+      expect(received.threadId).toBe(id)
+      expect(received.description).toBe('The invoice')
+      expect(received.items?.[0].uri).toBe('https://faber.example/invoice.png')
+    }, 60_000)
 
     it('opens a sub-connection over a v1 connection with an OOB 1.1 invitation that carries the label', async () => {
       const v1 = await faberAgent.didcomm.oob.createInvitation({
