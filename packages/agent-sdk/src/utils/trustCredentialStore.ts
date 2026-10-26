@@ -325,8 +325,6 @@ export async function createJsc(
 
 export async function removeTrustCredential(agent: VsAgent, schemaId: string, key: '_vt/jsc' | '_vt/vtc') {
   const didRecord = await getDidRecord(agent)
-  // same lookup deleteMetadataEntry performs: a self-issued entry carries the agent DID as
-  // credential id, so only its metadata key reaches it
   const record = findMetadataEntry(didRecord, key, schemaId, schemaId)
   // Currently, we only use one serviceEndpoint per ID.
   // In the future, if multiple serviceEndpoints exist for the same ID,
@@ -624,6 +622,7 @@ export async function rebindEcsCredentialSchema(
     vpUrl,
     { ...getEcsSchemas(publicApiBaseUrl), ...(onChainJsonSchema ? { [schemaKey]: onChainJsonSchema } : {}) },
     schemaKey,
+    schemaId,
     ['VerifiableCredential', 'VerifiableTrustCredential'],
     { id: jscUrl, type: 'JsonSchemaCredential' },
     ecsClaims,
