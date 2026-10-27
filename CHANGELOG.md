@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.2](https://github.com/verana-labs/vs-agent/compare/v1.13.1...v1.13.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* accept implicit requests to the public DID (backport [#767](https://github.com/verana-labs/vs-agent/issues/767)) ([#810](https://github.com/verana-labs/vs-agent/issues/810)) ([ad16249](https://github.com/verana-labs/vs-agent/commit/ad1624985f2ea9b337f964dac9ffe7062ddcda77))
+
 ## [1.13.1](https://github.com/verana-labs/vs-agent/compare/v1.13.0...v1.13.1) (2026-09-14)
 
 
