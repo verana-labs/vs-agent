@@ -8,12 +8,12 @@ import {
   Agent,
   AgentDependencies,
   BaseLogger,
-  convertPublicKeyToX25519,
   CredoError,
   DidCommV1Service,
   DidDocument,
   DidDocumentKey,
   DidDocumentRole,
+  DidRecord,
   DidRepository,
   DidsModule,
   InitConfig,
@@ -55,6 +55,7 @@ import { createInvitation } from '../utils/agent'
 import { EcsClaims } from '../utils/ecsClaims'
 
 const MANAGED_DIDCOMM_SERVICE_TYPES: readonly string[] = [DidCommV1Service.type, NewDidCommV2Service.type]
+const KEY_AGREEMENT_FRAGMENT = 'key-agreement-1'
 
 type VsAgentDidCommModule = DidCommModule<
   DidCommModuleConfigOptions & {
@@ -189,7 +190,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       if (!existingRecord) {
         if (parsedDid.method === 'web') {
           const didDocument = new DidDocument({ id: parsedDid.did })
-          const didCommKey = await this.createAndAddDidCommKeysAndServices(didDocument)
+          const didCommKeys = await this.createAndAddDidCommKeysAndServices(didDocument)
 
           this.addLinkedVpContext(didDocument)
 
@@ -201,7 +202,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
             method: 'web',
             domain: location,
             didDocument,
-            keys: [didCommKey],
+            keys: didCommKeys,
           })
           if (createResult.didState.state !== 'finished') {
             throw new CredoError(
@@ -219,7 +220,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           }
 
           // Add DIDComm services and keys
-          const didCommKey = await this.createAndAddDidCommKeysAndServices(didDocument)
+          const didCommKeys = await this.createAndAddDidCommKeysAndServices(didDocument)
 
           this.addLinkedVpContext(didDocument)
 
@@ -233,7 +234,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
           const didRepository = this.agentContext.resolve(DidRepository)
           const [record] = await didRepository.findByQuery(this.agentContext, { did: publicDid })
           if (record) {
-            record.keys = [...(record.keys ?? []), didCommKey]
+            record.keys = [...(record.keys ?? []), ...didCommKeys]
             if (legacyDidWeb) record.setTag('alternativeDids', [legacyDidWeb])
             await didRepository.update(this.agentContext, record)
           }
@@ -260,10 +261,12 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       // updating it only if one of the checks below finds a difference
       const didDocument = existingRecord.didDocument!
       const ed25519VerificationMethodId = this.findEd25519VerificationMethodId(didDocument)
+      const keyAgreementKey = await this.replaceDerivedKeyAgreementKey(existingRecord, didDocument)
       const servicesChanged =
         !ed25519VerificationMethodId ||
-        JSON.stringify(didDocument.didCommServices) !==
-          JSON.stringify(this.getDidCommServices(didDocument.id, ed25519VerificationMethodId))
+        JSON.stringify(
+          (didDocument.service ?? []).filter(service => MANAGED_DIDCOMM_SERVICE_TYPES.includes(service.type)),
+        ) !== JSON.stringify(this.getDidCommServices(didDocument.id, ed25519VerificationMethodId))
       const currentAdminEntry = (didDocument.service ?? []).find(s => s.type === 'VsAgentAdminAPI')
       const adminEntryChanged = currentAdminEntry?.serviceEndpoint !== this.adminApiServiceEndpoint
       // A record from an earlier version may still carry the service of the other method.
@@ -272,7 +275,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         method: artifactMethod,
         publicApiBaseUrl: this.publicApiBaseUrl,
       })
-      if (servicesChanged || adminEntryChanged || artifactServicesChanged) {
+      if (keyAgreementKey || servicesChanged || adminEntryChanged || artifactServicesChanged) {
         if (servicesChanged && ed25519VerificationMethodId) {
           didDocument.service = [
             ...(didDocument.service
@@ -290,14 +293,13 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         // silently no-ops. Check the result and surface the reason instead of assuming success.
         const updateResult = await this.dids.update({ did: didDocument.id, didDocument })
         if (updateResult.didState.state !== 'finished') {
-          this.logger?.error('Public did record update failed to persist', {
-            did: didDocument.id,
-            state: updateResult.didState.state,
-            reason: (updateResult.didState as { reason?: string }).reason,
-          })
-        } else {
-          this.logger?.debug('Public did record updated')
+          throw new CredoError(
+            `Cannot update DID ${didDocument.id}: ${(updateResult.didState as { reason?: string }).reason ?? 'unknown reason'}`,
+          )
         }
+        // Mapped only once the document publishes the key, so an interrupted update is retried on the next start
+        if (keyAgreementKey) await this.addDidKey(didDocument.id, keyAgreementKey)
+        this.logger?.debug('Public did record updated')
       } else {
         this.logger?.debug('Existing DID record found. No updates')
       }
@@ -380,7 +382,52 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     return services
   }
 
-  private async createAndAddDidCommKeysAndServices(didDocument: DidDocument): Promise<DidDocumentKey> {
+  // DIDs created by earlier versions publish an X25519 key derived from the Ed25519 key, with no KMS key of its own
+  private async replaceDerivedKeyAgreementKey(
+    didRecord: DidRecord,
+    didDocument: DidDocument,
+  ): Promise<DidDocumentKey | undefined> {
+    const keyAgreementId = `${didDocument.id}#${KEY_AGREEMENT_FRAGMENT}`
+    const verificationMethod = didDocument.verificationMethod?.find(vm => vm.id === keyAgreementId)
+    if (!verificationMethod) return
+    if (
+      didRecord.keys?.some(({ didDocumentRelativeKeyId }) =>
+        keyAgreementId.endsWith(didDocumentRelativeKeyId),
+      )
+    ) {
+      return
+    }
+
+    this.logger?.info(
+      `Key agreement key of ${didDocument.id} has no KMS key. Replacing it with a new X25519 key`,
+    )
+    const { key, publicKeyMultibase } = await this.createKeyAgreementKey()
+    verificationMethod.publicKeyMultibase = publicKeyMultibase
+    return key
+  }
+
+  private async createKeyAgreementKey(): Promise<{ key: DidDocumentKey; publicKeyMultibase: string }> {
+    const kms = this.agentContext.resolve(Kms.KeyManagementApi)
+    const { keyId, publicJwk } = await kms.createKey({ type: { kty: 'OKP', crv: 'X25519' } })
+    return {
+      key: { kmsKeyId: keyId, didDocumentRelativeKeyId: `#${KEY_AGREEMENT_FRAGMENT}` },
+      publicKeyMultibase: Kms.PublicJwk.fromPublicJwk(publicJwk).fingerprint,
+    }
+  }
+
+  private async addDidKey(did: string, key: DidDocumentKey): Promise<void> {
+    const didRepository = this.agentContext.resolve(DidRepository)
+    const [record] = await didRepository.findByQuery(this.agentContext, { did })
+    record.keys = [
+      ...(record.keys ?? []).filter(
+        ({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId !== key.didDocumentRelativeKeyId,
+      ),
+      key,
+    ]
+    await didRepository.update(this.agentContext, record)
+  }
+
+  private async createAndAddDidCommKeysAndServices(didDocument: DidDocument): Promise<DidDocumentKey[]> {
     const publicDid = didDocument.id
 
     const context = [
@@ -388,7 +435,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       'https://w3id.org/security/suites/ed25519-2020/v1',
       'https://w3id.org/security/suites/x25519-2019/v1',
     ]
-    const keyAgreementId = `${publicDid}#key-agreement-1`
+    const keyAgreementId = `${publicDid}#${KEY_AGREEMENT_FRAGMENT}`
     const kms = this.agentContext.resolve(Kms.KeyManagementApi)
 
     // Create didcomm keys
@@ -403,8 +450,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       didDocumentRelativeKeyId: `#${publicKeyMultibase}`,
     }
     const verificationMethodId = `${publicDid}#${publicKeyMultibase}`
-    const publicKeyX25519 = convertPublicKeyToX25519(publicKeyBytes)
-    const x25519Key = Kms.PublicJwk.fromPublicKey({ kty: 'OKP', crv: 'X25519', publicKey: publicKeyX25519 })
+    const keyAgreementKey = await this.createKeyAgreementKey()
 
     // Remove legacy if exist
     const legacyContexts = ['https://w3id.org/security/suites/ed25519-2018/v1']
@@ -429,7 +475,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       {
         controller: publicDid,
         id: keyAgreementId,
-        publicKeyMultibase: x25519Key.fingerprint,
+        publicKeyMultibase: keyAgreementKey.publicKeyMultibase,
         type: 'Multikey',
       },
     ]
@@ -461,7 +507,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       ...didcommServices,
     ]
 
-    return didDocumentKey
+    return [didDocumentKey, keyAgreementKey.key]
   }
 
   private addLinkedVpContext(didDocument: DidDocument) {

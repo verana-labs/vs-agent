@@ -1,7 +1,14 @@
 import '@openwallet-foundation/askar-nodejs'
 
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
-import { ConsoleLogger, DidDocumentService, DidRepository, LogLevel } from '@credo-ts/core'
+import {
+  ConsoleLogger,
+  convertPublicKeyToX25519,
+  DidDocumentService,
+  DidRepository,
+  Kms,
+  LogLevel,
+} from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { DIDLog, resolveDIDFromLog, Verifier } from 'didwebvh-ts'
@@ -233,6 +240,57 @@ describe('public DID startup lifecycle', () => {
 
       const [reloaded] = await second.dids.getCreatedDids({ method: 'webvh' })
       expect((reloaded.metadata.get('log') as DIDLog).length).toBe(entriesBefore)
+
+      await second.shutdown()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'startup replaces a derived key agreement key with a new KMS key and keeps the DID',
+    async () => {
+      const wallet = walletConfig('derived-key-agreement')
+      const first = makeAgent('did:webvh:derived-key-agreement.example', wallet)
+      await first.initialize()
+      const did = first.did!
+      const keyAgreementId = `${did}#key-agreement-1`
+
+      const didRepository = first.dependencyManager.resolve(DidRepository)
+      const [created] = await first.dids.getCreatedDids({ method: 'webvh' })
+      const didCommMethodId = created.didDocument!.authentication![0]
+      const ed25519Vm = created.didDocument!.verificationMethod!.find(vm => vm.id === didCommMethodId)!
+      const ed25519Key = Kms.PublicJwk.fromFingerprint(ed25519Vm.publicKeyMultibase!).publicKey as {
+        publicKey: Uint8Array
+      }
+      const derivedKey = Kms.PublicJwk.fromPublicKey({
+        kty: 'OKP',
+        crv: 'X25519',
+        publicKey: convertPublicKeyToX25519(ed25519Key.publicKey),
+      }).fingerprint
+      created.didDocument!.verificationMethod!.find(vm => vm.id === keyAgreementId)!.publicKeyMultibase =
+        derivedKey
+      created.keys = created.keys?.filter(key => key.didDocumentRelativeKeyId !== '#key-agreement-1')
+      await didRepository.update(first.context, created)
+      const entriesBefore = (created.metadata.get('log') as DIDLog).length
+      await first.shutdown()
+
+      const second = makeAgent('did:webvh:derived-key-agreement.example', wallet)
+      await second.initialize()
+
+      expect(second.did).toBe(did)
+      const [migrated] = await second.dids.getCreatedDids({ method: 'webvh' })
+      const log = migrated.metadata.get('log') as DIDLog
+      expect(log).toHaveLength(entriesBefore + 1)
+      const { publicJwk } = await second.dids.resolveVerificationMethodFromCreatedDidRecord(keyAgreementId)
+      expect(publicJwk.fingerprint).not.toBe(derivedKey)
+      const kmsKey = await second.kms.getPublicKey({ keyId: publicJwk.keyId })
+      expect(Kms.PublicJwk.fromPublicJwk(kmsKey as Kms.KmsJwkPublicAsymmetric).fingerprint).toBe(
+        publicJwk.fingerprint,
+      )
+      const resolved = await resolveDIDFromLog(log, { verifier: new InMemoryVerifier() })
+      expect(resolved.doc.verificationMethod?.find(vm => vm.id === keyAgreementId)?.publicKeyMultibase).toBe(
+        publicJwk.fingerprint,
+      )
 
       await second.shutdown()
     },
