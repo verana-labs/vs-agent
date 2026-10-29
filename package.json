@@ -24,7 +24,9 @@
     "test:e2e": "pnpm --filter @verana-labs/vs-agent-sdk test:e2e",
     "lint": "biome lint --write .",
     "validate": "pnpm lint && pnpm check-types && pnpm check-format",
-    "prepare": "corepack enable"
+    "prepare": "corepack enable",
+    "openapi:export": "pnpm --filter @verana-labs/vs-agent openapi:export",
+    "openapi:check": "pnpm openapi:export && git diff --exit-code -- docs/api/openapi.json"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.14",
