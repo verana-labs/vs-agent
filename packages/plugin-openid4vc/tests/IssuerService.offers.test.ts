@@ -2,6 +2,7 @@ import { ClaimFormat } from '@credo-ts/core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  AdminApiError,
   AdminApiErrorCode,
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
@@ -50,14 +51,32 @@ vi.mock('../src/trust/keyBinding', async importOriginal => ({
 
 let typeMetadataFetch: ReturnType<typeof stubTypeMetadataFetch>
 
-async function initializedIssuer(agentOverrides: Record<string, unknown> = {}) {
+/** The status list service as the offers see it: an index is bound, completed or released. */
+function statusLists() {
+  return {
+    attachIssuer: vi.fn(),
+    bindIndex: vi.fn(
+      async ({ statusListId, statusListIndex }: { statusListId: string; statusListIndex: number }) => ({
+        statusListId,
+        statusListIndex,
+        uri: `https://agent.example/oid4vc/status-list/${statusListId}`,
+      }),
+    ),
+    completeBinding: vi.fn(async () => {}),
+    releaseIndex: vi.fn(async () => {}),
+    recordIssuance: vi.fn(async () => {}),
+    getStatusListToken: vi.fn(async () => undefined),
+  }
+}
+
+async function initializedIssuer(agentOverrides: Record<string, unknown> = {}, lists = statusLists()) {
   const api = issuerApi()
   api.getIssuerByIssuerId.mockResolvedValue({ issuerId: 'issuer' })
   const options = issuerOptions()
   const agent = issuerAgent(api, undefined, undefined, undefined, agentOverrides) as Record<string, unknown>
-  const service = new IssuerService(agent as never, options, issuerSink)
+  const service = new IssuerService(agent as never, options, issuerSink, lists as never)
   await service.ensureInitialized()
-  return { service, api, options, agent }
+  return { service, api, options, agent, lists }
 }
 
 const offer = { jsonSchemaCredentialId: 'employee', claims: { name: 'Ada' }, ttlSeconds: 3_600 }
@@ -392,12 +411,144 @@ describe('IssuerService credential offers', () => {
     })
   })
 
-  it('rejects a whole status list pair as an unknown list', async () => {
-    const { service } = await initializedIssuer()
+  it('passes a status list the agent does not host through as an unknown id, before any offer exists', async () => {
+    const lists = statusLists()
+    lists.bindIndex.mockRejectedValue(
+      new AdminApiError(AdminApiErrorCode.UnknownId, 404, 'no status list with id "list-1"'),
+    )
+    const { service, api } = await initializedIssuer({}, lists)
 
     await expect(
       service.createOffer({ ...offer, statusListId: 'list-1', statusListIndex: 0 }),
     ).rejects.toMatchObject({ code: AdminApiErrorCode.UnknownId })
+    expect(api.createCredentialOffer).not.toHaveBeenCalled()
+  })
+
+  it('binds the index before the offer, stores the coordinates on the session, and completes the binding', async () => {
+    const { service, api, lists } = await initializedIssuer()
+    const session = issuanceSession({
+      id: 'session-id',
+      expiresAt: new Date('2026-07-21T10:05:00.000Z'),
+    })
+    api.createCredentialOffer.mockResolvedValue({
+      credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
+      issuanceSession: session,
+    })
+
+    await service.createOffer({
+      ...offer,
+      ttlSeconds: 31_536_000,
+      statusListId: 'list-1',
+      statusListIndex: 42,
+    })
+
+    expect(lists.bindIndex).toHaveBeenCalledWith({ statusListId: 'list-1', statusListIndex: 42 })
+    expect(lists.bindIndex.mock.invocationCallOrder[0]).toBeLessThan(
+      api.createCredentialOffer.mock.invocationCallOrder[0],
+    )
+    expect(api.createCredentialOffer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issuanceMetadata: {
+          claims: { name: 'Ada' },
+          ttlSeconds: 31_536_000,
+          status: {
+            statusListId: 'list-1',
+            statusListIndex: 42,
+            uri: 'https://agent.example/oid4vc/status-list/list-1',
+          },
+        },
+      }),
+    )
+    expect(session.getTag('statusListId')).toBe('list-1')
+    expect(session.getTag('statusListIndex')).toBe('42')
+    // an offer that no wallet redeemed binds its index while the offer is valid
+    expect(lists.completeBinding).toHaveBeenCalledWith(
+      { statusListId: 'list-1', statusListIndex: 42, uri: 'https://agent.example/oid4vc/status-list/list-1' },
+      { issuanceSessionId: 'session-id', expiresAt: new Date('2026-07-21T10:05:00.000Z') },
+    )
+    expect(lists.releaseIndex).not.toHaveBeenCalled()
+  })
+
+  it('releases the index when the offer cannot be created', async () => {
+    const { service, api, lists } = await initializedIssuer()
+    api.createCredentialOffer.mockRejectedValue(new Error('credo refused the offer'))
+
+    await expect(
+      service.createOffer({ ...offer, statusListId: 'list-1', statusListIndex: 42 }),
+    ).rejects.toThrow('credo refused the offer')
+
+    expect(lists.releaseIndex).toHaveBeenCalledWith({
+      statusListId: 'list-1',
+      statusListIndex: 42,
+      uri: 'https://agent.example/oid4vc/status-list/list-1',
+    })
+    expect(lists.completeBinding).not.toHaveBeenCalled()
+  })
+
+  it('allows a one-year lifetime for a registered credential alone', async () => {
+    const { service, api, lists } = await initializedIssuer()
+    api.createCredentialOffer.mockResolvedValue({
+      credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
+      issuanceSession: issuanceSession({ id: 'session-id' }),
+    })
+
+    await expect(service.createOffer({ ...offer, ttlSeconds: 31_536_000 })).rejects.toMatchObject({
+      code: AdminApiErrorCode.InvalidInput,
+    })
+    expect(lists.bindIndex).not.toHaveBeenCalled()
+    await expect(
+      service.createOffer({ ...offer, ttlSeconds: 31_536_001, statusListId: 'list-1', statusListIndex: 0 }),
+    ).rejects.toMatchObject({ code: AdminApiErrorCode.InvalidInput })
+    expect(lists.bindIndex).not.toHaveBeenCalled()
+    await expect(
+      service.createOffer({ ...offer, ttlSeconds: 31_536_000, statusListId: 'list-1', statusListIndex: 0 }),
+    ).resolves.toMatchObject({ issuanceSessionId: 'session-id' })
+  })
+
+  it('stamps the same status claim on every copy of a registered credential and records the issuance', async () => {
+    const { service, lists } = await initializedIssuer()
+    const status = {
+      statusListId: 'list-1',
+      statusListIndex: 42,
+      uri: 'https://agent.example/oid4vc/status-list/list-1',
+    }
+    const request = {
+      ...credentialRequest(),
+      issuanceSession: { issuanceMetadata: { claims: { name: 'Ada' }, ttlSeconds: 3_600, status } },
+      holderBinding: {
+        bindingMethod: 'jwk',
+        proofType: 'jwt',
+        keys: [
+          { method: 'jwk', jwk: HOLDER_JWK },
+          { method: 'jwk', jwk: { ...HOLDER_JWK, x: 'another' } },
+        ],
+      },
+    }
+
+    const mapped = await service.mapCredentialRequest(request as never)
+    if (mapped.type !== 'credentials') throw new Error('expected credentials')
+
+    expect(mapped.credentials).toHaveLength(2)
+    for (const credential of mapped.credentials) {
+      if (!('payload' in credential)) throw new Error('expected SD-JWT credentials')
+      expect(credential.payload.status).toEqual({ status_list: { idx: 42, uri: status.uri } })
+      expect(credential.payload).toMatchObject({ name: 'Ada', vct: EMPLOYEE_VCT })
+    }
+    const [first] = mapped.credentials
+    if (!('payload' in first)) throw new Error('expected SD-JWT credentials')
+    expect(lists.recordIssuance).toHaveBeenCalledWith(status, new Date(Number(first.payload.exp) * 1_000))
+  })
+
+  it('stamps no status claim on a credential that no list registers', async () => {
+    const { service, lists } = await initializedIssuer()
+
+    const mapped = await service.mapCredentialRequest(credentialRequest() as never)
+    if (mapped.type !== 'credentials') throw new Error('expected credentials')
+
+    const [credential] = mapped.credentials
+    if (!('payload' in credential)) throw new Error('expected SD-JWT credentials')
+    expect(credential.payload).not.toHaveProperty('status')
+    expect(lists.recordIssuance).not.toHaveBeenCalled()
   })
 
   it('rejects an offer for an unknown credential configuration with a dedicated error', async () => {

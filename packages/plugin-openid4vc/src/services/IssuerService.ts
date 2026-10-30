@@ -4,6 +4,7 @@ import type {
   OpenId4VcIssuerSink,
   OpenId4VcPluginOptions,
 } from '../types'
+import type { OpenId4VcStatusListBinding } from './StatusListService'
 import type { Kms } from '@credo-ts/core'
 import type { OnModuleInit } from '@nestjs/common'
 import type {
@@ -30,6 +31,7 @@ import {
   findCredentialConfiguration,
   ISSUER_CAPABILITY_ID,
   OfferClaimsError,
+  type OfferIssuanceMetadata,
   parseOfferClaims,
   parseOfferIssuanceMetadata,
   parseOfferTtlSeconds,
@@ -41,6 +43,7 @@ import { OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 import { serviceDisplay } from '../utils/serviceDisplay'
 
 import { buildCredentialConfigurations, resolveCredentialType } from './credentialConfigurationBuilder'
+import { StatusListService } from './StatusListService'
 import { createTypeMetadataIntegrity } from './typeMetadataIntegrity'
 
 import {
@@ -74,6 +77,7 @@ export interface OpenId4VcCreateOfferOptions {
 export interface OpenId4VcIssuanceSessionFilters {
   jsonSchemaCredentialId?: string
   state?: OpenId4VcIssuanceSessionState
+  statusListId?: string
 }
 
 export interface OpenId4VcOfferResult {
@@ -84,6 +88,8 @@ export interface OpenId4VcOfferResult {
 export interface OpenId4VcIssuanceSessionSummary {
   id: string
   jsonSchemaCredentialId: string
+  statusListId?: string
+  statusListIndex?: number
   state: OpenId4VcIssuanceSessionState
   createdAt: Date
   updatedAt: Date
@@ -96,6 +102,8 @@ const NOT_FOUND = 404
 const SERVICE_UNAVAILABLE = 503
 
 const JSON_SCHEMA_CREDENTIAL_ID_TAG = 'jsonSchemaCredentialId'
+const STATUS_LIST_ID_TAG = 'statusListId'
+const STATUS_LIST_INDEX_TAG = 'statusListIndex'
 const DPOP_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
 const ATTESTATION_ALGORITHMS: [Kms.KnownJwaSignatureAlgorithm] = ['ES256']
 
@@ -115,7 +123,15 @@ export class IssuerService implements OnModuleInit {
     @Inject('VSAGENT') private readonly agent: OpenId4VcAgent,
     @Inject(OPENID4VC_OPTIONS) private readonly options: OpenId4VcPluginOptions,
     @Inject(OPENID4VC_ISSUER_SINK) private readonly publishIssuerService: OpenId4VcIssuerSink,
-  ) {}
+    @Inject(StatusListService)
+    private readonly statusLists: StatusListService = new StatusListService(agent, options),
+  ) {
+    // The lists sign with the certificate of this capability, [VSA-PUB-OID-1].
+    this.statusLists.attachIssuer({
+      ensureInitialized: () => this.ensureInitialized(),
+      signingCertificate: () => this.signingCertificateHandle(),
+    })
+  }
 
   public async onModuleInit(): Promise<void> {
     this.publishIssuerService(this)
@@ -173,20 +189,13 @@ export class IssuerService implements OnModuleInit {
         'statusListId and statusListIndex must be both present or both absent',
       )
     }
-    if (statusListId !== undefined) {
-      throw new AdminApiError(
-        AdminApiErrorCode.UnknownId,
-        NOT_FOUND,
-        `no status list with id "${statusListId}"`,
-      )
-    }
+    const revocable = statusListId !== undefined && statusListIndex !== undefined
 
-    let issuanceMetadata: { claims: Record<string, unknown>; ttlSeconds: number }
+    let parsedClaims: Record<string, unknown>
+    let parsedTtlSeconds: number
     try {
-      issuanceMetadata = {
-        claims: parseOfferClaims(configuration, claims),
-        ttlSeconds: parseOfferTtlSeconds(ttlSeconds),
-      }
+      parsedClaims = parseOfferClaims(configuration, claims)
+      parsedTtlSeconds = parseOfferTtlSeconds(ttlSeconds, { revocable })
     } catch (error) {
       throw new AdminApiError(
         AdminApiErrorCode.InvalidInput,
@@ -207,15 +216,46 @@ export class IssuerService implements OnModuleInit {
 
     await this.assertTypeMetadataReadable(configuration.vct)
 
-    const { credentialOffer, issuanceSession } = await this.issuerApi().createCredentialOffer({
-      issuerId: ISSUER_CAPABILITY_ID,
-      credentialConfigurationIds: [configuration.id],
-      preAuthorizedCodeFlowConfig: {},
-      issuanceMetadata,
-    })
+    // [VSA-ADM-OID-CE-OFFER]: the index is bound before the offer exists, so a later offer that
+    // names it fails, and the binding is released when the offer itself cannot be created.
+    const binding = revocable
+      ? await this.statusLists.bindIndex({ statusListId, statusListIndex })
+      : undefined
+    const issuanceMetadata: OfferIssuanceMetadata = {
+      claims: parsedClaims,
+      ttlSeconds: parsedTtlSeconds,
+      ...(binding ? { status: binding } : {}),
+    }
 
-    issuanceSession.setTag(JSON_SCHEMA_CREDENTIAL_ID_TAG, configuration.id)
-    await this.sessionRepository().update(this.agent.context, issuanceSession)
+    let issuanceSession: OpenId4VcIssuanceSessionRecord
+    let credentialOffer: string
+    try {
+      ;({ credentialOffer, issuanceSession } = await this.issuerApi().createCredentialOffer({
+        issuerId: ISSUER_CAPABILITY_ID,
+        credentialConfigurationIds: [configuration.id],
+        preAuthorizedCodeFlowConfig: {},
+        issuanceMetadata,
+      }))
+
+      issuanceSession.setTag(JSON_SCHEMA_CREDENTIAL_ID_TAG, configuration.id)
+      if (binding) {
+        issuanceSession.setTag(STATUS_LIST_ID_TAG, binding.statusListId)
+        issuanceSession.setTag(STATUS_LIST_INDEX_TAG, String(binding.statusListIndex))
+      }
+      await this.sessionRepository().update(this.agent.context, issuanceSession)
+    } catch (error) {
+      if (binding) await this.releaseBinding(binding)
+      throw error
+    }
+
+    if (binding) {
+      // [VSA-ADM-OID-SL-DELETE]: an offer that no wallet redeemed binds its index while it is valid;
+      // the issuance then extends the binding to the `exp` of the credential.
+      await this.statusLists.completeBinding(binding, {
+        issuanceSessionId: issuanceSession.id,
+        expiresAt: issuanceSession.expiresAt,
+      })
+    }
     this.credentialExchangeStateUpdated(issuanceSession, null)
 
     return { credentialOffer, issuanceSessionId: issuanceSession.id }
@@ -234,6 +274,7 @@ export class IssuerService implements OnModuleInit {
       issuerId: ISSUER_CAPABILITY_ID,
       state: filters.state,
       [JSON_SCHEMA_CREDENTIAL_ID_TAG]: filters.jsonSchemaCredentialId,
+      [STATUS_LIST_ID_TAG]: filters.statusListId,
     })
     return sessions.map(summarizeIssuanceSession)
   }
@@ -242,6 +283,11 @@ export class IssuerService implements OnModuleInit {
     await this.ensureInitialized()
     await this.findOwnedSession(id)
     await this.issuerApi().deleteIssuanceSessionById(id)
+  }
+
+  /** [VSA-PUB-OID-1] The Status List Token the public listener serves for a list of this agent. */
+  public getStatusListToken(statusListId: string): Promise<string | undefined> {
+    return this.statusLists.getStatusListToken(statusListId)
   }
 
   private async findOwnedSession(id: string): Promise<OpenId4VcIssuanceSessionRecord> {
@@ -266,6 +312,17 @@ export class IssuerService implements OnModuleInit {
       )
     }
     return session
+  }
+
+  private async releaseBinding(binding: OpenId4VcStatusListBinding): Promise<void> {
+    try {
+      await this.statusLists.releaseIndex(binding)
+    } catch (error) {
+      this.agent.config.logger.error(
+        `[OpenID4VC] index ${binding.statusListIndex} of status list ${binding.statusListId} stays bound after a failed offer`,
+        { cause: error },
+      )
+    }
   }
 
   private credentialExchangeStateUpdated(
@@ -299,19 +356,25 @@ export class IssuerService implements OnModuleInit {
       throw new Error(`unknown credential configuration '${input.credentialConfigurationId}'`)
     }
 
-    const { claims, ttlSeconds } = parseOfferIssuanceMetadata(
+    const { claims, ttlSeconds, status } = parseOfferIssuanceMetadata(
       configuration,
       input.issuanceSession.issuanceMetadata,
     )
     const integrity = await this.typeMetadataIntegrity.digest(configuration.vct)
     const issuedAt = Math.floor(Date.now() / 1_000)
+    const expiresAt = issuedAt + ttlSeconds
+    // [VSA-ADM-OID-CE-OFFER]: every copy of the credential carries the same `status` entry, so one
+    // revocation ends all of them.
     const payload = {
       ...claims,
       vct: configuration.vct,
       'vct#integrity': integrity,
       iat: issuedAt,
-      exp: issuedAt + ttlSeconds,
+      exp: expiresAt,
+      ...(status ? { status: { status_list: { idx: status.statusListIndex, uri: status.uri } } } : {}),
     }
+    // Recorded before credo signs: a binding never claims less than the credential it backs.
+    if (status) await this.statusLists.recordIssuance(status, new Date(expiresAt * 1_000))
 
     return {
       type: 'credentials',
@@ -610,9 +673,14 @@ function sameCredentialConfigurations(
 
 function summarizeIssuanceSession(session: OpenId4VcIssuanceSessionRecord): OpenId4VcIssuanceSessionSummary {
   const jsonSchemaCredentialId = session.getTag(JSON_SCHEMA_CREDENTIAL_ID_TAG)
+  const statusListId = session.getTag(STATUS_LIST_ID_TAG)
+  const statusListIndex = session.getTag(STATUS_LIST_INDEX_TAG)
   return {
     id: session.id,
     jsonSchemaCredentialId: typeof jsonSchemaCredentialId === 'string' ? jsonSchemaCredentialId : '',
+    ...(typeof statusListId === 'string' && typeof statusListIndex === 'string'
+      ? { statusListId, statusListIndex: Number(statusListIndex) }
+      : {}),
     state: session.state,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt ?? session.createdAt,

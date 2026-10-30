@@ -94,6 +94,31 @@ describe('IssuerService issuance sessions', () => {
     })
   })
 
+  it('reports the status list coordinates that the offer stored on the session', async () => {
+    const { service, api } = await initializedIssuer()
+    const session = issuanceSession()
+    session.setTag('statusListId', 'list-1')
+    session.setTag('statusListIndex', '42')
+    api.getIssuanceSessionById.mockResolvedValue(session)
+
+    await expect(service.getIssuanceSession('session-1')).resolves.toMatchObject({
+      statusListId: 'list-1',
+      statusListIndex: 42,
+    })
+  })
+
+  it('filters the listing by the status list that the offer named', async () => {
+    const { service } = await initializedIssuer()
+    issuanceSessionRepository.findByQuery.mockResolvedValue([])
+
+    await service.listIssuanceSessions({ statusListId: 'list-1' })
+
+    expect(issuanceSessionRepository.findByQuery).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ issuerId: 'issuer', statusListId: 'list-1' }),
+    )
+  })
+
   it('reports an unknown or foreign session as unknown', async () => {
     const { service, api } = await initializedIssuer()
     api.getIssuanceSessionById.mockRejectedValueOnce(

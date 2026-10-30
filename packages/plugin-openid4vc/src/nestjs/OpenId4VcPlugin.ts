@@ -4,6 +4,7 @@ import type { DidTrustResolver, VsAgentNestPlugin } from '@verana-labs/vs-agent-
 import { createDidTrustResolver } from '@verana-labs/vs-agent-sdk'
 
 import { IssuerService } from '../services/IssuerService'
+import { StatusListService } from '../services/StatusListService'
 import { VerifierService } from '../services/VerifierService'
 import { OPENID4VC_DID_TRUST_RESOLVER, OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../types'
 
@@ -11,8 +12,10 @@ import { registerCredentialConfigurationHandlers } from '../sdk/credentialConfig
 import { setupOpenId4Vc } from '../sdk/setupOpenId4Vc'
 
 import { V2OpenId4VcCredentialExchangesController } from './V2OpenId4VcCredentialExchangesController'
+import { V2OpenId4VcCredentialRevocationController } from './V2OpenId4VcCredentialRevocationController'
 import { V2OpenId4VcPresentationsController } from './V2OpenId4VcPresentationsController'
 import { V2OpenId4VcSigningCertificatesController } from './V2OpenId4VcSigningCertificatesController'
+import { V2OpenId4VcStatusListsController } from './V2OpenId4VcStatusListsController'
 
 export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlugin {
   let issuerService: OpenId4VcIssuerRuntime | undefined
@@ -39,11 +42,14 @@ export function OpenId4VcPlugin(options: OpenId4VcPluginOptions): VsAgentNestPlu
       V2OpenId4VcCredentialExchangesController,
       V2OpenId4VcPresentationsController,
       V2OpenId4VcSigningCertificatesController,
+      V2OpenId4VcStatusListsController,
+      V2OpenId4VcCredentialRevocationController,
     ],
     providers: [
       { provide: OPENID4VC_OPTIONS, useValue: options },
       { provide: OPENID4VC_ISSUER_SINK, useValue: publishIssuerService },
       { provide: OPENID4VC_DID_TRUST_RESOLVER, useValue: resolveDidTrust },
+      StatusListService,
       IssuerService,
       VerifierService,
     ],

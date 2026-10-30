@@ -1,6 +1,8 @@
 import type { OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../src/types'
 import type { NextFunction, Request, Response } from 'express'
 
+import type { Response as SuperagentResponse } from 'superagent'
+
 import request from 'supertest'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -22,6 +24,16 @@ const noIssuerService = (): never => {
   throw new Error('OpenID4VC issuer service is not initialized')
 }
 
+// superagent buffers text/* alone, and the Status List Token is served as application/statuslist+jwt
+const text = (response: SuperagentResponse, done: (error: Error | null, body: string) => void): void => {
+  let body = ''
+  response.setEncoding('utf8')
+  response.on('data', (chunk: string) => {
+    body += chunk
+  })
+  response.on('end', () => done(null, body))
+}
+
 const setupOptions = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
   issuer: {},
@@ -36,12 +48,14 @@ describe('setupOpenId4Vc', () => {
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
+      getStatusListToken: async () => undefined,
     }))
     const second = setupOpenId4Vc(setupOptions(), () => ({
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
+      getStatusListToken: async () => undefined,
     }))
 
     expect(first.publicMiddleware).not.toBe(second.publicMiddleware)
@@ -65,6 +79,7 @@ describe('setupOpenId4Vc', () => {
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
+      getStatusListToken: async () => undefined,
     }))
     const peerCertificate = { toString: () => 'MIIB-peer-certificate' }
     const getTrustedCertificates = setup.modules.x509.config.getTrustedCertificatesForVerification
@@ -86,6 +101,7 @@ describe('setupOpenId4Vc', () => {
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
+      getStatusListToken: async () => undefined,
     }))
 
     const response = await request(setup.publicMiddleware).get('/.well-known/jwt-vc-issuer')
@@ -102,6 +118,7 @@ describe('setupOpenId4Vc', () => {
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
+      getStatusListToken: async () => undefined,
     }))
 
     const response = await request(setup.publicMiddleware).get('/.well-known/jwt-vc-issuer/oid4vci/demo-did')
@@ -142,12 +159,57 @@ describe('setupOpenId4Vc', () => {
     )
   })
 
+  it('serves a Status List Token as application/statuslist+jwt and answers 404 for an unknown list', async () => {
+    const setup = setupOpenId4Vc(setupOptions(), () => ({
+      getJwtVcIssuerMetadata: () => ({}),
+      mapCredentialRequest: () => {
+        throw new Error('not implemented')
+      },
+      getStatusListToken: async statusListId =>
+        statusListId === 'list-1' ? 'header.payload.signature' : undefined,
+    }))
+
+    const found = await request(setup.publicMiddleware).get('/oid4vc/status-list/list-1').buffer().parse(text)
+    const missing = await request(setup.publicMiddleware).get('/oid4vc/status-list/list-2')
+
+    expect(found.status).toBe(200)
+    // a Token Status List client compares the content type literally, so no charset parameter
+    expect(found.headers['content-type']).toBe('application/statuslist+jwt')
+    expect(found.headers['cache-control']).toBe('no-store')
+    expect(found.body).toBe('header.payload.signature')
+    expect(missing.status).toBe(404)
+    expect(missing.body).toEqual({ error: 'not_found', error_description: 'unknown status list' })
+  })
+
+  it('serves the Status List Token under a public base URL that carries a path', async () => {
+    const options = setupOptions()
+    options.publicApiBaseUrl = 'https://agent.example/public/base'
+    const setup = setupOpenId4Vc(options, () => ({
+      getJwtVcIssuerMetadata: () => ({}),
+      mapCredentialRequest: () => {
+        throw new Error('not implemented')
+      },
+      getStatusListToken: async () => 'header.payload.signature',
+    }))
+
+    const prefixed = await request(setup.publicMiddleware)
+      .get('/public/base/oid4vc/status-list/list-1')
+      .buffer()
+      .parse(text)
+    const bare = await request(setup.publicMiddleware).get('/oid4vc/status-list/list-1')
+
+    expect(prefixed.status).toBe(200)
+    expect(prefixed.body).toBe('header.payload.signature')
+    expect(bare.status).toBe(404)
+  })
+
   it('mounts no type metadata, credential-offer or credential-exchange route', async () => {
     const setup = setupOpenId4Vc(setupOptions(), () => ({
       getJwtVcIssuerMetadata: () => ({}),
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
+      getStatusListToken: async () => undefined,
     }))
 
     const metadata = await request(setup.publicMiddleware).get('/oid4vc/vct/employee')
@@ -238,6 +300,7 @@ describe('setupOpenId4Vc', () => {
       mapCredentialRequest: () => {
         throw new Error('not implemented')
       },
+      getStatusListToken: async () => undefined,
     }))
 
     const requestRoute = await request(setup.publicMiddleware)

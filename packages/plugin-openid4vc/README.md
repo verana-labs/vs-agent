@@ -6,9 +6,10 @@ operator sets `OID4VC_CONFIG_FILE_LOCATION`. Nothing else enables it.
 
 What it does:
 
-- pre-authorized OpenID4VCI issuance of `dc+sd-jwt` credentials, valid until they expire: the
-  agent hosts no status list yet, so a credential carries no `status` claim and the `ttlSeconds`
-  of its offer is its only bound;
+- pre-authorized OpenID4VCI issuance of `dc+sd-jwt` credentials, revocable through the Token
+  Status Lists the agent hosts: an offer that names a `statusListId` and a `statusListIndex` binds
+  the index and stamps the `status` claim, `revokeCredential` flips it, and a credential that no
+  list registers is valid until the `ttlSeconds` of its offer run out;
 - OpenID4VP requests in DCQL (`direct_post.jwt`, `x509_hash` or DID client identifier) or, for a
   wallet that predates DCQL, Presentation Exchange (`direct_post`, `x509_san_dns` or DID client
   identifier, since draft 21 predates `x509_hash`);
@@ -41,10 +42,32 @@ when the indexer cannot answer), and reads the Type Metadata document over `http
 following a redirect, to bind every credential to its `vct#integrity`. It answers
 `503 RESOLVER_UNAVAILABLE` when that document cannot be read.
 
-## Not wired up yet
+## Revocation
 
-The agent hosts no status list, so `createCredentialOffer` answers `404 UNKNOWN_ID` for every
-`statusListId`. [#713](https://github.com/verana-labs/vs-agent/issues/713) carries it.
+The issuer capability hosts [Token Status Lists](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list),
+one bit per status, each served at `{PUBLIC_API_BASE_URL}/oid4vc/status-list/{statusListId}` as
+`application/statuslist+jwt`. `createStatusList` signs an all-valid token with the certificate chain
+of the issuer capability, the same `x5c` that signs the credentials, so a verifier that applies the
+same-chain rule of [[VSA-VTI-FLOW-VERIFY-OID]](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#vsa-vti-flow-verify-oid-openid4vp-trust-decision)
+step 6, credo among them, accepts the list of every credential it accepts. Credo builds and signs
+each token through its `tokenStatusList` module; the plugin keeps the lists and the binding of each
+index in the agent storage (`OpenId4VcStatusListRecord`, `OpenId4VcStatusListEntryRecord`), so both
+survive a restart.
+
+A credential joins a list through its offer: `statusListId` and `statusListIndex`, both or none. The
+caller allocates the index. The agent binds it before the offer exists, refuses a later offer that
+names it with `409 INVALID_STATE`, stamps `status.status_list` with the `uri` of the list and the
+`idx` on every copy the wallet requests, and reports the coordinates on the credential exchange.
+`revokeCredential` sets the status at the index to INVALID and publishes the re-signed token before
+it answers; a second call changes nothing. The binding outlives the issuance session, so a caller
+can revoke a credential whose session it deleted. `deleteStatusList` is refused while an index is
+bound to a credential that is not revoked and not expired; an offer that no wallet redeemed binds
+its index until the offer expires.
+
+Every token carries `sub` (the `uri`), `iat` and `exp`, 24 hours after `iat`. The agent re-signs a
+list on the next read of its URL once half of that lifetime has passed, and whenever the signing
+certificate changed since the token was signed. A re-signed list carries the new chain, which ends
+the acceptance of every credential the previous certificate signed, as the spec states.
 
 ## Enable it
 
@@ -114,15 +137,19 @@ answers in the v2 error envelope. Without `OID4VC_CONFIG_FILE_LOCATION`, every p
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `createCredentialOffer` | `POST /credential-offer` | `jsonSchemaCredentialId`, `claims`, `ttlSeconds` (60 to 7776000), optional `statusListId` and `statusListIndex` together. Returns `credentialExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`, `409 NOT_AUTHORIZED`, `503 RESOLVER_UNAVAILABLE`. Answers `UNKNOWN_ID` for every status list until #713. |
-| `listCredentialExchanges` | `GET /credential-exchanges` | Filters `jsonSchemaCredentialId`, `state`. Keyset pagination. |
-| `getCredentialExchange` | `GET /credential-exchanges/{credentialExchangeId}` | `credentialExchangeId`, `jsonSchemaCredentialId`, `state`, `createdAt`, `updatedAt`, `expiresAt`, `errorMessage`. Never the claims, the offer URL or the pre-authorized code. |
+| `createCredentialOffer` | `POST /credential-offer` | `jsonSchemaCredentialId`, `claims`, `ttlSeconds` (60 to 7776000, or up to 31536000 for a credential registered on a status list), optional `statusListId` and `statusListIndex` together. Returns `credentialExchangeId` and `url`. `404 UNKNOWN_ID` (type or list), `400 INVALID_INPUT` (claims, `ttlSeconds`, half a pair, index out of range), `409 INVALID_STATE` (index already bound), `409 NOT_AUTHORIZED`, `503 RESOLVER_UNAVAILABLE`. |
+| `listCredentialExchanges` | `GET /credential-exchanges` | Filters `jsonSchemaCredentialId`, `state`, `statusListId`. Keyset pagination. |
+| `getCredentialExchange` | `GET /credential-exchanges/{credentialExchangeId}` | `credentialExchangeId`, `jsonSchemaCredentialId`, `statusListId` and `statusListIndex` when the offer set them, `state`, `createdAt`, `updatedAt`, `expiresAt`, `errorMessage`. Never the claims, the offer URL or the pre-authorized code. |
 | `deleteCredentialExchange` | `DELETE /credential-exchanges/{credentialExchangeId}` | `204`. Deletes the record only, never a credential that a wallet holds. |
 | `createPresentationRequest` | `POST /presentation-request` | `jsonSchemaCredentialId`, optional `requestedClaims` (defaults to every claim of the type), optional `queryLanguage` (`dcql`, `presentation_exchange`), optional `requestSigner` (`x5c`, `did`). Returns `proofExchangeId` and `url`. `404 UNKNOWN_ID`, `400 INVALID_INPUT`, `409 NOT_AUTHORIZED`, `503 RESOLVER_UNAVAILABLE`, `409 INVALID_STATE`. The agent has to hold an active VERIFIER `Participant` for the `CredentialSchema` of the type. |
 | `listPresentations` | `GET /presentations` | Filters `jsonSchemaCredentialId`, `state`. Keyset pagination. |
 | `getPresentation` | `GET /presentations/{proofExchangeId}` | Adds the stored `jsonSchemaCredentialId` and `requestedClaims` of the request, then `cryptographicVerified`, `accepted`, `trust` and `credential` once the wallet answered. |
 | `deletePresentation` | `DELETE /presentations/{proofExchangeId}` | `204`. |
 | `listSigningCertificates` | `GET /signing-certificates` | Bare array of `role`, `development`, `fingerprint`, `certificateChain`. Never a private key. |
+| `listStatusLists` | `GET /status-lists` | Keyset pagination of `statusListId`, `uri`, `size`, `createdAt`, `updatedAt` (the `iat` of the last published token). |
+| `createStatusList` | `POST /status-lists` | Optional `size` (1024 to 16777216, default 131072). Publishes the all-valid token before it answers `201` with the record. `400 INVALID_INPUT`. |
+| `deleteStatusList` | `DELETE /status-lists/{statusListId}` | `204`; the public URL answers `404` afterwards. `404 UNKNOWN_ID`, `409 INVALID_STATE` while an index is bound to a credential that is not revoked and not expired. |
+| `revokeCredential` | `POST /revoke-credential` | `statusListId`, `statusListIndex`. Publishes the re-signed token, then answers `200` with `statusListId`, `statusListIndex`, `revokedAt` (the `iat` of that token). Idempotent. `404 UNKNOWN_ID`, `400 INVALID_INPUT` (index out of range), `409 INVALID_STATE` (no offer bound the index). |
 
 Session states are credo's: `OfferCreated`, `OfferUriRetrieved`, `AuthorizationInitiated`,
 `AuthorizationGranted`, `AccessTokenRequested`, `AccessTokenCreated`, `CredentialRequestReceived`,
@@ -144,6 +171,7 @@ Admin API and the metadata return; it never builds a path itself.
 | `/.well-known/openid-credential-issuer`, `/.well-known/oauth-authorization-server`, `/.well-known/jwt-vc-issuer` | Issuer and authorization-server metadata, also at the path-inserted forms. |
 | `/oid4vci/issuer/...` | Token and credential traffic of the issuer capability. |
 | `/oid4vp/verifier/...` | Authorization request and response traffic of the verifier capability. |
+| `/oid4vc/status-list/{statusListId}` | The Status List Token of one list, `application/statuslist+jwt`, `Cache-Control: no-store`; `404` for an unknown list. |
 
 ## Trust decision
 
@@ -200,6 +228,7 @@ the code it changes, with a one-line note.
 
 `pnpm --filter @verana-labs/vs-agent-plugin-openid4vc exec vitest run` runs the unit tests and the
 in-process end-to-end tests, which start real credo agents for the issuer, the holder and the
-verifier, drive a pre-authorized issuance through to a stored holder-bound credential, and present
-it back to the verifier through to a stored trust verdict. No external wallet or conformance
+verifier, drive a pre-authorized issuance through to a stored holder-bound credential, present
+it back to the verifier through to a stored trust verdict, and revoke a registered credential on a
+status list the issuer serves until the verifier refuses it. No external wallet or conformance
 evidence is recorded here; see the Verana Playground for recorded wallet scenarios.
