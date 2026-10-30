@@ -46,6 +46,7 @@ import { webcrypto } from 'node:crypto'
 
 import { setupOpenId4Vc } from '../../src/sdk/setupOpenId4Vc'
 import { IssuerService } from '../../src/services/IssuerService'
+import { StatusListService } from '../../src/services/StatusListService'
 import { VerifierService } from '../../src/services/VerifierService'
 
 import {
@@ -124,6 +125,7 @@ export interface OpenId4VcTestAgents {
   issuer: {
     agent: OpenId4VcAgent
     service: IssuerService
+    statusLists: StatusListService
     publicApiBaseUrl: string
   }
   holder: {
@@ -231,6 +233,7 @@ export async function startTestAgents(input: {
   )
 
   try {
+    let statusLists: StatusListService | undefined
     const issuer = await startPluginAgent({
       role: 'issuer',
       did: input.issuerDid,
@@ -251,11 +254,15 @@ export async function startTestAgents(input: {
         },
         credentialConfigurations: [input.credentialConfiguration],
       }),
-      createService: (agent, options) => new IssuerService(agent, options, () => {}),
+      createService: (agent, options) => {
+        statusLists = new StatusListService(agent, options)
+        return new IssuerService(agent, options, () => {}, statusLists)
+      },
       indexer: issuerIndexer(input.issuerDid, input.credentialConfiguration.credentialSchemaId),
       logger,
     })
     stops.push(issuer.stop)
+    if (!statusLists) throw new Error('the issuer started without its status list service')
 
     const holder = await startHolderAgent(input.didResolver, rootCertificate, logger)
     stops.push(holder.stop)
@@ -289,7 +296,7 @@ export async function startTestAgents(input: {
     stops.push(verifier.stop)
 
     return {
-      issuer,
+      issuer: { ...issuer, statusLists },
       holder,
       verifier,
       rootCertificate,

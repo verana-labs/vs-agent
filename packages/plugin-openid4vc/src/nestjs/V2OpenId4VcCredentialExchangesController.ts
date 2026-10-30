@@ -96,7 +96,8 @@ export class V2OpenId4VcCredentialExchangesController {
   @Get('credential-exchanges')
   @ApiOperation({
     summary: 'List credential exchanges',
-    description: 'Returns the OpenID4VCI issuance sessions that the agent tracks.',
+    description:
+      'Returns the OpenID4VCI issuance sessions that the agent tracks, filtered by credential type, state or the status list that the offer named.',
   })
   @ApiOkResponse({
     description: 'A page of credential exchange records',
@@ -108,6 +109,7 @@ export class V2OpenId4VcCredentialExchangesController {
     const filters = {
       jsonSchemaCredentialId: query.jsonSchemaCredentialId,
       state: query.state,
+      statusListId: query.statusListId,
     }
     const sessions = await this.issuerService.listIssuanceSessions(filters)
 
