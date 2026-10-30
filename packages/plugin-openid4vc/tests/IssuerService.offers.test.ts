@@ -483,6 +483,43 @@ describe('IssuerService credential offers', () => {
       uri: 'https://agent.example/oid4vc/status-list/list-1',
     })
     expect(lists.completeBinding).not.toHaveBeenCalled()
+    expect(api.deleteIssuanceSessionById).not.toHaveBeenCalled()
+  })
+
+  it('deletes the session, then releases the index, when the binding cannot be completed', async () => {
+    const { service, api, lists } = await initializedIssuer()
+    api.createCredentialOffer.mockResolvedValue({
+      credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
+      issuanceSession: issuanceSession({ id: 'session-id' }),
+    })
+    lists.completeBinding.mockRejectedValue(new Error('storage down'))
+
+    await expect(
+      service.createOffer({ ...offer, statusListId: 'list-1', statusListIndex: 42 }),
+    ).rejects.toThrow('storage down')
+
+    expect(api.deleteIssuanceSessionById).toHaveBeenCalledWith('session-id')
+    expect(lists.releaseIndex).toHaveBeenCalledWith(expect.objectContaining({ statusListIndex: 42 }))
+    expect(api.deleteIssuanceSessionById.mock.invocationCallOrder[0]).toBeLessThan(
+      lists.releaseIndex.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('keeps the index bound while a session that names it survives a failed offer', async () => {
+    const { service, api, lists } = await initializedIssuer()
+    api.createCredentialOffer.mockResolvedValue({
+      credentialOffer: 'openid-credential-offer://?credential_offer_uri=secret',
+      issuanceSession: issuanceSession({ id: 'session-id' }),
+    })
+    lists.completeBinding.mockRejectedValue(new Error('storage down'))
+    api.deleteIssuanceSessionById.mockRejectedValue(new Error('still down'))
+
+    await expect(
+      service.createOffer({ ...offer, statusListId: 'list-1', statusListIndex: 42 }),
+    ).rejects.toThrow('storage down')
+
+    expect(api.deleteIssuanceSessionById).toHaveBeenCalledWith('session-id')
+    expect(lists.releaseIndex).not.toHaveBeenCalled()
   })
 
   it('allows a one-year lifetime for a registered credential alone', async () => {

@@ -29,6 +29,7 @@ export {
   STATUS_LIST_SIZE_MAX,
   STATUS_LIST_SIZE_MIN,
   STATUS_LIST_TOKEN_LIFETIME_SECONDS,
+  STATUS_LIST_TOKEN_TTL_SECONDS,
   StatusListService,
 } from './services/StatusListService'
 export type {

@@ -64,10 +64,12 @@ can revoke a credential whose session it deleted. `deleteStatusList` is refused 
 bound to a credential that is not revoked and not expired; an offer that no wallet redeemed binds
 its index until the offer expires.
 
-Every token carries `sub` (the `uri`), `iat` and `exp`, 24 hours after `iat`. The agent re-signs a
-list on the next read of its URL once half of that lifetime has passed, and whenever the signing
-certificate changed since the token was signed. A re-signed list carries the new chain, which ends
-the acceptance of every credential the previous certificate signed, as the spec states.
+Every token carries `sub` (the `uri`), `iat`, `exp`, 24 hours after `iat`, and `ttl`, 300 seconds,
+the longest a verifier may cache it, so a revocation reaches a caching verifier within minutes. The
+agent re-signs a list on the next read of its URL once half of that lifetime has passed, and whenever
+the signing certificate changed since the token was signed. A re-signed list carries the new chain
+and the statuses of the token it replaces, which ends the acceptance of every credential the
+previous certificate signed, as the spec states.
 
 ## Enable it
 

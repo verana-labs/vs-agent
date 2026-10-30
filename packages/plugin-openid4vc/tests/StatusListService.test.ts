@@ -1,6 +1,8 @@
 import type { OpenId4VcStatusListEntryRecord } from '../src/storage/StatusListEntryRecord'
 import type { OpenId4VcStatusListRecord } from '../src/storage/StatusListRecord'
 
+import { deflateSync } from 'zlib'
+
 import { RecordDuplicateError } from '@credo-ts/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -9,9 +11,11 @@ import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 import {
   STATUS_LIST_SIZE_DEFAULT,
   STATUS_LIST_TOKEN_LIFETIME_SECONDS,
+  STATUS_LIST_TOKEN_TTL_SECONDS,
   StatusListService,
   statusListTokenChainDiffers,
   statusListTokenNearsExpiry,
+  statusListTokenRevokedIndexes,
 } from '../src/services/StatusListService'
 import { OpenId4VcStatusListEntryRepository } from '../src/storage/StatusListEntryRecord'
 import { OpenId4VcStatusListRepository } from '../src/storage/StatusListRecord'
@@ -38,33 +42,50 @@ function seconds(date: Date): number {
   return Math.floor(date.getTime() / 1_000)
 }
 
-/** In-memory stand-ins for the two repositories, keyed like askar: a duplicate id refuses the save. */
+/** A one-bit-per-status list as Token Status List encodes it: zlib over bytes, first status in the lowest bit. */
+function encodedStatusList(size: number, revoked: number[]): { bits: number; lst: string } {
+  const bytes = Buffer.alloc(Math.ceil(size / 8))
+  for (const index of revoked) bytes[index >> 3] |= 1 << (index & 7)
+  return { bits: 1, lst: deflateSync(bytes).toString('base64url') }
+}
+
+/**
+ * In-memory stand-ins for the two repositories, keyed like askar: a duplicate id refuses the save, and
+ * a record travels by copy, so a write the store refused leaves no trace in it.
+ */
 function repositories() {
   const lists = new Map<string, OpenId4VcStatusListRecord>()
   const entries = new Map<string, OpenId4VcStatusListEntryRecord>()
+  const copy = <T extends object>(record: T): T =>
+    Object.assign(Object.create(Object.getPrototypeOf(record)), record)
   const repositoryOf = <T extends { id: string }>(store: Map<string, T>) => ({
     save: vi.fn(async (_context: unknown, record: T) => {
       if (store.has(record.id)) throw new RecordDuplicateError(`duplicate ${record.id}`, { recordType: 'x' })
-      store.set(record.id, record)
+      store.set(record.id, copy(record))
     }),
     update: vi.fn(async (_context: unknown, record: T) => {
-      store.set(record.id, record)
+      store.set(record.id, copy(record))
     }),
     delete: vi.fn(async (_context: unknown, record: T) => {
       store.delete(record.id)
     }),
-    findById: vi.fn(async (_context: unknown, id: string) => store.get(id) ?? null),
-    getAll: vi.fn(async () => [...store.values()]),
+    findById: vi.fn(async (_context: unknown, id: string) => {
+      const record = store.get(id)
+      return record ? copy(record) : null
+    }),
+    getAll: vi.fn(async () => [...store.values()].map(copy)),
     findByQuery: vi.fn(async (_context: unknown, query: Record<string, unknown>) =>
-      [...store.values()].filter(record =>
-        Object.entries(query).every(([key, value]) => (record as Record<string, unknown>)[key] === value),
-      ),
+      [...store.values()]
+        .filter(record =>
+          Object.entries(query).every(([key, value]) => (record as Record<string, unknown>)[key] === value),
+        )
+        .map(copy),
     ),
   })
   return { lists, entries, listRepository: repositoryOf(lists), entryRepository: repositoryOf(entries) }
 }
 
-/** Credo's Token Status List API, reduced to what the service reads back: header, sub, iat, exp, statuses. */
+/** Credo's Token Status List API, reduced to what the service reads back: header, sub, iat, exp, ttl, statuses. */
 function tokenStatusListApi() {
   return {
     createTokenStatusList: vi.fn(
@@ -74,6 +95,7 @@ function tokenStatusListApi() {
         signer: { x5c: { toString: () => string }[] }
         issuedAt: Date
         expiresAt: Date
+        timeToLive?: number
       }) => ({
         format: 'jwt',
         statusList: fakeJwt(
@@ -82,7 +104,8 @@ function tokenStatusListApi() {
             sub: options.statusListUri,
             iat: seconds(options.issuedAt),
             exp: seconds(options.expiresAt),
-            status_list: { bits: 1, lst: '', size: options.statusList.statusListLength, revoked: [] },
+            ttl: options.timeToLive,
+            status_list: encodedStatusList(options.statusList.statusListLength, []),
           },
         ),
       }),
@@ -93,19 +116,19 @@ function tokenStatusListApi() {
         status: { index: number; status: number }[]
         issuedAt: Date
         expiresAt: Date
+        timeToLive?: number
       }) => {
         const { header, payload } = decodeJwt(options.token)
-        const statusList = payload.status_list as { revoked: number[] }
+        const size = Buffer.byteLength(Buffer.from((payload.status_list as { lst: string }).lst, 'base64url'))
+        const revoked = [...statusListTokenRevokedIndexes(options.token), ...options.status.map(s => s.index)]
         return {
           format: 'jwt',
           statusList: fakeJwt(header, {
             ...payload,
             iat: seconds(options.issuedAt),
             exp: seconds(options.expiresAt),
-            status_list: {
-              ...statusList,
-              revoked: [...statusList.revoked, ...options.status.map(status => status.index)],
-            },
+            ttl: options.timeToLive ?? payload.ttl,
+            status_list: encodedStatusList(Math.max(size * 8, ...revoked.map(index => index + 1)), revoked),
           }),
         }
       },
@@ -113,9 +136,7 @@ function tokenStatusListApi() {
   }
 }
 
-function revokedIndexes(token: string): number[] {
-  return (decodeJwt(token).payload.status_list as { revoked: number[] }).revoked
-}
+const revokedIndexes = statusListTokenRevokedIndexes
 
 function issuer(leaf = leafCertificate) {
   return {
@@ -168,6 +189,7 @@ describe('StatusListService', () => {
           statusList: { statusListLength: STATUS_LIST_SIZE_DEFAULT, bitsPerStatus: 1 },
           statusListUri: `https://agent.example/oid4vc/status-list/${list.id}`,
           signer: { method: 'x5c', x5c: [leafCertificate] },
+          timeToLive: STATUS_LIST_TOKEN_TTL_SECONDS,
         }),
       )
       expect(list).toMatchObject({
@@ -252,6 +274,7 @@ describe('StatusListService', () => {
         expect.objectContaining({
           status: [{ index: 5, status: 1 }],
           signer: { method: 'x5c', x5c: [leafCertificate] },
+          timeToLive: STATUS_LIST_TOKEN_TTL_SECONDS,
         }),
       )
       const stored = stores.lists.get(list.id)
@@ -376,7 +399,7 @@ describe('StatusListService', () => {
       )
     })
 
-    it('re-creates the token from the bindings when the signing certificate changed', async () => {
+    it('re-creates the token with the new chain, from the statuses of the current token, when the signing certificate changed', async () => {
       const { statusLists, stores, api } = service()
       const list = await statusLists.createStatusList({ size: 1_024 })
       await statusLists.bindIndex({ statusListId: list.id, statusListIndex: 8 })
@@ -390,6 +413,26 @@ describe('StatusListService', () => {
       expect(decodeJwt(served ?? '').header.x5c).toEqual([OTHER_LEAF])
       expect(revokedIndexes(served ?? '')).toEqual([8])
       expect(stores.lists.get(list.id)?.token).toBe(served)
+    })
+
+    it('keeps a revocation that the token carries but no binding records when it re-creates the token', async () => {
+      const { statusLists, stores } = service()
+      const list = await statusLists.createStatusList({ size: 1_024 })
+      await statusLists.bindIndex({ statusListId: list.id, statusListIndex: 8 })
+      // the token is published, then the binding cannot record it
+      stores.entryRepository.update.mockRejectedValueOnce(new Error('storage down'))
+      await expect(
+        statusLists.revokeCredential({ statusListId: list.id, statusListIndex: 8 }),
+      ).rejects.toThrow('storage down')
+      expect(revokedIndexes(stores.lists.get(list.id)?.token ?? '')).toEqual([8])
+      expect(stores.entries.get(`${list.id}#8`)?.revokedAt).toBeUndefined()
+      const otherLeaf = { ...leafCertificate, toString: () => OTHER_LEAF }
+      statusLists.attachIssuer(issuer(otherLeaf as never) as never)
+
+      const served = await statusLists.getStatusListToken(list.id)
+
+      expect(decodeJwt(served ?? '').header.x5c).toEqual([OTHER_LEAF])
+      expect(revokedIndexes(served ?? '')).toEqual([8])
     })
   })
 
@@ -421,6 +464,16 @@ describe('status list token staleness', () => {
     expect(statusListTokenNearsExpiry(list, new Date('2026-01-01T11:59:59.000Z'))).toBe(false)
     expect(statusListTokenNearsExpiry(list, new Date('2026-01-01T12:00:00.000Z'))).toBe(true)
     expect(statusListTokenNearsExpiry(list, new Date('2026-01-03T00:00:00.000Z'))).toBe(true)
+  })
+
+  it('reads the statuses of the examples of the Token Status List draft', () => {
+    // draft-ietf-oauth-status-list, one bit per status: 1,0,0,1,1,1,0,1,1,1,0,0,0,1,0,1
+    const oneBit = fakeJwt({}, { status_list: { bits: 1, lst: 'eNrbuRgAAhcBXQ' } })
+    expect(statusListTokenRevokedIndexes(oneBit)).toEqual([0, 3, 4, 5, 7, 8, 9, 13, 15])
+    // two bits per status: 1,2,0,3,0,1,0,1,1,2,3,3
+    const twoBits = fakeJwt({}, { status_list: { bits: 2, lst: 'eNo76fITAAPfAgc' } })
+    expect(statusListTokenRevokedIndexes(twoBits)).toEqual([0, 1, 3, 5, 7, 8, 9, 10, 11])
+    expect(() => statusListTokenRevokedIndexes(fakeJwt({}, {}))).toThrow('status_list.lst')
   })
 
   it('reports a chain that differs from the x5c of the token', () => {

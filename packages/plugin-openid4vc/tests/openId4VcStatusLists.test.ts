@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { AdminApiErrorCode } from '@verana-labs/vs-agent-sdk'
 
-import { STATUS_LIST_TOKEN_LIFETIME_SECONDS } from '../src/services/StatusListService'
+import {
+  STATUS_LIST_TOKEN_LIFETIME_SECONDS,
+  STATUS_LIST_TOKEN_TTL_SECONDS,
+  statusListTokenRevokedIndexes,
+} from '../src/services/StatusListService'
 import { OpenId4VcStatusListRepository } from '../src/storage/StatusListRecord'
 
 import { createTestAgentsInput, startTestAgents, testCredentialConfiguration } from './helpers/startTestAgent'
@@ -83,7 +87,11 @@ describe('OpenID4VC Token Status Lists', () => {
     const certificates = await agents.issuer.service.getCertificateInfo()
     expect(header).toMatchObject({ alg: 'ES256', typ: 'statuslist+jwt' })
     expect(header.x5c).toEqual(certificates.certificateChain)
-    expect(payload).toMatchObject({ sub: list.uri, status_list: { bits: 1 } })
+    expect(payload).toMatchObject({
+      sub: list.uri,
+      ttl: STATUS_LIST_TOKEN_TTL_SECONDS,
+      status_list: { bits: 1 },
+    })
     expect(payload.iat).toBe(Math.floor(list.updatedAt.getTime() / 1_000))
     expect(Number(payload.exp) - Number(payload.iat)).toBe(STATUS_LIST_TOKEN_LIFETIME_SECONDS)
     expect(statusAt(token, 0)).toBe(0)
@@ -167,9 +175,14 @@ describe('OpenID4VC Token Status Lists', () => {
     expect(statusAt(after, 5)).toBe(1)
     expect(statusAt(after, 4)).toBe(0)
     expect(statusAt(after, 9)).toBe(0)
+    expect(statusListTokenRevokedIndexes(after)).toEqual([5])
     const { header, payload } = decodeJwt(after)
     expect(header).toMatchObject({ typ: 'statuslist+jwt', x5c: decodeJwt(before).header.x5c })
-    expect(payload).toMatchObject({ sub: list.uri, iat: Math.floor(revoked.revokedAt.getTime() / 1_000) })
+    expect(payload).toMatchObject({
+      sub: list.uri,
+      iat: Math.floor(revoked.revokedAt.getTime() / 1_000),
+      ttl: STATUS_LIST_TOKEN_TTL_SECONDS,
+    })
     const listed = await agents.issuer.statusLists.listStatusLists()
     expect(listed.find(entry => entry.id === list.id)?.updatedAt).toEqual(revoked.revokedAt)
 

@@ -227,7 +227,7 @@ export class IssuerService implements OnModuleInit {
       ...(binding ? { status: binding } : {}),
     }
 
-    let issuanceSession: OpenId4VcIssuanceSessionRecord
+    let issuanceSession: OpenId4VcIssuanceSessionRecord | undefined
     let credentialOffer: string
     try {
       ;({ credentialOffer, issuanceSession } = await this.issuerApi().createCredentialOffer({
@@ -243,18 +243,20 @@ export class IssuerService implements OnModuleInit {
         issuanceSession.setTag(STATUS_LIST_INDEX_TAG, String(binding.statusListIndex))
       }
       await this.sessionRepository().update(this.agent.context, issuanceSession)
-    } catch (error) {
-      if (binding) await this.releaseBinding(binding)
-      throw error
-    }
 
-    if (binding) {
-      // [VSA-ADM-OID-SL-DELETE]: an offer that no wallet redeemed binds its index while it is valid;
-      // the issuance then extends the binding to the `exp` of the credential.
-      await this.statusLists.completeBinding(binding, {
-        issuanceSessionId: issuanceSession.id,
-        expiresAt: issuanceSession.expiresAt,
-      })
+      if (binding) {
+        // [VSA-ADM-OID-SL-DELETE]: an offer that no wallet redeemed binds its index while it is valid;
+        // the issuance then extends the binding to the `exp` of the credential.
+        await this.statusLists.completeBinding(binding, {
+          issuanceSessionId: issuanceSession.id,
+          expiresAt: issuanceSession.expiresAt,
+        })
+      }
+    } catch (error) {
+      // The caller learns of no offer, so none survives: a session credo already created is deleted,
+      // then the index is released. An index that a surviving session names stays bound.
+      await this.discardFailedOffer(issuanceSession, binding)
+      throw error
     }
     this.credentialExchangeStateUpdated(issuanceSession, null)
 
@@ -312,6 +314,28 @@ export class IssuerService implements OnModuleInit {
       )
     }
     return session
+  }
+
+  private async discardFailedOffer(
+    issuanceSession: OpenId4VcIssuanceSessionRecord | undefined,
+    binding: OpenId4VcStatusListBinding | undefined,
+  ): Promise<void> {
+    if (issuanceSession) {
+      try {
+        await this.issuerApi().deleteIssuanceSessionById(issuanceSession.id)
+      } catch (error) {
+        this.agent.config.logger.error(
+          `[OpenID4VC] issuance session ${issuanceSession.id} survives a failed offer${
+            binding
+              ? `, and index ${binding.statusListIndex} of status list ${binding.statusListId} stays bound`
+              : ''
+          }`,
+          { cause: error },
+        )
+        return
+      }
+    }
+    if (binding) await this.releaseBinding(binding)
   }
 
   private async releaseBinding(binding: OpenId4VcStatusListBinding): Promise<void> {
