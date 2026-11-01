@@ -19,7 +19,14 @@ export interface LoadPluginPackagesOptions {
 export function appRootDirectory(): string {
   let dir = __dirname
   for (let i = 0; i < 6; i++) {
-    if (fs.existsSync(path.join(dir, 'package.json'))) return dir
+    // the Nest build copies package.json (and discovery.json) into build/, so a package.json alone is not the root:
+    // the root is the directory that also holds the installed dependencies or the build itself
+    if (
+      fs.existsSync(path.join(dir, 'package.json')) &&
+      (fs.existsSync(path.join(dir, 'node_modules')) || fs.existsSync(path.join(dir, 'build')))
+    ) {
+      return dir
+    }
     dir = path.dirname(dir)
   }
   return process.cwd()
