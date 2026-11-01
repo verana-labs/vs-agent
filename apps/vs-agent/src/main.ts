@@ -96,6 +96,7 @@ import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
+  appRootDirectory,
   loadPluginPackages,
   mountPublicPluginMiddleware,
   registerNestPluginEvents,
@@ -433,7 +434,7 @@ const run = async () => {
   const discoveryOptions = (() => {
     const candidates = [
       path.resolve(process.cwd(), 'discovery.json'),
-      path.resolve(__dirname, '..', '..', 'discovery.json'),
+      path.join(appRootDirectory(), 'discovery.json'),
     ]
     const file = candidates.find(candidate => fs.existsSync(candidate))
     if (!file) {
