@@ -215,3 +215,10 @@ export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'chat'
   .split(',')
   .map(s => s.trim())
   .filter(Boolean)
+
+// External plugin packages, comma-separated npm package names installed next to the agent. Each must export
+// `createVsAgentPlugin(env)` returning a VsAgentNestPlugin; the agent loads them after the built-in plugins.
+export const PLUGIN_PACKAGES: string[] = (process.env.VS_AGENT_PLUGIN_PACKAGES ?? '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean)

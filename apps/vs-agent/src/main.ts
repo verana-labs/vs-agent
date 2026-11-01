@@ -68,6 +68,7 @@ import {
   SUPERSEDED_VAR_WARNINGS,
   validateRuntimeConfig,
   ENABLED_PLUGINS,
+  PLUGIN_PACKAGES,
   EVENTS_WEBHOOK_API_KEY,
   EVENTS_WEBHOOK_URL,
   POSTGRES_HOST,
@@ -95,6 +96,7 @@ import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
+  loadPluginPackages,
   mountPublicPluginMiddleware,
   registerNestPluginEvents,
   registerNestPluginIndexerHandlers,
@@ -353,6 +355,17 @@ const run = async () => {
     ...(openId4VcOptions ? [OpenId4VcPlugin(openId4VcOptions)] : []),
     VtFlowNestPlugin,
   ]
+
+  // External plugin packages (VS_AGENT_PLUGIN_PACKAGES): installed next to the agent, loaded like the built-in ones
+  try {
+    const external = await loadPluginPackages(PLUGIN_PACKAGES)
+    for (const plugin of external)
+      serverLogger.info(`Loaded plugin ${plugin.name} from VS_AGENT_PLUGIN_PACKAGES`)
+    nestPlugins.push(...external)
+  } catch (error) {
+    serverLogger.error(`Invalid configuration:\n- ${(error as Error).message}`)
+    process.exit(1)
+  }
 
   const indexerService = new VeranaIndexerService({
     baseUrl: VERANA_INDEXER_BASE_URL,

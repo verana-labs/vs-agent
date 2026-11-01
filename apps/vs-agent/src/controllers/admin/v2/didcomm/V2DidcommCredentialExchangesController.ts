@@ -18,7 +18,11 @@ import {
 import {
   DidCommAutoAcceptCredential,
   DidCommCredentialEventTypes,
+  DidCommCredentialExchangeRepository,
   DidCommCredentialState,
+  DidCommCredentialsModuleConfig,
+  DidCommMessageSender,
+  getOutboundDidCommMessageContext,
 } from '@credo-ts/didcomm'
 import { RecordNotFoundError } from '@credo-ts/core'
 import {
@@ -139,8 +143,10 @@ export class V2DidcommCredentialExchangesController {
       revocationRegistryIndex,
       useLegacyDid,
       didcommVersion,
+      parentThreadId,
     } = body
     const autoAccept = body.autoAccept ?? false
+    if (parentThreadId && !connectionId) throw invalidInput('`parentThreadId` needs a `connectionId`')
 
     if (connectionId) await connectionOf(agent, connectionId)
 
@@ -217,6 +223,31 @@ export class V2DidcommCredentialExchangesController {
     // answers with neither `invitation` nor `shortUrl`. `useLegacyDid` and `didcommVersion`
     // describe an invitation only, so the agent ignores them here.
     if (connectionId) {
+      if (parentThreadId) {
+        // Credo's offerCredential takes no parent thread, so the offer is built and sent by hand, as vt-flow does
+        const connectionRecord = await connectionOf(agent, connectionId)
+        const v2Protocol = agent.dependencyManager
+          .resolve(DidCommCredentialsModuleConfig)
+          .credentialProtocols.find(protocol => protocol.version === 'v2')
+        if (!v2Protocol) throw new Error('issue-credential v2 is not registered on the agent')
+        const { credentialExchangeRecord, message } = await v2Protocol.createOffer(agent.context, {
+          connectionRecord,
+          credentialFormats: offerOptions.credentialFormats,
+          autoAcceptCredential: offerOptions.autoAcceptCredential,
+        })
+        credentialExchangeRecord.parentThreadId = parentThreadId
+        await agent.dependencyManager
+          .resolve(DidCommCredentialExchangeRepository)
+          .update(agent.context, credentialExchangeRecord)
+        message.setThread({ threadId: credentialExchangeRecord.threadId, parentThreadId })
+        const outbound = await getOutboundDidCommMessageContext(agent.context, {
+          message,
+          connectionRecord,
+          associatedRecord: credentialExchangeRecord,
+        })
+        await agent.dependencyManager.resolve(DidCommMessageSender).sendMessage(outbound)
+        return { credentialExchangeId: credentialExchangeRecord.id }
+      }
       const credentialExchangeRecord = await agent.didcomm.credentials.offerCredential({
         ...offerOptions,
         connectionId,
@@ -488,6 +519,7 @@ export class V2DidcommCredentialExchangesController {
     const filters = {
       connectionId: query.connectionId,
       threadId: query.threadId,
+      parentThreadId: query.parentThreadId,
       role: query.role,
       state: query.state,
     }

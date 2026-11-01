@@ -91,6 +91,21 @@ export const invitationEvents = (agent: VsAgent, logger: BaseLogger): void => {
     async ({ payload }: DidCommHandshakeReusedEvent) => {
       const { outOfBandRecord, connectionRecord } = payload
       if (outOfBandRecord.role !== DidCommOutOfBandRole.Sender) return
+      // A peer that reuses a connection may have gained features since it connected (a wallet updated to flows):
+      // ask again, as after a new connection, so that the controller's view of the peer stays current
+      if (agent.discoveryOptions) {
+        agent.didcomm.discovery
+          .queryFeatures({
+            connectionId: connectionRecord.id,
+            protocolVersion: 'v2',
+            queries: agent.discoveryOptions,
+          })
+          .catch(error =>
+            logger.warn(
+              `[invitation-events] feature query after handshake reuse failed: ${(error as Error).message}`,
+            ),
+          )
+      }
       if (outOfBandRecord.getTag(INVITATION_RECORD_TAG) !== true) return
       await accept(outOfBandRecord.id, connectionRecord, true)
     },

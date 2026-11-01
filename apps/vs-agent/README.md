@@ -99,6 +99,7 @@ These are variables that are updated only on specific use cases.
 | AGENT_BACKUP_BEFORE_STORAGE_UPDATE     | Toggle backup before storage update. If true, the agent creates a backup of the wallet using Askar's export before performing storage migrations                                                                                                 | false                    |
 | OID4VC_CONFIG_FILE_LOCATION            | **Enables OpenID4VC**. Location of the OpenID4VC JSON configuration file: a local path, or an `https://` URL that the agent fetches once at startup, following no redirect. When set, the agent refuses to start when it cannot read or validate the file, serves the `/v2/openid4vc` Admin API scope and the public OpenID4VCI and OpenID4VP endpoints. When unset, every `/v2/openid4vc` path answers 404. See [OpenID4VC](#openid4vc).            | none                     |
 | VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. Set by the Docker image in production, only override in development. See [Plugin system](#plugin-system) for available values.                                                               | `chat`                   |
+| VS_AGENT_PLUGIN_PACKAGES               | Comma-separated npm package names of external plugins installed next to the agent, each exporting `createVsAgentPlugin(env)`. Empty by default. |
 
 > **Note about Key derivation method**: By default, we use the strongest ARGON2I_MOD, but since this is the slowest one as well, depending on the security infrastructure you have, you might want to not derive the key at all (use RAW). However, in versions of VS Agent we are going to deprecate this setting, so we recommend to keep the default setting to make migration process easier.
 
@@ -285,6 +286,24 @@ VS_AGENT_PLUGINS=chat,mrtd
 ```
 
 > In production, `VS_AGENT_PLUGINS` is pre-configured by the Docker image, override it only in development environments. Any name outside `chat` and `mrtd`, whether unknown or not bundled in the current image, results in a startup warning and is skipped. That includes `openid4vc`, which is built in and enabled by `OID4VC_CONFIG_FILE_LOCATION`.
+
+### External plugin packages
+
+Plugins that do not live in this repository are npm packages installed next to the agent and named in
+`VS_AGENT_PLUGIN_PACKAGES` (comma-separated). Such a package exports `createVsAgentPlugin(env)` (or that function as
+its default export), which returns a `VsAgentNestPlugin` from `@verana-labs/vs-agent-sdk`: its Credo modules, Nest
+controllers, message routing and event listeners take part in the agent exactly like the built-in plugins. The
+package must resolve from `apps/vs-agent`, and its Credo peer dependencies must resolve to the agent's own copies
+(Credo modules share one dependency injection container), so install it into the agent's `node_modules`:
+
+```dockerfile
+FROM veranalabs/vs-agent:<version>
+RUN cd apps/vs-agent && npm install --no-save --omit=dev --no-package-lock @ayni.org/vs-agent-plugin-ayni-flow@<version>
+ENV VS_AGENT_PLUGIN_PACKAGES=@ayni.org/vs-agent-plugin-ayni-flow
+```
+
+A package that cannot be imported or does not export the factory stops the agent at start with the reason: a
+configured plugin that is missing is a configuration error, not something to run without.
 
 ### Optional dependencies
 

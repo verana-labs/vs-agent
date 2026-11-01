@@ -1,6 +1,7 @@
 export * from './ServerConfig'
 export * from './logger'
 export * from './pluginLifecycle'
+export * from './pluginLoader'
 export * from './runWithRetries'
 export * from './setupAgent'
 export * from './uiConfig'

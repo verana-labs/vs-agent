@@ -76,6 +76,17 @@ export class CreatePresentationRequestBodyDto {
   connectionId?: string
 
   @ApiPropertyOptional({
+    description:
+      'Parent thread the request belongs to, set as `~thread.pthid` on the request message: the flow id of an ' +
+      'ayni-flow, so that the holder groups the exchange into that flow.',
+    example: 'f1ow-7c2e',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  parentThreadId?: string
+
+  @ApiPropertyOptional({
     description: 'Ask the holder for a non-revocation proof at verification time',
     default: false,
   })
@@ -149,6 +160,11 @@ export class ListPresentationsQueryDto extends PaginationQueryDto {
   @IsString()
   threadId?: string
 
+  @ApiPropertyOptional({ description: 'Filter by parent thread identifier (the flow id of an ayni-flow)' })
+  @IsOptional()
+  @IsString()
+  parentThreadId?: string
+
   @ApiPropertyOptional({
     description: 'Filter by the role of the agent in the flow',
     enum: DidCommProofRole,
@@ -201,6 +217,11 @@ export class PresentationRecordDto {
 
   @ApiPropertyOptional({ description: 'DIDComm thread identifier', example: 'thread-8765-4321' })
   threadId?: string
+
+  @ApiPropertyOptional({
+    description: 'Parent thread identifier (`~thread.pthid`): the flow id of an ayni-flow',
+  })
+  parentThreadId?: string
 
   @ApiPropertyOptional({
     description:

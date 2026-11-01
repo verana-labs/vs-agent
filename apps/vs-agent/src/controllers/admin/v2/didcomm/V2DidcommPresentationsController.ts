@@ -141,7 +141,7 @@ export class V2DidcommPresentationsController {
   ): Promise<CreatePresentationRequestResponseDto> {
     const agent = await this.vsAgentService.getAgent()
 
-    const { requestedCredentials, connectionId, useLegacyDid, didcommVersion } = body
+    const { requestedCredentials, connectionId, useLegacyDid, didcommVersion, parentThreadId } = body
     const requireNonRevocation = body.requireNonRevocation ?? false
     const autoAccept = body.autoAccept ?? false
 
@@ -193,6 +193,7 @@ export class V2DidcommPresentationsController {
     const requestOptions = {
       protocolVersion: 'v2' as const,
       autoAcceptProof: DidCommAutoAcceptProof.Never,
+      parentThreadId,
       proofFormats: {
         anoncreds: {
           name: 'proof-request',
@@ -421,6 +422,7 @@ export class V2DidcommPresentationsController {
     const filters = {
       connectionId: query.connectionId,
       threadId: query.threadId,
+      parentThreadId: query.parentThreadId,
       role: query.role,
       state: query.state,
     }

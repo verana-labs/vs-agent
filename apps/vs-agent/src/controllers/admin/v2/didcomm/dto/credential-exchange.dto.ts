@@ -93,6 +93,17 @@ export class CreateCredentialOfferBodyDto {
 
   @ApiPropertyOptional({
     description:
+      'Parent thread the offer belongs to, set as `~thread.pthid` on the offer message: the flow id of an ' +
+      'ayni-flow, so that the holder groups the exchange into that flow. Needs `connectionId`.',
+    example: 'f1ow-7c2e',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  parentThreadId?: string
+
+  @ApiPropertyOptional({
+    description:
       'Complete the issuer steps without a call: the agent issues the credential on ' +
       '`request-received`, with no `acceptCredentialRequest` call.',
     default: false,
@@ -161,6 +172,11 @@ export class ListCredentialExchangesQueryDto extends PaginationQueryDto {
   @IsString()
   threadId?: string
 
+  @ApiPropertyOptional({ description: 'Filter by parent thread identifier (the flow id of an ayni-flow)' })
+  @IsOptional()
+  @IsString()
+  parentThreadId?: string
+
   @ApiPropertyOptional({
     description: 'Filter by the role of the agent in the exchange',
     enum: DidCommCredentialRole,
@@ -194,6 +210,11 @@ export class CredentialExchangeRecordDto {
 
   @ApiProperty({ description: 'DIDComm thread identifier', example: 'thread-8765-4321' })
   threadId!: string
+
+  @ApiPropertyOptional({
+    description: 'Parent thread identifier (`~thread.pthid`): the flow id of an ayni-flow',
+  })
+  parentThreadId?: string
 
   @ApiPropertyOptional({ description: 'Connection identifier', example: 'conn-1234' })
   connectionId?: string
