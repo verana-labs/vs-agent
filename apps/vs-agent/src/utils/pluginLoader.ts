@@ -1,11 +1,38 @@
 import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
+import { createRequire } from 'node:module'
+import path from 'node:path'
+
 export type PluginFactory = (env: NodeJS.ProcessEnv) => VsAgentNestPlugin | Promise<VsAgentNestPlugin>
 
 export interface LoadPluginPackagesOptions {
-  /** Imports a package by name; defaults to the dynamic `import()` of the running process */
+  /** Imports a package by name; defaults to `importPluginPackage` */
   importer?: (name: string) => Promise<unknown>
   env?: NodeJS.ProcessEnv
+}
+
+/** Where external plugin packages are installed: `VS_AGENT_PLUGIN_DIR`, else `<cwd>/plugins`. */
+export function pluginDirectory(env: NodeJS.ProcessEnv = process.env): string {
+  return env.VS_AGENT_PLUGIN_DIR ?? path.join(process.cwd(), 'plugins')
+}
+
+/**
+ * Imports an external plugin package: from the plugin directory first (`<dir>/node_modules/<name>`, where the operator
+ * installed it with `npm install --omit=peer`, so that its Credo and Nest peers resolve up the tree to the agent's own
+ * copies), then from the agent's own dependencies.
+ */
+export async function importPluginPackage(
+  name: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<unknown> {
+  const dir = pluginDirectory(env)
+  let resolved: string | undefined
+  try {
+    resolved = createRequire(path.join(dir, 'package.json')).resolve(name)
+  } catch {
+    resolved = undefined
+  }
+  return import(resolved ?? name)
 }
 
 /**
@@ -18,8 +45,8 @@ export async function loadPluginPackages(
   packageNames: readonly string[],
   options: LoadPluginPackagesOptions = {},
 ): Promise<VsAgentNestPlugin[]> {
-  const importer = options.importer ?? ((name: string) => import(name))
   const env = options.env ?? process.env
+  const importer = options.importer ?? ((name: string) => importPluginPackage(name, env))
   const plugins: VsAgentNestPlugin[] = []
 
   for (const name of packageNames) {
@@ -28,7 +55,7 @@ export async function loadPluginPackages(
       module = await importer(name)
     } catch (error) {
       throw new Error(
-        `VS_AGENT_PLUGIN_PACKAGES names ${name}, which cannot be imported: ${(error as Error).message}. Install it next to the agent (for example \`npm install --no-save ${name}\` in apps/vs-agent).`,
+        `VS_AGENT_PLUGIN_PACKAGES names ${name}, which cannot be imported: ${(error as Error).message}. Install it in the plugin directory ${pluginDirectory(env)} (\`npm install --omit=dev --omit=peer ${name}\` there).`,
       )
     }
     const factory = pluginFactoryOf(module)

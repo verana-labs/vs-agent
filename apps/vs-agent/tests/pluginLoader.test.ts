@@ -51,3 +51,11 @@ describe('VS_AGENT_PLUGIN_PACKAGES loader', () => {
     ).rejects.toThrow(/with a name/)
   })
 })
+
+describe('plugin directory', () => {
+  it('defaults to <cwd>/plugins and honours VS_AGENT_PLUGIN_DIR', async () => {
+    const { pluginDirectory } = await import('../src/utils/pluginLoader')
+    expect(pluginDirectory({})).toBe(`${process.cwd()}/plugins`)
+    expect(pluginDirectory({ VS_AGENT_PLUGIN_DIR: '/opt/plugins' })).toBe('/opt/plugins')
+  })
+})

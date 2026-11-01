@@ -5,6 +5,7 @@ import type {
   DidCommBasicMessageV2StateChangedEvent,
   DidCommConnectionStateChangedEvent,
   DidCommCredentialStateChangedEvent,
+  DidCommHandshakeReusedEvent,
   DidCommProofStateChangedEvent,
 } from '@credo-ts/didcomm'
 import type { Event } from '@verana-labs/vs-agent-model'
@@ -15,6 +16,7 @@ import {
   DidCommBasicMessageRole,
   DidCommConnectionEventTypes,
   DidCommCredentialEventTypes,
+  DidCommOutOfBandEventTypes,
   DidCommProofEventTypes,
 } from '@credo-ts/didcomm'
 import { EventType } from '@verana-labs/vs-agent-model'
@@ -37,6 +39,9 @@ import {
   toInvitationDto,
   toPresentationDto,
 } from '../controllers/admin/v2/didcomm/mappers'
+
+/** Event type of a handshake reuse: an existing connection accepted an invitation this agent minted. */
+export const HANDSHAKE_REUSED_EVENT = 'didcomm.out-of-band.handshake-reused'
 
 export interface WebhookOptions {
   url: string
@@ -95,6 +100,19 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
           .then(toInvitationDto),
         payload.event.previousState,
       ),
+  )
+
+  // A peer that already holds a connection answers an invitation with a handshake reuse. The
+  // controller correlates the reuse to the invitation it minted through the invitation id.
+  agent.events.on<DidCommHandshakeReusedEvent>(DidCommOutOfBandEventTypes.HandshakeReused, ({ payload }) =>
+    deliver(HANDSHAKE_REUSED_EVENT, {
+      outOfBandId: payload.outOfBandRecord.id,
+      invitationId:
+        payload.outOfBandRecord.outOfBandInvitation.v2Invitation?.id ??
+        payload.outOfBandRecord.outOfBandInvitation.id,
+      connectionId: payload.connectionRecord.id,
+      reuseThreadId: payload.reuseThreadId,
+    }),
   )
 
   agent.events.on<DidCommProofStateChangedEvent>(DidCommProofEventTypes.ProofStateChanged, ({ payload }) =>
