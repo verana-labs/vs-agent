@@ -18,7 +18,7 @@ export function pluginDirectory(env: NodeJS.ProcessEnv = process.env): string {
 
 /**
  * Imports an external plugin package: from the plugin directory first (`<dir>/node_modules/<name>`, where the operator
- * installed it with `npm install --omit=peer`, so that its Credo and Nest peers resolve up the tree to the agent's own
+ * installed it with `npm install --legacy-peer-deps`, so that its Credo and Nest peers resolve up the tree to the agent's own
  * copies), then from the agent's own dependencies.
  */
 export async function importPluginPackage(
@@ -55,7 +55,7 @@ export async function loadPluginPackages(
       module = await importer(name)
     } catch (error) {
       throw new Error(
-        `VS_AGENT_PLUGIN_PACKAGES names ${name}, which cannot be imported: ${(error as Error).message}. Install it in the plugin directory ${pluginDirectory(env)} (\`npm install --omit=dev --omit=peer ${name}\` there).`,
+        `VS_AGENT_PLUGIN_PACKAGES names ${name}, which cannot be imported: ${(error as Error).message}. Install it in the plugin directory ${pluginDirectory(env)} (\`npm install --omit=dev --legacy-peer-deps ${name}\` there).`,
       )
     }
     const factory = pluginFactoryOf(module)
