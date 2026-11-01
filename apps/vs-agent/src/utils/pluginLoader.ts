@@ -11,9 +11,12 @@ export interface LoadPluginPackagesOptions {
   env?: NodeJS.ProcessEnv
 }
 
-/** Where external plugin packages are installed: `VS_AGENT_PLUGIN_DIR`, else `<cwd>/plugins`. */
+/**
+ * Where external plugin packages are installed: `VS_AGENT_PLUGIN_DIR`, else the `plugins` directory of the app
+ * (`apps/vs-agent/plugins`: next to `build/`, whatever the working directory the process started from).
+ */
 export function pluginDirectory(env: NodeJS.ProcessEnv = process.env): string {
-  return env.VS_AGENT_PLUGIN_DIR ?? path.join(process.cwd(), 'plugins')
+  return env.VS_AGENT_PLUGIN_DIR ?? path.resolve(__dirname, '..', '..', 'plugins')
 }
 
 /**
