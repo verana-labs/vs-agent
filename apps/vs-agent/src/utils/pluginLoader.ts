@@ -1,5 +1,6 @@
 import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
+import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
@@ -12,11 +13,21 @@ export interface LoadPluginPackagesOptions {
 }
 
 /**
- * Where external plugin packages are installed: `VS_AGENT_PLUGIN_DIR`, else the `plugins` directory of the app
- * (`apps/vs-agent/plugins`: next to `build/`, whatever the working directory the process started from).
+ * The directory of the app's package.json (`apps/vs-agent`), found by walking up from this file: the same answer from
+ * the TypeScript sources (`src/utils`) and from the build (`build/src/utils`), whatever the working directory.
  */
+export function appRootDirectory(): string {
+  let dir = __dirname
+  for (let i = 0; i < 6; i++) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir
+    dir = path.dirname(dir)
+  }
+  return process.cwd()
+}
+
+/** Where external plugin packages are installed: `VS_AGENT_PLUGIN_DIR`, else `<app root>/plugins` (`apps/vs-agent/plugins`). */
 export function pluginDirectory(env: NodeJS.ProcessEnv = process.env): string {
-  return env.VS_AGENT_PLUGIN_DIR ?? path.resolve(__dirname, '..', '..', 'plugins')
+  return env.VS_AGENT_PLUGIN_DIR ?? path.join(appRootDirectory(), 'plugins')
 }
 
 /**
