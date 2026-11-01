@@ -428,11 +428,26 @@ const run = async () => {
     }
   }
 
+  // discovery.json sits in the working directory in development and next to the app's build in the image
+  // (/www/apps/vs-agent/discovery.json while the process starts from /www), so both places are tried
   const discoveryOptions = (() => {
+    const candidates = [
+      path.resolve(process.cwd(), 'discovery.json'),
+      path.resolve(__dirname, '..', '..', 'discovery.json'),
+    ]
+    const file = candidates.find(candidate => fs.existsSync(candidate))
+    if (!file) {
+      serverLogger.warn(
+        `No discovery.json found (looked in ${candidates.join(', ')}); the agent will not query peers' features`,
+      )
+      return undefined
+    }
     try {
-      return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'discovery.json'), 'utf-8'))
+      const options = JSON.parse(fs.readFileSync(file, 'utf-8'))
+      serverLogger.info(`Feature discovery queries loaded from ${file}`)
+      return options
     } catch (error) {
-      serverLogger.warn('Error reading discovery.json file:', error.message)
+      serverLogger.warn(`Error reading ${file}:`, error.message)
       return undefined
     }
   })()
