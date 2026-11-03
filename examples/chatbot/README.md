@@ -34,6 +34,7 @@ All endpoints are on `PORT`.
 |---|---|
 | `POST /events` | The [Events API](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#events-api) webhook of the agent. `204` |
 | `GET /invitation` | A new single use invitation: `{ "url": "<short URL of the invitation>", "invitationId": "<id>" }`. Scan the `url` as a QR code or open it with a wallet. The optional `label` query parameter, for example the id of a CI run, only goes to the log line of the request: the invitation carries no label. `503` with `{ "error": "..." }` when the admin API cannot create it |
+| `GET /qr` | An HTML page with the QR code of a new invitation, as an inline SVG, for a manual test. The page also shows the URL of the invitation as text, and a link that gets another one. The invitation is reusable, so any number of wallets can scan the code. `503` with an HTML page when the admin API cannot create it |
 | `GET /health` | `200` with `{ "status": "ok", "chatbotVersion": "...", "vsAgentVersion": "..." }` when the admin API is ready. `503` with `{ "status": "error", "chatbotVersion": "...", "reason": "..." }` when it is not ready or not reachable |
 
 ## Credentials
