@@ -13,8 +13,20 @@ import { isRecord } from './utils/isRecord'
 export const ISSUER_CAPABILITY_ID = 'issuer'
 export const VERIFIER_CAPABILITY_ID = 'verifier'
 
+/** [VSA-PUB-OID-1] The public path segment of a Token Status List, under `PUBLIC_API_BASE_URL`. */
+export const STATUS_LIST_PATH = 'oid4vc/status-list'
+export const STATUS_LIST_JWT_CONTENT_TYPE = 'application/statuslist+jwt'
+
+/** [VSA-PUB-OID-1] The `uri` of a list: the URL at which the agent serves its token. */
+export function statusListUri(publicApiBaseUrl: string, statusListId: string): string {
+  return `${publicApiBaseUrl}/${STATUS_LIST_PATH}/${encodeURIComponent(statusListId)}`
+}
+
 export const OFFER_TTL_SECONDS_MIN = 60
+/** [VSA-ADM-OID-CE-OFFER] ceiling of a credential that no status list registers: 90 days. */
 export const OFFER_TTL_SECONDS_MAX = 7_776_000
+/** [VSA-ADM-OID-CE-OFFER] ceiling of a credential registered on a status list: one year. */
+export const OFFER_TTL_SECONDS_MAX_REVOCABLE = 31_536_000
 
 // The issuer stamps these claims itself, so a credential never carries a value a caller supplied for one.
 const RESERVED_CLAIM_NAMES: readonly string[] = [
@@ -198,33 +210,68 @@ function claimSetSchema(jsonSchema: string): Record<string, unknown> {
   }
 }
 
-export function parseOfferTtlSeconds(input: unknown): number {
-  if (
-    typeof input !== 'number' ||
-    !Number.isInteger(input) ||
-    input < OFFER_TTL_SECONDS_MIN ||
-    input > OFFER_TTL_SECONDS_MAX
-  ) {
+/**
+ * [VSA-ADM-OID-CE-OFFER]: the lifetime of the credential. A credential that a status list registers
+ * can live a year, since a revocation can end it; one that no list registers is bound to 90 days.
+ */
+export function parseOfferTtlSeconds(
+  input: unknown,
+  { revocable = false }: { revocable?: boolean } = {},
+): number {
+  const max = revocable ? OFFER_TTL_SECONDS_MAX_REVOCABLE : OFFER_TTL_SECONDS_MAX
+  if (typeof input !== 'number' || !Number.isInteger(input) || input < OFFER_TTL_SECONDS_MIN || input > max) {
     throw new Error(
-      `ttlSeconds must be an integer between ${OFFER_TTL_SECONDS_MIN} and ${OFFER_TTL_SECONDS_MAX}`,
+      `ttlSeconds must be an integer between ${OFFER_TTL_SECONDS_MIN} and ${max}${
+        revocable ? '' : ' for a credential that no status list registers'
+      }`,
     )
   }
 
   return input
 }
 
+/** The Token Status List coordinates an offer stores on its issuance session, [VSA-ADM-OID-CE-OFFER]. */
+export interface OfferStatusReference {
+  statusListId: string
+  statusListIndex: number
+  uri: string
+}
+
+// A type alias, not an interface: credo stores it as the `Record<string, unknown>` of the session.
+export type OfferIssuanceMetadata = {
+  claims: Record<string, unknown>
+  ttlSeconds: number
+  status?: OfferStatusReference
+}
+
 export function parseOfferIssuanceMetadata(
   configuration: OpenId4VcCredentialConfiguration,
   input: unknown,
-): { claims: Record<string, unknown>; ttlSeconds: number } {
+): OfferIssuanceMetadata {
   if (!isRecord(input)) {
     throw new Error('issuance metadata must be an object')
   }
 
+  const status = parseOfferStatusReference(input.status)
   return {
     claims: parseOfferClaims(configuration, input.claims),
-    ttlSeconds: parseOfferTtlSeconds(input.ttlSeconds),
+    ttlSeconds: parseOfferTtlSeconds(input.ttlSeconds, { revocable: status !== undefined }),
+    ...(status ? { status } : {}),
   }
+}
+
+function parseOfferStatusReference(input: unknown): OfferStatusReference | undefined {
+  if (input === undefined) return undefined
+  if (
+    !isRecord(input) ||
+    typeof input.statusListId !== 'string' ||
+    typeof input.statusListIndex !== 'number' ||
+    typeof input.uri !== 'string'
+  ) {
+    throw new Error('issuance metadata carries an invalid status list reference')
+  }
+
+  return { statusListId: input.statusListId, statusListIndex: input.statusListIndex, uri: input.uri }
 }
 
 function isEmptyClaim(value: unknown): boolean {

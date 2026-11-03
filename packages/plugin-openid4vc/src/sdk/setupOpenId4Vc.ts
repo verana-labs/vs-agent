@@ -12,7 +12,8 @@ import {
 } from '@credo-ts/openid4vc'
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 
-import { ISSUER_CAPABILITY_ID } from '../config'
+import { ISSUER_CAPABILITY_ID, STATUS_LIST_JWT_CONTENT_TYPE, STATUS_LIST_PATH } from '../config'
+import { OpenId4VcStatusListStorageModule } from '../storage/StatusListStorageModule'
 import { trustedCertificatesForVerification } from '../trust/CertificateTrust'
 import { isRecord } from '../utils/isRecord'
 
@@ -21,10 +22,12 @@ const ISSUER_BODY_LIMIT = '1mb'
 export interface OpenId4VcIssuerRequestMapper {
   mapCredentialRequest: OpenId4VciCredentialRequestToCredentialMapper
   getJwtVcIssuerMetadata: () => Record<string, unknown>
+  /** [VSA-PUB-OID-1] The current Status List Token of a list of this agent; undefined for an unknown id. */
+  getStatusListToken: (statusListId: string) => Promise<string | undefined>
 }
 
 export interface OpenId4VcSdkPlugin {
-  modules: Pick<OpenId4VcVsAgentModules, 'openId4Vc' | 'x509'>
+  modules: Pick<OpenId4VcVsAgentModules, 'openId4Vc' | 'x509' | 'openId4VcStatusLists'>
   publicMiddleware: Express
 }
 
@@ -53,6 +56,10 @@ export function setupOpenId4Vc(
       next(error)
     }
   })
+  app.get(
+    `${new URL(`${options.publicApiBaseUrl}/${STATUS_LIST_PATH}`).pathname}/:statusListId`,
+    serveStatusListToken(getIssuerService),
+  )
 
   aliasBareWellKnownPath(app, '/.well-known/openid-credential-issuer', options.publicApiBaseUrl)
   aliasBareWellKnownPath(app, '/.well-known/oauth-authorization-server', options.publicApiBaseUrl)
@@ -76,8 +83,34 @@ export function setupOpenId4Vc(
         getTrustedCertificatesForVerification: (_agentContext, { verification }) =>
           trustedCertificatesForVerification(options, verification.type),
       }),
+      // Credo's default tokenStatusList module builds and signs the lists of [VSA-ADM-OID-SL]; this
+      // module keeps them, with the binding of each index, in the agent storage.
+      openId4VcStatusLists: new OpenId4VcStatusListStorageModule(),
     },
     publicMiddleware: app,
+  }
+}
+
+/**
+ * [VSA-PUB-OID-1]: the Status List Token of a list, as `application/statuslist+jwt` and nothing else:
+ * a Token Status List client compares the content type literally. A revocation must reach the next
+ * reader, so no intermediary stores the answer.
+ */
+function serveStatusListToken(
+  getIssuerService: () => Pick<OpenId4VcIssuerRequestMapper, 'getStatusListToken'>,
+) {
+  return (request: Request, response: Response, next: NextFunction): void => {
+    getIssuerService()
+      .getStatusListToken(request.params.statusListId)
+      .then(token => {
+        response.setHeader('Cache-Control', 'no-store')
+        if (token === undefined) {
+          response.status(404).json({ error: 'not_found', error_description: 'unknown status list' })
+          return
+        }
+        response.status(200).setHeader('Content-Type', STATUS_LIST_JWT_CONTENT_TYPE)
+        response.end(token)
+      }, next)
   }
 }
 

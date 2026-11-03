@@ -11,12 +11,17 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import {
   IssuerService,
   OpenId4VcCreateCredentialOfferBodyDto,
+  OpenId4VcCreateStatusListBodyDto,
   OpenId4VcListCredentialExchangesQueryDto,
   OpenId4VcListPresentationsQueryDto,
   OpenId4VcCreatePresentationRequestBodyDto,
+  OpenId4VcRevokeCredentialBodyDto,
+  StatusListService,
   V2OpenId4VcCredentialExchangesController,
+  V2OpenId4VcCredentialRevocationController,
   V2OpenId4VcPresentationsController,
   V2OpenId4VcSigningCertificatesController,
+  V2OpenId4VcStatusListsController,
   VerifierService,
 } from '@verana-labs/vs-agent-plugin-openid4vc'
 import { AdminApiError, AdminApiErrorCode, encodeCursor, hashScope } from '@verana-labs/vs-agent-sdk'
@@ -115,6 +120,30 @@ const issuerService = {
   deleteIssuanceSession: vi.fn(),
 }
 
+function statusList(id: string, createdAt: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    uri: `https://agent.test/oid4vc/status-list/${id}`,
+    size: 131072,
+    createdAt: new Date(createdAt),
+    updatedAt: new Date(createdAt),
+    ...overrides,
+  }
+}
+
+const statusLists = [
+  statusList('sl-a', '2026-01-01T00:00:00.000Z'),
+  statusList('sl-b', '2026-01-01T00:01:00.000Z', { size: 4096 }),
+  statusList('sl-c', '2026-01-01T00:02:00.000Z'),
+]
+
+const statusListService = {
+  listStatusLists: vi.fn(async () => statusLists),
+  createStatusList: vi.fn(),
+  deleteStatusList: vi.fn(),
+  revokeCredential: vi.fn(),
+}
+
 const verifierService = {
   getCertificateInfo: vi.fn(async () => verifierCertificate),
   listVerificationSessions: vi.fn(async (filters: SessionFilters = {}) =>
@@ -133,6 +162,10 @@ function proofIds(body: { items: { proofExchangeId: string }[] }): string[] {
   return body.items.map(item => item.proofExchangeId)
 }
 
+function statusListIds(body: { items: { statusListId: string }[] }): string[] {
+  return body.items.map(item => item.statusListId)
+}
+
 describe('v2 openid4vc routes', () => {
   let app: INestApplication
 
@@ -142,10 +175,13 @@ describe('v2 openid4vc routes', () => {
         V2OpenId4VcCredentialExchangesController,
         V2OpenId4VcPresentationsController,
         V2OpenId4VcSigningCertificatesController,
+        V2OpenId4VcStatusListsController,
+        V2OpenId4VcCredentialRevocationController,
       ],
       providers: [
         { provide: IssuerService, useValue: issuerService },
         { provide: VerifierService, useValue: verifierService },
+        { provide: StatusListService, useValue: statusListService },
       ],
     }).compile()
 
@@ -174,6 +210,13 @@ describe('v2 openid4vc routes', () => {
       verificationSessionId: 'pe-new',
     })
     verifierService.deleteVerificationSession.mockResolvedValue(undefined)
+    statusListService.createStatusList.mockResolvedValue(statusList('sl-new', '2026-01-01T00:03:00.000Z'))
+    statusListService.deleteStatusList.mockResolvedValue(undefined)
+    statusListService.revokeCredential.mockResolvedValue({
+      statusListId: 'sl-a',
+      statusListIndex: 42,
+      revokedAt: new Date('2026-01-02T00:00:00.000Z'),
+    })
   })
 
   describe('listCredentialExchanges', () => {
@@ -191,6 +234,32 @@ describe('v2 openid4vc routes', () => {
       expect(second.status).toBe(200)
       expect(exchangeIds(second.body)).toEqual(['ce-c'])
       expect(second.body.nextCursor).toBeNull()
+    })
+
+    it('filters by status list', async () => {
+      const byList = await request(app.getHttpServer()).get(
+        '/v2/openid4vc/credential-exchanges?statusListId=sl-a',
+      )
+
+      expect(byList.status).toBe(200)
+      expect(issuerService.listIssuanceSessions).toHaveBeenLastCalledWith({
+        jsonSchemaCredentialId: undefined,
+        state: undefined,
+        statusListId: 'sl-a',
+      })
+    })
+
+    it('sends the status list coordinates of a registered credential, and omits them otherwise', async () => {
+      issuerService.getIssuanceSession.mockResolvedValueOnce(
+        issuanceSession('ce-d', '2026-01-01T00:03:00.000Z', { statusListId: 'sl-a', statusListIndex: 42 }),
+      )
+
+      const registered = await request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges/ce-d')
+      const plain = await request(app.getHttpServer()).get('/v2/openid4vc/credential-exchanges/ce-a')
+
+      expect(registered.body).toMatchObject({ statusListId: 'sl-a', statusListIndex: 42 })
+      expect(plain.body).not.toHaveProperty('statusListId')
+      expect(plain.body).not.toHaveProperty('statusListIndex')
     })
 
     it('sends every field that the specification names and nothing about the offer content', async () => {
@@ -284,6 +353,179 @@ describe('v2 openid4vc routes', () => {
       expect(missing.body).toEqual({
         error: { code: 'UNKNOWN_ID', message: 'no credential exchange with id "nope"' },
       })
+    })
+  })
+
+  describe('listStatusLists', () => {
+    it('walks the status lists with the keyset cursor and ends with a null cursor', async () => {
+      const first = await request(app.getHttpServer()).get('/v2/openid4vc/status-lists?limit=2')
+
+      expect(first.status).toBe(200)
+      expect(statusListIds(first.body)).toEqual(['sl-a', 'sl-b'])
+      expect(first.body.nextCursor).not.toBeNull()
+
+      const second = await request(app.getHttpServer()).get(
+        `/v2/openid4vc/status-lists?limit=2&cursor=${encodeURIComponent(first.body.nextCursor)}`,
+      )
+
+      expect(second.status).toBe(200)
+      expect(statusListIds(second.body)).toEqual(['sl-c'])
+      expect(second.body.nextCursor).toBeNull()
+    })
+
+    it('sends the fields of a status list record as createStatusList does', async () => {
+      const response = await request(app.getHttpServer()).get('/v2/openid4vc/status-lists?limit=1')
+
+      expect(response.body.items[0]).toEqual({
+        statusListId: 'sl-a',
+        uri: 'https://agent.test/oid4vc/status-list/sl-a',
+        size: 131072,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      })
+    })
+  })
+
+  describe('createStatusList', () => {
+    it('creates a status list of the default size and returns its record', async () => {
+      const response = await request(app.getHttpServer()).post('/v2/openid4vc/status-lists').send({})
+
+      expect(response.status).toBe(201)
+      expect(response.body).toEqual({
+        statusListId: 'sl-new',
+        uri: 'https://agent.test/oid4vc/status-list/sl-new',
+        size: 131072,
+        createdAt: '2026-01-01T00:03:00.000Z',
+        updatedAt: '2026-01-01T00:03:00.000Z',
+      })
+      expect(statusListService.createStatusList).toHaveBeenCalledWith({ size: undefined })
+    })
+
+    it('passes an explicit size through', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/v2/openid4vc/status-lists')
+        .send({ size: 4096 })
+
+      expect(response.status).toBe(201)
+      expect(statusListService.createStatusList).toHaveBeenCalledWith({ size: 4096 })
+    })
+
+    it('validates the size and refuses fields the specification does not define', async () => {
+      const small = await validate(plainToInstance(OpenId4VcCreateStatusListBodyDto, { size: 1023 }))
+      expect(small.map(error => error.property)).toEqual(['size'])
+
+      const large = await validate(plainToInstance(OpenId4VcCreateStatusListBodyDto, { size: 16777217 }))
+      expect(large.map(error => error.property)).toEqual(['size'])
+
+      const extra = await validate(plainToInstance(OpenId4VcCreateStatusListBodyDto, { bits: 2 }), {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      })
+      expect(extra.map(error => error.property)).toEqual(['bits'])
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/openid4vc/status-lists')
+        .send({ size: 10 })
+      expect(response.status).toBe(400)
+      expect(statusListService.createStatusList).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('deleteStatusList', () => {
+    it('deletes a status list with 204', async () => {
+      const deleted = await request(app.getHttpServer()).delete('/v2/openid4vc/status-lists/sl-a')
+
+      expect(deleted.status).toBe(204)
+      expect(deleted.text).toBe('')
+      expect(statusListService.deleteStatusList).toHaveBeenCalledWith('sl-a')
+    })
+
+    it('answers UNKNOWN_ID for an unknown list and INVALID_STATE for a list with a live credential', async () => {
+      statusListService.deleteStatusList.mockRejectedValueOnce(
+        new AdminApiError(AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, 'no status list with id "nope"'),
+      )
+      const missing = await request(app.getHttpServer()).delete('/v2/openid4vc/status-lists/nope')
+      expect(missing.status).toBe(404)
+      expect(missing.body).toEqual({
+        error: { code: 'UNKNOWN_ID', message: 'no status list with id "nope"' },
+      })
+
+      statusListService.deleteStatusList.mockRejectedValueOnce(
+        new AdminApiError(
+          AdminApiErrorCode.InvalidState,
+          HttpStatus.CONFLICT,
+          'status list "sl-a" still has 1 index(es) bound to a credential that is not revoked and not expired',
+        ),
+      )
+      const live = await request(app.getHttpServer()).delete('/v2/openid4vc/status-lists/sl-a')
+      expect(live.status).toBe(409)
+      expect(live.body.error.code).toBe('INVALID_STATE')
+    })
+  })
+
+  describe('revokeCredential', () => {
+    it('revokes by list and index and returns the revocation record with 200', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/v2/openid4vc/revoke-credential')
+        .send({ statusListId: 'sl-a', statusListIndex: 42 })
+
+      expect(response.status).toBe(200)
+      expect(response.body).toEqual({
+        statusListId: 'sl-a',
+        statusListIndex: 42,
+        revokedAt: '2026-01-02T00:00:00.000Z',
+      })
+      expect(statusListService.revokeCredential).toHaveBeenCalledWith({
+        statusListId: 'sl-a',
+        statusListIndex: 42,
+      })
+    })
+
+    it.each([
+      [AdminApiErrorCode.UnknownId, HttpStatus.NOT_FOUND, 'no status list with id "sl-a"'],
+      [AdminApiErrorCode.InvalidState, HttpStatus.CONFLICT, 'no offer bound index 42 on status list "sl-a"'],
+      [
+        AdminApiErrorCode.InvalidInput,
+        HttpStatus.BAD_REQUEST,
+        'statusListIndex must be an integer between 0 and 1023',
+      ],
+    ])('maps %s onto the error envelope', async (code, status, message) => {
+      statusListService.revokeCredential.mockRejectedValueOnce(new AdminApiError(code, status, message))
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/openid4vc/revoke-credential')
+        .send({ statusListId: 'sl-a', statusListIndex: 42 })
+
+      expect(response.status).toBe(status)
+      expect(response.body).toEqual({ error: { code, message } })
+    })
+
+    it('validates the body and refuses fields the specification does not define', async () => {
+      const missing = await validate(
+        plainToInstance(OpenId4VcRevokeCredentialBodyDto, { statusListId: 'sl-a' }),
+      )
+      expect(missing.map(error => error.property)).toEqual(['statusListIndex'])
+
+      const negative = await validate(
+        plainToInstance(OpenId4VcRevokeCredentialBodyDto, { statusListId: 'sl-a', statusListIndex: -1 }),
+      )
+      expect(negative.map(error => error.property)).toEqual(['statusListIndex'])
+
+      const extra = await validate(
+        plainToInstance(OpenId4VcRevokeCredentialBodyDto, {
+          statusListId: 'sl-a',
+          statusListIndex: 0,
+          reason: 'lost',
+        }),
+        { whitelist: true, forbidNonWhitelisted: true },
+      )
+      expect(extra.map(error => error.property)).toEqual(['reason'])
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/openid4vc/revoke-credential')
+        .send({ statusListId: 'sl-a' })
+      expect(response.status).toBe(400)
+      expect(statusListService.revokeCredential).not.toHaveBeenCalled()
     })
   })
 

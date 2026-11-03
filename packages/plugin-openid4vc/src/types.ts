@@ -1,4 +1,5 @@
 import type { OpenId4VcIssuerRequestMapper } from './sdk/setupOpenId4Vc'
+import type { OpenId4VcStatusListStorageModule } from './storage/StatusListStorageModule'
 import type { Kms, X509Module } from '@credo-ts/core'
 import type { OpenId4VcModule } from '@credo-ts/openid4vc'
 import type { BaseAgentModules, VerifiablePublicRegistries, VsAgent } from '@verana-labs/vs-agent-sdk'
@@ -6,6 +7,7 @@ import type { BaseAgentModules, VerifiablePublicRegistries, VsAgent } from '@ver
 export type OpenId4VcVsAgentModules = BaseAgentModules & {
   openId4Vc: OpenId4VcModule<null, null>
   x509: X509Module
+  openId4VcStatusLists: OpenId4VcStatusListStorageModule
 }
 
 export type OpenId4VcAgent = VsAgent<OpenId4VcVsAgentModules>
