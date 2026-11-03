@@ -5,6 +5,7 @@ import type {
   DidCommBasicMessageV2StateChangedEvent,
   DidCommConnectionStateChangedEvent,
   DidCommCredentialStateChangedEvent,
+  DidCommDiscoverFeaturesDisclosureReceivedEvent,
   DidCommHandshakeReusedEvent,
   DidCommProofStateChangedEvent,
 } from '@credo-ts/didcomm'
@@ -16,6 +17,8 @@ import {
   DidCommBasicMessageRole,
   DidCommConnectionEventTypes,
   DidCommCredentialEventTypes,
+  DidCommDidExchangeState,
+  DidCommDiscoverFeaturesEventTypes,
   DidCommOutOfBandEventTypes,
   DidCommProofEventTypes,
 } from '@credo-ts/didcomm'
@@ -42,6 +45,12 @@ import {
 
 /** Event type of a handshake reuse: an existing connection accepted an invitation this agent minted. */
 export const HANDSHAKE_REUSED_EVENT = 'didcomm.out-of-band.handshake-reused'
+
+/**
+ * State of a connection event that carries a discover-features disclosure: the connection did not change
+ * state, the peer told what it supports. `metadata` maps each disclosed feature id to its JSON.
+ */
+export const CONNECTION_UPDATED_STATE = 'updated'
 
 export interface WebhookOptions {
   url: string
@@ -79,13 +88,36 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
     }
   }
 
+  // With discovery on, a completed connection carries an empty `metadata`: its features are queried now and
+  // arrive in a later event in state `updated`, so the controller knows to wait for them
+  const discovery = (agent.discoveryOptions?.length ?? 0) > 0
   agent.events.on<DidCommConnectionStateChangedEvent>(
     DidCommConnectionEventTypes.DidCommConnectionStateChanged,
     ({ payload }) =>
       stateUpdated(
         EventType.ConnectionStateUpdated,
-        toConnectionDto(payload.connectionRecord),
+        discovery && payload.connectionRecord.state === DidCommDidExchangeState.Completed
+          ? { ...toConnectionDto(payload.connectionRecord), metadata: {} }
+          : toConnectionDto(payload.connectionRecord),
         payload.previousState,
+      ),
+  )
+
+  // A peer's discover-features disclosure (after a new connection, or a handshake reuse where the agent asks
+  // again), as a connection event in state `updated` whose `metadata` maps each feature id to its JSON
+  agent.events.on<DidCommDiscoverFeaturesDisclosureReceivedEvent>(
+    DidCommDiscoverFeaturesEventTypes.DisclosureReceived,
+    ({ payload }) =>
+      stateUpdated(
+        EventType.ConnectionStateUpdated,
+        {
+          ...toConnectionDto(payload.connection),
+          state: CONNECTION_UPDATED_STATE,
+          metadata: Object.fromEntries(
+            payload.disclosures.map(feature => [feature.id, JSON.stringify(feature.toJSON())]),
+          ),
+        },
+        payload.connection.state,
       ),
   )
 

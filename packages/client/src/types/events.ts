@@ -12,7 +12,16 @@ import {
 } from './didcomm'
 import { VtFlowRecord } from './vt'
 
-export type ConnectionStateUpdatedData = ConnectionRecord & { previousState: DidExchangeState | null }
+export type ConnectionStateUpdatedData = Omit<ConnectionRecord, 'state'> & {
+  /** `updated`: no state change, the peer disclosed its features (in `metadata`) */
+  state: DidExchangeState | 'updated'
+  previousState: DidExchangeState | null
+  /**
+   * With feature discovery on: `{}` on `completed` (a disclosure follows in a later `updated` event), and on
+   * `updated` the disclosed features, each feature id mapped to its JSON.
+   */
+  metadata?: Record<string, string>
+}
 
 export type InvitationStateUpdatedData = InvitationRecord & { previousState: InvitationState | null }
 
