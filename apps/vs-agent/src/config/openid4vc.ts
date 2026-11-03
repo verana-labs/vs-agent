@@ -1,7 +1,11 @@
 import type { OpenId4VcPluginOptions } from '@verana-labs/vs-agent-plugin-openid4vc'
 import type { VerifiablePublicRegistries } from '@verana-labs/vs-agent-sdk'
 
-import { parseOpenId4VcConfiguration } from '@verana-labs/vs-agent-plugin-openid4vc'
+import {
+  OFFER_TTL_SECONDS_MAX,
+  OFFER_TTL_SECONDS_MIN,
+  parseOpenId4VcConfiguration,
+} from '@verana-labs/vs-agent-plugin-openid4vc'
 import { readFile } from 'fs/promises'
 
 const FETCH_TIMEOUT_MS = 10_000
@@ -15,6 +19,7 @@ export async function readOpenId4VcOptions(
   location: string,
   publicApiBaseUrl: string,
   verifiablePublicRegistries?: VerifiablePublicRegistries,
+  credentialOfferExpirationSeconds?: string,
 ): Promise<OpenId4VcOptionsResult> {
   const url = parseAbsoluteUrl(location)
   const name = url ? `${url.protocol}//${url.host}${url.pathname}` : location
@@ -28,12 +33,24 @@ export async function readOpenId4VcOptions(
         publicApiBaseUrl,
         credentialConfigurations: [],
         verifiablePublicRegistries,
+        credentialOfferExpirationSeconds: parseCredentialOfferExpiration(credentialOfferExpirationSeconds),
       },
       errors: [],
     }
   } catch (error) {
     return { errors: [(error as Error).message] }
   }
+}
+
+function parseCredentialOfferExpiration(value?: string): number | undefined {
+  if (value === undefined || value === '') return undefined
+  const seconds = Number(value)
+  if (!Number.isInteger(seconds) || seconds < OFFER_TTL_SECONDS_MIN || seconds > OFFER_TTL_SECONDS_MAX) {
+    throw new Error(
+      `OID4VC_CREDENTIAL_OFFER_EXPIRATION_SECONDS must be an integer between ${OFFER_TTL_SECONDS_MIN} and ${OFFER_TTL_SECONDS_MAX}`,
+    )
+  }
+  return seconds
 }
 
 function parseConfiguration(contents: string, name: string): unknown {
