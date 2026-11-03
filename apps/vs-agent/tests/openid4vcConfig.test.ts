@@ -38,6 +38,28 @@ describe('OpenID4VC configuration file', () => {
     await rm(fixtureDirectory, { recursive: true, force: true })
   })
 
+  it('passes the credential offer lifetime on to the plugin', async () => {
+    const { options, errors } = await readOpenId4VcOptions(configPath, publicApiBaseUrl, undefined, '86400')
+
+    expect(errors).toEqual([])
+    expect(options?.credentialOfferExpirationSeconds).toBe(86400)
+  })
+
+  it('leaves the credential offer lifetime to the default when unset', async () => {
+    const { options } = await readOpenId4VcOptions(configPath, publicApiBaseUrl)
+
+    expect(options?.credentialOfferExpirationSeconds).toBeUndefined()
+  })
+
+  it.each(['abc', '59', '7776001', '90.5'])('refuses a credential offer lifetime of %s', async value => {
+    const { options, errors } = await readOpenId4VcOptions(configPath, publicApiBaseUrl, undefined, value)
+
+    expect(options).toBeUndefined()
+    expect(errors).toEqual([
+      'OID4VC_CREDENTIAL_OFFER_EXPIRATION_SECONDS must be an integer between 60 and 7776000',
+    ])
+  })
+
   it('reads and validates the file and injects the trusted public API base URL', async () => {
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).resolves.toEqual({
       options: readOptions(),
