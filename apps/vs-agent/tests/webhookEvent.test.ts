@@ -2,7 +2,9 @@ import {
   DidCommBasicMessageEventTypes,
   DidCommBasicMessageRole,
   DidCommConnectionEventTypes,
+  DidCommDiscoverFeaturesEventTypes,
   DidCommProofEventTypes,
+  DidCommProtocol,
 } from '@credo-ts/didcomm'
 import { InvitationRecord, InvitationRepository } from '@verana-labs/vs-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,10 +19,11 @@ const fetchMock = vi.fn()
 
 const invitationRepository = { getById: vi.fn() }
 
-function fakeAgent() {
+function fakeAgent(discoveryOptions?: { featureType: string; match: string }[]) {
   const handlers = new Map<string, Handler>()
   const agent = {
     context: {},
+    discoveryOptions,
     dependencyManager: {
       resolve: (token: unknown) => (token === InvitationRepository ? invitationRepository : undefined),
     },
@@ -108,6 +111,63 @@ describe('Events API delivery', () => {
     const { body } = await delivered()
     expect(body.type).toBe('didcomm.connections.state-updated')
     expect(body.data).toMatchObject({ id: 'conn-1', invitationId: 'oob-1', parentConnectionId: 'conn-0' })
+  })
+
+  it('announces a coming disclosure with an empty metadata on a completed connection when discovery is on', async () => {
+    const { agent, emit } = fakeAgent([{ featureType: 'protocol', match: '*' }])
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit(DidCommConnectionEventTypes.DidCommConnectionStateChanged, { connectionRecord, previousState: null })
+
+    const { body } = await delivered()
+    expect(body.data).toMatchObject({ id: 'conn-1', state: 'completed', metadata: {} })
+  })
+
+  it('carries no metadata without discovery, nor on a connection that is not completed', async () => {
+    const off = fakeAgent()
+    webhookEvent(off.agent as never, { url: URL }, logger as never)
+    off.emit(DidCommConnectionEventTypes.DidCommConnectionStateChanged, {
+      connectionRecord,
+      previousState: null,
+    })
+    expect((await delivered()).body.data).not.toHaveProperty('metadata')
+
+    fetchMock.mockClear()
+    const on = fakeAgent([{ featureType: 'protocol', match: '*' }])
+    webhookEvent(on.agent as never, { url: URL }, logger as never)
+    on.emit(DidCommConnectionEventTypes.DidCommConnectionStateChanged, {
+      connectionRecord: { ...connectionRecord, state: 'response-sent' },
+      previousState: 'request-received',
+    })
+    expect((await delivered()).body.data).not.toHaveProperty('metadata')
+  })
+
+  it('delivers a disclosure as a connection event in state updated, each feature id mapped to its JSON', async () => {
+    const { agent, emit } = fakeAgent([{ featureType: 'protocol', match: '*' }])
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit(DidCommDiscoverFeaturesEventTypes.DisclosureReceived, {
+      connection: connectionRecord,
+      disclosures: [
+        new DidCommProtocol({ id: 'https://didcomm.org/ayni-flow/1.0', roles: ['holder'] }),
+        new DidCommProtocol({ id: 'https://didcomm.org/link-session/1.0' }),
+      ],
+      protocolVersion: 'v2',
+      threadId: 'thread-1',
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.connections.state-updated')
+    expect(body.data).toMatchObject({ id: 'conn-1', state: 'updated', previousState: 'completed' })
+    expect(Object.keys(body.data.metadata)).toEqual([
+      'https://didcomm.org/ayni-flow/1.0',
+      'https://didcomm.org/link-session/1.0',
+    ])
+    expect(JSON.parse(body.data.metadata['https://didcomm.org/ayni-flow/1.0'])).toEqual({
+      'feature-type': 'protocol',
+      id: 'https://didcomm.org/ayni-flow/1.0',
+      roles: ['holder'],
+    })
   })
 
   it('delivers an invitation record, read back from the store, with its previousState', async () => {

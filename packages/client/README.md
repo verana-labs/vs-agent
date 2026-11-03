@@ -58,6 +58,8 @@ const events = new EventDispatcher()
   })
   .on('didcomm.connections.state-updated', data => {
     if (data.state === 'completed' && data.previousState !== 'completed') console.log('new connection', data.id)
+    // with feature discovery on, the peer's disclosure follows as state `updated`
+    if (data.state === 'updated') console.log('features', data.id, Object.keys(data.metadata ?? {}))
   })
 
 app.post('/events', async (req, res) => {
