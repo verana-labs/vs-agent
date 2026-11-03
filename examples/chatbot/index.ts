@@ -1,4 +1,4 @@
-import { ApiClient, EventDispatcher, EventEnvelope } from '@verana-labs/vs-agent-client'
+import { ApiClient, ApiError, EventDispatcher, EventEnvelope } from '@verana-labs/vs-agent-client'
 import cors from 'cors'
 import { randomUUID } from 'crypto'
 import express from 'express'
@@ -8,6 +8,7 @@ import path from 'path'
 import { Logger } from 'tslog'
 
 import { helpMessage, rockyQuotes, rootContextMenu, rootMenuAsQA, welcomeMessage, worldCupPoll } from './data'
+import packageJson from './package.json'
 
 const logger = new Logger()
 
@@ -391,6 +392,35 @@ events
       reactions: [{ messageId: first.messageId, emoji: '❤️', action: 'react' }],
     })
   })
+
+const describeApiFailure = (error: unknown): string =>
+  error instanceof ApiError ? error.message : 'the VS Agent admin API is unreachable'
+
+app.get('/invitation', async (req: Request, res: Response): Promise<void> => {
+  const label = typeof req.query.label === 'string' ? req.query.label : undefined
+  const forLabel = label ? ` for ${label}` : ''
+  try {
+    const invitation = await client.didcomm.createInvitation({})
+    logger.info(`invitation ${invitation.id} created${forLabel}`)
+    res.json({ url: invitation.shortUrl, invitationId: invitation.id })
+  } catch (error) {
+    logger.error(`Cannot create an invitation${forLabel}: ${error}`)
+    res.status(503).json({ error: describeApiFailure(error) })
+  }
+})
+
+app.get('/health', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    await client.agent.getReadiness()
+    const { version } = await client.agent.getAgentInfo()
+    res.json({ status: 'ok', chatbotVersion: packageJson.version, vsAgentVersion: version })
+  } catch (error) {
+    logger.warn(`Health check failed: ${error}`)
+    res
+      .status(503)
+      .json({ status: 'error', chatbotVersion: packageJson.version, reason: describeApiFailure(error) })
+  }
+})
 
 app.post('/events', async (req: Request, res: Response): Promise<void> => {
   const envelope = req.body as EventEnvelope

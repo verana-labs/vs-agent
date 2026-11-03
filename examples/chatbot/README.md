@@ -9,7 +9,7 @@ cd examples/chatbot
 docker-compose up --build
 ```
 
-Set `PUBLIC_API_BASE_URL` in `docker-compose.yml` to the public `https` URL that fronts port `3001`. The agent derives its DID and its DIDComm endpoint from it. Then connect your wallet (for example Hologram) to the agent's public DID, or create an invitation with `POST /v2/didcomm/invitations` and no `connectionId` and scan its `shortUrl` as a QR code. When the connection completes the bot sends its context menu and a welcome message.
+Set `PUBLIC_API_BASE_URL` in `docker-compose.yml` to the public `https` URL that fronts port `3001`. The agent derives its DID and its DIDComm endpoint from it. Then connect your wallet (for example Hologram) to the agent's public DID, or get an invitation from `GET /invitation` on the backend and scan its `url` as a QR code. When the connection completes the bot sends its context menu and a welcome message.
 
 Services:
 
@@ -25,6 +25,16 @@ Services:
 | `PUBLIC_BASE_URL` | `http://localhost:5000` | Public URL of the backend, used for the media sample and the call callbacks |
 | `CREDENTIAL_DEFINITION_ID` | unset | AnonCreds credential definition with a `phoneNumber` attribute. Unset disables `issue`, `proof` and `/revoke` |
 | `VISION_SERVICE_BASE_URL`, `WEBRTC_SERVER_BASE_URL` | 2060 dev services | Used by `/call` |
+
+## Endpoints
+
+All endpoints are on `PORT`.
+
+| Endpoint | What it answers |
+|---|---|
+| `POST /events` | The [Events API](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#events-api) webhook of the agent. `204` |
+| `GET /invitation` | A new single use invitation: `{ "url": "<short URL of the invitation>", "invitationId": "<id>" }`. Scan the `url` as a QR code or open it with a wallet. The optional `label` query parameter, for example the id of a CI run, only goes to the log line of the request: the invitation carries no label. `503` with `{ "error": "..." }` when the admin API cannot create it |
+| `GET /health` | `200` with `{ "status": "ok", "chatbotVersion": "...", "vsAgentVersion": "..." }` when the admin API is ready. `503` with `{ "status": "error", "chatbotVersion": "...", "reason": "..." }` when it is not ready or not reachable |
 
 ## Credentials
 
