@@ -33,7 +33,7 @@ type BoundKeyLookup =
   | { result: 'bound'; verificationMethodId: string }
   | { result: 'unbound' | 'unresolvable' }
 
-async function lookupBoundVerificationMethod(
+export async function lookupBoundVerificationMethod(
   agent: DidResolverAgent,
   did: string | null,
   certificatePublicJwk: unknown,
