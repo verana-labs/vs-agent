@@ -32,6 +32,7 @@ import { setupOpenId4Vc } from '../src/sdk/setupOpenId4Vc'
 import {
   didFromValidatedCertificate,
   loadSigningCertificate,
+  mapConfiguredSigningKey,
   publishDevelopmentSigningKey,
 } from '../src/services/CertificateService'
 import { IssuerService } from '../src/services/IssuerService'
@@ -329,6 +330,33 @@ describe('CertificateService', () => {
     await publishDevelopmentSigningKey(agent, handle, 'issuer')
 
     expect(agent.dids.update).not.toHaveBeenCalled()
+    expect(agent.didRepository.update).not.toHaveBeenCalled()
+  })
+
+  it('maps a configured key to the method the operator published, without touching the DID document', async () => {
+    const agent = createAgent()
+    agent.did = 'did:web:issuer.example'
+    const handle = await loadSigningCertificate(
+      agent,
+      configuredSigning(fixtures.leaf, fixtures.intermediate),
+    )
+
+    await mapConfiguredSigningKey(agent, handle, 'did:web:issuer.example#operator-key')
+
+    expect(agent.dids.update).not.toHaveBeenCalled()
+    expect(agent.didRecord.keys).toEqual([
+      { didDocumentRelativeKeyId: '#operator-key', kmsKeyId: 'fixture-leaf' },
+    ])
+  })
+
+  it('leaves a development key to its own DID publication', async () => {
+    const agent = createAgent({ developmentCertificate: fixtures.attacker })
+    agent.did = 'did:web:attacker.example'
+    agent.publicApiBaseUrl = 'https://attacker.example/agent'
+    const handle = await loadSigningCertificate(agent, undefined)
+
+    await mapConfiguredSigningKey(agent, handle, 'did:web:attacker.example#openid4vc-development-issuer')
+
     expect(agent.didRepository.update).not.toHaveBeenCalled()
   })
 
