@@ -17,6 +17,7 @@ const detachVtjscPublications = vi.fn(async (_agent: unknown, refs: readonly str
 const reattachVtjscPublication = vi.fn(async () => false)
 const rebindEcsCredentialSchema = vi.fn()
 const saveVtjscTypeMetadata = vi.fn(async () => true)
+const withdrawSelfIssuedEcsCredentials = vi.fn(async (): Promise<string[]> => [])
 
 vi.mock('../src/utils/trustCredentialStore', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/utils/trustCredentialStore')>()),
@@ -25,6 +26,7 @@ vi.mock('../src/utils/trustCredentialStore', async importOriginal => ({
   reattachVtjscPublication: (...args: unknown[]) => reattachVtjscPublication(...(args as [])),
   rebindEcsCredentialSchema: (...args: unknown[]) => rebindEcsCredentialSchema(...args),
   saveVtjscTypeMetadata: (...args: unknown[]) => saveVtjscTypeMetadata(...(args as [])),
+  withdrawSelfIssuedEcsCredentials: (...args: unknown[]) => withdrawSelfIssuedEcsCredentials(...(args as [])),
 }))
 
 /** The Type Metadata bytes [VSA-PUB-VT-5] expects for a schema of this suite. */
@@ -514,6 +516,8 @@ describe('self-issued ECS credentials', () => {
     createJsc.mockResolvedValue({ id: jscId(5) })
     rebindEcsCredentialSchema.mockReset()
     rebindEcsCredentialSchema.mockResolvedValue(undefined)
+    withdrawSelfIssuedEcsCredentials.mockReset()
+    withdrawSelfIssuedEcsCredentials.mockResolvedValue([])
   })
 
   it('self-issues against every ECS schema it holds an ISSUER entry on', async () => {
@@ -528,6 +532,23 @@ describe('self-issued ECS credentials', () => {
     const keys = rebindEcsCredentialSchema.mock.calls.map(call => call[3])
     expect(keys).toContain('ecs-service')
     expect(keys).toContain('ecs-org')
+  })
+
+  it('never self-issues an ECS-Persona credential, and withdraws one an earlier build issued', async () => {
+    const agent = chainAgent([])
+    const indexer = indexerWithIssuerOn([
+      { id: 5, title: 'ServiceCredential' },
+      { id: 6, title: 'OrganizationCredential' },
+      { id: 8, title: 'PersonaCredential' },
+    ])
+    withdrawSelfIssuedEcsCredentials.mockResolvedValue([jscId(8)])
+
+    await reconcileVtjscPublications(agent as never, indexer as never, ecsClaims as never)
+
+    const keys = rebindEcsCredentialSchema.mock.calls.map(call => call[3])
+    expect(keys).toEqual(expect.arrayContaining(['ecs-service', 'ecs-org']))
+    expect(keys).not.toContain('ecs-persona')
+    expect(withdrawSelfIssuedEcsCredentials).toHaveBeenCalledWith(agent, 80)
   })
 
   it('self-issues under the effective_until of the ISSUER entry', async () => {

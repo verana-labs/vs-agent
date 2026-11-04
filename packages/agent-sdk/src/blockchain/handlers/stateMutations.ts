@@ -10,7 +10,7 @@ import {
   VtFlowValidatedFromStates,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { classifyEcsSchema } from '@verana-labs/vs-agent-model'
+import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../../types'
@@ -587,9 +587,11 @@ async function detachUncontrolledVtjscPublications(
  * this agent's account as its vs_operator, because the chain accepts the anchoring
  * CreateOrUpdateParticipantSession from no other signer.
  *
- * Every ECS schema qualifies, not only the Service one. The chain of Organization credentials has
- * to terminate: the service holding the ISSUER entry is the only party that can issue against that
- * schema, so it issues its own. Without it that service has no serviceProvider and fails VS-CONN-VS.
+ * Every ECS schema qualifies, not only the Service one, except ECS-Persona. The chain of
+ * Organization credentials has to terminate: the service holding the ISSUER entry is the only
+ * party that can issue against that schema, so it issues its own. Without it that service has no
+ * serviceProvider and fails VS-CONN-VS. A Persona credential describes a person, never a service,
+ * so an ISSUER of ECS-Persona issues it to people only and never to itself, per [VSA-VTI-ECS-SELF-1].
  */
 async function reconcileSelfIssuedEcsCredentials(
   agent: VsAgent,
@@ -637,6 +639,16 @@ async function reconcileSelfIssuedEcsCredentials(
       const schema = await indexer.getCredentialSchema(issuer.schema_id)
       const ecsKey = await classifyEcsSchema(schema.json_schema)
       if (!ecsKey) continue
+      if (ecsKey === ECS.PERSONA) {
+        // an earlier build may have issued one: take it back
+        const withdrawn = await withdrawSelfIssuedEcsCredentials(agent, issuer.id)
+        for (const jscUrl of withdrawn) {
+          agent.config.logger.info(
+            `[SelfTR] Withdrew the self-issued ECS-Persona credential bound to ${jscUrl} (issuer participant ${issuer.id})`,
+          )
+        }
+        continue
+      }
       const jsonSchemaCredentialId = await resolveJsonSchemaCredentialId(agent, indexer, schema.id, chainId)
       await rebindEcsCredentialSchema(
         agent,
