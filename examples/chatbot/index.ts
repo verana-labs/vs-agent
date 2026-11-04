@@ -1,13 +1,15 @@
-import { ApiClient, EventDispatcher, EventEnvelope } from '@verana-labs/vs-agent-client'
+import { ApiClient, ApiError, EventDispatcher, EventEnvelope } from '@verana-labs/vs-agent-client'
 import cors from 'cors'
 import { randomUUID } from 'crypto'
 import express from 'express'
 import type { Express, Request, Response } from 'express'
 import fetch from 'node-fetch'
 import path from 'path'
+import QRCode from 'qrcode'
 import { Logger } from 'tslog'
 
 import { helpMessage, rockyQuotes, rootContextMenu, rootMenuAsQA, welcomeMessage, worldCupPoll } from './data'
+import packageJson from './package.json'
 
 const logger = new Logger()
 
@@ -391,6 +393,85 @@ events
       reactions: [{ messageId: first.messageId, emoji: '❤️', action: 'react' }],
     })
   })
+
+const describeApiFailure = (error: unknown): string =>
+  error instanceof ApiError ? error.message : 'the VS Agent admin API is unreachable'
+
+const escapeHtml = (value: string): string =>
+  value.replace(/[&<>"]/g, character => `&#${character.charCodeAt(0)};`)
+
+const qrPage = (title: string, body: string): string => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>
+<style>
+body { font-family: sans-serif; text-align: center; margin: 2rem }
+svg { width: min(80vw, 400px); height: auto }
+code { word-break: break-all }
+</style>
+</head>
+<body>
+<h1>${title}</h1>
+${body}
+</body>
+</html>
+`
+
+app.get('/invitation', async (req: Request, res: Response): Promise<void> => {
+  const label = typeof req.query.label === 'string' ? req.query.label : undefined
+  const forLabel = label ? ` for ${label}` : ''
+  try {
+    const invitation = await client.didcomm.createInvitation({})
+    logger.info(`invitation ${invitation.id} created${forLabel}`)
+    res.json({ url: invitation.shortUrl, invitationId: invitation.id })
+  } catch (error) {
+    logger.error(`Cannot create an invitation${forLabel}: ${error}`)
+    res.status(503).json({ error: describeApiFailure(error) })
+  }
+})
+
+app.get('/qr', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const invitation = await client.didcomm.createInvitation({ reusable: true })
+    if (!invitation.shortUrl) {
+      logger.error(`Invitation ${invitation.id} carries no short URL`)
+      res
+        .status(503)
+        .send(qrPage('No QR code', '<p>The agent created the invitation without a short URL.</p>'))
+      return
+    }
+    logger.info(`invitation ${invitation.id} created for the QR page`)
+    const svg = await QRCode.toString(invitation.shortUrl, { type: 'svg' })
+    const url = escapeHtml(invitation.shortUrl)
+    res.send(
+      qrPage(
+        'Chat with the demo chatbot',
+        `${svg}
+<p><a href="${url}"><code>${url}</code></a></p>
+<p>This invitation is reusable, so any number of wallets can scan the code.</p>
+<p><a href="/qr">Get another invitation</a></p>`,
+      ),
+    )
+  } catch (error) {
+    logger.error(`Cannot create an invitation for the QR page: ${error}`)
+    res.status(503).send(qrPage('No QR code', `<p>${escapeHtml(describeApiFailure(error))}</p>`))
+  }
+})
+
+app.get('/health', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    await client.agent.getReadiness()
+    const { version } = await client.agent.getAgentInfo()
+    res.json({ status: 'ok', chatbotVersion: packageJson.version, vsAgentVersion: version })
+  } catch (error) {
+    logger.warn(`Health check failed: ${error}`)
+    res
+      .status(503)
+      .json({ status: 'error', chatbotVersion: packageJson.version, reason: describeApiFailure(error) })
+  }
+})
 
 app.post('/events', async (req: Request, res: Response): Promise<void> => {
   const envelope = req.body as EventEnvelope
