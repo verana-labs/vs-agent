@@ -95,9 +95,7 @@ export class V2DidcommConnectionsController {
   @ApiOperation({
     summary: 'Delete a connection',
     description:
-      'Tells the peer that the connection ends, then deletes the connection record and drops the ' +
-      'routing it held on its mediator when it had one. The connections opened from invitations sent ' +
-      'on it stay, each with its `parentConnectionId`.',
+      'Terminates the DIDComm connection: notifies the other party and deletes the connection record.',
   })
   @ApiParam({
     name: 'connectionId',
