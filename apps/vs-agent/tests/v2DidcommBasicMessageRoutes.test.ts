@@ -60,7 +60,7 @@ describe('v2 didcomm basic message routes', () => {
     basicMessages.findAllByQuery.mockResolvedValue(records)
   })
 
-  it('sends a message on the connection and answers with the record id', async () => {
+  it('sends a message on the connection and answers with the sent message id', async () => {
     basicMessages.sendMessage.mockResolvedValue(
       message('m-9', '2026-01-09T00:00:00.000Z', { role: 'sender' }),
     )
@@ -70,7 +70,7 @@ describe('v2 didcomm basic message routes', () => {
       .send({ connectionId: 'conn-1', content: 'hello' })
 
     expect(response.status).toBe(201)
-    expect(response.body).toEqual({ id: 'm-9' })
+    expect(response.body).toEqual({ id: 'thread-m-9' })
     expect(basicMessages.sendMessage).toHaveBeenCalledWith('conn-1', 'hello')
   })
 

@@ -56,6 +56,7 @@ const connections = {
   findAllByQuery: vi.fn(),
   findById: vi.fn(),
   deleteById: vi.fn(),
+  hangup: vi.fn(),
 }
 
 const oob = { createInvitation: vi.fn(), findById: vi.fn(), deleteById: vi.fn() }
@@ -268,6 +269,7 @@ describe('v2 didcomm connection routes', () => {
 
     expect(response.status).toBe(204)
     expect(response.body).toEqual({})
+    expect(connections.hangup).toHaveBeenCalledWith({ connectionId: 'c-1' })
     expect(connections.deleteById).toHaveBeenCalledWith('c-1')
   })
 
