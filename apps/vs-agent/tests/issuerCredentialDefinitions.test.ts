@@ -41,8 +41,7 @@ describe('IssuerCredentialDefinitions', () => {
     registerAnonCredsCredentialDefinition: ReturnType<typeof vi.fn>
   }
 
-  const build = () =>
-    new IssuerCredentialDefinitions(agent as any, indexer as any, registrar, logger)
+  const build = () => new IssuerCredentialDefinitions(agent as any, indexer as any, registrar, logger)
 
   beforeEach(() => {
     vi.clearAllMocks()
