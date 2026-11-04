@@ -42,7 +42,6 @@ describe('IssuerCredentialDefinitions', () => {
   }
 
   const build = () =>
-    // biome-ignore lint/suspicious/noExplicitAny: minimal doubles of the agent and the indexer
     new IssuerCredentialDefinitions(agent as any, indexer as any, registrar, logger)
 
   beforeEach(() => {
@@ -131,7 +130,6 @@ describe('IssuerCredentialDefinitions', () => {
     registry.register({ msg: 'SetParticipantOPToValidated', handle: original })
     active = [entry(10, 7)]
     build().registerHandlers(registry)
-    // biome-ignore lint/suspicious/noExplicitAny: the handlers do not read the activity or the context here
     await registry.get('SetParticipantOPToValidated')?.handle({} as any, {} as any)
     expect(original).toHaveBeenCalledOnce()
     expect(registrar.registerAnonCredsCredentialDefinition).toHaveBeenCalledOnce()
