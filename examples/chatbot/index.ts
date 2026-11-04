@@ -21,6 +21,7 @@ import {
   rockyQuotes,
   rootContextMenu,
   rootMenuAsQA,
+  testQuestion,
   welcomeMessage,
   worldCupPoll,
 } from './data'
@@ -36,6 +37,10 @@ const VISION_SERVICE_BASE_URL =
 const WEBRTC_SERVER_BASE_URL = process.env.WEBRTC_SERVER_BASE_URL || 'https://dts-webrtc.dev.2060.io'
 const CREDENTIAL_DEFINITION_ID = process.env.CREDENTIAL_DEFINITION_ID || undefined
 const MEDIA_DOWNLOAD_TIMEOUT_MS = 15_000
+const DEFAULT_PHONE_NUMBER = '+5712345678'
+const TRACED_MESSAGE_MEMORY = 200
+const MAXIMUM_QUESTION_OPTIONS = 10
+const DEFAULT_QUESTION_OPTIONS = 3
 
 const app: Express = express()
 const client = new ApiClient(VS_AGENT_ADMIN_BASE_URL)
@@ -64,14 +69,18 @@ const proofRequests = new Map<string, string>()
 
 interface ConnectionSettings {
   echoMedia: boolean
+  trace: boolean
 }
 
-const defaultConnectionSettings: ConnectionSettings = { echoMedia: false }
+const defaultConnectionSettings: ConnectionSettings = { echoMedia: false, trace: false }
 
 const connectionSettings = new Map<string, ConnectionSettings>()
 
 const settingsOf = (connectionId: string): ConnectionSettings =>
   connectionSettings.get(connectionId) ?? defaultConnectionSettings
+
+const tracedMessageIds = new Set<string>()
+const testQuestionThreadIds = new Set<string>()
 
 interface OngoingCall {
   wsUrl: string
@@ -112,22 +121,37 @@ const sendRootMenu = async (connectionId: string): Promise<void> => {
   await client.didcomm.sendMenu({ connectionId, menu: rootContextMenu })
 }
 
-const sendText = async (connectionId: string, content: string): Promise<void> => {
-  await client.didcomm.sendBasicMessage({ connectionId, content })
+const sendText = async (connectionId: string, content: string): Promise<string | undefined> => {
+  const { id } = await client.didcomm.sendBasicMessage({ connectionId, content })
+  return id
+}
+
+const sendTrace = async (connectionId: string, line: string): Promise<void> => {
+  if (!settingsOf(connectionId).trace) return
+
+  const messageId = await sendText(connectionId, line)
+  if (!messageId) return
+
+  tracedMessageIds.add(messageId)
+  if (tracedMessageIds.size > TRACED_MESSAGE_MEMORY) {
+    const oldest = tracedMessageIds.values().next().value
+    if (oldest) tracedMessageIds.delete(oldest)
+  }
 }
 
 const sendQuestion = async (
   connectionId: string,
   question: { prompt: string; menuItems: { id: string; text: string }[] },
-): Promise<void> => {
-  await client.didcomm.sendQuestion({
+): Promise<string> => {
+  const { id } = await client.didcomm.sendQuestion({
     connectionId,
     question: question.prompt,
     validResponses: question.menuItems.map(item => ({ text: item.text })),
   })
+  return id
 }
 
-const issueCredential = async (connectionId: string): Promise<void> => {
+const issueCredential = async (connectionId: string, phoneNumber?: string): Promise<void> => {
   if (!CREDENTIAL_DEFINITION_ID) {
     await sendText(connectionId, 'Service not available')
     return
@@ -141,7 +165,7 @@ const issueCredential = async (connectionId: string): Promise<void> => {
   // conversation and no link is needed.
   const offer = await client.didcomm.createCredentialOffer({
     credentialDefinitionId: CREDENTIAL_DEFINITION_ID,
-    claims: [{ name: 'phoneNumber', value: '+5712345678', mimeType: 'text/plain' }],
+    claims: [{ name: 'phoneNumber', value: phoneNumber || DEFAULT_PHONE_NUMBER, mimeType: 'text/plain' }],
     connectionId,
     revocationRegistryDefinitionId,
     revocationRegistryIndex: index,
@@ -294,10 +318,26 @@ const handleText = async (connectionId: string, content: string): Promise<void> 
       connectionSettings.set(connectionId, { ...settingsOf(connectionId), echoMedia: state === 'on' })
       await sendText(connectionId, `echo-media ${state}`)
     }
+  } else if (command === '/trace') {
+    const [, state] = content.split(' ')
+    if (state !== 'on' && state !== 'off') {
+      await sendText(connectionId, 'Usage: /trace on|off')
+    } else {
+      connectionSettings.set(connectionId, { ...settingsOf(connectionId), trace: state === 'on' })
+      await sendText(connectionId, `trace ${state}`)
+    }
   } else if (command === '/context') {
     await sendRootMenu(connectionId)
   } else if (command === '/menu') {
     await sendQuestion(connectionId, rootMenuAsQA)
+  } else if (command === '/question') {
+    const [, count] = content.split(' ')
+    const optionCount = count ? Number(count) : DEFAULT_QUESTION_OPTIONS
+    if (!Number.isInteger(optionCount) || optionCount < 1 || optionCount > MAXIMUM_QUESTION_OPTIONS) {
+      await sendText(connectionId, `Usage: /question <n>, n from 1 to ${MAXIMUM_QUESTION_OPTIONS}`)
+    } else {
+      testQuestionThreadIds.add(await sendQuestion(connectionId, testQuestion(optionCount)))
+    }
   } else if (command === '/media') {
     const [firstArgument, ...otherArguments] = content.substring(7).match(parameterRegExp) ?? []
     if (firstArgument && !mediaFixtures[firstArgument]) {
@@ -353,8 +393,23 @@ const handleText = async (connectionId: string, content: string): Promise<void> 
       })
     }
   } else if (command === '/invitation') {
-    const [, label, imageUrl, did] = content.split(' ')
-    await client.didcomm.createInvitation({ connectionId, label, imageUrl, did })
+    const parameters = content.split(/\s+/).slice(1)
+    const named = new Map<string, string>()
+    for (const parameter of parameters) {
+      const match = /^(did|label|image)=(.*)$/.exec(parameter)
+      if (match) named.set(match[1], match[2])
+    }
+    if (named.size > 0) {
+      await client.didcomm.createInvitation({
+        connectionId,
+        label: named.get('label') || undefined,
+        imageUrl: named.get('image') || undefined,
+        did: named.get('did') || undefined,
+      })
+    } else {
+      const [label, imageUrl, did] = parameters
+      await client.didcomm.createInvitation({ connectionId, label, imageUrl, did })
+    }
   } else if (command === '/profile') {
     const [, displayName, image, icon] = content.split(' ')
     await client.didcomm.sendProfile({
@@ -379,6 +434,9 @@ const handleText = async (connectionId: string, content: string): Promise<void> 
     } else {
       await revokeCredential(connectionId, credentialExchangeId)
     }
+  } else if (command === '/issue') {
+    const [, phoneNumber] = content.split(' ')
+    await issueCredential(connectionId, phoneNumber)
   } else if (command === '/proof') {
     await requestProof(connectionId)
   } else if (command === '/rocky') {
@@ -404,13 +462,26 @@ events
     logger.info(`received message: ${JSON.stringify(data)}`)
     await handleText(data.connectionId, data.content)
   })
+  .on('didcomm.receipts.message-receipts-received', async data => {
+    for (const receipt of data.receipts ?? []) {
+      if (tracedMessageIds.has(receipt.messageId)) continue
+      await sendTrace(data.connectionId, `receipt ${receipt.state} ${receipt.messageId}`)
+    }
+  })
+  .on('didcomm.user-profile.profile-received', async data => {
+    await sendTrace(data.connectionId, `profile ${data.profile.displayName ?? ''}`)
+  })
   .on('didcomm.question-answer.answer-received', async data => {
+    await sendTrace(data.connectionId, `answer ${data.response}`)
+    if (testQuestionThreadIds.delete(data.threadId)) return
+
     const item = [...worldCupPoll.menuItems, ...rootMenuAsQA.menuItems].find(
       menuItem => menuItem.text === data.response,
     )
     await handleMenuSelection(data.connectionId, item?.id ?? data.response)
   })
   .on('didcomm.action-menu.perform-received', async data => {
+    await sendTrace(data.connectionId, `menu ${data.name}`)
     await handleMenuSelection(data.connectionId, data.name)
   })
   .on('didcomm.presentations.state-updated', async data => {
@@ -489,6 +560,11 @@ events
     }
   })
   .on('didcomm.reactions.message-reactions-received', async data => {
+    for (const reaction of data.reactions ?? []) {
+      const line = `reaction ${reaction.action} ${reaction.emoji} ${reaction.messageId}`
+      await sendTrace(data.connectionId, line)
+    }
+
     const first = data.reactions?.[0]
     if (first?.action !== 'react') return
     await client.didcomm.sendReactions({

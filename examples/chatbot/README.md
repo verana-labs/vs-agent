@@ -52,25 +52,51 @@ Menu options: Home, World Cup poll, Rocky quotes, Issue credential, Request proo
 | Command | What it does |
 |---|---|
 | `/echo <text>` | Repeats the text |
+| `/echo-media on\|off` | Shares back each media item that the wallet sends, off by default. See [Media](#media) |
+| `/trace on\|off` | Sends one text for each action of the wallet, off by default. See [Trace](#trace) |
 | `/menu` | Sends the main menu as a question |
+| `/question [n]` | Sends the question `Test question` with the options `Option 1` to `Option n`, `n` from 1 to 10, 3 by default. The answer does not enter the menu logic, so the options need no handler |
 | `/context` | Resends the context menu |
 | `/link <url> [title] [desc] [icon] [openingMode]` | Shares a link |
-| `/media [url] [desc]` | Shares an image, `bunny.jpeg` by default |
+| `/media image\|video\|audio\|file` | Shares the sample file of that type from `public/` |
+| `/media [url] [desc]` | Shares an image that is already published, `bunny.jpeg` by default |
 | `/invitation [label] [imageUrl] [did]` | Sends an invitation on the chat connection. Without `did` it opens a sub-connection to the bot, with `did` it refers the wallet to that service |
+| `/invitation did=<did> label=<label> image=<url>` | The same, with named arguments in any order. One argument of the form `did=`, `label=` or `image=` selects this form, and the bot then ignores every other token. A command with no such token keeps the positional form |
 | `/profile [name] [image] [icon]` | Sends the bot profile |
 | `/call [wsUrl] [roomId]` | Offers a call, creating a WebRTC room when no arguments are given |
 | `/mrz` | Requests the MRZ of a passport. When the wallet answers, the bot requests the eMRTD data. The eMRTD request is not threaded under the MRZ exchange, the v2 API has no parent thread field |
 | `/emrtd` | Requests the eMRTD data directly |
+| `/issue [phoneNumber]` | Offers a `phoneNumber` credential on the chat connection, the same as the `issue` menu option. The claim takes the argument, or `+5712345678` |
 | `/proof` | Requests a `phoneNumber` presentation |
 | `/revoke <credentialExchangeId>` | Revokes the credential, the id is the one the bot sends after issuance. The wallet gets no notification |
 | `/rocky` | An inspiring quote |
 | `/help` | The command list |
-| `/terminate` | Deletes the connection record on the agent. No hangup is sent |
+| `/terminate` | Tells the wallet that the connection ends, then deletes the connection record on the agent |
 
 Not ported from v1: the `viewed` receipt after every inbound message (the basic message event carries no DIDComm message id).
+
+### Media
+
+For each media item that the wallet shares, the bot downloads it, deciphers it when the item carries a `ciphering`, and answers one text `media-received <mimeType> <byteCount> sha256:<digest>` of the plain bytes. A download or a decipher that fails answers `media-error <reason>` instead. With `/echo-media on` the bot also shares the item back, with the same `uri`, `ciphering` and `metadata`.
+
+### Trace
+
+`/trace on` makes the bot answer one text for each action that the wallet sends on that connection:
+
+| Event | Text |
+|---|---|
+| `didcomm.receipts.message-receipts-received` | `receipt <state> <messageId>`, one text for each receipt |
+| `didcomm.reactions.message-reactions-received` | `reaction <action> <emoji> <messageId>`, one text for each reaction |
+| `didcomm.user-profile.profile-received` | `profile <displayName>` |
+| `didcomm.action-menu.perform-received` | `menu <name>` |
+| `didcomm.question-answer.answer-received` | `answer <response>` |
+
+The texts add to the behavior of the bot and do not replace it: the bot still answers ❤️ to a reaction, and still acts on a menu selection and on an answer of its own questions.
+
+A trace text is a message too, so the wallet sends a receipt for it. To break that loop the bot keeps the `id` that `sendBasicMessage` answers for each trace text, which is the id of the sent message, and sends no trace for a receipt of those messages. The bot keeps the last 200 of them, which bounds the memory and covers the receipts of a conversation: a wallet reports `received` and `viewed` soon after it gets the message.
 
 ## Files
 
 - `index.ts`: the Express app, the event handlers and the command dispatch
-- `data.ts`: `welcomeMessage`, `helpMessage`, `rootContextMenu`, `rootMenuAsQA`, `worldCupPoll`, `rockyQuotes`
+- `data.ts`: `welcomeMessage`, `helpMessage`, `mediaFixtures`, `rootContextMenu`, `rootMenuAsQA`, `testQuestion`, `worldCupPoll`, `rockyQuotes`
 - `public/`: static files served by the backend
