@@ -92,6 +92,7 @@ import {
 } from './config'
 import { VtFlowNestPlugin } from './plugins'
 import { PublicModule } from './public.module'
+import { CredentialTypesService } from './services/CredentialTypesService'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
@@ -109,6 +110,7 @@ import {
   buildUiConfig,
   serveUiIndex,
 } from './utils'
+import { IssuerCredentialDefinitions } from './utils/issuerCredentialDefinitions'
 
 const SELECTABLE_PLUGINS = ['chat', 'mrtd']
 
@@ -187,7 +189,7 @@ export const startServers = async (agent: VsAgent, serverConfig: ServerConfig) =
 
   const httpServer = httpInboundTransport ? httpInboundTransport.server : publicAppServer
 
-  return { httpServer, webSocketServer }
+  return { httpServer, webSocketServer, adminApp }
 }
 
 const AUTHORIZATION_SEED_RETRY_MS = 30_000
@@ -460,7 +462,7 @@ const run = async () => {
     nestPlugins,
     bootstrapState,
   }
-  const { httpServer, webSocketServer } = await startServers(agent, conf)
+  const { httpServer, webSocketServer, adminApp } = await startServers(agent, conf)
 
   if (agent.did) {
     await runWithRetries({
@@ -498,8 +500,17 @@ const run = async () => {
       )
     }
     if (authorizationService) registerAuthorizationHandlers(handlerRegistry, authorizationService)
+    let issuerCredentialDefinitions: IssuerCredentialDefinitions | undefined
     if (VERANA_CORPORATION_ID) {
       registerSelfIssuanceAnchorHandlers(handlerRegistry, indexerService, ecsClaims)
+      // An issuer creates the credential definitions of the schemas it may issue by itself
+      issuerCredentialDefinitions = new IssuerCredentialDefinitions(
+        agent,
+        indexerService,
+        adminApp.get(CredentialTypesService),
+        serverLogger,
+      )
+      issuerCredentialDefinitions.registerHandlers(handlerRegistry)
     }
     registerNestPluginIndexerHandlers(nestPlugins, handlerRegistry)
 
@@ -525,9 +536,9 @@ const run = async () => {
     }
 
     if (VERANA_CORPORATION_ID) {
-      void reconcileVtjscPublications(agent, indexerService, ecsClaims).catch((error: Error) =>
-        serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`),
-      )
+      void reconcileVtjscPublications(agent, indexerService, ecsClaims)
+        .catch((error: Error) => serverLogger.error(`[VTJSC] reconciliation failed: ${error.message}`))
+        .then(() => issuerCredentialDefinitions?.reconcile())
     }
 
     const vtFlowOrchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl })
