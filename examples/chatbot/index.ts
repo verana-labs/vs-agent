@@ -1,14 +1,29 @@
-import { ApiClient, ApiError, EventDispatcher, EventEnvelope } from '@verana-labs/vs-agent-client'
+import {
+  ApiClient,
+  ApiError,
+  EventDispatcher,
+  EventEnvelope,
+  SharedMediaItem,
+} from '@verana-labs/vs-agent-client'
 import cors from 'cors'
-import { randomUUID } from 'crypto'
+import { createDecipheriv, createHash, randomUUID } from 'crypto'
 import express from 'express'
 import type { Express, Request, Response } from 'express'
+import { statSync } from 'fs'
 import fetch from 'node-fetch'
 import path from 'path'
 import QRCode from 'qrcode'
 import { Logger } from 'tslog'
 
-import { helpMessage, rockyQuotes, rootContextMenu, rootMenuAsQA, welcomeMessage, worldCupPoll } from './data'
+import {
+  helpMessage,
+  mediaFixtures,
+  rockyQuotes,
+  rootContextMenu,
+  rootMenuAsQA,
+  welcomeMessage,
+  worldCupPoll,
+} from './data'
 import packageJson from './package.json'
 
 const logger = new Logger()
@@ -20,12 +35,13 @@ const VISION_SERVICE_BASE_URL =
   process.env.VISION_SERVICE_BASE_URL || 'https://webrtc-pymediasoup-client-demo.dev.2060.io'
 const WEBRTC_SERVER_BASE_URL = process.env.WEBRTC_SERVER_BASE_URL || 'https://dts-webrtc.dev.2060.io'
 const CREDENTIAL_DEFINITION_ID = process.env.CREDENTIAL_DEFINITION_ID || undefined
+const MEDIA_DOWNLOAD_TIMEOUT_MS = 15_000
 
 const app: Express = express()
 const client = new ApiClient(VS_AGENT_ADMIN_BASE_URL)
 const events = new EventDispatcher()
 
-const staticDir = path.join(__dirname, 'public')
+const staticDir = path.join(__dirname, '..', 'public')
 app.use(express.static(staticDir))
 
 app.use(cors())
@@ -45,6 +61,17 @@ interface IssuedCredential {
 
 const issuedCredentials = new Map<string, IssuedCredential>()
 const proofRequests = new Map<string, string>()
+
+interface ConnectionSettings {
+  echoMedia: boolean
+}
+
+const defaultConnectionSettings: ConnectionSettings = { echoMedia: false }
+
+const connectionSettings = new Map<string, ConnectionSettings>()
+
+const settingsOf = (connectionId: string): ConnectionSettings =>
+  connectionSettings.get(connectionId) ?? defaultConnectionSettings
 
 interface OngoingCall {
   wsUrl: string
@@ -238,31 +265,75 @@ const offerCall = async (connectionId: string, wsUrlArg?: string, roomIdArg?: st
   }
 }
 
+const downloadAndDecipher = async (item: SharedMediaItem): Promise<Buffer> => {
+  if (!item.uri) throw new Error('the item carries no uri')
+  const response = await fetch(item.uri, { timeout: MEDIA_DOWNLOAD_TIMEOUT_MS })
+  if (!response.ok) throw new Error(`the download of ${item.uri} answered HTTP ${response.status}`)
+  const downloaded = await response.buffer()
+
+  const ciphering = item.ciphering
+  if (!ciphering) return downloaded
+  if (ciphering.algorithm !== 'aes-256-cbc') throw new Error(`unsupported ciphering ${ciphering.algorithm}`)
+
+  const key = Buffer.from(String(ciphering.parameters.key), 'hex')
+  const iv = Buffer.from(String(ciphering.parameters.iv), 'hex')
+  const decipher = createDecipheriv('aes-256-cbc', key, iv)
+  return Buffer.concat([decipher.update(downloaded), decipher.final()])
+}
+
 const handleText = async (connectionId: string, content: string): Promise<void> => {
   logger.info(`Content: ${content}`)
-  if (content.startsWith('/echo')) {
+  const [command] = content.split(/\s/)
+  if (command === '/echo') {
     await sendText(connectionId, content.substring(5))
-  } else if (content.startsWith('/context')) {
+  } else if (command === '/echo-media') {
+    const [, state] = content.split(' ')
+    if (state !== 'on' && state !== 'off') {
+      await sendText(connectionId, 'Usage: /echo-media on|off')
+    } else {
+      connectionSettings.set(connectionId, { ...settingsOf(connectionId), echoMedia: state === 'on' })
+      await sendText(connectionId, `echo-media ${state}`)
+    }
+  } else if (command === '/context') {
     await sendRootMenu(connectionId)
-  } else if (content.startsWith('/menu')) {
+  } else if (command === '/menu') {
     await sendQuestion(connectionId, rootMenuAsQA)
-  } else if (content.startsWith('/media')) {
-    const parsedContents = content.substring(7).match(parameterRegExp)
-    const description = parsedContents?.slice(1).join(' ')
-    await client.didcomm.shareMedia({
-      connectionId,
-      description: description || 'An image',
-      items: [
-        {
-          description: description || 'Bunny',
-          uri: parsedContents?.[0] ?? `${PUBLIC_BASE_URL}/bunny.jpeg`,
-          mimeType: 'image/jpeg',
-          fileName: `${randomUUID()}.jpg`,
-          byteCount: 6576,
-        },
-      ],
-    })
-  } else if (content.startsWith('/link')) {
+  } else if (command === '/media') {
+    const [firstArgument, ...otherArguments] = content.substring(7).match(parameterRegExp) ?? []
+    if (firstArgument && !mediaFixtures[firstArgument]) {
+      const description = otherArguments.join(' ')
+      await client.didcomm.shareMedia({
+        connectionId,
+        description: description || 'An image',
+        items: [
+          {
+            description: description || 'Bunny',
+            uri: firstArgument,
+            mimeType: 'image/jpeg',
+            fileName: `${randomUUID()}.jpg`,
+            byteCount: 6576,
+          },
+        ],
+      })
+    } else {
+      const fixture = mediaFixtures[firstArgument ?? 'image']
+      await client.didcomm.shareMedia({
+        connectionId,
+        description: fixture.description,
+        items: [
+          {
+            description: fixture.description,
+            uri: `${PUBLIC_BASE_URL}/${fixture.fileName}`,
+            mimeType: fixture.mimeType,
+            fileName: fixture.fileName,
+            byteCount: statSync(path.join(staticDir, fixture.fileName)).size,
+            metadata: fixture.metadata,
+          },
+        ],
+      })
+      if (fixture.note) await sendText(connectionId, fixture.note)
+    }
+  } else if (command === '/link') {
     const parsedContents = content.substring(6).match(parameterRegExp)
     if (parsedContents) {
       await client.didcomm.shareMedia({
@@ -281,10 +352,10 @@ const handleText = async (connectionId: string, content: string): Promise<void> 
         ],
       })
     }
-  } else if (content.startsWith('/invitation')) {
+  } else if (command === '/invitation') {
     const [, label, imageUrl, did] = content.split(' ')
     await client.didcomm.createInvitation({ connectionId, label, imageUrl, did })
-  } else if (content.startsWith('/profile')) {
+  } else if (command === '/profile') {
     const [, displayName, image, icon] = content.split(' ')
     await client.didcomm.sendProfile({
       connectionId,
@@ -294,27 +365,27 @@ const handleText = async (connectionId: string, content: string): Promise<void> 
         displayIcon: icon ? { links: [icon] } : undefined,
       },
     })
-  } else if (content.startsWith('/call')) {
+  } else if (command === '/call') {
     const [, wsUrl, roomId] = content.split(' ')
     await offerCall(connectionId, wsUrl, roomId)
-  } else if (content.startsWith('/mrz')) {
+  } else if (command === '/mrz') {
     await client.didcomm.requestMrz({ connectionId })
-  } else if (content.startsWith('/emrtd')) {
+  } else if (command === '/emrtd') {
     await client.didcomm.requestEmrtdData({ connectionId })
-  } else if (content.startsWith('/revoke')) {
+  } else if (command === '/revoke') {
     const [, credentialExchangeId] = content.split(' ')
     if (!credentialExchangeId) {
       await sendText(connectionId, 'Usage: /revoke <credentialExchangeId>')
     } else {
       await revokeCredential(connectionId, credentialExchangeId)
     }
-  } else if (content.startsWith('/proof')) {
+  } else if (command === '/proof') {
     await requestProof(connectionId)
-  } else if (content.startsWith('/rocky')) {
+  } else if (command === '/rocky') {
     await sendText(connectionId, rockyQuotes[Math.floor(Math.random() * rockyQuotes.length)])
-  } else if (content.startsWith('/help')) {
+  } else if (command === '/help') {
     await sendText(connectionId, helpMessage)
-  } else if (content.startsWith('/terminate')) {
+  } else if (command === '/terminate') {
     await client.didcomm.deleteConnection(connectionId)
   } else {
     await sendText(connectionId, 'I do not understand what you say. Write /help to get available commands')
@@ -382,8 +453,40 @@ events
   .on('didcomm.mrtd.problem-report-received', async data => {
     await sendText(data.connectionId, `Problem: ${data.reason}`)
   })
-  .on('didcomm.media-sharing.share-media-received', data => {
+  .on('didcomm.media-sharing.share-media-received', async data => {
     logger.info(`media received: ${JSON.stringify(data.items)}`)
+    const { echoMedia } = settingsOf(data.connectionId)
+    for (const item of data.items ?? []) {
+      let plain: Buffer
+      try {
+        plain = await downloadAndDecipher(item)
+      } catch (error) {
+        logger.error(`Cannot read the received media: ${error}`)
+        await sendText(data.connectionId, `media-error ${error instanceof Error ? error.message : error}`)
+        continue
+      }
+
+      const digest = createHash('sha256').update(plain).digest('hex')
+      await sendText(data.connectionId, `media-received ${item.mimeType} ${plain.length} sha256:${digest}`)
+
+      if (echoMedia) {
+        await client.didcomm.shareMedia({
+          connectionId: data.connectionId,
+          description: data.description,
+          items: [
+            {
+              uri: item.uri,
+              mimeType: item.mimeType,
+              fileName: item.fileName,
+              description: item.description,
+              byteCount: item.byteCount,
+              ciphering: item.ciphering,
+              metadata: item.metadata,
+            },
+          ],
+        })
+      }
+    }
   })
   .on('didcomm.reactions.message-reactions-received', async data => {
     const first = data.reactions?.[0]
