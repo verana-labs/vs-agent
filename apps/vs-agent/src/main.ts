@@ -75,6 +75,7 @@ import {
   USE_CORS,
   MRTD_MASTER_LIST_CSCA_LOCATION,
   OID4VC_CONFIG_FILE_LOCATION,
+  OID4VC_CREDENTIAL_OFFER_EXPIRATION_SECONDS,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
   VERANA_INDEXER_BASE_URL,
   VERANA_ACCOUNT_MNEMONIC,
@@ -298,6 +299,7 @@ const run = async () => {
       OID4VC_CONFIG_FILE_LOCATION,
       didLocation.normalizedBaseUrl,
       verifiablePublicRegistriesFromEnv(),
+      OID4VC_CREDENTIAL_OFFER_EXPIRATION_SECONDS,
     )
     openId4VcOptions = openId4Vc.options
     configErrors.push(...openId4Vc.errors)

@@ -217,6 +217,7 @@ export async function startTestAgents(input: {
   verifierDid: string
   credentialConfiguration: OpenId4VcCredentialConfiguration
   issuerTrust?: Partial<NonNullable<OpenId4VcPluginOptions['issuer']>>
+  credentialOfferExpirationSeconds?: number
   /** Step 7 of the trust decision for the verifier; trusts every DID when absent. */
   resolveDidTrust?: DidTrustResolver
   logger?: BaseLogger
@@ -253,6 +254,7 @@ export async function startTestAgents(input: {
           ...input.issuerTrust,
         },
         credentialConfigurations: [input.credentialConfiguration],
+        credentialOfferExpirationSeconds: input.credentialOfferExpirationSeconds,
       }),
       createService: (agent, options) => {
         statusLists = new StatusListService(agent, options)

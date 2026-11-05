@@ -22,6 +22,7 @@ export function statusListUri(publicApiBaseUrl: string, statusListId: string): s
   return `${publicApiBaseUrl}/${STATUS_LIST_PATH}/${encodeURIComponent(statusListId)}`
 }
 
+export const CREDENTIAL_OFFER_EXPIRATION_SECONDS_DEFAULT = 900
 export const OFFER_TTL_SECONDS_MIN = 60
 /** [VSA-ADM-OID-CE-OFFER] ceiling of a credential that no status list registers: 90 days. */
 export const OFFER_TTL_SECONDS_MAX = 7_776_000
