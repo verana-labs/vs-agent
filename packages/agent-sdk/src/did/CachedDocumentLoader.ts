@@ -147,7 +147,7 @@ export function defaultDocumentLoader(agentContext: AgentContext): DocumentLoade
 
 async function getNativeDocumentLoader(): Promise<() => DocumentLoader> {
   // @ts-expect-error package doesn't have types
-  const loader = await import('@digitalcredentials/jsonld/lib/documentLoaders/node')
+  const loader = await import('jsonld/lib/documentLoaders/node.js')
 
   if (!loader)
     throw new Error('Could not load node document loader. Module did not contain a loader function')
@@ -158,7 +158,7 @@ async function getNativeDocumentLoader(): Promise<() => DocumentLoader> {
 }
 
 //@ts-expect-error No type definitions available for this library
-import jsonld from '@digitalcredentials/jsonld'
+import jsonld from 'jsonld'
 
 export interface JsonLd {
   // biome-ignore lint/suspicious/noExplicitAny: no explanation
