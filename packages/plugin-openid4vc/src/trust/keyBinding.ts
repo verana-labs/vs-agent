@@ -52,7 +52,13 @@ export async function lookupBoundVerificationMethod(
   if (typeof didDocument === 'string') return { result: 'unresolvable' }
 
   const verificationMethodId = boundVerificationMethod(didDocument, certificateKey, purposes)
-  return verificationMethodId ? { result: 'bound', verificationMethodId } : { result: 'unbound' }
+  if (!verificationMethodId) return { result: 'unbound' }
+  return {
+    result: 'bound',
+    verificationMethodId: verificationMethodId.startsWith('#')
+      ? `${did}${verificationMethodId}`
+      : verificationMethodId,
+  }
 }
 
 /** The id of the verification method under one of the purposes that carries the key, if any. */
