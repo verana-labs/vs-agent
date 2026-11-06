@@ -777,8 +777,9 @@ describe('development signing DID publication', () => {
     const { initialize, registry } = await createHarness('issuer', DID_WEB)
     registry.returnWrongDidFromResolution = true
 
+    // Credo's DID resolver rejects a document whose id is not the resolved DID before our own check runs
     await expect(initialize()).rejects.toThrow(
-      'development signing key DID resolution returned a different DID',
+      'development signing key DID resolution failed: invalidDidDocument',
     )
     expect(registry.updateCount).toBe(0)
   })
