@@ -15,6 +15,7 @@ import {
   Agent,
   ConsoleLogger,
   DidDocument,
+  DidRepository,
   Kms as KmsApi,
   LogLevel,
   SdJwtVcRecord,
@@ -217,6 +218,7 @@ export async function startTestAgents(input: {
   verifierDid: string
   credentialConfiguration: OpenId4VcCredentialConfiguration
   issuerTrust?: Partial<NonNullable<OpenId4VcPluginOptions['issuer']>>
+  verifierDidRecordWithoutPublishedKey?: boolean
   /** Step 7 of the trust decision for the verifier; trusts every DID when absent. */
   resolveDidTrust?: DidTrustResolver
   logger?: BaseLogger
@@ -286,6 +288,9 @@ export async function startTestAgents(input: {
         },
         credentialConfigurations: [input.credentialConfiguration],
       }),
+      beforeServiceInit: input.verifierDidRecordWithoutPublishedKey
+        ? undefined
+        : agent => addPublishedKeysToDidRecord(agent, input.verifierDid),
       createService: (agent, options) =>
         new VerifierService(agent, options, input.resolveDidTrust ?? trustEveryDid),
       indexer: verifierIndexer(input.credentialConfiguration),
@@ -356,6 +361,7 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
   did: string
   didResolver: DidResolver
   options: (publicApiBaseUrl: string) => OpenId4VcPluginOptions
+  beforeServiceInit?: (agent: OpenId4VcAgent) => Promise<void>
   createService: (agent: OpenId4VcAgent, options: OpenId4VcPluginOptions) => Service
   indexer?: unknown
   veranaChain?: unknown
@@ -394,6 +400,7 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
       anonCredsTrust: input.anonCredsTrust,
     })
     await agent.initialize()
+    await input.beforeServiceInit?.(agent)
     service = input.createService(agent, options)
     await service.onModuleInit()
     return {
@@ -406,6 +413,18 @@ async function startPluginAgent<Service extends IssuerService | VerifierService>
     await Promise.allSettled([agent?.shutdown(), server ? closeServer(server) : undefined])
     throw error
   }
+}
+
+async function addPublishedKeysToDidRecord(agent: OpenId4VcAgent, did: string): Promise<void> {
+  const published = await agent.dids.resolveDidDocument(did)
+  const didRepository = agent.context.dependencyManager.resolve(DidRepository)
+  const didRecord = await didRepository.findCreatedDid(agent.context, did)
+  if (!didRecord?.didDocument) throw new Error(`the test agent stored no DID document for ${did}`)
+
+  const stored = didRecord.didDocument
+  stored.verificationMethod = [...(stored.verificationMethod ?? []), ...(published.verificationMethod ?? [])]
+  stored.authentication = [...(stored.authentication ?? []), ...(published.authentication ?? [])]
+  await didRepository.update(agent.context, didRecord)
 }
 
 async function startHolderAgent(
