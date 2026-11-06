@@ -74,9 +74,14 @@ export function didFromValidatedCertificate(certificate: X509Certificate): strin
   return did
 }
 
-// Nest calls every onModuleInit hook of a module concurrently, and two capabilities publishing into one DID
-// document would each drop the verification method the other added.
-let didDocumentPublication: Promise<unknown> = Promise.resolve()
+// Nest runs onModuleInit hooks concurrently: two capabilities writing one DID record would drop each other's change.
+let didRecordWrites: Promise<unknown> = Promise.resolve()
+
+function serializeDidRecordWrite<T>(write: () => Promise<T>): Promise<T> {
+  const result = didRecordWrites.catch(() => undefined).then(write)
+  didRecordWrites = result.catch(() => undefined)
+  return result
+}
 
 export function publishDevelopmentSigningKey(
   agent: OpenId4VcAgent,
@@ -85,12 +90,50 @@ export function publishDevelopmentSigningKey(
 ): Promise<string | undefined> {
   if (!signingCertificate.development) return Promise.resolve(undefined)
 
-  const publication = didDocumentPublication
-    .catch(() => undefined)
-    .then(() => publishSigningKeyToDidDocument(agent, signingCertificate, role))
-  didDocumentPublication = publication.catch(() => undefined)
+  return serializeDidRecordWrite(() => publishSigningKeyToDidDocument(agent, signingCertificate, role))
+}
 
-  return publication
+export async function mapConfiguredSigningKey(
+  agent: OpenId4VcAgent,
+  signingCertificate: SigningCertificateHandle,
+  verificationMethodId: string,
+): Promise<void> {
+  if (signingCertificate.development) return
+
+  const did = agent.did
+  if (!did) throw new Error('configured signing key mapping requires an agent DID')
+
+  const didDocumentRelativeKeyId = verificationMethodId.startsWith(did)
+    ? verificationMethodId.slice(did.length)
+    : verificationMethodId
+  await serializeDidRecordWrite(() =>
+    ensureCreatedDidRecordKeyMapping(agent, did, didDocumentRelativeKeyId, signingCertificate.keyId),
+  )
+  await assertDidRecordResolvesSigningKey(agent, verificationMethodId, signingCertificate)
+}
+
+async function assertDidRecordResolvesSigningKey(
+  agent: OpenId4VcAgent,
+  verificationMethodId: string,
+  signingCertificate: SigningCertificateHandle,
+): Promise<void> {
+  let publicJwk: Kms.PublicJwk
+  try {
+    ;({ publicJwk } = await agent.dids.resolveVerificationMethodFromCreatedDidRecord(verificationMethodId))
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    throw new Error(
+      `the DID record of the agent does not carry ${verificationMethodId}, the method its published DID document binds to the configured signing key: ${reason}`,
+    )
+  }
+  if (
+    publicJwk.keyId !== signingCertificate.keyId ||
+    !publicJwk.equals(signingCertificate.certificate.publicJwk)
+  ) {
+    throw new Error(
+      `${verificationMethodId} on the DID record of the agent does not resolve to the configured signing key`,
+    )
+  }
 }
 
 async function publishSigningKeyToDidDocument(
@@ -178,7 +221,7 @@ async function ensureCreatedDidRecordKeyMapping(
   const agentContext = agent.context
   const didRepository = agentContext.dependencyManager.resolve(DidRepository)
   const didRecord = await didRepository.findCreatedDid(agentContext, did)
-  if (!didRecord) throw new Error('development signing key DID record was not found')
+  if (!didRecord) throw new Error('signing key DID record was not found')
 
   const keys = didRecord.keys ?? []
   if (
