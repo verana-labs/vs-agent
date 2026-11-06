@@ -333,20 +333,43 @@ describe('CertificateService', () => {
     expect(agent.didRepository.update).not.toHaveBeenCalled()
   })
 
-  it('maps a configured key to the method the operator published, without touching the DID document', async () => {
+  it.each([
+    'did:web:issuer.example#operator-key',
+    '#operator-key',
+  ])('maps a configured key to the published method %s, without touching the DID document', async methodId => {
     const agent = createAgent()
     agent.did = 'did:web:issuer.example'
     const handle = await loadSigningCertificate(
       agent,
       configuredSigning(fixtures.leaf, fixtures.intermediate),
     )
+    agent.dids.resolveVerificationMethodFromCreatedDidRecord.mockResolvedValue({
+      publicJwk: publicJwkWithKeyId(handle.certificate, 'fixture-leaf'),
+    })
 
-    await mapConfiguredSigningKey(agent, handle, 'did:web:issuer.example#operator-key')
+    await mapConfiguredSigningKey(agent, handle, methodId)
 
     expect(agent.dids.update).not.toHaveBeenCalled()
     expect(agent.didRecord.keys).toEqual([
       { didDocumentRelativeKeyId: '#operator-key', kmsKeyId: 'fixture-leaf' },
     ])
+    expect(agent.dids.resolveVerificationMethodFromCreatedDidRecord).toHaveBeenCalledWith(methodId)
+  })
+
+  it('refuses a configured key that the DID record of the agent resolves to another KMS key', async () => {
+    const agent = createAgent()
+    agent.did = 'did:web:issuer.example'
+    const handle = await loadSigningCertificate(
+      agent,
+      configuredSigning(fixtures.leaf, fixtures.intermediate),
+    )
+    agent.dids.resolveVerificationMethodFromCreatedDidRecord.mockResolvedValue({
+      publicJwk: publicJwkWithKeyId(handle.certificate, 'another-key'),
+    })
+
+    await expect(
+      mapConfiguredSigningKey(agent, handle, 'did:web:issuer.example#operator-key'),
+    ).rejects.toThrow('does not resolve to the configured signing key')
   })
 
   it('leaves a development key to its own DID publication', async () => {
@@ -591,7 +614,7 @@ function createAgent({
 
   const agent = {
     keys,
-    dids: { resolve: vi.fn(), update: vi.fn() },
+    dids: { resolve: vi.fn(), update: vi.fn(), resolveVerificationMethodFromCreatedDidRecord: vi.fn() },
     kms,
     genericRecords,
     x509,
@@ -605,6 +628,12 @@ function createAgent({
   return agent as unknown as typeof agent &
     Parameters<typeof loadSigningCertificate>[0] &
     Parameters<typeof publishDevelopmentSigningKey>[0]
+}
+
+function publicJwkWithKeyId(certificate: X509Certificate, keyId: string): Kms.PublicJwk {
+  const publicJwk = Kms.PublicJwk.fromUnknown(certificate.publicJwk.toJson())
+  publicJwk.keyId = keyId
+  return publicJwk
 }
 
 const DID_WEB = 'did:web:agent.example'

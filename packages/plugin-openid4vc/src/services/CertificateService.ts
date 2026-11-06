@@ -109,6 +109,31 @@ export async function mapConfiguredSigningKey(
   await serializeDidRecordWrite(() =>
     ensureCreatedDidRecordKeyMapping(agent, did, didDocumentRelativeKeyId, signingCertificate.keyId),
   )
+  await assertDidRecordResolvesSigningKey(agent, verificationMethodId, signingCertificate)
+}
+
+async function assertDidRecordResolvesSigningKey(
+  agent: OpenId4VcAgent,
+  verificationMethodId: string,
+  signingCertificate: SigningCertificateHandle,
+): Promise<void> {
+  let publicJwk: Kms.PublicJwk
+  try {
+    ;({ publicJwk } = await agent.dids.resolveVerificationMethodFromCreatedDidRecord(verificationMethodId))
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    throw new Error(
+      `the DID record of the agent does not carry ${verificationMethodId}, the method its published DID document binds to the configured signing key: ${reason}`,
+    )
+  }
+  if (
+    publicJwk.keyId !== signingCertificate.keyId ||
+    !publicJwk.equals(signingCertificate.certificate.publicJwk)
+  ) {
+    throw new Error(
+      `${verificationMethodId} on the DID record of the agent does not resolve to the configured signing key`,
+    )
+  }
 }
 
 async function publishSigningKeyToDidDocument(
