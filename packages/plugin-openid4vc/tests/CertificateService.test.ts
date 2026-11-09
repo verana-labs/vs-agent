@@ -353,7 +353,29 @@ describe('CertificateService', () => {
     expect(agent.didRecord.keys).toEqual([
       { didDocumentRelativeKeyId: '#operator-key', kmsKeyId: 'fixture-leaf' },
     ])
-    expect(agent.dids.resolveVerificationMethodFromCreatedDidRecord).toHaveBeenCalledWith(methodId)
+    expect(agent.dids.resolveVerificationMethodFromCreatedDidRecord).toHaveBeenCalledWith(
+      'did:web:issuer.example#operator-key',
+    )
+  })
+
+  it.each([
+    'did:web:issuer.example:acme#operator-key',
+    'did:web:other.example#operator-key',
+    'operator-key',
+  ])('refuses %s as outside the agent DID before writing the DID record', async methodId => {
+    const agent = createAgent()
+    agent.did = 'did:web:issuer.example'
+    const handle = await loadSigningCertificate(
+      agent,
+      configuredSigning(fixtures.leaf, fixtures.intermediate),
+    )
+
+    await expect(mapConfiguredSigningKey(agent, handle, methodId)).rejects.toThrow(
+      `${methodId} bound to the configured signing key is not a method of the agent DID did:web:issuer.example`,
+    )
+
+    expect(agent.didRepository.update).not.toHaveBeenCalled()
+    expect(agent.dids.resolveVerificationMethodFromCreatedDidRecord).not.toHaveBeenCalled()
   })
 
   it('refuses a configured key that the DID record of the agent resolves to another KMS key', async () => {

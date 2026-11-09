@@ -171,4 +171,12 @@ describe('in-process OpenID4VP request signed with the verifier DID', () => {
       startTestAgents({ ...(await createTestAgentsInput()), verifierDidRecordWithoutPublishedKey: true }),
     ).rejects.toThrow(`the DID record of the agent does not carry ${TEST_VERIFIER_DID}#key-1`)
   }, 60_000)
+
+  it('refuses to start when the published document binds the key under a method outside the agent DID', async () => {
+    const outsideMethodId = `${TEST_VERIFIER_DID}:acme#key-1`
+
+    await expect(resolveDidSignedRequest(outsideMethodId)).rejects.toThrow(
+      `${outsideMethodId} bound to the configured signing key is not a method of the agent DID ${TEST_VERIFIER_DID}`,
+    )
+  }, 60_000)
 })
