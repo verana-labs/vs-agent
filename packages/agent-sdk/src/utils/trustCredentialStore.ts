@@ -17,7 +17,7 @@ import {
 // No type definitions available for this library
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 //@ts-expect-error
-import { purposes } from '@digitalcredentials/jsonld-signatures'
+import { purposes } from 'jsonld-signatures'
 import type { DataIntegrityCredential } from '@credo-ts/didcomm'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
