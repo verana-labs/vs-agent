@@ -34,6 +34,7 @@ export function toPresentationDto(
     state: session.state,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
+    expiresAt: session.expiresAt,
     errorMessage: session.errorMessage,
     cryptographicVerified: session.cryptographicVerified,
     accepted: session.accepted,

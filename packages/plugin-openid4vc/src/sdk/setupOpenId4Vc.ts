@@ -15,6 +15,7 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import {
   CREDENTIAL_OFFER_EXPIRATION_SECONDS_DEFAULT,
   ISSUER_CAPABILITY_ID,
+  PRESENTATION_REQUEST_EXPIRATION_SECONDS_DEFAULT,
   STATUS_LIST_JWT_CONTENT_TYPE,
   STATUS_LIST_PATH,
 } from '../config'
@@ -80,7 +81,11 @@ export function setupOpenId4Vc(
         options.credentialOfferExpirationSeconds ?? CREDENTIAL_OFFER_EXPIRATION_SECONDS_DEFAULT,
       credentialRequestToCredentialMapper: input => getIssuerService().mapCredentialRequest(input),
     },
-    verifier: { baseUrl: `${options.publicApiBaseUrl}/oid4vp` },
+    verifier: {
+      baseUrl: `${options.publicApiBaseUrl}/oid4vp`,
+      authorizationRequestExpirationInSeconds:
+        options.presentationRequestExpirationSeconds ?? PRESENTATION_REQUEST_EXPIRATION_SECONDS_DEFAULT,
+    },
   }
 
   return {

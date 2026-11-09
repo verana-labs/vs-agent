@@ -20,6 +20,7 @@ export async function readOpenId4VcOptions(
   publicApiBaseUrl: string,
   verifiablePublicRegistries?: VerifiablePublicRegistries,
   credentialOfferExpirationSeconds?: string,
+  presentationRequestExpirationSeconds?: string,
 ): Promise<OpenId4VcOptionsResult> {
   const url = parseAbsoluteUrl(location)
   const name = url ? `${url.protocol}//${url.host}${url.pathname}` : location
@@ -33,7 +34,14 @@ export async function readOpenId4VcOptions(
         publicApiBaseUrl,
         credentialConfigurations: [],
         verifiablePublicRegistries,
-        credentialOfferExpirationSeconds: parseCredentialOfferExpiration(credentialOfferExpirationSeconds),
+        credentialOfferExpirationSeconds: parseLifetimeSeconds(
+          'OID4VC_CREDENTIAL_OFFER_EXPIRATION_SECONDS',
+          credentialOfferExpirationSeconds,
+        ),
+        presentationRequestExpirationSeconds: parseLifetimeSeconds(
+          'OID4VC_PRESENTATION_REQUEST_EXPIRATION_SECONDS',
+          presentationRequestExpirationSeconds,
+        ),
       },
       errors: [],
     }
@@ -42,12 +50,12 @@ export async function readOpenId4VcOptions(
   }
 }
 
-function parseCredentialOfferExpiration(value?: string): number | undefined {
+function parseLifetimeSeconds(variable: string, value?: string): number | undefined {
   if (value === undefined || value === '') return undefined
   const seconds = Number(value)
   if (!Number.isInteger(seconds) || seconds < OFFER_TTL_SECONDS_MIN || seconds > OFFER_TTL_SECONDS_MAX) {
     throw new Error(
-      `OID4VC_CREDENTIAL_OFFER_EXPIRATION_SECONDS must be an integer between ${OFFER_TTL_SECONDS_MIN} and ${OFFER_TTL_SECONDS_MAX}`,
+      `${variable} must be an integer between ${OFFER_TTL_SECONDS_MIN} and ${OFFER_TTL_SECONDS_MAX}`,
     )
   }
   return seconds

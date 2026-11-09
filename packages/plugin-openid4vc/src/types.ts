@@ -59,6 +59,7 @@ export interface OpenId4VcPluginOptions extends OpenId4VcConfigurationFile {
   publicApiBaseUrl: string
   credentialConfigurations: OpenId4VcCredentialConfiguration[]
   credentialOfferExpirationSeconds?: number
+  presentationRequestExpirationSeconds?: number
   /** The VPR the verifier resolves a presented issuer against; absent when the agent has no indexer. */
   verifiablePublicRegistries?: VerifiablePublicRegistries
 }

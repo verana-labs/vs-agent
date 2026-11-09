@@ -61,6 +61,7 @@ type VerifierApi = Pick<
 export interface OpenId4VcVerificationRequest {
   authorizationRequest: string
   verificationSessionId: string
+  expiresAt?: Date
 }
 
 export interface OpenId4VcVerificationSessionFilters {
@@ -98,6 +99,7 @@ export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
   state: OpenId4VcVerificationSessionState
   createdAt: Date
   updatedAt: Date
+  expiresAt?: Date
   errorMessage?: string
 }
 
@@ -181,6 +183,7 @@ export class VerifierService implements OnModuleInit {
     return {
       authorizationRequest,
       verificationSessionId: verificationSession.id,
+      expiresAt: verificationSession.expiresAt,
     }
   }
 
@@ -318,6 +321,7 @@ export class VerifierService implements OnModuleInit {
       state: session.state,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt ?? session.createdAt,
+      ...(session.expiresAt ? { expiresAt: session.expiresAt } : {}),
       ...(session.errorMessage ? { errorMessage: session.errorMessage } : {}),
       ...decision,
     }

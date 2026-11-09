@@ -60,6 +60,40 @@ describe('OpenID4VC configuration file', () => {
     ])
   })
 
+  it('passes the presentation request lifetime on to the plugin', async () => {
+    const { options, errors } = await readOpenId4VcOptions(
+      configPath,
+      publicApiBaseUrl,
+      undefined,
+      undefined,
+      '86400',
+    )
+
+    expect(errors).toEqual([])
+    expect(options?.presentationRequestExpirationSeconds).toBe(86400)
+  })
+
+  it('leaves the presentation request lifetime to the default when unset', async () => {
+    const { options } = await readOpenId4VcOptions(configPath, publicApiBaseUrl)
+
+    expect(options?.presentationRequestExpirationSeconds).toBeUndefined()
+  })
+
+  it.each(['abc', '59', '7776001', '90.5'])('refuses a presentation request lifetime of %s', async value => {
+    const { options, errors } = await readOpenId4VcOptions(
+      configPath,
+      publicApiBaseUrl,
+      undefined,
+      undefined,
+      value,
+    )
+
+    expect(options).toBeUndefined()
+    expect(errors).toEqual([
+      'OID4VC_PRESENTATION_REQUEST_EXPIRATION_SECONDS must be an integer between 60 and 7776000',
+    ])
+  })
+
   it('reads and validates the file and injects the trusted public API base URL', async () => {
     await expect(readOpenId4VcOptions(configPath, publicApiBaseUrl)).resolves.toEqual({
       options: readOptions(),
