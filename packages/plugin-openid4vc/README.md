@@ -121,7 +121,9 @@ the verifier). A peer verifier still has to pin the fingerprint that
 **Configured signing** (`signing.configured`): `certificateChain` (a non-self-signed leaf first,
 then the intermediates and the root) and the `privateJwk` P-256 key of the leaf. The leaf must
 carry the agent DID as a URI SAN. The agent never publishes a configured key; the operator
-publishes it under `assertionMethod` or `authentication` before startup. Keep the file out of
+publishes it under `assertionMethod` or `authentication` before startup. For the verifier, that
+method has to be under the agent DID and resolve on the DID record the agent stores, because
+`requestSigner: did` signs with it; otherwise the verifier refuses to start. Keep the file out of
 source control, logs and image layers.
 
 ### Development example
