@@ -103,20 +103,17 @@ export async function mapConfiguredSigningKey(
   const did = agent.did
   if (!did) throw new Error('configured signing key mapping requires an agent DID')
 
-  const verificationMethodUrl = verificationMethodId.startsWith('#')
-    ? `${did}${verificationMethodId}`
-    : verificationMethodId
-  if (tryParseDid(verificationMethodUrl)?.did !== did) {
+  if (tryParseDid(verificationMethodId)?.did !== did) {
     throw new Error(
       `the verification method ${verificationMethodId} bound to the configured signing key is not a method of the agent DID ${did}`,
     )
   }
 
-  const didDocumentRelativeKeyId = verificationMethodUrl.slice(did.length)
+  const didDocumentRelativeKeyId = verificationMethodId.slice(did.length)
   await serializeDidRecordWrite(() =>
     ensureCreatedDidRecordKeyMapping(agent, did, didDocumentRelativeKeyId, signingCertificate.keyId),
   )
-  await assertDidRecordResolvesSigningKey(agent, verificationMethodUrl, signingCertificate)
+  await assertDidRecordResolvesSigningKey(agent, verificationMethodId, signingCertificate)
 }
 
 async function assertDidRecordResolvesSigningKey(

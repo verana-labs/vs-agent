@@ -333,10 +333,7 @@ describe('CertificateService', () => {
     expect(agent.didRepository.update).not.toHaveBeenCalled()
   })
 
-  it.each([
-    'did:web:issuer.example#operator-key',
-    '#operator-key',
-  ])('maps a configured key to the published method %s, without touching the DID document', async methodId => {
+  it('maps a configured key to its published method, without touching the DID document', async () => {
     const agent = createAgent()
     agent.did = 'did:web:issuer.example'
     const handle = await loadSigningCertificate(
@@ -347,7 +344,7 @@ describe('CertificateService', () => {
       publicJwk: publicJwkWithKeyId(handle.certificate, 'fixture-leaf'),
     })
 
-    await mapConfiguredSigningKey(agent, handle, methodId)
+    await mapConfiguredSigningKey(agent, handle, 'did:web:issuer.example#operator-key')
 
     expect(agent.dids.update).not.toHaveBeenCalled()
     expect(agent.didRecord.keys).toEqual([
@@ -362,7 +359,8 @@ describe('CertificateService', () => {
     'did:web:issuer.example:acme#operator-key',
     'did:web:other.example#operator-key',
     'operator-key',
-  ])('refuses %s as outside the agent DID before writing the DID record', async methodId => {
+    '#operator-key',
+  ])('refuses %s as no absolute method of the agent DID before writing the DID record', async methodId => {
     const agent = createAgent()
     agent.did = 'did:web:issuer.example'
     const handle = await loadSigningCertificate(
