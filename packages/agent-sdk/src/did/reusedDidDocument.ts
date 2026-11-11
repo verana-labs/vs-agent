@@ -20,21 +20,46 @@ export function findSigningVerificationMethodId(didDocument: DidDocument): strin
 }
 
 /**
- * Lists the signing key, and only that key, under `authentication` and `assertionMethod`, as a
- * newly created DID does. A document written by v1 has the did:webvh update key under
- * `authentication`, so no resolver accepts a presentation whose proof purpose is `authentication`.
+ * Makes sure the signing key is under `authentication` and `assertionMethod`, and removes the
+ * did:webvh update keys from both. A document written by v1 has the update key, and not the
+ * signing key, under `authentication`, so no resolver accepts a presentation whose proof purpose
+ * is `authentication`. Every other key stays: the OpenID4VC keys live under these relations too.
+ * `updateKeys` are the `updateKeys` of the did:webvh log, as multibase public keys.
  * Returns whether the document changed.
  */
-export function alignSigningKeyRelations(didDocument: DidDocument): boolean {
+export function alignSigningKeyRelations(didDocument: DidDocument, updateKeys: string[] = []): boolean {
   const signingKeyId = findSigningVerificationMethodId(didDocument)
   if (!signingKeyId) return false
 
-  const aligned = (relation?: unknown[]) => relation?.length === 1 && relation[0] === signingKeyId
-  if (aligned(didDocument.authentication) && aligned(didDocument.assertionMethod)) return false
+  const updateKeyIds = (didDocument.verificationMethod ?? [])
+    .filter(
+      method =>
+        method.id !== signingKeyId &&
+        typeof method.publicKeyMultibase === 'string' &&
+        updateKeys.includes(method.publicKeyMultibase),
+    )
+    .map(method => method.id)
 
-  didDocument.authentication = [signingKeyId]
-  didDocument.assertionMethod = [signingKeyId]
-  return true
+  let changed = false
+  for (const relation of ['authentication', 'assertionMethod'] as const) {
+    const current = didDocument[relation] ?? []
+    const kept = current.filter(entry => typeof entry !== 'string' || !updateKeyIds.includes(entry))
+    const aligned = kept.includes(signingKeyId) ? kept : [signingKeyId, ...kept]
+    if (aligned.length === current.length && aligned.every((entry, index) => entry === current[index]))
+      continue
+    didDocument[relation] = aligned
+    changed = true
+  }
+  return changed
+}
+
+/** Every key a did:webvh log has authorized to update the DID, as multibase public keys. */
+export function didWebvhUpdateKeys(log: unknown): string[] {
+  if (!Array.isArray(log)) return []
+  const updateKeys = log.flatMap(
+    entry => (entry as { parameters?: { updateKeys?: unknown } })?.parameters?.updateKeys ?? [],
+  )
+  return [...new Set(updateKeys.filter((key): key is string => typeof key === 'string'))]
 }
 
 type PresentationEntries = Record<string, { verifiablePresentation?: { id?: string } } | undefined>

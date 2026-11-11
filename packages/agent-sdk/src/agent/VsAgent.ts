@@ -48,6 +48,7 @@ import { applyArtifactServices, artifactServicesMatch } from '../did/artifactSer
 import { getLegacyDidWeb } from '../did/legacyDidWeb'
 import {
   alignSigningKeyRelations,
+  didWebvhUpdateKeys,
   findSigningVerificationMethodId,
   removeUnservedLinkedVpServices,
 } from '../did/reusedDidDocument'
@@ -266,7 +267,10 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       // updating it only if one of the checks below finds a difference
       const didDocument = existingRecord.didDocument!
       // A document written by v1 keeps its key relations and Linked VP services, which no resolver accepts
-      const signingKeyRelationsChanged = alignSigningKeyRelations(didDocument)
+      const signingKeyRelationsChanged = alignSigningKeyRelations(
+        didDocument,
+        didWebvhUpdateKeys(existingRecord.metadata.get('log')),
+      )
       const removedLinkedVpServices = removeUnservedLinkedVpServices(didDocument, {
         publicApiBaseUrl: this.publicApiBaseUrl,
         vtc: existingRecord.metadata.get('_vt/vtc') ?? undefined,
@@ -320,7 +324,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         if (keyAgreementKey) await this.addDidKey(didDocument.id, keyAgreementKey)
         if (signingKeyRelationsChanged) {
           this.logger?.info(
-            `Signing key of ${didDocument.id} is now the only authentication and assertionMethod key`,
+            `Signing key of ${didDocument.id} is now under authentication and assertionMethod, without the did:webvh update key`,
           )
         }
         if (removedLinkedVpServices.length) {

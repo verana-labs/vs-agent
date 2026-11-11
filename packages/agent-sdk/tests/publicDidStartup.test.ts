@@ -8,6 +8,7 @@ import {
   DidRepository,
   Kms,
   LogLevel,
+  VerificationMethod,
 } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { ed25519 } from '@noble/curves/ed25519.js'
@@ -325,7 +326,23 @@ describe('public DID startup lifecycle', () => {
       expect(updateKey.id).not.toBe(signingKeyId)
       updateKey.type = 'Ed25519VerificationKey2020'
       const updateKeyId = updateKey.id
-      document.authentication = [updateKeyId]
+      // a key the OpenID4VC plugin publishes under these relations must survive the reconcile
+      const oid4vcKeyId = `${did}#openid4vc-development-verifier`
+      document.verificationMethod = [
+        ...document.verificationMethod!,
+        new VerificationMethod({
+          id: oid4vcKeyId,
+          controller: did,
+          type: 'JsonWebKey2020',
+          publicKeyJwk: {
+            kty: 'EC',
+            crv: 'P-256',
+            x: 'f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU',
+            y: 'x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0',
+          },
+        }),
+      ]
+      document.authentication = [updateKeyId, oid4vcKeyId]
       const didCommV1Service = (document.service ?? []).find(service => service.type === 'did-communication')
       ;(didCommV1Service as unknown as { recipientKeys: string[] }).recipientKeys = [updateKeyId]
       document.service = [
@@ -355,7 +372,7 @@ describe('public DID startup lifecycle', () => {
         assertionMethod?: string[]
         service?: { id: string; type: string; recipientKeys?: string[] }[]
       }
-      expect(doc.authentication).toEqual([signingKeyId])
+      expect(doc.authentication).toEqual([signingKeyId, oid4vcKeyId])
       expect(doc.assertionMethod).toEqual([signingKeyId])
       const linkedVpIds = (doc.service ?? [])
         .filter(service => service.type === 'LinkedVerifiablePresentation')
