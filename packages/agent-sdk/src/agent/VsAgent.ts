@@ -42,10 +42,15 @@ import { AnonCredsTrustService } from '../blockchain/AnonCredsTrustService'
 import { AuthorizationService } from '../blockchain/AuthorizationService'
 import { VeranaChainService } from '../blockchain/VeranaChainService'
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
-import { flushPendingTriggerResolvers } from '../blockchain/triggerResolver'
+import { flushPendingTriggerResolvers, scheduleTriggerResolverForOwnDid } from '../blockchain/triggerResolver'
 import { applyAdminApiServiceEntry } from '../did/adminApiService'
 import { applyArtifactServices, artifactServicesMatch } from '../did/artifactServices'
 import { getLegacyDidWeb } from '../did/legacyDidWeb'
+import {
+  alignSigningKeyRelations,
+  findSigningVerificationMethodId,
+  removeUnservedLinkedVpServices,
+} from '../did/reusedDidDocument'
 import { baseMessageEvents } from '../events/BaseMessageEvents'
 import { ParentConnectionModule } from '../connections/ParentConnectionModule'
 import { connectionEvents } from '../events/ConnectionEvents'
@@ -260,6 +265,14 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       // DID already exists: reconcile the stored document with the current agent parameters,
       // updating it only if one of the checks below finds a difference
       const didDocument = existingRecord.didDocument!
+      // A document written by v1 keeps its key relations and Linked VP services, which no resolver accepts
+      const signingKeyRelationsChanged = alignSigningKeyRelations(didDocument)
+      const removedLinkedVpServices = removeUnservedLinkedVpServices(didDocument, {
+        publicApiBaseUrl: this.publicApiBaseUrl,
+        vtc: existingRecord.metadata.get('_vt/vtc') ?? undefined,
+        jsc: existingRecord.metadata.get('_vt/jsc') ?? undefined,
+      })
+      const publicationChanged = signingKeyRelationsChanged || removedLinkedVpServices.length > 0
       const ed25519VerificationMethodId = this.findEd25519VerificationMethodId(didDocument)
       const keyAgreementKey = await this.replaceDerivedKeyAgreementKey(existingRecord, didDocument)
       const servicesChanged =
@@ -275,7 +288,13 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         method: artifactMethod,
         publicApiBaseUrl: this.publicApiBaseUrl,
       })
-      if (keyAgreementKey || servicesChanged || adminEntryChanged || artifactServicesChanged) {
+      if (
+        keyAgreementKey ||
+        servicesChanged ||
+        adminEntryChanged ||
+        artifactServicesChanged ||
+        publicationChanged
+      ) {
         if (servicesChanged && ed25519VerificationMethodId) {
           didDocument.service = [
             ...(didDocument.service
@@ -299,11 +318,28 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
         }
         // Mapped only once the document publishes the key, so an interrupted update is retried on the next start
         if (keyAgreementKey) await this.addDidKey(didDocument.id, keyAgreementKey)
+        if (signingKeyRelationsChanged) {
+          this.logger?.info(
+            `Signing key of ${didDocument.id} is now the only authentication and assertionMethod key`,
+          )
+        }
+        if (removedLinkedVpServices.length) {
+          this.logger?.info(
+            `Removed the Linked VP services of ${didDocument.id} that the agent does not serve: ${removedLinkedVpServices.join(', ')}`,
+          )
+        }
         this.logger?.debug('Public did record updated')
       } else {
         this.logger?.debug('Existing DID record found. No updates')
       }
       this.did = existingRecord.did
+      // [VSA-VT-LVP-5]: resolvers read the reconciled document only once they are told it changed
+      if (publicationChanged) {
+        scheduleTriggerResolverForOwnDid(
+          this as VsAgent,
+          'the reused DID Document was brought to the current layout',
+        )
+      }
       await this.ensureSharedPublicDidInvitation()
     }
   }
@@ -332,8 +368,12 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     })
   }
 
-  // Prefer Ed25519VerificationKey2020 over Multikey: webvh's update Multikey is not ours to use.
+  // The signing key comes first: a v1 did:webvh document types the update key as
+  // Ed25519VerificationKey2020 too, and lists it before the key of the agent. Then prefer
+  // Ed25519VerificationKey2020 over Multikey: webvh's update Multikey is not ours to use.
   private findEd25519VerificationMethodId(didDocument: DidDocument): string | undefined {
+    const signingKeyId = findSigningVerificationMethodId(didDocument)
+    if (signingKeyId) return signingKeyId
     const vms = didDocument.verificationMethod ?? []
     const preferred = vms.find(vm => vm.type === 'Ed25519VerificationKey2020')
     if (preferred) return preferred.id
