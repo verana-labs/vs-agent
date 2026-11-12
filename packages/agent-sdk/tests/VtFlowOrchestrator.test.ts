@@ -1520,7 +1520,9 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       issuerParticipantId: 93,
     }
     const recordIssuance = vi.fn(async () => record)
+    const logger = { error: vi.fn() }
     const agent = {
+      config: { logger },
       dependencyManager: { resolve: () => ({ findById: async () => record, recordIssuance }) },
       indexer: {
         getParticipant: async () => ({ schema_id: 22 }),
@@ -1528,7 +1530,7 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       },
       veranaChain: chain,
     }
-    return { orchestrator: new VtFlowOrchestrator(agent as never), chain, record, recordIssuance }
+    return { orchestrator: new VtFlowOrchestrator(agent as never), chain, record, recordIssuance, logger }
   }
 
   it('returns the anchoring transaction once it is included', async () => {
@@ -1628,5 +1630,20 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       reason: 'TX_FAILED',
       error: 'digest exists',
     })
+  })
+
+  it('logs one error line that names the flow, the session and the cause of a failed anchoring', async () => {
+    const broke = makeAnchorAgent('100')
+    await broke.orchestrator.onCredentialIssued('rec-v', signed)
+
+    expect(broke.logger.error).toHaveBeenCalledTimes(1)
+    const [line] = broke.logger.error.mock.calls[0] as unknown as [string]
+    expect(line).toContain('rec-v')
+    expect(line).toContain('sess-1')
+    expect(line).toContain('INSUFFICIENT_FUNDS_AGENT: the agent account holds 100uvna')
+
+    const included = makeAnchorAgent()
+    await included.orchestrator.onCredentialIssued('rec-v', signed)
+    expect(included.logger.error).not.toHaveBeenCalled()
   })
 })

@@ -3,9 +3,10 @@ import {
   BasicAllowance,
   PeriodicAllowance,
 } from 'cosmjs-types/cosmos/feegrant/v1beta1/feegrant'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { VeranaChainService, feeAllowanceOf } from '../src/blockchain/VeranaChainService'
+import { preflightFee } from '../src/blockchain/feePreflight'
 
 const NOW = Date.parse('2026-09-23T12:00:00Z')
 const at = (iso: string) => ({ seconds: BigInt(Date.parse(iso) / 1000), nanos: 0 })
@@ -165,5 +166,89 @@ describe('VeranaChainService.broadcastMsg', () => {
       reason: 'FEEGRANT_EXPIRED',
     })
     expect(signAndBroadcast).not.toHaveBeenCalled()
+  })
+})
+
+describe('preflightFee', () => {
+  const fee = { amount: [{ denom: 'uvna', amount: '500' }], gas: '200000' }
+  const message = { typeUrl: '/verana.pp.v1.MsgTriggerResolver', value: {} }
+  const httpStatus = (status: number) =>
+    Object.assign(new Error(`Bad status on response: ${status}`), { cause: { status, body: '' } })
+  const socket = (code: string) =>
+    Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error(code), { code }) })
+
+  function chainWith() {
+    return {
+      feeAllowance: vi.fn(async () => ({ unlimited: true, remaining: BigInt(0) })),
+      estimateFee: vi.fn(async () => fee),
+      getAccountBalance: vi.fn(async () => ({ denom: 'uvna', amount: '10000' })),
+      getBalance: vi.fn(async () => ({ denom: 'uvna', amount: '10000' })),
+    }
+  }
+
+  async function run(chain: ReturnType<typeof chainWith>, granter?: string) {
+    const result = preflightFee(chain as never, message, granter)
+    await vi.runAllTimersAsync()
+    return result
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it.each([
+    ['feeAllowance', 'verana1corp'],
+    ['estimateFee', undefined],
+    ['getAccountBalance', 'verana1corp'],
+    ['getBalance', undefined],
+  ] as const)('retries %s after an HTTP 502 and returns the fee', async (read, granter) => {
+    const chain = chainWith()
+    chain[read].mockRejectedValueOnce(httpStatus(502))
+
+    await expect(run(chain, granter)).resolves.toEqual({ fee })
+    expect(chain[read]).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops after 4 attempts that wait 0.5 s, 1 s and 2 s, and reports PREFLIGHT_ERROR', async () => {
+    const chain = chainWith()
+    chain.estimateFee.mockRejectedValue(httpStatus(503))
+
+    const result = preflightFee(chain as never, message, undefined)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(chain.estimateFee).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(chain.estimateFee).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(chain.estimateFee).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(2000)
+
+    await expect(result).resolves.toEqual({
+      reason: 'PREFLIGHT_ERROR',
+      error: 'Bad status on response: 503',
+    })
+    expect(chain.estimateFee).toHaveBeenCalledTimes(4)
+  })
+
+  it('retries a connection reset', async () => {
+    const chain = chainWith()
+    chain.getBalance.mockRejectedValueOnce(socket('ECONNRESET'))
+
+    await expect(run(chain)).resolves.toEqual({ fee })
+    expect(chain.getBalance).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['an HTTP 4xx', httpStatus(429)],
+    ['a chain rejection with no cause', new Error('Query failed with (18): account sequence mismatch')],
+    ['a timeout of the response headers', socket('UND_ERR_HEADERS_TIMEOUT')],
+  ])('does not retry %s', async (_case, error) => {
+    const chain = chainWith()
+    chain.estimateFee.mockRejectedValue(error)
+
+    await expect(run(chain)).resolves.toEqual({ reason: 'PREFLIGHT_ERROR', error: error.message })
+    expect(chain.estimateFee).toHaveBeenCalledTimes(1)
   })
 })
