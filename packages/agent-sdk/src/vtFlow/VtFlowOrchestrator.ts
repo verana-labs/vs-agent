@@ -999,10 +999,13 @@ export class VtFlowOrchestrator {
       walletAgentParticipantId: Number(record.walletAgentParticipantId ?? 0) || 0,
       digest,
     })
-    return {
-      credentialDigest: digest,
-      issuance: { tx: await this.anchor(record, message, record.issuerParticipantId) },
+    const tx = await this.anchor(record, message, record.issuerParticipantId)
+    if (tx.status === VtFlowTxStatus.Failed) {
+      this.agent.config.logger.error(
+        `[vt-flow] the anchoring of the credential of flow ${record.id} (session ${record.participantSessionId}) failed, credential not delivered: ${tx.reason}: ${tx.error}`,
+      )
     }
+    return { credentialDigest: digest, issuance: { tx } }
   }
 
   async verifyOfferedCredential(vtFlowRecordId: string): Promise<void> {

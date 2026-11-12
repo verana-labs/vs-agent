@@ -15,6 +15,7 @@ import {
   VeranaChainService,
   VeranaIndexerService,
   readEcsClaimsFromEnv,
+  sendPendingRenewal,
   VsAgentWsInboundTransport,
   VtFlowOrchestrator,
   type VerifiablePublicRegistries,
@@ -152,6 +153,7 @@ export const setupAgent = async ({
             } catch (error) {
               logger.error(`[vt-flow] onCompleted failed: ${(error as Error).message}`)
             }
+            await sendPendingRenewal(agent, record)
           },
           onCredentialRevoked: async ({ record }) => {
             if (!orchestrator) return
