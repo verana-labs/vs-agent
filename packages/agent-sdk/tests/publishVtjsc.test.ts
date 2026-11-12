@@ -559,6 +559,19 @@ describe('self-issued ECS credentials', () => {
     expect(rebindEcsCredentialSchema).not.toHaveBeenCalled()
   })
 
+  it('does not self-issue a Badge or a UserAgent credential', async () => {
+    const agent = chainAgent([]) as { config: { logger: ReturnType<typeof makeLogger> } }
+    const indexer = indexerWithIssuerOn([
+      { id: 8, title: 'BadgeCredential' },
+      { id: 9, title: 'UserAgentCredential' },
+    ])
+
+    await reconcileVtjscPublications(agent as never, indexer as never, ecsClaims as never)
+
+    expect(rebindEcsCredentialSchema).not.toHaveBeenCalled()
+    expect(agent.config.logger.error).not.toHaveBeenCalled()
+  })
+
   it('skips an entry whose vs_operator is not the agent account', async () => {
     const agent = chainAgent([])
     const indexer = makeIndexer({
