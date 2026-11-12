@@ -1,6 +1,10 @@
 import type { BaseAgentModules, VsAgent } from '../agent/VsAgent'
 import type { AnonCredsProof } from '@credo-ts/anoncreds'
-import type { DidCommConnectionRecord, DidCommProofExchangeRecord } from '@credo-ts/didcomm'
+import type {
+  DidCommConnectionRecord,
+  DidCommProofExchangeRecord,
+  DidCommProofStateChangedEvent,
+} from '@credo-ts/didcomm'
 
 import { BaseLogger, CredoError } from '@credo-ts/core'
 import {
@@ -12,6 +16,7 @@ import {
   DidCommMessageSender,
   DidCommPresentationV2Message,
   DidCommPresentationV2ProblemReportMessage,
+  DidCommProofEventTypes,
   DidCommProofRole,
   DidCommProofsModuleConfig,
   DidCommProofState,
@@ -32,7 +37,9 @@ import {
   AnonCredsTrustErrorReason,
   AnonCredsTrustProblemCode,
   AUTO_ACCEPT_PRESENTATION_METADATA,
+  PRESENTED_CREDENTIALS_METADATA,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
+  type PresentedCredential,
   type RequestedCredentialSchemas,
 } from '../blockchain/AnonCredsTrustService'
 import { ParticipantRole } from '../blockchain/types'
@@ -312,6 +319,7 @@ async function applyAnonCredsTrustDecision(
   }
 
   const issuersByCredentialSchema = new Map<number, string[]>()
+  const presentedCredentials: PresentedCredential[] = []
   const unaccredited: string[] = []
   const unchecked: string[] = []
 
@@ -343,6 +351,15 @@ async function applyAnonCredsTrustDecision(
       const issuers = issuersByCredentialSchema.get(derived.credentialSchemaId) ?? []
       issuers.push(derived.issuerId)
       issuersByCredentialSchema.set(derived.credentialSchemaId, issuers)
+
+      presentedCredentials.push({
+        group,
+        credentialDefinitionId,
+        issuerDid: derived.issuerId,
+        credentialSchemaId: derived.credentialSchemaId,
+        ecosystemDid: derived.ecosystemDid,
+        jsonSchemaCredentialId: derived.jsonSchemaCredentialId,
+      })
     } catch (error) {
       const cannotCheck =
         !(error instanceof AnonCredsTrustError) || error.reason === AnonCredsTrustErrorReason.Unavailable
@@ -370,7 +387,20 @@ async function applyAnonCredsTrustDecision(
     )
   }
 
-  if (unaccredited.length === 0 && unchecked.length === 0) return false
+  if (unaccredited.length === 0 && unchecked.length === 0) {
+    // The record keeps what the agent verified, so a read resolves nothing again. Credo emitted
+    // the change to `presentation-received` before this decision; the Events API waits for this
+    // emission, which carries the credentials, per [VSA-VTI-FLOW-VERIFY-AC-7]
+    record.metadata.set(PRESENTED_CREDENTIALS_METADATA, presentedCredentials)
+    await agent.didcomm.proofs.update(record)
+
+    agent.events.emit<DidCommProofStateChangedEvent>(agent.context, {
+      type: DidCommProofEventTypes.ProofStateChanged,
+      payload: { proofRecord: record.clone(), previousState: DidCommProofState.RequestSent },
+    })
+
+    return false
+  }
 
   const code =
     unaccredited.length > 0

@@ -224,6 +224,54 @@ describe('Events API delivery', () => {
     })
   })
 
+  it('waits for the trust decision before it delivers a presentation-received change', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    const received = {
+      id: 'proof-1',
+      state: 'presentation-received',
+      role: 'verifier',
+      isVerified: true,
+      createdAt: new Date(),
+    }
+    const presented = {
+      group: 'employee',
+      credentialDefinitionId: 'did:webvh:issuer-a/resources/cred-def-a',
+      issuerDid: 'did:webvh:issuer-a',
+      credentialSchemaId: 12,
+      ecosystemDid: 'did:webvh:ecosystem',
+      jsonSchemaCredentialId: 'https://ecosystem.example/vt/schemas-employee-jsc.json',
+    }
+
+    // The change that Credo emits, before the trust decision
+    await emit(DidCommProofEventTypes.ProofStateChanged, {
+      proofRecord: { ...received, metadata: { get: () => null } },
+      previousState: 'request-sent',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    // The change that the trust decision emits, with the credentials it recorded
+    emit(DidCommProofEventTypes.ProofStateChanged, {
+      proofRecord: {
+        ...received,
+        metadata: {
+          get: (key: string) => (key === '_2060/presentedCredentials' ? [presented] : null),
+        },
+      },
+      previousState: 'request-sent',
+    })
+
+    const { body } = await delivered()
+    expect(body.data).toMatchObject({
+      state: 'presentation-received',
+      verified: true,
+      previousState: 'request-sent',
+      credentials: [{ issuerDid: 'did:webvh:issuer-a', credentialSchemaId: 12, unrevealed: [] }],
+    })
+    expect(body.data.credentials[0]).not.toHaveProperty('group')
+  })
+
   it('logs a record that cannot be mapped instead of rejecting the listener', async () => {
     const { agent, emit } = fakeAgent()
     agent.didcomm.proofs.getFormatData.mockRejectedValueOnce(new Error('record deleted'))

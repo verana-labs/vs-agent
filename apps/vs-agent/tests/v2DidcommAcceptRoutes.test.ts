@@ -455,6 +455,22 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const waiting = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
     expect(waiting.body.verified).toBe(true)
 
+    // The record names the issuer that the trust decision checked, from the proof itself.
+    expect(waiting.body.credentials).toEqual([
+      {
+        credentialDefinitionId,
+        issuerDid: faberAgent.did,
+        credentialSchemaId: expect.any(Number),
+        ecosystemDid: faberAgent.did,
+        jsonSchemaCredentialId: JSON_SCHEMA_CREDENTIAL_ID,
+        claims: expect.arrayContaining([
+          { name: 'name', value: 'OpenAI Research' },
+          { name: 'countryCode', value: 'US' },
+        ]),
+        unrevealed: [],
+      },
+    ])
+
     // Verifier: the exchange completes.
     const acknowledged = await faber().post(`/v2/didcomm/presentations/${faberProofId}/accept-presentation`)
     expect(acknowledged.body.error ?? acknowledged.status).toBe(200)
@@ -662,6 +678,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
       expect(abandoned.body.verified).toBe(false)
+      expect(abandoned.body.credentials).toEqual([])
       expect(abandoned.body.errorMessage).toContain('e.p.issuer-not-authorized')
 
       // The acknowledgement waits for the trust decision, so the peer gets the report instead.

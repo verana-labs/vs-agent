@@ -284,13 +284,32 @@ export interface ListPresentationsQuery extends PaginationQuery {
   state?: ProofState
 }
 
+/** What the agent verified of the credential that answers one entry of `requestedCredentials`. */
+export interface PresentedCredential {
+  credentialDefinitionId: string
+  /** The `issuerId` of the credential definition, which holds an active ISSUER `Participant`. */
+  issuerDid: string
+  credentialSchemaId: number
+  ecosystemDid: string
+  jsonSchemaCredentialId: string
+  claims: Claim[]
+  /** The requested attributes that the holder did not reveal. The proof verifies without them. */
+  unrevealed: string[]
+}
+
 export interface PresentationRecord {
   proofExchangeId: string
   state: ProofState
   role: ProofRole
   connectionId?: string
   requestedCredentials: RequestedCredential[]
+  /** Every revealed claim, in one list. It does not identify the credential of a claim. */
   claims: Claim[]
+  /**
+   * One entry for each entry of `requestedCredentials`, in the same order. Empty when the agent is
+   * the prover, before the trust decision succeeds, and when it fails.
+   */
+  credentials: PresentedCredential[]
   verified: boolean
   threadId?: string
   errorMessage?: string

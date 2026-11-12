@@ -22,6 +22,12 @@ export const REQUESTED_CREDENTIAL_SCHEMAS_METADATA = '_2060/requestedCredentialS
 
 export const AUTO_ACCEPT_PRESENTATION_METADATA = '_2060/autoAcceptPresentation'
 
+/**
+ * The credentials that the trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] accepted, one per requested
+ * group. The agent writes it when the decision succeeds, so its presence shows that the decision ran.
+ */
+export const PRESENTED_CREDENTIALS_METADATA = '_2060/presentedCredentials'
+
 export enum AnonCredsTrustProblemCode {
   IssuerNotAuthorized = 'e.p.issuer-not-authorized',
   TrustResolutionUnavailable = 'e.p.trust-resolution-unavailable',
@@ -59,6 +65,13 @@ export type RequestedCredentialSchema = Pick<
 >
 
 export type RequestedCredentialSchemas = Record<string, RequestedCredentialSchema>
+
+/** What the agent verified of the credential that answers one requested group. */
+export interface PresentedCredential extends RequestedCredentialSchema {
+  group: string
+  credentialDefinitionId: string
+  issuerDid: string
+}
 
 export function toRequestedCredentialSchema({
   credentialSchemaId,

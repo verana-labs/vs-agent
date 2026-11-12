@@ -31,6 +31,7 @@ import {
 import { resolveV2FlowRecord } from '../controllers/admin/v2/vt/VtFlowsService'
 
 import {
+  awaitsTrustDecision,
   toBasicMessageDto,
   toConnectionDto,
   toCredentialExchangeDto,
@@ -97,13 +98,16 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
       ),
   )
 
-  agent.events.on<DidCommProofStateChangedEvent>(DidCommProofEventTypes.ProofStateChanged, ({ payload }) =>
-    stateUpdated(
+  agent.events.on<DidCommProofStateChangedEvent>(DidCommProofEventTypes.ProofStateChanged, ({ payload }) => {
+    // The trust decision emits this change again once it succeeds, with the presented credentials
+    if (awaitsTrustDecision(payload.proofRecord)) return
+
+    return stateUpdated(
       EventType.PresentationStateUpdated,
       toPresentationDto(agent, payload.proofRecord),
       payload.previousState,
-    ),
-  )
+    )
+  })
 
   agent.events.on<DidCommCredentialStateChangedEvent>(
     DidCommCredentialEventTypes.DidCommCredentialStateChanged,

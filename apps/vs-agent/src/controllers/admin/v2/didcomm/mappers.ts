@@ -5,11 +5,21 @@ import type {
   DidCommCredentialExchangeRecord,
   DidCommProofExchangeRecord,
 } from '@credo-ts/didcomm'
-import type { BaseAgentModules, InvitationRecord, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type {
+  BaseAgentModules,
+  InvitationRecord,
+  PresentedCredential,
+  VsAgent,
+} from '@verana-labs/vs-agent-sdk'
 
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
+import { DidCommProofRole, DidCommProofState } from '@credo-ts/didcomm'
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
-import { INVITATION_ID_TAG, PARENT_CONNECTION_TAG } from '@verana-labs/vs-agent-sdk'
+import {
+  INVITATION_ID_TAG,
+  PARENT_CONNECTION_TAG,
+  PRESENTED_CREDENTIALS_METADATA,
+} from '@verana-labs/vs-agent-sdk'
 
 import {
   BasicMessageRecordDto,
@@ -17,6 +27,7 @@ import {
   CredentialExchangeRecordDto,
   InvitationRecordDto,
   PresentationRecordDto,
+  PresentedCredentialDto,
 } from './dto'
 
 export const REQUESTED_CREDENTIALS_METADATA = '_2060/requestedCredentials'
@@ -70,6 +81,24 @@ export function toInvitationDto(record: InvitationRecord): InvitationRecordDto {
   }
 }
 
+function presentedCredentialsOf(record: DidCommProofExchangeRecord): PresentedCredential[] | null {
+  if (record.role !== DidCommProofRole.Verifier) return null
+  return record.metadata.get(PRESENTED_CREDENTIALS_METADATA) as PresentedCredential[] | null
+}
+
+/**
+ * Credo sets `presentation-received` before the trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] runs.
+ * Until the decision records the presented credentials, the record is not `verified` and the
+ * Events API does not report the state change.
+ */
+export function awaitsTrustDecision(record: DidCommProofExchangeRecord): boolean {
+  return (
+    record.role === DidCommProofRole.Verifier &&
+    record.state === DidCommProofState.PresentationReceived &&
+    !presentedCredentialsOf(record)
+  )
+}
+
 export async function toPresentationDto(
   agent: VsAgent<BaseAgentModules>,
   record: DidCommProofExchangeRecord,
@@ -89,6 +118,31 @@ export async function toPresentationDto(
     }
   }
 
+  // The trust decision recorded the identity of each credential. The claims stay in the proof, and
+  // the request gives the attribute names, so a read resolves nothing.
+  const requestedAttributes = formatData.request?.anoncreds?.requested_attributes ?? {}
+  const credentials: PresentedCredentialDto[] = (presentedCredentialsOf(record) ?? []).map(
+    ({ group, ...identity }) => {
+      const requested = requestedAttributes[group]
+      const names = requested?.names ?? (requested?.name ? [requested.name] : [])
+
+      const revealed = new Map<string, string>()
+      for (const [name, value] of Object.entries(
+        proof?.requested_proof.revealed_attr_groups?.[group]?.values ?? {},
+      )) {
+        revealed.set(name, value.raw)
+      }
+      const single = proof?.requested_proof.revealed_attrs?.[group]
+      if (single && requested?.name) revealed.set(requested.name, single.raw)
+
+      return {
+        ...identity,
+        claims: [...revealed].map(([name, value]) => new Claim({ name, value })),
+        unrevealed: names.filter(name => !revealed.has(name)),
+      }
+    },
+  )
+
   return {
     proofExchangeId: record.id,
     state: record.state,
@@ -97,7 +151,8 @@ export async function toPresentationDto(
     requestedCredentials:
       (record.metadata.get(REQUESTED_CREDENTIALS_METADATA) as RequestedCredential[] | null) ?? [],
     claims,
-    verified: record.isVerified ?? false,
+    credentials,
+    verified: (record.isVerified ?? false) && !awaitsTrustDecision(record),
     threadId: record.threadId,
     errorMessage: record.errorMessage,
     createdAt: record.createdAt,

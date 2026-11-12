@@ -457,6 +457,137 @@ describe('v2 didcomm presentation routes', () => {
       })
     })
 
+    describe('credentials', () => {
+      const employee = {
+        group: 'employee',
+        credentialDefinitionId: 'did:webvh:issuer-a/resources/cred-def-a',
+        issuerDid: 'did:webvh:issuer-a',
+        credentialSchemaId: 12,
+        ecosystemDid: 'did:webvh:ecosystem',
+        jsonSchemaCredentialId: 'https://ecosystem.example/vt/schemas-employee-jsc.json',
+      }
+      const member = {
+        group: 'member',
+        credentialDefinitionId: 'did:webvh:issuer-b/resources/cred-def-b',
+        issuerDid: 'did:webvh:issuer-b',
+        credentialSchemaId: 15,
+        ecosystemDid: 'did:webvh:ecosystem',
+        jsonSchemaCredentialId: 'https://ecosystem.example/vt/schemas-member-jsc.json',
+      }
+
+      const twoCredentials = {
+        request: {
+          anoncreds: {
+            requested_attributes: {
+              employee: { names: ['name'] },
+              member: { names: ['name', 'memberSince'] },
+            },
+          },
+        },
+        presentation: {
+          anoncreds: {
+            requested_proof: {
+              revealed_attr_groups: {
+                employee: { sub_proof_index: 0, values: { name: { raw: 'Alice' } } },
+                member: { sub_proof_index: 1, values: { name: { raw: 'Alice B.' } } },
+              },
+            },
+          },
+        },
+      }
+
+      it('gives each requested credential its own issuer and its own claims, and resolves nothing', async () => {
+        proofs.findById.mockResolvedValue(
+          proofRecord('p-1', '2026-01-01T00:00:00.000Z', {
+            state: 'presentation-received',
+            isVerified: true,
+            metadata: metadata({ '_2060/presentedCredentials': [employee, member] }),
+          }),
+        )
+        proofs.getFormatData.mockResolvedValue(twoCredentials)
+        anonCredsTrust.deriveCredentialSchema.mockClear()
+
+        const response = await request(app.getHttpServer()).get('/v2/didcomm/presentations/p-1')
+
+        const { group: _employeeGroup, ...employeeIdentity } = employee
+        const { group: _memberGroup, ...memberIdentity } = member
+        expect(response.body.verified).toBe(true)
+        expect(response.body.credentials).toEqual([
+          { ...employeeIdentity, claims: [{ name: 'name', value: 'Alice' }], unrevealed: [] },
+          { ...memberIdentity, claims: [{ name: 'name', value: 'Alice B.' }], unrevealed: ['memberSince'] },
+        ])
+        expect(anonCredsTrust.deriveCredentialSchema).not.toHaveBeenCalled()
+      })
+
+      it('lists every attribute of a group that the holder answers without a reveal', async () => {
+        proofs.findById.mockResolvedValue(
+          proofRecord('p-1', '2026-01-01T00:00:00.000Z', {
+            state: 'done',
+            isVerified: true,
+            metadata: metadata({ '_2060/presentedCredentials': [member] }),
+          }),
+        )
+        proofs.getFormatData.mockResolvedValue({
+          request: twoCredentials.request,
+          presentation: {
+            anoncreds: { requested_proof: { unrevealed_attrs: { member: { sub_proof_index: 0 } } } },
+          },
+        })
+
+        const response = await request(app.getHttpServer()).get('/v2/didcomm/presentations/p-1')
+
+        expect(response.body.credentials).toMatchObject([
+          { issuerDid: 'did:webvh:issuer-b', claims: [], unrevealed: ['name', 'memberSince'] },
+        ])
+      })
+
+      it('is not verified, and has no entry, while the trust decision has not completed', async () => {
+        proofs.findById.mockResolvedValue(
+          proofRecord('p-1', '2026-01-01T00:00:00.000Z', {
+            state: 'presentation-received',
+            isVerified: true,
+          }),
+        )
+        proofs.getFormatData.mockResolvedValue(twoCredentials)
+
+        const response = await request(app.getHttpServer()).get('/v2/didcomm/presentations/p-1')
+
+        expect(response.body.verified).toBe(false)
+        expect(response.body.credentials).toEqual([])
+      })
+
+      it('has no entry for an abandoned presentation', async () => {
+        proofs.findById.mockResolvedValue(
+          proofRecord('p-1', '2026-01-01T00:00:00.000Z', {
+            state: 'abandoned',
+            isVerified: false,
+            errorMessage: 'e.p.issuer-not-authorized: did:webvh:issuer-c holds no active ISSUER Participant',
+          }),
+        )
+        proofs.getFormatData.mockResolvedValue(twoCredentials)
+
+        const response = await request(app.getHttpServer()).get('/v2/didcomm/presentations/p-1')
+
+        expect(response.body.verified).toBe(false)
+        expect(response.body.credentials).toEqual([])
+      })
+
+      it('has no entry when the agent is the prover', async () => {
+        proofs.findById.mockResolvedValue(
+          proofRecord('p-1', '2026-01-01T00:00:00.000Z', {
+            state: 'done',
+            role: 'prover',
+            metadata: metadata({ '_2060/presentedCredentials': [employee] }),
+          }),
+        )
+        proofs.getFormatData.mockResolvedValue(twoCredentials)
+
+        const response = await request(app.getHttpServer()).get('/v2/didcomm/presentations/p-1')
+
+        expect(response.body.credentials).toEqual([])
+      })
+    })
+
     it('reports an unknown presentation as UNKNOWN_ID', async () => {
       proofs.findById.mockResolvedValue(null)
 
