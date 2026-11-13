@@ -49,9 +49,11 @@ export interface VsAgentPresentationStateUpdatedEvent extends BaseEvent {
   }
 }
 /**
- * The trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] succeeded for a received presentation. Credo
+ * The trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] completed for a received presentation. Credo
  * emits the change to `presentation-received` before the decision runs, so a listener that needs
- * the verified credentials of the record waits for this event.
+ * its result waits for this event. On a success the record holds the verified credentials. On a
+ * failure it holds `isVerified` `false` and the cause in `errorMessage`, and the change to
+ * `abandoned` follows.
  */
 export interface VsAgentPresentationTrustDecidedEvent extends BaseEvent {
   type: typeof VsAgentEventTypes.PresentationTrustDecided

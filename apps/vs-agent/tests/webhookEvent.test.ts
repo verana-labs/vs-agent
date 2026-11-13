@@ -276,6 +276,34 @@ describe('Events API delivery', () => {
     expect(body.data.credentials[0]).not.toHaveProperty('group')
   })
 
+  it('delivers presentation-received with the cause when the trust decision fails', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit('vs-agent-presentation-trust-decided', {
+      proofRecord: {
+        id: 'proof-1',
+        state: 'presentation-received',
+        role: 'verifier',
+        isVerified: false,
+        errorMessage: 'e.p.issuer-not-authorized: did:webvh:issuer-c holds no active ISSUER Participant',
+        createdAt: new Date(),
+        metadata: { get: () => null },
+      },
+      previousState: 'request-sent',
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.presentations.state-updated')
+    expect(body.data).toMatchObject({
+      state: 'presentation-received',
+      verified: false,
+      credentials: [],
+      errorMessage: 'e.p.issuer-not-authorized: did:webvh:issuer-c holds no active ISSUER Participant',
+      previousState: 'request-sent',
+    })
+  })
+
   it('logs a record that cannot be mapped instead of rejecting the listener', async () => {
     const { agent, emit } = fakeAgent()
     agent.didcomm.proofs.getFormatData.mockRejectedValueOnce(new Error('record deleted'))

@@ -102,7 +102,7 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
 
   agent.events.on<DidCommProofStateChangedEvent>(DidCommProofEventTypes.ProofStateChanged, ({ payload }) => {
     // Credo emits this change before the trust decision runs. The agent reports it on
-    // `PresentationTrustDecided`, with the presented credentials, per [VSA-VTI-FLOW-VERIFY-AC-7]
+    // `PresentationTrustDecided`, with the result of the decision, per [VSA-VTI-FLOW-VERIFY-AC-7]
     const { role, state } = payload.proofRecord
     if (role === DidCommProofRole.Verifier && state === DidCommProofState.PresentationReceived) return
 

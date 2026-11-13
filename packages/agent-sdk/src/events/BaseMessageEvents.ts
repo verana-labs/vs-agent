@@ -388,16 +388,11 @@ async function applyAnonCredsTrustDecision(
   }
 
   if (unaccredited.length === 0 && unchecked.length === 0) {
-    // The record keeps what the agent verified, so a read resolves nothing again. Credo emitted
-    // the change to `presentation-received` before this decision; the Events API reports that
-    // change on this event, which carries the credentials, per [VSA-VTI-FLOW-VERIFY-AC-7]
+    // The record keeps what the agent verified, so a read resolves nothing again
     record.metadata.set(PRESENTED_CREDENTIALS_METADATA, presentedCredentials)
     await agent.didcomm.proofs.update(record)
 
-    agent.events.emit<VsAgentPresentationTrustDecidedEvent>(agent.context, {
-      type: VsAgentEventTypes.PresentationTrustDecided,
-      payload: { proofRecord: record.clone(), previousState: DidCommProofState.RequestSent },
-    })
+    emitTrustDecided(agent, record)
 
     return false
   }
@@ -419,6 +414,21 @@ async function applyAnonCredsTrustDecision(
   return true
 }
 
+/**
+ * Credo emits the change to `presentation-received` before the trust decision runs. The Events API
+ * reports that change on this event, which carries the result of the decision, per
+ * [VSA-VTI-FLOW-VERIFY-AC-7]. A record that left `presentation-received` already has no such
+ * change to report: Credo reported the state that the record is in.
+ */
+function emitTrustDecided(agent: VsAgent<BaseAgentModules>, record: DidCommProofExchangeRecord): void {
+  if (record.state !== DidCommProofState.PresentationReceived) return
+
+  agent.events.emit<VsAgentPresentationTrustDecidedEvent>(agent.context, {
+    type: VsAgentEventTypes.PresentationTrustDecided,
+    payload: { proofRecord: record.clone(), previousState: DidCommProofState.RequestSent },
+  })
+}
+
 async function abandonPresentation(
   agent: VsAgent<BaseAgentModules>,
   record: DidCommProofExchangeRecord,
@@ -431,6 +441,10 @@ async function abandonPresentation(
 
   record.isVerified = false
   record.errorMessage = `${code}: ${description}`
+
+  // The Events API reports the change to `presentation-received` with the cause of the failure,
+  // before the change to `abandoned`
+  emitTrustDecided(agent, record)
 
   // `updateState` emits the state change with `previousState`, per [VSA-VTI-FLOW-VERIFY-AC-7]
   const protocol = agent.dependencyManager

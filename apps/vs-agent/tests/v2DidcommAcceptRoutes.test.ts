@@ -35,6 +35,8 @@ import {
   ParticipantState,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
   VeranaIndexerService,
+  VsAgentEventTypes,
+  type VsAgentPresentationTrustDecidedEvent,
   type VeranaChainService,
 } from '@verana-labs/vs-agent-sdk'
 
@@ -676,6 +678,14 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const messageSender = faberAgent.dependencyManager.resolve(DidCommMessageSender)
     const sendMessage = vi.spyOn(messageSender, 'sendMessage')
     const changes = recordProofStates()
+    const decisions: Array<{ id: string; state: string; verified?: boolean; errorMessage?: string }> = []
+    faberAgent.events.on<VsAgentPresentationTrustDecidedEvent>(
+      VsAgentEventTypes.PresentationTrustDecided,
+      ({ payload }) => {
+        const { id, state, isVerified, errorMessage } = payload.proofRecord
+        decisions.push({ id, state, verified: isVerified, errorMessage })
+      },
+    )
 
     const created = await faber()
       .post('/v2/didcomm/presentation-request')
@@ -706,6 +716,16 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       expect(changes.filter(change => change.id === faberProofId && change.state === 'abandoned')).toEqual([
         { id: faberProofId, previousState: 'presentation-received', state: 'abandoned' },
+      ])
+
+      // The Events API reports `presentation-received` with the cause, before `abandoned`.
+      expect(decisions.filter(decision => decision.id === faberProofId)).toEqual([
+        {
+          id: faberProofId,
+          state: 'presentation-received',
+          verified: false,
+          errorMessage: expect.stringContaining('e.p.issuer-not-authorized'),
+        },
       ])
 
       const acknowledged = await faber().post(`/v2/didcomm/presentations/${faberProofId}/accept-presentation`)
