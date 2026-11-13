@@ -148,6 +148,7 @@ describe('v2 didcomm basic message routes', () => {
       role: 'receiver',
       content: 'content of m-1',
       sentTime: '2026-01-01T00:00:00.000Z',
+      threadId: 'thread-m-1',
       createdAt: '2026-01-01T00:00:00.000Z',
     })
   })
