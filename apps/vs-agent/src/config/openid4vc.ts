@@ -2,8 +2,10 @@ import type { OpenId4VcPluginOptions } from '@verana-labs/vs-agent-plugin-openid
 import type { VerifiablePublicRegistries } from '@verana-labs/vs-agent-sdk'
 
 import {
-  OFFER_TTL_SECONDS_MAX,
-  OFFER_TTL_SECONDS_MIN,
+  CREDENTIAL_OFFER_EXPIRATION_SECONDS_MAX,
+  CREDENTIAL_OFFER_EXPIRATION_SECONDS_MIN,
+  PRESENTATION_REQUEST_EXPIRATION_SECONDS_MAX,
+  PRESENTATION_REQUEST_EXPIRATION_SECONDS_MIN,
   parseOpenId4VcConfiguration,
 } from '@verana-labs/vs-agent-plugin-openid4vc'
 import { readFile } from 'fs/promises'
@@ -37,10 +39,14 @@ export async function readOpenId4VcOptions(
         credentialOfferExpirationSeconds: parseLifetimeSeconds(
           'OID4VC_CREDENTIAL_OFFER_EXPIRATION_SECONDS',
           credentialOfferExpirationSeconds,
+          CREDENTIAL_OFFER_EXPIRATION_SECONDS_MIN,
+          CREDENTIAL_OFFER_EXPIRATION_SECONDS_MAX,
         ),
         presentationRequestExpirationSeconds: parseLifetimeSeconds(
           'OID4VC_PRESENTATION_REQUEST_EXPIRATION_SECONDS',
           presentationRequestExpirationSeconds,
+          PRESENTATION_REQUEST_EXPIRATION_SECONDS_MIN,
+          PRESENTATION_REQUEST_EXPIRATION_SECONDS_MAX,
         ),
       },
       errors: [],
@@ -50,13 +56,16 @@ export async function readOpenId4VcOptions(
   }
 }
 
-function parseLifetimeSeconds(variable: string, value?: string): number | undefined {
+function parseLifetimeSeconds(
+  variable: string,
+  value: string | undefined,
+  min: number,
+  max: number,
+): number | undefined {
   if (value === undefined || value === '') return undefined
   const seconds = Number(value)
-  if (!Number.isInteger(seconds) || seconds < OFFER_TTL_SECONDS_MIN || seconds > OFFER_TTL_SECONDS_MAX) {
-    throw new Error(
-      `${variable} must be an integer between ${OFFER_TTL_SECONDS_MIN} and ${OFFER_TTL_SECONDS_MAX}`,
-    )
+  if (!Number.isInteger(seconds) || seconds < min || seconds > max) {
+    throw new Error(`${variable} must be an integer between ${min} and ${max}`)
   }
   return seconds
 }

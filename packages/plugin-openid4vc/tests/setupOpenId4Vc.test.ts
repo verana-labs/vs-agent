@@ -129,32 +129,6 @@ describe('setupOpenId4Vc', () => {
 
   // Credo advertises `client_attestation_*` and derives `token_endpoint_auth_methods_supported` from the
   // issuer record, which IssuerService fills from the same roots; openid4vcIssuance covers the served output.
-  it('hands the credential offer lifetime to credo and otherwise defaults to 15 minutes', () => {
-    const lifetimeKey = 'issuer.statefulCredentialOfferExpirationInSeconds'
-
-    expect(setupOpenId4Vc(setupOptions(), noIssuerService).modules.openId4Vc.config).toHaveProperty(
-      lifetimeKey,
-      900,
-    )
-    expect(
-      setupOpenId4Vc({ ...setupOptions(), credentialOfferExpirationSeconds: 86_400 }, noIssuerService).modules
-        .openId4Vc.config,
-    ).toHaveProperty(lifetimeKey, 86_400)
-  })
-
-  it('hands the presentation request lifetime to credo and otherwise defaults to 15 minutes', () => {
-    const lifetimeKey = 'verifier.authorizationRequestExpiresInSeconds'
-
-    expect(setupOpenId4Vc(setupOptions(), noIssuerService).modules.openId4Vc.config).toHaveProperty(
-      lifetimeKey,
-      900,
-    )
-    expect(
-      setupOpenId4Vc({ ...setupOptions(), presentationRequestExpirationSeconds: 86_400 }, noIssuerService)
-        .modules.openId4Vc.config,
-    ).toHaveProperty(lifetimeKey, 86_400)
-  })
-
   it('requires wallet attestations exactly when attestation roots are configured', () => {
     const options = setupOptions()
     options.issuer!.walletAttestationCertificates = [fixtures.root.toString('base64')]
@@ -183,6 +157,32 @@ describe('setupOpenId4Vc', () => {
       'issuer.ignoreWalletAttestationsWhenNotRequired',
       false,
     )
+  })
+
+  it('hands the credential offer lifetime to credo and otherwise defaults to 15 minutes', () => {
+    const lifetimeKey = 'issuer.statefulCredentialOfferExpirationInSeconds'
+
+    expect(setupOpenId4Vc(setupOptions(), noIssuerService).modules.openId4Vc.config).toHaveProperty(
+      lifetimeKey,
+      900,
+    )
+    expect(
+      setupOpenId4Vc({ ...setupOptions(), credentialOfferExpirationSeconds: 86_400 }, noIssuerService).modules
+        .openId4Vc.config,
+    ).toHaveProperty(lifetimeKey, 86_400)
+  })
+
+  it('hands the presentation request lifetime to credo and otherwise defaults to 15 minutes', () => {
+    const lifetimeKey = 'verifier.authorizationRequestExpiresInSeconds'
+
+    expect(setupOpenId4Vc(setupOptions(), noIssuerService).modules.openId4Vc.config).toHaveProperty(
+      lifetimeKey,
+      900,
+    )
+    expect(
+      setupOpenId4Vc({ ...setupOptions(), presentationRequestExpirationSeconds: 86_400 }, noIssuerService)
+        .modules.openId4Vc.config,
+    ).toHaveProperty(lifetimeKey, 86_400)
   })
 
   it('serves a Status List Token as application/statuslist+jwt and answers 404 for an unknown list', async () => {

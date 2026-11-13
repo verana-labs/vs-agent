@@ -22,7 +22,13 @@ export function statusListUri(publicApiBaseUrl: string, statusListId: string): s
   return `${publicApiBaseUrl}/${STATUS_LIST_PATH}/${encodeURIComponent(statusListId)}`
 }
 
+/** [VSA-VTI-CFG-ENV-OID] range and default of `OID4VC_CREDENTIAL_OFFER_EXPIRATION_SECONDS`. */
+export const CREDENTIAL_OFFER_EXPIRATION_SECONDS_MIN = 60
+export const CREDENTIAL_OFFER_EXPIRATION_SECONDS_MAX = 7_776_000
 export const CREDENTIAL_OFFER_EXPIRATION_SECONDS_DEFAULT = 900
+/** [VSA-VTI-CFG-ENV-OID] range and default of `OID4VC_PRESENTATION_REQUEST_EXPIRATION_SECONDS`. */
+export const PRESENTATION_REQUEST_EXPIRATION_SECONDS_MIN = 60
+export const PRESENTATION_REQUEST_EXPIRATION_SECONDS_MAX = 7_776_000
 export const PRESENTATION_REQUEST_EXPIRATION_SECONDS_DEFAULT = 900
 export const OFFER_TTL_SECONDS_MIN = 60
 /** [VSA-ADM-OID-CE-OFFER] ceiling of a credential that no status list registers: 90 days. */
