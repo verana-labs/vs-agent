@@ -1785,9 +1785,14 @@ describe('v4 full lifecycle on a live chain and indexer', () => {
 
         await holderPresentations.acceptPresentationRequest(received.id)
 
-        await untilProofState(validator, request.proofExchangeId, DidCommProofState.PresentationReceived)
-        const waiting = await presentations.getPresentation(request.proofExchangeId)
-        expect(waiting.verified).toBe(true)
+        // The state is stored before the trust decision, so the test waits for `verified`
+        const waiting = await until(async () => {
+          const record = await presentations.getPresentation(request.proofExchangeId)
+          return record.state === DidCommProofState.PresentationReceived && record.verified
+            ? record
+            : undefined
+        })
+        expect(waiting.credentials).toHaveLength(1)
 
         const acknowledged = await presentations.acceptPresentation(request.proofExchangeId)
         expect(acknowledged.state).toBe(DidCommProofState.Done)
