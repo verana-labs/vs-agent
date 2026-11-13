@@ -19,6 +19,7 @@ import {
   INVITATION_ID_TAG,
   PARENT_CONNECTION_TAG,
   PRESENTED_CREDENTIALS_METADATA,
+  REJECTED_CREDENTIALS_METADATA,
 } from '@verana-labs/vs-agent-sdk'
 
 import {
@@ -28,6 +29,7 @@ import {
   InvitationRecordDto,
   PresentationRecordDto,
   PresentedCredentialDto,
+  RejectedCredentialDto,
 } from './dto'
 
 export const REQUESTED_CREDENTIALS_METADATA = '_2060/requestedCredentials'
@@ -152,6 +154,10 @@ export async function toPresentationDto(
       (record.metadata.get(REQUESTED_CREDENTIALS_METADATA) as RequestedCredential[] | null) ?? [],
     claims,
     credentials,
+    rejectedCredentials:
+      record.role === DidCommProofRole.Verifier
+        ? ((record.metadata.get(REJECTED_CREDENTIALS_METADATA) as RejectedCredentialDto[] | null) ?? [])
+        : [],
     verified: (record.isVerified ?? false) && !awaitsTrustDecision(record),
     threadId: record.threadId,
     errorMessage: record.errorMessage,

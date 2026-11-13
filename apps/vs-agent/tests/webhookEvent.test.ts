@@ -288,7 +288,12 @@ describe('Events API delivery', () => {
         isVerified: false,
         errorMessage: 'e.p.issuer-not-authorized: did:webvh:issuer-c holds no active ISSUER Participant',
         createdAt: new Date(),
-        metadata: { get: () => null },
+        metadata: {
+          get: (key: string) =>
+            key === '_2060/rejectedCredentials'
+              ? [{ index: 0, code: 'e.p.issuer-not-authorized', note: 'n', issuerDid: 'did:webvh:issuer-c' }]
+              : null,
+        },
       },
       previousState: 'request-sent',
     })
@@ -299,6 +304,7 @@ describe('Events API delivery', () => {
       state: 'presentation-received',
       verified: false,
       credentials: [],
+      rejectedCredentials: [{ index: 0, code: 'e.p.issuer-not-authorized', issuerDid: 'did:webvh:issuer-c' }],
       errorMessage: 'e.p.issuer-not-authorized: did:webvh:issuer-c holds no active ISSUER Participant',
       previousState: 'request-sent',
     })

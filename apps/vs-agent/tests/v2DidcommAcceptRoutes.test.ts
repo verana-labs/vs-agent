@@ -705,6 +705,18 @@ describe('v2 didcomm accept routes, over two agents', () => {
       expect(abandoned.body.credentials).toEqual([])
       expect(abandoned.body.errorMessage).toContain('e.p.issuer-not-authorized')
 
+      // The record names the rejected issuer in a field of its own, apart from the verified ones.
+      expect(abandoned.body.rejectedCredentials).toEqual([
+        {
+          index: 0,
+          code: 'e.p.issuer-not-authorized',
+          note: expect.stringContaining('holds no active ISSUER Participant'),
+          credentialDefinitionId,
+          issuerDid: faberAgent.did,
+          credentialSchemaId: expect.any(Number),
+        },
+      ])
+
       // The acknowledgement waits for the trust decision, so the peer gets the report instead.
       const sentTypes = sendMessage.mock.calls.map(call => call[0].message.type)
       expect(sentTypes).toContain(DidCommPresentationV2ProblemReportMessage.type.messageTypeUri)
@@ -755,6 +767,9 @@ describe('v2 didcomm accept routes, over two agents', () => {
       const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
       expect(abandoned.body.verified).toBe(false)
       expect(abandoned.body.errorMessage).toContain('e.p.trust-resolution-unavailable')
+      expect(abandoned.body.rejectedCredentials).toMatchObject([
+        { index: 0, code: 'e.p.trust-resolution-unavailable', issuerDid: faberAgent.did },
+      ])
     } finally {
       unreachableIndexerOwner = undefined
     }

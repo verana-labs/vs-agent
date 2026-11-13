@@ -213,6 +213,47 @@ export class PresentedCredentialDto {
 }
 
 /**
+ * One entry of `rejectedCredentials`: why a requested credential failed the trust decision, and
+ * what the agent knows of the credential that answered it.
+ */
+export class RejectedCredentialDto {
+  @ApiProperty({ description: 'Position of the requested credential in `requestedCredentials`', example: 0 })
+  index!: number
+
+  @ApiProperty({
+    description: 'Problem-report code of the cause',
+    enum: ['e.p.issuer-not-authorized', 'e.p.trust-resolution-unavailable'],
+    example: 'e.p.issuer-not-authorized',
+  })
+  code!: string
+
+  @ApiProperty({
+    description: 'The cause, as text for an operator',
+    example:
+      'did:webvh:QmIssuerC:issuer-c.example holds no active ISSUER Participant for the CredentialSchema 12',
+  })
+  note!: string
+
+  @ApiPropertyOptional({
+    description: 'Credential definition that the proof names for the credential, when it names one',
+    example: 'did:webvh:QmIssuerC:issuer-c.example/resources/zQmCredDefC',
+  })
+  credentialDefinitionId?: string
+
+  @ApiPropertyOptional({
+    description: 'The `issuerId` of that credential definition, when the agent resolved it',
+    example: 'did:webvh:QmIssuerC:issuer-c.example',
+  })
+  issuerDid?: string
+
+  @ApiPropertyOptional({
+    description: 'The `CredentialSchema` that the agent derived from that credential definition',
+    example: 12,
+  })
+  credentialSchemaId?: number
+}
+
+/**
  * A presentation exchange record, as returned by listPresentations and getPresentation.
  */
 export class PresentationRecordDto {
@@ -251,6 +292,14 @@ export class PresentationRecordDto {
       'trust decision succeeds, and when it fails.',
   })
   credentials!: PresentedCredentialDto[]
+
+  @ApiProperty({
+    type: [RejectedCredentialDto],
+    description:
+      'The requested credentials that failed the trust decision, with the cause of each. The agent ' +
+      'verified none of their values. Empty unless the trust decision failed.',
+  })
+  rejectedCredentials!: RejectedCredentialDto[]
 
   @ApiProperty({
     description:

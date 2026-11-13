@@ -556,12 +556,21 @@ describe('v2 didcomm presentation routes', () => {
         expect(response.body.credentials).toEqual([])
       })
 
-      it('has no entry for an abandoned presentation', async () => {
+      it('reports a failed trust decision in rejectedCredentials, and has no entry in credentials', async () => {
+        const rejected = {
+          index: 1,
+          code: 'e.p.issuer-not-authorized',
+          note: 'did:webvh:issuer-c holds no active ISSUER Participant for the CredentialSchema 15',
+          credentialDefinitionId: 'did:webvh:issuer-c/resources/cred-def-c',
+          issuerDid: 'did:webvh:issuer-c',
+          credentialSchemaId: 15,
+        }
         proofs.findById.mockResolvedValue(
           proofRecord('p-1', '2026-01-01T00:00:00.000Z', {
             state: 'abandoned',
             isVerified: false,
-            errorMessage: 'e.p.issuer-not-authorized: did:webvh:issuer-c holds no active ISSUER Participant',
+            errorMessage: `e.p.issuer-not-authorized: ${rejected.note}`,
+            metadata: metadata({ '_2060/rejectedCredentials': [rejected] }),
           }),
         )
         proofs.getFormatData.mockResolvedValue(twoCredentials)
@@ -570,6 +579,22 @@ describe('v2 didcomm presentation routes', () => {
 
         expect(response.body.verified).toBe(false)
         expect(response.body.credentials).toEqual([])
+        expect(response.body.rejectedCredentials).toEqual([rejected])
+      })
+
+      it('has no rejected credential for a verified presentation', async () => {
+        proofs.findById.mockResolvedValue(
+          proofRecord('p-1', '2026-01-01T00:00:00.000Z', {
+            state: 'done',
+            isVerified: true,
+            metadata: metadata({ '_2060/presentedCredentials': [employee, member] }),
+          }),
+        )
+        proofs.getFormatData.mockResolvedValue(twoCredentials)
+
+        const response = await request(app.getHttpServer()).get('/v2/didcomm/presentations/p-1')
+
+        expect(response.body.rejectedCredentials).toEqual([])
       })
 
       it('has no entry when the agent is the prover', async () => {

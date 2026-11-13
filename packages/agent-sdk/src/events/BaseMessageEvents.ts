@@ -33,8 +33,10 @@ import {
   AnonCredsTrustProblemCode,
   AUTO_ACCEPT_PRESENTATION_METADATA,
   PRESENTED_CREDENTIALS_METADATA,
+  REJECTED_CREDENTIALS_METADATA,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
   type PresentedCredential,
+  type RejectedCredential,
   type RequestedCredentialSchemas,
 } from '../blockchain/AnonCredsTrustService'
 import { ParticipantRole } from '../blockchain/types'
@@ -318,41 +320,59 @@ async function applyAnonCredsTrustDecision(
     ...presentation.requested_proof?.predicates,
   }
 
-  const issuersByCredentialSchema = new Map<number, string[]>()
-  const presentedCredentials: PresentedCredential[] = []
-  const unaccredited: string[] = []
-  const unchecked: string[] = []
+  const candidates: Array<PresentedCredential & { index: number }> = []
+  const rejected: RejectedCredential[] = []
+  const reject = (
+    index: number,
+    code: AnonCredsTrustProblemCode,
+    note: string,
+    known: Pick<RejectedCredential, 'credentialDefinitionId' | 'issuerDid' | 'credentialSchemaId'> = {},
+  ) => rejected.push({ index, code, note, ...known })
 
-  for (const [group, requested] of requestedCredentialSchemas) {
+  for (const [index, [group, requested]] of requestedCredentialSchemas.entries()) {
     const subProofIndex = answered[group]?.sub_proof_index
     const credentialDefinitionId =
       subProofIndex === undefined ? undefined : identifiers[subProofIndex]?.cred_def_id
 
     if (!credentialDefinitionId) {
-      unaccredited.push(`no sub-proof answers the requested group "${group}"`)
+      reject(
+        index,
+        AnonCredsTrustProblemCode.IssuerNotAuthorized,
+        `no sub-proof answers the requested group "${group}"`,
+      )
       continue
     }
 
     try {
       const derived = await agent.anonCredsTrust.deriveCredentialSchema({ credentialDefinitionId })
+      const known = {
+        credentialDefinitionId,
+        issuerDid: derived.issuerId,
+        credentialSchemaId: derived.credentialSchemaId,
+      }
 
       if (derived.credentialSchemaId !== requested.credentialSchemaId) {
-        unaccredited.push(
+        reject(
+          index,
+          AnonCredsTrustProblemCode.IssuerNotAuthorized,
           `${credentialDefinitionId} presents the CredentialSchema ${derived.credentialSchemaId} for the group "${group}", which asks for the CredentialSchema ${requested.credentialSchemaId}`,
+          known,
         )
         continue
       }
 
       if (!derived.issuerId) {
-        unaccredited.push(`${credentialDefinitionId} names no issuer`)
+        reject(
+          index,
+          AnonCredsTrustProblemCode.IssuerNotAuthorized,
+          `${credentialDefinitionId} names no issuer`,
+          known,
+        )
         continue
       }
 
-      const issuers = issuersByCredentialSchema.get(derived.credentialSchemaId) ?? []
-      issuers.push(derived.issuerId)
-      issuersByCredentialSchema.set(derived.credentialSchemaId, issuers)
-
-      presentedCredentials.push({
+      candidates.push({
+        index,
         group,
         credentialDefinitionId,
         issuerDid: derived.issuerId,
@@ -363,9 +383,24 @@ async function applyAnonCredsTrustDecision(
     } catch (error) {
       const cannotCheck =
         !(error instanceof AnonCredsTrustError) || error.reason === AnonCredsTrustErrorReason.Unavailable
-      if (cannotCheck) unchecked.push(`${error}`)
-      else unaccredited.push(`${error}`)
+      reject(
+        index,
+        cannotCheck
+          ? AnonCredsTrustProblemCode.TrustResolutionUnavailable
+          : AnonCredsTrustProblemCode.IssuerNotAuthorized,
+        `${error}`,
+        { credentialDefinitionId },
+      )
     }
+  }
+
+  // One read answers every credential of an issuer on a CredentialSchema
+  const issuersByCredentialSchema = new Map<number, string[]>()
+  for (const { credentialSchemaId, issuerDid } of candidates) {
+    issuersByCredentialSchema.set(credentialSchemaId, [
+      ...(issuersByCredentialSchema.get(credentialSchemaId) ?? []),
+      issuerDid,
+    ])
   }
 
   for (const [credentialSchemaId, issuers] of issuersByCredentialSchema) {
@@ -374,22 +409,37 @@ async function applyAnonCredsTrustDecision(
       ParticipantRole.Issuer,
       credentialSchemaId,
     )
-    unaccredited.push(
-      ...result.unaccredited.map(
-        did => `${did} holds no active ISSUER Participant for the CredentialSchema ${credentialSchemaId}`,
-      ),
-    )
-    unchecked.push(
-      ...result.unchecked.map(
-        did =>
-          `the agent cannot check the ISSUER Participant of ${did} for the CredentialSchema ${credentialSchemaId}`,
-      ),
-    )
+
+    for (const candidate of candidates) {
+      if (candidate.credentialSchemaId !== credentialSchemaId) continue
+
+      const { index, credentialDefinitionId, issuerDid } = candidate
+      const known = { credentialDefinitionId, issuerDid, credentialSchemaId }
+
+      if (result.unaccredited.includes(issuerDid)) {
+        reject(
+          index,
+          AnonCredsTrustProblemCode.IssuerNotAuthorized,
+          `${issuerDid} holds no active ISSUER Participant for the CredentialSchema ${credentialSchemaId}`,
+          known,
+        )
+      } else if (result.unchecked.includes(issuerDid)) {
+        reject(
+          index,
+          AnonCredsTrustProblemCode.TrustResolutionUnavailable,
+          `the agent cannot check the ISSUER Participant of ${issuerDid} for the CredentialSchema ${credentialSchemaId}`,
+          known,
+        )
+      }
+    }
   }
 
-  if (unaccredited.length === 0 && unchecked.length === 0) {
+  if (rejected.length === 0) {
     // The record keeps what the agent verified, so a read resolves nothing again
-    record.metadata.set(PRESENTED_CREDENTIALS_METADATA, presentedCredentials)
+    record.metadata.set(
+      PRESENTED_CREDENTIALS_METADATA,
+      candidates.map(({ index: _index, ...presented }): PresentedCredential => presented),
+    )
     await agent.didcomm.proofs.update(record)
 
     emitTrustDecided(agent, record)
@@ -397,17 +447,23 @@ async function applyAnonCredsTrustDecision(
     return false
   }
 
-  const code =
-    unaccredited.length > 0
-      ? AnonCredsTrustProblemCode.IssuerNotAuthorized
-      : AnonCredsTrustProblemCode.TrustResolutionUnavailable
+  rejected.sort((a, b) => a.index - b.index)
+  record.metadata.set(REJECTED_CREDENTIALS_METADATA, rejected)
+
+  // A credential that is not authorized decides the code, and its cause comes first in the report
+  const notAuthorized = rejected.filter(({ code }) => code === AnonCredsTrustProblemCode.IssuerNotAuthorized)
+  const unavailable = rejected.filter(
+    ({ code }) => code === AnonCredsTrustProblemCode.TrustResolutionUnavailable,
+  )
 
   await abandonPresentation(
     agent,
     record,
     connection,
-    code,
-    [...unaccredited, ...unchecked].join('; '),
+    notAuthorized.length > 0
+      ? AnonCredsTrustProblemCode.IssuerNotAuthorized
+      : AnonCredsTrustProblemCode.TrustResolutionUnavailable,
+    [...new Set([...notAuthorized, ...unavailable].map(({ note }) => note))].join('; '),
     logger,
   )
 

@@ -28,6 +28,12 @@ export const AUTO_ACCEPT_PRESENTATION_METADATA = '_2060/autoAcceptPresentation'
  */
 export const PRESENTED_CREDENTIALS_METADATA = '_2060/presentedCredentials'
 
+/**
+ * What the agent knows of the requested credentials that failed the trust decision of
+ * [VSA-VTI-FLOW-VERIFY-AC-7]. The agent writes it when the decision fails.
+ */
+export const REJECTED_CREDENTIALS_METADATA = '_2060/rejectedCredentials'
+
 export enum AnonCredsTrustProblemCode {
   IssuerNotAuthorized = 'e.p.issuer-not-authorized',
   TrustResolutionUnavailable = 'e.p.trust-resolution-unavailable',
@@ -79,6 +85,20 @@ export function toRequestedCredentialSchema({
   jsonSchemaCredentialId,
 }: DerivedCredentialSchema): RequestedCredentialSchema {
   return { credentialSchemaId, ecosystemDid, jsonSchemaCredentialId }
+}
+
+/**
+ * Why one requested credential failed the trust decision, and what the agent knows of the
+ * credential that answered it. The agent verified none of the optional values.
+ */
+export interface RejectedCredential {
+  /** Position of the requested credential in the request. */
+  index: number
+  code: AnonCredsTrustProblemCode
+  note: string
+  credentialDefinitionId?: string
+  issuerDid?: string
+  credentialSchemaId?: number
 }
 
 export interface UnaccreditedDidsResult {

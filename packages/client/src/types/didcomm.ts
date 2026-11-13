@@ -297,6 +297,21 @@ export interface PresentedCredential {
   unrevealed: string[]
 }
 
+/**
+ * Why one requested credential failed the trust decision. The agent verified none of the optional
+ * values, so a caller must not use them as the identity of an issuer.
+ */
+export interface RejectedCredential {
+  /** Position of the requested credential in `requestedCredentials`. */
+  index: number
+  code: 'e.p.issuer-not-authorized' | 'e.p.trust-resolution-unavailable'
+  /** The cause, as text for an operator. */
+  note: string
+  credentialDefinitionId?: string
+  issuerDid?: string
+  credentialSchemaId?: number
+}
+
 export interface PresentationRecord {
   proofExchangeId: string
   state: ProofState
@@ -310,6 +325,8 @@ export interface PresentationRecord {
    * the prover, before the trust decision succeeds, and when it fails.
    */
   credentials: PresentedCredential[]
+  /** The requested credentials that failed the trust decision. Empty unless the decision failed. */
+  rejectedCredentials: RejectedCredential[]
   verified: boolean
   threadId?: string
   errorMessage?: string
