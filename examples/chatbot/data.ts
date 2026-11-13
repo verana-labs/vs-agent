@@ -6,20 +6,56 @@ export const welcomeMessage =
 export const helpMessage = [
   'Available commands:',
   '/echo <text>: repeat what you say',
+  '/echo-media on|off: share back each media item you send, off by default',
+  '/trace on|off: send one text for each receipt, reaction, profile, menu and answer you send, off by default',
   '/menu: display main menu',
+  '/question [n]: send a test question with n options, 3 by default',
   '/context: refresh context menu',
   '/link <url> [title] [desc] [icon] [openingMode]: send a link',
-  '/media [url] [desc]: send an image',
+  '/media image|video|audio|file: send the sample file of that type',
+  '/media [url] [desc]: send an image that is already published',
   '/invitation [label] [imageUrl] [did]: send an invitation to open a new connection',
+  '/invitation did=<did> label=<label> image=<url>: the same, with named arguments in any order',
   '/profile [name] [image] [icon]: send the bot profile',
   '/call [wsUrl] [roomId]: offer a call',
   '/mrz: request the MRZ of a passport',
   '/emrtd: request the eMRTD data of a passport',
+  '/issue [phoneNumber]: receive a phoneNumber credential, +5712345678 by default',
   '/proof: request a phoneNumber credential presentation',
   '/revoke <credentialExchangeId>: revoke an issued credential',
   '/rocky: get an inspiring quote from Rocky',
-  '/terminate: delete the connection record on the agent, the wallet is not told',
+  '/terminate: tell the wallet that the connection ends and delete the connection record',
 ].join('\n')
+
+export interface MediaFixture {
+  fileName: string
+  mimeType: string
+  description: string
+  metadata?: Record<string, number>
+  note?: string
+}
+
+export const mediaFixtures: Record<string, MediaFixture> = {
+  image: { fileName: 'bunny.jpeg', mimeType: 'image/jpeg', description: 'Bunny' },
+  video: {
+    fileName: 'sample.mp4',
+    mimeType: 'video/mp4',
+    description: 'A sample video',
+    metadata: { duration: 2000, width: 240, height: 180 },
+  },
+  audio: {
+    fileName: 'sample.m4a',
+    mimeType: 'audio/m4a',
+    description: 'A sample voice note',
+    metadata: { duration: 3042 },
+  },
+  file: {
+    fileName: 'sample.pdf',
+    mimeType: 'application/pdf',
+    description: 'A sample document',
+    note: 'Your wallet can ignore this item, as many wallets do not display application/pdf yet',
+  },
+}
 
 export const rootContextMenu: ActionMenu = {
   title: 'Root menu',
@@ -44,6 +80,16 @@ export const rootMenuAsQA = {
     { id: 'help', text: '🆘 Help' },
   ],
 }
+
+export const testQuestion = (
+  optionCount: number,
+): { prompt: string; menuItems: { id: string; text: string }[] } => ({
+  prompt: 'Test question',
+  menuItems: Array.from({ length: optionCount }, (_, index) => ({
+    id: `option-${index + 1}`,
+    text: `Option ${index + 1}`,
+  })),
+})
 
 export const worldCupPoll = {
   prompt: 'Who will win 2026 World Cup ⚽?',

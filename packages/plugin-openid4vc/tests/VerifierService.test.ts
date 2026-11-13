@@ -17,19 +17,22 @@ const {
   decidePresentationTrust,
   findBoundVerificationMethodId,
   loadSigningCertificate,
+  lookupBoundVerificationMethod,
+  mapConfiguredSigningKey,
   resolveCredentialType,
-  verifyKeyBoundToDid,
 } = vi.hoisted(() => ({
   decidePresentationTrust: vi.fn(),
   findBoundVerificationMethodId: vi.fn(),
   loadSigningCertificate: vi.fn(),
+  lookupBoundVerificationMethod: vi.fn(),
+  mapConfiguredSigningKey: vi.fn(),
   resolveCredentialType: vi.fn(),
-  verifyKeyBoundToDid: vi.fn(),
 }))
 
 vi.mock('../src/services/CertificateService', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/services/CertificateService')>()),
   loadSigningCertificate,
+  mapConfiguredSigningKey,
 }))
 vi.mock('../src/services/credentialConfigurationBuilder', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/services/credentialConfigurationBuilder')>()),
@@ -38,7 +41,7 @@ vi.mock('../src/services/credentialConfigurationBuilder', async importOriginal =
 vi.mock('../src/trust/keyBinding', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/trust/keyBinding')>()),
   findBoundVerificationMethodId,
-  verifyKeyBoundToDid,
+  lookupBoundVerificationMethod,
 }))
 vi.mock('../src/trust/trustDecision', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/trust/trustDecision')>()),
@@ -46,6 +49,7 @@ vi.mock('../src/trust/trustDecision', async importOriginal => ({
 }))
 
 const AGENT_DID = 'did:web:agent.example'
+const BOUND_METHOD_ID = `${AGENT_DID}#operator-verifier`
 const PUBLIC_JWK = {
   kty: 'EC' as const,
   crv: 'P-256' as const,
@@ -221,7 +225,11 @@ describe('VerifierService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     loadSigningCertificate.mockResolvedValue(verifierSigningHandle())
-    verifyKeyBoundToDid.mockResolvedValue('bound')
+    lookupBoundVerificationMethod.mockResolvedValue({
+      result: 'bound',
+      verificationMethodId: BOUND_METHOD_ID,
+    })
+    mapConfiguredSigningKey.mockResolvedValue(undefined)
     resolveCredentialType.mockResolvedValue(employeeType)
     anonCredsTrust.assertOwnAuthorization.mockResolvedValue(undefined)
   })
@@ -271,7 +279,7 @@ describe('VerifierService', () => {
       'https://agent.example',
       'verifier',
     )
-    expect(verifyKeyBoundToDid).toHaveBeenCalledWith(expect.anything(), AGENT_DID, PUBLIC_JWK, [
+    expect(lookupBoundVerificationMethod).toHaveBeenCalledWith(expect.anything(), AGENT_DID, PUBLIC_JWK, [
       'authentication',
     ])
     expect(api.createVerifier).toHaveBeenCalledWith({ verifierId: 'verifier' })
@@ -286,7 +294,7 @@ describe('VerifierService', () => {
     await Promise.all([service.ensureInitialized(), service.ensureInitialized(), service.ensureInitialized()])
 
     expect(loadSigningCertificate).toHaveBeenCalledOnce()
-    expect(verifyKeyBoundToDid).toHaveBeenCalledOnce()
+    expect(lookupBoundVerificationMethod).toHaveBeenCalledOnce()
     expect(api.getVerifierByVerifierId).toHaveBeenCalledOnce()
     expect(api.updateVerifierMetadata).toHaveBeenCalledWith({ verifierId: 'verifier' })
     expect(api.createVerifier).not.toHaveBeenCalled()
@@ -319,17 +327,34 @@ describe('VerifierService', () => {
     const service = verifierService(verifierAgent())
 
     await expect(service.ensureInitialized()).rejects.toThrow('does not match the agent DID')
-    expect(verifyKeyBoundToDid).not.toHaveBeenCalled()
+    expect(lookupBoundVerificationMethod).not.toHaveBeenCalled()
   })
 
   it.each([
     ['unresolvable', 'could not be resolved'],
     ['unbound', 'authentication'],
   ] as const)('fails initialization for %s authentication key binding', async (binding, message) => {
-    verifyKeyBoundToDid.mockResolvedValue(binding)
+    lookupBoundVerificationMethod.mockResolvedValue({ result: binding })
     const service = verifierService(verifierAgent())
 
     await expect(service.ensureInitialized()).rejects.toThrow(message)
+    expect(mapConfiguredSigningKey).not.toHaveBeenCalled()
+  })
+
+  it('maps the signing key to the authentication method that publishes it', async () => {
+    const agent = verifierAgent()
+    const service = verifierService(agent)
+
+    await service.ensureInitialized()
+
+    expect(mapConfiguredSigningKey).toHaveBeenCalledWith(agent, verifierSigningHandle(), BOUND_METHOD_ID)
+  })
+
+  it('fails initialization when the signing key cannot be mapped on the DID record', async () => {
+    mapConfiguredSigningKey.mockRejectedValue(new Error('signing key DID record was not found'))
+    const service = verifierService(verifierAgent())
+
+    await expect(service.ensureInitialized()).rejects.toThrow('signing key DID record was not found')
   })
 
   it('creates a direct_post.jwt DCQL request for exactly the requested claims', async () => {
@@ -344,6 +369,7 @@ describe('VerifierService', () => {
     ).resolves.toEqual({
       authorizationRequest: 'openid4vp://?request_uri=opaque',
       verificationSessionId: 'session-id',
+      expiresAt: new Date('2026-07-21T10:05:00.000Z'),
     })
     expect(resolveCredentialType).toHaveBeenCalledWith(expect.anything(), VTJSC_ID)
     expect(api.createAuthorizationRequest).toHaveBeenCalledWith({
@@ -550,6 +576,7 @@ describe('VerifierService', () => {
       state: 'RequestUriRetrieved',
       createdAt: new Date('2026-07-21T10:00:00.000Z'),
       updatedAt: new Date('2026-07-21T10:00:00.000Z'),
+      expiresAt: new Date('2026-07-21T10:05:00.000Z'),
       cryptographicVerified: false,
       accepted: false,
     })

@@ -180,6 +180,96 @@ export class ListPresentationsQueryDto extends PaginationQueryDto {
 }
 
 /**
+ * This is one entry of `credentials`. It gives the values that the agent verified for one presented
+ * credential. The entry of `requestedCredentials` at the same index asks for that credential.
+ */
+export class PresentedCredentialDto {
+  @ApiProperty({
+    description: 'Credential definition of the presented credential',
+    example: 'did:webvh:QmIssuerA:issuer-a.example/resources/zQmCredDefA',
+  })
+  credentialDefinitionId!: string
+
+  @ApiProperty({
+    description:
+      'The `issuerId` of the credential definition. The agent found an active ISSUER `Participant` for this DID.',
+    example: 'did:webvh:QmIssuerA:issuer-a.example',
+  })
+  issuerDid!: string
+
+  @ApiProperty({ description: 'Identifier of the `CredentialSchema` of the credential', example: 12 })
+  credentialSchemaId!: number
+
+  @ApiProperty({
+    description: 'The `did` of the Ecosystem that owns the `CredentialSchema`',
+    example: 'did:webvh:QmEcosystem:ecosystem.example',
+  })
+  ecosystemDid!: string
+
+  @ApiProperty({
+    description: 'The VTJSC of the credential',
+    example: 'https://ecosystem.example/vt/schemas-employee-jsc.json',
+  })
+  jsonSchemaCredentialId!: string
+
+  @ApiProperty({
+    type: [Object],
+    description: 'The claims that this credential revealed',
+    example: [{ name: 'employeeId', value: '1234' }],
+  })
+  claims!: Claim[]
+
+  @ApiProperty({
+    type: [String],
+    description:
+      'The names of the requested attributes that the holder did not reveal. The proof verifies without them.',
+    example: [],
+  })
+  unrevealed!: string[]
+}
+
+/**
+ * This is one entry of `rejectedCredentials`. It gives the cause of the failure of one requested
+ * credential. It also gives the values that the agent has of the credential that answered it.
+ */
+export class RejectedCredentialDto {
+  @ApiProperty({ description: 'Position of the requested credential in `requestedCredentials`', example: 0 })
+  index!: number
+
+  @ApiProperty({
+    description: 'Problem-report code of the cause',
+    enum: ['e.p.issuer-not-authorized', 'e.p.trust-resolution-unavailable'],
+    example: 'e.p.issuer-not-authorized',
+  })
+  code!: string
+
+  @ApiProperty({
+    description: 'The cause, as text for an operator',
+    example:
+      'did:webvh:QmIssuerC:issuer-c.example holds no active ISSUER Participant for the CredentialSchema 12',
+  })
+  note!: string
+
+  @ApiPropertyOptional({
+    description: 'Credential definition that the proof names for the credential, when it names one',
+    example: 'did:webvh:QmIssuerC:issuer-c.example/resources/zQmCredDefC',
+  })
+  credentialDefinitionId?: string
+
+  @ApiPropertyOptional({
+    description: 'The `issuerId` of that credential definition, when the agent resolved it',
+    example: 'did:webvh:QmIssuerC:issuer-c.example',
+  })
+  issuerDid?: string
+
+  @ApiPropertyOptional({
+    description: 'The `CredentialSchema` that the agent derived from that credential definition',
+    example: 12,
+  })
+  credentialSchemaId?: number
+}
+
+/**
  * A presentation exchange record, as returned by listPresentations and getPresentation.
  */
 export class PresentationRecordDto {
@@ -203,14 +293,33 @@ export class PresentationRecordDto {
 
   @ApiProperty({
     type: [Object],
-    description: 'The claims revealed by the presentation. Empty until the holder answers.',
+    description:
+      'Every claim revealed by the presentation, in one list. It does not identify the credential ' +
+      'of a claim: see `credentials`. Empty until the holder answers.',
     example: [{ name: 'firstName', value: 'Alice' }],
   })
   claims!: Claim[]
 
   @ApiProperty({
+    type: [PresentedCredentialDto],
     description:
-      'Whether the presentation verified. Set when the presentation is received, false with an `errorMessage` when the flow is `abandoned`.',
+      'The presented credentials that the agent verified: one entry for each entry of ' +
+      '`requestedCredentials`, in the same order. Empty when the agent is the prover, before the ' +
+      'trust decision succeeds, and when it fails.',
+  })
+  credentials!: PresentedCredentialDto[]
+
+  @ApiProperty({
+    type: [RejectedCredentialDto],
+    description:
+      'The requested credentials that failed the trust decision, with the cause of each. The agent ' +
+      'verified none of their values. Empty unless the trust decision failed.',
+  })
+  rejectedCredentials!: RejectedCredentialDto[]
+
+  @ApiProperty({
+    description:
+      'Whether the proof verified and the trust decision succeeded. False until the trust decision completes, and false with an `errorMessage` when the flow is `abandoned`.',
     example: true,
   })
   verified!: boolean

@@ -21,6 +21,8 @@ import {
   DidCommDiscoverFeaturesEventTypes,
   DidCommOutOfBandEventTypes,
   DidCommProofEventTypes,
+  DidCommProofRole,
+  DidCommProofState,
 } from '@credo-ts/didcomm'
 import { EventType } from '@verana-labs/vs-agent-model'
 import {
@@ -30,6 +32,7 @@ import {
   VsAgentIndexerNotificationEvent,
   VsAgentInvitationStateUpdatedEvent,
   VsAgentModuleMessageReceivedEvent,
+  VsAgentPresentationTrustDecidedEvent,
   VsAgentVtFlowStateUpdatedEvent,
 } from '@verana-labs/vs-agent-sdk'
 
@@ -147,12 +150,27 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
     }),
   )
 
-  agent.events.on<DidCommProofStateChangedEvent>(DidCommProofEventTypes.ProofStateChanged, ({ payload }) =>
-    stateUpdated(
+  agent.events.on<DidCommProofStateChangedEvent>(DidCommProofEventTypes.ProofStateChanged, ({ payload }) => {
+    // Credo emits this change before the trust decision runs. The agent reports it on
+    // `PresentationTrustDecided`, with the result of the decision, per [VSA-VTI-FLOW-VERIFY-AC-7]
+    const { role, state } = payload.proofRecord
+    if (role === DidCommProofRole.Verifier && state === DidCommProofState.PresentationReceived) return
+
+    return stateUpdated(
       EventType.PresentationStateUpdated,
       toPresentationDto(agent, payload.proofRecord),
       payload.previousState,
-    ),
+    )
+  })
+
+  agent.events.on<VsAgentPresentationTrustDecidedEvent>(
+    VsAgentEventTypes.PresentationTrustDecided,
+    ({ payload }) =>
+      stateUpdated(
+        EventType.PresentationStateUpdated,
+        toPresentationDto(agent, payload.proofRecord),
+        payload.previousState,
+      ),
   )
 
   agent.events.on<DidCommCredentialStateChangedEvent>(

@@ -32,6 +32,7 @@ import { setupOpenId4Vc } from '../src/sdk/setupOpenId4Vc'
 import {
   didFromValidatedCertificate,
   loadSigningCertificate,
+  mapConfiguredSigningKey,
   publishDevelopmentSigningKey,
 } from '../src/services/CertificateService'
 import { IssuerService } from '../src/services/IssuerService'
@@ -332,6 +333,76 @@ describe('CertificateService', () => {
     expect(agent.didRepository.update).not.toHaveBeenCalled()
   })
 
+  it('maps a configured key to its published method, without touching the DID document', async () => {
+    const agent = createAgent()
+    agent.did = 'did:web:issuer.example'
+    const handle = await loadSigningCertificate(
+      agent,
+      configuredSigning(fixtures.leaf, fixtures.intermediate),
+    )
+    agent.dids.resolveVerificationMethodFromCreatedDidRecord.mockResolvedValue({
+      publicJwk: publicJwkWithKeyId(handle.certificate, 'fixture-leaf'),
+    })
+
+    await mapConfiguredSigningKey(agent, handle, 'did:web:issuer.example#operator-key')
+
+    expect(agent.dids.update).not.toHaveBeenCalled()
+    expect(agent.didRecord.keys).toEqual([
+      { didDocumentRelativeKeyId: '#operator-key', kmsKeyId: 'fixture-leaf' },
+    ])
+    expect(agent.dids.resolveVerificationMethodFromCreatedDidRecord).toHaveBeenCalledWith(
+      'did:web:issuer.example#operator-key',
+    )
+  })
+
+  it.each([
+    'did:web:issuer.example:acme#operator-key',
+    'did:web:other.example#operator-key',
+    'operator-key',
+    '#operator-key',
+  ])('refuses %s as no absolute method of the agent DID before writing the DID record', async methodId => {
+    const agent = createAgent()
+    agent.did = 'did:web:issuer.example'
+    const handle = await loadSigningCertificate(
+      agent,
+      configuredSigning(fixtures.leaf, fixtures.intermediate),
+    )
+
+    await expect(mapConfiguredSigningKey(agent, handle, methodId)).rejects.toThrow(
+      `${methodId} bound to the configured signing key is not a method of the agent DID did:web:issuer.example`,
+    )
+
+    expect(agent.didRepository.update).not.toHaveBeenCalled()
+    expect(agent.dids.resolveVerificationMethodFromCreatedDidRecord).not.toHaveBeenCalled()
+  })
+
+  it('refuses a configured key that the DID record of the agent resolves to another KMS key', async () => {
+    const agent = createAgent()
+    agent.did = 'did:web:issuer.example'
+    const handle = await loadSigningCertificate(
+      agent,
+      configuredSigning(fixtures.leaf, fixtures.intermediate),
+    )
+    agent.dids.resolveVerificationMethodFromCreatedDidRecord.mockResolvedValue({
+      publicJwk: publicJwkWithKeyId(handle.certificate, 'another-key'),
+    })
+
+    await expect(
+      mapConfiguredSigningKey(agent, handle, 'did:web:issuer.example#operator-key'),
+    ).rejects.toThrow('does not resolve to the configured signing key')
+  })
+
+  it('leaves a development key to its own DID publication', async () => {
+    const agent = createAgent({ developmentCertificate: fixtures.attacker })
+    agent.did = 'did:web:attacker.example'
+    agent.publicApiBaseUrl = 'https://attacker.example/agent'
+    const handle = await loadSigningCertificate(agent, undefined)
+
+    await mapConfiguredSigningKey(agent, handle, 'did:web:attacker.example#openid4vc-development-issuer')
+
+    expect(agent.didRepository.update).not.toHaveBeenCalled()
+  })
+
   it('extracts the DID URI SAN from a validated certificate', () => {
     expect(didFromValidatedCertificate(fixtures.leaf)).toBe('did:web:issuer.example')
   })
@@ -563,7 +634,7 @@ function createAgent({
 
   const agent = {
     keys,
-    dids: { resolve: vi.fn(), update: vi.fn() },
+    dids: { resolve: vi.fn(), update: vi.fn(), resolveVerificationMethodFromCreatedDidRecord: vi.fn() },
     kms,
     genericRecords,
     x509,
@@ -577,6 +648,12 @@ function createAgent({
   return agent as unknown as typeof agent &
     Parameters<typeof loadSigningCertificate>[0] &
     Parameters<typeof publishDevelopmentSigningKey>[0]
+}
+
+function publicJwkWithKeyId(certificate: X509Certificate, keyId: string): Kms.PublicJwk {
+  const publicJwk = Kms.PublicJwk.fromUnknown(certificate.publicJwk.toJson())
+  publicJwk.keyId = keyId
+  return publicJwk
 }
 
 const DID_WEB = 'did:web:agent.example'
@@ -777,8 +854,9 @@ describe('development signing DID publication', () => {
     const { initialize, registry } = await createHarness('issuer', DID_WEB)
     registry.returnWrongDidFromResolution = true
 
+    // Credo's DID resolver rejects a document whose id is not the resolved DID before our own check runs
     await expect(initialize()).rejects.toThrow(
-      'development signing key DID resolution returned a different DID',
+      'development signing key DID resolution failed: invalidDidDocument',
     )
     expect(registry.updateCount).toBe(0)
   })

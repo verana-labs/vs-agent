@@ -30,14 +30,14 @@ export class V2DidcommBasicMessagesController {
     summary: 'Send a basic message',
     description: 'Sends a text message on an established connection.',
   })
-  @ApiCreatedResponse({ description: 'The message record', type: SentMessageDto })
+  @ApiCreatedResponse({ description: 'Sent message id', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id' })
   public async sendBasicMessage(@Body() body: SendBasicMessageBodyDto): Promise<SentMessageDto> {
     const agent = await this.vsAgentService.getAgent()
 
     const record = await agent.didcomm.basicMessages.sendMessage(body.connectionId, body.content)
 
-    return { id: record.id }
+    return { id: record.threadId! }
   }
 
   @Get()

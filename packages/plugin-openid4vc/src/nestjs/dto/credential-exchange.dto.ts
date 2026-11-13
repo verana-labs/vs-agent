@@ -3,14 +3,14 @@ import { OpenId4VcIssuanceSessionState } from '@credo-ts/openid4vc'
 import { PageDto, PaginationQueryDto } from '@verana-labs/vs-agent-sdk'
 import { IsEnum, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Max, Min } from 'class-validator'
 
-import { OFFER_TTL_SECONDS_MAX, OFFER_TTL_SECONDS_MIN } from '../../config'
+import { OFFER_TTL_SECONDS_MAX, OFFER_TTL_SECONDS_MAX_REVOCABLE, OFFER_TTL_SECONDS_MIN } from '../../config'
 
 /** Request body of [VSA-ADM-OID-CE] createCredentialOffer. */
 export class OpenId4VcCreateCredentialOfferBodyDto {
   @ApiProperty({
     description:
-      'Credential type of the offer. The agent derives no credential type yet, so every identifier answers UNKNOWN_ID.',
-    example: 'employee',
+      'Credential type of the offer: the jsonSchemaCredentialId of a CredentialSchema for which the agent holds an active ISSUER Participant.',
+    example: 'https://ecosystem.example/vt/employee.json',
   })
   @IsString()
   @IsNotEmpty()
@@ -29,20 +29,19 @@ export class OpenId4VcCreateCredentialOfferBodyDto {
   @ApiProperty({
     type: Number,
     minimum: OFFER_TTL_SECONDS_MIN,
-    maximum: OFFER_TTL_SECONDS_MAX,
-    description:
-      'Lifetime of the credential in seconds, from 60 up to 7776000 (90 days). Nothing revokes the credential, so this lifetime is its only bound.',
+    maximum: OFFER_TTL_SECONDS_MAX_REVOCABLE,
+    description: `Lifetime of the credential in seconds, from ${OFFER_TTL_SECONDS_MIN} up to ${OFFER_TTL_SECONDS_MAX_REVOCABLE} (one year) for a credential registered on a status list, and up to ${OFFER_TTL_SECONDS_MAX} (90 days) for one that is not: nothing revokes such a credential, so this lifetime is its only bound.`,
     example: 3600,
   })
   @IsInt()
   @Min(OFFER_TTL_SECONDS_MIN)
-  @Max(OFFER_TTL_SECONDS_MAX)
+  @Max(OFFER_TTL_SECONDS_MAX_REVOCABLE)
   ttlSeconds!: number
 
   @ApiPropertyOptional({
     description:
-      'Status list the credential is registered on, with statusListIndex. The agent hosts no status list yet, so every identifier answers UNKNOWN_ID.',
-    example: 'list-1',
+      'Status list of this agent that the credential is registered on, from createStatusList. Required for a revocable credential, together with statusListIndex.',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
   })
   @IsOptional()
   @IsString()
@@ -52,7 +51,8 @@ export class OpenId4VcCreateCredentialOfferBodyDto {
   @ApiPropertyOptional({
     type: Number,
     minimum: 0,
-    description: 'Index of the credential on that status list. Required whenever statusListId is present.',
+    description:
+      'Index of the credential on that status list, from 0 to size - 1. The caller allocates the index; the agent refuses one that an earlier offer bound. Required whenever statusListId is present.',
     example: 42,
   })
   @IsOptional()
@@ -92,6 +92,15 @@ export class OpenId4VcListCredentialExchangesQueryDto extends PaginationQueryDto
   @IsOptional()
   @IsEnum(OpenId4VcIssuanceSessionState)
   state?: OpenId4VcIssuanceSessionState
+
+  @ApiPropertyOptional({
+    description: 'Filter by the status list that the offer named',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  statusListId?: string
 }
 
 /** A credential exchange record, as returned by listCredentialExchanges and getCredentialExchange. */
@@ -104,6 +113,18 @@ export class OpenId4VcCredentialExchangeRecordDto {
 
   @ApiProperty({ description: 'Credential type of the offer', example: 'employee' })
   jsonSchemaCredentialId!: string
+
+  @ApiPropertyOptional({
+    description: 'Status list the offer registered the credential on. Present only when the offer set it.',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  statusListId?: string
+
+  @ApiPropertyOptional({
+    description: 'Index of the credential on that status list. Present only when the offer set it.',
+    example: 42,
+  })
+  statusListIndex?: number
 
   @ApiProperty({ enum: OpenId4VcIssuanceSessionState, description: 'State of the issuance session' })
   state!: OpenId4VcIssuanceSessionState

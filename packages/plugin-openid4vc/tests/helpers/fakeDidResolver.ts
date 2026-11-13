@@ -8,8 +8,8 @@ export function didDocumentWithKey(
   did: string,
   publicJwk: Record<string, unknown>,
   purposes: TestDidPurpose[],
+  verificationMethodId = `${did}#key-1`,
 ): DidDocument {
-  const verificationMethodId = `${did}#key-1`
   return JsonTransformer.fromJSON(
     {
       id: did,

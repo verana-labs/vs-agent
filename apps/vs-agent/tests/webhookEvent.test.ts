@@ -284,6 +284,92 @@ describe('Events API delivery', () => {
     })
   })
 
+  it('waits for the trust decision before it delivers a presentation-received change', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    const received = {
+      id: 'proof-1',
+      state: 'presentation-received',
+      role: 'verifier',
+      isVerified: true,
+      createdAt: new Date(),
+    }
+    const presented = {
+      group: 'employee',
+      credentialDefinitionId: 'did:webvh:issuer-a/resources/cred-def-a',
+      issuerDid: 'did:webvh:issuer-a',
+      credentialSchemaId: 12,
+      ecosystemDid: 'did:webvh:ecosystem',
+      jsonSchemaCredentialId: 'https://ecosystem.example/vt/schemas-employee-jsc.json',
+    }
+
+    const decided = {
+      ...received,
+      metadata: { get: (key: string) => (key === '_2060/presentedCredentials' ? [presented] : null) },
+    }
+
+    // Credo emits this change. The agent does not deliver it, whatever the record holds.
+    await emit(DidCommProofEventTypes.ProofStateChanged, {
+      proofRecord: { ...received, metadata: { get: () => null } },
+      previousState: 'request-sent',
+    })
+    await emit(DidCommProofEventTypes.ProofStateChanged, {
+      proofRecord: decided,
+      previousState: 'request-sent',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    // The trust decision emits this event, with the credentials that it recorded
+    emit('vs-agent-presentation-trust-decided', {
+      proofRecord: decided,
+      previousState: 'request-sent',
+    })
+
+    const { body } = await delivered()
+    expect(body.data).toMatchObject({
+      state: 'presentation-received',
+      verified: true,
+      previousState: 'request-sent',
+      credentials: [{ issuerDid: 'did:webvh:issuer-a', credentialSchemaId: 12, unrevealed: [] }],
+    })
+    expect(body.data.credentials[0]).not.toHaveProperty('group')
+  })
+
+  it('delivers presentation-received with the cause when the trust decision fails', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit('vs-agent-presentation-trust-decided', {
+      proofRecord: {
+        id: 'proof-1',
+        state: 'presentation-received',
+        role: 'verifier',
+        isVerified: false,
+        errorMessage: 'e.p.issuer-not-authorized: did:webvh:issuer-c holds no active ISSUER Participant',
+        createdAt: new Date(),
+        metadata: {
+          get: (key: string) =>
+            key === '_2060/rejectedCredentials'
+              ? [{ index: 0, code: 'e.p.issuer-not-authorized', note: 'n', issuerDid: 'did:webvh:issuer-c' }]
+              : null,
+        },
+      },
+      previousState: 'request-sent',
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.presentations.state-updated')
+    expect(body.data).toMatchObject({
+      state: 'presentation-received',
+      verified: false,
+      credentials: [],
+      rejectedCredentials: [{ index: 0, code: 'e.p.issuer-not-authorized', issuerDid: 'did:webvh:issuer-c' }],
+      errorMessage: 'e.p.issuer-not-authorized: did:webvh:issuer-c holds no active ISSUER Participant',
+      previousState: 'request-sent',
+    })
+  })
+
   it('logs a record that cannot be mapped instead of rejecting the listener', async () => {
     const { agent, emit } = fakeAgent()
     agent.didcomm.proofs.getFormatData.mockRejectedValueOnce(new Error('record deleted'))

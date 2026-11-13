@@ -1,5 +1,5 @@
 import { RecordNotFoundError } from '@credo-ts/core'
-import { Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Query } from '@nestjs/common'
+import { Controller, Delete, Get, HttpCode, HttpStatus, Inject, Logger, Param, Query } from '@nestjs/common'
 import {
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -24,6 +24,8 @@ import { toConnectionDto } from './mappers'
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/connections', version: '2' })
 export class V2DidcommConnectionsController {
+  private readonly logger = new Logger(V2DidcommConnectionsController.name)
+
   public constructor(@Inject(VsAgentService) private readonly vsAgentService: VsAgentService) {}
 
   @Get()
@@ -93,8 +95,7 @@ export class V2DidcommConnectionsController {
   @ApiOperation({
     summary: 'Delete a connection',
     description:
-      'Deletes a connection record, and drops the routing it held on its mediator when it had one. ' +
-      'The connections opened from invitations sent on it stay, each with its `parentConnectionId`.',
+      'Terminates the DIDComm connection: notifies the other party and deletes the connection record.',
   })
   @ApiParam({
     name: 'connectionId',
@@ -106,6 +107,13 @@ export class V2DidcommConnectionsController {
   @ApiNotFoundResponse({ description: 'No connection with the given id' })
   public async deleteConnection(@Param('connectionId') connectionId: string): Promise<void> {
     const agent = await this.vsAgentService.getAgent()
+
+    try {
+      await agent.didcomm.connections.hangup({ connectionId })
+    } catch (error) {
+      if (error instanceof RecordNotFoundError) throw unknownConnection(connectionId)
+      this.logger.warn(`Cannot tell connection ${connectionId} that it ends: ${error}`)
+    }
 
     try {
       await agent.didcomm.connections.deleteById(connectionId)

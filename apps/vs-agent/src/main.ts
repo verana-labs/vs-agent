@@ -19,6 +19,7 @@ import {
   VtFlowOrchestrator,
   IndexerWebSocketService,
   buildDefaultIndexerHandlerRegistry,
+  completePendingTrustDecisions,
   registerAuthorizationHandlers,
   registerSelfIssuanceAnchorHandlers,
   EcsBootstrapService,
@@ -76,6 +77,8 @@ import {
   USE_CORS,
   MRTD_MASTER_LIST_CSCA_LOCATION,
   OID4VC_CONFIG_FILE_LOCATION,
+  OID4VC_CREDENTIAL_OFFER_EXPIRATION_SECONDS,
+  OID4VC_PRESENTATION_REQUEST_EXPIRATION_SECONDS,
   AGENT_AUTO_UPDATE_STORAGE_ON_STARTUP,
   VERANA_INDEXER_BASE_URL,
   VERANA_ACCOUNT_MNEMONIC,
@@ -301,6 +304,8 @@ const run = async () => {
       OID4VC_CONFIG_FILE_LOCATION,
       didLocation.normalizedBaseUrl,
       verifiablePublicRegistriesFromEnv(),
+      OID4VC_CREDENTIAL_OFFER_EXPIRATION_SECONDS,
+      OID4VC_PRESENTATION_REQUEST_EXPIRATION_SECONDS,
     )
     openId4VcOptions = openId4Vc.options
     configErrors.push(...openId4Vc.errors)
@@ -512,6 +517,10 @@ const run = async () => {
   }
 
   registerNestPluginEvents(nestPlugins, agent, conf.logger)
+
+  // An earlier run can leave a presentation with no trust decision. The agent completes that
+  // decision now. The listeners above are ready, so they get the event of `presentation-received`.
+  void completePendingTrustDecisions(agent, serverLogger)
 
   // Connect to Verana indexer for on-chain notifications
   if (VERANA_INDEXER_BASE_URL) {

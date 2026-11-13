@@ -26,7 +26,7 @@ import {
 import { VERIFIER_CAPABILITY_ID } from '../config'
 import { emitStateUpdated, OpenId4VcEventType } from '../events/openId4VcEvents'
 import { toPresentationDto } from '../nestjs/mappers'
-import { findBoundVerificationMethodId, verifyKeyBoundToDid } from '../trust/keyBinding'
+import { findBoundVerificationMethodId, lookupBoundVerificationMethod } from '../trust/keyBinding'
 import { trustedIssuersForPresentation } from '../trust/presentedIssuer'
 import { decidePresentationTrust, type PresentationTrustRequest } from '../trust/trustDecision'
 import { OPENID4VC_DID_TRUST_RESOLVER, OPENID4VC_OPTIONS } from '../types'
@@ -35,6 +35,7 @@ import { serviceDisplay } from '../utils/serviceDisplay'
 import {
   didFromValidatedCertificate,
   loadSigningCertificate,
+  mapConfiguredSigningKey,
   publishDevelopmentSigningKey,
   signingCertificateInfo,
   type SigningCertificateHandle,
@@ -60,6 +61,7 @@ type VerifierApi = Pick<
 export interface OpenId4VcVerificationRequest {
   authorizationRequest: string
   verificationSessionId: string
+  expiresAt?: Date
 }
 
 export interface OpenId4VcVerificationSessionFilters {
@@ -97,6 +99,7 @@ export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
   state: OpenId4VcVerificationSessionState
   createdAt: Date
   updatedAt: Date
+  expiresAt?: Date
   errorMessage?: string
 }
 
@@ -180,6 +183,7 @@ export class VerifierService implements OnModuleInit {
     return {
       authorizationRequest,
       verificationSessionId: verificationSession.id,
+      expiresAt: verificationSession.expiresAt,
     }
   }
 
@@ -317,6 +321,7 @@ export class VerifierService implements OnModuleInit {
       state: session.state,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt ?? session.createdAt,
+      ...(session.expiresAt ? { expiresAt: session.expiresAt } : {}),
       ...(session.errorMessage ? { errorMessage: session.errorMessage } : {}),
       ...decision,
     }
@@ -356,18 +361,19 @@ export class VerifierService implements OnModuleInit {
     }
     const publishedMethodId = await publishDevelopmentSigningKey(this.agent, signingCertificate, 'verifier')
 
-    const binding = await verifyKeyBoundToDid(
+    const binding = await lookupBoundVerificationMethod(
       this.agent,
       agentDid,
       signingCertificate.certificate.publicJwk.toJson(),
       ['authentication'],
     )
-    if (binding === 'unresolvable') {
+    if (binding.result === 'unresolvable') {
       throw new Error('OpenID4VC verifier DID could not be resolved for authentication key binding')
     }
-    if (binding !== 'bound') {
+    if (binding.result !== 'bound') {
       throw new Error('OpenID4VC verifier certificate key is not bound to the agent DID authentication')
     }
+    await mapConfiguredSigningKey(this.agent, signingCertificate, binding.verificationMethodId)
 
     this.agent.config.setTrustedIssuersForVerification(trustedIssuersForPresentation)
     await this.createOrUpdateVerifier()
