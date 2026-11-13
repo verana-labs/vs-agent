@@ -13,9 +13,10 @@ import type {
 } from '@verana-labs/vs-agent-sdk'
 
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
-import { DidCommProofRole, DidCommProofState } from '@credo-ts/didcomm'
+import { DidCommProofRole } from '@credo-ts/didcomm'
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
 import {
+  awaitsTrustDecision,
   INVITATION_ID_TAG,
   PARENT_CONNECTION_TAG,
   PRESENTED_CREDENTIALS_METADATA,
@@ -86,19 +87,6 @@ export function toInvitationDto(record: InvitationRecord): InvitationRecordDto {
 function presentedCredentialsOf(record: DidCommProofExchangeRecord): PresentedCredential[] | null {
   if (record.role !== DidCommProofRole.Verifier) return null
   return record.metadata.get(PRESENTED_CREDENTIALS_METADATA) as PresentedCredential[] | null
-}
-
-/**
- * Credo sets `presentation-received` before the trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] runs.
- * Until the decision records the presented credentials, the record is not `verified` and the
- * caller cannot acknowledge the presentation.
- */
-export function awaitsTrustDecision(record: DidCommProofExchangeRecord): boolean {
-  return (
-    record.role === DidCommProofRole.Verifier &&
-    record.state === DidCommProofState.PresentationReceived &&
-    !presentedCredentialsOf(record)
-  )
 }
 
 export async function toPresentationDto(

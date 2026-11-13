@@ -38,6 +38,7 @@ import {
   type PresentedCredential,
   type RejectedCredential,
   type RequestedCredentialSchemas,
+  type UnaccreditedDidsResult,
 } from '../blockchain/AnonCredsTrustService'
 import { ParticipantRole } from '../blockchain/types'
 import { getRecordId } from '../utils/agent'
@@ -232,60 +233,173 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
   )
 }
 
+/** The threads whose presentation the message handler of an agent decides at this moment */
+const decidingThreads = new WeakMap<object, Set<string>>()
+
+function decidingThreadsOf(agent: VsAgent<BaseAgentModules>): Set<string> {
+  let threads = decidingThreads.get(agent)
+  if (!threads) {
+    threads = new Set()
+    decidingThreads.set(agent, threads)
+  }
+  return threads
+}
+
+/**
+ * Credo sets `presentation-received` before the trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] runs.
+ * Until the decision records the presented credentials, the record is not `verified`, and the
+ * caller can neither acknowledge nor decline the presentation.
+ */
+export function awaitsTrustDecision(record: DidCommProofExchangeRecord): boolean {
+  return (
+    record.role === DidCommProofRole.Verifier &&
+    record.state === DidCommProofState.PresentationReceived &&
+    !record.metadata.get(PRESENTED_CREDENTIALS_METADATA)
+  )
+}
+
 function registerAnonCredsTrustDecision(agent: VsAgent<BaseAgentModules>, logger: BaseLogger): void {
+  const deciding = decidingThreadsOf(agent)
+
   agent.didcomm.registerMessageHandlerMiddleware(async (messageContext, next) => {
-    await next()
+    const { message } = messageContext
+    if (message.type !== DidCommPresentationV2Message.type.messageTypeUri) return next()
 
-    const { connection, message } = messageContext
-    const isPresentation = message.type === DidCommPresentationV2Message.type.messageTypeUri
-
-    if (!isPresentation || !connection) return
-
-    let record: DidCommProofExchangeRecord | undefined
-    let presentation: AnonCredsProof | undefined
+    deciding.add(message.threadId)
     try {
-      record = await agent.didcomm.proofs.getByThreadAndConnectionId(message.threadId, connection.id)
-      const formatData = await agent.didcomm.proofs.getFormatData(record.id)
-      presentation = formatData.presentation?.anoncreds
-    } catch (error) {
-      logger.error(`The agent cannot read the presentation of ${message.threadId}: ${error}`)
-      messageContext.responseMessage = undefined
+      await next()
 
-      // The check did not run, so the exchange ends here, per [VSA-VTI-FLOW-VERIFY-AC-8]
-      if (record?.role === DidCommProofRole.Verifier) {
-        await abandonPresentation(
-          agent,
-          record,
-          connection,
-          AnonCredsTrustProblemCode.TrustResolutionUnavailable,
-          `the agent cannot read the presentation: ${error}`,
-          logger,
-        )
+      // A presentation with no connection answers a request of an invitation. The trust decision
+      // applies to it as to any other presentation.
+      const { connection } = messageContext
+
+      let record: DidCommProofExchangeRecord | null
+      try {
+        record = connection
+          ? await agent.didcomm.proofs.getByThreadAndConnectionId(message.threadId, connection.id)
+          : ((
+              await agent.didcomm.proofs.findAllByQuery({
+                threadId: message.threadId,
+                role: DidCommProofRole.Verifier,
+              })
+            )[0] ?? null)
+      } catch (error) {
+        logger.error(`The agent cannot read the presentation of ${message.threadId}: ${error}`)
+        messageContext.responseMessage = undefined
+        return
       }
-      return
-    }
 
-    if (await applyAnonCredsTrustDecision(agent, record, connection, presentation, logger)) {
-      messageContext.responseMessage = undefined
-      return
-    }
+      if (!record) return
 
-    // The proof and the trust decision both succeeded, so the agent acknowledges the presentation.
-    const policy = record.metadata.get<{ autoAccept: boolean }>(AUTO_ACCEPT_PRESENTATION_METADATA)
-    if (!policy?.autoAccept || record.state !== DidCommProofState.PresentationReceived) return
-
-    try {
-      await agent.didcomm.proofs.acceptPresentation({ proofExchangeRecordId: record.id })
-    } catch (error) {
-      logger.error(`The agent cannot acknowledge the presentation ${record.id}: ${error}`)
+      if (await completeTrustDecision(agent, record, connection, logger)) {
+        messageContext.responseMessage = undefined
+      }
+    } finally {
+      deciding.delete(message.threadId)
     }
   })
+}
+
+/**
+ * Runs the trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] on a received presentation, and acknowledges
+ * the presentation when the exchange asks for it. Returns `true` when the decision failed: the
+ * exchange then ended in `abandoned`.
+ */
+async function completeTrustDecision(
+  agent: VsAgent<BaseAgentModules>,
+  record: DidCommProofExchangeRecord,
+  connection: DidCommConnectionRecord | undefined,
+  logger: BaseLogger,
+): Promise<boolean> {
+  let presentation: AnonCredsProof | undefined
+  try {
+    const formatData = await agent.didcomm.proofs.getFormatData(record.id)
+    presentation = formatData.presentation?.anoncreds
+  } catch (error) {
+    logger.error(`The agent cannot read the presentation ${record.id}: ${error}`)
+
+    // The check did not run, so the exchange ends here, per [VSA-VTI-FLOW-VERIFY-AC-8]
+    if (record.role === DidCommProofRole.Verifier) {
+      await abandonPresentation(
+        agent,
+        record,
+        connection,
+        AnonCredsTrustProblemCode.TrustResolutionUnavailable,
+        `the agent cannot read the presentation: ${error}`,
+        logger,
+      )
+    }
+    return true
+  }
+
+  if (await applyAnonCredsTrustDecision(agent, record, connection, presentation, logger)) return true
+
+  // The proof and the trust decision both succeeded, so the agent acknowledges the presentation.
+  const policy = record.metadata.get<{ autoAccept: boolean }>(AUTO_ACCEPT_PRESENTATION_METADATA)
+  if (!policy?.autoAccept || record.state !== DidCommProofState.PresentationReceived) return false
+
+  try {
+    await agent.didcomm.proofs.acceptPresentation({ proofExchangeRecordId: record.id })
+  } catch (error) {
+    logger.error(`The agent cannot acknowledge the presentation ${record.id}: ${error}`)
+  }
+
+  return false
+}
+
+/**
+ * Completes the trust decision of each received presentation that has none. A stop of the agent
+ * between the proof verification and the decision leaves such a record, and so does a version of
+ * the agent that recorded no decision. A record with no decision can be neither acknowledged nor
+ * declined, so the agent runs this at each start, after it registered the event listeners: the
+ * decision emits the event of `presentation-received`. Per [VSA-VTI-FLOW-VERIFY-AC-8], a decision
+ * that cannot complete ends the exchange in `abandoned`.
+ */
+export async function completePendingTrustDecisions(
+  agent: VsAgent<BaseAgentModules>,
+  logger: BaseLogger,
+): Promise<void> {
+  const deciding = decidingThreadsOf(agent)
+
+  let pending: DidCommProofExchangeRecord[]
+  try {
+    pending = await agent.didcomm.proofs.findAllByQuery({
+      role: DidCommProofRole.Verifier,
+      state: DidCommProofState.PresentationReceived,
+    })
+  } catch (error) {
+    logger.error(`The agent cannot read the presentations that wait for the trust decision: ${error}`)
+    return
+  }
+
+  for (const { id, threadId } of pending) {
+    // The message handler decides the presentation that it receives at this moment
+    if (deciding.has(threadId)) continue
+
+    deciding.add(threadId)
+    try {
+      // The record can change after the query, so the agent reads it again
+      const record = await agent.didcomm.proofs.findById(id)
+      if (!record || !awaitsTrustDecision(record)) continue
+
+      const connection = record.connectionId
+        ? ((await agent.didcomm.connections.findById(record.connectionId)) ?? undefined)
+        : undefined
+
+      logger.info(`The agent completes the trust decision of the presentation ${id}`)
+      await completeTrustDecision(agent, record, connection, logger)
+    } catch (error) {
+      logger.error(`The agent cannot complete the trust decision of the presentation ${id}: ${error}`)
+    } finally {
+      deciding.delete(threadId)
+    }
+  }
 }
 
 async function applyAnonCredsTrustDecision(
   agent: VsAgent<BaseAgentModules>,
   record: DidCommProofExchangeRecord,
-  connection: DidCommConnectionRecord,
+  connection: DidCommConnectionRecord | undefined,
   presentation: AnonCredsProof | undefined,
   logger: BaseLogger,
 ): Promise<boolean> {
@@ -404,11 +518,19 @@ async function applyAnonCredsTrustDecision(
   }
 
   for (const [credentialSchemaId, issuers] of issuersByCredentialSchema) {
-    const result = await agent.anonCredsTrust.findUnaccreditedDids(
-      issuers,
-      ParticipantRole.Issuer,
-      credentialSchemaId,
-    )
+    // A read that fails leaves every issuer of the CredentialSchema unchecked, per
+    // [VSA-VTI-FLOW-VERIFY-AC-8]
+    let result: UnaccreditedDidsResult
+    try {
+      result = await agent.anonCredsTrust.findUnaccreditedDids(
+        issuers,
+        ParticipantRole.Issuer,
+        credentialSchemaId,
+      )
+    } catch (error) {
+      logger.error(`The agent cannot read the ISSUER Participants of ${credentialSchemaId}: ${error}`)
+      result = { unaccredited: [], unchecked: issuers }
+    }
 
     for (const candidate of candidates) {
       if (candidate.credentialSchemaId !== credentialSchemaId) continue
@@ -488,7 +610,7 @@ function emitTrustDecided(agent: VsAgent<BaseAgentModules>, record: DidCommProof
 async function abandonPresentation(
   agent: VsAgent<BaseAgentModules>,
   record: DidCommProofExchangeRecord,
-  connection: DidCommConnectionRecord,
+  connection: DidCommConnectionRecord | undefined,
   code: AnonCredsTrustProblemCode,
   description: string,
   logger: BaseLogger,
@@ -519,10 +641,17 @@ async function abandonPresentation(
   problemReport.setThread({ threadId: record.threadId, parentThreadId: record.parentThreadId })
 
   try {
+    // An exchange with no connection sends on the services of its last two messages
     const outboundMessageContext = await getOutboundDidCommMessageContext(agent.context, {
       message: problemReport,
       associatedRecord: record,
       connectionRecord: connection,
+      lastReceivedMessage: connection
+        ? undefined
+        : ((await protocol.findPresentationMessage(agent.context, record.id)) ?? undefined),
+      lastSentMessage: connection
+        ? undefined
+        : ((await protocol.findRequestMessage(agent.context, record.id)) ?? undefined),
     })
     await agent.dependencyManager.resolve(DidCommMessageSender).sendMessage(outboundMessageContext)
   } catch (error) {

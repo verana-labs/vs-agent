@@ -678,7 +678,10 @@ describe('v2 didcomm presentation routes', () => {
     })
 
     it('declines the verifier step with a problem report, and emits the state change', async () => {
-      const record = proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'presentation-received' })
+      const record = proofRecord('p-1', '2026-01-01T00:00:00.000Z', {
+        state: 'presentation-received',
+        metadata: metadata({ '_2060/presentedCredentials': [] }),
+      })
       proofs.findById.mockResolvedValue(record)
 
       const response = await request(app.getHttpServer())
@@ -711,6 +714,28 @@ describe('v2 didcomm presentation routes', () => {
       expect(response.body.state).toBe('declined')
       expect(response.body.errorMessage).toContain('could not notify the peer')
       expect(proofs.update).toHaveBeenCalled()
+    })
+
+    it('refuses to decline a presentation whose trust decision has not completed', async () => {
+      proofs.findById.mockResolvedValue(
+        proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'presentation-received' }),
+      )
+
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/presentations/p-1/decline')
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('INVALID_STATE')
+      expect(proofs.sendProblemReport).not.toHaveBeenCalled()
+      expect(proofs.update).not.toHaveBeenCalled()
+    })
+
+    it('declines a request that the verifier sent, before any presentation', async () => {
+      proofs.findById.mockResolvedValue(proofRecord('p-1', '2026-01-01T00:00:00.000Z'))
+
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/presentations/p-1/decline')
+
+      expect(response.status).toBe(200)
+      expect(response.body.state).toBe('declined')
     })
 
     it('answers INVALID_STATE for a decline of a terminal exchange', async () => {
