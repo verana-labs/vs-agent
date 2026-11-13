@@ -41,7 +41,8 @@ import { toCredentialExchangeDto } from './mappers'
  *
  * `createCredentialOffer` mints a pre-authorized offer for one credential configuration. The
  * wallet redeems that offer on the issuer endpoints of the agent, and the read methods show the
- * issuance session that the agent tracks for it. The offer expires after `ttlSeconds`.
+ * issuance session that the agent tracks for it. `ttlSeconds` is the lifetime of the credential;
+ * the offer has its own lifetime, reported as `expiresAt`.
  */
 @ApiTags('v2/openid4vc')
 @Controller({ path: 'openid4vc', version: '2' })
