@@ -19,6 +19,7 @@ import {
   VtFlowOrchestrator,
   IndexerWebSocketService,
   buildDefaultIndexerHandlerRegistry,
+  completePendingTrustDecisions,
   registerAuthorizationHandlers,
   registerSelfIssuanceAnchorHandlers,
   EcsBootstrapService,
@@ -487,6 +488,10 @@ const run = async () => {
   }
 
   registerNestPluginEvents(nestPlugins, agent, conf.logger)
+
+  // An earlier run can leave a presentation with no trust decision. The agent completes that
+  // decision now. The listeners above are ready, so they get the event of `presentation-received`.
+  void completePendingTrustDecisions(agent, serverLogger)
 
   // Connect to Verana indexer for on-chain notifications
   if (VERANA_INDEXER_BASE_URL) {

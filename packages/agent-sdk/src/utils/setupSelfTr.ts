@@ -18,6 +18,7 @@ import Ajv, { AnySchemaObject } from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
 
 import type { VsAgent } from '../agent/VsAgent'
+import { findSigningVerificationMethodId } from '../did/reusedDidDocument'
 import { digestOfBytes } from './boundedFetch'
 import { composeEcsClaims, EcsClaims } from './ecsClaims'
 import { createW3cV2Credential } from './vcdm2'
@@ -273,15 +274,12 @@ export function generateDigestSRI(content: string): string {
 
 export function getVerificationMethodId(logger: Logger, didRecord: DidRecord): string {
   try {
-    const verificationMethod = didRecord.didDocument?.verificationMethod?.find(
-      method =>
-        (method.type === 'Ed25519VerificationKey2020' || method.type === 'Ed25519VerificationKey2018') &&
-        method.id === didRecord.didDocument?.assertionMethod?.[0],
-    )
-    if (!verificationMethod) {
+    const verificationMethodId =
+      didRecord.didDocument && findSigningVerificationMethodId(didRecord.didDocument)
+    if (!verificationMethodId) {
       throw new Error('Cannot find a suitable Ed25519 verification method in DID Document')
     }
-    return verificationMethod.id
+    return verificationMethodId
   } catch (error) {
     logger.error(`Failed to get verification method ID.`, error)
     throw error

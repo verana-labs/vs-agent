@@ -1,5 +1,6 @@
 import type { VsAgent } from '../agent/VsAgent'
 import type { BaseEvent } from '@credo-ts/core'
+import type { DidCommProofExchangeRecord, DidCommProofState } from '@credo-ts/didcomm'
 
 import {
   BaseMessage,
@@ -17,6 +18,7 @@ export enum VsAgentEventTypes {
   InvitationStateUpdated = 'vs-agent-invitation-state-updated',
   MessageReceived = 'vs-agent-message-received',
   PresentationStateUpdated = 'vs-agent-presentation-state-updated',
+  PresentationTrustDecided = 'vs-agent-presentation-trust-decided',
   VtFlowStateUpdated = 'vs-agent-vt-flow-state-updated',
   IndexerNotification = 'vs-agent-indexer-notification',
   ModuleMessageReceived = 'vs-agent-module-message-received',
@@ -44,6 +46,26 @@ export interface VsAgentPresentationStateUpdatedEvent extends BaseEvent {
   type: typeof VsAgentEventTypes.PresentationStateUpdated
   payload: {
     event: PresentationStateUpdated
+  }
+}
+/**
+ * The agent emits this event when the trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] completes for a
+ * received presentation.
+ *
+ * - Credo emits the change to `presentation-received` before the decision runs. A listener that
+ *   needs the result of the decision waits for this event.
+ * - On a success, the record holds the verified credentials.
+ * - On a failure, the record holds `isVerified` `false` and the cause in `errorMessage`. The change
+ *   to `abandoned` follows.
+ * - The payload is not a DTO of the model, as in the other events of this file. This event replaces
+ *   the `ProofStateChanged` event of Credo for this change, so it has the same payload. The host of
+ *   the SDK builds its DTO from the record.
+ */
+export interface VsAgentPresentationTrustDecidedEvent extends BaseEvent {
+  type: typeof VsAgentEventTypes.PresentationTrustDecided
+  payload: {
+    proofRecord: DidCommProofExchangeRecord
+    previousState: DidCommProofState
   }
 }
 export interface VsAgentVtFlowStateUpdatedEvent extends BaseEvent {
