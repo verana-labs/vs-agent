@@ -516,7 +516,7 @@ describe('self-issued ECS credentials', () => {
     rebindEcsCredentialSchema.mockResolvedValue(undefined)
   })
 
-  it('self-issues against every ECS schema it holds an ISSUER entry on', async () => {
+  it('self-issues against each Service and Organization schema it holds an ISSUER entry on', async () => {
     const agent = chainAgent([])
     const indexer = indexerWithIssuerOn([
       { id: 5, title: 'ServiceCredential' },

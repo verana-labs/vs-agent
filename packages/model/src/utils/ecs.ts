@@ -122,6 +122,16 @@ export async function classifyEcsSchema(jsonSchema: string): Promise<ECS | null>
   }
 }
 
+const PUBLIC_SERVICE_ECS: ReadonlySet<string> = new Set([ECS.SERVICE, ECS.ORG, ECS.PERSONA])
+
+/**
+ * Tells whether a service is the subject of the ECS credential and declares it in its DID Document.
+ * Per [VSA-VTI-ECS-SELF-1] and [VSA-VT-LVP-1], this excludes ECS-Badge and ECS-UserAgent.
+ */
+export function isPublicServiceEcs(ecsKey: string): boolean {
+  return PUBLIC_SERVICE_ECS.has(ecsKey)
+}
+
 /**
  * Tells whether the JSON schema of a credential lists `validUntil` among its required properties.
  *

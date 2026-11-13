@@ -10,7 +10,7 @@ import {
   VtFlowValidatedFromStates,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
+import { classifyEcsSchema, isPublicServiceEcs } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../../types'
@@ -578,9 +578,6 @@ async function detachUncontrolledVtjscPublications(
   }
 }
 
-// Badge and UserAgent credentials stay out of the DID Document, per [VSA-VTI-ECS-SELF-1].
-const SELF_ISSUED_ECS_KEYS: ReadonlySet<ECS> = new Set([ECS.SERVICE, ECS.ORG, ECS.PERSONA])
-
 /**
  * Rebinds and anchors this agent's own ECS credentials.
  *
@@ -590,11 +587,11 @@ const SELF_ISSUED_ECS_KEYS: ReadonlySet<ECS> = new Set([ECS.SERVICE, ECS.ORG, EC
  * this agent's account as its vs_operator, because the chain accepts the anchoring
  * CreateOrUpdateParticipantSession from no other signer.
  *
- * The Service, Organization and Persona schemas qualify, not only the Service one. The chain of
- * Organization credentials has to terminate: the service holding the ISSUER entry is the only party
- * that can issue against that schema, so it issues its own. Without it that service has no
- * serviceProvider and fails VS-CONN-VS. An ISSUER entry on any other ECS schema only lets the agent
- * issue to other subjects.
+ * Per [VSA-VTI-ECS-SELF-1], the agent self-issues only ECS-Organization, ECS-Persona and ECS-Service
+ * credentials. The chain of these credentials has to terminate. The service that holds the ISSUER
+ * entry is the only party that can issue against the schema, so it issues its own credential.
+ * Without it, that service fails VS-CONN-VS. An ISSUER entry on ECS-Badge or ECS-UserAgent only lets
+ * the agent issue to other subjects.
  */
 async function reconcileSelfIssuedEcsCredentials(
   agent: VsAgent,
@@ -642,9 +639,9 @@ async function reconcileSelfIssuedEcsCredentials(
       const schema = await indexer.getCredentialSchema(issuer.schema_id)
       const ecsKey = await classifyEcsSchema(schema.json_schema)
       if (!ecsKey) continue
-      if (!SELF_ISSUED_ECS_KEYS.has(ecsKey)) {
+      if (!isPublicServiceEcs(ecsKey)) {
         agent.config.logger.debug(
-          `[SelfTR] Skipping schema ${schema.id}: the agent does not self-issue a ${ecsKey} credential`,
+          `[SelfTR] Skipping schema ${schema.id} (${ecsKey}): the agent self-issues no ECS-Badge or ECS-UserAgent credential`,
         )
         continue
       }

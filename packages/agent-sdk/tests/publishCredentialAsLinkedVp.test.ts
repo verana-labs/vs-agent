@@ -82,6 +82,14 @@ describe('VtFlowOrchestrator.publishCredentialAsLinkedVp', () => {
 
     expect(createVtc).toHaveBeenCalledWith(expect.anything(), BASE_URL, '12', expect.anything())
   })
+
+  it.each(['ecs-badge', 'ecs-user-agent'])('keeps a %s credential out of the DID Document', async key => {
+    const { orchestrator } = makeOrchestrator(key)
+
+    await orchestrator.publishCredentialAsLinkedVp('flow-1')
+
+    expect(createVtc).not.toHaveBeenCalled()
+  })
 })
 
 const APPLICANT_DID = 'did:web:child.example'

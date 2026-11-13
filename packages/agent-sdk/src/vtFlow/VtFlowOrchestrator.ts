@@ -29,7 +29,12 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { veranaTypeUrls } from '@verana-labs/verana-types'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
-import { ECS, classifyEcsSchema, schemaRequiresValidUntil } from '@verana-labs/vs-agent-model'
+import {
+  ECS,
+  classifyEcsSchema,
+  isPublicServiceEcs,
+  schemaRequiresValidUntil,
+} from '@verana-labs/vs-agent-model'
 
 import { AdminApiError, AdminApiErrorCode } from '../adminApi'
 import { BaseAgentModules, VsAgent } from '../agent'
@@ -1190,14 +1195,21 @@ export class VtFlowOrchestrator {
           credentialJson as Parameters<typeof W3cV2DataIntegrityVerifiableCredential.fromObject>[0],
         )
       : JsonTransformer.fromJSON(credentialJson, W3cJsonLdVerifiableCredential)
-    await createVtc(
-      this.agent,
-      this.options.publicApiBaseUrl,
-      record.ecsSchemaKey ? linkedVpSchemaId(record.ecsSchemaKey) : schemaBaseId,
-      credential,
-    )
+    if (record.ecsSchemaKey && !isPublicServiceEcs(record.ecsSchemaKey)) {
+      // per [VSA-VT-LVP-1], the agent keeps the credential and does not publish it
+      this.agent.config.logger.info(
+        `[vt-flow] Not publishing the ${record.ecsSchemaKey} credential of flow ${record.id}: an ECS-Badge or ECS-UserAgent credential stays out of the DID Document`,
+      )
+    } else {
+      await createVtc(
+        this.agent,
+        this.options.publicApiBaseUrl,
+        record.ecsSchemaKey ? linkedVpSchemaId(record.ecsSchemaKey) : schemaBaseId,
+        credential,
+      )
+    }
 
-    // [VSA-VT-LVP-3]: the record keeps the id of the published credential.
+    // [VSA-VT-LVP-3]: the record keeps the id of the credential.
     // Then the agent can remove that credential without the exchange.
     const credentialId = (credentialJson as { id?: unknown }).id
     if (typeof credentialId === 'string') await vtFlowApi.setCredentialId(record.id, credentialId)
