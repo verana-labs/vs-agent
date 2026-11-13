@@ -1097,7 +1097,7 @@ export class VtFlowOrchestrator {
     })
     if (credentialId) {
       this.agent.config.logger.info(
-        `[vt-flow] removed revoked credential and its linked VP (${credentialId})`,
+        `[vt-flow] removed revoked credential (${credentialId})`,
       )
     }
   }
@@ -1196,9 +1196,9 @@ export class VtFlowOrchestrator {
         )
       : JsonTransformer.fromJSON(credentialJson, W3cJsonLdVerifiableCredential)
     if (record.ecsSchemaKey && !isPublicServiceEcs(record.ecsSchemaKey)) {
-      // per [VSA-VT-LVP-1], the agent keeps the credential and does not publish it
+      // [VSA-VT-LVP-1]: the agent stores this credential but does not publish it.
       this.agent.config.logger.info(
-        `[vt-flow] Not publishing the ${record.ecsSchemaKey} credential of flow ${record.id}: an ECS-Badge or ECS-UserAgent credential stays out of the DID Document`,
+        `[vt-flow] Flow ${record.id}: stored the ${record.ecsSchemaKey} credential, published no linked VP`,
       )
     } else {
       await createVtc(

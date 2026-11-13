@@ -587,11 +587,8 @@ async function detachUncontrolledVtjscPublications(
  * this agent's account as its vs_operator, because the chain accepts the anchoring
  * CreateOrUpdateParticipantSession from no other signer.
  *
- * Per [VSA-VTI-ECS-SELF-1], the agent self-issues only ECS-Organization, ECS-Persona and ECS-Service
- * credentials. The chain of these credentials has to terminate. The service that holds the ISSUER
- * entry is the only party that can issue against the schema, so it issues its own credential.
- * Without it, that service fails VS-CONN-VS. An ISSUER entry on ECS-Badge or ECS-UserAgent only lets
- * the agent issue to other subjects.
+ * Per [VSA-VTI-ECS-SELF-1], only ECS-Organization, ECS-Persona and ECS-Service qualify.
+ * An ISSUER entry on another ECS schema starts no self-issuance.
  */
 async function reconcileSelfIssuedEcsCredentials(
   agent: VsAgent,
@@ -641,7 +638,7 @@ async function reconcileSelfIssuedEcsCredentials(
       if (!ecsKey) continue
       if (!isPublicServiceEcs(ecsKey)) {
         agent.config.logger.debug(
-          `[SelfTR] Skipping schema ${schema.id} (${ecsKey}): the agent self-issues no ECS-Badge or ECS-UserAgent credential`,
+          `[SelfTR] Skipping schema ${schema.id}: no self-issuance of ${ecsKey}`,
         )
         continue
       }
