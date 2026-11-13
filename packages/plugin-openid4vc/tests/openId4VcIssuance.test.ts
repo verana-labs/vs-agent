@@ -2,7 +2,7 @@ import { X509Certificate } from '@credo-ts/core'
 import { webcrypto } from 'node:crypto'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AdminApiErrorCode, digestOfBytes } from '@verana-labs/vs-agent-sdk'
 
@@ -161,6 +161,41 @@ describe('in-process OpenID4VC issuance', () => {
     const publicApi = await import('../src')
     expect(publicApi).not.toHaveProperty('WalletController')
     expect(publicApi).not.toHaveProperty('WalletService')
+  }, 60_000)
+})
+
+describe('OpenID4VC credential offer lifetime', () => {
+  const SECONDS_PAST_DEFAULT = 1_000
+
+  async function offerRedeemedPastDefault(credentialOfferExpirationSeconds?: number) {
+    const agents = await startTestAgents({
+      ...(await createTestAgentsInput()),
+      credentialOfferExpirationSeconds,
+    })
+    try {
+      const offer = await agents.issuer.service.createOffer({
+        jsonSchemaCredentialId: testCredentialConfiguration.id,
+        claims: { name: 'Ada Lovelace', role: 'engineer' },
+        ttlSeconds: TTL_SECONDS,
+      })
+      const session = await agents.issuer.service.getIssuanceSession(offer.issuanceSessionId)
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + SECONDS_PAST_DEFAULT * 1000 })
+      return { session, redemption: await agents.holder.acceptCredentialOffer(offer.credentialOffer) }
+    } finally {
+      vi.useRealTimers()
+      await agents.stop()
+    }
+  }
+
+  it('keeps an offer redeemable for the configured lifetime and reports it as expiresAt', async () => {
+    const { session, redemption } = await offerRedeemedPastDefault(86_400)
+
+    expect(redemption.prettyClaims).toMatchObject({ name: 'Ada Lovelace' })
+    expect(session.expiresAt!.getTime() - session.createdAt.getTime()).toBe(86_400_000)
+  }, 60_000)
+
+  it('expires an offer after 15 minutes when no lifetime is configured', async () => {
+    await expect(offerRedeemedPastDefault()).rejects.toThrow("status '404'")
   }, 60_000)
 })
 

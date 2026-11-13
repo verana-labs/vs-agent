@@ -36,6 +36,7 @@ import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
   AUTO_ACCEPT_PRESENTATION_METADATA,
+  awaitsTrustDecision,
   connectionOf,
   createInvitation,
   DerivedCredentialSchema,
@@ -388,7 +389,11 @@ export class V2DidcommPresentationsController {
     type: PresentationRecordDto,
   })
   @ApiNotFoundResponse({ description: 'No presentation with the given id' })
-  @ApiConflictResponse({ description: 'The exchange is not in state `presentation-received`' })
+  @ApiConflictResponse({
+    description:
+      'The exchange is not in state `presentation-received`, or the trust decision has not ' +
+      'completed for the presentation',
+  })
   public async acceptPresentation(
     @Param('proofExchangeId') proofExchangeId: string,
   ): Promise<PresentationRecordDto> {
@@ -398,6 +403,15 @@ export class V2DidcommPresentationsController {
     if (!record) throw unknownPresentation(proofExchangeId)
 
     requireProofState(record, DidCommProofState.PresentationReceived)
+
+    // The agent acknowledges no presentation that it did not check, per [VSA-VTI-FLOW-VERIFY-AC-8]
+    if (awaitsTrustDecision(record)) {
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidState,
+        HttpStatus.CONFLICT,
+        `the trust decision has not completed for presentation "${proofExchangeId}"`,
+      )
+    }
 
     const updated = await agent.didcomm.proofs.acceptPresentation({
       proofExchangeRecordId: proofExchangeId,
@@ -461,7 +475,9 @@ export class V2DidcommPresentationsController {
     summary: 'Decline a presentation exchange',
     description:
       'Refuses the pending step of a presentation exchange, in either role. The agent sends a ' +
-      'problem report to the peer and ends the exchange in state `declined`.',
+      'problem report to the peer and ends the exchange in state `declined`. The verifier cannot ' +
+      'decline a received presentation before the trust decision completes: the event of ' +
+      '`presentation-received` reports the result of that decision.',
   })
   @ApiParam({
     name: 'proofExchangeId',
@@ -475,7 +491,11 @@ export class V2DidcommPresentationsController {
     type: PresentationRecordDto,
   })
   @ApiNotFoundResponse({ description: 'No presentation with the given id' })
-  @ApiConflictResponse({ description: 'The exchange is in a terminal state' })
+  @ApiConflictResponse({
+    description:
+      'The exchange is in a terminal state, or the agent is the verifier and the trust decision ' +
+      'has not completed for the received presentation',
+  })
   public async declinePresentationExchange(
     @Param('proofExchangeId') proofExchangeId: string,
     @Body() body: DeclineExchangeBodyDto,
@@ -490,6 +510,16 @@ export class V2DidcommPresentationsController {
         AdminApiErrorCode.InvalidState,
         HttpStatus.CONFLICT,
         `presentation "${proofExchangeId}" is in the terminal state "${record.state}"`,
+      )
+    }
+
+    // The trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] is not complete. The agent reports its
+    // result in the event of `presentation-received`. The caller declines after that event.
+    if (awaitsTrustDecision(record)) {
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidState,
+        HttpStatus.CONFLICT,
+        `the trust decision has not completed for presentation "${proofExchangeId}"`,
       )
     }
 
