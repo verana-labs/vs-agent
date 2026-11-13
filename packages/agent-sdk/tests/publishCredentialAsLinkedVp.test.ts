@@ -29,6 +29,7 @@ function makeOrchestrator(ecsSchemaKey?: string) {
   }
   const credential = {
     '@context': ['https://www.w3.org/2018/credentials/v1'],
+    id: 'urn:uuid:vc-1',
     type: ['VerifiableCredential', 'VerifiableTrustCredential'],
     issuer: 'did:web:parent.example',
     issuanceDate: '2026-01-01T00:00:00Z',
@@ -48,10 +49,11 @@ function makeOrchestrator(ecsSchemaKey?: string) {
   const getCredentialSchema = vi.fn(async () => {
     throw new Error('publication must not reach the indexer')
   })
+  const setCredentialId = vi.fn()
   const agent = {
     did: 'did:web:child.example',
     config: { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
-    dependencyManager: { resolve: () => ({ findById: vi.fn(async () => record) }) },
+    dependencyManager: { resolve: () => ({ findById: vi.fn(async () => record), setCredentialId }) },
     didcomm: {
       credentials: {
         getFormatData: vi.fn(async () => ({ credential: { dataIntegrity: { credential } } })),
@@ -62,6 +64,7 @@ function makeOrchestrator(ecsSchemaKey?: string) {
   return {
     orchestrator: new VtFlowOrchestrator(agent as never, { publicApiBaseUrl: BASE_URL }),
     getCredentialSchema,
+    setCredentialId,
   }
 }
 
@@ -81,6 +84,15 @@ describe('VtFlowOrchestrator.publishCredentialAsLinkedVp', () => {
     await orchestrator.publishCredentialAsLinkedVp('flow-1')
 
     expect(createVtc).toHaveBeenCalledWith(expect.anything(), BASE_URL, '12', expect.anything())
+  })
+
+  it.each(['ecs-badge', 'ecs-user-agent'])('keeps a %s credential out of the DID Document', async key => {
+    const { orchestrator, setCredentialId } = makeOrchestrator(key)
+
+    await orchestrator.publishCredentialAsLinkedVp('flow-1')
+
+    expect(createVtc).not.toHaveBeenCalled()
+    expect(setCredentialId).toHaveBeenCalledWith('flow-1', 'urn:uuid:vc-1')
   })
 })
 

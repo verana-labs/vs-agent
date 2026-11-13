@@ -111,7 +111,7 @@ describe('ECS credential digest anchoring', () => {
     )
   })
 
-  it.each(['ecs-org', 'ecs-persona', 'ecs-user-agent'])('rebinds the %s credential too', async key => {
+  it.each(['ecs-org', 'ecs-persona'])('rebinds the %s credential too', async key => {
     const chain = makeChain()
     const { agent } = makeAgent(chain)
 

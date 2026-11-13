@@ -10,7 +10,7 @@ import {
   VtFlowValidatedFromStates,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { classifyEcsSchema } from '@verana-labs/vs-agent-model'
+import { classifyEcsSchema, isPublicServiceEcs } from '@verana-labs/vs-agent-model'
 
 import { VsAgent } from '../../agent/VsAgent'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../../types'
@@ -587,9 +587,8 @@ async function detachUncontrolledVtjscPublications(
  * this agent's account as its vs_operator, because the chain accepts the anchoring
  * CreateOrUpdateParticipantSession from no other signer.
  *
- * Every ECS schema qualifies, not only the Service one. The chain of Organization credentials has
- * to terminate: the service holding the ISSUER entry is the only party that can issue against that
- * schema, so it issues its own. Without it that service has no serviceProvider and fails VS-CONN-VS.
+ * Per [VSA-VTI-ECS-SELF-1], only ECS-Organization, ECS-Persona and ECS-Service qualify.
+ * An ISSUER entry on another ECS schema starts no self-issuance.
  */
 async function reconcileSelfIssuedEcsCredentials(
   agent: VsAgent,
@@ -637,6 +636,10 @@ async function reconcileSelfIssuedEcsCredentials(
       const schema = await indexer.getCredentialSchema(issuer.schema_id)
       const ecsKey = await classifyEcsSchema(schema.json_schema)
       if (!ecsKey) continue
+      if (!isPublicServiceEcs(ecsKey)) {
+        agent.config.logger.debug(`[SelfTR] Skipping schema ${schema.id}: no self-issuance of ${ecsKey}`)
+        continue
+      }
       const jsonSchemaCredentialId = await resolveJsonSchemaCredentialId(agent, indexer, schema.id, chainId)
       await rebindEcsCredentialSchema(
         agent,

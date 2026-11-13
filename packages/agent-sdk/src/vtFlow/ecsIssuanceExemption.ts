@@ -1,12 +1,11 @@
 import type { BaseLogger } from '@credo-ts/core'
 import type { VtFlowEcsIssuanceExemptionContext } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
-import { ECS, classifyEcsSchema } from '@verana-labs/vs-agent-model'
+import { classifyEcsSchema, isPublicServiceEcs } from '@verana-labs/vs-agent-model'
 
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
 import { ParticipantDto, ParticipantRole, ParticipantState } from '../blockchain/types'
 
-const EXEMPT_ECS_TYPES: ECS[] = [ECS.ORG, ECS.PERSONA, ECS.SERVICE]
 const PENDING_OP_STATE = 'PENDING'
 
 export interface EcsIssuanceExemptionOptions {
@@ -90,7 +89,7 @@ async function isTrustedEcsSchema(
   if (!schema || schema.archived) return false
 
   const ecsType = await classifyEcsSchema(schema.json_schema)
-  if (!ecsType || !EXEMPT_ECS_TYPES.includes(ecsType)) return false
+  if (!ecsType || !isPublicServiceEcs(ecsType)) return false
 
   if (!trustedEcosystemDids?.length) return true
   const ecosystem = await indexer.getEcosystem(schema.ecosystem_id)
