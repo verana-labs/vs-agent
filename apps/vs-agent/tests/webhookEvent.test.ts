@@ -244,21 +244,25 @@ describe('Events API delivery', () => {
       jsonSchemaCredentialId: 'https://ecosystem.example/vt/schemas-employee-jsc.json',
     }
 
-    // The change that Credo emits, before the trust decision
+    const decided = {
+      ...received,
+      metadata: { get: (key: string) => (key === '_2060/presentedCredentials' ? [presented] : null) },
+    }
+
+    // The change that Credo emits. The agent does not deliver it, whatever the record holds.
     await emit(DidCommProofEventTypes.ProofStateChanged, {
       proofRecord: { ...received, metadata: { get: () => null } },
       previousState: 'request-sent',
     })
+    await emit(DidCommProofEventTypes.ProofStateChanged, {
+      proofRecord: decided,
+      previousState: 'request-sent',
+    })
     expect(fetchMock).not.toHaveBeenCalled()
 
-    // The change that the trust decision emits, with the credentials it recorded
-    emit(DidCommProofEventTypes.ProofStateChanged, {
-      proofRecord: {
-        ...received,
-        metadata: {
-          get: (key: string) => (key === '_2060/presentedCredentials' ? [presented] : null),
-        },
-      },
+    // The event of the trust decision, with the credentials it recorded
+    emit('vs-agent-presentation-trust-decided', {
+      proofRecord: decided,
       previousState: 'request-sent',
     })
 

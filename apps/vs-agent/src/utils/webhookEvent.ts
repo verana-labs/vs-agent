@@ -16,6 +16,8 @@ import {
   DidCommConnectionEventTypes,
   DidCommCredentialEventTypes,
   DidCommProofEventTypes,
+  DidCommProofRole,
+  DidCommProofState,
 } from '@credo-ts/didcomm'
 import { EventType } from '@verana-labs/vs-agent-model'
 import {
@@ -25,13 +27,13 @@ import {
   VsAgentIndexerNotificationEvent,
   VsAgentInvitationStateUpdatedEvent,
   VsAgentModuleMessageReceivedEvent,
+  VsAgentPresentationTrustDecidedEvent,
   VsAgentVtFlowStateUpdatedEvent,
 } from '@verana-labs/vs-agent-sdk'
 
 import { resolveV2FlowRecord } from '../controllers/admin/v2/vt/VtFlowsService'
 
 import {
-  awaitsTrustDecision,
   toBasicMessageDto,
   toConnectionDto,
   toCredentialExchangeDto,
@@ -99,8 +101,10 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
   )
 
   agent.events.on<DidCommProofStateChangedEvent>(DidCommProofEventTypes.ProofStateChanged, ({ payload }) => {
-    // The trust decision emits this change again once it succeeds, with the presented credentials
-    if (awaitsTrustDecision(payload.proofRecord)) return
+    // Credo emits this change before the trust decision runs. The agent reports it on
+    // `PresentationTrustDecided`, with the presented credentials, per [VSA-VTI-FLOW-VERIFY-AC-7]
+    const { role, state } = payload.proofRecord
+    if (role === DidCommProofRole.Verifier && state === DidCommProofState.PresentationReceived) return
 
     return stateUpdated(
       EventType.PresentationStateUpdated,
@@ -108,6 +112,16 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
       payload.previousState,
     )
   })
+
+  agent.events.on<VsAgentPresentationTrustDecidedEvent>(
+    VsAgentEventTypes.PresentationTrustDecided,
+    ({ payload }) =>
+      stateUpdated(
+        EventType.PresentationStateUpdated,
+        toPresentationDto(agent, payload.proofRecord),
+        payload.previousState,
+      ),
+  )
 
   agent.events.on<DidCommCredentialStateChangedEvent>(
     DidCommCredentialEventTypes.DidCommCredentialStateChanged,

@@ -164,9 +164,6 @@ export class ListPresentationsQueryDto extends PaginationQueryDto {
 }
 
 /**
- * A presentation exchange record, as returned by listPresentations and getPresentation.
- */
-/**
  * One entry of `credentials`: what the agent verified of the credential that answers the entry of
  * `requestedCredentials` at the same index.
  */
@@ -215,6 +212,9 @@ export class PresentedCredentialDto {
   unrevealed!: string[]
 }
 
+/**
+ * A presentation exchange record, as returned by listPresentations and getPresentation.
+ */
 export class PresentationRecordDto {
   @ApiProperty({ description: 'Identifier of the proof exchange', example: 'proof-1234-5678' })
   proofExchangeId!: string

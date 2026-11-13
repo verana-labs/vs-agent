@@ -801,7 +801,11 @@ describe('v2 didcomm presentation routes', () => {
   describe('acceptPresentation', () => {
     beforeEach(() => {
       proofs.findById.mockResolvedValue(
-        proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'presentation-received' }),
+        proofRecord('p-1', '2026-01-01T00:00:00.000Z', {
+          state: 'presentation-received',
+          isVerified: true,
+          metadata: metadata({ '_2060/presentedCredentials': [] }),
+        }),
       )
       proofs.acceptPresentation.mockResolvedValue(
         proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'done', isVerified: true }),
@@ -817,6 +821,20 @@ describe('v2 didcomm presentation routes', () => {
       expect(response.status).toBe(200)
       expect(response.body).toMatchObject({ proofExchangeId: 'p-1', state: 'done', verified: true })
       expect(proofs.acceptPresentation).toHaveBeenCalledWith({ proofExchangeRecordId: 'p-1' })
+    })
+
+    it('refuses a presentation whose trust decision has not completed with INVALID_STATE', async () => {
+      proofs.findById.mockResolvedValue(
+        proofRecord('p-1', '2026-01-01T00:00:00.000Z', { state: 'presentation-received', isVerified: true }),
+      )
+
+      const response = await request(app.getHttpServer()).post(
+        '/v2/didcomm/presentations/p-1/accept-presentation',
+      )
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('INVALID_STATE')
+      expect(proofs.acceptPresentation).not.toHaveBeenCalled()
     })
 
     it('rejects a state other than presentation-received with INVALID_STATE', async () => {

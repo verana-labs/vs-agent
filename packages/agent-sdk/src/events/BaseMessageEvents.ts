@@ -1,10 +1,6 @@
 import type { BaseAgentModules, VsAgent } from '../agent/VsAgent'
 import type { AnonCredsProof } from '@credo-ts/anoncreds'
-import type {
-  DidCommConnectionRecord,
-  DidCommProofExchangeRecord,
-  DidCommProofStateChangedEvent,
-} from '@credo-ts/didcomm'
+import type { DidCommConnectionRecord, DidCommProofExchangeRecord } from '@credo-ts/didcomm'
 
 import { BaseLogger, CredoError } from '@credo-ts/core'
 import {
@@ -16,7 +12,6 @@ import {
   DidCommMessageSender,
   DidCommPresentationV2Message,
   DidCommPresentationV2ProblemReportMessage,
-  DidCommProofEventTypes,
   DidCommProofRole,
   DidCommProofsModuleConfig,
   DidCommProofState,
@@ -45,7 +40,12 @@ import {
 import { ParticipantRole } from '../blockchain/types'
 import { getRecordId } from '../utils/agent'
 
-import { emitVsAgentEvent, msgToEvent, VsAgentEventTypes } from './VsAgentEvents'
+import {
+  emitVsAgentEvent,
+  msgToEvent,
+  VsAgentEventTypes,
+  type VsAgentPresentationTrustDecidedEvent,
+} from './VsAgentEvents'
 
 export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger: BaseLogger) => {
   registerAnonCredsTrustDecision(agent, logger)
@@ -389,13 +389,13 @@ async function applyAnonCredsTrustDecision(
 
   if (unaccredited.length === 0 && unchecked.length === 0) {
     // The record keeps what the agent verified, so a read resolves nothing again. Credo emitted
-    // the change to `presentation-received` before this decision; the Events API waits for this
-    // emission, which carries the credentials, per [VSA-VTI-FLOW-VERIFY-AC-7]
+    // the change to `presentation-received` before this decision; the Events API reports that
+    // change on this event, which carries the credentials, per [VSA-VTI-FLOW-VERIFY-AC-7]
     record.metadata.set(PRESENTED_CREDENTIALS_METADATA, presentedCredentials)
     await agent.didcomm.proofs.update(record)
 
-    agent.events.emit<DidCommProofStateChangedEvent>(agent.context, {
-      type: DidCommProofEventTypes.ProofStateChanged,
+    agent.events.emit<VsAgentPresentationTrustDecidedEvent>(agent.context, {
+      type: VsAgentEventTypes.PresentationTrustDecided,
       payload: { proofRecord: record.clone(), previousState: DidCommProofState.RequestSent },
     })
 

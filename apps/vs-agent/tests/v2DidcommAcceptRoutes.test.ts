@@ -325,6 +325,20 @@ describe('v2 didcomm accept routes, over two agents', () => {
     throw new Error(`${collection} record "${id}" did not reach state "${state}"`)
   }
 
+  /**
+   * This function waits for the trust decision of a received presentation. The agent stores
+   * `presentation-received` before the decision records its values, so the state alone can
+   * show a record that is not `verified` yet.
+   */
+  async function untilPresentationVerified(app: INestApplication, id: string): Promise<void> {
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const { body } = await request(app.getHttpServer()).get(`/v2/didcomm/presentations/${id}`)
+      if (body.state === 'presentation-received' && body.verified === true) return
+      await new Promise(resolve => setTimeout(resolve, 250))
+    }
+    throw new Error(`presentation "${id}" did not pass the trust decision`)
+  }
+
   /** This function builds one entry of the CredentialSchema map that a request records per group. */
   const requestedCredentialSchema = (credentialSchemaId: number) => ({
     credentialSchemaId,
@@ -450,7 +464,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     expect(accepted.body.error ?? accepted.status).toBe(200)
 
     // The agent stops on `presentation-received`: the verifier acknowledges with a call.
-    await untilRecordState(faberApp, 'presentations', faberProofId, 'presentation-received')
+    await untilPresentationVerified(faberApp, faberProofId)
 
     const waiting = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
     expect(waiting.body.verified).toBe(true)
@@ -517,7 +531,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', knownRequests)
     const accepted = await alice().post(`/v2/didcomm/presentations/${aliceProofId}/accept-request`)
     expect(accepted.body.error ?? accepted.status).toBe(200)
-    await untilRecordState(faberApp, 'presentations', faberProofId, 'presentation-received')
+    await untilPresentationVerified(faberApp, faberProofId)
 
     const received = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
     expect(received.body.connectionId).toBe(connectionId)

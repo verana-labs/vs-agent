@@ -89,7 +89,7 @@ function presentedCredentialsOf(record: DidCommProofExchangeRecord): PresentedCr
 /**
  * Credo sets `presentation-received` before the trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] runs.
  * Until the decision records the presented credentials, the record is not `verified` and the
- * Events API does not report the state change.
+ * caller cannot acknowledge the presentation.
  */
 export function awaitsTrustDecision(record: DidCommProofExchangeRecord): boolean {
   return (

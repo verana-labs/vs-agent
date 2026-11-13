@@ -1,5 +1,6 @@
 import type { VsAgent } from '../agent/VsAgent'
 import type { BaseEvent } from '@credo-ts/core'
+import type { DidCommProofExchangeRecord, DidCommProofState } from '@credo-ts/didcomm'
 
 import {
   BaseMessage,
@@ -17,6 +18,7 @@ export enum VsAgentEventTypes {
   InvitationStateUpdated = 'vs-agent-invitation-state-updated',
   MessageReceived = 'vs-agent-message-received',
   PresentationStateUpdated = 'vs-agent-presentation-state-updated',
+  PresentationTrustDecided = 'vs-agent-presentation-trust-decided',
   VtFlowStateUpdated = 'vs-agent-vt-flow-state-updated',
   IndexerNotification = 'vs-agent-indexer-notification',
   ModuleMessageReceived = 'vs-agent-module-message-received',
@@ -44,6 +46,18 @@ export interface VsAgentPresentationStateUpdatedEvent extends BaseEvent {
   type: typeof VsAgentEventTypes.PresentationStateUpdated
   payload: {
     event: PresentationStateUpdated
+  }
+}
+/**
+ * The trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] succeeded for a received presentation. Credo
+ * emits the change to `presentation-received` before the decision runs, so a listener that needs
+ * the verified credentials of the record waits for this event.
+ */
+export interface VsAgentPresentationTrustDecidedEvent extends BaseEvent {
+  type: typeof VsAgentEventTypes.PresentationTrustDecided
+  payload: {
+    proofRecord: DidCommProofExchangeRecord
+    previousState: DidCommProofState
   }
 }
 export interface VsAgentVtFlowStateUpdatedEvent extends BaseEvent {

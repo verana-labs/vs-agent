@@ -73,7 +73,7 @@ import {
   PresentationRecordPageDto,
   RequestedCredentialDto,
 } from './dto'
-import { REQUESTED_CREDENTIALS_METADATA, toPresentationDto } from './mappers'
+import { awaitsTrustDecision, REQUESTED_CREDENTIALS_METADATA, toPresentationDto } from './mappers'
 
 /**
  * Presentation flows this agent requested over DIDComm.
@@ -388,7 +388,11 @@ export class V2DidcommPresentationsController {
     type: PresentationRecordDto,
   })
   @ApiNotFoundResponse({ description: 'No presentation with the given id' })
-  @ApiConflictResponse({ description: 'The exchange is not in state `presentation-received`' })
+  @ApiConflictResponse({
+    description:
+      'The exchange is not in state `presentation-received`, or the trust decision has not ' +
+      'completed for the presentation',
+  })
   public async acceptPresentation(
     @Param('proofExchangeId') proofExchangeId: string,
   ): Promise<PresentationRecordDto> {
@@ -398,6 +402,15 @@ export class V2DidcommPresentationsController {
     if (!record) throw unknownPresentation(proofExchangeId)
 
     requireProofState(record, DidCommProofState.PresentationReceived)
+
+    // The agent acknowledges no presentation that it did not check, per [VSA-VTI-FLOW-VERIFY-AC-8]
+    if (awaitsTrustDecision(record)) {
+      throw new AdminApiError(
+        AdminApiErrorCode.InvalidState,
+        HttpStatus.CONFLICT,
+        `the trust decision has not completed for presentation "${proofExchangeId}"`,
+      )
+    }
 
     const updated = await agent.didcomm.proofs.acceptPresentation({
       proofExchangeRecordId: proofExchangeId,
