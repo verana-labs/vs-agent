@@ -774,6 +774,34 @@ describe('v2 didcomm accept routes, over two agents', () => {
     }
   }, 120_000)
 
+  it('abandons a presentation that has no AnonCreds proof', async () => {
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }] })
+    expect(created.status).toBe(201)
+    const faberProofId = created.body.proofExchangeId
+
+    // The agent registers the AnonCreds format only, so the test removes the proof from the read
+    const proofs = faberAgent.didcomm.proofs
+    const getFormatData = proofs.getFormatData.bind(proofs)
+    const read = vi
+      .spyOn(proofs, 'getFormatData')
+      .mockImplementation(async id => (id === faberProofId ? {} : getFormatData(id)))
+
+    try {
+      await presentTo(created.body.invitation)
+      await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+    } finally {
+      read.mockRestore()
+    }
+
+    const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(abandoned.body).toMatchObject({ verified: false, credentials: [], rejectedCredentials: [] })
+    expect(abandoned.body.errorMessage).toBe(
+      'e.p.trust-resolution-unavailable: the presentation has no AnonCreds proof',
+    )
+  }, 120_000)
+
   it('never acknowledges a presentation that fails the trust decision, whatever the autoAccept policy', async () => {
     const messageSender = faberAgent.dependencyManager.resolve(DidCommMessageSender)
     const sendMessage = vi.spyOn(messageSender, 'sendMessage')

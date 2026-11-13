@@ -401,7 +401,8 @@ export async function completePendingTrustDecisions(
 
   let examineAgainInMs = 0
 
-  for (const { id, threadId } of pending) {
+  // A record with a decision waits for the caller, so the agent does not read it again
+  for (const { id, threadId } of pending.filter(awaitsTrustDecision)) {
     // The message handler of this process decides this presentation at this moment
     if (deciding.has(threadId)) continue
 
@@ -461,7 +462,21 @@ async function applyAnonCredsTrustDecision(
   presentation: AnonCredsProof | undefined,
   logger: BaseLogger,
 ): Promise<boolean> {
-  if (record.role !== DidCommProofRole.Verifier || !presentation) return false
+  if (record.role !== DidCommProofRole.Verifier) return false
+
+  // The agent can check an AnonCreds presentation only. A presentation with no decision can be
+  // neither acknowledged nor declined, so the exchange ends here, per [VSA-VTI-FLOW-VERIFY-AC-8].
+  if (!presentation) {
+    await abandonPresentation(
+      agent,
+      record,
+      connection,
+      AnonCredsTrustProblemCode.TrustResolutionUnavailable,
+      'the presentation has no AnonCreds proof',
+      logger,
+    )
+    return true
+  }
 
   const identifiers = presentation.identifiers ?? []
 
