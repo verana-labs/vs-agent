@@ -21,6 +21,7 @@ import {
   ISSUER_GRANTOR_PARTICIPANT_TYPE,
   ISSUER_PARTICIPANT_TYPE,
   ParticipantState,
+  sendPendingRenewal,
   VERIFIER_GRANTOR_PARTICIPANT_TYPE,
   VERIFIER_PARTICIPANT_TYPE,
   VeranaChainService,
@@ -173,10 +174,12 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
           }
           return false
         },
-        onCompleted: async ({ record }) =>
-          orchestrator
+        onCompleted: async ({ record }) => {
+          await orchestrator
             .onCredentialCompleted(record.id)
-            .catch((error: Error) => logger.warn(`onCompleted: ${error.message}`)),
+            .catch((error: Error) => logger.warn(`onCompleted: ${error.message}`))
+          await sendPendingRenewal(agent, record)
+        },
       },
     })
     orchestrator = new VtFlowOrchestrator(agent, { publicApiBaseUrl: agent.publicApiBaseUrl })
@@ -515,6 +518,67 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
       expect(await indexer.getDigest(reissued.credentialDigest!)).toBeDefined()
       expect(reheld.credentialExchangeRecordId).not.toBe(beforeHeld.credentialExchangeRecordId)
       expect(verifiedExchanges).toContain(reheld.credentialExchangeRecordId)
+    },
+    SETUP_TIMEOUT_MS,
+  )
+
+  it(
+    'sends the renewal that arrived while the credential was held back by a failed anchoring, once it completes',
+    async () => {
+      const validatorChain = validator.veranaChain!
+      const estimateFee = validatorChain.estimateFee.bind(validatorChain)
+      let anchoringAttempts = 0
+      validatorChain.estimateFee = async (messages, granter) => {
+        if (messages[0]?.typeUrl !== PP_SESSION) return estimateFee(messages, granter)
+        anchoringAttempts++
+        throw Object.assign(new Error('Bad status on response: 502'), { cause: { status: 502, body: '' } })
+      }
+
+      try {
+        await operatorChain.renewParticipantOP(holderId)
+        await untilState(validatorFlows, holderSid, VtFlowState.Validating)
+        await operatorChain.setParticipantOPToValidated({ id: holderId })
+
+        const failed = await until(
+          async () => {
+            const flow = await validatorFlows.getFlow(holderSid)
+            return flow.issuance?.tx?.status === VtFlowTxStatus.Failed ? flow : undefined
+          },
+          () => 'a FAILED anchoring',
+        )
+        expect(failed).toMatchObject({
+          flowState: VtFlowState.CredOffered,
+          issuance: { tx: { reason: 'PREFLIGHT_ERROR', error: 'Bad status on response: 502' } },
+        })
+        expect(anchoringAttempts).toBe(4)
+        await untilState(applicantFlows, holderSid, VtFlowState.CredOffered)
+      } finally {
+        validatorChain.estimateFee = estimateFee
+      }
+
+      const { txHash } = await operatorChain.renewParticipantOP(holderId)
+      await untilHandled(applicant, txHash)
+      expect((await applicantFlows.getFlow(holderSid)).flowState).toBe(VtFlowState.CredOffered)
+      expect((await validatorFlows.getFlow(holderSid)).flowState).toBe(VtFlowState.CredOffered)
+
+      expect((await validatorFlows.validateFlow(holderSid, {})).issuance?.tx?.status).toBe(
+        VtFlowTxStatus.Succeeded,
+      )
+      const renewed = await untilState(validatorFlows, holderSid, VtFlowState.Validating)
+      const renewedHeld = await untilState(applicantFlows, holderSid, VtFlowState.Validating)
+      expect(statesOf(renewed.id).slice(-4)).toEqual([
+        VtFlowState.CredOffered,
+        VtFlowState.Completed,
+        VtFlowState.AwaitingOr,
+        VtFlowState.Validating,
+      ])
+      expect(statesOf(renewedHeld.id).slice(-4)).toEqual([
+        VtFlowState.CredOffered,
+        VtFlowState.Completed,
+        VtFlowState.OrSent,
+        VtFlowState.Validating,
+      ])
+      expect((await indexer.getParticipant(holderId)).op_state).toBe('PENDING')
     },
     SETUP_TIMEOUT_MS,
   )

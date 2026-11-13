@@ -1520,7 +1520,9 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       issuerParticipantId: 93,
     }
     const recordIssuance = vi.fn(async () => record)
+    const logger = { error: vi.fn() }
     const agent = {
+      config: { logger },
       dependencyManager: { resolve: () => ({ findById: async () => record, recordIssuance }) },
       indexer: {
         getParticipant: async () => ({ schema_id: 22 }),
@@ -1528,7 +1530,7 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       },
       veranaChain: chain,
     }
-    return { orchestrator: new VtFlowOrchestrator(agent as never), chain, record, recordIssuance }
+    return { orchestrator: new VtFlowOrchestrator(agent as never), chain, record, recordIssuance, logger }
   }
 
   it('returns the anchoring transaction once it is included', async () => {
@@ -1572,7 +1574,7 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
     expect(notFound.issuance.tx).toMatchObject({ hash: 'EF56', status: 'FAILED', reason: 'TX_NOT_FOUND' })
   })
 
-  it('resumes at startup only the flows whose anchoring was left SUBMITTED', async () => {
+  it('resumes at startup the flows whose anchoring was left SUBMITTED or failed in the pre-flight', async () => {
     const issueCredentialForSession = vi.fn(async () => ({}))
     const offered = [
       {
@@ -1580,7 +1582,17 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
         credentialExchangeRecordId: 'cx-a',
         issuance: { tx: { hash: 'A1', status: 'SUBMITTED' } },
       },
-      { id: 'rec-b', credentialExchangeRecordId: 'cx-b', issuance: { tx: { status: 'FAILED' } } },
+      {
+        id: 'rec-b',
+        credentialExchangeRecordId: 'cx-b',
+        issuance: { tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR' } },
+      },
+      ...['BROADCAST_ERROR', 'TX_FAILED', 'TX_NOT_FOUND'].map(reason => ({
+        id: `rec-${reason}`,
+        credentialExchangeRecordId: `cx-${reason}`,
+        issuance: { tx: { status: 'FAILED', reason } },
+      })),
+      { id: 'rec-c', issuance: { tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR' } } },
     ]
     const findAllByQuery = vi.fn(async () => offered)
     const agent = { dependencyManager: { resolve: () => ({ findAllByQuery, issueCredentialForSession }) } }
@@ -1588,11 +1600,10 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
     await new VtFlowOrchestrator(agent as never).resumeIssuanceSubmissions()
 
     expect(findAllByQuery).toHaveBeenCalledWith({ role: VtFlowRole.Validator, flowState: 'CRED_OFFERED' })
-    expect(issueCredentialForSession).toHaveBeenCalledTimes(1)
-    expect(issueCredentialForSession).toHaveBeenCalledWith({
-      vtFlowRecordId: 'rec-a',
-      credentialExchangeRecordId: 'cx-a',
-    })
+    expect(issueCredentialForSession.mock.calls).toEqual([
+      [{ vtFlowRecordId: 'rec-a', credentialExchangeRecordId: 'cx-a' }],
+      [{ vtFlowRecordId: 'rec-b', credentialExchangeRecordId: 'cx-b' }],
+    ])
   })
 
   it('lets the Corporation pay the anchoring when the grant of the issuer entry has with_feegrant', async () => {
@@ -1628,5 +1639,20 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       reason: 'TX_FAILED',
       error: 'digest exists',
     })
+  })
+
+  it('logs one error line that names the flow, the session and the cause of a failed anchoring', async () => {
+    const broke = makeAnchorAgent('100')
+    await broke.orchestrator.onCredentialIssued('rec-v', signed)
+
+    expect(broke.logger.error).toHaveBeenCalledTimes(1)
+    const [line] = broke.logger.error.mock.calls[0] as unknown as [string]
+    expect(line).toContain('rec-v')
+    expect(line).toContain('sess-1')
+    expect(line).toContain('INSUFFICIENT_FUNDS_AGENT: the agent account holds 100uvna')
+
+    const included = makeAnchorAgent()
+    await included.orchestrator.onCredentialIssued('rec-v', signed)
+    expect(included.logger.error).not.toHaveBeenCalled()
   })
 })
