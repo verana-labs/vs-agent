@@ -232,9 +232,9 @@ describe('preflightFee', () => {
     expect(chain.estimateFee).toHaveBeenCalledTimes(4)
   })
 
-  it('retries a connection reset', async () => {
+  it.each(['ECONNRESET', 'EAI_AGAIN'])('retries a transport failure with the code %s', async code => {
     const chain = chainWith()
-    chain.getBalance.mockRejectedValueOnce(socket('ECONNRESET'))
+    chain.getBalance.mockRejectedValueOnce(socket(code))
 
     await expect(run(chain)).resolves.toEqual({ fee })
     expect(chain.getBalance).toHaveBeenCalledTimes(2)

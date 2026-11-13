@@ -1574,7 +1574,7 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
     expect(notFound.issuance.tx).toMatchObject({ hash: 'EF56', status: 'FAILED', reason: 'TX_NOT_FOUND' })
   })
 
-  it('resumes at startup only the flows whose anchoring was left SUBMITTED', async () => {
+  it('resumes at startup the flows whose anchoring was left SUBMITTED or failed in the pre-flight', async () => {
     const issueCredentialForSession = vi.fn(async () => ({}))
     const offered = [
       {
@@ -1582,7 +1582,17 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
         credentialExchangeRecordId: 'cx-a',
         issuance: { tx: { hash: 'A1', status: 'SUBMITTED' } },
       },
-      { id: 'rec-b', credentialExchangeRecordId: 'cx-b', issuance: { tx: { status: 'FAILED' } } },
+      {
+        id: 'rec-b',
+        credentialExchangeRecordId: 'cx-b',
+        issuance: { tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR' } },
+      },
+      ...['BROADCAST_ERROR', 'TX_FAILED', 'TX_NOT_FOUND'].map(reason => ({
+        id: `rec-${reason}`,
+        credentialExchangeRecordId: `cx-${reason}`,
+        issuance: { tx: { status: 'FAILED', reason } },
+      })),
+      { id: 'rec-c', issuance: { tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR' } } },
     ]
     const findAllByQuery = vi.fn(async () => offered)
     const agent = { dependencyManager: { resolve: () => ({ findAllByQuery, issueCredentialForSession }) } }
@@ -1590,11 +1600,10 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
     await new VtFlowOrchestrator(agent as never).resumeIssuanceSubmissions()
 
     expect(findAllByQuery).toHaveBeenCalledWith({ role: VtFlowRole.Validator, flowState: 'CRED_OFFERED' })
-    expect(issueCredentialForSession).toHaveBeenCalledTimes(1)
-    expect(issueCredentialForSession).toHaveBeenCalledWith({
-      vtFlowRecordId: 'rec-a',
-      credentialExchangeRecordId: 'cx-a',
-    })
+    expect(issueCredentialForSession.mock.calls).toEqual([
+      [{ vtFlowRecordId: 'rec-a', credentialExchangeRecordId: 'cx-a' }],
+      [{ vtFlowRecordId: 'rec-b', credentialExchangeRecordId: 'cx-b' }],
+    ])
   })
 
   it('lets the Corporation pay the anchoring when the grant of the issuer entry has with_feegrant', async () => {
