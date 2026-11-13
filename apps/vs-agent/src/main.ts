@@ -485,8 +485,8 @@ const run = async () => {
 
   registerNestPluginEvents(nestPlugins, agent, conf.logger)
 
-  // A presentation that an earlier run received and did not decide gets its trust decision now,
-  // after the listeners above: the decision emits the event of `presentation-received`
+  // An earlier run can leave a presentation with no trust decision. The agent completes that
+  // decision now. The listeners above are ready, so they get the event of `presentation-received`.
   void completePendingTrustDecisions(agent, serverLogger)
 
   // Connect to Verana indexer for on-chain notifications

@@ -249,7 +249,7 @@ describe('Events API delivery', () => {
       metadata: { get: (key: string) => (key === '_2060/presentedCredentials' ? [presented] : null) },
     }
 
-    // The change that Credo emits. The agent does not deliver it, whatever the record holds.
+    // Credo emits this change. The agent does not deliver it, whatever the record holds.
     await emit(DidCommProofEventTypes.ProofStateChanged, {
       proofRecord: { ...received, metadata: { get: () => null } },
       previousState: 'request-sent',
@@ -260,7 +260,7 @@ describe('Events API delivery', () => {
     })
     expect(fetchMock).not.toHaveBeenCalled()
 
-    // The event of the trust decision, with the credentials it recorded
+    // The trust decision emits this event, with the credentials that it recorded
     emit('vs-agent-presentation-trust-decided', {
       proofRecord: decided,
       previousState: 'request-sent',

@@ -164,8 +164,8 @@ export class ListPresentationsQueryDto extends PaginationQueryDto {
 }
 
 /**
- * One entry of `credentials`: what the agent verified of the credential that answers the entry of
- * `requestedCredentials` at the same index.
+ * This is one entry of `credentials`. It gives the values that the agent verified for one presented
+ * credential. The entry of `requestedCredentials` at the same index asks for that credential.
  */
 export class PresentedCredentialDto {
   @ApiProperty({
@@ -213,8 +213,8 @@ export class PresentedCredentialDto {
 }
 
 /**
- * One entry of `rejectedCredentials`: why a requested credential failed the trust decision, and
- * what the agent knows of the credential that answered it.
+ * This is one entry of `rejectedCredentials`. It gives the cause of the failure of one requested
+ * credential. It also gives the values that the agent has of the credential that answered it.
  */
 export class RejectedCredentialDto {
   @ApiProperty({ description: 'Position of the requested credential in `requestedCredentials`', example: 0 })

@@ -49,11 +49,17 @@ export interface VsAgentPresentationStateUpdatedEvent extends BaseEvent {
   }
 }
 /**
- * The trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] completed for a received presentation. Credo
- * emits the change to `presentation-received` before the decision runs, so a listener that needs
- * its result waits for this event. On a success the record holds the verified credentials. On a
- * failure it holds `isVerified` `false` and the cause in `errorMessage`, and the change to
- * `abandoned` follows.
+ * The agent emits this event when the trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] completes for a
+ * received presentation.
+ *
+ * - Credo emits the change to `presentation-received` before the decision runs. A listener that
+ *   needs the result of the decision waits for this event.
+ * - On a success, the record holds the verified credentials.
+ * - On a failure, the record holds `isVerified` `false` and the cause in `errorMessage`. The change
+ *   to `abandoned` follows.
+ * - The payload is not a DTO of the model, as in the other events of this file. This event replaces
+ *   the `ProofStateChanged` event of Credo for this change, so it has the same payload. The host of
+ *   the SDK builds its DTO from the record.
  */
 export interface VsAgentPresentationTrustDecidedEvent extends BaseEvent {
   type: typeof VsAgentEventTypes.PresentationTrustDecided

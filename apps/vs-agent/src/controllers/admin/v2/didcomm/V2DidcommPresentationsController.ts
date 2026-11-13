@@ -513,9 +513,8 @@ export class V2DidcommPresentationsController {
       )
     }
 
-    // The trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] ends the exchange itself when it fails, and
-    // it reports its result in the event of `presentation-received`. A decline before that would
-    // race it, so the caller waits for the event.
+    // The trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] is not complete. The agent reports its
+    // result in the event of `presentation-received`. The caller declines after that event.
     if (awaitsTrustDecision(record)) {
       throw new AdminApiError(
         AdminApiErrorCode.InvalidState,

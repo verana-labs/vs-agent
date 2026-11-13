@@ -233,22 +233,35 @@ export const baseMessageEvents = async (agent: VsAgent<BaseAgentModules>, logger
   )
 }
 
-/** The threads whose presentation the message handler of an agent decides at this moment */
-const decidingThreads = new WeakMap<object, Set<string>>()
+/**
+ * A trust decision in flight completes in less than this time. The function
+ * `completePendingTrustDecisions` does not decide a record that is younger: the message handler of
+ * this process, or of another process on the same wallet, can decide it at that moment.
+ */
+const PENDING_TRUST_DECISION_MIN_AGE_MS = 60_000
 
-function decidingThreadsOf(agent: VsAgent<BaseAgentModules>): Set<string> {
-  let threads = decidingThreads.get(agent)
-  if (!threads) {
-    threads = new Set()
-    decidingThreads.set(agent, threads)
+interface TrustDecisionState {
+  /** These are the threads of the presentations that this process decides at this moment. */
+  deciding: Set<string>
+  /** This timer starts the next examination of the pending trust decisions. */
+  nextExamination?: ReturnType<typeof setTimeout>
+}
+
+const trustDecisionStates = new WeakMap<object, TrustDecisionState>()
+
+function trustDecisionStateOf(agent: VsAgent<BaseAgentModules>): TrustDecisionState {
+  let state = trustDecisionStates.get(agent)
+  if (!state) {
+    state = { deciding: new Set() }
+    trustDecisionStates.set(agent, state)
   }
-  return threads
+  return state
 }
 
 /**
  * Credo sets `presentation-received` before the trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] runs.
- * Until the decision records the presented credentials, the record is not `verified`, and the
- * caller can neither acknowledge nor decline the presentation.
+ * The decision records the presented credentials when it succeeds. Before that, the record is not
+ * `verified`. The caller cannot acknowledge the presentation, and cannot decline it.
  */
 export function awaitsTrustDecision(record: DidCommProofExchangeRecord): boolean {
   return (
@@ -259,7 +272,7 @@ export function awaitsTrustDecision(record: DidCommProofExchangeRecord): boolean
 }
 
 function registerAnonCredsTrustDecision(agent: VsAgent<BaseAgentModules>, logger: BaseLogger): void {
-  const deciding = decidingThreadsOf(agent)
+  const { deciding } = trustDecisionStateOf(agent)
 
   agent.didcomm.registerMessageHandlerMiddleware(async (messageContext, next) => {
     const { message } = messageContext
@@ -270,7 +283,7 @@ function registerAnonCredsTrustDecision(agent: VsAgent<BaseAgentModules>, logger
       await next()
 
       // A presentation with no connection answers a request of an invitation. The trust decision
-      // applies to it as to any other presentation.
+      // applies to it also.
       const { connection } = messageContext
 
       let record: DidCommProofExchangeRecord | null
@@ -286,6 +299,10 @@ function registerAnonCredsTrustDecision(agent: VsAgent<BaseAgentModules>, logger
       } catch (error) {
         logger.error(`The agent cannot read the presentation of ${message.threadId}: ${error}`)
         messageContext.responseMessage = undefined
+
+        // The agent has no record to abandon. It examines the pending trust decisions again later:
+        // that examination completes the decision, or it ends the exchange in `abandoned`.
+        completePendingTrustDecisionsLater(agent, logger, PENDING_TRUST_DECISION_MIN_AGE_MS)
         return
       }
 
@@ -301,9 +318,9 @@ function registerAnonCredsTrustDecision(agent: VsAgent<BaseAgentModules>, logger
 }
 
 /**
- * Runs the trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] on a received presentation, and acknowledges
- * the presentation when the exchange asks for it. Returns `true` when the decision failed: the
- * exchange then ended in `abandoned`.
+ * This function runs the trust decision of [VSA-VTI-FLOW-VERIFY-AC-7] on a received presentation.
+ * It acknowledges the presentation when the exchange asks for it. It returns `true` when the
+ * decision failed. The exchange is then in `abandoned`.
  */
 async function completeTrustDecision(
   agent: VsAgent<BaseAgentModules>,
@@ -348,18 +365,28 @@ async function completeTrustDecision(
 }
 
 /**
- * Completes the trust decision of each received presentation that has none. A stop of the agent
- * between the proof verification and the decision leaves such a record, and so does a version of
- * the agent that recorded no decision. A record with no decision can be neither acknowledged nor
- * declined, so the agent runs this at each start, after it registered the event listeners: the
- * decision emits the event of `presentation-received`. Per [VSA-VTI-FLOW-VERIFY-AC-8], a decision
- * that cannot complete ends the exchange in `abandoned`.
+ * This function completes the trust decision of each received presentation that has none.
+ *
+ * - A stop of the agent before the decision leaves such a record. An earlier version of the agent
+ *   leaves such a record also. The caller cannot acknowledge that record, and cannot decline it.
+ * - Call this function at each start, after the event listeners are registered. The decision emits
+ *   the event of `presentation-received`.
+ * - The decision uses the state of the ledger at the time of the call, not at the time of the
+ *   presentation.
+ * - A decision that cannot complete ends the exchange in `abandoned`, per
+ *   [VSA-VTI-FLOW-VERIFY-AC-8].
+ * - The function does not decide a record that is younger than `minAgeMs`. Another process can
+ *   decide that record at this moment. The function examines that record again later.
  */
 export async function completePendingTrustDecisions(
   agent: VsAgent<BaseAgentModules>,
   logger: BaseLogger,
+  { minAgeMs = PENDING_TRUST_DECISION_MIN_AGE_MS }: { minAgeMs?: number } = {},
 ): Promise<void> {
-  const deciding = decidingThreadsOf(agent)
+  // A timer can start this function after the agent stopped
+  if (!agent.isInitialized) return
+
+  const { deciding } = trustDecisionStateOf(agent)
 
   let pending: DidCommProofExchangeRecord[]
   try {
@@ -372,8 +399,10 @@ export async function completePendingTrustDecisions(
     return
   }
 
+  let examineAgainInMs = 0
+
   for (const { id, threadId } of pending) {
-    // The message handler decides the presentation that it receives at this moment
+    // The message handler of this process decides this presentation at this moment
     if (deciding.has(threadId)) continue
 
     deciding.add(threadId)
@@ -381,6 +410,12 @@ export async function completePendingTrustDecisions(
       // The record can change after the query, so the agent reads it again
       const record = await agent.didcomm.proofs.findById(id)
       if (!record || !awaitsTrustDecision(record)) continue
+
+      const ageMs = Date.now() - (record.updatedAt ?? record.createdAt).getTime()
+      if (ageMs < minAgeMs) {
+        examineAgainInMs = Math.max(examineAgainInMs, minAgeMs - ageMs)
+        continue
+      }
 
       const connection = record.connectionId
         ? ((await agent.didcomm.connections.findById(record.connectionId)) ?? undefined)
@@ -394,6 +429,29 @@ export async function completePendingTrustDecisions(
       deciding.delete(threadId)
     }
   }
+
+  if (examineAgainInMs > 0) completePendingTrustDecisionsLater(agent, logger, examineAgainInMs, minAgeMs)
+}
+
+/** This function starts one later examination of the pending trust decisions of an agent. */
+function completePendingTrustDecisionsLater(
+  agent: VsAgent<BaseAgentModules>,
+  logger: BaseLogger,
+  delayMs: number,
+  minAgeMs?: number,
+): void {
+  const state = trustDecisionStateOf(agent)
+
+  // One examination decides every pending record, so the agent keeps one timer only
+  if (state.nextExamination) return
+
+  state.nextExamination = setTimeout(() => {
+    state.nextExamination = undefined
+    void completePendingTrustDecisions(agent, logger, { minAgeMs })
+  }, delayMs)
+
+  // The timer does not keep the process alive
+  state.nextExamination.unref()
 }
 
 async function applyAnonCredsTrustDecision(
@@ -557,7 +615,7 @@ async function applyAnonCredsTrustDecision(
   }
 
   if (rejected.length === 0) {
-    // The record keeps what the agent verified, so a read resolves nothing again
+    // The record keeps the values that the agent verified, so a later read resolves nothing
     record.metadata.set(
       PRESENTED_CREDENTIALS_METADATA,
       candidates.map(({ index: _index, ...presented }): PresentedCredential => presented),
@@ -572,7 +630,7 @@ async function applyAnonCredsTrustDecision(
   rejected.sort((a, b) => a.index - b.index)
   record.metadata.set(REJECTED_CREDENTIALS_METADATA, rejected)
 
-  // A credential that is not authorized decides the code, and its cause comes first in the report
+  // A credential that is not authorized decides the code. Its cause comes first in the report.
   const notAuthorized = rejected.filter(({ code }) => code === AnonCredsTrustProblemCode.IssuerNotAuthorized)
   const unavailable = rejected.filter(
     ({ code }) => code === AnonCredsTrustProblemCode.TrustResolutionUnavailable,
@@ -594,9 +652,9 @@ async function applyAnonCredsTrustDecision(
 
 /**
  * Credo emits the change to `presentation-received` before the trust decision runs. The Events API
- * reports that change on this event, which carries the result of the decision, per
- * [VSA-VTI-FLOW-VERIFY-AC-7]. A record that left `presentation-received` already has no such
- * change to report: Credo reported the state that the record is in.
+ * reports that change on this event, per [VSA-VTI-FLOW-VERIFY-AC-7]. The event carries the result
+ * of the decision. The function emits nothing for a record that is not in `presentation-received`:
+ * Credo reported the state of that record already.
  */
 function emitTrustDecided(agent: VsAgent<BaseAgentModules>, record: DidCommProofExchangeRecord): void {
   if (record.state !== DidCommProofState.PresentationReceived) return
@@ -620,8 +678,8 @@ async function abandonPresentation(
   record.isVerified = false
   record.errorMessage = `${code}: ${description}`
 
-  // The Events API reports the change to `presentation-received` with the cause of the failure,
-  // before the change to `abandoned`
+  // The Events API reports the change to `presentation-received` with the cause of the failure.
+  // It reports the change to `abandoned` after that.
   emitTrustDecided(agent, record)
 
   // `updateState` emits the state change with `previousState`, per [VSA-VTI-FLOW-VERIFY-AC-7]
@@ -641,7 +699,7 @@ async function abandonPresentation(
   problemReport.setThread({ threadId: record.threadId, parentThreadId: record.parentThreadId })
 
   try {
-    // An exchange with no connection sends on the services of its last two messages
+    // An exchange with no connection has no route. Its last two messages give the services.
     const outboundMessageContext = await getOutboundDidCommMessageContext(agent.context, {
       message: problemReport,
       associatedRecord: record,

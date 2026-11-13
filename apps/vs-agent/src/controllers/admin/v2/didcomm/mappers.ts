@@ -108,8 +108,8 @@ export async function toPresentationDto(
     }
   }
 
-  // The trust decision recorded the identity of each credential. The claims stay in the proof, and
-  // the request gives the attribute names, so a read resolves nothing.
+  // The trust decision recorded the identity of each credential. The proof holds the claims, and
+  // the request holds the attribute names. Thus a read resolves nothing.
   const requestedAttributes = formatData.request?.anoncreds?.requested_attributes ?? {}
   const credentials: PresentedCredentialDto[] = (presentedCredentialsOf(record) ?? []).map(
     ({ group, ...identity }) => {

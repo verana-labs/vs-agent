@@ -332,8 +332,8 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
   /**
    * This function waits for the trust decision of a received presentation. The agent stores
-   * `presentation-received` before the decision records its values, so the state alone can
-   * show a record that is not `verified` yet.
+   * `presentation-received` before the decision records its values. Thus the state alone does
+   * not show a verified record.
    */
   async function untilPresentationVerified(app: INestApplication, id: string): Promise<void> {
     for (let attempt = 0; attempt < 80; attempt++) {
@@ -577,9 +577,9 @@ describe('v2 didcomm accept routes, over two agents', () => {
   }, 120_000)
 
   /**
-   * This function drives one presentation up to the trust decision of Faber, and then removes the
-   * recorded decision. A stop of the agent between the proof verification and the decision leaves
-   * such a record, and so does a version of the agent that recorded no decision.
+   * This function drives one presentation up to the trust decision of Faber. Then it removes the
+   * recorded decision. A stop of the agent before the decision leaves such a record. An earlier
+   * version of the agent leaves such a record also.
    */
   async function presentationWithNoDecision(): Promise<string> {
     const created = await faber()
@@ -618,7 +618,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
       },
     )
 
-    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'))
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
 
     // The decision emits the event of `presentation-received`, and the record carries its result
     expect(decisions).toEqual([{ id: faberProofId, state: 'presentation-received' }])
@@ -629,7 +629,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     ])
 
     // A second run finds no presentation to decide
-    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'))
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
     expect(decisions).toHaveLength(1)
 
     const declined = await faber().post(`/v2/didcomm/presentations/${faberProofId}/decline`)
@@ -643,7 +643,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     issuerParticipantIsActive = false
 
     try {
-      await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'))
+      await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
 
       const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
       expect(abandoned.body).toMatchObject({ state: 'abandoned', verified: false, credentials: [] })
@@ -653,6 +653,52 @@ describe('v2 didcomm accept routes, over two agents', () => {
     } finally {
       issuerParticipantIsActive = true
     }
+  }, 120_000)
+
+  it('leaves a recent pending presentation to the process that can decide it, and examines it again later', async () => {
+    const faberProofId = await presentationWithNoDecision()
+
+    // The record is younger than the minimum age, so another process can decide it at this moment
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 1500 })
+
+    const pending = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(pending.body).toMatchObject({ state: 'presentation-received', verified: false })
+
+    // The later examination completes the decision
+    await untilPresentationVerified(faberApp, faberProofId)
+  }, 120_000)
+
+  it('examines the pending trust decisions later when it cannot read the record of a presentation', async () => {
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }] })
+    expect(created.status).toBe(201)
+    const faberProofId = created.body.proofExchangeId
+
+    const read = vi
+      .spyOn(faberAgent.didcomm.proofs, 'getByThreadAndConnectionId')
+      .mockRejectedValueOnce(new Error('the store does not answer'))
+    const timers = vi.spyOn(globalThis, 'setTimeout')
+
+    try {
+      await presentTo(created.body.invitation)
+      await untilRecordState(faberApp, 'presentations', faberProofId, 'presentation-received')
+
+      // The agent has no record to abandon, so it starts a later examination
+      await vi.waitFor(() => expect(timers.mock.calls.some(([, delay]) => delay === 60_000)).toBe(true))
+
+      const pending = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+      expect(pending.body).toMatchObject({ state: 'presentation-received', verified: false })
+    } finally {
+      read.mockRestore()
+      timers.mockRestore()
+    }
+
+    // The examination completes the decision. The test does not wait for the timer.
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
+
+    const decided = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(decided.body.verified).toBe(true)
   }, 120_000)
 
   /**
