@@ -9,6 +9,7 @@ import '@hyperledger/anoncreds-nodejs'
 import { DidCommMediaSharingService } from '@credo-ts/didcomm-media-sharing'
 import { LogLevel } from '@credo-ts/core'
 import {
+  DidCommAutoAcceptProof,
   DidCommHandshakeProtocol,
   DidCommMessageSender,
   DidCommOutOfBandInvitation,
@@ -29,12 +30,16 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { V2DidcommMediaSharingController, type ChatAgentModules } from '@verana-labs/vs-agent-plugin-chat'
 import {
   AUTO_ACCEPT_PRESENTATION_METADATA,
+  completePendingTrustDecisions,
   createInvitation,
   createJsc,
   ParticipantRole,
   ParticipantState,
+  PRESENTED_CREDENTIALS_METADATA,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
   VeranaIndexerService,
+  VsAgentEventTypes,
+  type VsAgentPresentationTrustDecidedEvent,
   type VeranaChainService,
 } from '@verana-labs/vs-agent-sdk'
 
@@ -325,6 +330,20 @@ describe('v2 didcomm accept routes, over two agents', () => {
     throw new Error(`${collection} record "${id}" did not reach state "${state}"`)
   }
 
+  /**
+   * This function waits for the trust decision of a received presentation. The agent stores
+   * `presentation-received` before the decision records its values. Thus the state alone does
+   * not show a verified record.
+   */
+  async function untilPresentationVerified(app: INestApplication, id: string): Promise<void> {
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const { body } = await request(app.getHttpServer()).get(`/v2/didcomm/presentations/${id}`)
+      if (body.state === 'presentation-received' && body.verified === true) return
+      await new Promise(resolve => setTimeout(resolve, 250))
+    }
+    throw new Error(`presentation "${id}" did not pass the trust decision`)
+  }
+
   /** This function builds one entry of the CredentialSchema map that a request records per group. */
   const requestedCredentialSchema = (credentialSchemaId: number) => ({
     credentialSchemaId,
@@ -450,10 +469,26 @@ describe('v2 didcomm accept routes, over two agents', () => {
     expect(accepted.body.error ?? accepted.status).toBe(200)
 
     // The agent stops on `presentation-received`: the verifier acknowledges with a call.
-    await untilRecordState(faberApp, 'presentations', faberProofId, 'presentation-received')
+    await untilPresentationVerified(faberApp, faberProofId)
 
     const waiting = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
     expect(waiting.body.verified).toBe(true)
+
+    // The record names the issuer that the trust decision checked, from the proof itself.
+    expect(waiting.body.credentials).toEqual([
+      {
+        credentialDefinitionId,
+        issuerDid: faberAgent.did,
+        credentialSchemaId: expect.any(Number),
+        ecosystemDid: faberAgent.did,
+        jsonSchemaCredentialId: JSON_SCHEMA_CREDENTIAL_ID,
+        claims: expect.arrayContaining([
+          { name: 'name', value: 'OpenAI Research' },
+          { name: 'countryCode', value: 'US' },
+        ]),
+        unrevealed: [],
+      },
+    ])
 
     // Verifier: the exchange completes.
     const acknowledged = await faber().post(`/v2/didcomm/presentations/${faberProofId}/accept-presentation`)
@@ -501,7 +536,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', knownRequests)
     const accepted = await alice().post(`/v2/didcomm/presentations/${aliceProofId}/accept-request`)
     expect(accepted.body.error ?? accepted.status).toBe(200)
-    await untilRecordState(faberApp, 'presentations', faberProofId, 'presentation-received')
+    await untilPresentationVerified(faberApp, faberProofId)
 
     const received = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
     expect(received.body.connectionId).toBe(connectionId)
@@ -540,6 +575,233 @@ describe('v2 didcomm accept routes, over two agents', () => {
       issuerParticipantIsActive = true
     }
   }, 120_000)
+
+  /**
+   * This function drives one presentation up to the trust decision of Faber. Then it removes the
+   * recorded decision. A stop of the agent before the decision leaves such a record. An earlier
+   * version of the agent leaves such a record also.
+   */
+  async function presentationWithNoDecision(): Promise<string> {
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }] })
+    expect(created.status).toBe(201)
+    const faberProofId = created.body.proofExchangeId
+
+    await presentTo(created.body.invitation)
+    await untilPresentationVerified(faberApp, faberProofId)
+
+    const record = await faberAgent.didcomm.proofs.getById(faberProofId)
+    record.metadata.delete(PRESENTED_CREDENTIALS_METADATA)
+    await faberAgent.didcomm.proofs.update(record)
+
+    return faberProofId
+  }
+
+  it('completes at a start the trust decision that an earlier run did not record', async () => {
+    const faberProofId = await presentationWithNoDecision()
+
+    // With no decision, the caller can neither acknowledge nor decline the presentation
+    const pending = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(pending.body).toMatchObject({ state: 'presentation-received', verified: false, credentials: [] })
+    for (const step of ['accept-presentation', 'decline']) {
+      const refused = await faber().post(`/v2/didcomm/presentations/${faberProofId}/${step}`)
+      expect(refused.status).toBe(409)
+      expect(refused.body.error.code).toBe('INVALID_STATE')
+    }
+
+    const decisions: Array<{ id: string; state: string }> = []
+    faberAgent.events.on<VsAgentPresentationTrustDecidedEvent>(
+      VsAgentEventTypes.PresentationTrustDecided,
+      ({ payload }) => {
+        decisions.push({ id: payload.proofRecord.id, state: payload.proofRecord.state })
+      },
+    )
+
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
+
+    // The decision emits the event of `presentation-received`, and the record carries its result
+    expect(decisions).toEqual([{ id: faberProofId, state: 'presentation-received' }])
+    const decided = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(decided.body.verified).toBe(true)
+    expect(decided.body.credentials).toEqual([
+      expect.objectContaining({ credentialDefinitionId, issuerDid: faberAgent.did }),
+    ])
+
+    // A second run finds no presentation to decide
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
+    expect(decisions).toHaveLength(1)
+
+    const declined = await faber().post(`/v2/didcomm/presentations/${faberProofId}/decline`)
+    expect(declined.body.error ?? declined.status).toBe(200)
+    expect(declined.body.state).toBe('declined')
+  }, 120_000)
+
+  it('abandons at a start a pending presentation whose issuer lost its ISSUER Participant', async () => {
+    const faberProofId = await presentationWithNoDecision()
+
+    issuerParticipantIsActive = false
+
+    try {
+      await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
+
+      const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+      expect(abandoned.body).toMatchObject({ state: 'abandoned', verified: false, credentials: [] })
+      expect(abandoned.body.rejectedCredentials).toEqual([
+        expect.objectContaining({ index: 0, code: 'e.p.issuer-not-authorized', credentialDefinitionId }),
+      ])
+    } finally {
+      issuerParticipantIsActive = true
+    }
+  }, 120_000)
+
+  it('leaves a recent pending presentation to the process that can decide it, and examines it again later', async () => {
+    const faberProofId = await presentationWithNoDecision()
+
+    // The record is younger than the minimum age, so another process can decide it at this moment
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 1500 })
+
+    const pending = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(pending.body).toMatchObject({ state: 'presentation-received', verified: false })
+
+    // The later examination completes the decision
+    await untilPresentationVerified(faberApp, faberProofId)
+  }, 120_000)
+
+  it('examines the pending trust decisions later when it cannot read the record of a presentation', async () => {
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }] })
+    expect(created.status).toBe(201)
+    const faberProofId = created.body.proofExchangeId
+
+    const read = vi
+      .spyOn(faberAgent.didcomm.proofs, 'getByThreadAndConnectionId')
+      .mockRejectedValueOnce(new Error('the store does not answer'))
+    const timers = vi.spyOn(globalThis, 'setTimeout')
+
+    try {
+      await presentTo(created.body.invitation)
+      await untilRecordState(faberApp, 'presentations', faberProofId, 'presentation-received')
+
+      // The agent has no record to abandon, so it starts a later examination
+      await vi.waitFor(() => expect(timers.mock.calls.some(([, delay]) => delay === 60_000)).toBe(true))
+
+      const pending = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+      expect(pending.body).toMatchObject({ state: 'presentation-received', verified: false })
+    } finally {
+      read.mockRestore()
+      timers.mockRestore()
+    }
+
+    // The examination completes the decision. The test does not wait for the timer.
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
+
+    const decided = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(decided.body.verified).toBe(true)
+  }, 120_000)
+
+  /**
+   * This function drives one presentation that Alice sends with no connection. The invitation
+   * asks for no handshake. A vs-agent prover presents only to a verifier with a DID, so Alice
+   * presents through Credo.
+   */
+  async function presentWithNoConnection(): Promise<string> {
+    const requested = await faberAgent.didcomm.proofs.createRequest({
+      protocolVersion: 'v2',
+      // The verifier acknowledges with a call, as for a request of the Administration API
+      autoAcceptProof: DidCommAutoAcceptProof.Never,
+      proofFormats: {
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: {
+            'gov-id': { names: ['name'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+          },
+        },
+      },
+    })
+    requested.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, {
+      'gov-id': requestedCredentialSchema(CREDENTIAL_SCHEMA_ID),
+    })
+    await faberAgent.didcomm.proofs.update(requested.proofRecord)
+
+    const outOfBand = await faberAgent.didcomm.oob.createInvitation({
+      handshake: false,
+      messages: [requested.message],
+    })
+
+    const known = await idsOf(aliceApp, 'presentations')
+    await aliceAgent.didcomm.oob.receiveInvitation(outOfBand.outOfBandInvitation, { label: 'Alice' })
+    const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
+    await aliceAgent.didcomm.proofs.acceptRequest({ proofExchangeRecordId: aliceProofId })
+
+    return requested.proofRecord.id
+  }
+
+  it('applies the trust decision to a presentation that arrives with no connection', async () => {
+    const faberProofId = await presentWithNoConnection()
+
+    await untilPresentationVerified(faberApp, faberProofId)
+
+    const received = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(received.body.connectionId).toBeUndefined()
+    expect(received.body.credentials).toEqual([
+      expect.objectContaining({ credentialDefinitionId, issuerDid: faberAgent.did }),
+    ])
+
+    const acknowledged = await faber().post(`/v2/didcomm/presentations/${faberProofId}/accept-presentation`)
+    expect(acknowledged.body.error ?? acknowledged.status).toBe(200)
+    expect(acknowledged.body.state).toBe('done')
+  }, 120_000)
+
+  it('abandons a presentation with no connection whose issuer holds no active ISSUER Participant', async () => {
+    issuerParticipantIsActive = false
+
+    try {
+      const faberProofId = await presentWithNoConnection()
+
+      await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+      const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+      expect(abandoned.body).toMatchObject({ verified: false, credentials: [] })
+      expect(abandoned.body.connectionId).toBeUndefined()
+      expect(abandoned.body.rejectedCredentials).toEqual([
+        expect.objectContaining({ index: 0, code: 'e.p.issuer-not-authorized' }),
+      ])
+    } finally {
+      issuerParticipantIsActive = true
+    }
+  }, 120_000)
+
+  it('abandons a presentation that has no AnonCreds proof', async () => {
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }] })
+    expect(created.status).toBe(201)
+    const faberProofId = created.body.proofExchangeId
+
+    // The agent registers the AnonCreds format only, so the test removes the proof from the read
+    const proofs = faberAgent.didcomm.proofs
+    const getFormatData = proofs.getFormatData.bind(proofs)
+    const read = vi
+      .spyOn(proofs, 'getFormatData')
+      .mockImplementation(async id => (id === faberProofId ? {} : getFormatData(id)))
+
+    try {
+      await presentTo(created.body.invitation)
+      await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+    } finally {
+      read.mockRestore()
+    }
+
+    const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(abandoned.body).toMatchObject({ verified: false, credentials: [], rejectedCredentials: [] })
+    expect(abandoned.body.errorMessage).toBe(
+      'e.p.trust-resolution-unavailable: the presentation has no AnonCreds proof',
+    )
+  }, 120_000)
+
   it('never acknowledges a presentation that fails the trust decision, whatever the autoAccept policy', async () => {
     const messageSender = faberAgent.dependencyManager.resolve(DidCommMessageSender)
     const sendMessage = vi.spyOn(messageSender, 'sendMessage')
@@ -646,6 +908,14 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const messageSender = faberAgent.dependencyManager.resolve(DidCommMessageSender)
     const sendMessage = vi.spyOn(messageSender, 'sendMessage')
     const changes = recordProofStates()
+    const decisions: Array<{ id: string; state: string; verified?: boolean; errorMessage?: string }> = []
+    faberAgent.events.on<VsAgentPresentationTrustDecidedEvent>(
+      VsAgentEventTypes.PresentationTrustDecided,
+      ({ payload }) => {
+        const { id, state, isVerified, errorMessage } = payload.proofRecord
+        decisions.push({ id, state, verified: isVerified, errorMessage })
+      },
+    )
 
     const created = await faber()
       .post('/v2/didcomm/presentation-request')
@@ -662,7 +932,20 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
       expect(abandoned.body.verified).toBe(false)
+      expect(abandoned.body.credentials).toEqual([])
       expect(abandoned.body.errorMessage).toContain('e.p.issuer-not-authorized')
+
+      // The record names the rejected issuer in a field of its own, apart from the verified ones.
+      expect(abandoned.body.rejectedCredentials).toEqual([
+        {
+          index: 0,
+          code: 'e.p.issuer-not-authorized',
+          note: expect.stringContaining('holds no active ISSUER Participant'),
+          credentialDefinitionId,
+          issuerDid: faberAgent.did,
+          credentialSchemaId: expect.any(Number),
+        },
+      ])
 
       // The acknowledgement waits for the trust decision, so the peer gets the report instead.
       const sentTypes = sendMessage.mock.calls.map(call => call[0].message.type)
@@ -675,6 +958,16 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       expect(changes.filter(change => change.id === faberProofId && change.state === 'abandoned')).toEqual([
         { id: faberProofId, previousState: 'presentation-received', state: 'abandoned' },
+      ])
+
+      // The Events API reports `presentation-received` with the cause, before `abandoned`.
+      expect(decisions.filter(decision => decision.id === faberProofId)).toEqual([
+        {
+          id: faberProofId,
+          state: 'presentation-received',
+          verified: false,
+          errorMessage: expect.stringContaining('e.p.issuer-not-authorized'),
+        },
       ])
 
       const acknowledged = await faber().post(`/v2/didcomm/presentations/${faberProofId}/accept-presentation`)
@@ -704,6 +997,9 @@ describe('v2 didcomm accept routes, over two agents', () => {
       const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
       expect(abandoned.body.verified).toBe(false)
       expect(abandoned.body.errorMessage).toContain('e.p.trust-resolution-unavailable')
+      expect(abandoned.body.rejectedCredentials).toMatchObject([
+        { index: 0, code: 'e.p.trust-resolution-unavailable', issuerDid: faberAgent.did },
+      ])
     } finally {
       unreachableIndexerOwner = undefined
     }
