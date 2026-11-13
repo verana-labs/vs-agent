@@ -1294,8 +1294,28 @@ describe('v2 didcomm accept routes, over two agents', () => {
       expect(invitationRecord.body.acceptances).toEqual([acceptance(connection.id, false)])
     }, 120_000)
 
+    /**
+     * This function deletes the v2 connections of a peer to Faber that Faber does not hold.
+     *
+     * A v2 connection has no handshake. The peer holds it when it receives the invitation, and
+     * Faber holds it only after the first message of the peer. A test that receives an invitation
+     * and sends no message thus leaves a connection that only the peer holds. Credo reuses the
+     * first v2 connection that the store returns, and the store has no order, so it can select
+     * that connection.
+     */
+    const deleteConnectionsUnknownToFaber = async (agent: VsAgent<BaseAgentModules>): Promise<void> => {
+      for (const connection of await agent.didcomm.connections.findByInvitationDid(faberDid())) {
+        const { id, did, theirDid, didcommVersion } = connection
+        // These are the connections that Credo can reuse for a v2 invitation
+        if (didcommVersion !== 'v2' || !did || !theirDid) continue
+        if (await faberAgent.didcomm.connections.findByDid(did)) continue
+        await agent.didcomm.connections.deleteById(id)
+      }
+    }
+
     /** The peer pings on the v2 connection that it already holds, so the ping carries the invitation as pthid. */
     const reuseFromUrl = async (agent: VsAgent<BaseAgentModules>, name: string, url: string) => {
+      await deleteConnectionsUnknownToFaber(agent)
       const known = new Set((await agent.didcomm.connections.getAll()).map(record => record.id))
       const { connectionRecord } = await agent.didcomm.oob.receiveInvitationFromUrl(url, {
         label: name,
