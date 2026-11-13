@@ -1096,9 +1096,7 @@ export class VtFlowOrchestrator {
       credentialExchangeRecordId: record.credentialExchangeRecordId,
     })
     if (credentialId) {
-      this.agent.config.logger.info(
-        `[vt-flow] removed revoked credential (${credentialId})`,
-      )
+      this.agent.config.logger.info(`[vt-flow] removed revoked credential (${credentialId})`)
     }
   }
 

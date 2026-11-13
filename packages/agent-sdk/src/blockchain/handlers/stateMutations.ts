@@ -637,9 +637,7 @@ async function reconcileSelfIssuedEcsCredentials(
       const ecsKey = await classifyEcsSchema(schema.json_schema)
       if (!ecsKey) continue
       if (!isPublicServiceEcs(ecsKey)) {
-        agent.config.logger.debug(
-          `[SelfTR] Skipping schema ${schema.id}: no self-issuance of ${ecsKey}`,
-        )
+        agent.config.logger.debug(`[SelfTR] Skipping schema ${schema.id}: no self-issuance of ${ecsKey}`)
         continue
       }
       const jsonSchemaCredentialId = await resolveJsonSchemaCredentialId(agent, indexer, schema.id, chainId)
