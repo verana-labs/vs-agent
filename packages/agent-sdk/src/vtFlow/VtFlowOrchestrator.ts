@@ -841,16 +841,22 @@ export class VtFlowOrchestrator {
     await Promise.all(pending.map(record => this.resolveValidationTx(record.id)))
   }
 
-  /** [VSA-VTI-FLOW-ISSUE-1]: at startup, resume every anchoring left SUBMITTED through the stored issued credential. */
+  /**
+   * [VSA-VTI-FLOW-ISSUE-1]: at startup, resume through the stored issued credential every anchoring
+   * left SUBMITTED, and every anchoring that failed in the pre-flight, which sent no transaction.
+   */
   async resumeIssuanceSubmissions(): Promise<void> {
     const vtFlowApi = this.resolveVtFlowApi()
     const offered = await vtFlowApi.findAllByQuery({
       role: VtFlowRole.Validator,
       flowState: VtFlowState.CredOffered,
     })
+    const resumable = (tx: VtFlowTx | undefined): boolean =>
+      tx?.status === VtFlowTxStatus.Submitted ||
+      (tx?.status === VtFlowTxStatus.Failed && tx.reason === VtFlowTxReason.PreflightError)
     await Promise.all(
       offered.map(({ id, issuance, credentialExchangeRecordId }) =>
-        issuance?.tx?.status === VtFlowTxStatus.Submitted && credentialExchangeRecordId
+        resumable(issuance?.tx) && credentialExchangeRecordId
           ? vtFlowApi.issueCredentialForSession({ vtFlowRecordId: id, credentialExchangeRecordId })
           : undefined,
       ),
@@ -999,10 +1005,13 @@ export class VtFlowOrchestrator {
       walletAgentParticipantId: Number(record.walletAgentParticipantId ?? 0) || 0,
       digest,
     })
-    return {
-      credentialDigest: digest,
-      issuance: { tx: await this.anchor(record, message, record.issuerParticipantId) },
+    const tx = await this.anchor(record, message, record.issuerParticipantId)
+    if (tx.status === VtFlowTxStatus.Failed) {
+      this.agent.config.logger.error(
+        `[vt-flow] the anchoring of the credential of flow ${record.id} (session ${record.participantSessionId}) failed, credential not delivered: ${tx.reason}: ${tx.error}`,
+      )
     }
+    return { credentialDigest: digest, issuance: { tx } }
   }
 
   async verifyOfferedCredential(vtFlowRecordId: string): Promise<void> {
