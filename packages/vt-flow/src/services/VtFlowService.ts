@@ -294,7 +294,6 @@ export class VtFlowService {
       fresh.connectionId = connection.id
       fresh.connectionTerminated = undefined
       const newThread = fresh.threadId !== message.threadId
-      // A reconnection keeps the thread, so a new thread on CRED_OFFERED is a renewal.
       const renewal = isVtFlowRenewable(fresh) || (newThread && fresh.state === VtFlowState.CredOffered)
       if (newThread) {
         fresh.threadId = message.threadId
