@@ -356,6 +356,29 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
       connectionId: 'conn-old',
     })
   })
+
+  describe('renewal of a flow left in CRED_OFFERED', () => {
+    it('sends the renewal request on the open connection with the same session', async () => {
+      const { agent, vtFlowApi } = makeAgent(openConnection, { ...holder, opState: ValidationState.PENDING })
+      vtFlowApi.findAllByQuery.mockResolvedValue([runningFlow('CRED_OFFERED')])
+
+      await new VtFlowOrchestrator(agent as never).startOnboardingProcess({
+        applicantParticipantId: 5,
+        claims: { name: 'Acme Renewed' },
+      })
+
+      expect(agent.didcomm.oob.receiveImplicitInvitation).not.toHaveBeenCalled()
+      expect(vtFlowApi.sendOnboardingRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          connectionId: 'conn-old',
+          participantSessionId: 'sess-old',
+          applicantParticipantId: '5',
+          claims: { name: 'Acme Renewed' },
+        }),
+      )
+      expect(vtFlowApi.resendOnboardingRequest).not.toHaveBeenCalled()
+    })
+  })
 })
 
 describe('VtFlowOrchestrator onboarding validation', () => {
