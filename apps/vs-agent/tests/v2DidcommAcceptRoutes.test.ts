@@ -1297,10 +1297,10 @@ describe('v2 didcomm accept routes, over two agents', () => {
     /**
      * This function deletes the v2 connections of a peer to Faber that Faber does not hold.
      *
-     * A v2 connection has no handshake. The peer holds it when it receives the invitation, and
+     * A v2 connection has no handshake. The peer holds it when it receives the invitation.
      * Faber holds it only after the first message of the peer. A test that receives an invitation
      * and sends no message thus leaves a connection that only the peer holds. Credo reuses the
-     * first v2 connection that the store returns, and the store has no order, so it can select
+     * first v2 connection that the store returns. The store has no order. Thus Credo can select
      * that connection.
      */
     const deleteConnectionsUnknownToFaber = async (agent: VsAgent<BaseAgentModules>): Promise<void> => {
