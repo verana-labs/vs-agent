@@ -159,6 +159,32 @@ describe('setupOpenId4Vc', () => {
     )
   })
 
+  it('hands the credential offer lifetime to credo and otherwise defaults to 15 minutes', () => {
+    const lifetimeKey = 'issuer.statefulCredentialOfferExpirationInSeconds'
+
+    expect(setupOpenId4Vc(setupOptions(), noIssuerService).modules.openId4Vc.config).toHaveProperty(
+      lifetimeKey,
+      900,
+    )
+    expect(
+      setupOpenId4Vc({ ...setupOptions(), credentialOfferExpirationSeconds: 86_400 }, noIssuerService).modules
+        .openId4Vc.config,
+    ).toHaveProperty(lifetimeKey, 86_400)
+  })
+
+  it('hands the presentation request lifetime to credo and otherwise defaults to 15 minutes', () => {
+    const lifetimeKey = 'verifier.authorizationRequestExpiresInSeconds'
+
+    expect(setupOpenId4Vc(setupOptions(), noIssuerService).modules.openId4Vc.config).toHaveProperty(
+      lifetimeKey,
+      900,
+    )
+    expect(
+      setupOpenId4Vc({ ...setupOptions(), presentationRequestExpirationSeconds: 86_400 }, noIssuerService)
+        .modules.openId4Vc.config,
+    ).toHaveProperty(lifetimeKey, 86_400)
+  })
+
   it('serves a Status List Token as application/statuslist+jwt and answers 404 for an unknown list', async () => {
     const setup = setupOpenId4Vc(setupOptions(), () => ({
       getJwtVcIssuerMetadata: () => ({}),

@@ -68,6 +68,13 @@ export class OpenId4VcPresentationRequestResponseDto {
       'openid4vp://authorize?request_uri=https%3A%2F%2Fagent.example%2Foid4vp%2Fverifier%2Fauthorization-requests%2F1',
   })
   url!: string
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    description: 'When the request stops being valid',
+  })
+  expiresAt?: Date
 }
 
 /** Query of [VSA-ADM-OID-PR] listPresentations. */
@@ -179,6 +186,13 @@ export class OpenId4VcPresentationRecordDto {
 
   @ApiProperty({ type: String, format: 'date-time', description: 'When the session last changed' })
   updatedAt!: Date
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    description: 'When the request stops being valid',
+  })
+  expiresAt?: Date
 
   @ApiPropertyOptional({ description: 'Error message on the session. The agent sets it if the flow stops.' })
   errorMessage?: string

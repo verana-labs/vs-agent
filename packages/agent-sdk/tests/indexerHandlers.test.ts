@@ -23,9 +23,10 @@ import {
   reconcileVtFlowRecordsOnCancel,
   removeHolderTrustCredentialIfRevoked,
   removeSelfIssuedEcsCredentialsIfIssuerRevoked,
+  sendPendingRenewal,
   startParticipantOPAutoFlow,
 } from '../src/blockchain/handlers/stateMutations'
-import { IndexerActivity, VeranaSyncState } from '../src/blockchain/types'
+import { IndexerActivity, ValidationState, VeranaSyncState } from '../src/blockchain/types'
 import { vtFlowEvents } from '../src/events/VtFlowEvents'
 import { VtFlowOrchestrator } from '../src/vtFlow'
 
@@ -339,6 +340,94 @@ describe('startParticipantOPAutoFlow', () => {
 
     expect(startOnboardingProcess).toHaveBeenCalledWith({ applicantParticipantId: 5 })
     expect(logger.warn).not.toHaveBeenCalled()
+    startOnboardingProcess.mockRestore()
+  })
+
+  it('sends nothing for an entry of another DID, and logs a failed request without throwing', async () => {
+    const startOnboardingProcess = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'startOnboardingProcess')
+      .mockRejectedValue(new Error('validator unreachable'))
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const findParticipant = vi.fn().mockResolvedValue({ id: 5, did: 'did:web:other', schemaId: 12 })
+    const agent = { did: 'did:web:agent', veranaChain: {}, config: { logger }, indexer: { findParticipant } }
+    const activity = makeActivity('RenewParticipantOP', { entity_id: '5' })
+
+    await startParticipantOPAutoFlow(agent as never, activity)
+    expect(startOnboardingProcess).not.toHaveBeenCalled()
+
+    findParticipant.mockResolvedValue({ id: 5, did: 'did:web:agent', schemaId: 12 })
+    await expect(startParticipantOPAutoFlow(agent as never, activity)).resolves.toBeUndefined()
+    expect(startOnboardingProcess).toHaveBeenCalledWith({ applicantParticipantId: 5 })
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('[IndexerWS] StartParticipantOP auto-flow failed: validator unreachable'),
+    )
+    startOnboardingProcess.mockRestore()
+  })
+})
+
+describe('sendPendingRenewal', () => {
+  const applicantFlow = {
+    id: 'flow-1',
+    role: VtFlowRole.Applicant,
+    variant: VtFlowVariant.OnboardingProcess,
+    state: VtFlowState.Completed,
+    applicantParticipantId: '5',
+  }
+
+  function makeRenewalAgent(opState: ValidationState) {
+    const startOnboardingProcess = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'startOnboardingProcess')
+      .mockResolvedValue({} as never)
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const findParticipant = vi.fn().mockResolvedValue({ id: 5, did: 'did:web:agent', schemaId: 12, opState })
+    const agent = {
+      did: 'did:web:agent',
+      veranaChain: {} as object | undefined,
+      config: { logger },
+      indexer: { findParticipant },
+    }
+    return { agent, logger, findParticipant, startOnboardingProcess }
+  }
+
+  it('sends the renewal onboarding request when the entry of a completed applicant flow is PENDING', async () => {
+    const { agent, findParticipant, startOnboardingProcess } = makeRenewalAgent(ValidationState.PENDING)
+
+    await sendPendingRenewal(agent as never, applicantFlow as never)
+
+    expect(findParticipant).toHaveBeenCalledWith('5')
+    expect(startOnboardingProcess).toHaveBeenCalledWith({ applicantParticipantId: 5 })
+    startOnboardingProcess.mockRestore()
+  })
+
+  it.each([
+    ['a VALIDATED entry', {}, ValidationState.VALIDATED, true],
+    ['a validator flow', { role: VtFlowRole.Validator }, ValidationState.PENDING, true],
+    ['a Direct Issuance flow', { variant: VtFlowVariant.DirectIssuance }, ValidationState.PENDING, true],
+    ['an agent with no chain', {}, ValidationState.PENDING, false],
+  ])('sends nothing for %s', async (_case, flow, opState, withChain) => {
+    const { agent, startOnboardingProcess } = makeRenewalAgent(opState)
+    if (!withChain) agent.veranaChain = undefined
+
+    await sendPendingRenewal(agent as never, { ...applicantFlow, ...flow } as never)
+
+    expect(startOnboardingProcess).not.toHaveBeenCalled()
+    startOnboardingProcess.mockRestore()
+  })
+
+  it('logs a failed indexer read or a failed request, and does not throw', async () => {
+    const { agent, logger, findParticipant, startOnboardingProcess } = makeRenewalAgent(
+      ValidationState.PENDING,
+    )
+
+    findParticipant.mockRejectedValueOnce(new Error('indexer unavailable'))
+    await expect(sendPendingRenewal(agent as never, applicantFlow as never)).resolves.toBeUndefined()
+    expect(startOnboardingProcess).not.toHaveBeenCalled()
+    expect(logger.error).toHaveBeenLastCalledWith(expect.stringMatching(/flow-1.*indexer unavailable/))
+
+    startOnboardingProcess.mockRejectedValueOnce(new Error('validator unreachable'))
+    await expect(sendPendingRenewal(agent as never, applicantFlow as never)).resolves.toBeUndefined()
+    expect(logger.error).toHaveBeenLastCalledWith(expect.stringMatching(/flow-1.*validator unreachable/))
+    expect(logger.error).toHaveBeenCalledTimes(2)
     startOnboardingProcess.mockRestore()
   })
 })

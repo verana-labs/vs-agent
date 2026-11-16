@@ -12,7 +12,13 @@ import {
 } from '@credo-ts/openid4vc'
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 
-import { ISSUER_CAPABILITY_ID, STATUS_LIST_JWT_CONTENT_TYPE, STATUS_LIST_PATH } from '../config'
+import {
+  CREDENTIAL_OFFER_EXPIRATION_SECONDS_DEFAULT,
+  ISSUER_CAPABILITY_ID,
+  PRESENTATION_REQUEST_EXPIRATION_SECONDS_DEFAULT,
+  STATUS_LIST_JWT_CONTENT_TYPE,
+  STATUS_LIST_PATH,
+} from '../config'
 import { OpenId4VcStatusListStorageModule } from '../storage/StatusListStorageModule'
 import { trustedCertificatesForVerification } from '../trust/CertificateTrust'
 import { isRecord } from '../utils/isRecord'
@@ -71,9 +77,15 @@ export function setupOpenId4Vc(
       baseUrl: `${options.publicApiBaseUrl}/oid4vci`,
       walletAttestationsRequired: walletAttestationEnabled,
       ignoreWalletAttestationsWhenNotRequired: !walletAttestationEnabled,
+      statefulCredentialOfferExpirationInSeconds:
+        options.credentialOfferExpirationSeconds ?? CREDENTIAL_OFFER_EXPIRATION_SECONDS_DEFAULT,
       credentialRequestToCredentialMapper: input => getIssuerService().mapCredentialRequest(input),
     },
-    verifier: { baseUrl: `${options.publicApiBaseUrl}/oid4vp` },
+    verifier: {
+      baseUrl: `${options.publicApiBaseUrl}/oid4vp`,
+      authorizationRequestExpirationInSeconds:
+        options.presentationRequestExpirationSeconds ?? PRESENTATION_REQUEST_EXPIRATION_SECONDS_DEFAULT,
+    },
   }
 
   return {

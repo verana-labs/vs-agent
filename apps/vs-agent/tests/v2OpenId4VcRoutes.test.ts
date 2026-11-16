@@ -208,6 +208,7 @@ describe('v2 openid4vc routes', () => {
     verifierService.createRequest.mockResolvedValue({
       authorizationRequest: AUTHORIZATION_REQUEST,
       verificationSessionId: 'pe-new',
+      expiresAt: new Date('2026-01-01T00:15:00.000Z'),
     })
     verifierService.deleteVerificationSession.mockResolvedValue(undefined)
     statusListService.createStatusList.mockResolvedValue(statusList('sl-new', '2026-01-01T00:03:00.000Z'))
@@ -756,6 +757,18 @@ describe('v2 openid4vc routes', () => {
       expect(response.body.accepted).toBe(true)
     })
 
+    it('reports when the request stops being valid', async () => {
+      verifierService.getVerificationSession.mockResolvedValue({
+        ...verificationSessions[0],
+        expiresAt: new Date('2026-01-01T00:15:00.000Z'),
+      })
+
+      const response = await request(app.getHttpServer()).get('/v2/openid4vc/presentations/pe-a')
+
+      expect(response.status).toBe(200)
+      expect(response.body.expiresAt).toBe('2026-01-01T00:15:00.000Z')
+    })
+
     it('omits trust and credential while the session is pending', async () => {
       verifierService.getVerificationSession.mockResolvedValue(verificationSessions[0])
 
@@ -799,7 +812,11 @@ describe('v2 openid4vc routes', () => {
         })
 
       expect(full.status).toBe(201)
-      expect(full.body).toEqual({ proofExchangeId: 'pe-new', url: AUTHORIZATION_REQUEST })
+      expect(full.body).toEqual({
+        proofExchangeId: 'pe-new',
+        url: AUTHORIZATION_REQUEST,
+        expiresAt: '2026-01-01T00:15:00.000Z',
+      })
       expect(verifierService.createRequest).toHaveBeenCalledWith({
         jsonSchemaCredentialId: 'employee',
         requestedClaims: ['name'],

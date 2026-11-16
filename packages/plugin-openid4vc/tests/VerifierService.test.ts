@@ -369,6 +369,7 @@ describe('VerifierService', () => {
     ).resolves.toEqual({
       authorizationRequest: 'openid4vp://?request_uri=opaque',
       verificationSessionId: 'session-id',
+      expiresAt: new Date('2026-07-21T10:05:00.000Z'),
     })
     expect(resolveCredentialType).toHaveBeenCalledWith(expect.anything(), VTJSC_ID)
     expect(api.createAuthorizationRequest).toHaveBeenCalledWith({
@@ -575,6 +576,7 @@ describe('VerifierService', () => {
       state: 'RequestUriRetrieved',
       createdAt: new Date('2026-07-21T10:00:00.000Z'),
       updatedAt: new Date('2026-07-21T10:00:00.000Z'),
+      expiresAt: new Date('2026-07-21T10:05:00.000Z'),
       cryptographicVerified: false,
       accepted: false,
     })

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TrustResolutionOutcome } from '@verana-labs/vs-agent-sdk'
 
@@ -178,5 +178,51 @@ describe('in-process OpenID4VP request signed with the verifier DID', () => {
     await expect(resolveDidSignedRequest(outsideMethodId)).rejects.toThrow(
       `${outsideMethodId} bound to the configured signing key is not a method of the agent DID ${TEST_VERIFIER_DID}`,
     )
+  }, 60_000)
+})
+
+describe('OpenID4VP presentation request lifetime', () => {
+  const PAST_CREDO_DEFAULT_SECONDS = 600
+  const PAST_AGENT_DEFAULT_SECONDS = 1_000
+
+  async function resolveRequestLater(secondsLater: number, presentationRequestExpirationSeconds?: number) {
+    const agents = await startTestAgents({
+      ...(await createTestAgentsInput()),
+      presentationRequestExpirationSeconds,
+    })
+    try {
+      const request = await agents.verifier.service.createRequest({
+        jsonSchemaCredentialId: testCredentialConfiguration.id,
+        requestedClaims: ['name'],
+      })
+      const session = await agents.verifier.service.getVerificationSession(request.verificationSessionId)
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + secondsLater * 1000 })
+      const resolved = await agents.holder.resolvePresentationRequest(request.authorizationRequest, [
+        agents.rootCertificate,
+      ])
+      return { request, session, resolved }
+    } finally {
+      vi.useRealTimers()
+      await agents.stop()
+    }
+  }
+
+  it('keeps a request resolvable for the configured lifetime and reports it as expiresAt', async () => {
+    const { request, session, resolved } = await resolveRequestLater(PAST_AGENT_DEFAULT_SECONDS, 86_400)
+
+    expect(resolved.authorizationRequestPayload).toBeDefined()
+    expect(session.expiresAt!.getTime() - session.createdAt.getTime()).toBe(86_400_000)
+    expect(request.expiresAt).toEqual(session.expiresAt)
+  }, 60_000)
+
+  it('keeps a request resolvable for 15 minutes when no lifetime is configured', async () => {
+    const { session, resolved } = await resolveRequestLater(PAST_CREDO_DEFAULT_SECONDS)
+
+    expect(resolved.authorizationRequestPayload).toBeDefined()
+    expect(session.expiresAt!.getTime() - session.createdAt.getTime()).toBe(900_000)
+  }, 60_000)
+
+  it('expires a request after 15 minutes when no lifetime is configured', async () => {
+    await expect(resolveRequestLater(PAST_AGENT_DEFAULT_SECONDS)).rejects.toThrow("status code '404'")
   }, 60_000)
 })

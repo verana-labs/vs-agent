@@ -284,13 +284,55 @@ export interface ListPresentationsQuery extends PaginationQuery {
   state?: ProofState
 }
 
+/**
+ * This type gives the values that the agent verified for the credential that answers one entry of
+ * `requestedCredentials`.
+ */
+export interface PresentedCredential {
+  credentialDefinitionId: string
+  /** This is the `issuerId` of the credential definition. It holds an active ISSUER `Participant`. */
+  issuerDid: string
+  credentialSchemaId: number
+  ecosystemDid: string
+  jsonSchemaCredentialId: string
+  claims: Claim[]
+  /** The holder did not reveal these requested attributes. The proof verifies without them. */
+  unrevealed: string[]
+}
+
+/**
+ * This type gives the cause of the failure of one requested credential. The agent verified none of
+ * the optional values. A caller must not use them as the identity of an issuer.
+ */
+export interface RejectedCredential {
+  /** This is the position of the requested credential in `requestedCredentials`. */
+  index: number
+  code: 'e.p.issuer-not-authorized' | 'e.p.trust-resolution-unavailable'
+  /** This text gives the cause to an operator. */
+  note: string
+  credentialDefinitionId?: string
+  issuerDid?: string
+  credentialSchemaId?: number
+}
+
 export interface PresentationRecord {
   proofExchangeId: string
   state: ProofState
   role: ProofRole
   connectionId?: string
   requestedCredentials: RequestedCredential[]
+  /** This list holds every revealed claim. It does not identify the credential of a claim. */
   claims: Claim[]
+  /**
+   * This list holds one entry for each entry of `requestedCredentials`, in the same order. It is
+   * empty when the agent is the prover, before the trust decision succeeds, and when it fails.
+   */
+  credentials: PresentedCredential[]
+  /**
+   * This list holds the requested credentials that failed the trust decision. It is empty unless the
+   * decision failed.
+   */
+  rejectedCredentials: RejectedCredential[]
   verified: boolean
   threadId?: string
   errorMessage?: string
