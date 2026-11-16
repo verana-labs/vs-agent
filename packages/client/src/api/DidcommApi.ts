@@ -22,6 +22,7 @@ import {
   Page,
   PresentationRecord,
   ProtocolModule,
+  RequestEmrtdBody,
   RequestMrtdBody,
   RequestProfileBody,
   SendBasicMessageBody,
@@ -125,7 +126,7 @@ export class DidcommApi {
     return this.http.request('POST', '/didcomm/mrtd/request-mrz', { body })
   }
 
-  public requestEmrtdData(body: RequestMrtdBody): Promise<SentMessage> {
+  public requestEmrtdData(body: RequestEmrtdBody): Promise<SentMessage> {
     return this.http.request('POST', '/didcomm/mrtd/request-emrtd', { body })
   }
 

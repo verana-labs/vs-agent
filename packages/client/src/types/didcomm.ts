@@ -277,6 +277,15 @@ export interface RequestMrtdBody {
   connectionId: string
 }
 
+export interface RequestEmrtdBody extends RequestMrtdBody {
+  /**
+   * Thread id of the MRZ exchange this request follows (`threadId` of the
+   * `didcomm.mrtd.mrz-data-received` event). Sent as the parent thread of the
+   * request: the wallet reads the chip with the MRZ of that exchange.
+   */
+  parentThreadId?: string
+}
+
 export interface ListPresentationsQuery extends PaginationQuery {
   connectionId?: string
   threadId?: string

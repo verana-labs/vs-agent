@@ -3,13 +3,27 @@ import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger'
-import { IsNotEmpty, IsString } from 'class-validator'
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class RequestMrtdBodyDto {
   @ApiProperty({ description: 'Connection to send the request on', example: 'conn-1234-5678' })
   @IsString()
   @IsNotEmpty()
   connectionId!: string
+}
+
+export class RequestEmrtdBodyDto extends RequestMrtdBodyDto {
+  @ApiProperty({
+    description:
+      'Thread id of the MRZ exchange this request follows (`threadId` of the `didcomm.mrtd.mrz-data-received` event). ' +
+      'It is sent as the parent thread (`pthid`) of the request, so that the wallet reads the chip with that MRZ.',
+    example: 'b2c3d4e5-6789-01ab-cdef-234567890abc',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  parentThreadId?: string
 }
 
 export class SentMrtdMessageDto {
@@ -46,8 +60,11 @@ export class V2DidcommMrtdController {
   })
   @ApiCreatedResponse({ description: 'The sent message', type: SentMrtdMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
-  public async requestEmrtdData(@Body() body: RequestMrtdBodyDto): Promise<SentMrtdMessageDto> {
-    const { messageId } = await this.agent.modules.mrtd.requestEMrtdData({ connectionId: body.connectionId })
+  public async requestEmrtdData(@Body() body: RequestEmrtdBodyDto): Promise<SentMrtdMessageDto> {
+    const { messageId } = await this.agent.modules.mrtd.requestEMrtdData({
+      connectionId: body.connectionId,
+      parentThreadId: body.parentThreadId,
+    })
 
     return { id: messageId }
   }
