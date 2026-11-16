@@ -1,8 +1,12 @@
+import { sha256 } from '@cosmjs/crypto'
+import { toHex } from '@cosmjs/encoding'
+import { BroadcastTxError } from '@cosmjs/stargate'
 import {
   AllowedMsgAllowance,
   BasicAllowance,
   PeriodicAllowance,
 } from 'cosmjs-types/cosmos/feegrant/v1beta1/feegrant'
+import { TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1/tx'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { VeranaChainService, feeAllowanceOf } from '../src/blockchain/VeranaChainService'
@@ -250,5 +254,81 @@ describe('preflightFee', () => {
 
     await expect(run(chain)).resolves.toEqual({ reason: 'PREFLIGHT_ERROR', error: error.message })
     expect(chain.estimateFee).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('VeranaChainService.broadcastWithoutWaiting', () => {
+  const fee = { amount: [{ denom: 'uvna', amount: '500' }], gas: '200000' }
+  const messages = [{ typeUrl: '/verana.pp.v1.MsgSetParticipantOPToValidated', value: {} }]
+  const signed = TxRaw.fromPartial({
+    bodyBytes: Uint8Array.of(1, 2),
+    authInfoBytes: Uint8Array.of(3),
+    signatures: [Uint8Array.of(4)],
+  })
+  const bytes = TxRaw.encode(signed).finish()
+  const httpStatus = (status: number) =>
+    Object.assign(new Error(`Bad status on response: ${status}`), { cause: { status, body: '' } })
+
+  function chainWith() {
+    const sign = vi.fn(async () => signed)
+    const broadcastTxSync = vi.fn(async () => 'AB12')
+    const chain = new VeranaChainService({} as never)
+    Object.assign(chain, { operatorAddress: 'verana1agent', signingClient: { sign, broadcastTxSync } })
+    return { chain, sign, broadcastTxSync }
+  }
+
+  async function run(chain: VeranaChainService) {
+    const result = chain.broadcastWithoutWaiting(messages, fee)
+    result.catch(() => undefined)
+    await vi.runAllTimersAsync()
+    return result
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('signs again after an HTTP 502 on the read before the signature', async () => {
+    const { chain, sign, broadcastTxSync } = chainWith()
+    sign.mockRejectedValueOnce(httpStatus(502))
+
+    await expect(run(chain)).resolves.toBe('AB12')
+    expect(sign).toHaveBeenCalledTimes(2)
+    expect(sign).toHaveBeenCalledWith('verana1agent', messages, fee, '')
+    expect(broadcastTxSync).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends the same signed bytes again after an HTTP 502 on the broadcast', async () => {
+    const { chain, sign, broadcastTxSync } = chainWith()
+    broadcastTxSync.mockRejectedValueOnce(httpStatus(502))
+
+    await expect(run(chain)).resolves.toBe('AB12')
+    expect(sign).toHaveBeenCalledTimes(1)
+    expect(broadcastTxSync.mock.calls).toEqual([[bytes], [bytes]])
+  })
+
+  it('takes a transaction the node already holds as accepted, under the hash of its bytes', async () => {
+    const { chain, broadcastTxSync } = chainWith()
+    broadcastTxSync
+      .mockRejectedValueOnce(httpStatus(502))
+      .mockRejectedValueOnce(
+        new Error(
+          JSON.stringify({ code: -32603, message: 'Internal error', data: 'tx already exists in cache' }),
+        ),
+      )
+
+    await expect(run(chain)).resolves.toBe(toHex(sha256(bytes)).toUpperCase())
+    expect(broadcastTxSync).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws a broadcast that the node rejects, without sending it again', async () => {
+    const { chain, broadcastTxSync } = chainWith()
+    broadcastTxSync.mockRejectedValueOnce(new BroadcastTxError(32, 'sdk', 'account sequence mismatch'))
+
+    await expect(run(chain)).rejects.toBeInstanceOf(BroadcastTxError)
+    expect(broadcastTxSync).toHaveBeenCalledTimes(1)
   })
 })
