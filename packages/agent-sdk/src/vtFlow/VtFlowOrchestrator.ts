@@ -194,7 +194,10 @@ export class VtFlowOrchestrator {
       .filter(record => !isVtFlowTerminalState(record.state))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
-    const running = latest !== undefined && !isVtFlowRenewable(latest)
+    // [VSA-VTI-FLOW-MISC]: a renewal replaces an offer whose credential did not come.
+    const offerReplaced =
+      latest?.state === VtFlowState.CredOffered && holderParticipant.opState === ValidationState.PENDING
+    const running = latest !== undefined && !isVtFlowRenewable(latest) && !offerReplaced
 
     let connectionId: string | undefined
     if (latest) {

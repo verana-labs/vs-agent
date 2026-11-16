@@ -219,6 +219,7 @@ export class VtFlowModule implements Module {
           (payload.previousState === null ||
             payload.previousState === VtFlowState.AwaitingOr ||
             payload.previousState === VtFlowState.Completed ||
+            payload.previousState === VtFlowState.CredOffered ||
             payload.previousState === VtFlowState.Validated) &&
           config.autoAcceptOnboardingRequest
         ) {

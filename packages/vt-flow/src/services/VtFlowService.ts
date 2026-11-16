@@ -5,7 +5,7 @@ import type {
   DidCommInboundMessageContext,
 } from '@credo-ts/didcomm'
 
-import { CredoError, EventEmitter, InjectionSymbols, inject, injectable } from '@credo-ts/core'
+import { CredoError, EventEmitter, InjectionSymbols, inject, injectable, utils } from '@credo-ts/core'
 import {
   DidCommConnectionRepository,
   DidCommCredentialExchangeRepository,
@@ -113,7 +113,14 @@ export class VtFlowService {
     agentContext: AgentContext,
     params: CreateOnboardingRequestParams,
   ): Promise<{ message: OnboardingRequestMessage; record: VtFlowRecord }> {
+    const existing = await this.repository.findByParticipantSessionId(
+      agentContext,
+      params.participantSessionId,
+      VtFlowRole.Applicant,
+    )
     const message = new OnboardingRequestMessage({
+      // Two renewals that read the same round send the same thread, also from different replicas.
+      id: existing ? utils.uuidFromName(existing.threadId, existing.id) : undefined,
       participantId: params.applicantParticipantId,
       participantSessionId: params.participantSessionId,
       agentParticipantId: params.agentParticipantId,
@@ -122,17 +129,14 @@ export class VtFlowService {
     })
     message.setThread({ threadId: message.id })
 
-    const existing = await this.repository.findByParticipantSessionId(
-      agentContext,
-      params.participantSessionId,
-      VtFlowRole.Applicant,
-    )
     if (existing) {
-      if (!isVtFlowRenewable(existing)) {
+      const offerReplaced = existing.state === VtFlowState.CredOffered
+      if (!isVtFlowRenewable(existing) && !offerReplaced) {
         throw new CredoError(
           `vt-flow: participant_session_id '${params.participantSessionId}' already belongs to a flow in state ${existing.state}; use a new session id`,
         )
       }
+      if (offerReplaced) await this.releaseCredentialExchange(agentContext, existing)
       existing.connectionId = params.connectionId
       existing.threadId = message.id
       if (params.claims) existing.claims = params.claims
@@ -289,15 +293,19 @@ export class VtFlowService {
       const reconnected = fresh.connectionTerminated
       fresh.connectionId = connection.id
       fresh.connectionTerminated = undefined
-      if (fresh.threadId !== message.threadId) {
+      const newThread = fresh.threadId !== message.threadId
+      // A reconnection keeps the thread, so a new thread on CRED_OFFERED is a renewal.
+      const renewal = isVtFlowRenewable(fresh) || (newThread && fresh.state === VtFlowState.CredOffered)
+      if (newThread) {
         fresh.threadId = message.threadId
-        if (fresh.state === VtFlowState.AwaitingOr || isVtFlowRenewable(fresh)) {
+        if (fresh.state === VtFlowState.AwaitingOr || renewal) {
           if (message.claims) fresh.claims = message.claims
           if (message.proofsAttach) fresh.proofsAttach = message.proofsAttach
         }
       }
-      if (isVtFlowRenewable(fresh)) {
+      if (renewal) {
         // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
+        if (fresh.state === VtFlowState.CredOffered) await this.releaseCredentialExchange(agentContext, fresh)
         fresh.oobLink = undefined
         fresh.validation = undefined
         fresh.issuance = undefined
