@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { encodeSecp256k1Pubkey } from '@cosmjs/amino'
+import { sha256 } from '@cosmjs/crypto'
+import { toHex } from '@cosmjs/encoding'
 import { DirectSecp256k1HdWallet, encodePubkey, type EncodeObject } from '@cosmjs/proto-signing'
 import {
   SigningStargateClient,
@@ -19,13 +21,14 @@ import {
 } from 'cosmjs-types/cosmos/feegrant/v1beta1/feegrant'
 import { SignMode } from 'cosmjs-types/cosmos/tx/signing/v1beta1/signing'
 import { SimulateRequest, SimulateResponse } from 'cosmjs-types/cosmos/tx/v1beta1/service'
-import { AuthInfo, Fee, Tx, TxBody } from 'cosmjs-types/cosmos/tx/v1beta1/tx'
+import { AuthInfo, Fee, Tx, TxBody, TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1/tx'
 import type { Any } from 'cosmjs-types/google/protobuf/any'
 import type { Timestamp } from 'cosmjs-types/google/protobuf/timestamp'
 import { connectComet } from '@cosmjs/tendermint-rpc'
 import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
 
 import { FeePreflightError, preflightFee } from './feePreflight'
+import { withTransportRetry } from './rpcRetry'
 import {
   Coin,
   CreateOrUpdateParticipantSessionParams,
@@ -301,7 +304,19 @@ export class VeranaChainService {
 
   // Returns once the node accepted the transaction into its mempool, without waiting for a block.
   async broadcastWithoutWaiting(messages: EncodeObject[], fee: StdFee): Promise<string> {
-    return this.signingClient.signAndBroadcastSync(this.operatorAddress, messages, fee)
+    const signed = await withTransportRetry(() =>
+      this.signingClient.sign(this.operatorAddress, messages, fee, ''),
+    )
+    const bytes = TxRaw.encode(signed).finish()
+    try {
+      return await withTransportRetry(() => this.signingClient.broadcastTxSync(bytes))
+    } catch (error) {
+      // A retry finds the transaction of a lost response in the mempool cache of the node.
+      if (error instanceof Error && error.message.includes('tx already exists in cache')) {
+        return toHex(sha256(bytes)).toUpperCase()
+      }
+      throw error
+    }
   }
 
   async findTx(hash: string): Promise<{ code: number; height: number; rawLog: string } | undefined> {

@@ -5,18 +5,9 @@ import type { FeeAllowance, VeranaChainService } from './VeranaChainService'
 
 import { VtFlowTxReason } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
-export const FEE_DENOM = 'uvna'
+import { withTransportRetry } from './rpcRetry'
 
-const READ_ATTEMPTS = 4
-const READ_BASE_DELAY_MS = 500
-const TRANSPORT_ERROR_CODES = new Set([
-  'ECONNRESET',
-  'ECONNREFUSED',
-  'ETIMEDOUT',
-  'EAI_AGAIN',
-  'UND_ERR_SOCKET',
-  'UND_ERR_CONNECT_TIMEOUT',
-])
+export const FEE_DENOM = 'uvna'
 
 export type FeePreflightResult = { fee: StdFee } | { reason: VtFlowTxReason; error: string }
 
@@ -27,23 +18,6 @@ type FeePreflightChain = Pick<
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-function isTransportFailure(error: unknown): boolean {
-  const cause = (error as { cause?: { status?: unknown; code?: unknown } } | undefined)?.cause
-  if (typeof cause?.status === 'number') return cause.status >= 500
-  return typeof cause?.code === 'string' && TRANSPORT_ERROR_CODES.has(cause.code)
-}
-
-async function readWithRetry<T>(read: () => Promise<T>): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await read()
-    } catch (error) {
-      if (attempt >= READ_ATTEMPTS || !isTransportFailure(error)) throw error
-      await new Promise(resolve => setTimeout(resolve, READ_BASE_DELAY_MS * 2 ** (attempt - 1)))
-    }
-  }
 }
 
 /** What a broadcast throws when its fee payer cannot pay it, with the reason of [VSA-ADM-VT-FL-VALIDATE-9]. */
@@ -87,7 +61,7 @@ export async function preflightFee(
 
   let allowance: FeeAllowance | undefined
   try {
-    allowance = granter ? await readWithRetry(() => chain.feeAllowance(granter, FEE_DENOM)) : undefined
+    allowance = granter ? await withTransportRetry(() => chain.feeAllowance(granter, FEE_DENOM)) : undefined
   } catch (error) {
     return failed(VtFlowTxReason.PreflightError, errorMessage(error))
   }
@@ -97,7 +71,7 @@ export async function preflightFee(
 
   let fee: StdFee
   try {
-    fee = await readWithRetry(() => chain.estimateFee([message], granter))
+    fee = await withTransportRetry(() => chain.estimateFee([message], granter))
   } catch (error) {
     return failed(VtFlowTxReason.PreflightError, errorMessage(error))
   }
@@ -112,7 +86,9 @@ export async function preflightFee(
     }
     let corporation: bigint
     try {
-      corporation = BigInt((await readWithRetry(() => chain.getAccountBalance(granter, FEE_DENOM))).amount)
+      corporation = BigInt(
+        (await withTransportRetry(() => chain.getAccountBalance(granter, FEE_DENOM))).amount,
+      )
     } catch (error) {
       return failed(VtFlowTxReason.PreflightError, errorMessage(error))
     }
@@ -125,7 +101,7 @@ export async function preflightFee(
   } else {
     let own: bigint
     try {
-      own = BigInt((await readWithRetry(() => chain.getBalance(FEE_DENOM))).amount)
+      own = BigInt((await withTransportRetry(() => chain.getBalance(FEE_DENOM))).amount)
     } catch (error) {
       return failed(VtFlowTxReason.PreflightError, errorMessage(error))
     }
