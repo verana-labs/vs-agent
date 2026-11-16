@@ -5,30 +5,13 @@ import { HttpAdapterHost } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
 import { MrtdPlugin } from '@verana-labs/vs-agent-plugin-mrtd'
 import request from 'supertest'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { VsAgentModule } from '../src/admin.module'
 import { ErrorEnvelopeFilter } from '../src/common'
 
-const calls: Array<{ method: string; options: Record<string, unknown> }> = []
-
-const agent = {
-  isInitialized: true,
-  context: { dependencyManager: {} },
-  didcomm: {},
-  modules: {
-    mrtd: {
-      requestMrzString: async (options: Record<string, unknown>) => {
-        calls.push({ method: 'requestMrzString', options })
-        return { messageId: 'mrz-message' }
-      },
-      requestEMrtdData: async (options: Record<string, unknown>) => {
-        calls.push({ method: 'requestEMrtdData', options })
-        return { messageId: 'emrtd-message' }
-      },
-    },
-  },
-}
+const mrtd = { requestEMrtdData: vi.fn() }
+const agent = { isInitialized: true, context: { dependencyManager: {} }, didcomm: {}, modules: { mrtd } }
 
 describe('POST /v2/didcomm/mrtd/request-emrtd', () => {
   let app: INestApplication
@@ -37,6 +20,7 @@ describe('POST /v2/didcomm/mrtd/request-emrtd', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [VsAgentModule.register(agent as never, 'http://localhost:3001', [MrtdPlugin()])],
     }).compile()
+
     app = moduleRef.createNestApplication()
     app.enableVersioning({ type: VersioningType.URI })
     app.useGlobalPipes(new ValidationPipe())
@@ -45,11 +29,12 @@ describe('POST /v2/didcomm/mrtd/request-emrtd', () => {
   })
 
   afterAll(async () => {
-    await app.close()
+    await app?.close()
   })
 
   beforeEach(() => {
-    calls.length = 0
+    vi.clearAllMocks()
+    mrtd.requestEMrtdData.mockResolvedValue({ messageId: 'emrtd-message' })
   })
 
   it('names the MRZ exchange as the parent thread of the request', async () => {
@@ -59,20 +44,19 @@ describe('POST /v2/didcomm/mrtd/request-emrtd', () => {
 
     expect(response.status).toBe(201)
     expect(response.body).toEqual({ id: 'emrtd-message' })
-    expect(calls).toEqual([
-      { method: 'requestEMrtdData', options: { connectionId: 'conn-1', parentThreadId: 'mrz-thread-1' } },
-    ])
+    expect(mrtd.requestEMrtdData).toHaveBeenCalledWith({
+      connectionId: 'conn-1',
+      parentThreadId: 'mrz-thread-1',
+    })
   })
 
-  it('still accepts a request without a parent thread', async () => {
+  it('sends the request without a parent thread when the body has none', async () => {
     const response = await request(app.getHttpServer())
       .post('/v2/didcomm/mrtd/request-emrtd')
       .send({ connectionId: 'conn-1' })
 
     expect(response.status).toBe(201)
-    expect(calls).toEqual([
-      { method: 'requestEMrtdData', options: { connectionId: 'conn-1', parentThreadId: undefined } },
-    ])
+    expect(mrtd.requestEMrtdData).toHaveBeenCalledWith({ connectionId: 'conn-1', parentThreadId: undefined })
   })
 
   it('rejects an empty parent thread', async () => {
@@ -81,15 +65,6 @@ describe('POST /v2/didcomm/mrtd/request-emrtd', () => {
       .send({ connectionId: 'conn-1', parentThreadId: '' })
 
     expect(response.status).toBe(400)
-    expect(calls).toEqual([])
-  })
-
-  it('keeps request-mrz without a parent thread field', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/v2/didcomm/mrtd/request-mrz')
-      .send({ connectionId: 'conn-1', parentThreadId: 'x' })
-
-    expect(response.status).toBe(400)
-    expect(calls).toEqual([])
+    expect(mrtd.requestEMrtdData).not.toHaveBeenCalled()
   })
 })

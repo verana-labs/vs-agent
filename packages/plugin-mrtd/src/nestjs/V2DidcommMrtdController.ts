@@ -2,7 +2,14 @@ import type { MrtdAgentModules } from '../types'
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
-import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger'
+import {
+  ApiCreatedResponse,
+  ApiNotFoundResponse,
+  ApiOperation,
+  ApiProperty,
+  ApiPropertyOptional,
+  ApiTags,
+} from '@nestjs/swagger'
 import { IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class RequestMrzBodyDto {
@@ -18,12 +25,11 @@ export class RequestEmrtdDataBodyDto {
   @IsNotEmpty()
   connectionId!: string
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
       'Thread id of the MRZ exchange this request follows (`threadId` of the `didcomm.mrtd.mrz-data-received` event). ' +
       'It is sent as the parent thread (`pthid`) of the request, so that the wallet reads the chip with that MRZ.',
     example: 'b2c3d4e5-6789-01ab-cdef-234567890abc',
-    required: false,
   })
   @IsOptional()
   @IsString()
