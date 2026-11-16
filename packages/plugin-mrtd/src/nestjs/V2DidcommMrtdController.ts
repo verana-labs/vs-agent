@@ -5,14 +5,19 @@ import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestj
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger'
 import { IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
-export class RequestMrtdBodyDto {
+export class RequestMrzBodyDto {
   @ApiProperty({ description: 'Connection to send the request on', example: 'conn-1234-5678' })
   @IsString()
   @IsNotEmpty()
   connectionId!: string
 }
 
-export class RequestEmrtdBodyDto extends RequestMrtdBodyDto {
+export class RequestEmrtdDataBodyDto {
+  @ApiProperty({ description: 'Connection to send the request on', example: 'conn-1234-5678' })
+  @IsString()
+  @IsNotEmpty()
+  connectionId!: string
+
   @ApiProperty({
     description:
       'Thread id of the MRZ exchange this request follows (`threadId` of the `didcomm.mrtd.mrz-data-received` event). ' +
@@ -47,7 +52,7 @@ export class V2DidcommMrtdController {
   })
   @ApiCreatedResponse({ description: 'The sent message', type: SentMrtdMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
-  public async requestMrz(@Body() body: RequestMrtdBodyDto): Promise<SentMrtdMessageDto> {
+  public async requestMrz(@Body() body: RequestMrzBodyDto): Promise<SentMrtdMessageDto> {
     const { messageId } = await this.agent.modules.mrtd.requestMrzString({ connectionId: body.connectionId })
 
     return { id: messageId }
@@ -60,7 +65,7 @@ export class V2DidcommMrtdController {
   })
   @ApiCreatedResponse({ description: 'The sent message', type: SentMrtdMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
-  public async requestEmrtdData(@Body() body: RequestEmrtdBodyDto): Promise<SentMrtdMessageDto> {
+  public async requestEmrtdData(@Body() body: RequestEmrtdDataBodyDto): Promise<SentMrtdMessageDto> {
     const { messageId } = await this.agent.modules.mrtd.requestEMrtdData({
       connectionId: body.connectionId,
       parentThreadId: body.parentThreadId,
