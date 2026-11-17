@@ -189,7 +189,7 @@ describe('vt-flow: applicant reconnection', () => {
     expect(validatorRecords[0].state).toBe(VtFlowState.AwaitingOr)
   }, 60_000)
 
-  it('reconnects during the credential offer and the flow is offered again on the new connection', async () => {
+  it('reconnects during the credential offer, keeps the run, and takes the new offer of the validator on the new connection', async () => {
     const { record, validatorRecordId, connection } = await onboardUntilValidatorRotates()
     await validator.modules.vtFlow.markValidated(validatorRecordId)
     opState = ValidationState.VALIDATED
@@ -230,13 +230,19 @@ describe('vt-flow: applicant reconnection', () => {
     await vi.waitFor(() => expect(onboardingRequestsProcessed()).toBe(before + 1))
 
     const validatorRecord = await validator.modules.vtFlow.getById(validatorRecordId)
-    expect(validatorRecord.state).toBe(VtFlowState.Validated)
-    expect(validatorRecord.credentialExchangeRecordId).toBeUndefined()
-    expect(resent.id).toBe(record.id)
-    expect(resent.state).toBe(VtFlowState.Validating)
-    expect(resent.credentialExchangeRecordId).toBeUndefined()
+    expect(validatorRecord).toMatchObject({
+      state: VtFlowState.CredOffered,
+      credentialExchangeRecordId: firstExchange.id,
+    })
+    expect(resent).toMatchObject({
+      id: record.id,
+      state: VtFlowState.CredOffered,
+      credentialExchangeRecordId: offered.credentialExchangeRecordId,
+    })
     expect(resent.connectionId).not.toBe(connection.id)
 
+    // The validator resumes so: the run used the deleted connection and sent no anchoring transaction.
+    await validator.modules.vtFlow.abandonIssuanceRun(validatorRecordId)
     const { credentialExchangeRecord: secondExchange } = await offer()
     expect(secondExchange.id).not.toBe(firstExchange.id)
     await vi.waitFor(async () => {
@@ -244,6 +250,9 @@ describe('vt-flow: applicant reconnection', () => {
       expect(reoffered.state).toBe(VtFlowState.CredOffered)
       expect(reoffered.subprotocolThid).toBe(secondExchange.threadId)
       expect(reoffered.connectionId).toBe(resent.connectionId)
+      expect((await applicant.didcomm.credentials.getById(offered.credentialExchangeRecordId!)).state).toBe(
+        DidCommCredentialState.Abandoned,
+      )
     })
   }, 60_000)
 

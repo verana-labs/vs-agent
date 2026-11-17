@@ -2,6 +2,7 @@ import { EventEmitter, JsonTransformer, utils } from '@credo-ts/core'
 import {
   DidCommCredentialExchangeRepository,
   DidCommCredentialState,
+  DidCommCredentialsModuleConfig,
   WhoRetriesStatus,
 } from '@credo-ts/didcomm'
 import { describe, expect, it, vi } from 'vitest'
@@ -65,10 +66,20 @@ function makeService(
   const config = { assertVerifiableService: undefined, ...moduleConfig }
   const connectionRepository = { findById: vi.fn().mockResolvedValue(previousConnection) }
   const exchangeRepository = { findById: vi.fn().mockResolvedValue(null), update: vi.fn() }
+  const protocol = {
+    version: 'v2',
+    updateState: vi.fn(async (_context: unknown, exchange: { state: string }, state: string) => {
+      exchange.state = state
+    }),
+  }
   const agentContext = {
     dependencyManager: {
       resolve: (token: unknown) =>
-        token === DidCommCredentialExchangeRepository ? exchangeRepository : connectionRepository,
+        token === DidCommCredentialExchangeRepository
+          ? exchangeRepository
+          : token === DidCommCredentialsModuleConfig
+            ? { credentialProtocols: [protocol] }
+            : connectionRepository,
     },
   }
   const service = new VtFlowService(
@@ -77,7 +88,15 @@ function makeService(
     logger as never,
     config as never,
   )
-  return { service, repository, agentContext, exchangeRepository, eventEmitter, connectionRepository }
+  return {
+    service,
+    repository,
+    agentContext,
+    exchangeRepository,
+    eventEmitter,
+    connectionRepository,
+    protocol,
+  }
 }
 
 function holdPeerCheck(stored: VtFlowRecord) {
@@ -687,34 +706,79 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(repository.update).not.toHaveBeenCalled()
   })
 
-  it('validator re-attach during the credential offer drops the exchange and steps back to Validated', async () => {
+  it('validator keeps the run and its anchoring when the applicant repairs on the same thread', async () => {
+    const tx = { hash: 'CD34', submittedAt: new Date().toISOString(), status: VtFlowTxStatus.Submitted }
     const existing = makeRecord({
       role: VtFlowRole.Validator,
       state: VtFlowState.CredOffered,
       credentialExchangeRecordId: 'cred-ex-1',
       subprotocolThid: 'sub-1',
-      issuance: {
-        tx: { hash: 'CD34', submittedAt: new Date().toISOString(), status: VtFlowTxStatus.Submitted },
-      },
+      issuance: { tx },
     })
-    const { service, agentContext, exchangeRepository } = makeService(existing, {
+    const { service, agentContext, exchangeRepository, eventEmitter } = makeService(existing, {
       id: 'conn-old',
       theirDid: 'did:web:agent-peer',
     })
-    const stale = { id: 'cred-ex-1', parentThreadId: existing.threadId }
-    exchangeRepository.findById.mockResolvedValue(stale)
+    const run = { id: 'cred-ex-1', parentThreadId: existing.threadId, connectionId: 'conn-old' }
+    exchangeRepository.findById.mockResolvedValue(run)
     const context = makeMessageContext(agentContext)
     context.message.setThread({ threadId: existing.threadId })
 
     const record = await service.processReceiveOnboardingRequest(context as never)
 
-    expect(record.state).toBe(VtFlowState.Validated)
-    expect(record.credentialExchangeRecordId).toBeUndefined()
-    expect(record.subprotocolThid).toBeUndefined()
-    expect(record.issuance).toBeUndefined()
-    expect(record.connectionId).toBe('conn-new')
-    expect(stale.parentThreadId).toBeUndefined()
-    expect(exchangeRepository.update).toHaveBeenCalledWith(agentContext, stale)
+    expect(record).toMatchObject({
+      state: VtFlowState.CredOffered,
+      credentialExchangeRecordId: 'cred-ex-1',
+      subprotocolThid: 'sub-1',
+      connectionId: 'conn-new',
+      issuance: { tx },
+    })
+    expect(run).toEqual({ id: 'cred-ex-1', parentThreadId: existing.threadId, connectionId: 'conn-old' })
+    expect(eventEmitter.emit).toHaveBeenCalledExactlyOnceWith(agentContext, {
+      type: VtFlowEventTypes.VtFlowStateChanged,
+      payload: expect.objectContaining({
+        state: VtFlowState.CredOffered,
+        previousState: VtFlowState.CredOffered,
+      }),
+    })
+  })
+
+  it('validator resumes a Direct Issuance run on the same thread, and drops it on a new thread', async () => {
+    const stored = () =>
+      makeRecord({
+        role: VtFlowRole.Validator,
+        state: VtFlowState.CredOffered,
+        variant: VtFlowVariant.DirectIssuance,
+        applicantParticipantId: undefined,
+        schemaId: '5',
+        credentialExchangeRecordId: 'cred-ex-1',
+      })
+    const peer = { id: 'conn-old', theirDid: 'did:web:agent-peer' }
+
+    const repaired = stored()
+    const sameThread = makeService(repaired, peer)
+    const repair = makeIssuanceContext(sameThread.agentContext)
+    repair.message.setThread({ threadId: repaired.threadId })
+    await sameThread.service.processReceiveIssuanceRequest(repair as never)
+    expect(repaired).toMatchObject({
+      state: VtFlowState.CredOffered,
+      credentialExchangeRecordId: 'cred-ex-1',
+    })
+    expect(sameThread.eventEmitter.emit).toHaveBeenCalledWith(sameThread.agentContext, {
+      type: VtFlowEventTypes.VtFlowStateChanged,
+      payload: expect.objectContaining({
+        state: VtFlowState.CredOffered,
+        previousState: VtFlowState.CredOffered,
+      }),
+    })
+
+    const requested = stored()
+    const newThread = makeService(requested, peer)
+    await newThread.service.processReceiveIssuanceRequest(
+      makeIssuanceContext(newThread.agentContext) as never,
+    )
+    expect(requested.state).toBe(VtFlowState.Validating)
+    expect(requested.credentialExchangeRecordId).toBeUndefined()
   })
 
   it('applicant renewal re-enters a flow left in CRED_OFFERED and drops its exchange', async () => {
@@ -906,26 +970,29 @@ describe('VtFlowService.reattachOnboardingProcessRecord', () => {
     expect(repository.save).not.toHaveBeenCalled()
   })
 
-  it('drops the exchange of a flow in CredOffered and steps back to Validating', async () => {
+  it('keeps the run of a flow in CRED_OFFERED and moves only the flow to the new connection', async () => {
     const existing = makeRecord({
       state: VtFlowState.CredOffered,
       credentialExchangeRecordId: 'cred-ex-1',
       subprotocolThid: 'sub-1',
     })
     const { service, agentContext, exchangeRepository } = makeService(existing)
-    const stale = { id: 'cred-ex-1', parentThreadId: existing.threadId }
-    exchangeRepository.findById.mockResolvedValue(stale)
+    const run = { id: 'cred-ex-1', parentThreadId: existing.threadId, connectionId: 'conn-old' }
+    exchangeRepository.findById.mockResolvedValue(run)
 
-    const { record } = await service.reattachOnboardingProcessRecord(agentContext as never, {
+    const { message, record } = await service.reattachOnboardingProcessRecord(agentContext as never, {
       vtFlowRecordId: existing.id,
       connectionId: 'conn-new',
     })
 
-    expect(record.state).toBe(VtFlowState.Validating)
-    expect(stale.parentThreadId).toBeUndefined()
-    expect(record.credentialExchangeRecordId).toBeUndefined()
-    expect(record.subprotocolThid).toBeUndefined()
-    expect(record.connectionId).toBe('conn-new')
+    expect(message.threadId).toBe(existing.threadId)
+    expect(record).toMatchObject({
+      state: VtFlowState.CredOffered,
+      credentialExchangeRecordId: 'cred-ex-1',
+      subprotocolThid: 'sub-1',
+      connectionId: 'conn-new',
+    })
+    expect(run).toEqual({ id: 'cred-ex-1', parentThreadId: existing.threadId, connectionId: 'conn-old' })
   })
 
   it('refuses a finished flow', async () => {
@@ -1513,6 +1580,79 @@ describe('VtFlowService.onSubprotocolStateChanged', () => {
 
     expect(record.state).toBe(VtFlowState.Error)
   })
+
+  it('moves the flow to ERROR when the run is abandoned after the credential was received', async () => {
+    const record = makeRecord({ state: VtFlowState.CredOffered, credentialExchangeRecordId: 'cx-1' })
+    const { service, agentContext } = makeService(record)
+
+    await service.onSubprotocolStateChanged(
+      agentContext as never,
+      record,
+      { id: 'cx-1', state: DidCommCredentialState.Abandoned } as never,
+      DidCommCredentialState.CredentialReceived,
+    )
+
+    expect(record.state).toBe(VtFlowState.Error)
+  })
+
+  it('keeps the applicant in CRED_OFFERED when the validator refuses its request', async () => {
+    const record = makeRecord({ state: VtFlowState.CredOffered, credentialExchangeRecordId: 'cx-1' })
+    const { service, agentContext, eventEmitter } = makeService(record)
+
+    await service.onSubprotocolStateChanged(
+      agentContext as never,
+      record,
+      { id: 'cx-1', state: DidCommCredentialState.Abandoned } as never,
+      DidCommCredentialState.RequestSent,
+    )
+
+    expect(record.state).toBe(VtFlowState.CredOffered)
+    expect(eventEmitter.emit).not.toHaveBeenCalled()
+  })
+
+  it('replaces the run with a new offer for the flow, and signals the auto-accept', async () => {
+    const record = makeRecord({ state: VtFlowState.CredOffered, credentialExchangeRecordId: 'cx-1' })
+    const { service, agentContext, exchangeRepository, eventEmitter, protocol } = makeService(record)
+    const earlier = {
+      id: 'cx-1',
+      protocolVersion: 'v2',
+      parentThreadId: record.threadId,
+      state: DidCommCredentialState.RequestSent,
+    }
+    exchangeRepository.findById.mockResolvedValue(earlier)
+
+    await service.onSubprotocolStateChanged(agentContext as never, record, {
+      id: 'cx-2',
+      threadId: 'sub-2',
+      connectionId: 'conn-old',
+      state: DidCommCredentialState.OfferReceived,
+    } as never)
+
+    expect(record).toMatchObject({ credentialExchangeRecordId: 'cx-2', subprotocolThid: 'sub-2' })
+    expect(earlier.parentThreadId).toBeUndefined()
+    expect(protocol.updateState).toHaveBeenCalledWith(agentContext, earlier, DidCommCredentialState.Abandoned)
+    expect(eventEmitter.emit).toHaveBeenCalledExactlyOnceWith(agentContext, {
+      type: VtFlowEventTypes.VtFlowStateChanged,
+      payload: expect.objectContaining({
+        state: VtFlowState.CredOffered,
+        previousState: VtFlowState.CredOffered,
+      }),
+    })
+  })
+
+  it('ignores the events of a run that a new offer replaced', async () => {
+    const record = makeRecord({ state: VtFlowState.CredOffered, credentialExchangeRecordId: 'cx-2' })
+    const { service, agentContext } = makeService(record)
+
+    await service.onSubprotocolStateChanged(
+      agentContext as never,
+      record,
+      { id: 'cx-1', state: DidCommCredentialState.Declined } as never,
+      DidCommCredentialState.RequestSent,
+    )
+
+    expect(record).toMatchObject({ state: VtFlowState.CredOffered, credentialExchangeRecordId: 'cx-2' })
+  })
 })
 
 describe('VtFlowModule state listeners', () => {
@@ -1588,6 +1728,40 @@ describe('VtFlowModule state listeners', () => {
 
     expect(vtFlowApi.acceptOnboardingRequest).toHaveBeenCalledTimes(accepts)
     if (accepts) expect(vtFlowApi.acceptOnboardingRequest).toHaveBeenCalledWith(record.id)
+  })
+
+  it.each([
+    ['a VALIDATED flow', VtFlowState.Validated, VtFlowState.Validated, 1],
+    ['a CRED_OFFERED flow', VtFlowState.CredOffered, VtFlowState.CredOffered, 1],
+    ['no flow that only moved to CRED_OFFERED', VtFlowState.CredOffered, VtFlowState.Validated, 0],
+  ])('resume the issuance of %s that the applicant re-attached', async (_label, state, previousState, resumes) => {
+    const listeners: Array<(event: unknown) => Promise<void>> = []
+    const record = makeRecord({ role: VtFlowRole.Validator, state })
+    const onReconnected = vi.fn()
+    const service = new VtFlowService(
+      { findById: vi.fn().mockResolvedValue(record) } as never,
+      {} as never,
+      { debug: vi.fn(), error: vi.fn() } as never,
+      new VtFlowModuleConfig({ onReconnected }),
+    )
+    const eventEmitter = {
+      on: (type: string, listener: (event: unknown) => Promise<void>) => {
+        if (type === VtFlowEventTypes.VtFlowStateChanged) listeners.push(listener)
+      },
+    }
+    const registry = { registerMessageHandlers: vi.fn(), register: vi.fn() }
+    const agentContext = {
+      dependencyManager: {
+        resolve: (token: unknown) =>
+          token === VtFlowService ? service : token === EventEmitter ? eventEmitter : registry,
+      },
+    }
+    await new VtFlowModule().initialize(agentContext as never)
+
+    const event = { payload: { vtFlowRecordId: record.id, state, previousState } }
+    await Promise.all(listeners.map(listener => listener(event)))
+
+    expect(onReconnected).toHaveBeenCalledTimes(resumes)
   })
 
   it('auto-accepts an offer through the vt-flow offer check', async () => {

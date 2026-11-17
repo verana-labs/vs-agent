@@ -26,11 +26,12 @@ const SIGNED_CREDENTIAL = { id: 'urn:uuid:vtc-1', proof: { proofValue: 'zSIG' } 
 const buildApi = (
   options: VtFlowModuleConfigOptions,
   exchangeState = DidCommCredentialState.RequestReceived,
+  flow: Record<string, unknown> = {},
 ) => {
   const sendMessage = vi.fn(async () => undefined)
   const setCredentialDigest = vi.fn(async () => undefined)
   const recordIssuance = vi.fn(async () => undefined)
-  const record = { id: 'flow-1', assertRole: (role: VtFlowRole) => role }
+  const record = { id: 'flow-1', assertRole: (role: VtFlowRole) => role, ...flow }
 
   const protocol = {
     version: 'v2',
@@ -131,6 +132,56 @@ describe('issueCredentialForSession', () => {
     expect(onBeforeCredentialIssued).toHaveBeenCalledWith(
       expect.objectContaining({ credential: SIGNED_CREDENTIAL }),
     )
+  })
+
+  it('delivers a credential whose anchoring succeeded without anchoring it again', async () => {
+    const onBeforeCredentialIssued = vi.fn(async () => undefined)
+    const { api, protocol } = buildApi(
+      { onBeforeCredentialIssued },
+      DidCommCredentialState.CredentialIssued,
+      {
+        credentialExchangeRecordId: 'cx-1',
+        issuance: { tx: { hash: 'CD34', status: VtFlowTxStatus.Succeeded } },
+      },
+    )
+
+    // the outbound context needs a real agent, so delivery throws after the checks
+    await issue(api).catch(() => undefined)
+
+    expect(protocol.findCredentialMessage).toHaveBeenCalledWith(expect.anything(), 'cx-1')
+    expect(onBeforeCredentialIssued).not.toHaveBeenCalled()
+  })
+
+  it('does not issue an exchange that is not the current run of the flow', async () => {
+    const onBeforeCredentialIssued = vi.fn(async () => undefined)
+    const { api, protocol } = buildApi({ onBeforeCredentialIssued }, DidCommCredentialState.RequestReceived, {
+      credentialExchangeRecordId: 'cx-2',
+    })
+
+    await issue(api)
+
+    expect(protocol.acceptRequest).not.toHaveBeenCalled()
+    expect(onBeforeCredentialIssued).not.toHaveBeenCalled()
+  })
+
+  it('anchors a run one time when two calls come at the same time', async () => {
+    let release!: () => void
+    const held = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const onBeforeCredentialIssued = vi.fn(async () => {
+      await held
+      return undefined
+    })
+    const { api } = buildApi({ onBeforeCredentialIssued })
+
+    const first = issue(api).catch(() => undefined)
+    await vi.waitFor(() => expect(onBeforeCredentialIssued).toHaveBeenCalled())
+    await issue(api)
+    release()
+    await first
+
+    expect(onBeforeCredentialIssued).toHaveBeenCalledTimes(1)
   })
 
   it('records an anchoring transaction SUBMITTED on the flow before it lands', async () => {
