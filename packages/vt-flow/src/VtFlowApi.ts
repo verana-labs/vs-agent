@@ -35,9 +35,11 @@ import {
 import { VtFlowModuleConfig } from './VtFlowModuleConfig'
 import { VtFlowError, VtFlowErrorCode } from './errors'
 import { VtFlowService } from './services'
-import { VtFlowRole, VtFlowState, VtFlowTxStatus } from './types'
+import { VtFlowRole, VtFlowState, VtFlowTxStatus, isVtFlowTxSent } from './types'
 
 const DATA_INTEGRITY_OFFER_FORMAT = 'didcomm/w3c-di-vc-offer@v0.1'
+
+const issuing = new Set<string>()
 
 /** Public API for vt-flow; each method performs a single state transition so callers can gate each one on its own on-chain work. */
 @injectable()
@@ -98,6 +100,36 @@ export class VtFlowApi {
     })
     await this.messageSender.sendMessage(outboundMessageContext)
 
+    return record
+  }
+
+  public async resendIssuanceRequest(options: ResendOnboardingRequestOptions): Promise<VtFlowRecord> {
+    const connection = await this.connectionService.getById(this.agentContext, options.connectionId)
+    connection.assertReady()
+    await this.vtFlowService.checkIsVerifiableService(this.agentContext, connection)
+
+    const { message, record } = await this.vtFlowService.reattachDirectIssuanceRecord(this.agentContext, {
+      vtFlowRecordId: options.vtFlowRecordId,
+      connectionId: options.connectionId,
+    })
+
+    const outboundMessageContext = await getOutboundDidCommMessageContext(this.agentContext, {
+      message,
+      associatedRecord: record,
+      connectionRecord: connection,
+    })
+    await this.messageSender.sendMessage(outboundMessageContext)
+
+    return record
+  }
+
+  public async abandonIssuanceRun(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    const record = await this.vtFlowService.getById(this.agentContext, vtFlowRecordId)
+    record.assertRole(VtFlowRole.Validator)
+    record.assertState(VtFlowState.CredOffered)
+    if (isVtFlowTxSent(record.issuance?.tx))
+      throw new CredoError(`VtFlow record '${record.id}' has an anchoring of its run`)
+    await this.vtFlowService.abandonCredentialExchange(this.agentContext, record)
     return record
   }
 
@@ -402,6 +434,28 @@ export class VtFlowApi {
       this.agentContext,
       options.credentialExchangeRecordId,
     )
+    // The agent issues only the current run of the flow, and one call at a time.
+    const earlierRun =
+      !!record.credentialExchangeRecordId && record.credentialExchangeRecordId !== credentialExchangeRecord.id
+    if (earlierRun || issuing.has(credentialExchangeRecord.id)) {
+      return { record, credentialExchangeRecord }
+    }
+    issuing.add(credentialExchangeRecord.id)
+    try {
+      return await this.issueCredential(record, credentialExchangeRecord, options)
+    } finally {
+      issuing.delete(credentialExchangeRecord.id)
+    }
+  }
+
+  private async issueCredential(
+    record: VtFlowRecord,
+    credentialExchangeRecord: DidCommCredentialExchangeRecord,
+    options: {
+      comment?: string
+      credentialFormats?: { dataIntegrity: DidCommDataIntegrityAcceptRequestFormat }
+    },
+  ): Promise<{ record: VtFlowRecord; credentialExchangeRecord: DidCommCredentialExchangeRecord }> {
     const protocol = this.credentialsModuleConfig.credentialProtocols.find(
       p => p.version === credentialExchangeRecord.protocolVersion,
     )
@@ -438,7 +492,8 @@ export class VtFlowApi {
       ).message
 
     const hook = this.config.onBeforeCredentialIssued
-    if (hook) {
+    const anchored = reissue && record.issuance?.tx?.status === VtFlowTxStatus.Succeeded
+    if (hook && !anchored) {
       const formatData = await protocol.getFormatData(this.agentContext, credentialExchangeRecord.id)
       // the attachment, which is the exact JSON the holder will digest
       const credential = (formatData.credential as { dataIntegrity?: DataIntegrityCredential } | undefined)

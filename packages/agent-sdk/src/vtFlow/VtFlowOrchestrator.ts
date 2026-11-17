@@ -9,6 +9,7 @@ import {
   utils,
 } from '@credo-ts/core'
 import type { DataIntegrityCredential, DidCommDataIntegrityOfferCredentialFormat } from '@credo-ts/didcomm'
+import { DidCommCredentialState } from '@credo-ts/didcomm'
 import {
   VtFlowApi,
   VtFlowRecord,
@@ -21,6 +22,7 @@ import {
   VtFlowVariant,
   isVtFlowRenewable,
   isVtFlowTerminalState,
+  isVtFlowTxSent,
   type VtFlowCheckParticipantIdContext,
   type VtFlowEcsIssuanceExemptionContext,
   type VtFlowIssuance,
@@ -793,8 +795,12 @@ export class VtFlowOrchestrator {
 
   // one run at a time per flow: two callers at once would both read VALIDATED and offer twice
   async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {
+    return this.oneAtATime(recordId, () => this.issuanceAfterValidated(recordId))
+  }
+
+  private async oneAtATime<T>(recordId: string, task: () => Promise<T>): Promise<T> {
     const previous = continuingAfterValidated.get(recordId) ?? Promise.resolve()
-    const run = previous.then(() => this.issuanceAfterValidated(recordId))
+    const run = previous.then(task)
     const settled = run.then(
       () => undefined,
       () => undefined,
@@ -863,6 +869,84 @@ export class VtFlowOrchestrator {
           : undefined,
       ),
     )
+  }
+
+  async resumeIssuance(recordId: string, reoffer = true): Promise<VtFlowRecord | null> {
+    return this.oneAtATime(recordId, () => this.resumeIssuanceRun(recordId, reoffer))
+  }
+
+  private async resumeIssuanceRun(recordId: string, reoffer: boolean): Promise<VtFlowRecord | null> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(recordId)
+    if (!record || record.role !== VtFlowRole.Validator) return record
+    if (record.state === VtFlowState.Validated) return this.issuanceAfterValidated(record.id)
+    if (record.state !== VtFlowState.CredOffered) return record
+
+    const tx = record.issuance?.tx
+    const sent = isVtFlowTxSent(tx)
+    if (sent && tx?.status !== VtFlowTxStatus.Succeeded) return record
+    const exchange = record.credentialExchangeRecordId
+      ? await this.agent.didcomm.credentials.findById(record.credentialExchangeRecordId)
+      : null
+    // Credo cannot continue a run whose messages used an earlier connection.
+    const elsewhere = !!exchange && exchange.connectionId !== record.connectionId
+    if (
+      !elsewhere &&
+      (exchange?.state === DidCommCredentialState.RequestReceived ||
+        exchange?.state === DidCommCredentialState.CredentialIssued)
+    ) {
+      return (
+        await vtFlowApi.issueCredentialForSession({
+          vtFlowRecordId: record.id,
+          credentialExchangeRecordId: exchange.id,
+        })
+      ).record
+    }
+    if (sent || (exchange && !elsewhere && (!reoffer || exchange.state !== DidCommCredentialState.OfferSent)))
+      return record
+
+    await vtFlowApi.abandonIssuanceRun(record.id)
+    if (record.variant === VtFlowVariant.DirectIssuance) {
+      const offer = await this.buildDirectIssuanceOffer(record.id)
+      if (!offer) return vtFlowApi.findById(record.id)
+      return (await vtFlowApi.offerCredentialForSession({ vtFlowRecordId: record.id, ...offer })).record
+    }
+    return this.offerOnboardingCredential({ vtFlowRecordId: record.id })
+  }
+
+  async resumeIssuanceRuns(): Promise<void> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const offered = await vtFlowApi.findAllByQuery({
+      role: VtFlowRole.Validator,
+      flowState: VtFlowState.CredOffered,
+    })
+    const validated = await vtFlowApi.findAllByQuery({
+      role: VtFlowRole.Validator,
+      flowState: VtFlowState.Validated,
+    })
+    const resumable = [
+      ...offered.filter(record => !record.issuance?.tx),
+      ...validated.filter(
+        record =>
+          record.variant === VtFlowVariant.OnboardingProcess &&
+          !record.credentialExchangeRecordId &&
+          !record.connectionTerminated &&
+          (record.applicantParticipantRole === undefined ||
+            record.applicantParticipantRole === HOLDER_PARTICIPANT_TYPE),
+      ),
+    ]
+    for (const record of resumable) {
+      try {
+        const connection = await this.agent.didcomm.connections.findById(record.connectionId)
+        // A slow holder can still answer an old Direct Issuance offer.
+        const reoffer = record.variant === VtFlowVariant.OnboardingProcess
+        if (connection?.isReady) await this.resumeIssuance(record.id, reoffer)
+      } catch (error) {
+        this.agent.config.logger.warn(
+          `[vt-flow] could not resume the issuance of flow ${record.id}: ${errorMessage(error)}`,
+        )
+      }
+    }
   }
 
   async acceptCredential(input: AcceptCredentialInput): Promise<VtFlowRecord> {
@@ -1000,6 +1084,19 @@ export class VtFlowOrchestrator {
       signedCredential as unknown as W3cVerifiableCredential,
       algorithm,
     )
+    let tx: VtFlowTx | undefined
+    if (record.issuance?.tx?.status !== VtFlowTxStatus.Submitted) {
+      // An earlier attempt can anchor the credential and stop before it records the tx.
+      const found = await this.agent.indexer
+        .getDigest(digest)
+        .catch((error: unknown) => new Error(errorMessage(error)))
+      if (found instanceof Error) {
+        const error = `the digest lookup failed: ${found.message}`
+        tx = { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.PreflightError, error }
+      } else if (found) {
+        tx = { status: VtFlowTxStatus.Succeeded }
+      }
+    }
     const message = chain.createOrUpdateParticipantSessionMsg({
       id: record.participantSessionId,
       issuerParticipantId: record.issuerParticipantId,
@@ -1007,7 +1104,7 @@ export class VtFlowOrchestrator {
       walletAgentParticipantId: Number(record.walletAgentParticipantId ?? 0) || 0,
       digest,
     })
-    const tx = await this.anchor(record, message, record.issuerParticipantId)
+    tx ??= await this.anchor(record, message, record.issuerParticipantId)
     if (tx.status === VtFlowTxStatus.Failed) {
       this.agent.config.logger.error(
         `[vt-flow] the anchoring of the credential of flow ${record.id} (session ${record.participantSessionId}) failed, credential not delivered: ${tx.reason}: ${tx.error}`,

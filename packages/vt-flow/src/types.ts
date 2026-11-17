@@ -138,6 +138,12 @@ export interface VtFlowTx {
   error?: string
 }
 
+/** True when the anchoring sent a transaction; a failed pre-flight sends none. */
+export function isVtFlowTxSent(tx?: VtFlowTx): boolean {
+  if (!tx) return false
+  return tx.status !== VtFlowTxStatus.Failed || !!tx.hash || tx.reason === VtFlowTxReason.BroadcastError
+}
+
 /** The validation decision of an Onboarding Process flow, recorded by `validateFlow`. Discounts are decimals between 0 and 1. */
 export interface VtFlowValidation {
   decidedAt: string

@@ -57,6 +57,7 @@ import { ParentConnectionModule } from '../connections/ParentConnectionModule'
 import { connectionEvents } from '../events/ConnectionEvents'
 import { invitationEvents } from '../events/InvitationEvents'
 import { vtFlowEvents } from '../events/VtFlowEvents'
+import { watchIssuanceRepair } from '../vtFlow/issuanceRepair'
 import { createInvitation } from '../utils/agent'
 import { EcsClaims } from '../utils/ecsClaims'
 
@@ -158,6 +159,7 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
     invitationEvents(this as VsAgent, logger)
     await baseMessageEvents(this as VsAgent, logger)
     await vtFlowEvents(this as VsAgent, logger)
+    watchIssuanceRepair(this as VsAgent, logger)
 
     const parsedDid = this.did ? parseDid(this.did) : null
     if (parsedDid) {

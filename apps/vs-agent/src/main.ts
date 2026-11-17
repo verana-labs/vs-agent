@@ -546,6 +546,11 @@ const run = async () => {
     void vtFlowOrchestrator
       .resumeIssuanceSubmissions()
       .catch((error: Error) => serverLogger.error(`[vt-flow] resuming issuances failed: ${error.message}`))
+    void vtFlowOrchestrator
+      .resumeIssuanceRuns()
+      .catch((error: Error) =>
+        serverLogger.error(`[vt-flow] resuming issuance runs failed: ${error.message}`),
+      )
   }
 
   const ecsBootstrap = new EcsBootstrapService(
