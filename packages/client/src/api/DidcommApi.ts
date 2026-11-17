@@ -22,7 +22,8 @@ import {
   Page,
   PresentationRecord,
   ProtocolModule,
-  RequestMrtdBody,
+  RequestEmrtdDataBody,
+  RequestMrzBody,
   RequestProfileBody,
   SendBasicMessageBody,
   CreateOutOfBandInvitationBody,
@@ -129,11 +130,11 @@ export class DidcommApi {
     return this.http.request('POST', '/didcomm/question-answer', { body })
   }
 
-  public requestMrz(body: RequestMrtdBody): Promise<SentMessage> {
+  public requestMrz(body: RequestMrzBody): Promise<SentMessage> {
     return this.http.request('POST', '/didcomm/mrtd/request-mrz', { body })
   }
 
-  public requestEmrtdData(body: RequestMrtdBody): Promise<SentMessage> {
+  public requestEmrtdData(body: RequestEmrtdDataBody): Promise<SentMessage> {
     return this.http.request('POST', '/didcomm/mrtd/request-emrtd', { body })
   }
 
