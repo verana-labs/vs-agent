@@ -124,7 +124,7 @@ export async function classifyEcsSchema(jsonSchema: string): Promise<ECS | null>
 
 const PUBLIC_SERVICE_ECS: ReadonlySet<string> = new Set([ECS.SERVICE, ECS.ORG, ECS.PERSONA])
 
-/** Tells whether a service holds this ECS credential and publishes it ([VSA-VT-LVP-1], [VSA-DC-CONN-2]). */
+/** Tells whether a service holds this ECS credential and publishes it ([VSA-VTI-ECS-SELF-1], [VSA-VT-LVP-1], [VSA-DC-CONN-2]). */
 export function isPublicServiceEcs(ecsKey: string): boolean {
   return PUBLIC_SERVICE_ECS.has(ecsKey)
 }

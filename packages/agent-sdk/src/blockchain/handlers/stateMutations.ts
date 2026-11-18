@@ -323,7 +323,7 @@ export async function removeHolderTrustCredentialIfRevoked(
       })
       if (credentialId) {
         agent.config.logger.info(
-          `[IndexerWS] Removed linked VP and stored credential ${credentialId} (participant=${participantId})`,
+          `[IndexerWS] removed revoked credential (${credentialId}) (participant=${participantId})`,
         )
       }
     } catch (e) {
