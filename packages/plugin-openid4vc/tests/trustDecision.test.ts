@@ -2,8 +2,8 @@ import type { PresentationTrustDependencies } from '../src/trust/trustDecision'
 import type { SdJwtVc } from '@credo-ts/core'
 import type { DidTrustResolution } from '@verana-labs/vs-agent-sdk'
 
-import { ClaimFormat, Kms } from '@credo-ts/core'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ClaimFormat, Kms, X509Certificate } from '@credo-ts/core'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   AnonCredsTrustError,
@@ -55,6 +55,15 @@ const invalidResolution = (errorCode: TrustErrorCode, errorMessage: string): Did
 const issuerKey = Kms.PublicJwk.fromUnknown(ISSUER_JWK)
 const leaf = { publicJwk: issuerKey, sanUriNames: [ISSUER_DID] }
 
+// A decoded SD-JWT VC holds the encoded x5c certificates. The trust decision parses them, so map each
+// placeholder encoding to its fixture certificate.
+const ENCODED_LEAF = 'encoded-leaf'
+const ENCODED_LEAF_WITHOUT_DID = 'encoded-leaf-without-did'
+const FIXTURE_CERTIFICATES: Record<string, unknown> = {
+  [ENCODED_LEAF]: leaf,
+  [ENCODED_LEAF_WITHOUT_DID]: { ...leaf, sanUriNames: [] },
+}
+
 /** A credential as credo hands it over after step 1, signed with the fixture leaf. */
 function credential(
   overrides: Partial<Record<'issuer' | 'payload' | 'prettyClaims', unknown>> = {},
@@ -68,7 +77,7 @@ function credential(
   }
   return {
     claimFormat: ClaimFormat.SdJwtDc,
-    issuer: { method: 'x5c', x5c: [leaf], issuer: 'https://issuer.example' },
+    issuer: { method: 'x5c', x5c: [ENCODED_LEAF], issuer: 'https://issuer.example' },
     payload,
     prettyClaims: { ...payload, name: 'Ada Lovelace', role: 'engineer' },
     ...overrides,
@@ -87,7 +96,17 @@ function dependencies(overrides: Partial<PresentationTrustDependencies> = {}): P
 }
 
 describe('decidePresentationTrust', () => {
-  afterEach(() => vi.useRealTimers())
+  beforeEach(() => {
+    vi.spyOn(X509Certificate, 'fromEncodedCertificate').mockImplementation(encoded => {
+      const certificate = FIXTURE_CERTIFICATES[encoded]
+      if (!certificate) throw new Error(`no fixture certificate for ${encoded}`)
+      return certificate as X509Certificate
+    })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
 
   it('accepts a credential that passes every step, with the reads it ran as evidence', async () => {
     await expect(decidePresentationTrust(credential(), REQUEST, dependencies())).resolves.toEqual({
@@ -132,7 +151,7 @@ describe('decidePresentationTrust', () => {
 
   it('answers UNTRUSTED for a credential that yields no issuer DID', async () => {
     const presented = credential({
-      issuer: { method: 'x5c', x5c: [{ ...leaf, sanUriNames: [] }], issuer: 'https://issuer.example' },
+      issuer: { method: 'x5c', x5c: [ENCODED_LEAF_WITHOUT_DID], issuer: 'https://issuer.example' },
     })
 
     const decision = await decidePresentationTrust(presented, REQUEST, dependencies())
