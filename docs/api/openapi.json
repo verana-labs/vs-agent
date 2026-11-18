@@ -17,7 +17,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeResponseDto"
+                }
+              }
+            }
           }
         },
         "summary": "Request an ADR-036 signature challenge for a Verana account",
@@ -42,7 +49,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponseDto"
+                }
+              }
+            }
           }
         },
         "summary": "Exchange a signed challenge for a short-lived bearer token",
@@ -169,7 +183,7 @@
         },
         "responses": {
           "201": {
-            "description": "The message record",
+            "description": "Sent message id",
             "content": {
               "application/json": {
                 "schema": {
@@ -386,7 +400,7 @@
             "description": "No presentation with the given id"
           },
           "409": {
-            "description": "The exchange is not in state `presentation-received`"
+            "description": "The exchange is not in state `presentation-received`, or the trust decision has not completed for the presentation"
           }
         },
         "summary": "Accept a presentation",
@@ -558,7 +572,7 @@
     },
     "/v2/didcomm/presentations/{proofExchangeId}/decline": {
       "post": {
-        "description": "Refuses the pending step of a presentation exchange, in either role. The agent sends a problem report to the peer and ends the exchange in state `declined`.",
+        "description": "Refuses the pending step of a presentation exchange, in either role. The agent sends a problem report to the peer and ends the exchange in state `declined`. The verifier cannot decline a received presentation before the trust decision completes: the event of `presentation-received` reports the result of that decision.",
         "operationId": "V2DidcommPresentationsController_declinePresentationExchange_v2",
         "parameters": [
           {
@@ -597,7 +611,7 @@
             "description": "No presentation with the given id"
           },
           "409": {
-            "description": "The exchange is in a terminal state"
+            "description": "The exchange is in a terminal state, or the agent is the verifier and the trust decision has not completed for the received presentation"
           }
         },
         "summary": "Decline a presentation exchange",
@@ -633,10 +647,10 @@
             }
           },
           {
-            "name": "outOfBandId",
+            "name": "invitationId",
             "required": false,
             "in": "query",
-            "description": "Filter by Out-of-Band identifier",
+            "description": "Filter by the invitation record that produced the connection",
             "schema": {
               "type": "string"
             }
@@ -797,7 +811,7 @@
         ]
       },
       "delete": {
-        "description": "Deletes a connection record, and drops the routing it held on its mediator when it had one. The connections opened from invitations sent on it stay, each with its `parentConnectionId`.",
+        "description": "Terminates the DIDComm connection: notifies the other party and deletes the connection record.",
         "operationId": "V2DidcommConnectionsController_deleteConnection_v2",
         "parameters": [
           {
@@ -1195,21 +1209,59 @@
         "tags": [
           "v2/didcomm"
         ]
+      },
+      "delete": {
+        "description": "Deletes a credential exchange record, along with the DIDComm messages it accumulated. It does not delete a stored credential, and it does not revoke an issued credential.",
+        "operationId": "V2DidcommCredentialExchangesController_deleteCredentialExchange_v2",
+        "parameters": [
+          {
+            "name": "credentialExchangeId",
+            "required": true,
+            "in": "path",
+            "description": "Exchange identifier",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The credential exchange record is deleted"
+          },
+          "404": {
+            "description": "No credential exchange with the given id"
+          },
+          "409": {
+            "description": "A trust credential flow that is not terminal names the exchange"
+          }
+        },
+        "summary": "Delete a credential exchange",
+        "tags": [
+          "v2/didcomm"
+        ]
       }
     },
     "/v2/didcomm/invitations": {
       "post": {
-        "description": "Sends an Out-of-Band invitation on an established connection. A v1 connection carries the Out-of-Band 1.1 message. A v2 connection carries the Out-of-Band 2.0 invitation in the `application/didcomm-plain+json` attachment of a Media Sharing share-media message. Without `did`, the invitation opens a single-use sub-connection to this agent, correlated through `parentConnectionId`. With `did`, it refers the peer to that service and creates no record.",
-        "operationId": "V2DidcommInvitationsController_sendInvitation_v2",
+        "description": "Without `connectionId`, creates a standalone Out-of-Band invitation that names the DID of the agent, with no label, no image and no attachment, and returns it with its short URL. With `connectionId`, sends the invitation on that connection: a v1 connection carries the Out-of-Band 1.1 message, and a v2 connection carries the Out-of-Band 2.0 invitation in the `application/didcomm-plain+json` attachment of a Media Sharing share-media message. Without `did`, that invitation opens a single-use sub-connection to this agent, correlated through `parentConnectionId`. With `did`, it refers the peer to that service and creates no record.",
+        "operationId": "V2DidcommInvitationsController_createInvitation_v2",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SendInvitationBodyDto"
+                "$ref": "#/components/schemas/CreateInvitationBodyDto"
               },
               "examples": {
+                "standalone": {
+                  "summary": "Standalone invitation for a QR code",
+                  "value": {
+                    "reusable": false,
+                    "goalCode": "login"
+                  }
+                },
                 "subConnection": {
                   "summary": "Sub-connection to this agent",
                   "value": {
@@ -1235,23 +1287,182 @@
         },
         "responses": {
           "201": {
-            "description": "The invitation is sent",
+            "description": "The invitation is created",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SendInvitationResponseDto"
+                  "$ref": "#/components/schemas/CreateInvitationResponseDto"
                 }
               }
             }
           },
           "400": {
-            "description": "The body fails validation"
+            "description": "The body fails validation, `did` comes without `connectionId`, or `reusable` with it"
           },
           "404": {
             "description": "No connection with the given id"
           }
         },
-        "summary": "Send an invitation",
+        "summary": "Create an invitation",
+        "tags": [
+          "v2/didcomm"
+        ]
+      },
+      "get": {
+        "description": "Returns the invitation records, filtered when the caller supplies a filter.",
+        "operationId": "V2DidcommInvitationsController_listInvitations_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "Filter by state",
+            "schema": {
+              "enum": [
+                "created",
+                "accepted"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "parentConnectionId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the connection that carried a sub-connection invitation",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by a connection that appears in `acceptances`",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reusable",
+            "required": false,
+            "in": "query",
+            "description": "Filter by `reusable`",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "didcommVersion",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the envelope of the invitation",
+            "schema": {
+              "enum": [
+                "v1",
+                "v2"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of invitation records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationRecordPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List invitations",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/invitations/{invitationId}": {
+      "get": {
+        "description": "Retrieves one invitation record by identifier.",
+        "operationId": "V2DidcommInvitationsController_getInvitation_v2",
+        "parameters": [
+          {
+            "name": "invitationId",
+            "required": true,
+            "in": "path",
+            "description": "Identifier of the invitation record",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The invitation record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No invitation with the given id"
+          }
+        },
+        "summary": "Get an invitation",
+        "tags": [
+          "v2/didcomm"
+        ]
+      },
+      "delete": {
+        "description": "Deletes an invitation record. The agent stops accepting the invitation, and its short URL answers 404. A connection that the invitation produced keeps its `invitationId`.",
+        "operationId": "V2DidcommInvitationsController_deleteInvitation_v2",
+        "parameters": [
+          {
+            "name": "invitationId",
+            "required": true,
+            "in": "path",
+            "description": "Identifier of the invitation record to delete",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The invitation record is deleted"
+          },
+          "404": {
+            "description": "No invitation with the given id"
+          }
+        },
+        "summary": "Delete an invitation",
         "tags": [
           "v2/didcomm"
         ]
@@ -1845,7 +2056,7 @@
     },
     "/v2/openid4vc/credential-exchanges": {
       "get": {
-        "description": "Returns the OpenID4VCI issuance sessions that the agent tracks.",
+        "description": "Returns the OpenID4VCI issuance sessions that the agent tracks, filtered by credential type, state or the status list that the offer named.",
         "operationId": "V2OpenId4VcCredentialExchangesController_listCredentialExchanges_v2",
         "parameters": [
           {
@@ -1897,6 +2108,16 @@
                 "Completed",
                 "Error"
               ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "statusListId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the status list that the offer named",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
               "type": "string"
             }
           }
@@ -2199,6 +2420,181 @@
           }
         },
         "summary": "List signing certificates",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      }
+    },
+    "/v2/openid4vc/status-lists": {
+      "get": {
+        "description": "Returns the Token Status Lists of this agent.",
+        "operationId": "V2OpenId4VcStatusListsController_listStatusLists_v2",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records in one page.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of status list records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenId4VcStatusListRecordPageDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List status lists",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      },
+      "post": {
+        "description": "Creates a Token Status List with every entry VALID, publishes its signed token at its public URL, and returns its record.",
+        "operationId": "V2OpenId4VcStatusListsController_createStatusList_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenId4VcCreateStatusListBodyDto"
+              },
+              "examples": {
+                "default": {
+                  "summary": "Default size",
+                  "value": {}
+                },
+                "small": {
+                  "summary": "Explicit size",
+                  "value": {
+                    "size": 4096
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The status list record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenId4VcStatusListRecordDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "size is out of range"
+          }
+        },
+        "summary": "Create a status list",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      }
+    },
+    "/v2/openid4vc/status-lists/{statusListId}": {
+      "delete": {
+        "description": "Deletes a status list and stops serving its public URL. Refused with INVALID_STATE while an index of the list is bound to a credential that is not revoked and not expired.",
+        "operationId": "V2OpenId4VcStatusListsController_deleteStatusList_v2",
+        "parameters": [
+          {
+            "name": "statusListId",
+            "required": true,
+            "in": "path",
+            "description": "Identifier of the list",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The status list is deleted"
+          },
+          "404": {
+            "description": "No status list with the given id"
+          },
+          "409": {
+            "description": "An index of the list is bound to a live credential"
+          }
+        },
+        "summary": "Delete a status list",
+        "tags": [
+          "v2/openid4vc"
+        ]
+      }
+    },
+    "/v2/openid4vc/revoke-credential": {
+      "post": {
+        "description": "Sets the status of the credential at statusListIndex to INVALID and publishes the re-signed Status List Token before it answers. A second call on a revoked index succeeds and changes nothing. A caller revokes a credential whose issuance session it has deleted.",
+        "operationId": "V2OpenId4VcCredentialRevocationController_revokeCredential_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenId4VcRevokeCredentialBodyDto"
+              },
+              "examples": {
+                "default": {
+                  "summary": "Revoke by list and index",
+                  "value": {
+                    "statusListId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                    "statusListIndex": 42
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The revocation record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenId4VcRevokeCredentialResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "statusListIndex is out of range for the list"
+          },
+          "404": {
+            "description": "No status list with the given id"
+          },
+          "409": {
+            "description": "No offer bound statusListIndex on that list"
+          }
+        },
+        "summary": "Revoke an OpenID4VC credential",
         "tags": [
           "v2/openid4vc"
         ]
@@ -2663,9 +3059,48 @@
         "type": "object",
         "properties": {}
       },
+      "ChallengeResponseDto": {
+        "type": "object",
+        "properties": {
+          "nonce": {
+            "type": "string",
+            "description": "Single-use nonce to sign"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "ISO 8601 UTC datetime after which the nonce is rejected"
+          },
+          "audience": {
+            "type": "string",
+            "description": "The ADMIN_API_PUBLIC_URL of this agent. Sign vs-agent-admin-auth:<audience>:<nonce> only if it is the origin you called"
+          }
+        },
+        "required": [
+          "nonce",
+          "expiresAt",
+          "audience"
+        ]
+      },
       "TokenRequestDto": {
         "type": "object",
         "properties": {}
+      },
+      "TokenResponseDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Bearer token for the Authorization header"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "ISO 8601 UTC datetime after which the token is rejected"
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt"
+        ]
       },
       "AgentInfoDto": {
         "type": "object",
@@ -2930,6 +3365,110 @@
           "proofExchangeId"
         ]
       },
+      "PresentedCredentialDto": {
+        "type": "object",
+        "properties": {
+          "credentialDefinitionId": {
+            "type": "string",
+            "description": "Credential definition of the presented credential",
+            "example": "did:webvh:QmIssuerA:issuer-a.example/resources/zQmCredDefA"
+          },
+          "issuerDid": {
+            "type": "string",
+            "description": "The `issuerId` of the credential definition. The agent found an active ISSUER `Participant` for this DID.",
+            "example": "did:webvh:QmIssuerA:issuer-a.example"
+          },
+          "credentialSchemaId": {
+            "type": "number",
+            "description": "Identifier of the `CredentialSchema` of the credential",
+            "example": 12
+          },
+          "ecosystemDid": {
+            "type": "string",
+            "description": "The `did` of the Ecosystem that owns the `CredentialSchema`",
+            "example": "did:webvh:QmEcosystem:ecosystem.example"
+          },
+          "jsonSchemaCredentialId": {
+            "type": "string",
+            "description": "The VTJSC of the credential",
+            "example": "https://ecosystem.example/vt/schemas-employee-jsc.json"
+          },
+          "claims": {
+            "description": "The claims that this credential revealed",
+            "example": [
+              {
+                "name": "employeeId",
+                "value": "1234"
+              }
+            ],
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "unrevealed": {
+            "description": "The names of the requested attributes that the holder did not reveal. The proof verifies without them.",
+            "example": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "credentialDefinitionId",
+          "issuerDid",
+          "credentialSchemaId",
+          "ecosystemDid",
+          "jsonSchemaCredentialId",
+          "claims",
+          "unrevealed"
+        ]
+      },
+      "RejectedCredentialDto": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number",
+            "description": "Position of the requested credential in `requestedCredentials`",
+            "example": 0
+          },
+          "code": {
+            "type": "string",
+            "description": "Problem-report code of the cause",
+            "enum": [
+              "e.p.issuer-not-authorized",
+              "e.p.trust-resolution-unavailable"
+            ],
+            "example": "e.p.issuer-not-authorized"
+          },
+          "note": {
+            "type": "string",
+            "description": "The cause, as text for an operator",
+            "example": "did:webvh:QmIssuerC:issuer-c.example holds no active ISSUER Participant for the CredentialSchema 12"
+          },
+          "credentialDefinitionId": {
+            "type": "string",
+            "description": "Credential definition that the proof names for the credential, when it names one",
+            "example": "did:webvh:QmIssuerC:issuer-c.example/resources/zQmCredDefC"
+          },
+          "issuerDid": {
+            "type": "string",
+            "description": "The `issuerId` of that credential definition, when the agent resolved it",
+            "example": "did:webvh:QmIssuerC:issuer-c.example"
+          },
+          "credentialSchemaId": {
+            "type": "number",
+            "description": "The `CredentialSchema` that the agent derived from that credential definition",
+            "example": 12
+          }
+        },
+        "required": [
+          "index",
+          "code",
+          "note"
+        ]
+      },
       "PresentationRecordDto": {
         "type": "object",
         "properties": {
@@ -2974,7 +3513,7 @@
             }
           },
           "claims": {
-            "description": "The claims revealed by the presentation. Empty until the holder answers.",
+            "description": "Every claim revealed by the presentation, in one list. It does not identify the credential of a claim: see `credentials`. Empty until the holder answers.",
             "example": [
               {
                 "name": "firstName",
@@ -2986,9 +3525,23 @@
               "type": "object"
             }
           },
+          "credentials": {
+            "description": "The presented credentials that the agent verified: one entry for each entry of `requestedCredentials`, in the same order. Empty when the agent is the prover, before the trust decision succeeds, and when it fails.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PresentedCredentialDto"
+            }
+          },
+          "rejectedCredentials": {
+            "description": "The requested credentials that failed the trust decision, with the cause of each. The agent verified none of their values. Empty unless the trust decision failed.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RejectedCredentialDto"
+            }
+          },
           "verified": {
             "type": "boolean",
-            "description": "Whether the presentation verified. Set when the presentation is received, false with an `errorMessage` when the flow is `abandoned`.",
+            "description": "Whether the proof verified and the trust decision succeeded. False until the trust decision completes, and false with an `errorMessage` when the flow is `abandoned`.",
             "example": true
           },
           "threadId": {
@@ -3017,6 +3570,8 @@
           "role",
           "requestedCredentials",
           "claims",
+          "credentials",
+          "rejectedCredentials",
           "verified",
           "createdAt",
           "updatedAt"
@@ -3113,10 +3668,10 @@
             "type": "string",
             "description": "Avatar URL advertised by the peer"
           },
-          "outOfBandId": {
+          "invitationId": {
             "type": "string",
             "nullable": true,
-            "description": "Out-of-Band identifier this connection started from, or null when it has none"
+            "description": "Invitation record that produced this connection, or null for every other connection"
           },
           "parentConnectionId": {
             "type": "string",
@@ -3168,7 +3723,7 @@
           "id",
           "state",
           "role",
-          "outOfBandId",
+          "invitationId",
           "parentConnectionId",
           "createdAt",
           "updatedAt"
@@ -3406,27 +3961,32 @@
           "nextCursor"
         ]
       },
-      "SendInvitationBodyDto": {
+      "CreateInvitationBodyDto": {
         "type": "object",
         "properties": {
           "connectionId": {
             "type": "string",
-            "description": "Connection to send the invitation on",
+            "description": "Connection to send the invitation on. When absent, the agent creates a standalone invitation and returns it.",
             "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           },
           "did": {
             "type": "string",
-            "description": "DID of the service the peer is invited to connect to (referral). When absent, the invitation opens a sub-connection to this agent.",
+            "description": "DID of the service the peer is invited to connect to (referral). Requires `connectionId`. When absent, the invitation is for a connection to this agent.",
             "example": "did:webvh:QmbfsYcjFS2bnouwXBSoZZ65jREEgZGSPdcatcwY7i1Gq2:verifier.example.com"
+          },
+          "reusable": {
+            "type": "boolean",
+            "description": "Accept the standalone invitation any number of times, until the record is deleted. Requires that `connectionId` is absent.",
+            "default": false
           },
           "label": {
             "type": "string",
-            "description": "Text the peer shows for the invitation. On a v2 connection it travels as the `description` of the share-media message and as the `metadata.title` of its item. Sub-connection default: the `name` of the ECS-Service credential of the agent, omitted when it holds none.",
+            "description": "Text the peer shows for a sub-connection invitation or a referral. On a v2 connection it travels as the `description` of the share-media message and as the `metadata.title` of its item. Sub-connection default: the `name` of the ECS-Service credential of the agent, omitted when it holds none. Ignored for a standalone invitation.",
             "example": "My Service"
           },
           "imageUrl": {
             "type": "string",
-            "description": "URL of an image the peer shows for the invitation. On a v2 connection it travels as the `metadata.icon` of the item of the share-media message.",
+            "description": "URL of an image the peer shows for a sub-connection invitation or a referral. On a v2 connection it travels as the `metadata.icon` of the item of the share-media message. Ignored for a standalone invitation.",
             "example": "https://example.com/logo.png"
           },
           "goal": {
@@ -3438,28 +3998,163 @@
             "type": "string",
             "description": "The `goal_code` of the invitation",
             "example": "support-chat"
+          },
+          "useLegacyDid": {
+            "type": "boolean",
+            "description": "Advertise the legacy did:web form when the DID of the agent is did:webvh. Ignored when `connectionId` is present."
+          },
+          "didcommVersion": {
+            "type": "string",
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "description": "DIDComm envelope version of a standalone invitation. Defaults to 'v2'. Ignored when `connectionId` is present."
           }
-        },
-        "required": [
-          "connectionId"
-        ]
+        }
       },
-      "SendInvitationResponseDto": {
+      "CreateInvitationResponseDto": {
         "type": "object",
         "properties": {
           "id": {
             "type": "string",
-            "description": "Identifier of the sent message: the Out-of-Band 1.1 invitation on a v1 connection, the share-media message that carries the Out-of-Band 2.0 invitation on a v2 connection.",
-            "example": "b6a2f0d4-7c1e-4f6a-9d2b-0f3c5e8a1b7d"
-          },
-          "outOfBandId": {
-            "type": "string",
-            "description": "Identifier of the Out-of-Band record created for a sub-connection invitation. Absent for a referral. The connection the invitation produces carries this value as `outOfBandId`.",
+            "description": "Identifier of the invitation record. Absent for a referral. The connection the invitation produces carries this value as `invitationId`.",
             "example": "8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f"
+          },
+          "invitation": {
+            "type": "object",
+            "description": "The Out-of-Band invitation, in the envelope that `didcommVersion` selects. Present for a standalone invitation only.",
+            "additionalProperties": true
+          },
+          "shortUrl": {
+            "type": "string",
+            "description": "A URL under PUBLIC_API_BASE_URL that resolves to the same invitation, for a QR code. Present for a standalone invitation only.",
+            "example": "https://mydomain.com/s?id=abcd"
+          },
+          "messageId": {
+            "type": "string",
+            "description": "Identifier of the sent message: the Out-of-Band 1.1 invitation on a v1 connection, the share-media message that carries the Out-of-Band 2.0 invitation on a v2 connection. Present when `connectionId` is present.",
+            "example": "b6a2f0d4-7c1e-4f6a-9d2b-0f3c5e8a1b7d"
+          }
+        }
+      },
+      "InvitationAcceptanceDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "The connection that the acceptance produced, or that the peer reused"
+          },
+          "reused": {
+            "type": "boolean",
+            "description": "True when the peer accepted the invitation on a connection that it already held, false when the acceptance produced a new connection"
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the peer accepted the invitation"
           }
         },
         "required": [
-          "id"
+          "connectionId",
+          "reused",
+          "acceptedAt"
+        ]
+      },
+      "InvitationRecordDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier of the record",
+            "example": "8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "created",
+              "accepted"
+            ],
+            "description": "State of the invitation"
+          },
+          "didcommVersion": {
+            "type": "string",
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "description": "The envelope of the invitation"
+          },
+          "reusable": {
+            "type": "boolean",
+            "description": "True when the agent accepts the invitation any number of times"
+          },
+          "invitation": {
+            "type": "object",
+            "description": "The Out-of-Band invitation",
+            "additionalProperties": true
+          },
+          "shortUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "The short URL of a standalone invitation, or null",
+            "example": "https://mydomain.com/s?id=abcd"
+          },
+          "parentConnectionId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The connection that carried a sub-connection invitation, or null for a standalone invitation"
+          },
+          "acceptances": {
+            "description": "The acceptances of the invitation, empty while the state is `created`",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvitationAcceptanceDto"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the record was created"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the record was last updated"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "didcommVersion",
+          "reusable",
+          "invitation",
+          "shortUrl",
+          "parentConnectionId",
+          "acceptances",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "InvitationRecordPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvitationRecordDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
         ]
       },
       "RevokeCredentialBodyDto": {
@@ -3746,8 +4441,8 @@
         "properties": {
           "jsonSchemaCredentialId": {
             "type": "string",
-            "description": "Credential type of the offer. The agent derives no credential type yet, so every identifier answers UNKNOWN_ID.",
-            "example": "employee"
+            "description": "Credential type of the offer: the jsonSchemaCredentialId of a CredentialSchema for which the agent holds an active ISSUER Participant.",
+            "example": "https://ecosystem.example/vt/employee.json"
           },
           "claims": {
             "type": "object",
@@ -3761,19 +4456,19 @@
           "ttlSeconds": {
             "type": "number",
             "minimum": 60,
-            "maximum": 7776000,
-            "description": "Lifetime of the credential in seconds, from 60 up to 7776000 (90 days). Nothing revokes the credential, so this lifetime is its only bound.",
+            "maximum": 31536000,
+            "description": "Lifetime of the credential in seconds, from 60 up to 31536000 (one year) for a credential registered on a status list, and up to 7776000 (90 days) for one that is not: nothing revokes such a credential, so this lifetime is its only bound.",
             "example": 3600
           },
           "statusListId": {
             "type": "string",
-            "description": "Status list the credential is registered on, with statusListIndex. The agent hosts no status list yet, so every identifier answers UNKNOWN_ID.",
-            "example": "list-1"
+            "description": "Status list of this agent that the credential is registered on, from createStatusList. Required for a revocable credential, together with statusListIndex.",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           },
           "statusListIndex": {
             "type": "number",
             "minimum": 0,
-            "description": "Index of the credential on that status list. Required whenever statusListId is present.",
+            "description": "Index of the credential on that status list, from 0 to size - 1. The caller allocates the index; the agent refuses one that an earlier offer bound. Required whenever statusListId is present.",
             "example": 42
           }
         },
@@ -3814,6 +4509,16 @@
             "type": "string",
             "description": "Credential type of the offer",
             "example": "employee"
+          },
+          "statusListId": {
+            "type": "string",
+            "description": "Status list the offer registered the credential on. Present only when the offer set it.",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "statusListIndex": {
+            "type": "number",
+            "description": "Index of the credential on that status list. Present only when the offer set it.",
+            "example": 42
           },
           "state": {
             "type": "string",
@@ -3932,6 +4637,11 @@
             "type": "string",
             "description": "Authorization request URI, ready to render as a QR code or to send as a link",
             "example": "openid4vp://authorize?request_uri=https%3A%2F%2Fagent.example%2Foid4vp%2Fverifier%2Fauthorization-requests%2F1"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the request stops being valid"
           }
         },
         "required": [
@@ -4085,6 +4795,11 @@
             "format": "date-time",
             "description": "When the session last changed"
           },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the request stops being valid"
+          },
           "errorMessage": {
             "type": "string",
             "description": "Error message on the session. The agent sets it if the flow stops."
@@ -4177,6 +4892,122 @@
           "development",
           "fingerprint",
           "certificateChain"
+        ]
+      },
+      "OpenId4VcStatusListRecordDto": {
+        "type": "object",
+        "properties": {
+          "statusListId": {
+            "type": "string",
+            "description": "Identifier of the list",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "uri": {
+            "type": "string",
+            "description": "Public URL of the Status List Token, the value every credential registered on the list carries in status.status_list.uri",
+            "example": "https://agent.example/oid4vc/status-list/3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "size": {
+            "type": "number",
+            "description": "Number of entries of the list",
+            "example": 131072
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the agent created the list"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The iat of the last token the agent published for the list"
+          }
+        },
+        "required": [
+          "statusListId",
+          "uri",
+          "size",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "OpenId4VcStatusListRecordPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "The records of this page.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenId4VcStatusListRecordDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Cursor of the next page. The agent sets it to null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "OpenId4VcCreateStatusListBodyDto": {
+        "type": "object",
+        "properties": {
+          "size": {
+            "type": "number",
+            "minimum": 1024,
+            "maximum": 16777216,
+            "default": 131072,
+            "description": "Number of entries of the list. The default is large so that a list reveals little about the number of credentials the issuer has issued.",
+            "example": 131072
+          }
+        }
+      },
+      "OpenId4VcRevokeCredentialBodyDto": {
+        "type": "object",
+        "properties": {
+          "statusListId": {
+            "type": "string",
+            "description": "The status list that the credential is registered on",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "statusListIndex": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Index of the credential on the list, from 0 to size - 1",
+            "example": 42
+          }
+        },
+        "required": [
+          "statusListId",
+          "statusListIndex"
+        ]
+      },
+      "OpenId4VcRevokeCredentialResponseDto": {
+        "type": "object",
+        "properties": {
+          "statusListId": {
+            "type": "string",
+            "description": "The status list of the request",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "statusListIndex": {
+            "type": "number",
+            "description": "The index of the request",
+            "example": 42
+          },
+          "revokedAt": {
+            "type": "string",
+            "description": "The iat of the token the agent published for this revocation, as an ISO 8601 UTC datetime. It can differ from the time the agent received the request.",
+            "example": "2026-08-28T10:15:30.000Z"
+          }
+        },
+        "required": [
+          "statusListId",
+          "statusListIndex",
+          "revokedAt"
         ]
       },
       "V2VtFlowOobLinkDto": {
