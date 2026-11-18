@@ -1,8 +1,9 @@
-import { CredentialState, DidExchangeState, ProofState, VtFlowState } from './common'
+import { CredentialState, DidExchangeState, InvitationState, ProofState, VtFlowState } from './common'
 import {
   BasicMessageRecord,
   ConnectionRecord,
   CredentialExchangeRecord,
+  InvitationRecord,
   MessageReactionAction,
   MessageState,
   PresentationRecord,
@@ -12,6 +13,8 @@ import {
 import { VtFlowRecord } from './vt'
 
 export type ConnectionStateUpdatedData = ConnectionRecord & { previousState: DidExchangeState | null }
+
+export type InvitationStateUpdatedData = InvitationRecord & { previousState: InvitationState | null }
 
 export type PresentationStateUpdatedData = PresentationRecord & { previousState: ProofState | null }
 
@@ -160,6 +163,7 @@ export interface VprNotificationData {
 
 export interface EventDataMap {
   'didcomm.connections.state-updated': ConnectionStateUpdatedData
+  'didcomm.invitations.state-updated': InvitationStateUpdatedData
   'didcomm.basic-messages.message-received': BasicMessageRecord
   'didcomm.receipts.message-receipts-received': MessageReceiptsReceivedData
   'didcomm.reactions.message-reactions-received': MessageReactionsReceivedData

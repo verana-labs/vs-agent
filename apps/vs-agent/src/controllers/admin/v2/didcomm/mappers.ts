@@ -5,17 +5,32 @@ import type {
   DidCommCredentialExchangeRecord,
   DidCommProofExchangeRecord,
 } from '@credo-ts/didcomm'
-import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
+import type {
+  BaseAgentModules,
+  InvitationRecord,
+  PresentedCredential,
+  VsAgent,
+} from '@verana-labs/vs-agent-sdk'
 
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
+import { DidCommProofRole } from '@credo-ts/didcomm'
 import { Claim, RequestedCredential } from '@verana-labs/vs-agent-model'
-import { PARENT_CONNECTION_TAG } from '@verana-labs/vs-agent-sdk'
+import {
+  awaitsTrustDecision,
+  INVITATION_ID_TAG,
+  PARENT_CONNECTION_TAG,
+  PRESENTED_CREDENTIALS_METADATA,
+  REJECTED_CREDENTIALS_METADATA,
+} from '@verana-labs/vs-agent-sdk'
 
 import {
   BasicMessageRecordDto,
   ConnectionRecordDto,
   CredentialExchangeRecordDto,
+  InvitationRecordDto,
   PresentationRecordDto,
+  PresentedCredentialDto,
+  RejectedCredentialDto,
 } from './dto'
 
 export const REQUESTED_CREDENTIALS_METADATA = '_2060/requestedCredentials'
@@ -42,7 +57,7 @@ export function toConnectionDto(record: DidCommConnectionRecord): ConnectionReco
     alias: record.alias,
     threadId: record.threadId,
     imageUrl: record.imageUrl,
-    outOfBandId: record.outOfBandId ?? null,
+    invitationId: (record.getTag(INVITATION_ID_TAG) as string | undefined) ?? null,
     parentConnectionId: (record.getTag(PARENT_CONNECTION_TAG) as string | undefined) ?? null,
     invitationDid: record.invitationDid,
     didcommVersion: record.didcommVersion,
@@ -52,6 +67,26 @@ export function toConnectionDto(record: DidCommConnectionRecord): ConnectionReco
     createdAt: record.createdAt,
     updatedAt: record.updatedAt ?? record.createdAt,
   }
+}
+
+export function toInvitationDto(record: InvitationRecord): InvitationRecordDto {
+  return {
+    id: record.id,
+    state: record.state,
+    didcommVersion: record.didcommVersion,
+    reusable: record.reusable,
+    invitation: record.invitation,
+    shortUrl: record.shortUrl,
+    parentConnectionId: record.parentConnectionId,
+    acceptances: record.acceptances,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt ?? record.createdAt,
+  }
+}
+
+function presentedCredentialsOf(record: DidCommProofExchangeRecord): PresentedCredential[] | null {
+  if (record.role !== DidCommProofRole.Verifier) return null
+  return record.metadata.get(PRESENTED_CREDENTIALS_METADATA) as PresentedCredential[] | null
 }
 
 export async function toPresentationDto(
@@ -73,6 +108,31 @@ export async function toPresentationDto(
     }
   }
 
+  // The trust decision recorded the identity of each credential. The proof holds the claims, and
+  // the request holds the attribute names. Thus a read resolves nothing.
+  const requestedAttributes = formatData.request?.anoncreds?.requested_attributes ?? {}
+  const credentials: PresentedCredentialDto[] = (presentedCredentialsOf(record) ?? []).map(
+    ({ group, ...identity }) => {
+      const requested = requestedAttributes[group]
+      const names = requested?.names ?? (requested?.name ? [requested.name] : [])
+
+      const revealed = new Map<string, string>()
+      for (const [name, value] of Object.entries(
+        proof?.requested_proof.revealed_attr_groups?.[group]?.values ?? {},
+      )) {
+        revealed.set(name, value.raw)
+      }
+      const single = proof?.requested_proof.revealed_attrs?.[group]
+      if (single && requested?.name) revealed.set(requested.name, single.raw)
+
+      return {
+        ...identity,
+        claims: [...revealed].map(([name, value]) => new Claim({ name, value })),
+        unrevealed: names.filter(name => !revealed.has(name)),
+      }
+    },
+  )
+
   return {
     proofExchangeId: record.id,
     state: record.state,
@@ -81,7 +141,12 @@ export async function toPresentationDto(
     requestedCredentials:
       (record.metadata.get(REQUESTED_CREDENTIALS_METADATA) as RequestedCredential[] | null) ?? [],
     claims,
-    verified: record.isVerified ?? false,
+    credentials,
+    rejectedCredentials:
+      record.role === DidCommProofRole.Verifier
+        ? ((record.metadata.get(REJECTED_CREDENTIALS_METADATA) as RejectedCredentialDto[] | null) ?? [])
+        : [],
+    verified: (record.isVerified ?? false) && !awaitsTrustDecision(record),
     threadId: record.threadId,
     errorMessage: record.errorMessage,
     createdAt: record.createdAt,

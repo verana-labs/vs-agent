@@ -5,7 +5,7 @@ import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 import '@hyperledger/anoncreds-nodejs'
 
 import { LogLevel } from '@credo-ts/core'
-import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh/anoncreds'
 import { ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import { Test } from '@nestjs/testing'

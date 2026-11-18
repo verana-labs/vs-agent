@@ -1,4 +1,4 @@
-import type { DidCommUserProfileData } from '@2060.io/credo-ts-didcomm-user-profile'
+import type { DidCommUserProfileData } from '@credo-ts/didcomm-user-profile'
 import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 
 export const DEFAULT_PROFILE = 'CHAT_DEFAULT_PROFILE'

@@ -1,3 +1,5 @@
 export * from './credential-exchange.dto'
+export * from './credential-revocation.dto'
 export * from './presentation.dto'
 export * from './signing-certificate.dto'
+export * from './status-list.dto'

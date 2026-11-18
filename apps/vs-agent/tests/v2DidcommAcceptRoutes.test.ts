@@ -6,9 +6,10 @@ import type { BaseAgentModules, VsAgent } from '@verana-labs/vs-agent-sdk'
 // itself into the shared module on import.
 import '@hyperledger/anoncreds-nodejs'
 
-import { DidCommMediaSharingService } from '@2060.io/credo-ts-didcomm-media-sharing'
+import { DidCommMediaSharingService } from '@credo-ts/didcomm-media-sharing'
 import { LogLevel } from '@credo-ts/core'
 import {
+  DidCommAutoAcceptProof,
   DidCommHandshakeProtocol,
   DidCommMessageSender,
   DidCommOutOfBandInvitation,
@@ -18,22 +19,27 @@ import {
   DidCommProofEventTypes,
   type DidCommProofStateChangedEvent,
 } from '@credo-ts/didcomm'
-import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh/anoncreds'
 import { ValidationPipe, VersioningType } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
-import { Subject } from 'rxjs'
+import { filter, firstValueFrom, Subject } from 'rxjs'
 import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { V2DidcommMediaSharingController, type ChatAgentModules } from '@verana-labs/vs-agent-plugin-chat'
 import {
   AUTO_ACCEPT_PRESENTATION_METADATA,
+  completePendingTrustDecisions,
   createInvitation,
   createJsc,
   ParticipantRole,
   ParticipantState,
+  PRESENTED_CREDENTIALS_METADATA,
   REQUESTED_CREDENTIAL_SCHEMAS_METADATA,
   VeranaIndexerService,
+  VsAgentEventTypes,
+  type VsAgentPresentationTrustDecidedEvent,
   type VeranaChainService,
 } from '@verana-labs/vs-agent-sdk'
 
@@ -171,16 +177,19 @@ const claims = [
 const faberMessages = new Subject<SubjectMessage>()
 const aliceMessages = new Subject<SubjectMessage>()
 const charlieMessages = new Subject<SubjectMessage>()
+const daveMessages = new Subject<SubjectMessage>()
 const subjectMap = {
   'rxjs:faber': faberMessages,
   'rxjs:alice': aliceMessages,
   'rxjs:charlie': charlieMessages,
+  'rxjs:dave': daveMessages,
 }
 
 describe('v2 didcomm accept routes, over two agents', () => {
   let faberAgent: VsAgent<BaseAgentModules>
   let aliceAgent: VsAgent<BaseAgentModules>
   let charlieAgent: VsAgent<BaseAgentModules>
+  let daveAgent: VsAgent<BaseAgentModules>
   let faberApp: INestApplication
   let aliceApp: INestApplication
   let credentialDefinitionId: string
@@ -211,10 +220,17 @@ describe('v2 didcomm accept routes, over two agents', () => {
     charlieAgent.dids.config.resolvers.unshift(resolver)
     await charlieAgent.initialize()
 
+    daveAgent = await startAgent({ label: 'Dave', domain: 'dave', veranaChain })
+    daveAgent.didcomm.registerInboundTransport(new SubjectInboundTransport(daveMessages))
+    daveAgent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+    daveAgent.dids.config.resolvers.unshift(resolver)
+    await daveAgent.initialize()
+
     // Neither DID is published on a reachable host, so each agent resolves the other from memory.
     await resolver.registerAgent(faberAgent)
     await resolver.registerAgent(aliceAgent)
     await resolver.registerAgent(charlieAgent)
+    await resolver.registerAgent(daveAgent)
 
     JSON_SCHEMA_CREDENTIAL_ID = await publishVtjsc(faberAgent, 'https://faber')
     const ecosystemDid = faberAgent.did
@@ -259,6 +275,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     await faberAgent?.shutdown()
     await aliceAgent?.shutdown()
     await charlieAgent?.shutdown()
+    await daveAgent?.shutdown()
     vi.restoreAllMocks()
   })
 
@@ -311,6 +328,20 @@ describe('v2 didcomm accept routes, over two agents', () => {
       await new Promise(resolve => setTimeout(resolve, 250))
     }
     throw new Error(`${collection} record "${id}" did not reach state "${state}"`)
+  }
+
+  /**
+   * This function waits for the trust decision of a received presentation. The agent stores
+   * `presentation-received` before the decision records its values. Thus the state alone does
+   * not show a verified record.
+   */
+  async function untilPresentationVerified(app: INestApplication, id: string): Promise<void> {
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const { body } = await request(app.getHttpServer()).get(`/v2/didcomm/presentations/${id}`)
+      if (body.state === 'presentation-received' && body.verified === true) return
+      await new Promise(resolve => setTimeout(resolve, 250))
+    }
+    throw new Error(`presentation "${id}" did not pass the trust decision`)
   }
 
   /** This function builds one entry of the CredentialSchema map that a request records per group. */
@@ -401,6 +432,23 @@ describe('v2 didcomm accept routes, over two agents', () => {
     expect(acceptedCredential.body.state).toBe('done')
 
     await untilRecordState(faberApp, 'credential-exchanges', faberId, 'done')
+
+    // The holder deletes the record. The credential stays in the store, per [VSA-ADM-DC-CE-DELETE].
+    const storedBefore = await aliceAgent.modules.anoncreds.getCredentials({ credentialDefinitionId })
+    expect(storedBefore.length).toBeGreaterThan(0)
+
+    const deleted = await alice().delete(`/v2/didcomm/credential-exchanges/${aliceId}`)
+    expect(deleted.status).toBe(204)
+    expect(deleted.text).toBe('')
+
+    const gone = await alice().get(`/v2/didcomm/credential-exchanges/${aliceId}`)
+    expect(gone.status).toBe(404)
+    expect(gone.body.error.code).toBe('UNKNOWN_ID')
+
+    const storedAfter = await aliceAgent.modules.anoncreds.getCredentials({ credentialDefinitionId })
+    expect(storedAfter.map(credential => credential.credentialId)).toEqual(
+      storedBefore.map(credential => credential.credentialId),
+    )
   }, 120_000)
 
   it('runs a presentation where each caller takes its own step', async () => {
@@ -421,10 +469,26 @@ describe('v2 didcomm accept routes, over two agents', () => {
     expect(accepted.body.error ?? accepted.status).toBe(200)
 
     // The agent stops on `presentation-received`: the verifier acknowledges with a call.
-    await untilRecordState(faberApp, 'presentations', faberProofId, 'presentation-received')
+    await untilPresentationVerified(faberApp, faberProofId)
 
     const waiting = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
     expect(waiting.body.verified).toBe(true)
+
+    // The record names the issuer that the trust decision checked, from the proof itself.
+    expect(waiting.body.credentials).toEqual([
+      {
+        credentialDefinitionId,
+        issuerDid: faberAgent.did,
+        credentialSchemaId: expect.any(Number),
+        ecosystemDid: faberAgent.did,
+        jsonSchemaCredentialId: JSON_SCHEMA_CREDENTIAL_ID,
+        claims: expect.arrayContaining([
+          { name: 'name', value: 'OpenAI Research' },
+          { name: 'countryCode', value: 'US' },
+        ]),
+        unrevealed: [],
+      },
+    ])
 
     // Verifier: the exchange completes.
     const acknowledged = await faber().post(`/v2/didcomm/presentations/${faberProofId}/accept-presentation`)
@@ -472,7 +536,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', knownRequests)
     const accepted = await alice().post(`/v2/didcomm/presentations/${aliceProofId}/accept-request`)
     expect(accepted.body.error ?? accepted.status).toBe(200)
-    await untilRecordState(faberApp, 'presentations', faberProofId, 'presentation-received')
+    await untilPresentationVerified(faberApp, faberProofId)
 
     const received = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
     expect(received.body.connectionId).toBe(connectionId)
@@ -511,6 +575,233 @@ describe('v2 didcomm accept routes, over two agents', () => {
       issuerParticipantIsActive = true
     }
   }, 120_000)
+
+  /**
+   * This function drives one presentation up to the trust decision of Faber. Then it removes the
+   * recorded decision. A stop of the agent before the decision leaves such a record. An earlier
+   * version of the agent leaves such a record also.
+   */
+  async function presentationWithNoDecision(): Promise<string> {
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }] })
+    expect(created.status).toBe(201)
+    const faberProofId = created.body.proofExchangeId
+
+    await presentTo(created.body.invitation)
+    await untilPresentationVerified(faberApp, faberProofId)
+
+    const record = await faberAgent.didcomm.proofs.getById(faberProofId)
+    record.metadata.delete(PRESENTED_CREDENTIALS_METADATA)
+    await faberAgent.didcomm.proofs.update(record)
+
+    return faberProofId
+  }
+
+  it('completes at a start the trust decision that an earlier run did not record', async () => {
+    const faberProofId = await presentationWithNoDecision()
+
+    // With no decision, the caller can neither acknowledge nor decline the presentation
+    const pending = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(pending.body).toMatchObject({ state: 'presentation-received', verified: false, credentials: [] })
+    for (const step of ['accept-presentation', 'decline']) {
+      const refused = await faber().post(`/v2/didcomm/presentations/${faberProofId}/${step}`)
+      expect(refused.status).toBe(409)
+      expect(refused.body.error.code).toBe('INVALID_STATE')
+    }
+
+    const decisions: Array<{ id: string; state: string }> = []
+    faberAgent.events.on<VsAgentPresentationTrustDecidedEvent>(
+      VsAgentEventTypes.PresentationTrustDecided,
+      ({ payload }) => {
+        decisions.push({ id: payload.proofRecord.id, state: payload.proofRecord.state })
+      },
+    )
+
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
+
+    // The decision emits the event of `presentation-received`, and the record carries its result
+    expect(decisions).toEqual([{ id: faberProofId, state: 'presentation-received' }])
+    const decided = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(decided.body.verified).toBe(true)
+    expect(decided.body.credentials).toEqual([
+      expect.objectContaining({ credentialDefinitionId, issuerDid: faberAgent.did }),
+    ])
+
+    // A second run finds no presentation to decide
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
+    expect(decisions).toHaveLength(1)
+
+    const declined = await faber().post(`/v2/didcomm/presentations/${faberProofId}/decline`)
+    expect(declined.body.error ?? declined.status).toBe(200)
+    expect(declined.body.state).toBe('declined')
+  }, 120_000)
+
+  it('abandons at a start a pending presentation whose issuer lost its ISSUER Participant', async () => {
+    const faberProofId = await presentationWithNoDecision()
+
+    issuerParticipantIsActive = false
+
+    try {
+      await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
+
+      const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+      expect(abandoned.body).toMatchObject({ state: 'abandoned', verified: false, credentials: [] })
+      expect(abandoned.body.rejectedCredentials).toEqual([
+        expect.objectContaining({ index: 0, code: 'e.p.issuer-not-authorized', credentialDefinitionId }),
+      ])
+    } finally {
+      issuerParticipantIsActive = true
+    }
+  }, 120_000)
+
+  it('leaves a recent pending presentation to the process that can decide it, and examines it again later', async () => {
+    const faberProofId = await presentationWithNoDecision()
+
+    // The record is younger than the minimum age, so another process can decide it at this moment
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 1500 })
+
+    const pending = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(pending.body).toMatchObject({ state: 'presentation-received', verified: false })
+
+    // The later examination completes the decision
+    await untilPresentationVerified(faberApp, faberProofId)
+  }, 120_000)
+
+  it('examines the pending trust decisions later when it cannot read the record of a presentation', async () => {
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }] })
+    expect(created.status).toBe(201)
+    const faberProofId = created.body.proofExchangeId
+
+    const read = vi
+      .spyOn(faberAgent.didcomm.proofs, 'getByThreadAndConnectionId')
+      .mockRejectedValueOnce(new Error('the store does not answer'))
+    const timers = vi.spyOn(globalThis, 'setTimeout')
+
+    try {
+      await presentTo(created.body.invitation)
+      await untilRecordState(faberApp, 'presentations', faberProofId, 'presentation-received')
+
+      // The agent has no record to abandon, so it starts a later examination
+      await vi.waitFor(() => expect(timers.mock.calls.some(([, delay]) => delay === 60_000)).toBe(true))
+
+      const pending = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+      expect(pending.body).toMatchObject({ state: 'presentation-received', verified: false })
+    } finally {
+      read.mockRestore()
+      timers.mockRestore()
+    }
+
+    // The examination completes the decision. The test does not wait for the timer.
+    await completePendingTrustDecisions(faberAgent, new TsLogger(LogLevel.Off, 'test'), { minAgeMs: 0 })
+
+    const decided = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(decided.body.verified).toBe(true)
+  }, 120_000)
+
+  /**
+   * This function drives one presentation that Alice sends with no connection. The invitation
+   * asks for no handshake. A vs-agent prover presents only to a verifier with a DID, so Alice
+   * presents through Credo.
+   */
+  async function presentWithNoConnection(): Promise<string> {
+    const requested = await faberAgent.didcomm.proofs.createRequest({
+      protocolVersion: 'v2',
+      // The verifier acknowledges with a call, as for a request of the Administration API
+      autoAcceptProof: DidCommAutoAcceptProof.Never,
+      proofFormats: {
+        anoncreds: {
+          name: 'proof-request',
+          version: '1.0',
+          requested_attributes: {
+            'gov-id': { names: ['name'], restrictions: [{ cred_def_id: credentialDefinitionId }] },
+          },
+        },
+      },
+    })
+    requested.proofRecord.metadata.set(REQUESTED_CREDENTIAL_SCHEMAS_METADATA, {
+      'gov-id': requestedCredentialSchema(CREDENTIAL_SCHEMA_ID),
+    })
+    await faberAgent.didcomm.proofs.update(requested.proofRecord)
+
+    const outOfBand = await faberAgent.didcomm.oob.createInvitation({
+      handshake: false,
+      messages: [requested.message],
+    })
+
+    const known = await idsOf(aliceApp, 'presentations')
+    await aliceAgent.didcomm.oob.receiveInvitation(outOfBand.outOfBandInvitation, { label: 'Alice' })
+    const aliceProofId = await untilNewRecord(aliceApp, 'presentations', 'request-received', known)
+    await aliceAgent.didcomm.proofs.acceptRequest({ proofExchangeRecordId: aliceProofId })
+
+    return requested.proofRecord.id
+  }
+
+  it('applies the trust decision to a presentation that arrives with no connection', async () => {
+    const faberProofId = await presentWithNoConnection()
+
+    await untilPresentationVerified(faberApp, faberProofId)
+
+    const received = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(received.body.connectionId).toBeUndefined()
+    expect(received.body.credentials).toEqual([
+      expect.objectContaining({ credentialDefinitionId, issuerDid: faberAgent.did }),
+    ])
+
+    const acknowledged = await faber().post(`/v2/didcomm/presentations/${faberProofId}/accept-presentation`)
+    expect(acknowledged.body.error ?? acknowledged.status).toBe(200)
+    expect(acknowledged.body.state).toBe('done')
+  }, 120_000)
+
+  it('abandons a presentation with no connection whose issuer holds no active ISSUER Participant', async () => {
+    issuerParticipantIsActive = false
+
+    try {
+      const faberProofId = await presentWithNoConnection()
+
+      await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+
+      const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+      expect(abandoned.body).toMatchObject({ verified: false, credentials: [] })
+      expect(abandoned.body.connectionId).toBeUndefined()
+      expect(abandoned.body.rejectedCredentials).toEqual([
+        expect.objectContaining({ index: 0, code: 'e.p.issuer-not-authorized' }),
+      ])
+    } finally {
+      issuerParticipantIsActive = true
+    }
+  }, 120_000)
+
+  it('abandons a presentation that has no AnonCreds proof', async () => {
+    const created = await faber()
+      .post('/v2/didcomm/presentation-request')
+      .send({ requestedCredentials: [{ credentialDefinitionId, attributes: ['name'] }] })
+    expect(created.status).toBe(201)
+    const faberProofId = created.body.proofExchangeId
+
+    // The agent registers the AnonCreds format only, so the test removes the proof from the read
+    const proofs = faberAgent.didcomm.proofs
+    const getFormatData = proofs.getFormatData.bind(proofs)
+    const read = vi
+      .spyOn(proofs, 'getFormatData')
+      .mockImplementation(async id => (id === faberProofId ? {} : getFormatData(id)))
+
+    try {
+      await presentTo(created.body.invitation)
+      await untilRecordState(faberApp, 'presentations', faberProofId, 'abandoned')
+    } finally {
+      read.mockRestore()
+    }
+
+    const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
+    expect(abandoned.body).toMatchObject({ verified: false, credentials: [], rejectedCredentials: [] })
+    expect(abandoned.body.errorMessage).toBe(
+      'e.p.trust-resolution-unavailable: the presentation has no AnonCreds proof',
+    )
+  }, 120_000)
+
   it('never acknowledges a presentation that fails the trust decision, whatever the autoAccept policy', async () => {
     const messageSender = faberAgent.dependencyManager.resolve(DidCommMessageSender)
     const sendMessage = vi.spyOn(messageSender, 'sendMessage')
@@ -617,6 +908,14 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const messageSender = faberAgent.dependencyManager.resolve(DidCommMessageSender)
     const sendMessage = vi.spyOn(messageSender, 'sendMessage')
     const changes = recordProofStates()
+    const decisions: Array<{ id: string; state: string; verified?: boolean; errorMessage?: string }> = []
+    faberAgent.events.on<VsAgentPresentationTrustDecidedEvent>(
+      VsAgentEventTypes.PresentationTrustDecided,
+      ({ payload }) => {
+        const { id, state, isVerified, errorMessage } = payload.proofRecord
+        decisions.push({ id, state, verified: isVerified, errorMessage })
+      },
+    )
 
     const created = await faber()
       .post('/v2/didcomm/presentation-request')
@@ -633,7 +932,20 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
       expect(abandoned.body.verified).toBe(false)
+      expect(abandoned.body.credentials).toEqual([])
       expect(abandoned.body.errorMessage).toContain('e.p.issuer-not-authorized')
+
+      // The record names the rejected issuer in a field of its own, apart from the verified ones.
+      expect(abandoned.body.rejectedCredentials).toEqual([
+        {
+          index: 0,
+          code: 'e.p.issuer-not-authorized',
+          note: expect.stringContaining('holds no active ISSUER Participant'),
+          credentialDefinitionId,
+          issuerDid: faberAgent.did,
+          credentialSchemaId: expect.any(Number),
+        },
+      ])
 
       // The acknowledgement waits for the trust decision, so the peer gets the report instead.
       const sentTypes = sendMessage.mock.calls.map(call => call[0].message.type)
@@ -646,6 +958,16 @@ describe('v2 didcomm accept routes, over two agents', () => {
 
       expect(changes.filter(change => change.id === faberProofId && change.state === 'abandoned')).toEqual([
         { id: faberProofId, previousState: 'presentation-received', state: 'abandoned' },
+      ])
+
+      // The Events API reports `presentation-received` with the cause, before `abandoned`.
+      expect(decisions.filter(decision => decision.id === faberProofId)).toEqual([
+        {
+          id: faberProofId,
+          state: 'presentation-received',
+          verified: false,
+          errorMessage: expect.stringContaining('e.p.issuer-not-authorized'),
+        },
       ])
 
       const acknowledged = await faber().post(`/v2/didcomm/presentations/${faberProofId}/accept-presentation`)
@@ -675,6 +997,9 @@ describe('v2 didcomm accept routes, over two agents', () => {
       const abandoned = await faber().get(`/v2/didcomm/presentations/${faberProofId}`)
       expect(abandoned.body.verified).toBe(false)
       expect(abandoned.body.errorMessage).toContain('e.p.trust-resolution-unavailable')
+      expect(abandoned.body.rejectedCredentials).toMatchObject([
+        { index: 0, code: 'e.p.trust-resolution-unavailable', issuerDid: faberAgent.did },
+      ])
     } finally {
       unreachableIndexerOwner = undefined
     }
@@ -828,7 +1153,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
     expect(abandoned.body.errorMessage).toContain('records no CredentialSchema')
   }, 120_000)
 
-  describe('the invitations module, over an established connection', () => {
+  describe('the invitations module', () => {
     const faberDid = () => faberAgent.did as string
     const charlieDid = () => charlieAgent.did as string
 
@@ -856,17 +1181,37 @@ describe('v2 didcomm accept routes, over two agents', () => {
     const webhookUrl = 'http://webhook.test/events'
     const webhookFetch = vi.fn()
 
-    const firstConnectionEvent = (outOfBandId: string) =>
+    const firstConnectionEvent = (invitationId: string) =>
       vi.waitFor(() => {
         const event = webhookFetch.mock.calls
           .map(([, init]) => JSON.parse((init as RequestInit).body as string))
           .find(
             body =>
-              body.type === 'didcomm.connections.state-updated' && body.data.outOfBandId === outOfBandId,
+              body.type === 'didcomm.connections.state-updated' && body.data.invitationId === invitationId,
           )
         expect(event).toBeDefined()
         return event.data
       })
+
+    const invitationEvents = (invitationId: string, count = 1) =>
+      vi.waitFor(
+        () => {
+          const events = webhookFetch.mock.calls
+            .map(([, init]) => JSON.parse((init as RequestInit).body as string))
+            .filter(
+              body => body.type === 'didcomm.invitations.state-updated' && body.data.id === invitationId,
+            )
+          expect(events.length).toBeGreaterThanOrEqual(count)
+          return events
+        },
+        { timeout: 10_000 },
+      )
+
+    const acceptance = (connectionId: string, reused: boolean) => ({
+      connectionId,
+      reused,
+      acceptedAt: expect.any(String),
+    })
 
     const aliceReceives = async (invitation: DidCommOutOfBandInvitation) => {
       const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitation(invitation, {
@@ -937,19 +1282,6 @@ describe('v2 didcomm accept routes, over two agents', () => {
       return connectionRecord
     }
 
-    /**
-     * The inviter closes a connection with a rotation to nothing. Therefore the peer keeps the
-     * record, but without the DID of the inviter.
-     */
-    const untilTerminated = async (agent: VsAgent<BaseAgentModules>, name: string, connectionId: string) => {
-      for (let attempt = 0; attempt < 80; attempt++) {
-        const record = await agent.didcomm.connections.findById(connectionId)
-        if (record && record.theirDid === undefined) return record
-        await new Promise(resolve => setTimeout(resolve, 250))
-      }
-      throw new Error(`${name} keeps connection ${connectionId} open`)
-    }
-
     const sentBy = async (app: () => request.SuperTest<request.Test>, body: Record<string, unknown>) => {
       const sendMessage = vi.spyOn(faberAgent.dependencyManager.resolve(DidCommMessageSender), 'sendMessage')
       try {
@@ -973,7 +1305,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
       })
 
       expect(response.status).toBe(201)
-      expect(response.body.outOfBandId).toBeDefined()
+      expect(response.body).toEqual({ id: expect.any(String), messageId: expect.any(String) })
       expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount + 1)
 
       const { record, invitation } = await untilAliceReceivesInvitation(known)
@@ -994,22 +1326,63 @@ describe('v2 didcomm accept routes, over two agents', () => {
       if (!connectionRecord) throw new Error('Alice did not open a connection from the invitation')
       await aliceAgent.didcomm.basicMessages.sendMessage(connectionRecord.id, 'hello over the sub-connection')
 
-      const child = await untilFaberConnection({ outOfBandId: response.body.outOfBandId })
+      const child = await untilFaberConnection({ invitationId: response.body.id })
       expect(child.id).not.toBe(parent.id)
+      expect(child.outOfBandId).toBe(response.body.id)
       expect(child.getTag('parentConnectionId')).toBe(parent.id)
 
       const fetched = await faber().get(`/v2/didcomm/connections/${child.id}`)
       expect(fetched.body).toMatchObject({
-        outOfBandId: response.body.outOfBandId,
+        invitationId: response.body.id,
         parentConnectionId: parent.id,
       })
 
-      const firstEvent = await firstConnectionEvent(response.body.outOfBandId)
+      const firstEvent = await firstConnectionEvent(response.body.id)
       expect(firstEvent).toMatchObject({ parentConnectionId: parent.id, previousState: null })
 
-      const listed = await faber().get(`/v2/didcomm/connections?outOfBandId=${response.body.outOfBandId}`)
+      const listed = await faber().get(`/v2/didcomm/connections?invitationId=${response.body.id}`)
       expect(listed.body.items.map((item: { id: string }) => item.id)).toEqual([child.id])
+
+      const [created, accepted] = await invitationEvents(response.body.id, 2)
+      expect(created.data).toMatchObject({
+        state: 'created',
+        previousState: null,
+        didcommVersion: 'v2',
+        parentConnectionId: parent.id,
+        shortUrl: null,
+      })
+      expect(accepted.data).toMatchObject({
+        state: 'accepted',
+        previousState: 'created',
+        acceptances: [acceptance(child.id, false)],
+      })
     }, 120_000)
+
+    it('answers shareMedia with the id of the share-media message that the peer receives', async () => {
+      const known = await aliceKnownShares()
+      const controller = new V2DidcommMediaSharingController(
+        faberAgent as unknown as VsAgent<ChatAgentModules>,
+      )
+
+      const { id } = await controller.shareMedia({
+        connectionId: v2Parent.id,
+        description: 'The invoice',
+        items: [{ uri: 'https://faber.example/invoice.png', mimeType: 'image/png' }],
+      })
+
+      const received = await vi.waitFor(
+        async () => {
+          const [record] = (await aliceSharedMedia()).filter(shared => !known.has(shared.id))
+          expect(record).toBeDefined()
+          return record
+        },
+        { timeout: 20_000, interval: 250 },
+      )
+
+      expect(received.threadId).toBe(id)
+      expect(received.description).toBe('The invoice')
+      expect(received.items?.[0].uri).toBe('https://faber.example/invoice.png')
+    }, 60_000)
 
     it('opens a sub-connection over a v1 connection with an OOB 1.1 invitation that carries the label', async () => {
       const v1 = await faberAgent.didcomm.oob.createInvitation({
@@ -1030,7 +1403,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
       expect(message).toBeInstanceOf(DidCommOutOfBandInvitation)
       const invitation = message as DidCommOutOfBandInvitation
       expect(invitation.v2Invitation).toBeUndefined()
-      expect(invitation.id).toBe(response.body.id)
+      expect(invitation.id).toBe(response.body.messageId)
       expect(invitation.label).toBe('Support')
       expect(invitation.imageUrl).toBe('https://faber.example/support.png')
       expect(invitation.getServices()).not.toContain(faberDid())
@@ -1038,12 +1411,16 @@ describe('v2 didcomm accept routes, over two agents', () => {
       const aliceChild = await aliceReceives(invitation)
       await aliceAgent.didcomm.connections.returnWhenIsConnected(aliceChild.id)
 
-      const child = await untilFaberConnection({ outOfBandId: response.body.outOfBandId, state: 'completed' })
+      const child = await untilFaberConnection({ invitationId: response.body.id, state: 'completed' })
       expect(child.id).not.toBe(parent.id)
       expect(child.getTag('parentConnectionId')).toBe(parent.id)
 
-      const firstEvent = await firstConnectionEvent(response.body.outOfBandId)
+      const firstEvent = await firstConnectionEvent(response.body.id)
       expect(firstEvent).toMatchObject({ id: child.id, parentConnectionId: parent.id })
+
+      await invitationEvents(response.body.id, 2)
+      const invitationRecord = await faber().get(`/v2/didcomm/invitations/${response.body.id}`)
+      expect(invitationRecord.body.acceptances).toEqual([acceptance(child.id, false)])
 
       const deleted = await faber().delete(`/v2/didcomm/connections/${parent.id}`)
       expect(deleted.status).toBe(204)
@@ -1064,17 +1441,28 @@ describe('v2 didcomm accept routes, over two agents', () => {
       const url = invitation.toUrl({ domain: 'https://alice' })
 
       const accepted = await connectFromUrl(aliceAgent, 'Alice', url, 'the first use')
-      const child = await untilFaberConnection({ outOfBandId: response.body.outOfBandId })
+      const child = await untilFaberConnection({ invitationId: response.body.id })
       expect(child.getTag('parentConnectionId')).toBe(v2Parent.id)
 
+      const refusal = firstValueFrom(
+        faberAgent.events
+          .observable('AgentReceiveMessageError')
+          .pipe(filter(({ payload }) => String(payload).includes('No connection associated'))),
+      )
       const refused = await connectFromUrl(charlieAgent, 'Charlie', url, 'the second use')
+      await refusal
 
-      const terminated = await untilTerminated(charlieAgent, 'Charlie', refused.id)
-      expect(terminated.previousTheirDids?.length).toBeGreaterThan(0)
+      expect(await faberAgent.didcomm.connections.findAllByQuery({ theirDid: refused.did })).toHaveLength(0)
 
-      const surviving = await faberAgent.didcomm.connections.findAllByOutOfBandId(response.body.outOfBandId)
+      const surviving = await faberAgent.didcomm.connections.findAllByOutOfBandId(response.body.id)
       expect(surviving.map(record => record.id)).toEqual([child.id])
       expect(accepted.theirDid).toBeDefined()
+
+      const invitationRecord = await faber().get(`/v2/didcomm/invitations/${response.body.id}`)
+      expect(invitationRecord.body).toMatchObject({
+        state: 'accepted',
+        acceptances: [acceptance(child.id, false)],
+      })
     }, 120_000)
 
     it('refers the peer to another DID without creating a record', async () => {
@@ -1089,7 +1477,7 @@ describe('v2 didcomm accept routes, over two agents', () => {
       })
 
       expect(response.status).toBe(201)
-      expect(response.body).toEqual({ id: expect.any(String) })
+      expect(response.body).toEqual({ messageId: expect.any(String) })
       expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount)
 
       const { record, invitation } = await untilAliceReceivesInvitation(known)
@@ -1110,6 +1498,241 @@ describe('v2 didcomm accept routes, over two agents', () => {
       const referred = await untilConnection(charlieAgent, { theirDid: aliceDid })
       expect(referred.outOfBandId).toBeUndefined()
       expect((await faberAgent.didcomm.oob.getAll()).length).toBe(oobCount)
+    }, 120_000)
+
+    const servedInvitation = async (shortUrl: string) => {
+      const served = await faber().get(`/s${new URL(shortUrl).search}`)
+      expect(served.status).toBe(200)
+      return served.body as Record<string, unknown>
+    }
+
+    it('connects a peer with no connection to a v2 standalone invitation that names the DID of the agent', async () => {
+      const response = await faber().post('/v2/didcomm/invitations').send({})
+
+      expect(response.status).toBe(201)
+      expect(Object.keys(response.body).sort()).toEqual(['id', 'invitation', 'shortUrl'])
+      expect(response.body.shortUrl.startsWith(`${PUBLIC_API_BASE_URL}/s?id=`)).toBe(true)
+      expect(response.body.invitation).toMatchObject({
+        type: 'https://didcomm.org/out-of-band/2.0/invitation',
+        from: faberDid(),
+      })
+      expect(response.body.invitation.attachments ?? []).toEqual([])
+      expect(JSON.stringify(response.body.invitation)).not.toMatch(/label|imageUrl/)
+
+      const served = await servedInvitation(response.body.shortUrl)
+      expect(served).toEqual(response.body.invitation)
+
+      const [created] = await invitationEvents(response.body.id)
+      expect(created.data).toEqual({
+        ...(await faber().get(`/v2/didcomm/invitations/${response.body.id}`)).body,
+        previousState: null,
+      })
+
+      const scanned = await connectFromUrl(
+        charlieAgent,
+        'Charlie',
+        invitationUrl(served),
+        'hello from a scan',
+      )
+
+      const connection = await untilFaberConnection({ invitationId: response.body.id })
+      expect(connection.theirDid).toBe(scanned.did)
+      const fetched = await faber().get(`/v2/didcomm/connections/${connection.id}`)
+      expect(fetched.body).toMatchObject({ invitationId: response.body.id, parentConnectionId: null })
+
+      const events = await invitationEvents(response.body.id, 2)
+      expect(events).toHaveLength(2)
+      expect(events[1].data).toEqual({
+        ...(await faber().get(`/v2/didcomm/invitations/${response.body.id}`)).body,
+        state: 'accepted',
+        acceptances: [acceptance(connection.id, false)],
+        previousState: 'created',
+      })
+      expect((await faber().get(`/s${new URL(response.body.shortUrl).search}`)).status).toBe(404)
+
+      const deleted = await faber().delete(`/v2/didcomm/invitations/${response.body.id}`)
+      expect(deleted.status).toBe(204)
+      const kept = await faber().get(`/v2/didcomm/connections/${connection.id}`)
+      expect(kept.body.invitationId).toBe(response.body.id)
+    }, 120_000)
+
+    it('connects a peer to a v1 standalone invitation over DID Exchange', async () => {
+      const response = await faber().post('/v2/didcomm/invitations').send({
+        didcommVersion: 'v1',
+        label: 'ignored',
+        imageUrl: 'https://faber.example/ignored.png',
+      })
+
+      expect(response.status).toBe(201)
+      expect(response.body.invitation).toMatchObject({
+        '@type': 'https://didcomm.org/out-of-band/1.1/invitation',
+        services: [faberDid()],
+      })
+      expect(response.body.invitation.handshake_protocols).toEqual(['https://didcomm.org/didexchange/1.1'])
+      expect(response.body.invitation).not.toHaveProperty('label')
+      expect(response.body.invitation).not.toHaveProperty('imageUrl')
+
+      const served = await servedInvitation(response.body.shortUrl)
+      const { connectionRecord } = await aliceAgent.didcomm.oob.receiveInvitationFromUrl(
+        invitationUrl(served),
+        {
+          label: 'Alice',
+        },
+      )
+      if (!connectionRecord) throw new Error('Alice did not open a connection from the invitation')
+      await aliceAgent.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
+
+      const connection = await untilFaberConnection({ invitationId: response.body.id, state: 'completed' })
+      expect(connection.getTag('parentConnectionId')).toBeUndefined()
+
+      await invitationEvents(response.body.id, 2)
+      const invitationRecord = await faber().get(`/v2/didcomm/invitations/${response.body.id}`)
+      expect(invitationRecord.body.acceptances).toEqual([acceptance(connection.id, false)])
+    }, 120_000)
+
+    /**
+     * This function deletes the v2 connections of a peer to Faber that Faber does not hold.
+     *
+     * A v2 connection has no handshake. The peer holds it when it receives the invitation.
+     * Faber holds it only after the first message of the peer. A test that receives an invitation
+     * and sends no message thus leaves a connection that only the peer holds. Credo reuses the
+     * first v2 connection that the store returns. The store has no order. Thus Credo can select
+     * that connection.
+     */
+    const deleteConnectionsUnknownToFaber = async (agent: VsAgent<BaseAgentModules>): Promise<void> => {
+      for (const connection of await agent.didcomm.connections.findByInvitationDid(faberDid())) {
+        const { id, did, theirDid, didcommVersion } = connection
+        // These are the connections that Credo can reuse for a v2 invitation
+        if (didcommVersion !== 'v2' || !did || !theirDid) continue
+        if (await faberAgent.didcomm.connections.findByDid(did)) continue
+        await agent.didcomm.connections.deleteById(id)
+      }
+    }
+
+    /** The peer pings on the v2 connection that it already holds, so the ping carries the invitation as pthid. */
+    const reuseFromUrl = async (agent: VsAgent<BaseAgentModules>, name: string, url: string) => {
+      await deleteConnectionsUnknownToFaber(agent)
+      const known = new Set((await agent.didcomm.connections.getAll()).map(record => record.id))
+      const { connectionRecord } = await agent.didcomm.oob.receiveInvitationFromUrl(url, {
+        label: name,
+        reuseConnection: true,
+      })
+      if (!connectionRecord?.did || !known.has(connectionRecord.id))
+        throw new Error(`${name} reused no connection`)
+      await agent.didcomm.connections.sendPing(connectionRecord.id, { responseRequested: true })
+
+      const reused = await faberAgent.didcomm.connections.findByDid(connectionRecord.did)
+      if (!reused) throw new Error(`Faber holds no connection with ${name}`)
+      return reused
+    }
+
+    it('accepts a v2 standalone invitation on the connection that the peer already holds', async () => {
+      const response = await faber().post('/v2/didcomm/invitations').send({})
+      const connectionCount = (await faberAgent.didcomm.connections.getAll()).length
+
+      const reused = await reuseFromUrl(aliceAgent, 'Alice', invitationUrl(response.body.invitation))
+
+      const [, accepted] = await invitationEvents(response.body.id, 2)
+      expect(accepted.data).toMatchObject({
+        state: 'accepted',
+        previousState: 'created',
+        acceptances: [acceptance(reused.id, true)],
+      })
+      expect((await faberAgent.didcomm.connections.getAll()).length).toBe(connectionCount)
+      const produced = await faber().get(`/v2/didcomm/connections?invitationId=${response.body.id}`)
+      expect(produced.body.items).toEqual([])
+    }, 120_000)
+
+    it('accepts a v1 standalone invitation with handshake-reuse on the connection that the peer already holds', async () => {
+      // Credo reuses the first connection with the invitation DID in either version, and Dave holds no v2 one
+      const first = await faber().post('/v2/didcomm/invitations').send({ didcommVersion: 'v1' })
+      const { connectionRecord: daveConnection } = await daveAgent.didcomm.oob.receiveInvitationFromUrl(
+        invitationUrl(first.body.invitation),
+        { label: 'Dave' },
+      )
+      if (!daveConnection) throw new Error('Dave did not open a connection from the invitation')
+      await daveAgent.didcomm.connections.returnWhenIsConnected(daveConnection.id)
+      const connection = await untilFaberConnection({ invitationId: first.body.id, state: 'completed' })
+      const connectionCount = (await faberAgent.didcomm.connections.getAll()).length
+
+      const second = await faber().post('/v2/didcomm/invitations').send({ didcommVersion: 'v1' })
+      const { connectionRecord } = await daveAgent.didcomm.oob.receiveInvitationFromUrl(
+        invitationUrl(second.body.invitation),
+        { label: 'Dave', reuseConnection: true },
+      )
+      expect(connectionRecord?.id).toBe(daveConnection.id)
+
+      const [, accepted] = await invitationEvents(second.body.id, 2)
+      expect(accepted.data).toMatchObject({
+        state: 'accepted',
+        previousState: 'created',
+        acceptances: [acceptance(connection.id, true)],
+      })
+      expect((await faberAgent.didcomm.connections.getAll()).length).toBe(connectionCount)
+    }, 120_000)
+
+    it('records each acceptance of a reusable invitation and keeps serving its short URL', async () => {
+      const response = await faber().post('/v2/didcomm/invitations').send({ reusable: true })
+      const url = invitationUrl(response.body.invitation)
+
+      await connectFromUrl(daveAgent, 'Dave', url, 'hello from a new connection')
+      const connection = await untilFaberConnection({ invitationId: response.body.id })
+      await invitationEvents(response.body.id, 2)
+
+      const reusedByAlice = await reuseFromUrl(aliceAgent, 'Alice', url)
+      await invitationEvents(response.body.id, 3)
+
+      const reusedByCharlie = await reuseFromUrl(charlieAgent, 'Charlie', url)
+      const events = await invitationEvents(response.body.id, 4)
+
+      expect(events.map(event => event.data.previousState)).toEqual([null, 'created', 'accepted', 'accepted'])
+      const invitationRecord = await faber().get(`/v2/didcomm/invitations/${response.body.id}`)
+      expect(invitationRecord.body).toMatchObject({ state: 'accepted', reusable: true })
+      expect(invitationRecord.body.acceptances).toEqual([
+        acceptance(connection.id, false),
+        acceptance(reusedByAlice.id, true),
+        acceptance(reusedByCharlie.id, true),
+      ])
+      expect(await servedInvitation(response.body.shortUrl)).toEqual(response.body.invitation)
+    }, 120_000)
+
+    it('lists, reads and deletes invitation records from the store', async () => {
+      const created = await faber().post('/v2/didcomm/invitations').send({ reusable: true })
+      expect(created.status).toBe(201)
+
+      const fetched = await faber().get(`/v2/didcomm/invitations/${created.body.id}`)
+      expect(fetched.status).toBe(200)
+      expect(fetched.body).toMatchObject({
+        id: created.body.id,
+        state: 'created',
+        didcommVersion: 'v2',
+        reusable: true,
+        invitation: created.body.invitation,
+        shortUrl: created.body.shortUrl,
+        parentConnectionId: null,
+        acceptances: [],
+      })
+
+      const idsOfPage = (body: { items: { id: string }[] }) => body.items.map(item => item.id)
+      const reusable = await faber().get(
+        '/v2/didcomm/invitations?reusable=true&state=created&didcommVersion=v2',
+      )
+      expect(idsOfPage(reusable.body)).toContain(created.body.id)
+      const singleUse = await faber().get('/v2/didcomm/invitations?reusable=false')
+      expect(idsOfPage(singleUse.body)).not.toContain(created.body.id)
+
+      const subConnections = await faber().get(`/v2/didcomm/invitations?parentConnectionId=${v2Parent.id}`)
+      expect(subConnections.body.items.length).toBeGreaterThan(0)
+      for (const item of subConnections.body.items) {
+        expect(item).toMatchObject({ parentConnectionId: v2Parent.id, shortUrl: null, reusable: false })
+      }
+
+      const deleted = await faber().delete(`/v2/didcomm/invitations/${created.body.id}`)
+      expect(deleted.status).toBe(204)
+      expect((await faber().get(`/v2/didcomm/invitations/${created.body.id}`)).status).toBe(404)
+      expect(await faberAgent.didcomm.oob.findById(created.body.id)).toBeNull()
+      expect((await faber().get(`/s${new URL(created.body.shortUrl).search}`)).status).toBe(404)
+      expect((await faber().delete(`/v2/didcomm/invitations/${created.body.id}`)).status).toBe(404)
     }, 120_000)
 
     it('reports an unknown connection as UNKNOWN_ID', async () => {

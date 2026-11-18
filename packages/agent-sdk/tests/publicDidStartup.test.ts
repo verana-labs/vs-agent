@@ -1,7 +1,15 @@
 import '@openwallet-foundation/askar-nodejs'
 
 import { AskarModuleConfigStoreOptions } from '@credo-ts/askar'
-import { ConsoleLogger, DidDocumentService, DidRepository, LogLevel } from '@credo-ts/core'
+import {
+  ConsoleLogger,
+  convertPublicKeyToX25519,
+  DidDocumentService,
+  DidRepository,
+  Kms,
+  LogLevel,
+  VerificationMethod,
+} from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { DIDLog, resolveDIDFromLog, Verifier } from 'didwebvh-ts'
@@ -235,6 +243,150 @@ describe('public DID startup lifecycle', () => {
       expect((reloaded.metadata.get('log') as DIDLog).length).toBe(entriesBefore)
 
       await second.shutdown()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'startup replaces a derived key agreement key with a new KMS key and keeps the DID',
+    async () => {
+      const wallet = walletConfig('derived-key-agreement')
+      const first = makeAgent('did:webvh:derived-key-agreement.example', wallet)
+      await first.initialize()
+      const did = first.did!
+      const keyAgreementId = `${did}#key-agreement-1`
+
+      const didRepository = first.dependencyManager.resolve(DidRepository)
+      const [created] = await first.dids.getCreatedDids({ method: 'webvh' })
+      const didCommMethodId = created.didDocument!.authentication![0]
+      const ed25519Vm = created.didDocument!.verificationMethod!.find(vm => vm.id === didCommMethodId)!
+      const ed25519Key = Kms.PublicJwk.fromFingerprint(ed25519Vm.publicKeyMultibase!).publicKey as {
+        publicKey: Uint8Array
+      }
+      const derivedKey = Kms.PublicJwk.fromPublicKey({
+        kty: 'OKP',
+        crv: 'X25519',
+        publicKey: convertPublicKeyToX25519(ed25519Key.publicKey),
+      }).fingerprint
+      created.didDocument!.verificationMethod!.find(vm => vm.id === keyAgreementId)!.publicKeyMultibase =
+        derivedKey
+      created.keys = created.keys?.filter(key => key.didDocumentRelativeKeyId !== '#key-agreement-1')
+      await didRepository.update(first.context, created)
+      const entriesBefore = (created.metadata.get('log') as DIDLog).length
+      await first.shutdown()
+
+      const second = makeAgent('did:webvh:derived-key-agreement.example', wallet)
+      await second.initialize()
+
+      expect(second.did).toBe(did)
+      const [migrated] = await second.dids.getCreatedDids({ method: 'webvh' })
+      const log = migrated.metadata.get('log') as DIDLog
+      expect(log).toHaveLength(entriesBefore + 1)
+      const { publicJwk } = await second.dids.resolveVerificationMethodFromCreatedDidRecord(keyAgreementId)
+      expect(publicJwk.fingerprint).not.toBe(derivedKey)
+      const kmsKey = await second.kms.getPublicKey({ keyId: publicJwk.keyId })
+      expect(Kms.PublicJwk.fromPublicJwk(kmsKey as Kms.KmsJwkPublicAsymmetric).fingerprint).toBe(
+        publicJwk.fingerprint,
+      )
+      const resolved = await resolveDIDFromLog(log, { verifier: new InMemoryVerifier() })
+      expect(resolved.doc.verificationMethod?.find(vm => vm.id === keyAgreementId)?.publicKeyMultibase).toBe(
+        publicJwk.fingerprint,
+      )
+
+      await second.shutdown()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'startup brings a document written by v1 to the current layout and keeps the DID',
+    async () => {
+      const wallet = walletConfig('v1-layout')
+      const baseUrl = 'https://v1-layout.example'
+      const first = makeAgent('did:webvh:v1-layout.example', wallet)
+      await first.initialize()
+      const did = first.did!
+      const servedUrl = `${baseUrl}/vt/schemas-service-vtc-vp.json`
+      const linkedVp = (fragment: string, serviceEndpoint: string) =>
+        new DidDocumentService({
+          id: `${did}#${fragment}`,
+          type: 'LinkedVerifiablePresentation',
+          serviceEndpoint,
+        })
+
+      const didRepository = first.dependencyManager.resolve(DidRepository)
+      const [created] = await first.dids.getCreatedDids({ method: 'webvh' })
+      const document = created.didDocument!
+      const signingKeyId = document.assertionMethod![0] as string
+      // v1 types the update key as an Ed25519VerificationKey2020, lists it first and authenticates with it
+      const [updateKey] = document.verificationMethod!
+      expect(updateKey.publicKeyMultibase).toBe(
+        (created.metadata.get('log') as DIDLog)[0].parameters.updateKeys?.[0],
+      )
+      expect(updateKey.id).not.toBe(signingKeyId)
+      updateKey.type = 'Ed25519VerificationKey2020'
+      const updateKeyId = updateKey.id
+      // a key the OpenID4VC plugin publishes under these relations must survive the reconcile
+      const oid4vcKeyId = `${did}#openid4vc-development-verifier`
+      document.verificationMethod = [
+        ...document.verificationMethod!,
+        new VerificationMethod({
+          id: oid4vcKeyId,
+          controller: did,
+          type: 'JsonWebKey2020',
+          publicKeyJwk: {
+            kty: 'EC',
+            crv: 'P-256',
+            x: 'f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU',
+            y: 'x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0',
+          },
+        }),
+      ]
+      document.authentication = [updateKeyId, oid4vcKeyId]
+      const didCommV1Service = (document.service ?? []).find(service => service.type === 'did-communication')
+      ;(didCommV1Service as unknown as { recipientKeys: string[] }).recipientKeys = [updateKeyId]
+      document.service = [
+        linkedVp('whois', `${baseUrl}/vt/schemas-service-c-vp.json`),
+        linkedVp('vpr-schemas-service-c-vp', `${baseUrl}/vt/schemas-service-c-vp.json`),
+        ...(document.service ?? []),
+        linkedVp('vpr-schemas-service-vtc-vp', servedUrl),
+      ]
+      created.metadata.set('_vt/vtc', {
+        'https://ecosystem.example/vt/schemas-14-jsc.json': { verifiablePresentation: { id: servedUrl } },
+      })
+      await didRepository.update(first.context, created)
+      const entriesBefore = (created.metadata.get('log') as DIDLog).length
+      await first.shutdown()
+
+      const second = makeAgent('did:webvh:v1-layout.example', wallet)
+      await second.initialize()
+
+      expect(second.did).toBe(did)
+      const [reconciled] = await second.dids.getCreatedDids({ method: 'webvh' })
+      const log = reconciled.metadata.get('log') as DIDLog
+      expect(log).toHaveLength(entriesBefore + 1)
+      await resolveDIDFromLog(log, { verifier: new InMemoryVerifier() })
+      // the published state, not the resolved document: resolution adds the implicit #whois of did:webvh
+      const doc = log[log.length - 1].state as {
+        authentication?: string[]
+        assertionMethod?: string[]
+        service?: { id: string; type: string; recipientKeys?: string[] }[]
+      }
+      expect(doc.authentication).toEqual([signingKeyId, oid4vcKeyId])
+      expect(doc.assertionMethod).toEqual([signingKeyId])
+      const linkedVpIds = (doc.service ?? [])
+        .filter(service => service.type === 'LinkedVerifiablePresentation')
+        .map(service => service.id)
+      expect(linkedVpIds).toEqual([`${did}#vpr-schemas-service-vtc-vp`])
+      const didCommV1 = (doc.service ?? []).find(service => service.type === 'did-communication')
+      expect(didCommV1?.recipientKeys).toEqual([signingKeyId])
+      await second.shutdown()
+
+      const third = makeAgent('did:webvh:v1-layout.example', wallet)
+      await third.initialize()
+      const [stable] = await third.dids.getCreatedDids({ method: 'webvh' })
+      expect((stable.metadata.get('log') as DIDLog).length).toBe(entriesBefore + 1)
+      await third.shutdown()
     },
     TEST_TIMEOUT_MS,
   )

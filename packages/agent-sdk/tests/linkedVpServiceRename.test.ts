@@ -98,6 +98,7 @@ async function publishOrgCredential(agent: unknown) {
     `${PUBLIC_URL}/vt/ecs-org-vtc-vp.json`,
     getEcsSchemas(PUBLIC_URL),
     'ecs-org',
+    '29',
     TYPE,
     { id: `${PUBLIC_URL}/vt/schemas-29-jsc.json`, type: 'JsonSchemaCredential' } as never,
     ecsClaims,

@@ -6,23 +6,26 @@ import {
   ConnectionRecord,
   CreateCredentialOfferBody,
   CreateCredentialOfferResponse,
+  CreateInvitationBody,
+  CreateInvitationResponse,
   CreatePresentationRequestBody,
   CreatePresentationRequestResponse,
   CredentialExchangeRecord,
   DeclineExchangeBody,
+  InvitationRecord,
   ListBasicMessagesQuery,
   ListConnectionsQuery,
   ListCredentialExchangesQuery,
+  ListInvitationsQuery,
   ListPresentationsQuery,
   OfferCallBody,
   Page,
   PresentationRecord,
   ProtocolModule,
-  RequestMrtdBody,
+  RequestEmrtdDataBody,
+  RequestMrzBody,
   RequestProfileBody,
   SendBasicMessageBody,
-  SendInvitationBody,
-  SendInvitationResponse,
   SendMenuBody,
   SendProfileBody,
   SendQuestionBody,
@@ -51,8 +54,20 @@ export class DidcommApi {
     return this.http.request('DELETE', `/didcomm/connections/${encodeURIComponent(connectionId)}`)
   }
 
-  public sendInvitation(body: SendInvitationBody): Promise<SendInvitationResponse> {
+  public createInvitation(body: CreateInvitationBody): Promise<CreateInvitationResponse> {
     return this.http.request('POST', '/didcomm/invitations', { body })
+  }
+
+  public listInvitations(query?: ListInvitationsQuery): Promise<Page<InvitationRecord>> {
+    return this.http.request('GET', '/didcomm/invitations', { query })
+  }
+
+  public getInvitation(invitationId: string): Promise<InvitationRecord> {
+    return this.http.request('GET', `/didcomm/invitations/${encodeURIComponent(invitationId)}`)
+  }
+
+  public deleteInvitation(invitationId: string): Promise<void> {
+    return this.http.request('DELETE', `/didcomm/invitations/${encodeURIComponent(invitationId)}`)
   }
 
   public sendBasicMessage(body: SendBasicMessageBody): Promise<SentMessage> {
@@ -107,11 +122,11 @@ export class DidcommApi {
     return this.http.request('POST', '/didcomm/question-answer', { body })
   }
 
-  public requestMrz(body: RequestMrtdBody): Promise<SentMessage> {
+  public requestMrz(body: RequestMrzBody): Promise<SentMessage> {
     return this.http.request('POST', '/didcomm/mrtd/request-mrz', { body })
   }
 
-  public requestEmrtdData(body: RequestMrtdBody): Promise<SentMessage> {
+  public requestEmrtdData(body: RequestEmrtdDataBody): Promise<SentMessage> {
     return this.http.request('POST', '/didcomm/mrtd/request-emrtd', { body })
   }
 
@@ -207,5 +222,10 @@ export class DidcommApi {
     )
   }
 
-  // deleteCredentialExchange [VSA-ADM-DC-CE-DELETE] has no handler on main yet
+  public deleteCredentialExchange(credentialExchangeId: string): Promise<void> {
+    return this.http.request(
+      'DELETE',
+      `/didcomm/credential-exchanges/${encodeURIComponent(credentialExchangeId)}`,
+    )
+  }
 }

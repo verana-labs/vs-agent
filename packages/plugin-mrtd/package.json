@@ -31,9 +31,9 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@2060.io/credo-ts-didcomm-mrtd": "0.1.1",
     "@credo-ts/core": "catalog:",
     "@credo-ts/didcomm": "catalog:",
+    "@credo-ts/didcomm-mrtd": "catalog:",
     "@nestjs/common": "^10.0.0",
     "@nestjs/swagger": "^8.0.7",
     "@types/node-tlv": "^1.5.4",

@@ -1,4 +1,5 @@
 export * from './VsAgentEvents'
 export * from './ConnectionEvents'
+export * from './InvitationEvents'
 export * from './BaseMessageEvents'
 export * from './VtFlowEvents'

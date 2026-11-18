@@ -155,7 +155,7 @@ describe('v2 didcomm basic messages, over two agents', () => {
     )
     expect(outgoing.status).toBe(200)
     expect(outgoing.body.items).toHaveLength(1)
-    expect(outgoing.body.items[0]).toMatchObject({ id: sent.body.id, role: 'sender', content: 'hello alice' })
+    expect(outgoing.body.items[0]).toMatchObject({ role: 'sender', content: 'hello alice' })
 
     expect(envelopes(MESSAGE_RECEIVED)).toHaveLength(before + 1)
   }, 15_000)

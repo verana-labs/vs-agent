@@ -4,6 +4,7 @@ import {
   DidCommConnectionEventTypes,
   DidCommProofEventTypes,
 } from '@credo-ts/didcomm'
+import { InvitationRecord, InvitationRepository } from '@verana-labs/vs-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { webhookEvent } from '../src/utils/webhookEvent'
@@ -14,9 +15,15 @@ const URL = 'https://backend.example/events'
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 const fetchMock = vi.fn()
 
+const invitationRepository = { getById: vi.fn() }
+
 function fakeAgent() {
   const handlers = new Map<string, Handler>()
   const agent = {
+    context: {},
+    dependencyManager: {
+      resolve: (token: unknown) => (token === InvitationRepository ? invitationRepository : undefined),
+    },
     events: { on: (type: string, handler: Handler) => handlers.set(type, handler) },
     didcomm: {
       proofs: {
@@ -80,12 +87,12 @@ describe('Events API delivery', () => {
       id: 'conn-1',
       state: 'completed',
       previousState: null,
-      outOfBandId: null,
+      invitationId: null,
       parentConnectionId: null,
     })
   })
 
-  it('delivers a sub-connection with its outOfBandId and parentConnectionId', async () => {
+  it('delivers a sub-connection with its invitationId and parentConnectionId', async () => {
     const { agent, emit } = fakeAgent()
     webhookEvent(agent as never, { url: URL }, logger as never)
 
@@ -93,14 +100,51 @@ describe('Events API delivery', () => {
       connectionRecord: {
         ...connectionRecord,
         outOfBandId: 'oob-1',
-        getTag: (name: string) => (name === 'parentConnectionId' ? 'conn-0' : undefined),
+        getTag: (name: string) => ({ parentConnectionId: 'conn-0', invitationId: 'oob-1' })[name],
       },
       previousState: null,
     })
 
     const { body } = await delivered()
     expect(body.type).toBe('didcomm.connections.state-updated')
-    expect(body.data).toMatchObject({ id: 'conn-1', outOfBandId: 'oob-1', parentConnectionId: 'conn-0' })
+    expect(body.data).toMatchObject({ id: 'conn-1', invitationId: 'oob-1', parentConnectionId: 'conn-0' })
+  })
+
+  it('delivers an invitation record, read back from the store, with its previousState', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+    const record = new InvitationRecord({
+      id: 'inv-1',
+      createdAt: new Date('2026-09-01T00:00:00Z'),
+      state: 'created',
+      didcommVersion: 'v2',
+      reusable: true,
+      invitation: { type: 'https://didcomm.org/out-of-band/2.0/invitation', id: 'oob-msg-1' },
+      shortUrl: 'https://agent.example/s?id=abcd',
+      parentConnectionId: null,
+    })
+    invitationRepository.getById.mockResolvedValueOnce(record)
+
+    emit('vs-agent-invitation-state-updated', {
+      event: { invitationRecordId: 'inv-1', state: 'created', previousState: null },
+    })
+
+    const { body } = await delivered()
+    expect(invitationRepository.getById).toHaveBeenCalledWith(agent.context, 'inv-1')
+    expect(body.type).toBe('didcomm.invitations.state-updated')
+    expect(body.data).toEqual({
+      id: 'inv-1',
+      state: 'created',
+      didcommVersion: 'v2',
+      reusable: true,
+      invitation: { type: 'https://didcomm.org/out-of-band/2.0/invitation', id: 'oob-msg-1' },
+      shortUrl: 'https://agent.example/s?id=abcd',
+      parentConnectionId: null,
+      acceptances: [],
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
+      previousState: null,
+    })
   })
 
   it('delivers a received basic message as its record and ignores sent ones', async () => {
@@ -176,6 +220,92 @@ describe('Events API delivery', () => {
       connectionId: 'conn-1',
       verified: false,
       errorMessage: 'e.req.no-compatible-credentials: no matching credentials',
+      previousState: 'request-sent',
+    })
+  })
+
+  it('waits for the trust decision before it delivers a presentation-received change', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    const received = {
+      id: 'proof-1',
+      state: 'presentation-received',
+      role: 'verifier',
+      isVerified: true,
+      createdAt: new Date(),
+    }
+    const presented = {
+      group: 'employee',
+      credentialDefinitionId: 'did:webvh:issuer-a/resources/cred-def-a',
+      issuerDid: 'did:webvh:issuer-a',
+      credentialSchemaId: 12,
+      ecosystemDid: 'did:webvh:ecosystem',
+      jsonSchemaCredentialId: 'https://ecosystem.example/vt/schemas-employee-jsc.json',
+    }
+
+    const decided = {
+      ...received,
+      metadata: { get: (key: string) => (key === '_2060/presentedCredentials' ? [presented] : null) },
+    }
+
+    // Credo emits this change. The agent does not deliver it, whatever the record holds.
+    await emit(DidCommProofEventTypes.ProofStateChanged, {
+      proofRecord: { ...received, metadata: { get: () => null } },
+      previousState: 'request-sent',
+    })
+    await emit(DidCommProofEventTypes.ProofStateChanged, {
+      proofRecord: decided,
+      previousState: 'request-sent',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    // The trust decision emits this event, with the credentials that it recorded
+    emit('vs-agent-presentation-trust-decided', {
+      proofRecord: decided,
+      previousState: 'request-sent',
+    })
+
+    const { body } = await delivered()
+    expect(body.data).toMatchObject({
+      state: 'presentation-received',
+      verified: true,
+      previousState: 'request-sent',
+      credentials: [{ issuerDid: 'did:webvh:issuer-a', credentialSchemaId: 12, unrevealed: [] }],
+    })
+    expect(body.data.credentials[0]).not.toHaveProperty('group')
+  })
+
+  it('delivers presentation-received with the cause when the trust decision fails', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit('vs-agent-presentation-trust-decided', {
+      proofRecord: {
+        id: 'proof-1',
+        state: 'presentation-received',
+        role: 'verifier',
+        isVerified: false,
+        errorMessage: 'e.p.issuer-not-authorized: did:webvh:issuer-c holds no active ISSUER Participant',
+        createdAt: new Date(),
+        metadata: {
+          get: (key: string) =>
+            key === '_2060/rejectedCredentials'
+              ? [{ index: 0, code: 'e.p.issuer-not-authorized', note: 'n', issuerDid: 'did:webvh:issuer-c' }]
+              : null,
+        },
+      },
+      previousState: 'request-sent',
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.presentations.state-updated')
+    expect(body.data).toMatchObject({
+      state: 'presentation-received',
+      verified: false,
+      credentials: [],
+      rejectedCredentials: [{ index: 0, code: 'e.p.issuer-not-authorized', issuerDid: 'did:webvh:issuer-c' }],
+      errorMessage: 'e.p.issuer-not-authorized: did:webvh:issuer-c holds no active ISSUER Participant',
       previousState: 'request-sent',
     })
   })

@@ -1,4 +1,4 @@
-import { DidCommConnectionProfileUpdatedEvent } from '@2060.io/credo-ts-didcomm-user-profile'
+import { DidCommConnectionProfileUpdatedEvent } from '@credo-ts/didcomm-user-profile'
 import { LogLevel } from '@credo-ts/core'
 import {
   DidCommBasicMessage,

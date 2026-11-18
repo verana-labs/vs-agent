@@ -235,10 +235,7 @@ async function startWebvhVerifier() {
     did: WEBVH_DID,
     role: DidDocumentRole.Created,
     didDocument: clone(didDocument),
-    keys: [
-      { didDocumentRelativeKeyId: `#${publicKeyMultibase}`, kmsKeyId: imported.keyId },
-      { didDocumentRelativeKeyId: '#certificate', kmsKeyId: OTHER_PRIVATE_JWK.kid as string },
-    ],
+    keys: [{ didDocumentRelativeKeyId: `#${publicKeyMultibase}`, kmsKeyId: imported.keyId }],
   })
   didRecord.setTag('domain', 'verifier.example')
   await agent.dependencyManager.resolve(DidRepository).save(agent.context, didRecord)

@@ -70,6 +70,7 @@ const TX_LOOKUP_TIMEOUT_MS = 60_000
 const TX_LOOKUP_INTERVAL_MS = 3_000
 // the notification handler and the tx lookup can both reach markValidated for one flow at the same time
 const markingValidated = new Set<string>()
+const continuingAfterValidated = new Map<string, Promise<void>>()
 
 const FEE_KEYS = ['validationFees', 'issuanceFees', 'verificationFees'] as const
 const DISCOUNT_KEYS = ['issuanceFeeDiscount', 'verificationFeeDiscount'] as const
@@ -82,14 +83,6 @@ function invalidInput(message: string): AdminApiError {
 
 function invalidState(message: string): AdminApiError {
   return new AdminApiError(AdminApiErrorCode.InvalidState, 409, message)
-}
-
-// AUTHZ-CHECK-3 step 1. A record's expiration is only its budget clock, not a validity window.
-function isActiveParticipant(participant: ParticipantDto): boolean {
-  const now = Date.now()
-  if (!participant.effective_from || Date.parse(participant.effective_from) > now) return false
-  if (participant.effective_until && Date.parse(participant.effective_until) <= now) return false
-  return !participant.revoked && !participant.slashed
 }
 
 function sameTerm(key: string, given: number, onEntry: number): boolean {
@@ -543,11 +536,10 @@ export class VtFlowOrchestrator {
     const validator = await this.agent.indexer
       .getParticipant(applicant.validator_participant_id)
       .catch(() => undefined)
-    if (!validator || !isActiveParticipant(validator)) return VtFlowSubmission.Operator
+    if (!validator) return VtFlowSubmission.Operator
 
     await authorization.refreshForOperator().catch(() => undefined)
-    const grant = authorization.getVsOperatorAuthorizationRecord(validator.id)
-    return grant?.msgTypes.includes(veranaTypeUrls.MsgSetParticipantOPToValidated)
+    return authorization.canSign(validator, veranaTypeUrls.MsgSetParticipantOPToValidated)
       ? VtFlowSubmission.Agent
       : VtFlowSubmission.Operator
   }
@@ -797,7 +789,23 @@ export class VtFlowOrchestrator {
     return latest?.id === record.id
   }
 
+  // one run at a time per flow: two callers at once would both read VALIDATED and offer twice
   async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {
+    const previous = continuingAfterValidated.get(recordId) ?? Promise.resolve()
+    const run = previous.then(() => this.issuanceAfterValidated(recordId))
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    continuingAfterValidated.set(recordId, settled)
+    try {
+      return await run
+    } finally {
+      if (continuingAfterValidated.get(recordId) === settled) continuingAfterValidated.delete(recordId)
+    }
+  }
+
+  private async issuanceAfterValidated(recordId: string): Promise<VtFlowRecord> {
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(recordId)
     if (!record) throw new Error(`vt-flow record ${recordId} not found`)
@@ -833,16 +841,22 @@ export class VtFlowOrchestrator {
     await Promise.all(pending.map(record => this.resolveValidationTx(record.id)))
   }
 
-  /** [VSA-VTI-FLOW-ISSUE-1]: at startup, resume every anchoring left SUBMITTED through the stored issued credential. */
+  /**
+   * [VSA-VTI-FLOW-ISSUE-1]: at startup, resume through the stored issued credential every anchoring
+   * left SUBMITTED, and every anchoring that failed in the pre-flight, which sent no transaction.
+   */
   async resumeIssuanceSubmissions(): Promise<void> {
     const vtFlowApi = this.resolveVtFlowApi()
     const offered = await vtFlowApi.findAllByQuery({
       role: VtFlowRole.Validator,
       flowState: VtFlowState.CredOffered,
     })
+    const resumable = (tx: VtFlowTx | undefined): boolean =>
+      tx?.status === VtFlowTxStatus.Submitted ||
+      (tx?.status === VtFlowTxStatus.Failed && tx.reason === VtFlowTxReason.PreflightError)
     await Promise.all(
       offered.map(({ id, issuance, credentialExchangeRecordId }) =>
-        issuance?.tx?.status === VtFlowTxStatus.Submitted && credentialExchangeRecordId
+        resumable(issuance?.tx) && credentialExchangeRecordId
           ? vtFlowApi.issueCredentialForSession({ vtFlowRecordId: id, credentialExchangeRecordId })
           : undefined,
       ),
@@ -991,10 +1005,13 @@ export class VtFlowOrchestrator {
       walletAgentParticipantId: Number(record.walletAgentParticipantId ?? 0) || 0,
       digest,
     })
-    return {
-      credentialDigest: digest,
-      issuance: { tx: await this.anchor(record, message, record.issuerParticipantId) },
+    const tx = await this.anchor(record, message, record.issuerParticipantId)
+    if (tx.status === VtFlowTxStatus.Failed) {
+      this.agent.config.logger.error(
+        `[vt-flow] the anchoring of the credential of flow ${record.id} (session ${record.participantSessionId}) failed, credential not delivered: ${tx.reason}: ${tx.error}`,
+      )
     }
+    return { credentialDigest: digest, issuance: { tx } }
   }
 
   async verifyOfferedCredential(vtFlowRecordId: string): Promise<void> {
@@ -1075,9 +1092,13 @@ export class VtFlowOrchestrator {
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(vtFlowRecordId)
     if (!record || record.role !== VtFlowRole.Applicant) return
-    if (!this.options.publicApiBaseUrl || !record.credentialExchangeRecordId) return
+    if (!this.options.publicApiBaseUrl) return
+    if (!record.credentialId && !record.credentialExchangeRecordId) return
 
-    const credentialId = await removeStoredTrustCredential(this.agent, record.credentialExchangeRecordId)
+    const credentialId = await removeStoredTrustCredential(this.agent, {
+      credentialId: record.credentialId,
+      credentialExchangeRecordId: record.credentialExchangeRecordId,
+    })
     if (credentialId) {
       this.agent.config.logger.info(
         `[vt-flow] removed revoked credential and its linked VP (${credentialId})`,
@@ -1184,6 +1205,11 @@ export class VtFlowOrchestrator {
       record.ecsSchemaKey ? linkedVpSchemaId(record.ecsSchemaKey) : schemaBaseId,
       credential,
     )
+
+    // [VSA-VT-LVP-3]: the record keeps the id of the published credential.
+    // Then the agent can remove that credential without the exchange.
+    const credentialId = (credentialJson as { id?: unknown }).id
+    if (typeof credentialId === 'string') await vtFlowApi.setCredentialId(record.id, credentialId)
   }
 
   private extractSchemaBaseId(jscUrl: string): string | undefined {

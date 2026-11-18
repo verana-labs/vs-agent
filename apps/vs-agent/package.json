@@ -57,14 +57,14 @@
     "openapi:export": "node build/src/scripts/export-openapi.js"
   },
   "dependencies": {
-    "@2060.io/credo-ts-didcomm-media-sharing": "0.1.1",
     "@credo-ts/anoncreds": "catalog:",
     "@credo-ts/askar": "catalog:",
     "@credo-ts/core": "catalog:",
     "@credo-ts/didcomm": "catalog:",
+    "@credo-ts/didcomm-media-sharing": "catalog:",
     "@credo-ts/node": "catalog:",
     "@credo-ts/webvh": "catalog:",
-    "@hyperledger/anoncreds-nodejs": "^0.4.0",
+    "@hyperledger/anoncreds-nodejs": "^0.4.1",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
@@ -89,7 +89,7 @@
     "@verana-labs/vs-agent-plugin-mrtd": "workspace:*"
   },
   "devDependencies": {
-    "@2060.io/credo-ts-didcomm-user-profile": "0.1.0",
+    "@credo-ts/didcomm-user-profile": "catalog:",
     "@nestjs/cli": "^10.0.0",
     "@nestjs/schematics": "^10.0.0",
     "@nestjs/testing": "^10.0.0",

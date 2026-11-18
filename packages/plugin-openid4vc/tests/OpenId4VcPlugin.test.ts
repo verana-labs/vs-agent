@@ -6,13 +6,16 @@ import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
 
 import { IssuerService } from '../src/services/IssuerService'
+import { StatusListService } from '../src/services/StatusListService'
 import { VerifierService } from '../src/services/VerifierService'
 import { OPENID4VC_DID_TRUST_RESOLVER, OPENID4VC_ISSUER_SINK, OPENID4VC_OPTIONS } from '../src/types'
 
 import { OpenId4VcPlugin } from '../src/nestjs/OpenId4VcPlugin'
 import { V2OpenId4VcCredentialExchangesController } from '../src/nestjs/V2OpenId4VcCredentialExchangesController'
+import { V2OpenId4VcCredentialRevocationController } from '../src/nestjs/V2OpenId4VcCredentialRevocationController'
 import { V2OpenId4VcPresentationsController } from '../src/nestjs/V2OpenId4VcPresentationsController'
 import { V2OpenId4VcSigningCertificatesController } from '../src/nestjs/V2OpenId4VcSigningCertificatesController'
+import { V2OpenId4VcStatusListsController } from '../src/nestjs/V2OpenId4VcStatusListsController'
 
 const options = (): OpenId4VcPluginOptions => ({
   publicApiBaseUrl: 'https://agent.example',
@@ -64,19 +67,22 @@ const advertising = (credentialSchemaId: number): OpenId4VcPluginOptions => ({
 })
 
 describe('OpenId4VcPlugin', () => {
-  it('registers the three v2 controllers', () => {
+  it('registers the five v2 controllers', () => {
     expect(OpenId4VcPlugin(options()).controllers).toEqual([
       V2OpenId4VcCredentialExchangesController,
       V2OpenId4VcPresentationsController,
       V2OpenId4VcSigningCertificatesController,
+      V2OpenId4VcStatusListsController,
+      V2OpenId4VcCredentialRevocationController,
     ])
   })
 
-  it('hands Nest the options, the issuer sink and both services', () => {
+  it('hands Nest the options, the issuer sink and the three services', () => {
     expect(OpenId4VcPlugin(options()).providers).toEqual([
       { provide: OPENID4VC_OPTIONS, useValue: options() },
       { provide: OPENID4VC_ISSUER_SINK, useValue: expect.any(Function) },
       { provide: OPENID4VC_DID_TRUST_RESOLVER, useValue: expect.any(Function) },
+      StatusListService,
       IssuerService,
       VerifierService,
     ])
@@ -88,6 +94,7 @@ describe('OpenId4VcPlugin', () => {
     expect(plugin.name).toBe('openid4vc')
     expect(plugin.credoPlugin?.modules).toHaveProperty('openId4Vc')
     expect(plugin.credoPlugin?.modules).toHaveProperty('x509')
+    expect(plugin.credoPlugin?.modules).toHaveProperty('openId4VcStatusLists')
     expect(typeof plugin.publicMiddleware).toBe('function')
   })
 

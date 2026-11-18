@@ -3,6 +3,7 @@ import {
   DidDocumentService,
   DidRecord,
   DidRepository,
+  RecordNotFoundError,
   W3cJsonLdVerifiableCredential,
   W3cJsonLdVerifiablePresentation,
   W3cPresentation,
@@ -16,7 +17,7 @@ import {
 // No type definitions available for this library
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 //@ts-expect-error
-import { purposes } from '@digitalcredentials/jsonld-signatures'
+import { purposes } from 'jsonld-signatures'
 import type { DataIntegrityCredential } from '@credo-ts/didcomm'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
 
@@ -324,8 +325,6 @@ export async function createJsc(
 
 export async function removeTrustCredential(agent: VsAgent, schemaId: string, key: '_vt/jsc' | '_vt/vtc') {
   const didRecord = await getDidRecord(agent)
-  // same lookup deleteMetadataEntry performs: a self-issued entry carries the agent DID as
-  // credential id, so only its metadata key reaches it
   const record = findMetadataEntry(didRecord, key, schemaId, schemaId)
   // Currently, we only use one serviceEndpoint per ID.
   // In the future, if multiple serviceEndpoints exist for the same ID,
@@ -339,20 +338,43 @@ export async function removeTrustCredential(agent: VsAgent, schemaId: string, ke
 }
 
 /**
- * Removes the linked VP and the stored credential an exchange delivered, as
- * [VSA-VTI-FLOW-OP-REVOKE] requires of the applicant. The credential is read from the RFC 0809
- * format data of the exchange; exchanges earlier versions completed over other formats are not
- * migrated. Returns the credential id, or `undefined` when none is found, in which case nothing is
- * removed.
+ * Reads the id of the credential from the RFC 0809 format data of an exchange.
+ * Returns `undefined` when the exchange is deleted. Returns `undefined` also when the exchange
+ * used a different format.
  */
-export async function removeStoredTrustCredential(
+export async function findExchangeCredentialId(
   agent: VsAgent,
   credentialExchangeRecordId: string,
 ): Promise<string | undefined> {
-  const formatData = await agent.didcomm.credentials.getFormatData(credentialExchangeRecordId)
-  const credentialId = (formatData.credential as { dataIntegrity?: DataIntegrityCredential } | undefined)
+  const formatData = await agent.didcomm.credentials
+    .getFormatData(credentialExchangeRecordId)
+    .catch(error => {
+      if (error instanceof RecordNotFoundError) return undefined
+      throw error
+    })
+  const credentialId = (formatData?.credential as { dataIntegrity?: DataIntegrityCredential } | undefined)
     ?.dataIntegrity?.credential?.id
-  if (typeof credentialId !== 'string') {
+  return typeof credentialId === 'string' ? credentialId : undefined
+}
+
+/**
+ * Removes the linked VP and the stored credential of the applicant, as
+ * [VSA-VTI-FLOW-OP-REVOKE] requires. The caller supplies the credential id from the flow record.
+ * An older record has no credential id. Then this function reads the id from the RFC 0809 format
+ * data of the exchange. Returns the credential id. Returns `undefined` when no id is available,
+ * and removes nothing.
+ */
+export async function removeStoredTrustCredential(
+  agent: VsAgent,
+  options: { credentialId?: string; credentialExchangeRecordId?: string },
+): Promise<string | undefined> {
+  const { credentialExchangeRecordId } = options
+  const credentialId =
+    options.credentialId ??
+    (credentialExchangeRecordId
+      ? await findExchangeCredentialId(agent, credentialExchangeRecordId)
+      : undefined)
+  if (!credentialId) {
     agent.config.logger.warn(
       `[trust-credential] Credential exchange ${credentialExchangeRecordId} carries no RFC 0809 credential id; its linked VP and stored credential are left in place`,
     )
@@ -600,6 +622,7 @@ export async function rebindEcsCredentialSchema(
     vpUrl,
     { ...getEcsSchemas(publicApiBaseUrl), ...(onChainJsonSchema ? { [schemaKey]: onChainJsonSchema } : {}) },
     schemaKey,
+    schemaId,
     ['VerifiableCredential', 'VerifiableTrustCredential'],
     { id: jscUrl, type: 'JsonSchemaCredential' },
     ecsClaims,

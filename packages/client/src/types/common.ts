@@ -69,6 +69,8 @@ export type CredentialRole = 'issuer' | 'holder'
 
 export type DidCommVersion = 'v1' | 'v2'
 
+export type InvitationState = 'created' | 'accepted'
+
 export type VtFlowRole = 'applicant' | 'validator'
 
 export type VtFlowVariant = 'onboarding-process' | 'direct-issuance'

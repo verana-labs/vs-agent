@@ -1,7 +1,11 @@
 import type { OpenId4VcAgent, OpenId4VcCredentialConfiguration, OpenId4VcPluginOptions } from '../types'
 import type { OnModuleInit } from '@nestjs/common'
 import type { SdJwtVc } from '@credo-ts/core'
-import type { OpenId4VcVerificationSessionRecord, OpenId4VcVerifierApi } from '@credo-ts/openid4vc'
+import type {
+  OpenId4VcVerificationSessionRecord,
+  OpenId4VcVerificationSessionStateChangedEvent,
+  OpenId4VcVerifierApi,
+} from '@credo-ts/openid4vc'
 import type { DidTrustResolver } from '@verana-labs/vs-agent-sdk'
 
 import { ClaimFormat, RecordNotFoundError } from '@credo-ts/core'
@@ -9,6 +13,7 @@ import { Inject, Injectable } from '@nestjs/common'
 import {
   OpenId4VcVerificationSessionRepository,
   OpenId4VcVerificationSessionState,
+  OpenId4VcVerifierEvents,
 } from '@credo-ts/openid4vc'
 import {
   AdminApiError,
@@ -19,7 +24,9 @@ import {
 } from '@verana-labs/vs-agent-sdk'
 
 import { VERIFIER_CAPABILITY_ID } from '../config'
-import { findBoundVerificationMethodId, verifyKeyBoundToDid } from '../trust/keyBinding'
+import { emitStateUpdated, OpenId4VcEventType } from '../events/openId4VcEvents'
+import { toPresentationDto } from '../nestjs/mappers'
+import { findBoundVerificationMethodId, lookupBoundVerificationMethod } from '../trust/keyBinding'
 import { trustedIssuersForPresentation } from '../trust/presentedIssuer'
 import { decidePresentationTrust, type PresentationTrustRequest } from '../trust/trustDecision'
 import { OPENID4VC_DID_TRUST_RESOLVER, OPENID4VC_OPTIONS } from '../types'
@@ -28,6 +35,7 @@ import { serviceDisplay } from '../utils/serviceDisplay'
 import {
   didFromValidatedCertificate,
   loadSigningCertificate,
+  mapConfiguredSigningKey,
   publishDevelopmentSigningKey,
   signingCertificateInfo,
   type SigningCertificateHandle,
@@ -53,6 +61,7 @@ type VerifierApi = Pick<
 export interface OpenId4VcVerificationRequest {
   authorizationRequest: string
   verificationSessionId: string
+  expiresAt?: Date
 }
 
 export interface OpenId4VcVerificationSessionFilters {
@@ -90,6 +99,7 @@ export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
   state: OpenId4VcVerificationSessionState
   createdAt: Date
   updatedAt: Date
+  expiresAt?: Date
   errorMessage?: string
 }
 
@@ -97,6 +107,7 @@ export type OpenId4VcVerificationSessionSummary = PresentationDecision & {
 export class VerifierService implements OnModuleInit {
   private initialization?: Promise<void>
   private signingCertificate?: SigningCertificateHandle
+  private readonly decisions = new Map<string, Promise<OpenId4VcVerificationSessionSummary>>()
 
   public constructor(
     @Inject('VSAGENT') private readonly agent: OpenId4VcAgent,
@@ -105,6 +116,14 @@ export class VerifierService implements OnModuleInit {
   ) {}
 
   public async onModuleInit(): Promise<void> {
+    this.agent.events.on<OpenId4VcVerificationSessionStateChangedEvent>(
+      OpenId4VcVerifierEvents.VerificationSessionStateChanged,
+      ({ payload: { verificationSession, previousState } }) => {
+        // credo announces a new session before createRequest tags it with its type, so createRequest announces it
+        if (verificationSession.verifierId !== VERIFIER_CAPABILITY_ID || previousState === null) return
+        this.presentationStateUpdated(verificationSession, previousState)
+      },
+    )
     await this.ensureInitialized()
   }
 
@@ -159,10 +178,12 @@ export class VerifierService implements OnModuleInit {
     verificationSession.setTag(CREDENTIAL_SCHEMA_ID_TAG, String(configuration.credentialSchemaId))
     verificationSession.setTag(REQUESTED_CLAIMS_TAG, claims)
     await this.sessionRepository().update(this.agent.context, verificationSession)
+    this.presentationStateUpdated(verificationSession, null)
 
     return {
       authorizationRequest,
       verificationSessionId: verificationSession.id,
+      expiresAt: verificationSession.expiresAt,
     }
   }
 
@@ -174,7 +195,7 @@ export class VerifierService implements OnModuleInit {
   public async getVerificationSession(id: string): Promise<OpenId4VcVerificationSessionSummary> {
     await this.ensureInitialized()
     const session = await this.findOwnedSession(id)
-    return this.toSummary(session, await this.decide(session))
+    return this.decide(session)
   }
 
   // [VSA-ADM-OID-PR-LIST]: a list reports the stored verdict and never decides
@@ -212,11 +233,50 @@ export class VerifierService implements OnModuleInit {
     return session
   }
 
-  // [VSA-ADM-OID-PR-GET]: the verdict is computed once, on the first read of a verified session, and
-  // stored with it; RESOLVER_UNAVAILABLE is never stored, so the next read retries the resolver
-  private async decide(session: OpenId4VcVerificationSessionRecord): Promise<PresentationDecision> {
+  // [VSA-EVT-CAT]: the event carries the record as getPresentation returns it, so it decides like a read
+  private presentationStateUpdated(
+    session: OpenId4VcVerificationSessionRecord,
+    previousState: OpenId4VcVerificationSessionState | null,
+  ): void {
+    emitStateUpdated(
+      this.agent,
+      OpenId4VcEventType.PresentationStateUpdated,
+      async () => {
+        const summary = await this.decide(session).catch(error => {
+          this.agent.config.logger.error(`[OpenID4VC] presentation ${session.id} could not be decided`, {
+            cause: error,
+          })
+          return this.toSummary(session, UNDECIDED)
+        })
+        return toPresentationDto(summary)
+      },
+      previousState,
+    )
+  }
+
+  // [VSA-ADM-OID-PR-GET]: the verdict is computed once, on the first read or the ResponseVerified event,
+  // and stored with the session; RESOLVER_UNAVAILABLE is never stored, so the next read retries the resolver
+  private async decide(
+    session: OpenId4VcVerificationSessionRecord,
+  ): Promise<OpenId4VcVerificationSessionSummary> {
     const stored = this.storedDecision(session)
-    if (stored) return stored
+    if (stored) return this.toSummary(session, stored)
+
+    let summary = this.decisions.get(session.id)
+    if (!summary) {
+      summary = this.decideAndStore(session).finally(() => this.decisions.delete(session.id))
+      this.decisions.set(session.id, summary)
+    }
+    return summary
+  }
+
+  private async decideAndStore({
+    id,
+  }: OpenId4VcVerificationSessionRecord): Promise<OpenId4VcVerificationSessionSummary> {
+    // a caller can hold a copy read before a concurrent decision stored its verdict
+    const session = await this.verifierApi().getVerificationSessionById(id)
+    const stored = this.storedDecision(session)
+    if (stored) return this.toSummary(session, stored)
 
     const decision = await decidePresentationTrust(
       await this.presentedCredential(session),
@@ -232,7 +292,7 @@ export class VerifierService implements OnModuleInit {
       session.metadata.set(OUTCOME_METADATA_KEY, decision)
       await this.sessionRepository().update(this.agent.context, session)
     }
-    return decision
+    return this.toSummary(session, decision)
   }
 
   private async presentedCredential(session: OpenId4VcVerificationSessionRecord): Promise<SdJwtVc> {
@@ -261,6 +321,7 @@ export class VerifierService implements OnModuleInit {
       state: session.state,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt ?? session.createdAt,
+      ...(session.expiresAt ? { expiresAt: session.expiresAt } : {}),
       ...(session.errorMessage ? { errorMessage: session.errorMessage } : {}),
       ...decision,
     }
@@ -300,18 +361,19 @@ export class VerifierService implements OnModuleInit {
     }
     const publishedMethodId = await publishDevelopmentSigningKey(this.agent, signingCertificate, 'verifier')
 
-    const binding = await verifyKeyBoundToDid(
+    const binding = await lookupBoundVerificationMethod(
       this.agent,
       agentDid,
       signingCertificate.certificate.publicJwk.toJson(),
       ['authentication'],
     )
-    if (binding === 'unresolvable') {
+    if (binding.result === 'unresolvable') {
       throw new Error('OpenID4VC verifier DID could not be resolved for authentication key binding')
     }
-    if (binding !== 'bound') {
+    if (binding.result !== 'bound') {
       throw new Error('OpenID4VC verifier certificate key is not bound to the agent DID authentication')
     }
+    await mapConfiguredSigningKey(this.agent, signingCertificate, binding.verificationMethodId)
 
     this.agent.config.setTrustedIssuersForVerification(trustedIssuersForPresentation)
     await this.createOrUpdateVerifier()

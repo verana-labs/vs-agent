@@ -35,6 +35,33 @@ describe('EventDispatcher', () => {
     expect(calls).toEqual(['first:hello:evt-1', 'second:c1'])
   })
 
+  it('routes a didcomm.invitations.state-updated event to its handler', async () => {
+    const handler = vi.fn()
+    const events = new EventDispatcher().on('didcomm.invitations.state-updated', handler)
+    const envelope: EventEnvelope<'didcomm.invitations.state-updated'> = {
+      id: 'evt-3',
+      type: 'didcomm.invitations.state-updated',
+      timestamp: '2026-09-15T10:00:00.000Z',
+      data: {
+        id: 'inv-1',
+        state: 'created',
+        didcommVersion: 'v2',
+        reusable: false,
+        invitation: {},
+        shortUrl: 'https://agent.example/s?id=abcd',
+        parentConnectionId: null,
+        acceptances: [],
+        createdAt: '2026-09-15T10:00:00.000Z',
+        updatedAt: '2026-09-15T10:00:00.000Z',
+        previousState: null,
+      },
+    }
+
+    await events.dispatch(envelope)
+
+    expect(handler).toHaveBeenCalledWith(envelope.data, envelope)
+  })
+
   it('ignores an unknown type', async () => {
     const handler = vi.fn()
     const events = new EventDispatcher().on('didcomm.basic-messages.message-received', handler)

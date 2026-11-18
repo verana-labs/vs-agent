@@ -1,7 +1,7 @@
 import type { ChatAgentModules } from '../types'
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import type { DidCommUserProfileData, DidCommUserProfileKey } from '@2060.io/credo-ts-didcomm-user-profile'
+import type { DidCommUserProfileData, DidCommUserProfileKey } from '@credo-ts/didcomm-user-profile'
 import { Body, Controller, HttpStatus, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
@@ -57,8 +57,6 @@ export class V2DidcommUserProfileController {
   @ApiCreatedResponse({ description: 'The sent message', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id, or the module is not served' })
   public async requestProfile(@Body() body: RequestProfileBodyDto): Promise<SentMessageDto> {
-    await connectionOf(this.agent, body.connectionId)
-
     const { messageId } = await this.agent.modules.userProfile.requestUserProfile({
       connectionId: body.connectionId,
       query: body.query as DidCommUserProfileKey[] | undefined,

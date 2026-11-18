@@ -1,4 +1,4 @@
-import { MessageState } from '@2060.io/credo-ts-didcomm-receipts'
+import { MessageState } from '@credo-ts/didcomm-receipts'
 import { Expose, Type, Transform } from 'class-transformer'
 import { IsInstance, IsArray, IsDate, IsString, ValidateNested } from 'class-validator'
 

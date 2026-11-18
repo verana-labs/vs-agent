@@ -1,5 +1,5 @@
 import { RecordNotFoundError } from '@credo-ts/core'
-import { Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Query } from '@nestjs/common'
+import { Controller, Delete, Get, HttpCode, HttpStatus, Inject, Logger, Param, Query } from '@nestjs/common'
 import {
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -18,13 +18,14 @@ import { toConnectionDto } from './mappers'
 /**
  * DIDComm connection records held by this agent.
  *
- * The agent has no method that creates a bare connection invitation: a connection starts either
- * from an invitation minted by `createPresentationRequest` / `createCredentialOffer`, or from a
- * peer that connects to the agent.
+ * A connection starts from an invitation minted by `createInvitation`, `createPresentationRequest`
+ * or `createCredentialOffer`, or from a peer that connects to the DID of the agent.
  */
 @ApiTags('v2/didcomm')
 @Controller({ path: 'didcomm/connections', version: '2' })
 export class V2DidcommConnectionsController {
+  private readonly logger = new Logger(V2DidcommConnectionsController.name)
+
   public constructor(@Inject(VsAgentService) private readonly vsAgentService: VsAgentService) {}
 
   @Get()
@@ -37,7 +38,7 @@ export class V2DidcommConnectionsController {
     const agent = await this.vsAgentService.getAgent()
 
     const filters = {
-      outOfBandId: query.outOfBandId,
+      invitationId: query.invitationId,
       parentConnectionId: query.parentConnectionId,
       state: query.state,
       role: query.role,
@@ -94,8 +95,7 @@ export class V2DidcommConnectionsController {
   @ApiOperation({
     summary: 'Delete a connection',
     description:
-      'Deletes a connection record, and drops the routing it held on its mediator when it had one. ' +
-      'The connections opened from invitations sent on it stay, each with its `parentConnectionId`.',
+      'Terminates the DIDComm connection: notifies the other party and deletes the connection record.',
   })
   @ApiParam({
     name: 'connectionId',
@@ -107,6 +107,13 @@ export class V2DidcommConnectionsController {
   @ApiNotFoundResponse({ description: 'No connection with the given id' })
   public async deleteConnection(@Param('connectionId') connectionId: string): Promise<void> {
     const agent = await this.vsAgentService.getAgent()
+
+    try {
+      await agent.didcomm.connections.hangup({ connectionId })
+    } catch (error) {
+      if (error instanceof RecordNotFoundError) throw unknownConnection(connectionId)
+      this.logger.warn(`Cannot tell connection ${connectionId} that it ends: ${error}`)
+    }
 
     try {
       await agent.didcomm.connections.deleteById(connectionId)

@@ -6,6 +6,8 @@ import {
   DidCommConnectionRepository,
   DidCommHandshakeProtocol,
   DidCommMessage,
+  type DidCommOutOfBandInvitation,
+  type DidCommOutOfBandRecord,
   type DidCommVersion,
 } from '@credo-ts/didcomm'
 import { peerAnchorDid } from '@verana-labs/credo-ts-didcomm-vt-flow'
@@ -26,8 +28,17 @@ export async function createInvitation(options: {
   messages?: DidCommMessage[]
   useLegacyDid?: boolean
   didCommVersion?: DidCommVersion
-}) {
-  const { agent, messages, useLegacyDid, didCommVersion } = options
+  unbranded?: boolean
+  multiUseInvitation?: boolean
+  goal?: string
+  goalCode?: string
+}): Promise<{
+  invitation: Record<string, unknown>
+  outOfBandInvitation: DidCommOutOfBandInvitation
+  outOfBandRecord: DidCommOutOfBandRecord
+  url: string
+}> {
+  const { agent, messages, useLegacyDid, didCommVersion, unbranded, goal, goalCode } = options
 
   const ourDid = (useLegacyDid && agent.did ? getLegacyDidWeb(agent.did) : undefined) ?? agent.did
 
@@ -42,25 +53,27 @@ export async function createInvitation(options: {
     )
   }
 
-  const claims = await ecsServiceClaims(agent)
-  const outOfBandInvitation = (
-    await agent.didcomm.oob.createInvitation({
-      label: claims?.name,
-      multiUseInvitation: !messages,
-      imageUrl: claims?.logoUri,
-      messages,
-      didCommVersion: effectiveVersion,
-      ...(isV2
-        ? { ourDid }
-        : {
-            handshakeProtocols: [DidCommHandshakeProtocol.DidExchange],
-            invitationDid: ourDid,
-          }),
-    })
-  ).outOfBandInvitation
+  const claims = unbranded ? undefined : await ecsServiceClaims(agent)
+  const outOfBandRecord = await agent.didcomm.oob.createInvitation({
+    label: claims?.name,
+    multiUseInvitation: options.multiUseInvitation ?? !messages,
+    imageUrl: claims?.logoUri,
+    goal,
+    goalCode,
+    messages,
+    didCommVersion: effectiveVersion,
+    ...(isV2
+      ? { ourDid }
+      : {
+          handshakeProtocols: [DidCommHandshakeProtocol.DidExchange],
+          invitationDid: ourDid,
+        }),
+  })
+  const { outOfBandInvitation } = outOfBandRecord
   return {
     invitation: outOfBandInvitation.v2Invitation?.toJSON() ?? outOfBandInvitation.toJSON(),
     outOfBandInvitation,
+    outOfBandRecord,
     url: outOfBandInvitation.toUrl({ domain: agent.publicApiBaseUrl }),
   }
 }
@@ -68,6 +81,8 @@ export async function createInvitation(options: {
 export function isUsableConnectionTo(connection: DidCommConnectionRecord, peerPublicDid: string): boolean {
   return connection.isReady && !!connection.theirDid && peerAnchorDid(connection) === peerPublicDid
 }
+
+const pendingConnections = new Map<string, Promise<string>>()
 
 /**
  * Connects to a peer that publishes a public DID, and reuses the connection that the
@@ -77,7 +92,10 @@ export function isUsableConnectionTo(connection: DidCommConnectionRecord, peerPu
  * same pair of DIDs makes the `findByDids` lookup of the message receiver throw
  * `RecordDuplicateError`, and the agent then fails to process every inbound message from
  * that peer. To find the existing record, the agent reads the `publicDid` tag that it
- * sets on each connection to a peer that publishes a public DID.
+ * sets on each connection it opens to a peer that publishes a public DID, and the DIDs of
+ * the connections that the peer opened to the agent.
+ *
+ * Concurrent calls for the same peer share one attempt, within this process only.
  *
  * @param agent the local agent
  * @param peerPublicDid the public DID of the peer
@@ -86,17 +104,35 @@ export function isUsableConnectionTo(connection: DidCommConnectionRecord, peerPu
 export async function connectToPublicDid(agent: VsAgent, peerPublicDid: string): Promise<string> {
   if (!agent.did) throw new Error('Agent has no public DID')
 
-  const [existing] = await agent.didcomm.connections.findAllByQuery({
-    publicDid: peerPublicDid,
+  const key = `${agent.did} ${peerPublicDid}`
+  const pending = pendingConnections.get(key)
+  if (pending) return pending
+
+  const connecting = findOrOpenConnection(agent, agent.did, peerPublicDid).finally(() =>
+    pendingConnections.delete(key),
+  )
+  pendingConnections.set(key, connecting)
+  return connecting
+}
+
+async function findOrOpenConnection(agent: VsAgent, ourDid: string, peerPublicDid: string): Promise<string> {
+  const connections = await agent.didcomm.connections.findAllByQuery({
+    $or: [
+      { publicDid: peerPublicDid },
+      { theirDid: peerPublicDid },
+      { previousTheirDids: [peerPublicDid] },
+      { invitationDid: peerPublicDid },
+    ],
   })
-  if (existing) {
-    if (isUsableConnectionTo(existing, peerPublicDid)) return existing.id
-    await agent.didcomm.connections.deleteById(existing.id)
-  }
+  const usable = connections.find(connection => isUsableConnectionTo(connection, peerPublicDid))
+  if (usable) return usable.id
+
+  const existing = connections.find(connection => connection.getTag('publicDid') === peerPublicDid)
+  if (existing) await agent.didcomm.connections.deleteById(existing.id)
 
   const { connectionRecord } = await agent.didcomm.oob.receiveImplicitInvitation({
     did: peerPublicDid,
-    ourDid: agent.did,
+    ourDid,
     label: await agentDisplayName(agent),
     didCommVersion: 'v2',
   })

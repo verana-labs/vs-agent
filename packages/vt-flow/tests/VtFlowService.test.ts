@@ -77,7 +77,22 @@ function makeService(
     logger as never,
     config as never,
   )
-  return { service, repository, agentContext, exchangeRepository, eventEmitter }
+  return { service, repository, agentContext, exchangeRepository, eventEmitter, connectionRepository }
+}
+
+function holdPeerCheck(stored: VtFlowRecord) {
+  const peer = { id: 'conn-old', theirDid: 'did:web:agent-peer' }
+  const setup = makeService(JsonTransformer.clone(stored), peer)
+  setup.repository.getById.mockResolvedValue(stored)
+  let release!: () => void
+  const held = new Promise<void>(resolve => {
+    release = resolve
+  })
+  setup.connectionRepository.findById.mockImplementation(async () => {
+    await held
+    return peer
+  })
+  return { ...setup, release }
 }
 
 function makeMessageContext(agentContext: unknown, theirDid = 'did:web:agent-peer') {
@@ -317,7 +332,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     [VtFlowState.Completed, 6],
     [VtFlowState.Validated, 1],
     [VtFlowState.CredRevoked, 6],
-  ])('validator renewal from %s drops the validation and issuance of the previous round', async (state, role) => {
+  ])('validator renewal from %s drops the previous round and takes the new claims', async (state, role) => {
     const messages = [{ type: VtFlowMessageType.Validating, text: 'ok', at: '2026-01-01T00:00:00.000Z' }]
     const tx = { hash: 'AA', status: VtFlowTxStatus.Succeeded }
     const existing = makeRecord({
@@ -334,13 +349,16 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
       theirDid: 'did:web:agent-peer',
     })
 
-    const record = await service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+    const context = makeMessageContext(agentContext)
+    context.message.claims = { name: 'Acme Renewed' }
+
+    const record = await service.processReceiveOnboardingRequest(context as never)
 
     expect(record.state).toBe(VtFlowState.AwaitingOr)
     expect(record.validation).toBeUndefined()
     expect(record.issuance).toBeUndefined()
     expect(record.messages).toEqual(messages)
-    expect(record.claims).toEqual({ name: 'Acme' })
+    expect(record.claims).toEqual({ name: 'Acme Renewed' })
   })
 
   it('validator keeps a flow in VALIDATED when the applicant resends its request', async () => {
@@ -419,6 +437,108 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(running.eventEmitter.emit).not.toHaveBeenCalled()
   })
 
+  it('validator writes the copy a notification moved to VALIDATED while the peer check ran', async () => {
+    const stored = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.AwaitingOr,
+      applicantParticipantRole: 6,
+    })
+    const { service, repository, agentContext, eventEmitter, connectionRepository, release } =
+      holdPeerCheck(stored)
+    const context = makeMessageContext(agentContext)
+
+    const receiving = service.processReceiveOnboardingRequest(context as never)
+    await vi.waitFor(() => expect(connectionRepository.findById).toHaveBeenCalled())
+    Object.assign(stored, { state: VtFlowState.Validated, connectionTerminated: true })
+    release()
+    const record = await receiving
+
+    expect(record).toBe(stored)
+    expect(record).toMatchObject({ state: VtFlowState.Validated, connectionId: 'conn-new' })
+    expect(record.connectionTerminated).toBeUndefined()
+    expect(repository.update).toHaveBeenCalledExactlyOnceWith(agentContext, stored)
+    expect(eventEmitter.emit).toHaveBeenCalledExactlyOnceWith(agentContext, {
+      type: VtFlowEventTypes.VtFlowStateChanged,
+      payload: expect.objectContaining({
+        vtFlowRecordId: stored.id,
+        state: VtFlowState.Validated,
+        previousState: VtFlowState.Validated,
+      }),
+    })
+  })
+
+  it('validator writes the copy an auto accept moved to VALIDATING while the peer check ran', async () => {
+    const stored = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.AwaitingIr,
+      variant: VtFlowVariant.DirectIssuance,
+      applicantParticipantId: undefined,
+      schemaId: '5',
+    })
+    const { service, repository, agentContext, eventEmitter, connectionRepository, release } =
+      holdPeerCheck(stored)
+    const context = makeIssuanceContext(agentContext)
+
+    const receiving = service.processReceiveIssuanceRequest(context as never)
+    await vi.waitFor(() => expect(connectionRepository.findById).toHaveBeenCalled())
+    stored.state = VtFlowState.Validating
+    release()
+    const record = await receiving
+
+    expect(record).toBe(stored)
+    expect(record).toMatchObject({
+      state: VtFlowState.Validating,
+      connectionId: 'conn-new',
+      threadId: context.message.threadId,
+    })
+    expect(repository.update).toHaveBeenCalledExactlyOnceWith(agentContext, stored)
+    expect(eventEmitter.emit).not.toHaveBeenCalled()
+  })
+
+  it('validator refuses a request whose flow was terminated while the peer check ran', async () => {
+    const stored = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    const { service, repository, agentContext, eventEmitter, connectionRepository, release } =
+      holdPeerCheck(stored)
+
+    const receiving = service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+    await vi.waitFor(() => expect(connectionRepository.findById).toHaveBeenCalled())
+    stored.state = VtFlowState.TerminatedByValidator
+    release()
+
+    await expect(receiving).rejects.toMatchObject({ code: VtFlowErrorCode.InvalidParticipantSessionId })
+    expect(repository.update).not.toHaveBeenCalled()
+    expect(repository.save).not.toHaveBeenCalled()
+    expect(eventEmitter.emit).not.toHaveBeenCalled()
+  })
+
+  it('validator fails the copy a notification moved to VALIDATED while the VS-CONN-VS check ran', async () => {
+    const stored = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.AwaitingOr })
+    let release!: () => void
+    const held = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const assertVerifiableService = vi.fn(async () => {
+      await held
+      return false
+    })
+    const { service, repository, agentContext } = makeService(
+      JsonTransformer.clone(stored),
+      { id: 'conn-old', theirDid: 'did:web:agent-peer' },
+      { assertVerifiableService },
+    )
+    repository.getById.mockResolvedValue(stored)
+    const validation = { decidedAt: '2026-01-01T00:00:00.000Z', submission: VtFlowSubmission.Agent }
+
+    const receiving = service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+    await vi.waitFor(() => expect(assertVerifiableService).toHaveBeenCalled())
+    Object.assign(stored, { state: VtFlowState.Validated, validation })
+    release()
+
+    await expect(receiving).rejects.toMatchObject({ code: VtFlowErrorCode.NotAVerifiableService })
+    expect(repository.update).toHaveBeenCalledExactlyOnceWith(agentContext, stored)
+    expect(stored).toMatchObject({ state: VtFlowState.Error, validation })
+  })
+
   it('validator rejects a session id colliding with a terminated flow', async () => {
     const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.TerminatedByValidator })
     const { service, agentContext } = makeService(existing)
@@ -438,6 +558,31 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     await expect(
       service.processReceiveOnboardingRequest(makeMessageContext(agentContext, 'did:web:attacker') as never),
     ).rejects.toThrow(/peer does not match/)
+  })
+
+  it.each([
+    VtFlowState.Validating,
+    VtFlowState.AwaitingValidationTx,
+    VtFlowState.ValidatedPendingClaims,
+    VtFlowState.Validated,
+  ])('validator keeps its claims when the applicant resends on a new thread in %s', async state => {
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state,
+      applicantParticipantRole: 6,
+      claims: { name: 'Acme' },
+    })
+    const { service, agentContext } = makeService(existing, {
+      id: 'conn-old',
+      theirDid: 'did:web:agent-peer',
+    })
+    const context = makeMessageContext(agentContext)
+    context.message.claims = { name: 'Someone Else' }
+
+    const record = await service.processReceiveOnboardingRequest(context as never)
+
+    expect(record.claims).toEqual({ name: 'Acme' })
+    expect(record.state).toBe(state)
   })
 
   it('validator keeps its edited claims when the applicant resends the same thread', async () => {

@@ -30,7 +30,10 @@ export class AdminAuthGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     )
     if (exemption === 'always') return true
-    if (exemption === 'corporation' && this.authMode === 'corporation') return true
+    if (exemption === 'corporation') {
+      if (this.authMode === 'corporation') return true
+      throw new ForbiddenException('authentication methods are served only in corporation mode')
+    }
 
     // Classification is on the peer TCP address only, never on X-Forwarded-For or similar headers.
     const request = context.switchToHttp().getRequest<Request>()

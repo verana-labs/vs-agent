@@ -324,6 +324,17 @@ describe('parseOfferTtlSeconds', () => {
   it.each([59, 7_776_001, 3_600.5, '3600', null, undefined])('rejects %s', value => {
     expect(() => parseOfferTtlSeconds(value)).toThrow('ttlSeconds must be an integer between 60 and 7776000')
   })
+
+  // [VSA-ADM-OID-CE-OFFER]: a revocation can end a registered credential, so it can live a year
+  it('allows one year for a credential registered on a status list, and 90 days otherwise', () => {
+    expect(parseOfferTtlSeconds(31_536_000, { revocable: true })).toBe(31_536_000)
+    expect(() => parseOfferTtlSeconds(31_536_001, { revocable: true })).toThrow(
+      'ttlSeconds must be an integer between 60 and 31536000',
+    )
+    expect(() => parseOfferTtlSeconds(7_776_001)).toThrow(
+      'ttlSeconds must be an integer between 60 and 7776000 for a credential that no status list registers',
+    )
+  })
 })
 
 describe('parseOfferIssuanceMetadata', () => {
@@ -336,9 +347,27 @@ describe('parseOfferIssuanceMetadata', () => {
     })
   })
 
+  it('returns the status list reference of a registered credential, with its longer lifetime', () => {
+    const config = validOptions().credentialConfigurations[0]
+    const status = {
+      statusListId: 'list-1',
+      statusListIndex: 42,
+      uri: 'https://agent.example/oid4vc/status-list/list-1',
+    }
+
+    expect(
+      parseOfferIssuanceMetadata(config, { claims: { name: 'Ada' }, ttlSeconds: 31_536_000, status }),
+    ).toEqual({ claims: { name: 'Ada' }, ttlSeconds: 31_536_000, status })
+  })
+
   it.each([
     [{ claims: { name: 'Ada' } }, 'ttlSeconds'],
     [{ claims: { admin: true }, ttlSeconds: 3_600 }, "unknown claim 'admin'"],
+    [{ claims: { name: 'Ada' }, ttlSeconds: 31_536_000 }, 'ttlSeconds'],
+    [
+      { claims: { name: 'Ada' }, ttlSeconds: 3_600, status: { statusListId: 'list-1' } },
+      'status list reference',
+    ],
     [null, 'issuance metadata must be an object'],
   ])('rejects invalid stored metadata %#', (metadata, message) => {
     const config = validOptions().credentialConfigurations[0]

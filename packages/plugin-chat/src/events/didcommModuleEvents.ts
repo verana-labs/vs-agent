@@ -5,11 +5,11 @@ import {
   DidCommMediaSharingRole,
   DidCommMediaSharingState,
   DidCommMediaSharingStateChangedEvent,
-} from '@2060.io/credo-ts-didcomm-media-sharing'
+} from '@credo-ts/didcomm-media-sharing'
 import {
   DidCommConnectionProfileUpdatedEvent,
   DidCommProfileEventTypes,
-} from '@2060.io/credo-ts-didcomm-user-profile'
+} from '@credo-ts/didcomm-user-profile'
 import { emitModuleMessageEvent, moduleOf } from '@verana-labs/vs-agent-sdk'
 
 import { CHAT_DIDCOMM_MODULES } from '../nestjs/didcommModules'

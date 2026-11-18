@@ -117,12 +117,14 @@ async function publish(
   beforePublish: (vp: unknown) => Promise<void>,
   credentialSchemaId = JSC_URL,
   validUntil?: string,
+  schemaId = '5',
 ) {
   return await publishSelfIssuedEcsPresentation(
     agent as never,
     VP_URL,
     getEcsSchemas('https://agent.example'),
     'ecs-service',
+    schemaId,
     ['VerifiableCredential', 'VerifiableTrustCredential'],
     { id: credentialSchemaId, type: 'JsonSchemaCredential' },
     ecsClaims,
@@ -187,6 +189,7 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
       VP_URL,
       getEcsSchemas('https://agent.example'),
       'ecs-service',
+      '5',
       ['VerifiableCredential', 'VerifiableTrustCredential'],
       { id: JSC_URL, type: 'JsonSchemaCredential' },
       changed,
@@ -200,7 +203,7 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
     const otherJsc = 'https://agent.example/vt/schemas-6-jsc.json'
 
     await publish(agent, async () => {}, JSC_URL, '2027-09-25T10:00:00Z')
-    await publish(agent, async () => {}, otherJsc)
+    await publish(agent, async () => {}, otherJsc, undefined, '6')
 
     expect(storedEntry(metadata, JSC_URL).credential.validUntil).toBe('2027-09-25T10:00:00Z')
     expect(storedEntry(metadata, otherJsc).credential.validUntil).toBeUndefined()
@@ -218,6 +221,7 @@ describe('publishSelfIssuedEcsPresentation beforePublish step', () => {
       'https://agent.example/vt/ecs-org-vtc-vp.json',
       ecsSchemas,
       'ecs-org',
+      '6',
       ['VerifiableCredential', 'VerifiableTrustCredential'],
       { id: orgJsc, type: 'JsonSchemaCredential' },
       ecsClaims,
@@ -361,6 +365,44 @@ describe('stored self-issued VTC revalidation', () => {
 
     expect(storedEntry(metadata, SELF_TR_URL).attached).toBe(false)
     expect(didsUpdate).not.toHaveBeenCalled()
+  })
+
+  it('names the credential after its CredentialSchema, and not after its subject', async () => {
+    const { agent, metadata } = makeAgent()
+
+    await publish(agent, beforePublish)
+
+    const { credential } = storedEntry(metadata, JSC_URL)
+    expect(credential.id).toBe(`${DID}#schemas-5-vtc`)
+    expect(credential.credentialSubject.id).toBe(DID)
+  })
+
+  it('gives a different credential id to each CredentialSchema of one ECS schema key', async () => {
+    const { agent, metadata } = makeAgent()
+    const otherJsc = 'https://agent.example/vt/schemas-6-jsc.json'
+
+    await publish(agent, beforePublish, JSC_URL, undefined, '5')
+    await publish(agent, beforePublish, otherJsc, undefined, '6')
+
+    const { id: first } = storedEntry(metadata, JSC_URL).credential
+    const { id: second } = storedEntry(metadata, otherJsc).credential
+    expect(first).not.toBe(second)
+    expect(first).toBe(`${DID}#schemas-5-vtc`)
+    expect(second).toBe(`${DID}#schemas-6-vtc`)
+  })
+
+  it('rebuilds a credential an older agent published with the agent DID as its id, one time only', async () => {
+    const { agent, metadata, repositoryUpdate } = makeAgent()
+
+    await publish(agent, beforePublish)
+    storedEntry(metadata, JSC_URL).credential.id = DID
+
+    await publish(agent, beforePublish)
+    expect(repositoryUpdate).toHaveBeenCalledTimes(2)
+    expect(storedEntry(metadata, JSC_URL).credential.id).toBe(`${DID}#schemas-5-vtc`)
+
+    await publish(agent, beforePublish)
+    expect(repositoryUpdate).toHaveBeenCalledTimes(2)
   })
 })
 

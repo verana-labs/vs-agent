@@ -120,6 +120,7 @@ export function issuerAgent(
     ecsClaims,
     anonCredsTrust,
     config: { logger },
+    events: { on: vi.fn(), emit: vi.fn() },
     dids: { resolve: () => undefined },
     genericRecords: { findById: async () => null, save: () => undefined, update: () => undefined },
     kms: {},

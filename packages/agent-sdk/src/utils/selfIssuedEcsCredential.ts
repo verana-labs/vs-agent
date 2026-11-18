@@ -20,6 +20,7 @@ const buildIntegrityData = (data: Record<string, unknown>) => {
 }
 
 interface StoredSelfIssuedCredential {
+  id?: string
   issuer?: string | { id?: string }
   validUntil?: string
   credentialSchema?: { id?: string } | Array<{ id?: string }>
@@ -28,6 +29,7 @@ interface StoredSelfIssuedCredential {
 
 function storedCredentialIsCurrent(
   credential: StoredSelfIssuedCredential | undefined,
+  credentialId: string,
   credentialSchemaId: string,
   did: string,
   didRecord: DidRecord,
@@ -39,6 +41,7 @@ function storedCredentialIsCurrent(
 
   const issuer = typeof credential.issuer === 'string' ? credential.issuer : credential.issuer?.id
   if (issuer !== did) return false
+  if (credential.id !== credentialId) return false
 
   const schema = Array.isArray(credential.credentialSchema)
     ? credential.credentialSchema[0]
@@ -74,13 +77,14 @@ async function signSelfIssuedEcsCredential(
   agent: VsAgent,
   didRecord: DidRecord,
   presentationId: string,
+  credentialId: string,
   type: string[],
   claims: Record<string, unknown>,
   credentialSchema: W3cCredentialSchema,
   validUntil: string | undefined,
 ): Promise<SelfIssuedEcsPresentation> {
   const unsignedCredential = createW3cV2Credential({
-    id: agent.did,
+    id: credentialId,
     type,
     issuer: agent.did!,
     credentialSubject: { ...claims, id: agent.did },
@@ -103,6 +107,7 @@ export async function publishSelfIssuedEcsPresentation(
   id: string,
   ecsSchemas: Record<string, string>,
   schemaKey: string,
+  schemaId: string,
   type: string[],
   credentialSchema: W3cCredentialSchema,
   ecsClaims: EcsClaims,
@@ -120,6 +125,9 @@ export async function publishSelfIssuedEcsPresentation(
     )
   }
   const didDocumentServiceId = `${agent.did}#${linkedVpFragment(schemaKey)}`
+  // [VT-CRED-W3C] requires a globally unique credential id. The agent builds the id from the
+  // CredentialSchema, which keeps it stable: a random id causes a new issuance at each start.
+  const credentialId = `${agent.did}#schemas-${schemaId}-vtc`
   const integrityData = buildIntegrityData({ id, type, credentialSchema, claims })
   const record = didRecord.metadata.get('_vt/vtc') ?? {}
   const metadata = record[credentialSchema.id]
@@ -132,7 +140,14 @@ export async function publishSelfIssuedEcsPresentation(
   const attached = (metadata?.attached ?? true) && !superseded
   if (
     metadata?.integrityData === integrityData &&
-    storedCredentialIsCurrent(metadata?.credential, credentialSchema.id, agent.did, didRecord, validUntil)
+    storedCredentialIsCurrent(
+      metadata?.credential,
+      credentialId,
+      credentialSchema.id,
+      agent.did,
+      didRecord,
+      validUntil,
+    )
   ) {
     // the presentation is already public, so a failed beforePublish step still needs a retry here
     if (attached) await beforePublish?.(metadata.verifiablePresentation)
@@ -143,6 +158,7 @@ export async function publishSelfIssuedEcsPresentation(
     agent,
     didRecord,
     id,
+    credentialId,
     type,
     claims as Record<string, unknown>,
     credentialSchema,

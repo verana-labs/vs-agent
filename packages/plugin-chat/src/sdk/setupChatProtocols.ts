@@ -1,11 +1,8 @@
-import { DidCommCallsModule } from '@2060.io/credo-ts-didcomm-calls'
-import { DidCommMediaSharingModule } from '@2060.io/credo-ts-didcomm-media-sharing'
-import { DidCommReactionsModule } from '@2060.io/credo-ts-didcomm-reactions'
-import { DidCommReceiptsModule } from '@2060.io/credo-ts-didcomm-receipts'
-import {
-  DidCommUserProfileModule,
-  DidCommUserProfileModuleConfig,
-} from '@2060.io/credo-ts-didcomm-user-profile'
+import { DidCommCallsModule } from '@credo-ts/didcomm-calls'
+import { DidCommMediaSharingModule } from '@credo-ts/didcomm-media-sharing'
+import { DidCommReactionsModule } from '@credo-ts/didcomm-reactions'
+import { DidCommReceiptsModule } from '@credo-ts/didcomm-receipts'
+import { DidCommUserProfileModule, DidCommUserProfileModuleConfig } from '@credo-ts/didcomm-user-profile'
 import { ActionMenuModule } from '@credo-ts/action-menu'
 import { QuestionAnswerModule } from '@credo-ts/question-answer'
 

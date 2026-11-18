@@ -4,7 +4,7 @@ import {
   MrtdProblemReportEvent,
   MrtdProblemReportReason,
   MrzDataReceivedEvent,
-} from '@2060.io/credo-ts-didcomm-mrtd'
+} from '@credo-ts/didcomm-mrtd'
 import { BaseLogger } from '@credo-ts/core'
 import {
   emitModuleMessageEvent,

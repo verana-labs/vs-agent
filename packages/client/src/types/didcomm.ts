@@ -6,6 +6,7 @@ import {
   DidCommVersion,
   DidExchangeRole,
   DidExchangeState,
+  InvitationState,
   PaginationQuery,
   ProofRole,
   ProofState,
@@ -27,7 +28,7 @@ export interface ConnectionRecord {
   alias?: string
   threadId?: string
   imageUrl?: string
-  outOfBandId: string | null
+  invitationId: string | null
   parentConnectionId: string | null
   invitationDid?: string
   didcommVersion?: DidCommVersion
@@ -39,7 +40,7 @@ export interface ConnectionRecord {
 }
 
 export interface ListConnectionsQuery extends PaginationQuery {
-  outOfBandId?: string
+  invitationId?: string
   parentConnectionId?: string
   state?: DidExchangeState
   role?: DidExchangeRole
@@ -51,18 +52,63 @@ export interface ListConnectionsQuery extends PaginationQuery {
   mediatorId?: string
 }
 
-export interface SendInvitationBody {
-  connectionId: string
+export interface CreateInvitationBody {
+  /** When absent, the agent creates a standalone invitation and returns it. */
+  connectionId?: string
+  /** A referral. Requires `connectionId`. */
   did?: string
+  /** Requires that `connectionId` is absent. */
+  reusable?: boolean
+  /** Ignored for a standalone invitation. */
   label?: string
+  /** Ignored for a standalone invitation. */
   imageUrl?: string
   goal?: string
   goalCode?: string
+  /** The agent ignores it when `connectionId` is present. */
+  useLegacyDid?: boolean
+  /** The agent ignores it when `connectionId` is present. */
+  didcommVersion?: DidCommVersion
 }
 
-export interface SendInvitationResponse {
+export interface CreateInvitationResponse {
+  /** Absent for a referral. */
+  id?: string
+  /** Present for a standalone invitation only. */
+  invitation?: Record<string, unknown>
+  /** Present for a standalone invitation only. */
+  shortUrl?: string
+  /** Present when the request named a `connectionId`. */
+  messageId?: string
+}
+
+export interface InvitationAcceptance {
+  connectionId: string
+  /** True when the peer accepted the invitation on a connection that it already held. */
+  reused: boolean
+  acceptedAt: string
+}
+
+export interface InvitationRecord {
   id: string
-  outOfBandId?: string
+  state: InvitationState
+  didcommVersion: DidCommVersion
+  reusable: boolean
+  invitation: Record<string, unknown>
+  shortUrl: string | null
+  parentConnectionId: string | null
+  acceptances: InvitationAcceptance[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ListInvitationsQuery extends PaginationQuery {
+  state?: InvitationState
+  parentConnectionId?: string
+  /** A connection that appears in `acceptances`. */
+  connectionId?: string
+  reusable?: boolean
+  didcommVersion?: DidCommVersion
 }
 
 export interface SendBasicMessageBody {
@@ -227,8 +273,18 @@ export interface SendQuestionBody {
   detail?: string
 }
 
-export interface RequestMrtdBody {
+export interface RequestMrzBody {
   connectionId: string
+}
+
+export interface RequestEmrtdDataBody {
+  connectionId: string
+  /**
+   * Thread id of the MRZ exchange this request follows (`threadId` of the
+   * `didcomm.mrtd.mrz-data-received` event). Sent as the parent thread of the
+   * request: the wallet reads the chip with the MRZ of that exchange.
+   */
+  parentThreadId?: string
 }
 
 export interface ListPresentationsQuery extends PaginationQuery {
@@ -238,13 +294,55 @@ export interface ListPresentationsQuery extends PaginationQuery {
   state?: ProofState
 }
 
+/**
+ * This type gives the values that the agent verified for the credential that answers one entry of
+ * `requestedCredentials`.
+ */
+export interface PresentedCredential {
+  credentialDefinitionId: string
+  /** This is the `issuerId` of the credential definition. It holds an active ISSUER `Participant`. */
+  issuerDid: string
+  credentialSchemaId: number
+  ecosystemDid: string
+  jsonSchemaCredentialId: string
+  claims: Claim[]
+  /** The holder did not reveal these requested attributes. The proof verifies without them. */
+  unrevealed: string[]
+}
+
+/**
+ * This type gives the cause of the failure of one requested credential. The agent verified none of
+ * the optional values. A caller must not use them as the identity of an issuer.
+ */
+export interface RejectedCredential {
+  /** This is the position of the requested credential in `requestedCredentials`. */
+  index: number
+  code: 'e.p.issuer-not-authorized' | 'e.p.trust-resolution-unavailable'
+  /** This text gives the cause to an operator. */
+  note: string
+  credentialDefinitionId?: string
+  issuerDid?: string
+  credentialSchemaId?: number
+}
+
 export interface PresentationRecord {
   proofExchangeId: string
   state: ProofState
   role: ProofRole
   connectionId?: string
   requestedCredentials: RequestedCredential[]
+  /** This list holds every revealed claim. It does not identify the credential of a claim. */
   claims: Claim[]
+  /**
+   * This list holds one entry for each entry of `requestedCredentials`, in the same order. It is
+   * empty when the agent is the prover, before the trust decision succeeds, and when it fails.
+   */
+  credentials: PresentedCredential[]
+  /**
+   * This list holds the requested credentials that failed the trust decision. It is empty unless the
+   * decision failed.
+   */
+  rejectedCredentials: RejectedCredential[]
   verified: boolean
   threadId?: string
   errorMessage?: string

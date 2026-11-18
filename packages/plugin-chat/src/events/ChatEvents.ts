@@ -5,21 +5,18 @@ import {
   CallEndMessage,
   CallOfferMessage,
   CallRejectMessage,
-} from '@2060.io/credo-ts-didcomm-calls'
+} from '@credo-ts/didcomm-calls'
 import {
   DidCommMediaSharingEventTypes,
   DidCommMediaSharingRole,
   DidCommMediaSharingState,
   DidCommMediaSharingStateChangedEvent,
-} from '@2060.io/credo-ts-didcomm-media-sharing'
-import {
-  DidCommReactionsEventTypes,
-  DidCommMessageReactionsReceivedEvent,
-} from '@2060.io/credo-ts-didcomm-reactions'
+} from '@credo-ts/didcomm-media-sharing'
+import { DidCommReactionsEventTypes, DidCommMessageReactionsReceivedEvent } from '@credo-ts/didcomm-reactions'
 import {
   DidCommConnectionProfileUpdatedEvent,
   DidCommProfileEventTypes,
-} from '@2060.io/credo-ts-didcomm-user-profile'
+} from '@credo-ts/didcomm-user-profile'
 import { MenuRequestMessage, PerformMessage } from '@credo-ts/action-menu'
 import { BaseLogger } from '@credo-ts/core'
 import {

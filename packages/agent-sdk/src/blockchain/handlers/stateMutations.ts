@@ -8,6 +8,7 @@ import {
   VtFlowService,
   VtFlowState,
   VtFlowValidatedFromStates,
+  VtFlowVariant,
   isVtFlowTerminalState,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { classifyEcsSchema } from '@verana-labs/vs-agent-model'
@@ -38,6 +39,7 @@ import { VeranaIndexerService } from '../VeranaIndexerService'
 import {
   EcosystemDto,
   IndexerActivity,
+  Participant,
   ParticipantRole,
   ParticipantState,
   ValidationState,
@@ -314,9 +316,13 @@ export async function removeHolderTrustCredentialIfRevoked(
   const service = agentContext.dependencyManager.resolve(VtFlowService)
   const records = await service.findAllByQuery(agentContext, { applicantParticipantId: participantId })
   for (const record of records) {
-    if (record.role !== VtFlowRole.Applicant || !record.credentialExchangeRecordId) continue
+    if (record.role !== VtFlowRole.Applicant) continue
+    if (!record.credentialId && !record.credentialExchangeRecordId) continue
     try {
-      const credentialId = await removeStoredTrustCredential(agent, record.credentialExchangeRecordId)
+      const credentialId = await removeStoredTrustCredential(agent, {
+        credentialId: record.credentialId,
+        credentialExchangeRecordId: record.credentialExchangeRecordId,
+      })
       if (credentialId) {
         agent.config.logger.info(
           `[IndexerWS] Removed linked VP and stored credential ${credentialId} (participant=${participantId})`,
@@ -404,15 +410,38 @@ export async function startParticipantOPAutoFlow(agent: VsAgent, activity: Index
   const holderParticipant = await agent.indexer.findParticipant(applicantParticipantId)
   if (!holderParticipant || holderParticipant.did !== agent.did) return
   try {
-    await waitUntilOwnDidIsPubliclyResolvable(agent, agent.config.logger)
-    const orchestrator = new VtFlowOrchestrator(agent)
-    const claims = await onboardingClaims(agent, holderParticipant.schemaId)
-    await orchestrator.startOnboardingProcess({ applicantParticipantId, ...(claims ? { claims } : {}) })
+    await requestOnboarding(agent, holderParticipant)
   } catch (err) {
     agent.config.logger.error(
       `[IndexerWS] StartParticipantOP auto-flow failed: ${(err as Error).message}\n${(err as Error).stack}`,
     )
   }
+}
+
+export async function sendPendingRenewal(agent: VsAgent, record: VtFlowRecord): Promise<void> {
+  if (!agent.veranaChain || record.role !== VtFlowRole.Applicant || !record.applicantParticipantId) return
+  if (record.variant !== VtFlowVariant.OnboardingProcess) return
+  try {
+    const participant = await agent.indexer.findParticipant(record.applicantParticipantId)
+    if (participant?.opState !== ValidationState.PENDING) return
+    agent.config.logger.info(
+      `[vt-flow] participant ${participant.id} is PENDING after flow ${record.id} completed, sending its renewal onboarding request`,
+    )
+    await requestOnboarding(agent, participant)
+  } catch (err) {
+    agent.config.logger.error(
+      `[vt-flow] renewal onboarding request after flow ${record.id} failed: ${(err as Error).message}`,
+    )
+  }
+}
+
+async function requestOnboarding(agent: VsAgent, participant: Participant): Promise<void> {
+  await waitUntilOwnDidIsPubliclyResolvable(agent, agent.config.logger)
+  const claims = await onboardingClaims(agent, participant.schemaId)
+  await new VtFlowOrchestrator(agent).startOnboardingProcess({
+    applicantParticipantId: participant.id,
+    ...(claims ? { claims } : {}),
+  })
 }
 
 export async function reconcileVtjscPublications(

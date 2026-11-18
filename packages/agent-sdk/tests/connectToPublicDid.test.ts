@@ -8,9 +8,12 @@ const PEER_DID = 'did:webvh:QmPeer:peer.example'
 interface ConnectionFixture {
   id: string
   isReady?: boolean
+  did?: string
+  previousDids?: string[]
   theirDid?: string
   invitationDid?: string
   previousTheirDids?: string[]
+  publicDid?: string
 }
 
 const rotatedToPeer: ConnectionFixture = {
@@ -19,6 +22,17 @@ const rotatedToPeer: ConnectionFixture = {
   theirDid: 'did:peer:4zQmRotated',
   invitationDid: PEER_DID,
   previousTheirDids: [PEER_DID],
+  publicDid: PEER_DID,
+}
+
+const openedByPeer: ConnectionFixture = {
+  id: 'inbound',
+  isReady: true,
+  did: 'did:peer:4zQmOurs',
+  previousDids: [AGENT_DID],
+  theirDid: PEER_DID,
+  invitationDid: AGENT_DID,
+  previousTheirDids: [],
 }
 
 function makeAgent(records: ConnectionFixture[]) {
@@ -34,7 +48,12 @@ function makeAgent(records: ConnectionFixture[]) {
     repository,
     didcomm: {
       connections: {
-        findAllByQuery: vi.fn(async () => records),
+        findAllByQuery: vi.fn(async () =>
+          records.map(record => ({
+            ...record,
+            getTag: (name: string) => (name === 'publicDid' ? record.publicDid : undefined),
+          })),
+        ),
         returnWhenIsConnected: vi.fn(async (id: string) => ({ id })),
         deleteById: vi.fn(async () => undefined),
       },
@@ -55,14 +74,52 @@ describe('connectToPublicDid', () => {
 
     expect(id).toBe('existing')
     expect(agent.didcomm.connections.findAllByQuery).toHaveBeenCalledWith({
-      publicDid: PEER_DID,
+      $or: [
+        { publicDid: PEER_DID },
+        { theirDid: PEER_DID },
+        { previousTheirDids: [PEER_DID] },
+        { invitationDid: PEER_DID },
+      ],
     })
     expect(agent.didcomm.oob.receiveImplicitInvitation).not.toHaveBeenCalled()
   })
 
+  it('reuses the connection that the peer opened to the public DID of the agent', async () => {
+    const agent = makeAgent([openedByPeer])
+
+    const id = await connectToPublicDid(agent as never, PEER_DID)
+
+    expect(id).toBe('inbound')
+    expect(agent.didcomm.oob.receiveImplicitInvitation).not.toHaveBeenCalled()
+    expect(agent.didcomm.connections.deleteById).not.toHaveBeenCalled()
+  })
+
+  it('dials once for concurrent calls to the same peer', async () => {
+    const agent = makeAgent([])
+
+    const ids = await Promise.all([
+      connectToPublicDid(agent as never, PEER_DID),
+      connectToPublicDid(agent as never, PEER_DID),
+    ])
+
+    expect(ids).toEqual(['fresh-record', 'fresh-record'])
+    expect(agent.didcomm.oob.receiveImplicitInvitation).toHaveBeenCalledTimes(1)
+  })
+
+  it('looks up the connections again once the previous call settled', async () => {
+    const agent = makeAgent([])
+    agent.repository.update.mockRejectedValueOnce(new Error('storage'))
+
+    await expect(connectToPublicDid(agent as never, PEER_DID)).rejects.toThrow('storage')
+    await connectToPublicDid(agent as never, PEER_DID)
+
+    expect(agent.didcomm.connections.findAllByQuery).toHaveBeenCalledTimes(2)
+    expect(agent.didcomm.oob.receiveImplicitInvitation).toHaveBeenCalledTimes(2)
+  })
+
   it('deletes a tagged connection the peer hung up on and dials again', async () => {
     const agent = makeAgent([
-      { id: 'dead', isReady: true, theirDid: undefined, previousTheirDids: [PEER_DID] },
+      { id: 'dead', isReady: true, theirDid: undefined, previousTheirDids: [PEER_DID], publicDid: PEER_DID },
     ])
 
     const id = await connectToPublicDid(agent as never, PEER_DID)

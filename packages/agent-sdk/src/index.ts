@@ -32,6 +32,17 @@ export { applyAdminApiServiceEntry } from './did/adminApiService'
 
 // Connections
 export {
+  INVITATION_ID_TAG,
+  INVITATION_RECORD_TAG,
+  InvitationRecord,
+  InvitationRepository,
+} from './connections/InvitationRecord'
+export type {
+  InvitationAcceptance,
+  InvitationRecordProps,
+  InvitationState,
+} from './connections/InvitationRecord'
+export {
   PARENT_CONNECTION_TAG,
   ParentConnectionModule,
   ParentConnectionRepository,

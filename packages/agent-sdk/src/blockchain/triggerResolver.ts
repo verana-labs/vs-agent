@@ -1,5 +1,5 @@
 import type { VsAgent } from '../agent/VsAgent'
-import { ParticipantRole, type ParticipantDto } from './types'
+import { ParticipantRole } from './types'
 
 import { veranaTypeUrls } from '@verana-labs/verana-types'
 
@@ -11,14 +11,6 @@ const pendingByDid = new Map<string, { timer: ReturnType<typeof setTimeout>; sen
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-// AUTHZ-CHECK-3 step 1, as the flow orchestrator applies it
-function isActiveParticipant(participant: ParticipantDto): boolean {
-  const now = Date.now()
-  if (!participant.effective_from || Date.parse(participant.effective_from) > now) return false
-  if (participant.effective_until && Date.parse(participant.effective_until) <= now) return false
-  return !participant.revoked && !participant.slashed
 }
 
 /**
@@ -34,8 +26,7 @@ export async function findResolverParticipantId(agent: VsAgent): Promise<number 
     p =>
       p.did === did &&
       p.role === ParticipantRole.Holder &&
-      isActiveParticipant(p) &&
-      agent.authorizationService?.canSign(p.id, veranaTypeUrls.MsgTriggerResolver),
+      agent.authorizationService?.canSign(p, veranaTypeUrls.MsgTriggerResolver),
   )?.id
 }
 

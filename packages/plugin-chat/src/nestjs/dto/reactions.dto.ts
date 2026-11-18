@@ -1,4 +1,4 @@
-import { DidCommMessageReactionAction } from '@2060.io/credo-ts-didcomm-reactions'
+import { DidCommMessageReactionAction } from '@credo-ts/didcomm-reactions'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {

@@ -89,7 +89,11 @@ export class V2OpenId4VcPresentationsController {
       queryLanguage: body.queryLanguage,
       requestSigner: body.requestSigner,
     })
-    return { proofExchangeId: request.verificationSessionId, url: request.authorizationRequest }
+    return {
+      proofExchangeId: request.verificationSessionId,
+      url: request.authorizationRequest,
+      expiresAt: request.expiresAt,
+    }
   }
 
   @Get('presentations')

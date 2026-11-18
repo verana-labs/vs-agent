@@ -1,4 +1,4 @@
-import { DidCommMrtdModule } from '@2060.io/credo-ts-didcomm-mrtd'
+import { DidCommMrtdModule } from '@credo-ts/didcomm-mrtd'
 
 import { MrtdAgentModules } from '../types'
 

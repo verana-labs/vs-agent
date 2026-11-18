@@ -1,4 +1,4 @@
-import { MrzData } from '@2060.io/credo-ts-didcomm-mrtd'
+import { MrzData } from '@credo-ts/didcomm-mrtd'
 import { BaseMessage, BaseMessageOptions, MessageType } from '@verana-labs/vs-agent-model'
 
 import { MrtdSubmitState } from './MrtdSubmitState'

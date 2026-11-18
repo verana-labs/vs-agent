@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Inject, Post, UnauthorizedException } from '@nestjs/common'
-import { ApiOperation, ApiTags } from '@nestjs/swagger'
+import { ApiCreatedResponse, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger'
 import { IsNotEmpty, IsString } from 'class-validator'
 
 import { AdminAuthExempt, AdminAuthService } from '../../../../security'
@@ -28,6 +28,29 @@ export class TokenRequestDto {
   nonce!: string
 }
 
+export class ChallengeResponseDto {
+  @ApiProperty({ type: String, description: 'Single-use nonce to sign' })
+  nonce!: string
+
+  @ApiProperty({ type: String, description: 'ISO 8601 UTC datetime after which the nonce is rejected' })
+  expiresAt!: string
+
+  @ApiProperty({
+    type: String,
+    description:
+      'The ADMIN_API_PUBLIC_URL of this agent. Sign vs-agent-admin-auth:<audience>:<nonce> only if it is the origin you called',
+  })
+  audience!: string
+}
+
+export class TokenResponseDto {
+  @ApiProperty({ type: String, description: 'Bearer token for the Authorization header' })
+  token!: string
+
+  @ApiProperty({ type: String, description: 'ISO 8601 UTC datetime after which the token is rejected' })
+  expiresAt!: string
+}
+
 @ApiTags('v2/auth')
 @Controller({ path: 'auth', version: '2' })
 export class V2AuthController {
@@ -36,7 +59,8 @@ export class V2AuthController {
   @Post('challenge')
   @AdminAuthExempt('corporation')
   @ApiOperation({ summary: 'Request an ADR-036 signature challenge for a Verana account' })
-  challenge(@Body() body: ChallengeRequestDto): { nonce: string; expiresAt: string } {
+  @ApiCreatedResponse({ type: ChallengeResponseDto })
+  challenge(@Body() body: ChallengeRequestDto): ChallengeResponseDto {
     if (!body.account.startsWith('verana1')) throw new BadRequestException('account must be a verana address')
     return this.authService.createChallenge(body.account)
   }
@@ -44,7 +68,8 @@ export class V2AuthController {
   @Post('token')
   @AdminAuthExempt('corporation')
   @ApiOperation({ summary: 'Exchange a signed challenge for a short-lived bearer token' })
-  async token(@Body() body: TokenRequestDto): Promise<{ token: string; expiresAt: string }> {
+  @ApiCreatedResponse({ type: TokenResponseDto })
+  async token(@Body() body: TokenRequestDto): Promise<TokenResponseDto> {
     const issued = await this.authService.issueToken(body)
     if (!issued) throw new UnauthorizedException('challenge verification failed')
     return issued

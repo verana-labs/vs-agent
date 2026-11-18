@@ -40,6 +40,7 @@ export class VsAgentModule {
     nestPlugins: VsAgentNestPlugin[] = [],
     options: {
       authMode?: string
+      publicUrl?: string
       allowedAccounts?: string[]
       trustedNetworks?: TrustedNetwork[]
       bootstrapState?: BootstrapState
@@ -93,6 +94,7 @@ export class VsAgentModule {
     const securityProviders = [
       AdminAuthService,
       { provide: 'ADMIN_AUTH_MODE', useValue: options.authMode ?? 'internal' },
+      { provide: 'ADMIN_API_PUBLIC_URL', useValue: options.publicUrl },
       { provide: 'ADMIN_TRUSTED_NETWORKS', useValue: trustedNetworks },
       { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: options.allowedAccounts ?? [] },
       { provide: APP_GUARD, useClass: AdminAuthGuard },

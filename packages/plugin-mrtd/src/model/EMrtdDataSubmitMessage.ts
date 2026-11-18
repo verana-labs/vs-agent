@@ -1,4 +1,4 @@
-import { EMrtdData, SodVerification } from '@2060.io/credo-ts-didcomm-mrtd'
+import { EMrtdData, SodVerification } from '@credo-ts/didcomm-mrtd'
 import { BaseMessage, BaseMessageOptions, convertShortDate, MessageType } from '@verana-labs/vs-agent-model'
 import * as Mrz from 'mrz'
 

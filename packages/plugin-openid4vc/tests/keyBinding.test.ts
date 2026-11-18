@@ -229,6 +229,16 @@ describe('findBoundVerificationMethodId', () => {
     ).resolves.toBe(`${DID}#auth`)
   })
 
+  it('returns a method published under a relative id as an absolute DID URL', async () => {
+    const agent = agentResolving(async () => ({
+      didDocument: didDocument({ authentication: [verificationMethod(LEAF_PUBLIC_JWK, '#auth')] }),
+    }))
+
+    await expect(
+      findBoundVerificationMethodId(agent, DID, LEAF_PUBLIC_JWK, ['authentication']),
+    ).resolves.toBe(`${DID}#auth`)
+  })
+
   it('returns null when no method under the purpose carries the key', async () => {
     const agent = agentResolving(async () => ({
       didDocument: didDocument({ authentication: [verificationMethod(OTHER_PUBLIC_JWK, `${DID}#auth`)] }),

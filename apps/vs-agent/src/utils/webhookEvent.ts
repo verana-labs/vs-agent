@@ -16,13 +16,18 @@ import {
   DidCommConnectionEventTypes,
   DidCommCredentialEventTypes,
   DidCommProofEventTypes,
+  DidCommProofRole,
+  DidCommProofState,
 } from '@credo-ts/didcomm'
 import { EventType } from '@verana-labs/vs-agent-model'
 import {
+  InvitationRepository,
   VsAgent,
   VsAgentEventTypes,
   VsAgentIndexerNotificationEvent,
+  VsAgentInvitationStateUpdatedEvent,
   VsAgentModuleMessageReceivedEvent,
+  VsAgentPresentationTrustDecidedEvent,
   VsAgentVtFlowStateUpdatedEvent,
 } from '@verana-labs/vs-agent-sdk'
 
@@ -32,6 +37,7 @@ import {
   toBasicMessageDto,
   toConnectionDto,
   toCredentialExchangeDto,
+  toInvitationDto,
   toPresentationDto,
 } from '../controllers/admin/v2/didcomm/mappers'
 
@@ -81,12 +87,40 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
       ),
   )
 
-  agent.events.on<DidCommProofStateChangedEvent>(DidCommProofEventTypes.ProofStateChanged, ({ payload }) =>
-    stateUpdated(
+  agent.events.on<VsAgentInvitationStateUpdatedEvent>(
+    VsAgentEventTypes.InvitationStateUpdated,
+    ({ payload }) =>
+      stateUpdated(
+        EventType.InvitationStateUpdated,
+        agent.dependencyManager
+          .resolve(InvitationRepository)
+          .getById(agent.context, payload.event.invitationRecordId)
+          .then(toInvitationDto),
+        payload.event.previousState,
+      ),
+  )
+
+  agent.events.on<DidCommProofStateChangedEvent>(DidCommProofEventTypes.ProofStateChanged, ({ payload }) => {
+    // Credo emits this change before the trust decision runs. The agent reports it on
+    // `PresentationTrustDecided`, with the result of the decision, per [VSA-VTI-FLOW-VERIFY-AC-7]
+    const { role, state } = payload.proofRecord
+    if (role === DidCommProofRole.Verifier && state === DidCommProofState.PresentationReceived) return
+
+    return stateUpdated(
       EventType.PresentationStateUpdated,
       toPresentationDto(agent, payload.proofRecord),
       payload.previousState,
-    ),
+    )
+  })
+
+  agent.events.on<VsAgentPresentationTrustDecidedEvent>(
+    VsAgentEventTypes.PresentationTrustDecided,
+    ({ payload }) =>
+      stateUpdated(
+        EventType.PresentationStateUpdated,
+        toPresentationDto(agent, payload.proofRecord),
+        payload.previousState,
+      ),
   )
 
   agent.events.on<DidCommCredentialStateChangedEvent>(

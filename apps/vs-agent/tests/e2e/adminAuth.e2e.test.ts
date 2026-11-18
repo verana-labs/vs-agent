@@ -13,6 +13,8 @@ import { AdminAuthGuard } from '../../src/security/AdminAuthGuard'
 import { AdminAuthService, challengePayload } from '../../src/security/AdminAuthService'
 import { commonAppConfig } from '../../src/utils/setupAgent'
 
+const AUDIENCE = 'https://admin.example.io'
+
 @Controller({ path: 'vt/flows', version: '2' })
 class TestFlowsController {
   @Get()
@@ -27,6 +29,7 @@ async function makeApp(authMode: string, allowedAccounts: string[]): Promise<INe
     providers: [
       AdminAuthService,
       { provide: 'ADMIN_AUTH_MODE', useValue: authMode },
+      { provide: 'ADMIN_API_PUBLIC_URL', useValue: authMode === 'corporation' ? AUDIENCE : undefined },
       { provide: 'ADMIN_TRUSTED_NETWORKS', useValue: [] },
       { provide: 'ADMIN_ALLOWED_ACCOUNTS', useValue: allowedAccounts },
       { provide: APP_GUARD, useClass: AdminAuthGuard },
@@ -38,12 +41,12 @@ async function makeApp(authMode: string, allowedAccounts: string[]): Promise<INe
   return app
 }
 
-async function signChallenge(wallet: Secp256k1HdWallet, account: string, nonce: string) {
+async function signChallenge(wallet: Secp256k1HdWallet, account: string, payload: string) {
   const signDoc = makeSignDoc(
     [
       {
         type: 'sign/MsgSignData',
-        value: { signer: account, data: toBase64(toUtf8(challengePayload(nonce))) },
+        value: { signer: account, data: toBase64(toUtf8(payload)) },
       },
     ],
     { gas: '0', amount: [] },
@@ -59,7 +62,12 @@ async function signChallenge(wallet: Secp256k1HdWallet, account: string, nonce: 
 async function authenticate(app: INestApplication, wallet: Secp256k1HdWallet, account: string) {
   const challenge = await request(app.getHttpServer()).post('/v2/auth/challenge').send({ account })
   expect(challenge.status).toBe(201)
-  const signed = await signChallenge(wallet, account, challenge.body.nonce)
+  expect(challenge.body.audience).toBe(AUDIENCE)
+  const signed = await signChallenge(
+    wallet,
+    account,
+    challengePayload(challenge.body.audience, challenge.body.nonce),
+  )
   return request(app.getHttpServer())
     .post('/v2/auth/token')
     .send({ account, nonce: challenge.body.nonce, ...signed })
@@ -117,7 +125,11 @@ describe('admin API auth: ADR-036 challenge to allowlisted call from an external
   })
 
   it('envelopes a failed token exchange as UNAUTHENTICATED without distinguishing the cause', async () => {
-    const signed = await signChallenge(callerWallet, callerAccount, 'unknown-nonce')
+    const signed = await signChallenge(
+      callerWallet,
+      callerAccount,
+      challengePayload(AUDIENCE, 'unknown-nonce'),
+    )
     const response = await request(app.getHttpServer())
       .post('/v2/auth/token')
       .send({ account: callerAccount, nonce: 'unknown-nonce', ...signed })
@@ -126,6 +138,22 @@ describe('admin API auth: ADR-036 challenge to allowlisted call from an external
     expect(response.body).toEqual({
       error: { code: 'UNAUTHENTICATED', message: 'challenge verification failed' },
     })
+  })
+
+  it.each([
+    ['another audience', (nonce: string) => challengePayload('https://other.example.io', nonce)],
+    ['the payload without an audience', (nonce: string) => `vs-agent-admin-auth:${nonce}`],
+  ])('rejects a signature over %s with 401', async (_, payload) => {
+    const challenge = await request(app.getHttpServer())
+      .post('/v2/auth/challenge')
+      .send({ account: callerAccount })
+    const { nonce } = challenge.body
+    const signed = await signChallenge(callerWallet, callerAccount, payload(nonce))
+    const response = await request(app.getHttpServer())
+      .post('/v2/auth/token')
+      .send({ account: callerAccount, nonce, ...signed })
+
+    expect(response.status).toBe(401)
   })
 
   it('rejects every external request with 403 in internal mode, auth methods included', async () => {

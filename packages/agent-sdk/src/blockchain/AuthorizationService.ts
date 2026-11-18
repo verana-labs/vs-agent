@@ -2,17 +2,25 @@ import { BaseLogger } from '@credo-ts/core'
 
 import { VeranaChainService } from './VeranaChainService'
 import { VeranaIndexerService } from './VeranaIndexerService'
-import { CachedVsOperatorAuthorizationRecord, DurationParam } from './types'
+import { CachedVsOperatorAuthorizationRecord, DurationParam, ParticipantDto } from './types'
 
-// A lapsed grant that carries a period is still valid: the chain rolls the expiration
-// forward on the next check (VPR spec AUTHZ-CHECK-3 step 4, AUTHZ-CHECK-1 step 2).
+// A lapsed operator authorization that carries a period is still valid: the chain rolls the
+// expiration forward on the next check (AUTHZ-CHECK-1 step 2).
 function renews(period?: DurationParam): boolean {
   return period != null && (period.seconds > 0 || (period.nanos ?? 0) > 0)
 }
 
-// An unset expiration means the grant never expires (AUTHZ-CHECK-3 step 4, AUTHZ-CHECK-1 step 2).
+// An unset expiration means the operator authorization never expires (AUTHZ-CHECK-1 step 2).
 function isAuthorizationActive(expiration?: Date, period?: DurationParam): boolean {
   return expiration === undefined || expiration.getTime() > Date.now() || renews(period)
+}
+
+// AUTHZ-CHECK-3 step 1. A record's expiration is only its budget clock, not a validity window.
+export function isActiveParticipant(participant: ParticipantDto): boolean {
+  const now = Date.now()
+  if (!participant.effective_from || Date.parse(participant.effective_from) > now) return false
+  if (participant.effective_until && Date.parse(participant.effective_until) <= now) return false
+  return !participant.revoked && !participant.slashed
 }
 
 export interface AuthorizationServiceConfig {
@@ -78,11 +86,9 @@ export class AuthorizationService {
     }
   }
 
-  canSign(participantId: number, msgType: string): boolean {
-    const record = this.vsoaByParticipant.get(participantId)
-    return (
-      !!record && record.msgTypes.includes(msgType) && isAuthorizationActive(record.expiration, record.period)
-    )
+  canSign(participant: ParticipantDto, msgType: string): boolean {
+    const record = this.vsoaByParticipant.get(participant.id)
+    return !!record && record.msgTypes.includes(msgType) && isActiveParticipant(participant)
   }
 
   getVsOperatorAuthorizationRecord(participantId: number): CachedVsOperatorAuthorizationRecord | undefined {
@@ -91,15 +97,6 @@ export class AuthorizationService {
 
   listVsOperatorAuthorizationRecords(): CachedVsOperatorAuthorizationRecord[] {
     return [...this.vsoaByParticipant.values()]
-  }
-
-  // The feegrant mirror requires a strictly future expiration and is not renewed by the
-  // lazy cycle (MOD-DE-MSG-5-5), so no period leniency here.
-  hasFeegrant(participantId: number): boolean {
-    const record = this.vsoaByParticipant.get(participantId)
-    return (
-      !!record && record.withFeegrant && record.expiration != null && record.expiration.getTime() > Date.now()
-    )
   }
 
   async agentHoldsOperatorGrant(msgType: string): Promise<boolean> {

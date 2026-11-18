@@ -1,10 +1,10 @@
 import type { DidCommVersion } from '@credo-ts/didcomm'
 
+import { AnonCredsModule } from '@credo-ts/anoncreds'
 import {
   AnonCredsDidCommCredentialFormatService,
   AnonCredsDidCommProofFormatService,
-  AnonCredsModule,
-} from '@credo-ts/anoncreds'
+} from '@credo-ts/anoncreds/didcomm'
 import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
 import { DidsModule, JwkDidResolver, W3cCredentialsModule } from '@credo-ts/core'
 import {
@@ -16,7 +16,8 @@ import {
   DidCommModule,
   DidCommProofV2Protocol,
 } from '@credo-ts/didcomm'
-import { WebVhAnonCredsRegistry, WebVhDidRegistrar, WebVhDidResolver } from '@credo-ts/webvh'
+import { WebVhDidRegistrar, WebVhDidResolver } from '@credo-ts/webvh'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh/anoncreds'
 import { anoncreds } from '@hyperledger/anoncreds-nodejs'
 import { askar } from '@openwallet-foundation/askar-nodejs'
 import { VtFlowModule, type VtFlowModuleConfigOptions } from '@verana-labs/credo-ts-didcomm-vt-flow'

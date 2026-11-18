@@ -726,6 +726,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
       ...options.applicant,
     }
     const validator = { id: 93, effective_from: past, effective_until: null, revoked: null, slashed: null }
+    const grant = options.grant ?? { msgTypes: [SET_VALIDATED], withFeegrant: false }
     const chain = {
       corporation: 'verana1corp',
       setParticipantOPToValidatedMsg: vi.fn(params => ({ typeUrl: SET_VALIDATED, value: params })),
@@ -745,9 +746,8 @@ describe('VtFlowOrchestrator validateFlow', () => {
           ? undefined
           : {
               refreshForOperator: vi.fn(async () => undefined),
-              getVsOperatorAuthorizationRecord: vi.fn(
-                () => options.grant ?? { msgTypes: [SET_VALIDATED], withFeegrant: false },
-              ),
+              getVsOperatorAuthorizationRecord: vi.fn(() => grant),
+              canSign: vi.fn((_participant: unknown, msgType: string) => grant.msgTypes.includes(msgType)),
             },
       indexer: {
         getParticipant: vi.fn(async (id: string | number) => (Number(id) === 93 ? validator : applicant)),
@@ -797,6 +797,10 @@ describe('VtFlowOrchestrator validateFlow', () => {
       submission: 'AGENT',
       tx: { hash: 'AB12', status: 'SUBMITTED' },
     })
+    expect(agent.authorizationService?.canSign).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 93 }),
+      SET_VALIDATED,
+    )
   })
 
   it('records a failed pre-flight without broadcasting', async () => {
@@ -1418,6 +1422,64 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(agent.config.logger.error).toHaveBeenCalledWith(expect.stringContaining('/name must be string'))
   })
 
+  function makeHolderOffer() {
+    const setup = makeValidateAgent({ state: 'VALIDATED' })
+    setup.agent.indexer.findParticipant.mockResolvedValue({
+      id: 94,
+      role: 6,
+      schemaId: 22,
+      did: 'did:web:applicant',
+      validatorParticipantId: 93,
+    } as never)
+    let release!: () => void
+    const held = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const offerCredentialForSession = vi.fn(async () => {
+      await held
+      Object.assign(setup.current(), { state: 'CRED_OFFERED' })
+      return { record: setup.current() }
+    })
+    Object.assign(setup.vtFlowApi, { offerCredentialForSession })
+    const orchestrator = (): VtFlowOrchestrator => {
+      const instance = new VtFlowOrchestrator(setup.agent as never)
+      ;(instance as unknown as { resolveJsonSchemaCredentialId: unknown }).resolveJsonSchemaCredentialId =
+        async () => JSC_ID
+      return instance
+    }
+    return { ...setup, orchestrator, offerCredentialForSession, release }
+  }
+
+  it('offers once when two callers continue the same VALIDATED HOLDER flow together', async () => {
+    const { orchestrator, offerCredentialForSession, release } = makeHolderOffer()
+
+    const runs = [
+      orchestrator().continueAfterValidated('rec-v'),
+      orchestrator().continueAfterValidated('rec-v'),
+    ]
+    await vi.waitFor(() => expect(offerCredentialForSession).toHaveBeenCalled())
+    release()
+    const records = await Promise.all(runs)
+
+    expect(offerCredentialForSession).toHaveBeenCalledTimes(1)
+    expect(records.map(record => record.state)).toEqual(['CRED_OFFERED', 'CRED_OFFERED'])
+  })
+
+  it('runs the next caller after a failed one instead of holding the flow', async () => {
+    const { agent, orchestrator, offerCredentialForSession, release } = makeHolderOffer()
+    agent.indexer.findParticipant.mockRejectedValueOnce(new Error('indexer unavailable'))
+    release()
+
+    const [failed, continued] = await Promise.allSettled([
+      orchestrator().continueAfterValidated('rec-v'),
+      orchestrator().continueAfterValidated('rec-v'),
+    ])
+
+    expect(failed).toMatchObject({ status: 'rejected', reason: { message: 'indexer unavailable' } })
+    expect(continued).toMatchObject({ status: 'fulfilled', value: { state: 'CRED_OFFERED' } })
+    expect(offerCredentialForSession).toHaveBeenCalledTimes(1)
+  })
+
   it('repeats the anchoring of a credential only while its issuance transaction is FAILED', async () => {
     const { agent, vtFlowApi, current } = makeValidateAgent({ state: 'CRED_OFFERED' })
     const issueCredentialForSession = vi.fn(async () => ({ record: current() }))
@@ -1458,7 +1520,9 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       issuerParticipantId: 93,
     }
     const recordIssuance = vi.fn(async () => record)
+    const logger = { error: vi.fn() }
     const agent = {
+      config: { logger },
       dependencyManager: { resolve: () => ({ findById: async () => record, recordIssuance }) },
       indexer: {
         getParticipant: async () => ({ schema_id: 22 }),
@@ -1466,7 +1530,7 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       },
       veranaChain: chain,
     }
-    return { orchestrator: new VtFlowOrchestrator(agent as never), chain, record, recordIssuance }
+    return { orchestrator: new VtFlowOrchestrator(agent as never), chain, record, recordIssuance, logger }
   }
 
   it('returns the anchoring transaction once it is included', async () => {
@@ -1510,7 +1574,7 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
     expect(notFound.issuance.tx).toMatchObject({ hash: 'EF56', status: 'FAILED', reason: 'TX_NOT_FOUND' })
   })
 
-  it('resumes at startup only the flows whose anchoring was left SUBMITTED', async () => {
+  it('resumes at startup the flows whose anchoring was left SUBMITTED or failed in the pre-flight', async () => {
     const issueCredentialForSession = vi.fn(async () => ({}))
     const offered = [
       {
@@ -1518,7 +1582,17 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
         credentialExchangeRecordId: 'cx-a',
         issuance: { tx: { hash: 'A1', status: 'SUBMITTED' } },
       },
-      { id: 'rec-b', credentialExchangeRecordId: 'cx-b', issuance: { tx: { status: 'FAILED' } } },
+      {
+        id: 'rec-b',
+        credentialExchangeRecordId: 'cx-b',
+        issuance: { tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR' } },
+      },
+      ...['BROADCAST_ERROR', 'TX_FAILED', 'TX_NOT_FOUND'].map(reason => ({
+        id: `rec-${reason}`,
+        credentialExchangeRecordId: `cx-${reason}`,
+        issuance: { tx: { status: 'FAILED', reason } },
+      })),
+      { id: 'rec-c', issuance: { tx: { status: 'FAILED', reason: 'PREFLIGHT_ERROR' } } },
     ]
     const findAllByQuery = vi.fn(async () => offered)
     const agent = { dependencyManager: { resolve: () => ({ findAllByQuery, issueCredentialForSession }) } }
@@ -1526,11 +1600,10 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
     await new VtFlowOrchestrator(agent as never).resumeIssuanceSubmissions()
 
     expect(findAllByQuery).toHaveBeenCalledWith({ role: VtFlowRole.Validator, flowState: 'CRED_OFFERED' })
-    expect(issueCredentialForSession).toHaveBeenCalledTimes(1)
-    expect(issueCredentialForSession).toHaveBeenCalledWith({
-      vtFlowRecordId: 'rec-a',
-      credentialExchangeRecordId: 'cx-a',
-    })
+    expect(issueCredentialForSession.mock.calls).toEqual([
+      [{ vtFlowRecordId: 'rec-a', credentialExchangeRecordId: 'cx-a' }],
+      [{ vtFlowRecordId: 'rec-b', credentialExchangeRecordId: 'cx-b' }],
+    ])
   })
 
   it('lets the Corporation pay the anchoring when the grant of the issuer entry has with_feegrant', async () => {
@@ -1566,5 +1639,20 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       reason: 'TX_FAILED',
       error: 'digest exists',
     })
+  })
+
+  it('logs one error line that names the flow, the session and the cause of a failed anchoring', async () => {
+    const broke = makeAnchorAgent('100')
+    await broke.orchestrator.onCredentialIssued('rec-v', signed)
+
+    expect(broke.logger.error).toHaveBeenCalledTimes(1)
+    const [line] = broke.logger.error.mock.calls[0] as unknown as [string]
+    expect(line).toContain('rec-v')
+    expect(line).toContain('sess-1')
+    expect(line).toContain('INSUFFICIENT_FUNDS_AGENT: the agent account holds 100uvna')
+
+    const included = makeAnchorAgent()
+    await included.orchestrator.onCredentialIssued('rec-v', signed)
+    expect(included.logger.error).not.toHaveBeenCalled()
   })
 })
