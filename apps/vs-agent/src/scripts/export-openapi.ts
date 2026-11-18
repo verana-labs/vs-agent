@@ -4,6 +4,8 @@ import type { VsAgent, VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
 
 import { VersioningType } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
+import { ChatPlugin } from '@verana-labs/vs-agent-plugin-chat'
+import { MrtdPlugin } from '@verana-labs/vs-agent-plugin-mrtd'
 import { OpenId4VcPlugin } from '@verana-labs/vs-agent-plugin-openid4vc'
 import { mkdirSync, writeFileSync } from 'fs'
 import { resolve } from 'path'
@@ -23,6 +25,8 @@ const publicApiBaseUrl = 'https://agent.example'
 async function main() {
   const agent = { toJSON: () => 'VsAgent (placeholder for the OpenAPI export)' } as unknown as VsAgent
   const nestPlugins: VsAgentNestPlugin[] = [
+    ChatPlugin(),
+    MrtdPlugin(),
     OpenId4VcPlugin({ publicApiBaseUrl, credentialConfigurations: [] }),
     VtFlowNestPlugin,
   ]

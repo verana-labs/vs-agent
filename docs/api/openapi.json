@@ -1992,6 +1992,474 @@
         ]
       }
     },
+    "/v2/didcomm/receipts": {
+      "post": {
+        "description": "Sends message receipts on an established connection.",
+        "operationId": "V2DidcommReceiptsController_sendReceipts_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendReceiptsBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Send message receipts",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/reactions": {
+      "post": {
+        "description": "Sends emoji reactions to messages on an established connection.",
+        "operationId": "V2DidcommReactionsController_sendReactions_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendReactionsBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Send message reactions",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/user-profile/send": {
+      "post": {
+        "description": "Sends a profile on an established connection, the stored one when the body omits it.",
+        "operationId": "V2DidcommUserProfileController_sendProfile_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendProfileBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Send a profile",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/user-profile/request": {
+      "post": {
+        "description": "Asks the peer of a connection for its profile.",
+        "operationId": "V2DidcommUserProfileController_requestProfile_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestProfileBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Request a profile",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/media-sharing": {
+      "post": {
+        "description": "Shares media items on an established connection. The media itself travels out of band.",
+        "operationId": "V2DidcommMediaSharingController_shareMedia_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareMediaBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Share media",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/calls": {
+      "post": {
+        "description": "Offers a call on an established connection.",
+        "operationId": "V2DidcommCallsController_offerCall_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfferCallBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Offer a call",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/calls/accept": {
+      "post": {
+        "description": "Accepts a call that a peer offered.",
+        "operationId": "V2DidcommCallsController_acceptCall_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptCallBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Accept a call",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/calls/reject": {
+      "post": {
+        "description": "Rejects a call that a peer offered.",
+        "operationId": "V2DidcommCallsController_rejectCall_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallThreadBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Reject a call",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/calls/end": {
+      "post": {
+        "description": "Ends a call.",
+        "operationId": "V2DidcommCallsController_endCall_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallThreadBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "End a call",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/action-menu": {
+      "post": {
+        "description": "Sends a menu on an established connection.",
+        "operationId": "V2DidcommActionMenuController_sendMenu_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMenuBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Send a menu",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/question-answer": {
+      "post": {
+        "description": "Asks the peer a question with a fixed set of answers.",
+        "operationId": "V2DidcommQuestionAnswerController_sendQuestion_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendQuestionBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Send a question",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/mrtd/request-mrz": {
+      "post": {
+        "description": "Asks the peer for the machine-readable zone of its travel document.",
+        "operationId": "V2DidcommMrtdController_requestMrz_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestMrzBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMrtdMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Request an MRZ",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/mrtd/request-emrtd": {
+      "post": {
+        "description": "Asks the peer for the data groups of its electronic travel document.",
+        "operationId": "V2DidcommMrtdController_requestEmrtdData_v2",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestEmrtdDataBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sent message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentMrtdMessageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id, or the module is not served"
+          }
+        },
+        "summary": "Request eMRTD data groups",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
     "/v2/openid4vc/credential-offer": {
       "post": {
         "description": "Creates a pre-authorized OpenID4VCI credential offer for one credential configuration. The credential expires after ttlSeconds.",
@@ -4435,6 +4903,630 @@
             "example": "https://mcp.agent.example.com"
           }
         }
+      },
+      "MessageReceiptDto": {
+        "type": "object",
+        "properties": {
+          "messageId": {
+            "type": "string",
+            "description": "Identifier of the message the receipt refers to",
+            "example": "msg-1234"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "created",
+              "submitted",
+              "received",
+              "viewed",
+              "deleted"
+            ],
+            "description": "State reported for the message"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "When the state was reached",
+            "example": "2026-09-07T12:00:00.000Z"
+          }
+        },
+        "required": [
+          "messageId",
+          "state"
+        ]
+      },
+      "SendReceiptsBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to send the receipts on",
+            "example": "conn-1234-5678"
+          },
+          "receipts": {
+            "description": "The receipts to send",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MessageReceiptDto"
+            }
+          }
+        },
+        "required": [
+          "connectionId",
+          "receipts"
+        ]
+      },
+      "MessageReactionDto": {
+        "type": "object",
+        "properties": {
+          "messageId": {
+            "type": "string",
+            "description": "Identifier of the message the reaction refers to",
+            "example": "msg-1234"
+          },
+          "emoji": {
+            "type": "string",
+            "description": "The emoji",
+            "example": "👍"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "react",
+              "unreact"
+            ],
+            "description": "Whether the emoji is set or removed"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "When the reaction was made",
+            "example": "2026-09-07T12:00:00.000Z"
+          }
+        },
+        "required": [
+          "messageId",
+          "emoji",
+          "action"
+        ]
+      },
+      "SendReactionsBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to send the reactions on",
+            "example": "conn-1234-5678"
+          },
+          "reactions": {
+            "description": "The reactions to send",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MessageReactionDto"
+            }
+          }
+        },
+        "required": [
+          "connectionId",
+          "reactions"
+        ]
+      },
+      "ProfilePictureDto": {
+        "type": "object",
+        "properties": {
+          "mimeType": {
+            "type": "string",
+            "description": "Media type of the content",
+            "example": "image/png"
+          },
+          "links": {
+            "description": "URLs the content can be fetched from",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "base64": {
+            "type": "string",
+            "description": "The content, base64 encoded"
+          }
+        }
+      },
+      "UserProfileDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "description": "Name to display",
+            "example": "Acme Support"
+          },
+          "displayPicture": {
+            "description": "Picture to display",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProfilePictureDto"
+              }
+            ]
+          },
+          "displayIcon": {
+            "description": "Icon to display",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProfilePictureDto"
+              }
+            ]
+          },
+          "description": {
+            "type": "string",
+            "description": "Text that describes the profile"
+          },
+          "preferredLanguage": {
+            "type": "string",
+            "description": "Preferred language, as a BCP 47 tag",
+            "example": "en"
+          }
+        }
+      },
+      "SendProfileBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to send the profile on",
+            "example": "conn-1234-5678"
+          },
+          "profile": {
+            "description": "Profile to send, the stored one when absent",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserProfileDto"
+              }
+            ]
+          },
+          "sendBackYours": {
+            "type": "boolean",
+            "description": "Ask the peer to answer with its own profile",
+            "default": false
+          },
+          "threadId": {
+            "type": "string",
+            "description": "Thread of the message this profile answers"
+          }
+        },
+        "required": [
+          "connectionId"
+        ]
+      },
+      "RequestProfileBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to send the request on",
+            "example": "conn-1234-5678"
+          },
+          "query": {
+            "description": "Profile fields of interest, every field when absent",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "connectionId"
+        ]
+      },
+      "MediaCipheringDto": {
+        "type": "object",
+        "properties": {
+          "algorithm": {
+            "type": "string",
+            "description": "Algorithm the media at the uri is encrypted with",
+            "example": "aes-256-gcm"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Parameters of the algorithm"
+          }
+        },
+        "required": [
+          "algorithm",
+          "parameters"
+        ]
+      },
+      "SharedMediaItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Item identifier, generated by the agent when absent"
+          },
+          "uri": {
+            "type": "string",
+            "description": "Where the media can be fetched from",
+            "example": "https://media.example/1"
+          },
+          "mimeType": {
+            "type": "string",
+            "description": "Media type of the item",
+            "example": "image/png"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Name of the file"
+          },
+          "description": {
+            "type": "string",
+            "description": "Text that describes the item"
+          },
+          "byteCount": {
+            "type": "number",
+            "description": "Size of the media, in bytes"
+          },
+          "ciphering": {
+            "description": "Set when the media is encrypted",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MediaCipheringDto"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Anything else the peer should know about the item"
+          }
+        },
+        "required": [
+          "uri",
+          "mimeType"
+        ]
+      },
+      "ShareMediaBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to share the items on",
+            "example": "conn-1234-5678"
+          },
+          "description": {
+            "type": "string",
+            "description": "Text that describes the share"
+          },
+          "threadId": {
+            "type": "string",
+            "description": "Thread of the request-media message this share answers"
+          },
+          "items": {
+            "description": "The items to share",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SharedMediaItemDto"
+            }
+          }
+        },
+        "required": [
+          "connectionId",
+          "items"
+        ]
+      },
+      "OfferCallBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to offer the call on",
+            "example": "conn-1234-5678"
+          },
+          "callType": {
+            "type": "string",
+            "enum": [
+              "audio",
+              "video",
+              "service"
+            ],
+            "description": "Kind of call"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Transport parameters of the call"
+          },
+          "description": {
+            "type": "string",
+            "description": "Text that describes the call"
+          },
+          "offerStartTime": {
+            "type": "string",
+            "description": "When the call starts",
+            "example": "2026-09-07T12:00:00.000Z"
+          },
+          "offerExpirationTime": {
+            "type": "string",
+            "description": "When the offer expires",
+            "example": "2026-09-07T12:05:00.000Z"
+          }
+        },
+        "required": [
+          "connectionId",
+          "callType",
+          "parameters"
+        ]
+      },
+      "AcceptCallBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection of the call",
+            "example": "conn-1234-5678"
+          },
+          "threadId": {
+            "type": "string",
+            "description": "Thread of the call offer"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Transport parameters of the accepting side"
+          }
+        },
+        "required": [
+          "connectionId",
+          "threadId",
+          "parameters"
+        ]
+      },
+      "CallThreadBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection of the call",
+            "example": "conn-1234-5678"
+          },
+          "threadId": {
+            "type": "string",
+            "description": "Thread of the call offer"
+          }
+        },
+        "required": [
+          "connectionId",
+          "threadId"
+        ]
+      },
+      "ActionMenuFormParameterDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the parameter",
+            "example": "email"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the parameter",
+            "example": "Email address"
+          },
+          "description": {
+            "type": "string",
+            "description": "Text that describes the parameter"
+          },
+          "default": {
+            "type": "string",
+            "description": "Value the peer starts from"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "The peer must fill the parameter",
+            "default": false
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text"
+            ],
+            "description": "Kind of input"
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "description"
+        ]
+      },
+      "ActionMenuFormDto": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Text that describes the form"
+          },
+          "submitLabel": {
+            "type": "string",
+            "description": "Label of the submit control",
+            "example": "Send"
+          },
+          "params": {
+            "description": "The parameters the peer fills",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActionMenuFormParameterDto"
+            }
+          }
+        },
+        "required": [
+          "description",
+          "submitLabel",
+          "params"
+        ]
+      },
+      "ActionMenuOptionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the option, reported back when the peer performs it"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the option"
+          },
+          "description": {
+            "type": "string",
+            "description": "Text that describes the option"
+          },
+          "disabled": {
+            "type": "boolean",
+            "description": "The option is displayed but cannot be performed",
+            "default": false
+          },
+          "form": {
+            "description": "Form the peer fills before it performs",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActionMenuFormDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "description"
+        ]
+      },
+      "ActionMenuDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Title of the menu"
+          },
+          "description": {
+            "type": "string",
+            "description": "Text that describes the menu"
+          },
+          "options": {
+            "description": "The options of the menu",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActionMenuOptionDto"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "options"
+        ]
+      },
+      "SendMenuBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to send the menu on",
+            "example": "conn-1234-5678"
+          },
+          "menu": {
+            "description": "The menu to send",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActionMenuDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "connectionId",
+          "menu"
+        ]
+      },
+      "ValidResponseDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "An answer the peer can select",
+            "example": "Yes"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "SendQuestionBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to send the question on",
+            "example": "conn-1234-5678"
+          },
+          "question": {
+            "type": "string",
+            "description": "Text of the question",
+            "example": "Do you accept the terms?"
+          },
+          "validResponses": {
+            "description": "The answers the peer can select",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidResponseDto"
+            }
+          },
+          "detail": {
+            "type": "string",
+            "description": "Additional text for the question"
+          }
+        },
+        "required": [
+          "connectionId",
+          "question",
+          "validResponses"
+        ]
+      },
+      "RequestMrzBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to send the request on",
+            "example": "conn-1234-5678"
+          }
+        },
+        "required": [
+          "connectionId"
+        ]
+      },
+      "SentMrtdMessageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier of the sent message",
+            "example": "a1b2c3d4-5678-90ab-cdef-1234567890ab"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "RequestEmrtdDataBodyDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Connection to send the request on",
+            "example": "conn-1234-5678"
+          },
+          "parentThreadId": {
+            "type": "string",
+            "description": "Thread id of the MRZ exchange this request follows (`threadId` of the `didcomm.mrtd.mrz-data-received` event). It is sent as the parent thread (`pthid`) of the request, so that the wallet reads the chip with that MRZ.",
+            "example": "b2c3d4e5-6789-01ab-cdef-234567890abc"
+          }
+        },
+        "required": [
+          "connectionId"
+        ]
       },
       "OpenId4VcCreateCredentialOfferBodyDto": {
         "type": "object",
