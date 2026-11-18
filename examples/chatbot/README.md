@@ -64,8 +64,8 @@ Menu options: Home, World Cup poll, Rocky quotes, Issue credential, Request proo
 | `/invitation did=<did> label=<label> image=<url>` | The same, with named arguments in any order. One argument of the form `did=`, `label=` or `image=` selects this form, and the bot then ignores every other token. A command with no such token keeps the positional form |
 | `/profile [name] [image] [icon]` | Sends the bot profile |
 | `/call [wsUrl] [roomId]` | Offers a call, creating a WebRTC room when no arguments are given |
-| `/mrz` | Requests the MRZ of a passport. When the wallet answers, the bot requests the eMRTD data. The eMRTD request is not threaded under the MRZ exchange, the v2 API has no parent thread field |
-| `/emrtd` | Requests the eMRTD data directly |
+| `/mrz` | Requests the MRZ of a passport. When the wallet answers, the bot requests the eMRTD data, with the MRZ exchange as the parent thread of the request |
+| `/emrtd` | Requests the eMRTD data, with the last MRZ exchange of the connection as the parent thread. Without an earlier `/mrz`, the request has no parent thread, and the wallet has no MRZ to read the chip with |
 | `/issue [phoneNumber]` | Offers a `phoneNumber` credential on the chat connection, the same as the `issue` menu option. The claim takes the argument, or `+5712345678` |
 | `/proof` | Requests a `phoneNumber` presentation |
 | `/revoke <credentialExchangeId>` | Revokes the credential, the id is the one the bot sends after issuance. The wallet gets no notification |
