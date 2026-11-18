@@ -17,7 +17,7 @@ import {
   DidCommConnectionProfileUpdatedEvent,
   DidCommProfileEventTypes,
 } from '@credo-ts/didcomm-user-profile'
-import { MenuRequestMessage, PerformMessage } from '@credo-ts/action-menu'
+import { DidCommMenuRequestMessage, DidCommPerformMessage } from '@credo-ts/didcomm-action-menu'
 import { BaseLogger } from '@credo-ts/core'
 import {
   DidCommConnectionEventTypes,
@@ -27,7 +27,7 @@ import {
   DidCommEventTypes,
   DidCommMessageProcessedEvent,
 } from '@credo-ts/didcomm'
-import { AnswerMessage, QuestionAnswerService } from '@credo-ts/question-answer'
+import { DidCommAnswerMessage, DidCommQuestionAnswerService } from '@credo-ts/didcomm-question-answer'
 import {
   CallAcceptRequestMessage,
   CallEndRequestMessage,
@@ -89,7 +89,7 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
       }
 
       // Action Menu protocol messages
-      if (message.type === MenuRequestMessage.type.messageTypeUri) {
+      if (message.type === DidCommMenuRequestMessage.type.messageTypeUri) {
         const msg = new ContextualMenuRequestMessage({
           connectionId: connection.id,
           id: connection.id,
@@ -99,9 +99,9 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
         emitVsAgentEvent(agent, VsAgentEventTypes.MessageReceived, msgToEvent(msg))
       }
 
-      if (message.type === PerformMessage.type.messageTypeUri) {
+      if (message.type === DidCommPerformMessage.type.messageTypeUri) {
         const msg = new ContextualMenuSelectMessage({
-          selectionId: (message as PerformMessage).name,
+          selectionId: (message as DidCommPerformMessage).name,
           connectionId: connection.id,
           id: message.id,
           timestamp: new Date(),
@@ -111,9 +111,9 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
       }
 
       // Question Answer protocol messages
-      if (message.type === AnswerMessage.type.messageTypeUri) {
+      if (message.type === DidCommAnswerMessage.type.messageTypeUri) {
         const record = await agent.dependencyManager
-          .resolve(QuestionAnswerService)
+          .resolve(DidCommQuestionAnswerService)
           .getByThreadAndConnectionId(agent.context, connection.id, message.threadId)
 
         const textIdMapping = record.metadata.get<Record<string, string>>('text-id-mapping')
@@ -124,8 +124,8 @@ export const chatEvents = async (agent: VsAgent<ChatAgentModules>, logger: BaseL
           )
         }
         const selectionId = textIdMapping
-          ? textIdMapping[(message as AnswerMessage).response]
-          : (message as AnswerMessage).response
+          ? textIdMapping[(message as DidCommAnswerMessage).response]
+          : (message as DidCommAnswerMessage).response
         const msg = new MenuSelectMessage({
           threadId: message.threadId,
           connectionId: connection.id,

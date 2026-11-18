@@ -1,4 +1,4 @@
-import { ActionMenuFormInputType } from '@credo-ts/action-menu'
+import { DidCommActionMenuFormInputType } from '@credo-ts/didcomm-action-menu'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
@@ -38,10 +38,10 @@ export class ActionMenuFormParameterDto {
   @IsBoolean()
   required?: boolean
 
-  @ApiPropertyOptional({ enum: ActionMenuFormInputType, description: 'Kind of input' })
+  @ApiPropertyOptional({ enum: DidCommActionMenuFormInputType, description: 'Kind of input' })
   @IsOptional()
-  @IsEnum(ActionMenuFormInputType)
-  type?: ActionMenuFormInputType
+  @IsEnum(DidCommActionMenuFormInputType)
+  type?: DidCommActionMenuFormInputType
 }
 
 export class ActionMenuFormDto {
