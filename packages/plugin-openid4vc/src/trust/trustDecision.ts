@@ -4,7 +4,7 @@ import type { TrustEvidence, TrustVerdictName } from './types'
 import type { SdJwtVc } from '@credo-ts/core'
 import type { DidTrustResolver } from '@verana-labs/vs-agent-sdk'
 
-import { getPublicJwkFromVerificationMethod, Kms, tryParseDid } from '@credo-ts/core'
+import { getPublicJwkFromVerificationMethod, Kms, tryParseDid, X509Certificate } from '@credo-ts/core'
 import {
   AnonCredsTrustError,
   AnonCredsTrustErrorReason,
@@ -118,7 +118,7 @@ function issuerDidOf(credential: SdJwtVc): string {
     typeof credential.payload.iss === 'string' ? tryParseDid(credential.payload.iss)?.did : undefined
   if (fromIss) return fromIss
   try {
-    return didFromValidatedCertificate(issuer.x5c[0])
+    return didFromValidatedCertificate(X509Certificate.fromEncodedCertificate(issuer.x5c[0]))
   } catch {
     return fail(
       'UNTRUSTED',
@@ -149,7 +149,12 @@ async function assertIssuerKeyBound(
   const issuer = credential.issuer
   let issuerKey: Kms.PublicJwk
   if (issuer.method === 'x5c') {
-    issuerKey = issuer.x5c[0].publicJwk
+    // A decoded SD-JWT VC holds the encoded x5c certificates, so parse the leaf to get its key.
+    try {
+      issuerKey = X509Certificate.fromEncodedCertificate(issuer.x5c[0]).publicJwk
+    } catch {
+      return fail('UNTRUSTED', 'the leaf certificate of the issuer x5c cannot be parsed')
+    }
   } else {
     try {
       issuerKey = getPublicJwkFromVerificationMethod(didDocument.dereferenceVerificationMethod(issuer.didUrl))
