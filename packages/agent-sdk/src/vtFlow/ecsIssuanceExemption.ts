@@ -17,8 +17,8 @@ export interface EcsIssuanceExemptionOptions {
 
 // VS-CONN-VS exemption: an applicant onboarding for its first ECS credentials cannot be a Verifiable
 // Service yet, so the peer is admitted on on-chain evidence instead of on its credentials.
-// [VSA-DC-CONN-2]: that evidence is a PENDING Participant entry of the peer. A Direct Issuance
-// request names none, so it never qualifies.
+// [VSA-DC-CONN-2]: that evidence is the Participant entry of the peer that its onboarding-request
+// names. A Direct Issuance request names none, so it never qualifies.
 export async function isEcsIssuanceExempt(
   options: EcsIssuanceExemptionOptions,
   { agentContext, peerDid, purpose }: VtFlowEcsIssuanceExemptionContext,

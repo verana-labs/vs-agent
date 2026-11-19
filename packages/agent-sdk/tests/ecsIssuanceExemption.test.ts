@@ -178,8 +178,8 @@ describe('allowEcsIssuanceExemption: direct issuance request', () => {
     purpose: { schemaId },
   })
 
-  // [VSA-DC-CONN-2]: only a PENDING Participant entry of the peer establishes the purpose, and a
-  // Direct Issuance request names none
+  // [VSA-DC-CONN-2]: the purpose comes from the Participant entry that an onboarding-request names,
+  // and a Direct Issuance request names none
   it.each([
     orgSchema,
     serviceSchema,

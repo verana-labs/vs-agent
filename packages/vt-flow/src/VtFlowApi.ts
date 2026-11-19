@@ -285,7 +285,20 @@ export class VtFlowApi {
     }
   }
 
-  public async acceptIssuanceRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
+  // a request resent while the one before it is checked waits for that check: one accept per flow at a time
+  private readonly issuanceAccepts = new Map<string, Promise<unknown>>()
+
+  public acceptIssuanceRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
+    const accept = (this.issuanceAccepts.get(vtFlowRecordId) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => this.acceptIssuanceRequestNow(vtFlowRecordId))
+    this.issuanceAccepts.set(vtFlowRecordId, accept)
+    return accept.finally(() => {
+      if (this.issuanceAccepts.get(vtFlowRecordId) === accept) this.issuanceAccepts.delete(vtFlowRecordId)
+    })
+  }
+
+  private async acceptIssuanceRequestNow(vtFlowRecordId: string): Promise<VtFlowRecord> {
     try {
       const { record, message } = await this.vtFlowService.acceptIssuanceRequest(
         this.agentContext,

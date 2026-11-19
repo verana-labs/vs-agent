@@ -448,15 +448,17 @@ export class VtFlowOrchestrator {
     const schema = await this.agent.indexer.getCredentialSchema(record.schemaId)
     this.assertClaims(schema.json_schema, connection.theirDid, record.claims)
 
-    const vtFlowApi = this.resolveVtFlowApi()
-    if (record.state === VtFlowState.OobPending) await this.sendValidating(record)
-
+    // built before validating is sent, so a flow that cannot be offered tells the applicant nothing
     const offer = await this.buildDirectIssuanceOffer(record.id)
     if (!offer) {
       throw invalidState(
         'the schema of the flow is not open to Direct Issuance, or the agent holds no active ISSUER participant for it',
       )
     }
+
+    const vtFlowApi = this.resolveVtFlowApi()
+    if (record.state === VtFlowState.OobPending) await this.sendValidating(record)
+
     const { record: offered } = await vtFlowApi.offerCredentialForSession({
       vtFlowRecordId: record.id,
       ...offer,
@@ -1062,9 +1064,6 @@ export class VtFlowOrchestrator {
     credentialFormats: { dataIntegrity: DidCommDataIntegrityOfferCredentialFormat }
     issuerParticipantId: number
   } | null> {
-    this.requireChain()
-    if (!this.agent.did) throw new Error('Agent has no public DID')
-
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(vtFlowRecordId)
     if (!record) throw new Error(`vt-flow record ${vtFlowRecordId} not found`)
@@ -1073,7 +1072,7 @@ export class VtFlowOrchestrator {
     }
     if (!record.schemaId) throw new Error('Record has no schemaId')
 
-    // checked here too, for a flow that reached VALIDATING before checkSchemaId refused such requests
+    // checked here too: checkSchemaId is optional, and the chain can change after the request was accepted
     const issuer = await this.directIssuanceIssuer(record.schemaId)
     if (!issuer) return null
 
@@ -1097,16 +1096,16 @@ export class VtFlowOrchestrator {
   /**
    * The ISSUER entry under which this agent issues the schema by Direct Issuance, if any.
    * [VSA-VTI-FLOW-DI]: Direct Issuance is only for a schema with holder_onboarding_mode =
-   * PERMISSIONLESS, which no ECS schema has. The chain accepts the anchoring
-   * CreateOrUpdateParticipantSession only from the vs_operator of the entry.
+   * PERMISSIONLESS, and the ECS schemas use ISSUER_ONBOARDING_PROCESS. The chain accepts the
+   * anchoring CreateOrUpdateParticipantSession only from the vs_operator of the entry.
    */
   private async directIssuanceIssuer(schemaId: string): Promise<ParticipantDto | undefined> {
     const chain = this.requireChain()
     if (!this.agent.did) throw new Error('Agent has no public DID')
     const logger = this.agent.config.logger
 
-    const id = Number(schemaId)
-    if (!Number.isInteger(id) || id <= 0) {
+    const id = /^[1-9]\d*$/.test(schemaId) ? Number(schemaId) : Number.NaN
+    if (!Number.isSafeInteger(id)) {
       logger.warn(`[vt-flow] ${JSON.stringify(schemaId)} is not a credential schema id`)
       return undefined
     }
@@ -1200,6 +1199,15 @@ export class VtFlowOrchestrator {
     if (!record) throw new Error(`vt-flow record ${vtFlowRecordId} not found`)
     if (record.issuerParticipantId == null) {
       throw new Error(`vt-flow record ${vtFlowRecordId} has no issuerParticipantId to anchor against`)
+    }
+    // [VSA-VTI-FLOW-DI]: checked again before anchoring, as the chain can change after the offer
+    if (
+      record.variant === VtFlowVariant.DirectIssuance &&
+      !(record.schemaId && (await this.directIssuanceIssuer(record.schemaId)))
+    ) {
+      throw new Error(
+        `vt-flow record ${vtFlowRecordId}: this agent does not issue schema ${record.schemaId} by Direct Issuance, credential not anchored`,
+      )
     }
 
     const issuer = await this.agent.indexer.getParticipant(record.issuerParticipantId)

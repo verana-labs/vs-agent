@@ -741,7 +741,8 @@ describe('vt-flow: Direct Issuance schema check', () => {
     vi.restoreAllMocks()
   })
 
-  async function sendIssuanceRequest(holderOnboardingMode: string) {
+  // the schema is read on each check, so a test can change its mode between two requests
+  async function startAgents(schema: { holderOnboardingMode: string }) {
     const sharedResolver = new FakeDidResolver()
     const subjectMap = {
       'rxjs:applicant': new Subject<SubjectMessage>(),
@@ -764,7 +765,7 @@ describe('vt-flow: Direct Issuance schema check', () => {
         getCredentialSchema: async () => ({
           id: 22,
           archived: null,
-          holder_onboarding_mode: holderOnboardingMode,
+          holder_onboarding_mode: schema.holderOnboardingMode,
           json_schema: JSON.stringify({ title: 'OrganizationCredential' }),
         }),
         listParticipants: async () => [{ id: 93, vs_operator: 'verana1agent', revoked: null, slashed: null }],
@@ -792,19 +793,25 @@ describe('vt-flow: Direct Issuance schema check', () => {
     if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
     const connection = await applicant.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
 
-    const applicantRecord = await applicant.modules.vtFlow.sendIssuanceRequest({
-      connectionId: connection.id,
-      schemaId: '22',
-      agentParticipantId: '0',
-      walletAgentParticipantId: '0',
-      claims: { name: 'Acme' },
-    })
-    return { applicantRecord, applicantEvents, validatorEvents, buildCredentialOffer }
+    const sendIssuanceRequest = (participantSessionId?: string, claims = { name: 'Acme' }) =>
+      applicant.modules.vtFlow.sendIssuanceRequest({
+        connectionId: connection.id,
+        participantSessionId,
+        schemaId: '22',
+        agentParticipantId: '0',
+        walletAgentParticipantId: '0',
+        claims,
+      })
+    return { sendIssuanceRequest, applicantEvents, validatorEvents, buildCredentialOffer }
   }
 
   it('refuses an ISSUER_ONBOARDING_PROCESS schema with vt-flow.invalid-schema-id and never offers', async () => {
-    const { applicantRecord, applicantEvents, validatorEvents, buildCredentialOffer } =
-      await sendIssuanceRequest('ISSUER_ONBOARDING_PROCESS')
+    const { sendIssuanceRequest, applicantEvents, validatorEvents, buildCredentialOffer } = await startAgents(
+      {
+        holderOnboardingMode: 'ISSUER_ONBOARDING_PROCESS',
+      },
+    )
+    const applicantRecord = await sendIssuanceRequest()
 
     const report = await waitForEvent(applicantEvents, (ev: unknown): ev is any => {
       const e = ev as any
@@ -822,7 +829,10 @@ describe('vt-flow: Direct Issuance schema check', () => {
   }, 30_000)
 
   it('accepts a PERMISSIONLESS schema and moves the flow to VALIDATING', async () => {
-    const { validatorEvents, buildCredentialOffer } = await sendIssuanceRequest('PERMISSIONLESS')
+    const { sendIssuanceRequest, validatorEvents, buildCredentialOffer } = await startAgents({
+      holderOnboardingMode: 'PERMISSIONLESS',
+    })
+    await sendIssuanceRequest()
 
     await vi.waitFor(() =>
       expect(
@@ -830,5 +840,37 @@ describe('vt-flow: Direct Issuance schema check', () => {
       ).toBeDefined(),
     )
     await vi.waitFor(() => expect(buildCredentialOffer).toHaveBeenCalledTimes(1))
+  }, 30_000)
+
+  it('checks a request resent after a refusal again, and accepts it once the schema is PERMISSIONLESS', async () => {
+    const schema = { holderOnboardingMode: 'ISSUER_ONBOARDING_PROCESS' }
+    const { sendIssuanceRequest, applicantEvents, validatorEvents, buildCredentialOffer } =
+      await startAgents(schema)
+    const refusals = (): number =>
+      applicantEvents.mock.calls
+        .flat()
+        .filter(
+          (ev: any) => ev?.type === 'DidCommMessageProcessed' && ev?.payload?.message?.description?.code,
+        ).length
+    const first = await sendIssuanceRequest()
+    await vi.waitFor(() => expect(refusals()).toBe(1))
+
+    await sendIssuanceRequest(first.participantSessionId)
+    await vi.waitFor(() => expect(refusals()).toBe(2))
+    const [refused, ...others] = await validator.modules.vtFlow.findAllByQuery({ role: VtFlowRole.Validator })
+    expect(others).toHaveLength(0)
+    expect(refused).toMatchObject({ state: VtFlowState.AwaitingIr, messages: [{}, {}] })
+
+    schema.holderOnboardingMode = 'PERMISSIONLESS'
+    const validating = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+    const accepted = await sendIssuanceRequest(first.participantSessionId, { name: 'Acme Corp' })
+
+    expect((await validating).payload.vtFlowRecordId).toBe(refused.id)
+    await vi.waitFor(async () =>
+      expect((await applicant.modules.vtFlow.getById(accepted.id)).state).toBe(VtFlowState.Validating),
+    )
+    await vi.waitFor(() => expect(buildCredentialOffer).toHaveBeenCalledTimes(1))
+    expect((await validator.modules.vtFlow.getById(refused.id)).claims).toEqual({ name: 'Acme Corp' })
+    expect(refusals()).toBe(2)
   }, 30_000)
 })

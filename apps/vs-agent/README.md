@@ -148,7 +148,7 @@ Every vt-flow session is gated on trust resolution: the peer DID must resolve to
 
 As allowed by [VS-CONN-VS], a Validator still accepts a peer that is not a Verifiable Service yet when the request is an ECS Organization, Persona or Service issuance — otherwise no agent could ever onboard. The exemption is not granted on the peer's word: the request must be an onboarding request, the peer must own a `PENDING` Participant entry naming this agent as its validator, and the schema must be an ECS Organization, Persona or Service schema of an ecosystem listed in `TRUSTED_ECS_ECOSYSTEM_DIDS`. A direct issuance request never qualifies, as it names no Participant entry. An Applicant never exempts its Validator: the peer it contacts must always be a Verifiable Service.
 
-A Validator accepts a direct issuance request only for a schema whose `holder_onboarding_mode` is `PERMISSIONLESS`, and only when it holds an active ISSUER Participant for that schema whose `vs_operator` is the agent account. It refuses any other request with `vt-flow.invalid-schema-id`. No ECS schema is `PERMISSIONLESS`, so ECS credentials are only issued through an onboarding process.
+A Validator accepts a direct issuance request only for a schema that is not archived and whose `holder_onboarding_mode` is `PERMISSIONLESS`, and only when it holds an active ISSUER Participant for that schema whose `vs_operator` is the agent account. It refuses any other direct issuance request with `vt-flow.invalid-schema-id`, and checks a request resent after a refusal again. The ECS Organization, Persona and Service schemas use `ISSUER_ONBOARDING_PROCESS`, so the agent never issues them to another party by direct issuance.
 
 #### Admin API authentication
 

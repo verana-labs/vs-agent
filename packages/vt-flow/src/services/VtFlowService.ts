@@ -426,6 +426,8 @@ export class VtFlowService {
       this.assertNotTerminated(fresh)
       const repair = fresh.threadId === message.threadId && fresh.state === VtFlowState.CredOffered
       fresh.connectionId = connection.id
+      // a request resent after a refusal carries the claims to check and issue
+      if (fresh.state === VtFlowState.AwaitingIr && message.claims) fresh.claims = message.claims
       fresh.threadId = message.threadId
       if (repair) {
         await this.repository.update(agentContext, fresh)
@@ -436,6 +438,9 @@ export class VtFlowService {
       } else {
         await this.repository.update(agentContext, fresh)
       }
+
+      // [VSA-VTI-FLOW-DI] step 2: a request resent after a refusal is checked again
+      if (fresh.state === VtFlowState.AwaitingIr) this.emitStateChanged(agentContext, fresh, fresh.state)
       return fresh
     }
 
@@ -572,15 +577,16 @@ export class VtFlowService {
 
     const { checkSchemaId } = this.config
     if (checkSchemaId) {
-      if (!(await checkSchemaId({ agentContext, record }))) {
+      const checked = await checkSchemaId({ agentContext, record })
+      // the check reads the indexer while the flow can move on, and a flow that moved on is not refused
+      record = await this.repository.getById(agentContext, recordId)
+      record.assertState(VtFlowState.AwaitingIr)
+      if (!checked) {
         throw new VtFlowError(
           VtFlowErrorCode.InvalidSchemaId,
           `vt-flow: schema_id '${record.schemaId}' is not a schema this agent issues by Direct Issuance`,
         )
       }
-      // the check reads the indexer while the flow can move on
-      record = await this.repository.getById(agentContext, recordId)
-      record.assertState(VtFlowState.AwaitingIr)
     }
 
     await this.updateState(agentContext, record, VtFlowState.Validating)

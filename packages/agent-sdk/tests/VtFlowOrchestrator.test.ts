@@ -805,16 +805,18 @@ describe('VtFlowOrchestrator.checkSchemaId', () => {
     ['an archived schema', { archived: '2026-01-01T00:00:00Z' }],
     ['a schema the indexer does not know', null],
   ])('refuses %s', async (_label, schema) => {
-    const { orchestrator, indexer } = makeOrchestrator(schema)
+    const { orchestrator, indexer, logger } = makeOrchestrator(schema)
 
     await expect(orchestrator.checkSchemaId(context('22'))).resolves.toBe(false)
     expect(indexer.listParticipants).not.toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('not open to Direct Issuance'))
   })
 
   it.each([
     ['no ISSUER entry', []],
     ['only an ISSUER entry that another account operates', [{ ...ownIssuer, vs_operator: 'verana1other' }]],
     ['only a revoked ISSUER entry', [{ ...ownIssuer, revoked: '2026-01-01T00:00:00Z' }]],
+    ['only a slashed ISSUER entry', [{ ...ownIssuer, slashed: '2026-01-01T00:00:00Z' }]],
   ])('refuses a PERMISSIONLESS schema for which this agent holds %s', async (_label, issuers) => {
     const { orchestrator } = makeOrchestrator({}, issuers)
 
@@ -826,6 +828,11 @@ describe('VtFlowOrchestrator.checkSchemaId', () => {
     '22/../../v4/ecosystem/list',
     '0',
     '1.5',
+    ' 22',
+    '0x16',
+    '2.2e1',
+    '022',
+    '9007199254740993',
   ])('refuses the schema id %j without querying the indexer', async schemaId => {
     const { orchestrator, indexer } = makeOrchestrator()
 
@@ -1289,6 +1296,27 @@ describe('VtFlowOrchestrator validateFlow', () => {
   })
 
   it.each([
+    ['ISSUER_ONBOARDING_PROCESS', 0],
+    ['PERMISSIONLESS', 1],
+  ])('checks the %s schema of an OOB_PENDING Direct Issuance flow before it sends validating', async (mode, sends) => {
+    const { orchestrator, agent, vtFlowApi, current, offerCredentialForSession } =
+      makeDirectIssuanceOffer(mode)
+    current().state = 'OOB_PENDING'
+    Object.assign(agent, {
+      didcomm: {
+        connections: { findById: vi.fn(async () => ({ theirDid: 'did:web:holder', isReady: true })) },
+      },
+    })
+
+    const validated = orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    if (sends) await validated
+    else await expect(validated).rejects.toMatchObject({ code: 'INVALID_STATE', status: 409 })
+    expect(vtFlowApi.sendValidating).toHaveBeenCalledTimes(sends)
+    expect(offerCredentialForSession).toHaveBeenCalledTimes(sends)
+  })
+
+  it.each([
     'VALIDATION_TX_SUBMITTED',
     'AWAITING_OR',
   ])('resumes a HOLDER renewal in %s whose entry is already VALIDATED into issuance', async state => {
@@ -1710,7 +1738,7 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       issuerParticipantId: 93,
     }
     const recordIssuance = vi.fn(async () => record)
-    const logger = { error: vi.fn() }
+    const logger = { error: vi.fn(), warn: vi.fn() }
     const agent = {
       config: { logger },
       dependencyManager: { resolve: () => ({ findById: async () => record, recordIssuance }) },
@@ -1805,6 +1833,37 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       expect.objectContaining({ id: 'sess-1', issuerParticipantId: 93, digest: credentialDigest }),
     )
     expect(issuance.tx).toMatchObject({ hash: 'CD34', height: 12, status: 'SUCCEEDED' })
+  })
+
+  // a flow offered before checkSchemaId refused such requests reaches the anchoring only through here
+  it.each([
+    ['refuses to anchor', 'ISSUER_ONBOARDING_PROCESS', 0],
+    ['anchors', 'PERMISSIONLESS', 1],
+  ])('%s the credential of a Direct Issuance flow on a %s schema', async (_label, mode, broadcasts) => {
+    const { orchestrator, chain, record, logger } = makeAnchorAgent()
+    const { agent } = orchestrator as unknown as { agent: { indexer: Record<string, unknown> } }
+    Object.assign(record, { variant: 'direct-issuance', schemaId: '22' })
+    Object.assign(chain, { address: 'verana1agent' })
+    Object.assign(agent, { did: VALIDATOR_DID })
+    Object.assign(agent.indexer, {
+      getCredentialSchema: async () => ({
+        digest_algorithm: 'sha384',
+        json_schema: '{}',
+        archived: null,
+        holder_onboarding_mode: mode,
+      }),
+      listParticipants: async () => [{ id: 93, vs_operator: 'verana1agent', revoked: null, slashed: null }],
+    })
+
+    const issued = orchestrator.onCredentialIssued('rec-v', signed)
+
+    if (broadcasts) {
+      await expect(issued).resolves.toMatchObject({ issuance: { tx: { status: 'SUCCEEDED' } } })
+    } else {
+      await expect(issued).rejects.toThrow('does not issue schema 22 by Direct Issuance')
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('not open to Direct Issuance'))
+    }
+    expect(chain.broadcastWithoutWaiting).toHaveBeenCalledTimes(broadcasts)
   })
 
   it('records the anchoring SUBMITTED as soon as the broadcast is accepted', async () => {

@@ -456,6 +456,44 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(running.eventEmitter.emit).not.toHaveBeenCalled()
   })
 
+  it('validator signals an issuance-request resent to a flow in AWAITING_IR, so its checks run again', async () => {
+    const peer = { id: 'conn-old', theirDid: 'did:web:agent-peer' }
+    const directIssuance = (state: VtFlowState) =>
+      makeRecord({
+        role: VtFlowRole.Validator,
+        state,
+        variant: VtFlowVariant.DirectIssuance,
+        applicantParticipantId: undefined,
+        schemaId: '5',
+      })
+    const refused = directIssuance(VtFlowState.AwaitingIr)
+    const retry = makeService(refused, peer)
+    const context = makeIssuanceContext(retry.agentContext)
+    context.message.claims = { name: 'Acme' }
+
+    const record = await retry.service.processReceiveIssuanceRequest(context as never)
+
+    expect(record).toMatchObject({
+      state: VtFlowState.AwaitingIr,
+      connectionId: 'conn-new',
+      claims: { name: 'Acme' },
+    })
+    expect(retry.eventEmitter.emit).toHaveBeenCalledExactlyOnceWith(retry.agentContext, {
+      type: VtFlowEventTypes.VtFlowStateChanged,
+      payload: {
+        vtFlowRecordId: refused.id,
+        threadId: context.message.threadId,
+        participantSessionId: 'sess-1',
+        state: VtFlowState.AwaitingIr,
+        previousState: VtFlowState.AwaitingIr,
+      },
+    })
+
+    const running = makeService(directIssuance(VtFlowState.Validating), peer)
+    await running.service.processReceiveIssuanceRequest(makeIssuanceContext(running.agentContext) as never)
+    expect(running.eventEmitter.emit).not.toHaveBeenCalled()
+  })
+
   it('validator writes the copy a notification moved to VALIDATED while the peer check ran', async () => {
     const stored = makeRecord({
       role: VtFlowRole.Validator,
@@ -1381,6 +1419,73 @@ describe('VtFlowService.acceptIssuanceRequest', () => {
       code: VtFlowErrorCode.InvalidSchemaId,
     })
   })
+
+  it('does not refuse a flow that moved on while its schema_id was checked', async () => {
+    const awaiting = awaitingIr()
+    const { service, repository, agentContext } = makeService(awaiting, null, {
+      checkSchemaId: vi.fn().mockResolvedValue(false),
+    })
+    repository.getById.mockResolvedValueOnce(awaiting).mockResolvedValueOnce(
+      makeRecord({
+        role: VtFlowRole.Validator,
+        state: VtFlowState.Validating,
+        variant: VtFlowVariant.DirectIssuance,
+      }),
+    )
+    const api = new VtFlowApi(
+      service,
+      {} as never,
+      {} as never,
+      agentContext as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+    const rejectRequest = vi.spyOn(api, 'rejectRequest')
+
+    await expect(api.acceptIssuanceRequest(awaiting.id)).rejects.toThrow(/VALIDATING/)
+    expect(rejectRequest).not.toHaveBeenCalled()
+  })
+
+  it('checks a request resent while the one before it is checked only after that check', async () => {
+    const awaiting = awaitingIr()
+    let releaseFirstCheck!: (checked: boolean) => void
+    const checkSchemaId = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>(resolve => {
+            releaseFirstCheck = resolve
+          }),
+      )
+      .mockResolvedValueOnce(true)
+    const { service, agentContext } = makeService(awaiting, null, { checkSchemaId })
+    const api = new VtFlowApi(
+      service,
+      {} as never,
+      {} as never,
+      agentContext as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+    const rejectRequest = vi.spyOn(api, 'rejectRequest').mockResolvedValue(awaiting)
+    const dispatch = vi
+      .spyOn(api as unknown as { dispatchMessage: () => Promise<void> }, 'dispatchMessage')
+      .mockResolvedValue(undefined)
+
+    const first = api.acceptIssuanceRequest(awaiting.id)
+    const resent = api.acceptIssuanceRequest(awaiting.id)
+    await vi.waitFor(() => expect(checkSchemaId).toHaveBeenCalledTimes(1))
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(checkSchemaId).toHaveBeenCalledTimes(1)
+
+    releaseFirstCheck(false)
+    await expect(first).rejects.toMatchObject({ code: VtFlowErrorCode.InvalidSchemaId })
+    await expect(resent).resolves.toMatchObject({ state: VtFlowState.Validating })
+    expect(checkSchemaId).toHaveBeenCalledTimes(2)
+    expect(rejectRequest).toHaveBeenCalledBefore(dispatch)
+  })
 })
 
 describe('VtFlowService.rejectRequest', () => {
@@ -2007,5 +2112,47 @@ describe('VtFlowModule state listeners', () => {
 
     await receive(VtFlowState.Validated)
     expect(onReconnected).toHaveBeenCalledExactlyOnceWith({ agentContext, record })
+  })
+
+  it.each([
+    ['opened a new flow', null, 1],
+    ['was resent to a flow in AWAITING_IR', VtFlowState.AwaitingIr, 1],
+    ['was rejected with a retryable code', VtFlowState.Validating, 0],
+  ])('auto-accept an issuance-request that %s', async (_label, previousState, accepts) => {
+    const listeners: Array<(event: unknown) => Promise<void>> = []
+    const record = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.AwaitingIr,
+      variant: VtFlowVariant.DirectIssuance,
+      schemaId: '5',
+    })
+    const service = new VtFlowService(
+      { findById: vi.fn().mockResolvedValue(record) } as never,
+      {} as never,
+      { debug: vi.fn(), error: vi.fn() } as never,
+      new VtFlowModuleConfig({ autoAcceptIssuanceRequest: true }),
+    )
+    const vtFlowApi = { acceptIssuanceRequest: vi.fn() }
+    const eventEmitter = {
+      on: (type: string, listener: (event: unknown) => Promise<void>) => {
+        if (type === VtFlowEventTypes.VtFlowStateChanged) listeners.push(listener)
+      },
+    }
+    const registry = { registerMessageHandlers: vi.fn(), register: vi.fn() }
+    const dependencies = new Map<unknown, unknown>([
+      [VtFlowService, service],
+      [EventEmitter, eventEmitter],
+      [VtFlowApi, vtFlowApi],
+    ])
+    const agentContext = {
+      dependencyManager: { resolve: (token: unknown) => dependencies.get(token) ?? registry },
+    }
+    await new VtFlowModule().initialize(agentContext as never)
+
+    const event = { payload: { vtFlowRecordId: record.id, state: VtFlowState.AwaitingIr, previousState } }
+    await Promise.all(listeners.map(listener => listener(event)))
+
+    expect(vtFlowApi.acceptIssuanceRequest).toHaveBeenCalledTimes(accepts)
+    if (accepts) expect(vtFlowApi.acceptIssuanceRequest).toHaveBeenCalledWith(record.id)
   })
 })
