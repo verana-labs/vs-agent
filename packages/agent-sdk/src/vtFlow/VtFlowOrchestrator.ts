@@ -907,10 +907,31 @@ export class VtFlowOrchestrator {
         })
       ).record
     }
-    if (sent || (exchange && !elsewhere && (!reoffer || exchange.state !== DidCommCredentialState.OfferSent)))
+    const anchored =
+      tx?.status === VtFlowTxStatus.Succeeded &&
+      !!exchange &&
+      (elsewhere || (reoffer && exchange.state === DidCommCredentialState.OfferSent))
+    if (
+      !anchored &&
+      (sent || (exchange && !elsewhere && (!reoffer || exchange.state !== DidCommCredentialState.OfferSent)))
+    )
       return record
 
+    // [VSA-VTI-FLOW-ISSUE-3]: the new run signs the same credential again, so its digest is the anchored one.
+    const offered = anchored
+      ? (await this.agent.didcomm.credentials.getFormatData(exchange.id)).offer?.dataIntegrity?.credential
+      : undefined
+    if (anchored && !offered)
+      throw new Error(`the anchored run of flow ${record.id} has no offered credential`)
     await vtFlowApi.abandonIssuanceRun(record.id)
+    if (offered) {
+      const { record: reoffered } = await vtFlowApi.offerCredentialForSession({
+        vtFlowRecordId: record.id,
+        issuerParticipantId: record.issuerParticipantId,
+        credentialFormats: { dataIntegrity: { credential: offered, bindingRequired: false } },
+      })
+      return reoffered
+    }
     if (record.variant === VtFlowVariant.DirectIssuance) {
       const offer = await this.buildDirectIssuanceOffer(record.id)
       if (!offer) return vtFlowApi.findById(record.id)
@@ -1089,6 +1110,10 @@ export class VtFlowOrchestrator {
       signedCredential as unknown as W3cVerifiableCredential,
       algorithm,
     )
+    const anchored = record.issuance?.tx?.status === VtFlowTxStatus.Succeeded ? record.issuance.tx : undefined
+    if (anchored && digest !== record.credentialDigest) {
+      throw new Error(`the credential of flow ${record.id} does not have the digest that the flow anchored`)
+    }
     let tx: VtFlowTx | undefined
     if (record.issuance?.tx?.status !== VtFlowTxStatus.Submitted) {
       // An earlier attempt can anchor the credential and stop before it records the tx.
@@ -1099,7 +1124,7 @@ export class VtFlowOrchestrator {
         const error = `the digest lookup failed: ${found.message}`
         tx = { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.PreflightError, error }
       } else if (found) {
-        tx = { status: VtFlowTxStatus.Succeeded }
+        tx = anchored ?? { status: VtFlowTxStatus.Succeeded }
       }
     }
     const message = chain.createOrUpdateParticipantSessionMsg({

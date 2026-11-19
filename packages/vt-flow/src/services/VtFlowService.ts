@@ -48,6 +48,7 @@ import {
   VtFlowMessageType,
   VtFlowRole,
   VtFlowState,
+  VtFlowTxStatus,
   VtFlowValidatedFromStates,
   VtFlowVariant,
   type VtFlowStateChangedEvent,
@@ -258,7 +259,10 @@ export class VtFlowService {
 
   public async abandonCredentialExchange(agentContext: AgentContext, record: VtFlowRecord): Promise<void> {
     const exchangeId = record.credentialExchangeRecordId
+    const { issuance } = record
     await this.releaseCredentialExchange(agentContext, record)
+    // The next run delivers the credential that this anchoring put on chain.
+    if (issuance?.tx?.status === VtFlowTxStatus.Succeeded) record.issuance = issuance
     await this.repository.update(agentContext, record)
     if (!exchangeId) return
 
@@ -357,8 +361,8 @@ export class VtFlowService {
         fresh.issuance = undefined
         await this.updateState(agentContext, fresh, VtFlowState.AwaitingOr)
       } else if (
-        (fresh.state === VtFlowState.CredOffered || fresh.state === VtFlowState.Validated) &&
-        (!newThread || reconnected)
+        fresh.state === VtFlowState.CredOffered ||
+        (fresh.state === VtFlowState.Validated && (!newThread || reconnected))
       ) {
         // [VSA-ADM-VT-FL-REJECT-2]: after a reject, a reconnection on a new thread also resumes the run.
         await this.repository.update(agentContext, fresh)

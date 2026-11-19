@@ -884,7 +884,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
       credentialExchangeRecordId: 'cred-ex-1',
       validation,
     })
-    const { service, agentContext } = makeService(
+    const { service, agentContext, eventEmitter } = makeService(
       existing,
       { id: 'conn-old', theirDid: 'did:web:agent-peer' },
       moduleConfig,
@@ -895,11 +895,53 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     const record = await service.processReceiveOnboardingRequest(context as never)
 
     expect(record).toMatchObject({
-      state: VtFlowState.Validated,
+      state: VtFlowState.CredOffered,
       threadId: context.message.threadId,
       claims: { name: 'Acme' },
+      credentialExchangeRecordId: 'cred-ex-1',
       validation,
     })
+    expect(eventEmitter.emit).toHaveBeenCalledExactlyOnceWith(agentContext, {
+      type: VtFlowEventTypes.VtFlowStateChanged,
+      payload: expect.objectContaining({
+        state: VtFlowState.CredOffered,
+        previousState: VtFlowState.CredOffered,
+      }),
+    })
+  })
+
+  it.each([
+    ['keeps an anchoring that succeeded', { hash: 'AA', status: VtFlowTxStatus.Succeeded }, true],
+    [
+      'drops an anchoring whose pre-flight failed',
+      { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.PreflightError },
+      false,
+    ],
+  ])('validator abandons the run of a flow and %s', async (_label, tx, kept) => {
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.CredOffered,
+      credentialExchangeRecordId: 'cred-ex-1',
+      issuance: { tx },
+    })
+    const { service, agentContext, exchangeRepository, protocol } = makeService(existing)
+    const exchange = {
+      id: 'cred-ex-1',
+      state: DidCommCredentialState.CredentialIssued,
+      protocolVersion: 'v2',
+      parentThreadId: existing.threadId,
+    }
+    exchangeRepository.findById.mockResolvedValue(exchange)
+
+    await service.abandonCredentialExchange(agentContext as never, existing)
+
+    expect(existing.credentialExchangeRecordId).toBeUndefined()
+    expect(existing.issuance).toEqual(kept ? { tx } : undefined)
+    expect(protocol.updateState).toHaveBeenCalledWith(
+      agentContext,
+      exchange,
+      DidCommCredentialState.Abandoned,
+    )
   })
 
   it.each([

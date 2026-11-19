@@ -127,7 +127,8 @@ export class VtFlowApi {
     const record = await this.vtFlowService.getById(this.agentContext, vtFlowRecordId)
     record.assertRole(VtFlowRole.Validator)
     record.assertState(VtFlowState.CredOffered)
-    if (isVtFlowTxSent(record.issuance?.tx))
+    const tx = record.issuance?.tx
+    if (isVtFlowTxSent(tx) && tx?.status !== VtFlowTxStatus.Succeeded)
       throw new CredoError(`VtFlow record '${record.id}' has an anchoring of its run`)
     await this.vtFlowService.abandonCredentialExchange(this.agentContext, record)
     return record

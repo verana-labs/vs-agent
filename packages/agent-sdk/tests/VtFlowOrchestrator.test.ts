@@ -1,19 +1,17 @@
-import { DidCommCredentialEventTypes, DidCommCredentialState, MessageSendingError } from '@credo-ts/didcomm'
+import { DidCommCredentialState } from '@credo-ts/didcomm'
 import {
-  VtFlowEventTypes,
   VtFlowRole,
-  VtFlowService,
   VtFlowState,
   VtFlowTxReason,
   VtFlowTxStatus,
   VtFlowVariant,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { computeCredentialDigestJCS } from '@verana-labs/verre'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ValidationState } from '../src/blockchain/types'
 import { HOLDER_PARTICIPANT_TYPE } from '../src/types'
 import { VtFlowOrchestrator } from '../src/vtFlow/VtFlowOrchestrator'
-import { watchIssuanceRepair } from '../src/vtFlow/issuanceRepair'
 
 const record = {
   id: 'rec-1',
@@ -1634,6 +1632,31 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
     expect(issuance.tx).toEqual({ status: 'SUCCEEDED' })
   })
 
+  it('keeps the anchoring of the flow when a new run delivers the credential that it anchored', async () => {
+    const { orchestrator, chain, indexer, record } = makeAnchorAgent()
+    const tx = { hash: 'AB12', height: 7, status: 'SUCCEEDED' }
+    record.issuance = { tx }
+    record.credentialDigest = computeCredentialDigestJCS(signed as never, 'sha384')
+    indexer.getDigest.mockResolvedValue({ digest: 'anchored' })
+
+    const { issuance } = await orchestrator.onCredentialIssued('rec-v', signed)
+
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(issuance.tx).toEqual(tx)
+  })
+
+  it('refuses a new run whose credential does not have the digest that the flow anchored', async () => {
+    const { orchestrator, chain, indexer, record } = makeAnchorAgent()
+    record.issuance = { tx: { hash: 'AB12', height: 7, status: 'SUCCEEDED' } }
+    record.credentialDigest = 'another-digest'
+
+    await expect(orchestrator.onCredentialIssued('rec-v', signed)).rejects.toThrow(
+      'digest that the flow anchored',
+    )
+    expect(indexer.getDigest).not.toHaveBeenCalled()
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+  })
+
   it('records a failed pre-flight, and does not anchor, when the digest lookup fails', async () => {
     const { orchestrator, chain, indexer, logger } = makeAnchorAgent()
     indexer.getDigest.mockRejectedValue(new Error('indexer unreachable'))
@@ -1777,6 +1800,8 @@ describe('VtFlowOrchestrator validator resume of an issuance run', () => {
   type Flow = Record<string, unknown> & { id: string }
   type Exchange = { id: string; state: DidCommCredentialState; connectionId?: string }
 
+  const OFFERED_CREDENTIAL = { id: 'did:web:validator#vtc-1', credentialSubject: { id: 'did:web:applicant' } }
+
   function makeResumeAgent(flows: Flow[], exchanges: Exchange[] = []) {
     const records = new Map(
       flows.map(flow => [
@@ -1807,6 +1832,11 @@ describe('VtFlowOrchestrator validator resume of an issuance run', () => {
       steps.push('offer:end')
       return records.get(id)
     }
+    const getFormatData = vi.fn(
+      async (): Promise<unknown> => ({
+        offer: { dataIntegrity: { credential: OFFERED_CREDENTIAL } },
+      }),
+    )
     const vtFlowApi = {
       findById: vi.fn(async (id: string) => records.get(id) ?? null),
       findAllByQuery: vi.fn(async ({ flowState }: { flowState: VtFlowState }) =>
@@ -1838,7 +1868,7 @@ describe('VtFlowOrchestrator validator resume of an issuance run', () => {
         }),
       },
       didcomm: {
-        credentials: { findById: vi.fn(async (id: string) => runs.get(id) ?? null) },
+        credentials: { findById: vi.fn(async (id: string) => runs.get(id) ?? null), getFormatData },
         connections: { findById: vi.fn(async () => ({ isReady: true })) },
       },
     }
@@ -1850,7 +1880,7 @@ describe('VtFlowOrchestrator validator resume of an issuance run', () => {
       credentialFormats: {},
       issuerParticipantId: 1,
     } as never)
-    return { orchestrator, records, vtFlowApi, offerOnboardingCredential, steps }
+    return { orchestrator, records, vtFlowApi, offerOnboardingCredential, steps, getFormatData }
   }
 
   const run = (state: DidCommCredentialState) => ({ id: 'cx-1', state })
@@ -1920,11 +1950,6 @@ describe('VtFlowOrchestrator validator resume of an issuance run', () => {
       { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.PreflightError },
       'offer',
     ],
-    [
-      'sends nothing for a run whose anchoring succeeded',
-      { hash: 'CD34', status: VtFlowTxStatus.Succeeded },
-      'nothing',
-    ],
   ])('on a run that used an earlier connection, a repair %s', async (_label, tx, expected) => {
     const { orchestrator, vtFlowApi, offerOnboardingCredential } = makeResumeAgent(
       [{ id: 'rec-v', credentialExchangeRecordId: 'cx-1', ...(tx && { issuance: { tx } }) }],
@@ -1935,6 +1960,47 @@ describe('VtFlowOrchestrator validator resume of an issuance run', () => {
 
     expect(vtFlowApi.issueCredentialForSession).not.toHaveBeenCalled()
     expect(offerOnboardingCredential).toHaveBeenCalledTimes(expected === 'offer' ? 1 : 0)
+  })
+
+  const anchoredFlow = {
+    id: 'rec-v',
+    credentialExchangeRecordId: 'cx-1',
+    issuerParticipantId: 3,
+    issuance: { tx: { hash: 'CD34', status: VtFlowTxStatus.Succeeded } },
+  }
+
+  it.each([
+    ['a run of an earlier connection', DidCommCredentialState.CredentialIssued, 'conn-old'],
+    ['an unanswered offer on the connection of the flow', DidCommCredentialState.OfferSent, 'conn-1'],
+  ])('a repair offers again the anchored credential of %s', async (_label, state, connectionId) => {
+    const { orchestrator, vtFlowApi, offerOnboardingCredential, getFormatData } = makeResumeAgent(
+      [anchoredFlow],
+      [{ id: 'cx-1', state, connectionId }],
+    )
+
+    await orchestrator.resumeIssuance('rec-v')
+
+    expect(getFormatData).toHaveBeenCalledWith('cx-1')
+    expect(vtFlowApi.abandonIssuanceRun).toHaveBeenCalledOnce()
+    expect(vtFlowApi.offerCredentialForSession).toHaveBeenCalledExactlyOnceWith({
+      vtFlowRecordId: 'rec-v',
+      issuerParticipantId: 3,
+      credentialFormats: { dataIntegrity: { credential: OFFERED_CREDENTIAL, bindingRequired: false } },
+    })
+    expect(offerOnboardingCredential).not.toHaveBeenCalled()
+    expect(vtFlowApi.issueCredentialForSession).not.toHaveBeenCalled()
+  })
+
+  it('keeps an anchored run whose offered credential it cannot read', async () => {
+    const { orchestrator, vtFlowApi, getFormatData } = makeResumeAgent(
+      [anchoredFlow],
+      [{ id: 'cx-1', state: DidCommCredentialState.CredentialIssued, connectionId: 'conn-old' }],
+    )
+    getFormatData.mockResolvedValue({})
+
+    await expect(orchestrator.resumeIssuance('rec-v')).rejects.toThrow('has no offered credential')
+    expect(vtFlowApi.abandonIssuanceRun).not.toHaveBeenCalled()
+    expect(vtFlowApi.offerCredentialForSession).not.toHaveBeenCalled()
   })
 
   it('never leaves two open offers when two resumes of one flow come at the same time', async () => {
@@ -1981,194 +2047,5 @@ describe('VtFlowOrchestrator validator resume of an issuance run', () => {
     expect(vtFlowApi.issueCredentialForSession.mock.calls).toEqual([
       [{ vtFlowRecordId: 'di-requested', credentialExchangeRecordId: 'cx-req' }],
     ])
-  })
-})
-
-describe('applicant issuance repair', () => {
-  const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
-  let flows = 0
-
-  beforeEach(() => {
-    vi.useFakeTimers()
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  function makeRepairAgent(flow: Record<string, unknown> = {}) {
-    const handlers = new Map<string, Array<(event: unknown) => unknown>>()
-    let middleware!: (context: unknown, next: () => Promise<void>) => Promise<void>
-    const record: Record<string, unknown> & { id: string } = {
-      id: `flow-${++flows}`,
-      role: VtFlowRole.Applicant,
-      state: VtFlowState.CredOffered,
-      variant: VtFlowVariant.OnboardingProcess,
-      connectionId: 'conn-1',
-      threadId: 'thid-1',
-      ...flow,
-    }
-    const exchange = {
-      id: 'cx-1',
-      role: 'holder',
-      threadId: 'sub-1',
-      parentThreadId: 'thid-1',
-      connectionId: 'conn-1',
-      state: DidCommCredentialState.RequestSent,
-    }
-    const vtFlowApi = {
-      findByThreadId: vi.fn(async () => record),
-      findById: vi.fn(async () => record),
-      resendOnboardingRequest: vi.fn(async () => record),
-      resendIssuanceRequest: vi.fn(async () => record),
-    }
-    const vtFlowService = {
-      setErrorMessage: vi.fn(async (_context: unknown, _id: string, cause?: string) => {
-        record.errorMessage = cause
-      }),
-    }
-    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
-    const agent = {
-      context: {},
-      events: {
-        on: (type: string, handler: (event: unknown) => unknown) =>
-          handlers.set(type, [...(handlers.get(type) ?? []), handler]),
-      },
-      dependencyManager: {
-        resolve: (token: unknown) => (token === VtFlowService ? vtFlowService : vtFlowApi),
-      },
-      didcomm: {
-        registerMessageHandlerMiddleware: (registered: typeof middleware) => {
-          middleware = registered
-        },
-        credentials: { findAllByQuery: vi.fn(async () => [exchange]) },
-        connections: { findById: vi.fn(async () => ({ isReady: true })) },
-      },
-    }
-    watchIssuanceRepair(agent as never, logger as never)
-
-    const emit = async (type: string, payload: unknown) => {
-      for (const handler of handlers.get(type) ?? []) await handler({ payload })
-    }
-    const credentialEvent = (state: DidCommCredentialState) =>
-      emit(DidCommCredentialEventTypes.DidCommCredentialStateChanged, {
-        credentialExchangeRecord: { ...exchange, state },
-        previousState: null,
-      })
-    const report = () =>
-      middleware(
-        {
-          message: {
-            id: 'report-1',
-            type: PROBLEM_REPORT,
-            thread: { parentThreadId: 'sub-1' },
-            code: 'e.p.msg.message-parse-failure',
-            args: ['Error validating message'],
-          },
-          connection: { id: 'conn-1' },
-        },
-        async () => undefined,
-      )
-    return { record, exchange, vtFlowApi, logger, emit, credentialEvent, report }
-  }
-
-  it('repairs once after a problem report on its request, and records the cause at the second one', async () => {
-    const { record, exchange, vtFlowApi, logger, credentialEvent, report } = makeRepairAgent()
-    await credentialEvent(DidCommCredentialState.RequestSent)
-
-    await report()
-    expect(vtFlowApi.resendOnboardingRequest).toHaveBeenCalledExactlyOnceWith({
-      vtFlowRecordId: record.id,
-      connectionId: 'conn-1',
-    })
-
-    await report()
-    expect(record.errorMessage).toContain('e.p.msg.message-parse-failure')
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining(record.id))
-    await vi.advanceTimersByTimeAsync(600_000)
-    expect(vtFlowApi.resendOnboardingRequest).toHaveBeenCalledTimes(1)
-    expect(exchange.state).toBe(DidCommCredentialState.RequestSent)
-  })
-
-  it('repairs 10, 25 and 45 seconds after a request with no answer, and records the cause at 60 seconds', async () => {
-    const { record, vtFlowApi, credentialEvent } = makeRepairAgent()
-    await credentialEvent(DidCommCredentialState.RequestSent)
-    const start = Date.now()
-
-    for (const [at, repairs] of [
-      [9_999, 0],
-      [10_000, 1],
-      [25_000, 2],
-      [45_000, 3],
-    ]) {
-      await vi.advanceTimersByTimeAsync(start + at - Date.now())
-      expect(vtFlowApi.resendOnboardingRequest).toHaveBeenCalledTimes(repairs)
-    }
-    expect(record.errorMessage).toBeUndefined()
-    await vi.advanceTimersByTimeAsync(15_000)
-    expect(record.errorMessage).toBe('the validator did not answer the credential request')
-    await vi.advanceTimersByTimeAsync(600_000)
-    expect(vtFlowApi.resendOnboardingRequest).toHaveBeenCalledTimes(3)
-  })
-
-  it('repairs again 1, 2 and 5 minutes after the request when the validator cannot be reached, and then stops', async () => {
-    const { record, vtFlowApi, credentialEvent } = makeRepairAgent()
-    vtFlowApi.resendOnboardingRequest.mockRejectedValue(
-      new MessageSendingError('connection refused', { outboundMessageContext: {} as never }),
-    )
-    await credentialEvent(DidCommCredentialState.RequestSent)
-    const start = Date.now()
-
-    for (const [at, repairs] of [
-      [10_000, 1],
-      [59_999, 1],
-      [60_000, 2],
-      [120_000, 3],
-      [299_999, 3],
-      [300_000, 4],
-      [900_000, 4],
-    ]) {
-      await vi.advanceTimersByTimeAsync(start + at - Date.now())
-      expect(vtFlowApi.resendOnboardingRequest).toHaveBeenCalledTimes(repairs)
-    }
-    expect(record.errorMessage).toContain('the validator cannot be reached')
-  })
-
-  it('repairs a Direct Issuance flow with its issuance-request', async () => {
-    const { vtFlowApi, credentialEvent } = makeRepairAgent({ variant: VtFlowVariant.DirectIssuance })
-    await credentialEvent(DidCommCredentialState.RequestSent)
-
-    await vi.advanceTimersByTimeAsync(10_000)
-
-    expect(vtFlowApi.resendIssuanceRequest).toHaveBeenCalledTimes(1)
-    expect(vtFlowApi.resendOnboardingRequest).not.toHaveBeenCalled()
-  })
-
-  it('stops the repair when a renewal moves the flow out of CRED_OFFERED', async () => {
-    const { record, vtFlowApi, emit, credentialEvent } = makeRepairAgent()
-    await credentialEvent(DidCommCredentialState.RequestSent)
-
-    await emit(VtFlowEventTypes.VtFlowStateChanged, {
-      vtFlowRecordId: record.id,
-      state: VtFlowState.OrSent,
-      previousState: VtFlowState.CredOffered,
-    })
-    await vi.advanceTimersByTimeAsync(600_000)
-
-    expect(vtFlowApi.resendOnboardingRequest).not.toHaveBeenCalled()
-    expect(record.errorMessage).toBeUndefined()
-  })
-
-  it('stops the repair and clears the cause when the credential arrives late', async () => {
-    const { record, vtFlowApi, credentialEvent } = makeRepairAgent()
-    await credentialEvent(DidCommCredentialState.RequestSent)
-    await vi.advanceTimersByTimeAsync(60_000)
-    expect(record.errorMessage).toBeDefined()
-
-    await credentialEvent(DidCommCredentialState.CredentialReceived)
-    await vi.advanceTimersByTimeAsync(600_000)
-
-    expect(record.errorMessage).toBeUndefined()
-    expect(vtFlowApi.resendOnboardingRequest).toHaveBeenCalledTimes(3)
   })
 })

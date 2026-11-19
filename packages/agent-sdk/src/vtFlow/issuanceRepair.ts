@@ -5,6 +5,8 @@ import {
   DidCommCredentialEventTypes,
   DidCommCredentialRole,
   DidCommCredentialState,
+  DidCommProblemReportMessage,
+  DidCommProblemReportV2Message,
   MessageSendingError,
   type DidCommCredentialStateChangedEvent,
   type DidCommMessage,
@@ -24,8 +26,8 @@ const UNDELIVERABLE_REPAIRS_MS = [60_000, 120_000, 300_000]
 const NOTICE_MS = 60_000
 
 const PROBLEM_REPORT_TYPES = [
-  'https://didcomm.org/report-problem/2.0/problem-report',
-  'https://didcomm.org/notification/1.0/problem-report',
+  DidCommProblemReportV2Message.type.messageTypeUri,
+  DidCommProblemReportMessage.type.messageTypeUri,
 ]
 
 interface Repair {
