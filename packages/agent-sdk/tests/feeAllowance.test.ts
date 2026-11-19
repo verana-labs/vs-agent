@@ -10,7 +10,8 @@ import { TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1/tx'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { VeranaChainService, feeAllowanceOf } from '../src/blockchain/VeranaChainService'
-import { preflightFee } from '../src/blockchain/feePreflight'
+import { preflightFailureReason, preflightFee } from '../src/blockchain/feePreflight'
+import { fetchJson } from '../src/utils/util'
 
 const NOW = Date.parse('2026-09-23T12:00:00Z')
 const at = (iso: string) => ({ seconds: BigInt(Date.parse(iso) / 1000), nanos: 0 })
@@ -324,11 +325,56 @@ describe('VeranaChainService.broadcastWithoutWaiting', () => {
     expect(broadcastTxSync).toHaveBeenCalledTimes(2)
   })
 
+  it('returns the hash of the bytes when no attempt of the broadcast gets a valid answer', async () => {
+    const { chain, sign, broadcastTxSync } = chainWith()
+    broadcastTxSync.mockRejectedValue(httpStatus(502))
+
+    await expect(run(chain)).resolves.toBe(toHex(sha256(bytes)).toUpperCase())
+    expect(sign).toHaveBeenCalledTimes(1)
+    expect(broadcastTxSync.mock.calls).toEqual([[bytes], [bytes], [bytes], [bytes]])
+  })
+
+  it('throws when the read before the signature gets no valid answer, as nothing was sent', async () => {
+    const { chain, sign, broadcastTxSync } = chainWith()
+    sign.mockRejectedValue(httpStatus(502))
+
+    await expect(run(chain)).rejects.toThrow('Bad status on response: 502')
+    expect(broadcastTxSync).not.toHaveBeenCalled()
+  })
+
   it('throws a broadcast that the node rejects, without sending it again', async () => {
     const { chain, broadcastTxSync } = chainWith()
     broadcastTxSync.mockRejectedValueOnce(new BroadcastTxError(32, 'sdk', 'account sequence mismatch'))
 
     await expect(run(chain)).rejects.toBeInstanceOf(BroadcastTxError)
     expect(broadcastTxSync).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('preflightFailureReason', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const indexerError = async (status: number) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('', { status, statusText: 'Status' })),
+    )
+    return fetchJson('https://idx.example/v4/di/get/abc').catch((error: unknown) => error)
+  }
+
+  it('gives SERVICE_UNAVAILABLE for an indexer answer with an HTTP status of 500 or more', async () => {
+    expect(preflightFailureReason(await indexerError(502))).toBe('SERVICE_UNAVAILABLE')
+  })
+
+  it('gives PREFLIGHT_ERROR for an indexer answer with an HTTP status below 500', async () => {
+    expect(preflightFailureReason(await indexerError(400))).toBe('PREFLIGHT_ERROR')
+  })
+
+  it('gives SERVICE_UNAVAILABLE when the indexer cannot be reached', () => {
+    const unreachable = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } })
+
+    expect(preflightFailureReason(unreachable)).toBe('SERVICE_UNAVAILABLE')
   })
 })

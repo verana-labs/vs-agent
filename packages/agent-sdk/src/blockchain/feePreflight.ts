@@ -31,6 +31,11 @@ export class FeePreflightError extends Error {
   }
 }
 
+/** [VSA-ADM-VT-FL-VALIDATE-9]: the reason of a pre-flight request of the node or the indexer that threw. */
+export function preflightFailureReason(error: unknown): VtFlowTxReason {
+  return isTransportFailure(error) ? VtFlowTxReason.ServiceUnavailable : VtFlowTxReason.PreflightError
+}
+
 /**
  * [VSA-VPR-TX-3]: the fee payer of a transaction that targets a `Participant` entry follows the
  * `ParticipantAuthorizationRecord` of that entry. With `with_feegrant`, the Corporation pays through
@@ -59,10 +64,7 @@ export async function preflightFee(
 ): Promise<FeePreflightResult> {
   const failed = (reason: VtFlowTxReason, error: string): FeePreflightResult => ({ reason, error })
   const unread = (error: unknown): FeePreflightResult =>
-    failed(
-      isTransportFailure(error) ? VtFlowTxReason.ServiceUnavailable : VtFlowTxReason.PreflightError,
-      errorMessage(error),
-    )
+    failed(preflightFailureReason(error), errorMessage(error))
 
   let allowance: FeeAllowance | undefined
   try {

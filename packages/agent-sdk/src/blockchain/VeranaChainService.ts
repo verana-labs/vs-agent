@@ -28,7 +28,7 @@ import { connectComet } from '@cosmjs/tendermint-rpc'
 import { createVeranaRegistry, createVeranaAminoTypes, veranaTypeUrls } from '@verana-labs/verana-types'
 
 import { FeePreflightError, preflightFee } from './feePreflight'
-import { withTransportRetry } from './rpcRetry'
+import { isTransportFailure, withTransportRetry } from './rpcRetry'
 import {
   Coin,
   CreateOrUpdateParticipantSessionParams,
@@ -302,7 +302,8 @@ export class VeranaChainService {
     return granter ? { ...fee, granter } : fee
   }
 
-  // Returns once the node accepted the transaction into its mempool, without waiting for a block.
+  // Returns the hash once the node accepted the transaction into its mempool, or can have it,
+  // without waiting for a block.
   async broadcastWithoutWaiting(messages: EncodeObject[], fee: StdFee): Promise<string> {
     const signed = await withTransportRetry(() =>
       this.signingClient.sign(this.operatorAddress, messages, fee, ''),
@@ -313,9 +314,9 @@ export class VeranaChainService {
     } catch (error) {
       // A retry finds the transaction of a lost response in the mempool cache of the node.
       // The text is the message of ErrTxInCache in the mempool package of CometBFT.
-      if (error instanceof Error && error.message.includes('tx already exists in cache')) {
-        return toHex(sha256(bytes)).toUpperCase()
-      }
+      const cached = error instanceof Error && error.message.includes('tx already exists in cache')
+      // A broadcast with no valid answer can have reached the node: the caller looks the hash up.
+      if (cached || isTransportFailure(error)) return toHex(sha256(bytes)).toUpperCase()
       throw error
     }
   }
