@@ -287,6 +287,10 @@ export class VtFlowService {
         )
       }
       await this.assertSamePeer(agentContext, existing, connection)
+      const pending =
+        existing.threadId !== message.threadId &&
+        existing.state === VtFlowState.CredOffered &&
+        ((await this.config.isParticipantPending?.({ agentContext, record: existing })) ?? false)
       // the checks above await, and a chain notification can move the flow meanwhile
       const fresh = await this.repository.getById(agentContext, existing.id)
       this.assertNotTerminated(fresh)
@@ -294,7 +298,8 @@ export class VtFlowService {
       fresh.connectionId = connection.id
       fresh.connectionTerminated = undefined
       const newThread = fresh.threadId !== message.threadId
-      const renewal = isVtFlowRenewable(fresh) || (newThread && fresh.state === VtFlowState.CredOffered)
+      const renewal =
+        isVtFlowRenewable(fresh) || (pending && newThread && fresh.state === VtFlowState.CredOffered)
       if (newThread) {
         fresh.threadId = message.threadId
         if (fresh.state === VtFlowState.AwaitingOr || renewal) {
@@ -303,7 +308,6 @@ export class VtFlowService {
         }
       }
       if (renewal) {
-        // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
         if (fresh.state === VtFlowState.CredOffered) await this.releaseCredentialExchange(agentContext, fresh)
         fresh.oobLink = undefined
         fresh.validation = undefined

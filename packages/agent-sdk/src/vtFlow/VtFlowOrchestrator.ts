@@ -1174,6 +1174,21 @@ export class VtFlowOrchestrator {
     }
   }
 
+  // the indexer can still lag the applicant's RenewParticipantOP, so wait for it as checkParticipantId does
+  async isParticipantPending({ record }: VtFlowCheckParticipantIdContext): Promise<boolean> {
+    if (!record.applicantParticipantId) return false
+    const deadline = Date.now() + TX_LOOKUP_TIMEOUT_MS
+    for (;;) {
+      const entry = await this.agent.indexer
+        .getParticipant(record.applicantParticipantId)
+        .catch(() => undefined)
+      if (entry?.revoked || entry?.slashed) return false
+      if (entry?.op_state === 'PENDING') return true
+      if (Date.now() >= deadline) return false
+      await new Promise(resolve => setTimeout(resolve, TX_LOOKUP_INTERVAL_MS))
+    }
+  }
+
   async publishCredentialAsLinkedVp(vtFlowRecordId: string): Promise<void> {
     if (!this.options.publicApiBaseUrl) {
       throw new Error('publicApiBaseUrl is required to publish a LinkedVerifiablePresentation')
