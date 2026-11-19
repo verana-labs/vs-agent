@@ -101,25 +101,6 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-async function oneRunPerFlow<T>(
-  runs: Map<string, Promise<void>>,
-  recordId: string,
-  run: () => Promise<T>,
-): Promise<T> {
-  const previous = runs.get(recordId) ?? Promise.resolve()
-  const result = previous.then(run)
-  const settled = result.then(
-    () => undefined,
-    () => undefined,
-  )
-  runs.set(recordId, settled)
-  try {
-    return await result
-  } finally {
-    if (runs.get(recordId) === settled) runs.delete(recordId)
-  }
-}
-
 const REASONS_AFTER_BROADCAST: ReadonlySet<VtFlowTxReason | undefined> = new Set([
   VtFlowTxReason.BroadcastError,
   VtFlowTxReason.TxFailed,
@@ -393,7 +374,7 @@ export class VtFlowOrchestrator {
 
   /** [VSA-ADM-VT-FL-VALIDATE] */
   async validateFlow(input: ValidateFlowInput): Promise<VtFlowRecord> {
-    return oneRunPerFlow(validatingFlows, input.vtFlowRecordId, () => this.validateFlowOnce(input))
+    return this.oneAtATime(input.vtFlowRecordId, () => this.validateFlowOnce(input), validatingFlows)
   }
 
   private async validateFlowOnce(input: ValidateFlowInput): Promise<VtFlowRecord> {
@@ -842,7 +823,26 @@ export class VtFlowOrchestrator {
 
   // one run at a time per flow: two callers at once would both read VALIDATED and offer twice
   async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {
-    return oneRunPerFlow(continuingAfterValidated, recordId, () => this.issuanceAfterValidated(recordId))
+    return this.oneAtATime(recordId, () => this.issuanceAfterValidated(recordId))
+  }
+
+  private async oneAtATime<T>(
+    recordId: string,
+    task: () => Promise<T>,
+    runs = continuingAfterValidated,
+  ): Promise<T> {
+    const previous = runs.get(recordId) ?? Promise.resolve()
+    const run = previous.then(task)
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    runs.set(recordId, settled)
+    try {
+      return await run
+    } finally {
+      if (runs.get(recordId) === settled) runs.delete(recordId)
+    }
   }
 
   private async issuanceAfterValidated(recordId: string): Promise<VtFlowRecord> {
