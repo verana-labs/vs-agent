@@ -4,9 +4,10 @@ import { AnonCredsModule } from '@credo-ts/anoncreds'
 import {
   AnonCredsDidCommCredentialFormatService,
   AnonCredsDidCommProofFormatService,
+  AnonCredsLinkSecretBindingProvider,
 } from '@credo-ts/anoncreds/didcomm'
 import { AskarModule, AskarModuleConfigStoreOptions } from '@credo-ts/askar'
-import { DidsModule, JwkDidResolver, W3cCredentialsModule } from '@credo-ts/core'
+import { DidsModule, JsonLdModule, JwkDidResolver } from '@credo-ts/core'
 import {
   DidCommAutoAcceptCredential,
   DidCommAutoAcceptProof,
@@ -69,7 +70,10 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
             new DidCommCredentialV2Protocol({
               credentialFormats: [
                 new AnonCredsDidCommCredentialFormatService(),
-                new DidCommDataIntegrityCredentialFormatService(),
+                // Credo no longer registers the AnonCreds link secret binding by itself, so pass it here.
+                new DidCommDataIntegrityCredentialFormatService({
+                  linkSecretBinding: new AnonCredsLinkSecretBindingProvider(),
+                }),
               ],
             }),
           ],
@@ -105,7 +109,7 @@ export function setupBaseDidComm(options: BaseDidCommPluginOptions): BaseDidComm
         resolvers: [new CachedWebDidResolver(), new WebVhDidResolver(), new JwkDidResolver()],
         registrars: [new WebDidRegistrar(), new WebVhDidRegistrar()],
       }),
-      w3cCredentials: new W3cCredentialsModule({
+      jsonLd: new JsonLdModule({
         documentLoader: defaultDocumentLoader,
       }),
       vtFlow: new VtFlowModule({ ...options.vtFlow }),

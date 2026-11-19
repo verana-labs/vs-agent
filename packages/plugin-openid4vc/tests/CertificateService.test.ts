@@ -571,7 +571,7 @@ function createAgent({
     getPublicKey: vi.fn(async ({ keyId }: { keyId: string }) => {
       const key = keys.get(keyId)
       if (!key) throw new Kms.KeyManagementKeyNotFoundError(keyId, ['test'])
-      return key
+      return { publicKey: key, backend: 'test' }
     }),
     importKey: vi.fn(async ({ privateJwk }: { privateJwk: Kms.KmsJwkPrivateEc }) => {
       const keyId = privateJwk.kid ?? 'imported-key'

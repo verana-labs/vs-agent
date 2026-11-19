@@ -570,8 +570,7 @@ async function anchorCredentialDigest(
  * resolve it there — see resolveJsonSchemaCredentialId.
  * @param issuerParticipantId this agent's ISSUER participant for the schema, which anchors the
  * credential digest.
- * @param schemaKey the ECS schema this agent issues against. Every ECS key is accepted; the caller
- * reaches this function only for a schema the agent holds an active ISSUER entry on.
+ * @param schemaKey the ECS schema of a self-issued credential.
  */
 export async function rebindEcsCredentialSchema(
   agent: VsAgent,

@@ -284,7 +284,7 @@ describe('public DID startup lifecycle', () => {
       expect(log).toHaveLength(entriesBefore + 1)
       const { publicJwk } = await second.dids.resolveVerificationMethodFromCreatedDidRecord(keyAgreementId)
       expect(publicJwk.fingerprint).not.toBe(derivedKey)
-      const kmsKey = await second.kms.getPublicKey({ keyId: publicJwk.keyId })
+      const { publicKey: kmsKey } = await second.kms.getPublicKey({ keyId: publicJwk.keyId })
       expect(Kms.PublicJwk.fromPublicJwk(kmsKey as Kms.KmsJwkPublicAsymmetric).fingerprint).toBe(
         publicJwk.fingerprint,
       )
