@@ -31,7 +31,12 @@ import {
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
 import { veranaTypeUrls } from '@verana-labs/verana-types'
 import { computeCredentialDigestJCS } from '@verana-labs/verre'
-import { ECS, classifyEcsSchema, schemaRequiresValidUntil } from '@verana-labs/vs-agent-model'
+import {
+  ECS,
+  classifyEcsSchema,
+  isPublicServiceEcs,
+  schemaRequiresValidUntil,
+} from '@verana-labs/vs-agent-model'
 
 import { AdminApiError, AdminApiErrorCode } from '../adminApi'
 import { BaseAgentModules, VsAgent } from '../agent'
@@ -1199,9 +1204,7 @@ export class VtFlowOrchestrator {
       credentialExchangeRecordId: record.credentialExchangeRecordId,
     })
     if (credentialId) {
-      this.agent.config.logger.info(
-        `[vt-flow] removed revoked credential and its linked VP (${credentialId})`,
-      )
+      this.agent.config.logger.info(`[vt-flow] removed revoked credential (${credentialId})`)
     }
   }
 
@@ -1271,6 +1274,21 @@ export class VtFlowOrchestrator {
     }
   }
 
+  // the indexer can still lag the applicant's RenewParticipantOP, so wait for it as checkParticipantId does
+  async isParticipantPending({ record }: VtFlowCheckParticipantIdContext): Promise<boolean> {
+    if (!record.applicantParticipantId) return false
+    const deadline = Date.now() + TX_LOOKUP_TIMEOUT_MS
+    for (;;) {
+      const entry = await this.agent.indexer
+        .getParticipant(record.applicantParticipantId)
+        .catch(() => undefined)
+      if (entry?.revoked || entry?.slashed) return false
+      if (entry?.op_state === 'PENDING') return true
+      if (Date.now() >= deadline) return false
+      await new Promise(resolve => setTimeout(resolve, TX_LOOKUP_INTERVAL_MS))
+    }
+  }
+
   async publishCredentialAsLinkedVp(vtFlowRecordId: string): Promise<void> {
     if (!this.options.publicApiBaseUrl) {
       throw new Error('publicApiBaseUrl is required to publish a LinkedVerifiablePresentation')
@@ -1298,14 +1316,21 @@ export class VtFlowOrchestrator {
           credentialJson as Parameters<typeof W3cV2DataIntegrityVerifiableCredential.fromObject>[0],
         )
       : JsonTransformer.fromJSON(credentialJson, W3cJsonLdVerifiableCredential)
-    await createVtc(
-      this.agent,
-      this.options.publicApiBaseUrl,
-      record.ecsSchemaKey ? linkedVpSchemaId(record.ecsSchemaKey) : schemaBaseId,
-      credential,
-    )
+    if (record.ecsSchemaKey && !isPublicServiceEcs(record.ecsSchemaKey)) {
+      // [VSA-VT-LVP-1]: the agent stores this credential but does not publish it.
+      this.agent.config.logger.info(
+        `[vt-flow] Flow ${record.id}: stored the ${record.ecsSchemaKey} credential, published no linked VP`,
+      )
+    } else {
+      await createVtc(
+        this.agent,
+        this.options.publicApiBaseUrl,
+        record.ecsSchemaKey ? linkedVpSchemaId(record.ecsSchemaKey) : schemaBaseId,
+        credential,
+      )
+    }
 
-    // [VSA-VT-LVP-3]: the record keeps the id of the published credential.
+    // [VSA-VT-LVP-3]: the record keeps the id of the credential.
     // Then the agent can remove that credential without the exchange.
     const credentialId = (credentialJson as { id?: unknown }).id
     if (typeof credentialId === 'string') await vtFlowApi.setCredentialId(record.id, credentialId)

@@ -17,12 +17,12 @@ import {
   DidRepository,
   DidsModule,
   InitConfig,
+  JsonLdModule,
   Kms,
   NewDidCommV2Service,
   NewDidCommV2ServiceEndpoint,
   ParsedDid,
   parseDid,
-  W3cCredentialsModule,
 } from '@credo-ts/core'
 import {
   DidCommCredentialsModuleConfigOptions,
@@ -81,7 +81,7 @@ export type BaseAgentModules = {
   askar: AskarModule
   anoncreds: AnonCredsModule
   dids: DidsModule
-  w3cCredentials: W3cCredentialsModule
+  jsonLd: JsonLdModule
   didcomm: VsAgentDidCommModule
   parentConnection: ParentConnectionModule
   vtFlow: VtFlowModule
@@ -121,7 +121,8 @@ export class VsAgent<TModules extends BaseAgentModules = BaseAgentModules> exten
       skipOwnAuthorization?: boolean
     },
   ) {
-    super(options)
+    // Credo validates the module map with a type that it does not export, so cast to its constructor options.
+    super(options as ConstructorParameters<typeof Agent<TModules>>[0])
     this.did = options.did
     this.publicApiBaseUrl = options.publicApiBaseUrl
     this.adminApiServiceEndpoint = options.adminApiServiceEndpoint

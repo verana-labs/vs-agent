@@ -840,10 +840,12 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
       validation: { decidedAt: '2026-01-01T00:00:00.000Z', submission: VtFlowSubmission.Agent },
       issuance: { tx },
     })
-    const { service, agentContext, exchangeRepository, eventEmitter } = makeService(existing, {
-      id: 'conn-old',
-      theirDid: 'did:web:agent-peer',
-    })
+    const isParticipantPending = vi.fn().mockResolvedValue(true)
+    const { service, agentContext, exchangeRepository, eventEmitter } = makeService(
+      existing,
+      { id: 'conn-old', theirDid: 'did:web:agent-peer' },
+      { isParticipantPending },
+    )
     const stale = { id: 'cred-ex-1', parentThreadId: existing.threadId }
     exchangeRepository.findById.mockResolvedValue(stale)
     const context = makeMessageContext(agentContext)
@@ -859,6 +861,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(record.validation).toBeUndefined()
     expect(record.issuance).toBeUndefined()
     expect(record.credentialExchangeRecordId).toBeUndefined()
+    expect(isParticipantPending).toHaveBeenCalledWith({ agentContext, record: existing })
     expect(stale.parentThreadId).toBeUndefined()
     expect(eventEmitter.emit).toHaveBeenCalledExactlyOnceWith(agentContext, {
       type: VtFlowEventTypes.VtFlowStateChanged,
@@ -869,12 +872,62 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     })
   })
 
+  it.each([
+    ['the hook finds the entry not PENDING', { isParticipantPending: async () => false }],
+    ['no hook is configured', {}],
+  ])('validator takes a request on a new thread in CRED_OFFERED as a reconnection when %s', async (_label, moduleConfig) => {
+    const validation = { decidedAt: '2026-01-01T00:00:00.000Z', submission: VtFlowSubmission.Agent }
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.CredOffered,
+      claims: { name: 'Acme' },
+      credentialExchangeRecordId: 'cred-ex-1',
+      validation,
+    })
+    const { service, agentContext } = makeService(
+      existing,
+      { id: 'conn-old', theirDid: 'did:web:agent-peer' },
+      moduleConfig,
+    )
+    const context = makeMessageContext(agentContext)
+    context.message.claims = { name: 'Acme Renewed' }
+
+    const record = await service.processReceiveOnboardingRequest(context as never)
+
+    expect(record).toMatchObject({
+      state: VtFlowState.Validated,
+      threadId: context.message.threadId,
+      claims: { name: 'Acme' },
+      validation,
+    })
+  })
+
+  it.each([
+    ['a request on the same thread in CRED_OFFERED', VtFlowState.CredOffered, true],
+    ['a request on a new thread in VALIDATING', VtFlowState.Validating, false],
+  ])('validator does not ask whether the entry is PENDING for %s', async (_label, state, sameThread) => {
+    const existing = makeRecord({ role: VtFlowRole.Validator, state })
+    const isParticipantPending = vi.fn().mockResolvedValue(true)
+    const { service, agentContext } = makeService(
+      existing,
+      { id: 'conn-old', theirDid: 'did:web:agent-peer' },
+      { isParticipantPending },
+    )
+    const context = makeMessageContext(agentContext)
+    if (sameThread) context.message.setThread({ threadId: existing.threadId })
+
+    await service.processReceiveOnboardingRequest(context as never)
+
+    expect(isParticipantPending).not.toHaveBeenCalled()
+  })
+
   it('validator starts one validation when the renewal request comes twice on the same thread', async () => {
     const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.CredOffered })
-    const { service, repository, agentContext, eventEmitter } = makeService(existing, {
-      id: 'conn-old',
-      theirDid: 'did:web:agent-peer',
-    })
+    const { service, repository, agentContext, eventEmitter } = makeService(
+      existing,
+      { id: 'conn-old', theirDid: 'did:web:agent-peer' },
+      { isParticipantPending: async () => true },
+    )
     const renewal = makeMessageContext(agentContext)
     const duplicate = makeMessageContext(agentContext)
     duplicate.message.setThread({ threadId: renewal.message.threadId })

@@ -100,7 +100,11 @@ describe('vt-flow: applicant reconnection', () => {
       label: 'Validator',
       domain: 'validator',
       didcommVersions: ['v1', 'v2'],
-      vtFlowOptions: { autoAcceptOnboardingRequest, autoOfferCredential: false },
+      vtFlowOptions: {
+        autoAcceptOnboardingRequest,
+        autoOfferCredential: false,
+        isParticipantPending: async () => opState === ValidationState.PENDING,
+      },
     })
     validator.didcomm.registerInboundTransport(new SubjectInboundTransport(subjectMap['rxjs:validator']))
     validator.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))

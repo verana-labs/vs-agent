@@ -89,6 +89,7 @@ export type {
   VtFlowCheckParticipantIdHook,
   VtFlowCredentialLifecycleContext,
   VtFlowCredentialOfferPayload,
+  VtFlowIsParticipantPendingHook,
   VtFlowModuleConfigOptions,
   VtFlowOnCompletedHook,
   VtFlowRequestPurpose,

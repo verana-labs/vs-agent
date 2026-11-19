@@ -1,11 +1,11 @@
-diff --git a/build/ActionMenuApi.d.mts b/build/ActionMenuApi.d.mts
-index 5926df0..c0e0004 100644
---- a/build/ActionMenuApi.d.mts
-+++ b/build/ActionMenuApi.d.mts
-@@ -30,6 +30,16 @@ export declare class ActionMenuApi {
+diff --git a/build/index-ChuM1PFA.d.mts b/build/index-ChuM1PFA.d.mts
+index ba001c015bcb1fc0fd9d6f2244194287a9deb4d6..a9b93fec8189d11f89238c2d87a0cbaf74353fae 100644
+--- a/build/index-ChuM1PFA.d.mts
++++ b/build/index-ChuM1PFA.d.mts
+@@ -420,6 +420,16 @@ declare class DidCommActionMenuApi {
     * @returns Action Menu record associated to this action
     */
-   sendMenu(options: SendMenuOptions): Promise<ActionMenuRecord>;
+   sendMenu(options: SendMenuOptions): Promise<DidCommActionMenuRecord>;
 +  /**
 +   * Send a new Action Menu as responder, answering with the identifier of the sent message.
 +   *
@@ -13,17 +13,17 @@ index 5926df0..c0e0004 100644
 +   * @returns the Action Menu record and the id of the sent message
 +   */
 +  sendMenuWithMessageId(options: SendMenuOptions): Promise<{
-+    record: ActionMenuRecord;
++    record: DidCommActionMenuRecord;
 +    messageId: string;
 +  }>;
    /**
     * Perform action in active Action Menu, as a requester. The related
     * menu will be closed.
-diff --git a/build/ActionMenuApi.mjs b/build/ActionMenuApi.mjs
-index c31c5af..c21eb19 100644
---- a/build/ActionMenuApi.mjs
-+++ b/build/ActionMenuApi.mjs
-@@ -38,6 +38,16 @@ let ActionMenuApi = class ActionMenuApi {
+diff --git a/build/index.mjs b/build/index.mjs
+index ee16224bd3e1ca17b482e62ac387e08f54fa2f84..c55b2102942f2bdf6852e8c5c7dfa0c1c9a3772a 100644
+--- a/build/index.mjs
++++ b/build/index.mjs
+@@ -484,6 +484,16 @@ let DidCommActionMenuApi = class DidCommActionMenuApi$1 {
  	* @returns Action Menu record associated to this action
  	*/
  	async sendMenu(options) {
@@ -40,7 +40,7 @@ index c31c5af..c21eb19 100644
  		const connection = await this.connectionService.getById(this.agentContext, options.connectionId);
  		const { message, record } = await this.actionMenuService.createMenu(this.agentContext, {
  			connection,
-@@ -49,7 +59,10 @@ let ActionMenuApi = class ActionMenuApi {
+@@ -495,7 +505,10 @@ let DidCommActionMenuApi = class DidCommActionMenuApi$1 {
  			connectionRecord: connection
  		});
  		await this.messageSender.sendMessage(outboundMessageContext);
