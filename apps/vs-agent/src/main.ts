@@ -17,6 +17,7 @@ import {
   VeranaChainService,
   VeranaIndexerService,
   VtFlowOrchestrator,
+  FAILED_SUBMISSION_RETRY_INTERVAL_MS,
   IndexerWebSocketService,
   buildDefaultIndexerHandlerRegistry,
   completePendingTrustDecisions,
@@ -546,6 +547,15 @@ const run = async () => {
     void vtFlowOrchestrator
       .resumeIssuanceSubmissions()
       .catch((error: Error) => serverLogger.error(`[vt-flow] resuming issuances failed: ${error.message}`))
+    const resumeFailedSubmissions = (): void => {
+      void vtFlowOrchestrator
+        .resumeFailedSubmissions()
+        .catch((error: Error) =>
+          serverLogger.error(`[vt-flow] resuming failed transactions failed: ${error.message}`),
+        )
+        .finally(() => setTimeout(resumeFailedSubmissions, FAILED_SUBMISSION_RETRY_INTERVAL_MS).unref())
+    }
+    resumeFailedSubmissions()
   }
 
   const ecsBootstrap = new EcsBootstrapService(

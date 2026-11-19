@@ -156,7 +156,9 @@ export async function fetchJson<T>(
     const res = await fetch(url, controller ? { signal: controller.signal } : undefined)
     if (allowNotFound && res.status === 404) return undefined
     if (!res.ok) {
-      throw new Error(`Failed to fetch ${url}: ${res.statusText}`)
+      throw Object.assign(new Error(`Failed to fetch ${url}: ${res.statusText}`), {
+        cause: { status: res.status },
+      })
     }
     return (await res.json()) as T
   } finally {
