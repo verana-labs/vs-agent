@@ -17,6 +17,7 @@ import {
   VtFlowRecord,
   VtFlowRole,
   VtFlowState,
+  VtFlowTxReason,
   VtFlowTxStatus,
   VtFlowVariant,
   isVtFlowTerminalState,
@@ -289,9 +290,10 @@ const VALIDATOR_STATES: ReadonlySet<VtFlowState> = new Set([
 /**
  * Gives the party that must act for a flow to progress, per the [VSA-ADM-VT-FL-LIST] pendingAction
  * table. An expired oob-link hands OOB_PENDING back to the validator, and a failed issuance
- * anchoring hands CRED_OFFERED back to it so the operator can re-anchor.
+ * anchoring hands CRED_OFFERED back to it so the operator can re-anchor. A transaction that failed
+ * with SERVICE_UNAVAILABLE stays with the agent, which repeats it ([VSA-ADM-VT-FL-VALIDATE-12]).
  */
-function pendingActionOf(record: VtFlowRecord): VtFlowPendingAction {
+function pendingActionOf(record: VtFlowRecord, connectionState: VtConnectionState): VtFlowPendingAction {
   const { state, role } = record
   if (isVtFlowTerminalState(state)) return VtFlowPendingAction.None
 
@@ -308,7 +310,11 @@ function pendingActionOf(record: VtFlowRecord): VtFlowPendingAction {
     if (state !== VtFlowState.Validating && role === VtFlowRole.Applicant) {
       return VtFlowPendingAction.None
     }
-    return VtFlowPendingAction.Validator
+    const agentRepeats =
+      state === VtFlowState.ValidationTxFailed &&
+      record.validation?.tx?.reason === VtFlowTxReason.ServiceUnavailable &&
+      connectionState !== 'TERMINATED'
+    return agentRepeats ? VtFlowPendingAction.Agent : VtFlowPendingAction.Validator
   }
   if (state === VtFlowState.ValidationTxSubmitted) {
     return role === VtFlowRole.Applicant ? VtFlowPendingAction.None : VtFlowPendingAction.Chain
@@ -319,8 +325,10 @@ function pendingActionOf(record: VtFlowRecord): VtFlowPendingAction {
       : VtFlowPendingAction.None
   }
   if (state === VtFlowState.CredOffered) {
-    const anchoringFailed = record.issuance?.tx?.status === VtFlowTxStatus.Failed
-    return role === VtFlowRole.Validator && anchoringFailed
+    const tx = record.issuance?.tx
+    const operatorRepeats =
+      tx?.status === VtFlowTxStatus.Failed && tx.reason !== VtFlowTxReason.ServiceUnavailable
+    return role === VtFlowRole.Validator && operatorRepeats
       ? VtFlowPendingAction.Validator
       : VtFlowPendingAction.Agent
   }
@@ -377,7 +385,7 @@ function toDto({ record, peerDid, connectionState }: ResolvedFlow): VtFlowRecord
       at: message.at,
       url: message.url,
     })),
-    pendingAction: pendingActionOf(record),
+    pendingAction: pendingActionOf(record, connectionState),
     validation: record.validation,
     issuance: record.issuance,
     proofs: record.proofsAttach,

@@ -548,7 +548,7 @@ describe('v4 vt-flow driven by an onboarding backend on a live chain and indexer
         )
         expect(failed).toMatchObject({
           flowState: VtFlowState.CredOffered,
-          issuance: { tx: { reason: 'PREFLIGHT_ERROR', error: 'Bad status on response: 502' } },
+          issuance: { tx: { reason: 'SERVICE_UNAVAILABLE', error: 'Bad status on response: 502' } },
         })
         expect(anchoringAttempts).toBe(4)
         await untilState(applicantFlows, holderSid, VtFlowState.CredOffered)

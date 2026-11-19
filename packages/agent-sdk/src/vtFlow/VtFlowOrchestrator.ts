@@ -73,9 +73,11 @@ import {
 const DISCOUNT_SCALE = 10_000
 const TX_LOOKUP_TIMEOUT_MS = 60_000
 const TX_LOOKUP_INTERVAL_MS = 3_000
+export const FAILED_SUBMISSION_RETRY_INTERVAL_MS = 60_000
 // the notification handler and the tx lookup can both reach markValidated for one flow at the same time
 const markingValidated = new Set<string>()
 const continuingAfterValidated = new Map<string, Promise<void>>()
+const validatingFlows = new Map<string, Promise<void>>()
 
 const FEE_KEYS = ['validationFees', 'issuanceFees', 'verificationFees'] as const
 const DISCOUNT_KEYS = ['issuanceFeeDiscount', 'verificationFeeDiscount'] as const
@@ -97,6 +99,25 @@ function sameTerm(key: string, given: number, onEntry: number): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+const REASONS_AFTER_BROADCAST: ReadonlySet<VtFlowTxReason | undefined> = new Set([
+  VtFlowTxReason.BroadcastError,
+  VtFlowTxReason.TxFailed,
+  VtFlowTxReason.TxNotFound,
+])
+
+// A transaction that failed in the pre-flight: a repeat cannot put a second transaction on chain.
+function failedInPreflight(tx: VtFlowTx | undefined): boolean {
+  return tx?.status === VtFlowTxStatus.Failed && !REASONS_AFTER_BROADCAST.has(tx.reason)
+}
+
+function repeatsOnInterval(tx: VtFlowTx | undefined): boolean {
+  return tx?.status === VtFlowTxStatus.Failed && tx.reason === VtFlowTxReason.ServiceUnavailable
+}
+
+function flowTx(record: VtFlowRecord): VtFlowTx | undefined {
+  return record.state === VtFlowState.CredOffered ? record.issuance?.tx : record.validation?.tx
 }
 
 export interface VtFlowOrchestratorOptions {
@@ -147,6 +168,8 @@ export interface AcceptCredentialInput {
 }
 
 export class VtFlowOrchestrator {
+  private startupRepeats?: Set<string>
+
   constructor(
     private readonly agent: VsAgent<BaseAgentModules>,
     private readonly options: VtFlowOrchestratorOptions = {},
@@ -353,6 +376,10 @@ export class VtFlowOrchestrator {
 
   /** [VSA-ADM-VT-FL-VALIDATE] */
   async validateFlow(input: ValidateFlowInput): Promise<VtFlowRecord> {
+    return this.oneAtATime(input.vtFlowRecordId, () => this.validateFlowOnce(input), validatingFlows)
+  }
+
+  private async validateFlowOnce(input: ValidateFlowInput): Promise<VtFlowRecord> {
     this.requireChain()
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(input.vtFlowRecordId)
@@ -798,17 +825,25 @@ export class VtFlowOrchestrator {
 
   // one run at a time per flow: two callers at once would both read VALIDATED and offer twice
   async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {
-    const previous = continuingAfterValidated.get(recordId) ?? Promise.resolve()
-    const run = previous.then(() => this.issuanceAfterValidated(recordId))
+    return this.oneAtATime(recordId, () => this.issuanceAfterValidated(recordId))
+  }
+
+  private async oneAtATime<T>(
+    recordId: string,
+    task: () => Promise<T>,
+    runs = continuingAfterValidated,
+  ): Promise<T> {
+    const previous = runs.get(recordId) ?? Promise.resolve()
+    const run = previous.then(task)
     const settled = run.then(
       () => undefined,
       () => undefined,
     )
-    continuingAfterValidated.set(recordId, settled)
+    runs.set(recordId, settled)
     try {
       return await run
     } finally {
-      if (continuingAfterValidated.get(recordId) === settled) continuingAfterValidated.delete(recordId)
+      if (runs.get(recordId) === settled) runs.delete(recordId)
     }
   }
 
@@ -848,26 +883,60 @@ export class VtFlowOrchestrator {
     await Promise.all(pending.map(record => this.resolveValidationTx(record.id)))
   }
 
-  /**
-   * [VSA-VTI-FLOW-ISSUE-1]: at startup, resume through the stored issued credential every anchoring
-   * left SUBMITTED, and every anchoring that failed in the pre-flight, which sent no transaction.
-   */
+  /** [VSA-VTI-FLOW-ISSUE-1]: at startup, resume through the stored issued credential every anchoring left SUBMITTED. */
   async resumeIssuanceSubmissions(): Promise<void> {
     const vtFlowApi = this.resolveVtFlowApi()
     const offered = await vtFlowApi.findAllByQuery({
       role: VtFlowRole.Validator,
       flowState: VtFlowState.CredOffered,
     })
-    const resumable = (tx: VtFlowTx | undefined): boolean =>
-      tx?.status === VtFlowTxStatus.Submitted ||
-      (tx?.status === VtFlowTxStatus.Failed && tx.reason === VtFlowTxReason.PreflightError)
     await Promise.all(
       offered.map(({ id, issuance, credentialExchangeRecordId }) =>
-        resumable(issuance?.tx) && credentialExchangeRecordId
+        issuance?.tx?.status === VtFlowTxStatus.Submitted && credentialExchangeRecordId
           ? vtFlowApi.issueCredentialForSession({ vtFlowRecordId: id, credentialExchangeRecordId })
           : undefined,
       ),
     )
+  }
+
+  /**
+   * [VSA-ADM-VT-FL-VALIDATE-12], [VSA-VTI-FLOW-ISSUE-3]: repeat validateFlow for each anchoring and
+   * validation that failed in the pre-flight. The first run repeats each of them one time. A later run
+   * repeats only SERVICE_UNAVAILABLE. A run stops after a validation it broadcasts, as its inclusion
+   * is not awaited and a second signature would reuse the account sequence. The flows that the first
+   * run did not reach stay for the subsequent runs.
+   */
+  async resumeFailedSubmissions(): Promise<void> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const [offered, failedValidations] = await Promise.all([
+      vtFlowApi.findAllByQuery({ role: VtFlowRole.Validator, flowState: VtFlowState.CredOffered }),
+      vtFlowApi.findAllByQuery({ role: VtFlowRole.Validator, flowState: VtFlowState.ValidationTxFailed }),
+    ])
+    const failed = [
+      ...offered.filter(record => record.credentialExchangeRecordId),
+      ...failedValidations.filter(record => !record.connectionTerminated),
+    ].filter(record => failedInPreflight(flowTx(record)))
+    const failedIds = new Set(failed.map(record => record.id))
+    if (!this.startupRepeats) this.startupRepeats = failedIds
+    for (const id of this.startupRepeats) if (!failedIds.has(id)) this.startupRepeats.delete(id)
+
+    for (const record of failed) {
+      if (!this.startupRepeats.has(record.id) && !repeatsOnInterval(flowTx(record))) continue
+      if (validatingFlows.has(record.id)) continue
+      this.startupRepeats.delete(record.id)
+      const warn = (details: Record<string, unknown>) =>
+        this.agent.config.logger.warn(
+          `[vt-flow] retrying the transaction of flow ${record.id} failed`,
+          details,
+        )
+      const retried = await this.validateFlow({ vtFlowRecordId: record.id }).catch(error => {
+        warn({ error: errorMessage(error) })
+        return undefined
+      })
+      const tx = retried && flowTx(retried)
+      if (tx?.status === VtFlowTxStatus.Failed) warn({ reason: tx.reason, error: tx.error })
+      if (retried?.state === VtFlowState.ValidationTxSubmitted) return
+    }
   }
 
   async acceptCredential(input: AcceptCredentialInput): Promise<VtFlowRecord> {
