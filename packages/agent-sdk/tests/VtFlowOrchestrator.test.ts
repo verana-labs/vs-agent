@@ -1920,7 +1920,7 @@ describe('VtFlowOrchestrator.resumeFailedSubmissions', () => {
   })
 
   it('goes on to the next validation when one fails in the pre-flight again', async () => {
-    const { orchestrator, chain } = makeResumeAgent([
+    const { orchestrator, chain, logger } = makeResumeAgent([
       {
         id: 'rec-1',
         state: 'VALIDATION_TX_FAILED',
@@ -1942,6 +1942,11 @@ describe('VtFlowOrchestrator.resumeFailedSubmissions', () => {
 
     expect(sentIds(chain)).toEqual([94, 95])
     expect(chain.broadcastWithoutWaiting).toHaveBeenCalledTimes(1)
+    expect(logger.warn).toHaveBeenCalledTimes(1)
+    expect(logger.warn).toHaveBeenCalledWith('[vt-flow] retrying the transaction of flow rec-1 failed', {
+      reason: 'PREFLIGHT_ERROR',
+      error: 'unauthorized',
+    })
   })
 
   it('stops the tick after the first validation it broadcasts', async () => {

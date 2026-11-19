@@ -248,12 +248,20 @@ describe('preflightFee', () => {
   it.each([
     ['an HTTP 4xx', httpStatus(429)],
     ['a chain rejection with no cause', new Error('Query failed with (18): account sequence mismatch')],
-    ['a timeout of the response headers', socket('UND_ERR_HEADERS_TIMEOUT')],
   ])('does not retry %s, and reports PREFLIGHT_ERROR', async (_case, error) => {
     const chain = chainWith()
     chain.estimateFee.mockRejectedValue(error)
 
     await expect(run(chain)).resolves.toEqual({ reason: 'PREFLIGHT_ERROR', error: error.message })
+    expect(chain.estimateFee).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not retry a timeout of the response, and reports SERVICE_UNAVAILABLE', async () => {
+    const chain = chainWith()
+    const error = socket('UND_ERR_HEADERS_TIMEOUT')
+    chain.estimateFee.mockRejectedValue(error)
+
+    await expect(run(chain)).resolves.toEqual({ reason: 'SERVICE_UNAVAILABLE', error: error.message })
     expect(chain.estimateFee).toHaveBeenCalledTimes(1)
   })
 })
@@ -376,5 +384,40 @@ describe('preflightFailureReason', () => {
     const unreachable = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } })
 
     expect(preflightFailureReason(unreachable)).toBe('SERVICE_UNAVAILABLE')
+  })
+
+  it('gives SERVICE_UNAVAILABLE when the request to the indexer times out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init: { signal: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            init.signal.addEventListener('abort', () => reject(init.signal.reason)),
+          ),
+      ),
+    )
+    const timedOut = await fetchJson('https://idx.example/v4/di/get/abc', 1).catch((error: unknown) => error)
+
+    expect((timedOut as Error).name).toBe('AbortError')
+    expect(preflightFailureReason(timedOut)).toBe('SERVICE_UNAVAILABLE')
+  })
+
+  it.each([
+    'UND_ERR_HEADERS_TIMEOUT',
+    'UND_ERR_BODY_TIMEOUT',
+  ])('gives SERVICE_UNAVAILABLE when the request ends with %s', code => {
+    const timedOut = Object.assign(new TypeError('fetch failed'), { cause: { code } })
+
+    expect(preflightFailureReason(timedOut)).toBe('SERVICE_UNAVAILABLE')
+  })
+
+  it('gives SERVICE_UNAVAILABLE for the TimeoutError of an AbortSignal.timeout', async () => {
+    const timedOut = await new Promise(resolve =>
+      AbortSignal.timeout(1).addEventListener('abort', event =>
+        resolve((event.target as AbortSignal).reason),
+      ),
+    )
+
+    expect(preflightFailureReason(timedOut)).toBe('SERVICE_UNAVAILABLE')
   })
 })

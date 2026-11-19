@@ -922,12 +922,17 @@ export class VtFlowOrchestrator {
       if (!this.startupRepeats.has(record.id) && !repeatsOnInterval(flowTx(record))) continue
       if (validatingFlows.has(record.id)) continue
       this.startupRepeats.delete(record.id)
+      const warn = (details: Record<string, unknown>) =>
+        this.agent.config.logger.warn(
+          `[vt-flow] retrying the transaction of flow ${record.id} failed`,
+          details,
+        )
       const retried = await this.validateFlow({ vtFlowRecordId: record.id }).catch(error => {
-        this.agent.config.logger.warn(`[vt-flow] retrying the transaction of flow ${record.id} failed`, {
-          error: errorMessage(error),
-        })
+        warn({ error: errorMessage(error) })
         return undefined
       })
+      const tx = retried && flowTx(retried)
+      if (tx?.status === VtFlowTxStatus.Failed) warn({ reason: tx.reason, error: tx.error })
       if (retried?.state === VtFlowState.ValidationTxSubmitted) return
     }
   }
