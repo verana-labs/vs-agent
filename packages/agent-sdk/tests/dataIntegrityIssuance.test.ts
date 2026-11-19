@@ -412,7 +412,7 @@ describe('VC Data Model 2.0 issuance over the Data Integrity credential format',
     expect((issued.proof as { type: string }).type).toMatch(/^Ed25519Signature20(18|20)$/)
   }, 30_000)
 
-  it('explains that the anoncreds link secret binding needs the AnonCredsModule', async () => {
+  it('explains that the anoncreds link secret binding needs a link secret binding provider', async () => {
     await expect(
       formatService.createOffer(agent.context, {
         credentialExchangeRecord: newExchange(),
@@ -432,7 +432,7 @@ describe('VC Data Model 2.0 issuance over the Data Integrity credential format',
           },
         },
       }),
-    ).rejects.toThrow(/Register the AnonCredsModule/)
+    ).rejects.toThrow(/Pass a linkSecretBinding provider/)
   })
 
   it('rejects the anoncreds link secret binding for a data model 2.0 credential', async () => {

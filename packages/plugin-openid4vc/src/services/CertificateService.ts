@@ -285,7 +285,7 @@ async function loadConfiguredSigningCertificate(
   let storedPublicJwk: unknown
 
   try {
-    storedPublicJwk = await agent.kms.getPublicKey({ keyId })
+    storedPublicJwk = (await agent.kms.getPublicKey({ keyId })).publicKey
   } catch (error) {
     if (!(error instanceof Kms.KeyManagementKeyNotFoundError)) throw error
 
@@ -326,7 +326,7 @@ async function loadDevelopmentSigningCertificate(
       assertCertificateChainUsable([certificate])
       assertDevelopmentCertificateIdentity(certificate, agent.did, hostname)
 
-      const storedPublicJwk = await agent.kms.getPublicKey({ keyId: stored.keyId })
+      const { publicKey: storedPublicJwk } = await agent.kms.getPublicKey({ keyId: stored.keyId })
       if (
         !equalPublicJwk(
           canonicalP256PublicJwk(storedPublicJwk),

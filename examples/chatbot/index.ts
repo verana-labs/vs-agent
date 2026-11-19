@@ -76,6 +76,10 @@ const defaultConnectionSettings: ConnectionSettings = { echoMedia: false, trace:
 
 const connectionSettings = new Map<string, ConnectionSettings>()
 
+// Thread of the last MRZ received per connection: the eMRTD request names it as its
+// parent thread, so that the wallet reads the chip with that MRZ.
+const lastMrzThread = new Map<string, string>()
+
 const settingsOf = (connectionId: string): ConnectionSettings =>
   connectionSettings.get(connectionId) ?? defaultConnectionSettings
 
@@ -426,7 +430,7 @@ const handleText = async (connectionId: string, content: string): Promise<void> 
   } else if (command === '/mrz') {
     await client.didcomm.requestMrz({ connectionId })
   } else if (command === '/emrtd') {
-    await client.didcomm.requestEmrtdData({ connectionId })
+    await client.didcomm.requestEmrtdData({ connectionId, parentThreadId: lastMrzThread.get(connectionId) })
   } else if (command === '/revoke') {
     const [, credentialExchangeId] = content.split(' ')
     if (!credentialExchangeId) {
@@ -516,7 +520,8 @@ events
   })
   .on('didcomm.mrtd.mrz-data-received', async data => {
     logger.info(`MRZ data received: ${JSON.stringify(data.mrzData)}`)
-    await client.didcomm.requestEmrtdData({ connectionId: data.connectionId })
+    lastMrzThread.set(data.connectionId, data.threadId)
+    await client.didcomm.requestEmrtdData({ connectionId: data.connectionId, parentThreadId: data.threadId })
   })
   .on('didcomm.mrtd.emrtd-data-received', data => {
     logger.info(`eMRTD data received: ${JSON.stringify(data.dataGroups)}`)

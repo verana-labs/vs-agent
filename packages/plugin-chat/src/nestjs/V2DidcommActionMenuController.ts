@@ -1,7 +1,7 @@
 import type { ChatAgentModules } from '../types'
 import type { VsAgent } from '@verana-labs/vs-agent-sdk'
 
-import { ActionMenu } from '@credo-ts/action-menu'
+import { DidCommActionMenu } from '@credo-ts/didcomm-action-menu'
 import { Body, Controller, Inject, Post, UsePipes, ValidationPipe } from '@nestjs/common'
 import { ApiCreatedResponse, ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
@@ -20,7 +20,7 @@ export class V2DidcommActionMenuController {
   public async sendMenu(@Body() body: SendMenuBodyDto): Promise<SentMessageDto> {
     const { messageId } = await this.agent.modules.actionMenu.sendMenuWithMessageId({
       connectionId: body.connectionId,
-      menu: new ActionMenu(body.menu),
+      menu: new DidCommActionMenu(body.menu),
     })
 
     return { id: messageId }
