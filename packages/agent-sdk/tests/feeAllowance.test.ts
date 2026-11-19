@@ -216,7 +216,7 @@ describe('preflightFee', () => {
     expect(chain[read]).toHaveBeenCalledTimes(2)
   })
 
-  it('stops after 4 attempts that wait 0.5 s, 1 s and 2 s, and reports PREFLIGHT_ERROR', async () => {
+  it('stops after 4 attempts that wait 0.5 s, 1 s and 2 s, and reports SERVICE_UNAVAILABLE', async () => {
     const chain = chainWith()
     chain.estimateFee.mockRejectedValue(httpStatus(503))
 
@@ -230,7 +230,7 @@ describe('preflightFee', () => {
     await vi.advanceTimersByTimeAsync(2000)
 
     await expect(result).resolves.toEqual({
-      reason: 'PREFLIGHT_ERROR',
+      reason: 'SERVICE_UNAVAILABLE',
       error: 'Bad status on response: 503',
     })
     expect(chain.estimateFee).toHaveBeenCalledTimes(4)
@@ -248,7 +248,7 @@ describe('preflightFee', () => {
     ['an HTTP 4xx', httpStatus(429)],
     ['a chain rejection with no cause', new Error('Query failed with (18): account sequence mismatch')],
     ['a timeout of the response headers', socket('UND_ERR_HEADERS_TIMEOUT')],
-  ])('does not retry %s', async (_case, error) => {
+  ])('does not retry %s, and reports PREFLIGHT_ERROR', async (_case, error) => {
     const chain = chainWith()
     chain.estimateFee.mockRejectedValue(error)
 

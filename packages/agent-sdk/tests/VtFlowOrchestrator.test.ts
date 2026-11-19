@@ -1744,64 +1744,126 @@ describe('VtFlowOrchestrator.resumeFailedSubmissions', () => {
   const sentIds = (chain: { setParticipantOPToValidatedMsg: { mock: { calls: unknown[][] } } }) =>
     chain.setParticipantOPToValidatedMsg.mock.calls.map(([params]) => (params as { id: number }).id)
 
-  it('repeats the anchorings and the validations that failed in the pre-flight, and nothing else', async () => {
-    const { orchestrator, vtFlowApi, chain, logger } = makeResumeAgent([
-      {
-        id: 'anchor-ok',
-        state: 'CRED_OFFERED',
-        credentialExchangeRecordId: 'cx-ok',
-        issuance: { tx: preflightFailed },
-      },
+  const failedWith = (reason: string) => ({ status: 'FAILED', reason })
+  const anchoring = (reason: string) => ({
+    id: `anchor-${reason}`,
+    state: 'CRED_OFFERED',
+    credentialExchangeRecordId: `cx-${reason}`,
+    issuance: { tx: failedWith(reason) },
+  })
+  const validation = (
+    reason: string,
+    applicantParticipantId: number,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    id: `validation-${reason}`,
+    state: 'VALIDATION_TX_FAILED',
+    applicantParticipantId: String(applicantParticipantId),
+    validation: { decidedAt: '', submission: 'AGENT', tx: failedWith(reason) },
+    ...extra,
+  })
+  const rejectSimulation = (chain: { estimateFee: { mockRejectedValue: (error: Error) => void } }) =>
+    chain.estimateFee.mockRejectedValue(new Error('unauthorized'))
+
+  it('repeats at startup each transaction that failed in the pre-flight, and nothing else', async () => {
+    const { orchestrator, vtFlowApi, chain } = makeResumeAgent([
+      ...['SERVICE_UNAVAILABLE', 'PREFLIGHT_ERROR', 'INSUFFICIENT_FUNDS_AGENT'].map(anchoring),
+      ...['BROADCAST_ERROR', 'TX_FAILED', 'TX_NOT_FOUND'].map(anchoring),
       { id: 'anchor-no-cx', state: 'CRED_OFFERED', issuance: { tx: preflightFailed } },
-      ...['BROADCAST_ERROR', 'TX_FAILED', 'TX_NOT_FOUND', 'INSUFFICIENT_FUNDS_AGENT'].map(reason => ({
-        id: `anchor-${reason}`,
-        state: 'CRED_OFFERED',
-        credentialExchangeRecordId: `cx-${reason}`,
-        issuance: { tx: { status: 'FAILED', reason } },
-      })),
       {
         id: 'anchor-submitted',
         state: 'CRED_OFFERED',
         credentialExchangeRecordId: 'cx-s',
         issuance: { tx: { status: 'SUBMITTED' } },
       },
+      ...['BROADCAST_ERROR', 'TX_FAILED', 'TX_NOT_FOUND'].map((reason, index) =>
+        validation(reason, 200 + index),
+      ),
+      validation('PREFLIGHT_ERROR', 95, { id: 'validation-terminated', connectionTerminated: true }),
       ...[
-        'BROADCAST_ERROR',
-        'TX_FAILED',
-        'TX_NOT_FOUND',
+        'SERVICE_UNAVAILABLE',
+        'PREFLIGHT_ERROR',
         'INSUFFICIENT_FUNDS_AGENT',
         'INSUFFICIENT_FUNDS_CORPORATION',
         'FEEGRANT_EXHAUSTED',
         'FEEGRANT_EXPIRED',
         'AUTHORIZATION_EXPIRED',
-      ].map((reason, index) => ({
-        id: `validation-${reason}`,
-        state: 'VALIDATION_TX_FAILED',
-        applicantParticipantId: String(200 + index),
-        validation: { decidedAt: '', submission: 'AGENT', tx: { status: 'FAILED', reason } },
-      })),
-      {
-        id: 'validation-terminated',
-        state: 'VALIDATION_TX_FAILED',
-        applicantParticipantId: '95',
-        connectionTerminated: true,
-        validation: { decidedAt: '', submission: 'AGENT', tx: preflightFailed },
-      },
-      {
-        id: 'validation-ok',
-        state: 'VALIDATION_TX_FAILED',
-        validation: { decidedAt: '', submission: 'AGENT', tx: preflightFailed },
-      },
+      ].map((reason, index) => validation(reason, 300 + index)),
     ])
+    rejectSimulation(chain)
 
     await orchestrator.resumeFailedSubmissions()
 
-    expect(vtFlowApi.issueCredentialForSession.mock.calls).toEqual([
-      [{ vtFlowRecordId: 'anchor-ok', credentialExchangeRecordId: 'cx-ok' }],
+    expect(vtFlowApi.issueCredentialForSession.mock.calls.map(([input]) => input.vtFlowRecordId)).toEqual([
+      'anchor-SERVICE_UNAVAILABLE',
+      'anchor-PREFLIGHT_ERROR',
+      'anchor-INSUFFICIENT_FUNDS_AGENT',
     ])
-    expect(sentIds(chain)).toEqual([94])
-    expect(chain.broadcastWithoutWaiting).toHaveBeenCalledTimes(1)
-    expect(logger.warn).not.toHaveBeenCalled()
+    expect(sentIds(chain)).toEqual([300, 301, 302, 303, 304, 305, 306])
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+  })
+
+  it('repeats on the interval only the transactions that failed with SERVICE_UNAVAILABLE', async () => {
+    const { orchestrator, vtFlowApi, chain, store } = makeResumeAgent([
+      ...['SERVICE_UNAVAILABLE', 'PREFLIGHT_ERROR'].map(anchoring),
+      validation('SERVICE_UNAVAILABLE', 300),
+      validation('PREFLIGHT_ERROR', 301),
+      validation('INSUFFICIENT_FUNDS_AGENT', 302),
+    ])
+    const unavailable = Object.assign(new Error('Bad status on response: 502'), { cause: { status: 502 } })
+    chain.estimateFee.mockImplementation(async ([message]) => {
+      throw message.value.id === 300 ? unavailable : new Error('unauthorized')
+    })
+    vi.useFakeTimers()
+    try {
+      const startup = orchestrator.resumeFailedSubmissions()
+      await vi.runAllTimersAsync()
+      await startup
+      expect(store.get('validation-SERVICE_UNAVAILABLE')?.validation).toMatchObject({
+        tx: { status: 'FAILED', reason: 'SERVICE_UNAVAILABLE' },
+      })
+      vtFlowApi.issueCredentialForSession.mockClear()
+      chain.setParticipantOPToValidatedMsg.mockClear()
+
+      const tick = orchestrator.resumeFailedSubmissions()
+      await vi.runAllTimersAsync()
+      await tick
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(vtFlowApi.issueCredentialForSession.mock.calls.map(([input]) => input.vtFlowRecordId)).toEqual([
+      'anchor-SERVICE_UNAVAILABLE',
+    ])
+    expect(sentIds(chain)).toEqual([300])
+  })
+
+  it('repeats in a later run the startup flows that a broadcast kept out of the first run', async () => {
+    const { orchestrator, chain } = makeResumeAgent([
+      validation('PREFLIGHT_ERROR', 300),
+      validation('PREFLIGHT_ERROR', 301, { id: 'validation-second' }),
+    ])
+
+    await orchestrator.resumeFailedSubmissions()
+    expect(sentIds(chain)).toEqual([300])
+
+    await orchestrator.resumeFailedSubmissions()
+    expect(sentIds(chain)).toEqual([300, 301])
+
+    await orchestrator.resumeFailedSubmissions()
+    expect(sentIds(chain)).toEqual([300, 301])
+  })
+
+  it('logs at warning level a repeat that throws', async () => {
+    const { orchestrator, vtFlowApi, logger } = makeResumeAgent([anchoring('SERVICE_UNAVAILABLE')])
+    vtFlowApi.issueCredentialForSession.mockRejectedValue(new Error('no connection'))
+
+    await orchestrator.resumeFailedSubmissions()
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[vt-flow] retrying the transaction of flow anchor-SERVICE_UNAVAILABLE failed',
+      { error: 'no connection' },
+    )
   })
 
   it('sends the validation again with the terms stored on the flow', async () => {

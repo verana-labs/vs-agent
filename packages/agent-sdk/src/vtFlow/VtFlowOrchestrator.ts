@@ -115,9 +115,23 @@ async function oneRunPerFlow<T>(
   }
 }
 
-// A failed transaction that the agent did not sign: a repeat cannot put a second transaction on chain.
-function resumesAutomatically(tx: VtFlowTx | undefined): boolean {
-  return tx?.status === VtFlowTxStatus.Failed && tx.reason === VtFlowTxReason.PreflightError
+const REASONS_AFTER_BROADCAST: ReadonlySet<VtFlowTxReason | undefined> = new Set([
+  VtFlowTxReason.BroadcastError,
+  VtFlowTxReason.TxFailed,
+  VtFlowTxReason.TxNotFound,
+])
+
+// A transaction that failed in the pre-flight: a repeat cannot put a second transaction on chain.
+function failedInPreflight(tx: VtFlowTx | undefined): boolean {
+  return tx?.status === VtFlowTxStatus.Failed && !REASONS_AFTER_BROADCAST.has(tx.reason)
+}
+
+function repeatsOnInterval(tx: VtFlowTx | undefined): boolean {
+  return tx?.status === VtFlowTxStatus.Failed && tx.reason === VtFlowTxReason.ServiceUnavailable
+}
+
+function flowTx(record: VtFlowRecord): VtFlowTx | undefined {
+  return record.state === VtFlowState.CredOffered ? record.issuance?.tx : record.validation?.tx
 }
 
 export interface VtFlowOrchestratorOptions {
@@ -168,6 +182,8 @@ export interface AcceptCredentialInput {
 }
 
 export class VtFlowOrchestrator {
+  private startupRepeats?: Set<string>
+
   constructor(
     private readonly agent: VsAgent<BaseAgentModules>,
     private readonly options: VtFlowOrchestratorOptions = {},
@@ -877,9 +893,11 @@ export class VtFlowOrchestrator {
   }
 
   /**
-   * [VSA-VTI-FLOW-ISSUE-1], [VSA-ADM-VT-FL-VALIDATE-9]: repeat validateFlow for each anchoring and
-   * validation that failed before the agent signed. The tick stops after a validation it broadcasts,
-   * as its inclusion is not awaited and a second signature would reuse the account sequence.
+   * [VSA-ADM-VT-FL-VALIDATE-12], [VSA-VTI-FLOW-ISSUE-3]: repeat validateFlow for each anchoring and
+   * validation that failed in the pre-flight. The first run repeats each of them one time. A later run
+   * repeats only SERVICE_UNAVAILABLE. A run stops after a validation it broadcasts, as its inclusion
+   * is not awaited and a second signature would reuse the account sequence. The flows that the first
+   * run did not reach stay for the subsequent runs.
    */
   async resumeFailedSubmissions(): Promise<void> {
     const vtFlowApi = this.resolveVtFlowApi()
@@ -887,14 +905,18 @@ export class VtFlowOrchestrator {
       vtFlowApi.findAllByQuery({ role: VtFlowRole.Validator, flowState: VtFlowState.CredOffered }),
       vtFlowApi.findAllByQuery({ role: VtFlowRole.Validator, flowState: VtFlowState.ValidationTxFailed }),
     ])
-    const anchorings = offered.filter(
-      record => record.credentialExchangeRecordId && resumesAutomatically(record.issuance?.tx),
-    )
-    const validations = failedValidations.filter(
-      record => !record.connectionTerminated && resumesAutomatically(record.validation?.tx),
-    )
-    for (const record of [...anchorings, ...validations]) {
+    const failed = [
+      ...offered.filter(record => record.credentialExchangeRecordId),
+      ...failedValidations.filter(record => !record.connectionTerminated),
+    ].filter(record => failedInPreflight(flowTx(record)))
+    const failedIds = new Set(failed.map(record => record.id))
+    if (!this.startupRepeats) this.startupRepeats = failedIds
+    for (const id of this.startupRepeats) if (!failedIds.has(id)) this.startupRepeats.delete(id)
+
+    for (const record of failed) {
+      if (!this.startupRepeats.has(record.id) && !repeatsOnInterval(flowTx(record))) continue
       if (validatingFlows.has(record.id)) continue
+      this.startupRepeats.delete(record.id)
       const retried = await this.validateFlow({ vtFlowRecordId: record.id }).catch(error => {
         this.agent.config.logger.warn(`[vt-flow] retrying the transaction of flow ${record.id} failed`, {
           error: errorMessage(error),

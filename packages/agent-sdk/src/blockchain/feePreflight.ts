@@ -5,7 +5,7 @@ import type { FeeAllowance, VeranaChainService } from './VeranaChainService'
 
 import { VtFlowTxReason } from '@verana-labs/credo-ts-didcomm-vt-flow'
 
-import { withTransportRetry } from './rpcRetry'
+import { isTransportFailure, withTransportRetry } from './rpcRetry'
 
 export const FEE_DENOM = 'uvna'
 
@@ -58,12 +58,17 @@ export async function preflightFee(
   granter: string | undefined,
 ): Promise<FeePreflightResult> {
   const failed = (reason: VtFlowTxReason, error: string): FeePreflightResult => ({ reason, error })
+  const unread = (error: unknown): FeePreflightResult =>
+    failed(
+      isTransportFailure(error) ? VtFlowTxReason.ServiceUnavailable : VtFlowTxReason.PreflightError,
+      errorMessage(error),
+    )
 
   let allowance: FeeAllowance | undefined
   try {
     allowance = granter ? await withTransportRetry(() => chain.feeAllowance(granter, FEE_DENOM)) : undefined
   } catch (error) {
-    return failed(VtFlowTxReason.PreflightError, errorMessage(error))
+    return unread(error)
   }
   if (granter && !allowance) {
     return failed(VtFlowTxReason.FeegrantExpired, 'the Corporation grants the agent no active fee allowance')
@@ -73,7 +78,7 @@ export async function preflightFee(
   try {
     fee = await withTransportRetry(() => chain.estimateFee([message], granter))
   } catch (error) {
-    return failed(VtFlowTxReason.PreflightError, errorMessage(error))
+    return unread(error)
   }
   const amount = BigInt(fee.amount.find(coin => coin.denom === FEE_DENOM)?.amount ?? '0')
 
@@ -90,7 +95,7 @@ export async function preflightFee(
         (await withTransportRetry(() => chain.getAccountBalance(granter, FEE_DENOM))).amount,
       )
     } catch (error) {
-      return failed(VtFlowTxReason.PreflightError, errorMessage(error))
+      return unread(error)
     }
     if (corporation < amount) {
       return failed(
@@ -103,7 +108,7 @@ export async function preflightFee(
     try {
       own = BigInt((await withTransportRetry(() => chain.getBalance(FEE_DENOM))).amount)
     } catch (error) {
-      return failed(VtFlowTxReason.PreflightError, errorMessage(error))
+      return unread(error)
     }
     if (own < amount) {
       return failed(VtFlowTxReason.InsufficientFundsAgent, `the agent account holds ${own}${FEE_DENOM}`)

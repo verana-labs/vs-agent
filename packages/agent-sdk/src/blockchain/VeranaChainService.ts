@@ -312,6 +312,7 @@ export class VeranaChainService {
       return await withTransportRetry(() => this.signingClient.broadcastTxSync(bytes))
     } catch (error) {
       // A retry finds the transaction of a lost response in the mempool cache of the node.
+      // The text is the message of ErrTxInCache in the mempool package of CometBFT.
       if (error instanceof Error && error.message.includes('tx already exists in cache')) {
         return toHex(sha256(bytes)).toUpperCase()
       }
