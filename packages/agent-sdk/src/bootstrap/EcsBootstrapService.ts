@@ -25,6 +25,7 @@ import { triggerResolverForOwnDid } from '../blockchain/triggerResolver'
 import { HOLDER_PARTICIPANT_TYPE, ISSUER_PARTICIPANT_TYPE } from '../types'
 import { waitUntilOwnDidIsPubliclyResolvable } from '../utils/didReadiness'
 import { VtFlowOrchestrator } from '../vtFlow/VtFlowOrchestrator'
+import { repairIssuance } from '../vtFlow/issuanceRepair'
 import { composeEcsClaims } from '../utils/ecsClaims'
 
 const START_OP_MSG = '/verana.pp.v1.MsgStartParticipantOP'
@@ -131,6 +132,13 @@ export class EcsBootstrapService {
             await this.agent.didcomm.credentials.acceptCredential({ credentialExchangeRecordId: exchange.id })
             this.logger.info(`[EcsBootstrap] accepted the verified credential of flow ${record.id}`)
           }
+          continue
+        }
+        if (
+          exchange.state === DidCommCredentialState.RequestSent ||
+          exchange.state === DidCommCredentialState.Abandoned
+        ) {
+          await repairIssuance(this.agent, this.logger, record.id)
           continue
         }
         await api.acceptCredentialOffer(record.id)

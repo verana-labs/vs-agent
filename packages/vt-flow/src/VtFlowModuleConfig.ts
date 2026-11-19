@@ -32,7 +32,7 @@ export type VtFlowOnCredentialRevokedHook = (ctx: {
   record: VtFlowRecord
 }) => Promise<void>
 
-/** Validator hook fired when the applicant re-attaches a `VALIDATED` flow whose issuance waited for its reconnection ([VSA-ADM-VT-FL-REJECT-2]). */
+/** The validator calls this hook when the applicant re-attaches a `VALIDATED` or `CRED_OFFERED` flow. */
 export type VtFlowOnReconnectedHook = (ctx: {
   agentContext: AgentContext
   record: VtFlowRecord

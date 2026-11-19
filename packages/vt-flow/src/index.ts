@@ -13,6 +13,7 @@ export {
   VtFlowVariant,
   isVtFlowRenewable,
   isVtFlowTerminalState,
+  isVtFlowTxSent,
 } from './types'
 export type {
   NotifyCredentialStateChangeOptions,

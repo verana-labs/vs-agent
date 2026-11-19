@@ -325,12 +325,13 @@ function pendingActionOf(record: VtFlowRecord, connectionState: VtConnectionStat
       : VtFlowPendingAction.None
   }
   if (state === VtFlowState.CredOffered) {
+    if (role === VtFlowRole.Applicant) {
+      return record.errorMessage ? VtFlowPendingAction.Applicant : VtFlowPendingAction.Agent
+    }
     const tx = record.issuance?.tx
     const operatorRepeats =
       tx?.status === VtFlowTxStatus.Failed && tx.reason !== VtFlowTxReason.ServiceUnavailable
-    return role === VtFlowRole.Validator && operatorRepeats
-      ? VtFlowPendingAction.Validator
-      : VtFlowPendingAction.Agent
+    return operatorRepeats ? VtFlowPendingAction.Validator : VtFlowPendingAction.Agent
   }
   return VtFlowPendingAction.None
 }

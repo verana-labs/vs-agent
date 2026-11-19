@@ -165,7 +165,7 @@ export const setupAgent = async ({
             }
           },
           onReconnected: async ({ record }) => {
-            await orchestrator?.continueAfterValidated(record.id)
+            await orchestrator?.resumeIssuance(record.id)
           },
         },
       }),

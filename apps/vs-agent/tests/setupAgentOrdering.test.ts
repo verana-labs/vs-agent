@@ -66,7 +66,7 @@ describe('setupAgent vt-flow', () => {
     await agent.shutdown()
   }, 60_000)
 
-  it('resumes issuance when the applicant reconnects to a VALIDATED flow ([VSA-ADM-VT-FL-REJECT-2])', async () => {
+  it('resumes the issuance run when the applicant re-attaches a flow ([VSA-VTI-FLOW-ISSUE-3])', async () => {
     const { agent } = await setupAgent({
       port: 3997,
       walletConfig: getAskarStoreConfig('setupAgent vt-flow reconnect'),
@@ -79,15 +79,15 @@ describe('setupAgent vt-flow', () => {
       parsedDid: parseDid('did:webvh:reconnect.example'),
       logLevel: LogLevel.Off,
     })
-    const continueAfterValidated = vi
-      .spyOn(VtFlowOrchestrator.prototype, 'continueAfterValidated')
+    const resumeIssuance = vi
+      .spyOn(VtFlowOrchestrator.prototype, 'resumeIssuance')
       .mockResolvedValue({} as never)
 
     const config = agent.dependencyManager.resolve(VtFlowModuleConfig)
     await config.onReconnected?.({ agentContext: agent.context, record: { id: 'flow-1' } as never })
 
-    expect(continueAfterValidated).toHaveBeenCalledExactlyOnceWith('flow-1')
-    continueAfterValidated.mockRestore()
+    expect(resumeIssuance).toHaveBeenCalledExactlyOnceWith('flow-1')
+    resumeIssuance.mockRestore()
     await agent.shutdown()
   }, 60_000)
 })

@@ -22,6 +22,7 @@ import {
   DidCommDataIntegrityCredentialFormatService,
 } from '@credo-ts/didcomm'
 import { agentDependencies } from '@credo-ts/node'
+import { computeCredentialDigestJCS } from '@verana-labs/verre'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import {
@@ -253,6 +254,24 @@ describe('VC Data Model 2.0 issuance over the Data Integrity credential format',
       RecordNotFoundError,
     )
   }, 30_000)
+
+  it('signs the same offered credential in two runs to the same digest', async () => {
+    const credential = trustCredential()
+    const issue = async () => {
+      const { credentialExchangeRecord, offerAttachment, requestAttachment } =
+        await offerAndRequest(credential)
+      const { attachment } = await formatService.acceptRequest(agent.context, {
+        credentialExchangeRecord,
+        offerAttachment,
+        requestAttachment,
+        credentialFormats: { dataIntegrity: { cryptosuite: 'eddsa-jcs-2022' } },
+      })
+      const { credential: issued } = attachment.getDataAsJson<DataIntegrityCredential>()
+      return computeCredentialDigestJCS(issued as never, 'sha384')
+    }
+
+    expect(await issue()).toBe(await issue())
+  })
 
   it('rejects a received credential that does not match the offer', async () => {
     const { credentialExchangeRecord, offerAttachment, requestAttachment } = await offerAndRequest()
