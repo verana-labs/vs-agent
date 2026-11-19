@@ -286,12 +286,18 @@ export class VtFlowApi {
   }
 
   public async acceptIssuanceRequest(vtFlowRecordId: string): Promise<VtFlowRecord> {
-    const { record, message } = await this.vtFlowService.acceptIssuanceRequest(
-      this.agentContext,
-      vtFlowRecordId,
-    )
-    await this.dispatchMessage(record.connectionId, message, record)
-    return record
+    try {
+      const { record, message } = await this.vtFlowService.acceptIssuanceRequest(
+        this.agentContext,
+        vtFlowRecordId,
+      )
+      await this.dispatchMessage(record.connectionId, message, record)
+      return record
+    } catch (error) {
+      if (!(error instanceof VtFlowError)) throw error
+      await this.rejectRequest({ vtFlowRecordId, code: error.code })
+      throw error
+    }
   }
 
   public async rejectRequest(options: ProblemReportDispatchOptions): Promise<VtFlowRecord> {

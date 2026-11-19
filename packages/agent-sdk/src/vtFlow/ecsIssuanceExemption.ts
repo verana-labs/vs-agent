@@ -4,7 +4,6 @@ import type { VtFlowEcsIssuanceExemptionContext } from '@verana-labs/credo-ts-di
 import { classifyEcsSchema, isPublicServiceEcs } from '@verana-labs/vs-agent-model'
 
 import { VeranaIndexerService } from '../blockchain/VeranaIndexerService'
-import { ParticipantDto, ParticipantRole, ParticipantState } from '../blockchain/types'
 
 const PENDING_OP_STATE = 'PENDING'
 
@@ -18,18 +17,18 @@ export interface EcsIssuanceExemptionOptions {
 
 // VS-CONN-VS exemption: an applicant onboarding for its first ECS credentials cannot be a Verifiable
 // Service yet, so the peer is admitted on on-chain evidence instead of on its credentials.
+// [VSA-DC-CONN-2]: that evidence is a PENDING Participant entry of the peer. A Direct Issuance
+// request names none, so it never qualifies.
 export async function isEcsIssuanceExempt(
   options: EcsIssuanceExemptionOptions,
   { agentContext, peerDid, purpose }: VtFlowEcsIssuanceExemptionContext,
 ): Promise<boolean> {
   const { indexer, agent, trustedEcosystemDids } = options
   const logger = options.logger ?? agentContext.config.logger
-  if (!agent.did) return false
+  if (!agent.did || !purpose.participantId) return false
 
   try {
-    const schemaId = purpose.participantId
-      ? await schemaOfPendingOnboarding(indexer, purpose.participantId, peerDid, agent.did)
-      : await schemaOfDirectIssuance(indexer, purpose.schemaId, agent.did)
+    const schemaId = await schemaOfPendingOnboarding(indexer, purpose.participantId, peerDid, agent.did)
     if (schemaId === undefined) return false
 
     return await isTrustedEcsSchema(indexer, schemaId, trustedEcosystemDids)
@@ -62,24 +61,6 @@ async function schemaOfPendingOnboarding(
   return participant.schema_id
 }
 
-// A Direct Issuance request carries no Participant entry: the only claim to the exemption is that
-// issuing this very schema is what this agent is an ISSUER for.
-async function schemaOfDirectIssuance(
-  indexer: VeranaIndexerService,
-  schemaId: string | undefined,
-  ownDid: string,
-): Promise<number | undefined> {
-  const id = schemaId === undefined ? undefined : toEntityId(schemaId)
-  if (id === undefined) return undefined
-
-  const issuers = await indexer.listParticipants({
-    schemaId: id,
-    did: ownDid,
-    role: ParticipantRole.Issuer,
-  })
-  return issuers.some(isUsableIssuer) ? id : undefined
-}
-
 async function isTrustedEcsSchema(
   indexer: VeranaIndexerService,
   schemaId: number,
@@ -99,13 +80,4 @@ async function isTrustedEcsSchema(
 function toEntityId(value: string): number | undefined {
   const id = Number(value)
   return Number.isInteger(id) && id > 0 ? id : undefined
-}
-
-function isUsableIssuer(participant: ParticipantDto): boolean {
-  return (
-    !participant.revoked &&
-    !participant.slashed &&
-    (participant.participant_state === ParticipantState.Active ||
-      participant.participant_state === ParticipantState.Future)
-  )
 }

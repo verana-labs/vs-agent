@@ -756,6 +756,92 @@ describe('VtFlowOrchestrator.isParticipantPending', () => {
   })
 })
 
+// [VSA-VTI-FLOW-DI]: Direct Issuance is only for a schema with holder_onboarding_mode = PERMISSIONLESS
+describe('VtFlowOrchestrator.checkSchemaId', () => {
+  const ownIssuer = { id: 93, vs_operator: 'verana1agent', revoked: null, slashed: null }
+  const context = (schemaId?: string) => ({ agentContext: {}, record: { id: 'flow-1', schemaId } }) as never
+
+  // a null schema is one the indexer does not know
+  function makeOrchestrator(
+    schema: Record<string, unknown> | null = {},
+    issuers: Array<Record<string, unknown>> = [ownIssuer],
+  ) {
+    const indexer = {
+      getCredentialSchema: vi.fn(async () =>
+        schema === null
+          ? undefined
+          : { id: 22, archived: null, holder_onboarding_mode: 'PERMISSIONLESS', ...schema },
+      ),
+      listParticipants: vi.fn(async () => issuers),
+    }
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const orchestrator = new VtFlowOrchestrator({
+      did: VALIDATOR_DID,
+      config: { logger },
+      veranaChain: { address: 'verana1agent' },
+      indexer,
+    } as never)
+    return { orchestrator, indexer, logger }
+  }
+
+  it('accepts a PERMISSIONLESS schema that this agent issues as the VS operator of its ISSUER entry', async () => {
+    const { orchestrator, indexer } = makeOrchestrator()
+
+    await expect(orchestrator.checkSchemaId(context('22'))).resolves.toBe(true)
+    expect(indexer.listParticipants).toHaveBeenCalledWith({
+      did: VALIDATOR_DID,
+      schemaId: 22,
+      role: 'ISSUER',
+      participantState: 'ACTIVE',
+    })
+  })
+
+  it.each([
+    [
+      'an ISSUER_ONBOARDING_PROCESS schema, as every ECS schema is',
+      { holder_onboarding_mode: 'ISSUER_ONBOARDING_PROCESS' },
+    ],
+    ['a schema with no holder_onboarding_mode', { holder_onboarding_mode: null }],
+    ['an archived schema', { archived: '2026-01-01T00:00:00Z' }],
+    ['a schema the indexer does not know', null],
+  ])('refuses %s', async (_label, schema) => {
+    const { orchestrator, indexer } = makeOrchestrator(schema)
+
+    await expect(orchestrator.checkSchemaId(context('22'))).resolves.toBe(false)
+    expect(indexer.listParticipants).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['no ISSUER entry', []],
+    ['only an ISSUER entry that another account operates', [{ ...ownIssuer, vs_operator: 'verana1other' }]],
+    ['only a revoked ISSUER entry', [{ ...ownIssuer, revoked: '2026-01-01T00:00:00Z' }]],
+  ])('refuses a PERMISSIONLESS schema for which this agent holds %s', async (_label, issuers) => {
+    const { orchestrator } = makeOrchestrator({}, issuers)
+
+    await expect(orchestrator.checkSchemaId(context('22'))).resolves.toBe(false)
+  })
+
+  it.each([
+    undefined,
+    '22/../../v4/ecosystem/list',
+    '0',
+    '1.5',
+  ])('refuses the schema id %j without querying the indexer', async schemaId => {
+    const { orchestrator, indexer } = makeOrchestrator()
+
+    await expect(orchestrator.checkSchemaId(context(schemaId))).resolves.toBe(false)
+    expect(indexer.getCredentialSchema).not.toHaveBeenCalled()
+  })
+
+  it('refuses and logs when the indexer cannot be reached', async () => {
+    const { orchestrator, indexer, logger } = makeOrchestrator()
+    indexer.getCredentialSchema.mockRejectedValue(new Error('indexer unreachable'))
+
+    await expect(orchestrator.checkSchemaId(context('22'))).resolves.toBe(false)
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('indexer unreachable'))
+  })
+})
+
 describe('VtFlowOrchestrator validateFlow', () => {
   const SET_VALIDATED = '/verana.pp.v1.MsgSetParticipantOPToValidated'
   const now = Date.now()
@@ -770,6 +856,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
       claims?: Record<string, unknown>
       jsonSchema?: Record<string, unknown>
       validityPeriod?: number
+      holderOnboardingMode?: string | null
     } = {},
   ) {
     let flowRecord: Record<string, unknown> = {
@@ -845,6 +932,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
             },
           ),
           holder_validation_validity_period: options.validityPeriod ?? 365,
+          holder_onboarding_mode: options.holderOnboardingMode,
         })),
       },
     }
@@ -1158,24 +1246,46 @@ describe('VtFlowOrchestrator validateFlow', () => {
     expect(offerCredentialForSession).toHaveBeenCalledTimes(3)
   })
 
-  it('offers a Direct Issuance credential with no validUntil', async () => {
-    const { agent, current } = makeValidateAgent()
-    Object.assign(current(), { variant: 'direct-issuance', schemaId: '22', connectionId: 'conn-1' })
-    Object.assign(agent, {
+  function makeDirectIssuanceOffer(holderOnboardingMode: string | null) {
+    const setup = makeValidateAgent({ holderOnboardingMode })
+    Object.assign(setup.current(), { variant: 'direct-issuance', schemaId: '22', connectionId: 'conn-1' })
+    const offerCredentialForSession = vi.fn(async () => ({ record: setup.current() }))
+    Object.assign(setup.vtFlowApi, { offerCredentialForSession })
+    Object.assign(setup.agent, {
       didcomm: { connections: { findById: vi.fn(async () => ({ theirDid: 'did:web:holder' })) } },
     })
-    Object.assign(agent.veranaChain, { address: 'verana1agent' })
-    Object.assign(agent.indexer, {
-      listParticipants: vi.fn(async () => [{ id: 93, vs_operator: 'verana1agent' }]),
-    })
-    const orchestrator = new VtFlowOrchestrator(agent as never)
+    Object.assign(setup.agent.veranaChain, { address: 'verana1agent' })
+    const listParticipants = vi.fn(async () => [{ id: 93, vs_operator: 'verana1agent' }])
+    Object.assign(setup.agent.indexer, { listParticipants })
+    const orchestrator = new VtFlowOrchestrator(setup.agent as never)
     ;(orchestrator as unknown as { resolveJsonSchemaCredentialId: unknown }).resolveJsonSchemaCredentialId =
       async () => JSC_ID
+    return { ...setup, orchestrator, offerCredentialForSession, listParticipants }
+  }
+
+  it('offers a Direct Issuance credential with no validUntil', async () => {
+    const { orchestrator } = makeDirectIssuanceOffer('PERMISSIONLESS')
 
     const offer = await orchestrator.buildDirectIssuanceOffer('rec-v')
 
     const credential = offer?.credentialFormats.dataIntegrity.credential as { validUntil?: string }
     expect(credential.validUntil).toBeUndefined()
+  })
+
+  // a flow that reached VALIDATING before the request was checked is never offered either
+  it.each([
+    'ISSUER_ONBOARDING_PROCESS',
+    null,
+  ])('offers nothing for a Direct Issuance flow whose schema has holder_onboarding_mode %s', async mode => {
+    const { orchestrator, offerCredentialForSession, listParticipants } = makeDirectIssuanceOffer(mode)
+
+    await expect(orchestrator.buildDirectIssuanceOffer('rec-v')).resolves.toBeNull()
+    await expect(orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })).rejects.toMatchObject({
+      code: 'INVALID_STATE',
+      status: 409,
+    })
+    expect(listParticipants).not.toHaveBeenCalled()
+    expect(offerCredentialForSession).not.toHaveBeenCalled()
   })
 
   it.each([

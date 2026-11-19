@@ -1311,6 +1311,78 @@ describe('VtFlowService.acceptOnboardingRequest', () => {
   })
 })
 
+describe('VtFlowService.acceptIssuanceRequest', () => {
+  const awaitingIr = () =>
+    makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.AwaitingIr,
+      variant: VtFlowVariant.DirectIssuance,
+      applicantParticipantId: undefined,
+      schemaId: '5',
+    })
+
+  it('refuses a schema_id the checkSchemaId hook rejects and leaves the flow in AWAITING_IR', async () => {
+    const awaiting = awaitingIr()
+    const checkSchemaId = vi.fn().mockResolvedValue(false)
+    const { service, repository, agentContext } = makeService(awaiting, null, { checkSchemaId })
+
+    await expect(service.acceptIssuanceRequest(agentContext as never, awaiting.id)).rejects.toMatchObject({
+      code: VtFlowErrorCode.InvalidSchemaId,
+    })
+    expect(checkSchemaId).toHaveBeenCalledWith({ agentContext, record: awaiting })
+    expect(awaiting.state).toBe(VtFlowState.AwaitingIr)
+    expect(repository.update).not.toHaveBeenCalled()
+  })
+
+  it('moves to VALIDATING only when the flow is still AWAITING_IR once the check passes', async () => {
+    const awaiting = awaitingIr()
+    const { service, repository, agentContext } = makeService(awaiting, null, {
+      checkSchemaId: vi.fn().mockResolvedValue(true),
+    })
+    repository.getById.mockResolvedValueOnce(awaiting).mockResolvedValueOnce(
+      makeRecord({
+        role: VtFlowRole.Validator,
+        state: VtFlowState.TerminatedByValidator,
+        variant: VtFlowVariant.DirectIssuance,
+      }),
+    )
+
+    await expect(service.acceptIssuanceRequest(agentContext as never, awaiting.id)).rejects.toThrow(
+      /TERMINATED_BY_VALIDATOR/,
+    )
+    expect(repository.update).not.toHaveBeenCalled()
+
+    const { record, message } = await service.acceptIssuanceRequest(agentContext as never, awaiting.id)
+    expect(record.state).toBe(VtFlowState.Validating)
+    expect(message).toBeInstanceOf(ValidatingMessage)
+  })
+
+  it('answers a refused schema_id with a vt-flow.invalid-schema-id problem-report', async () => {
+    const awaiting = awaitingIr()
+    const { service, agentContext } = makeService(awaiting, null, {
+      checkSchemaId: vi.fn().mockResolvedValue(false),
+    })
+    const api = new VtFlowApi(
+      service,
+      {} as never,
+      {} as never,
+      agentContext as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+    const rejectRequest = vi.spyOn(api, 'rejectRequest').mockResolvedValue(awaiting)
+
+    await expect(api.acceptIssuanceRequest(awaiting.id)).rejects.toMatchObject({
+      code: VtFlowErrorCode.InvalidSchemaId,
+    })
+    expect(rejectRequest).toHaveBeenCalledWith({
+      vtFlowRecordId: awaiting.id,
+      code: VtFlowErrorCode.InvalidSchemaId,
+    })
+  })
+})
+
 describe('VtFlowService.rejectRequest', () => {
   it.each([
     [VtFlowVariant.OnboardingProcess, VtFlowState.AwaitingOr],

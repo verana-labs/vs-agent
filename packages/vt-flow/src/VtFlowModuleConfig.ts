@@ -94,6 +94,14 @@ export type VtFlowCheckParticipantIdHook = (
 /** Validator renews a `CRED_OFFERED` flow on a new thread only when this hook returns `true`. */
 export type VtFlowIsParticipantPendingHook = (ctx: VtFlowCheckParticipantIdContext) => Promise<boolean>
 
+export interface VtFlowCheckSchemaIdContext {
+  agentContext: AgentContext
+  record: VtFlowRecord
+}
+
+/** Validator check of the issuance-request `schema_id` before the flow moves to `VALIDATING`; return `false` to refuse the request with `vt-flow.invalid-schema-id`, as for a schema that is not open to Direct Issuance. */
+export type VtFlowCheckSchemaIdHook = (ctx: VtFlowCheckSchemaIdContext) => Promise<boolean>
+
 /** Default Data Integrity cryptosuite, applied when `dataIntegrityCryptosuite` is not configured. */
 export const DEFAULT_DATA_INTEGRITY_CRYPTOSUITE = 'eddsa-jcs-2022'
 
@@ -126,6 +134,7 @@ export interface VtFlowModuleConfigOptions {
   checkEcsIssuanceExemption?: VtFlowEcsIssuanceExemptionHook
   checkParticipantId?: VtFlowCheckParticipantIdHook
   isParticipantPending?: VtFlowIsParticipantPendingHook
+  checkSchemaId?: VtFlowCheckSchemaIdHook
 }
 
 /** Read-only view over VtFlowModuleConfigOptions with defaults applied. */
@@ -210,5 +219,9 @@ export class VtFlowModuleConfig {
 
   public get isParticipantPending(): VtFlowIsParticipantPendingHook | undefined {
     return this.options.isParticipantPending
+  }
+
+  public get checkSchemaId(): VtFlowCheckSchemaIdHook | undefined {
+    return this.options.checkSchemaId
   }
 }

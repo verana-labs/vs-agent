@@ -24,6 +24,7 @@ import {
   isVtFlowTerminalState,
   isVtFlowTxSent,
   type VtFlowCheckParticipantIdContext,
+  type VtFlowCheckSchemaIdContext,
   type VtFlowEcsIssuanceExemptionContext,
   type VtFlowIssuance,
   type VtFlowTx,
@@ -43,6 +44,7 @@ import { BaseAgentModules, VsAgent } from '../agent'
 import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
 import { feeGranterFor, preflightFailureReason, preflightFee } from '../blockchain/feePreflight'
 import {
+  HolderOnboardingMode,
   Participant,
   ParticipantDto,
   ParticipantRole,
@@ -450,7 +452,11 @@ export class VtFlowOrchestrator {
     if (record.state === VtFlowState.OobPending) await this.sendValidating(record)
 
     const offer = await this.buildDirectIssuanceOffer(record.id)
-    if (!offer) throw invalidState('the agent holds no active ISSUER participant for the schema of the flow')
+    if (!offer) {
+      throw invalidState(
+        'the schema of the flow is not open to Direct Issuance, or the agent holds no active ISSUER participant for it',
+      )
+    }
     const { record: offered } = await vtFlowApi.offerCredentialForSession({
       vtFlowRecordId: record.id,
       ...offer,
@@ -1056,9 +1062,8 @@ export class VtFlowOrchestrator {
     credentialFormats: { dataIntegrity: DidCommDataIntegrityOfferCredentialFormat }
     issuerParticipantId: number
   } | null> {
-    const chain = this.requireChain()
+    this.requireChain()
     if (!this.agent.did) throw new Error('Agent has no public DID')
-    const indexer = this.agent.indexer
 
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(vtFlowRecordId)
@@ -1068,19 +1073,9 @@ export class VtFlowOrchestrator {
     }
     if (!record.schemaId) throw new Error('Record has no schemaId')
 
-    const issuers = await indexer.listParticipants({
-      did: this.agent.did,
-      schemaId: Number(record.schemaId),
-      role: ParticipantRole.Issuer,
-      participantState: ParticipantState.Active,
-    })
-    const issuer = issuers.find(p => !p.revoked && !p.slashed && p.vs_operator === chain.address)
-    if (!issuer) {
-      this.agent.config.logger.warn(
-        `[vt-flow] no active issuer participant with vs_operator ${chain.address} for schema ${record.schemaId}; not offering`,
-      )
-      return null
-    }
+    // checked here too, for a flow that reached VALIDATING before checkSchemaId refused such requests
+    const issuer = await this.directIssuanceIssuer(record.schemaId)
+    if (!issuer) return null
 
     const connection = await this.agent.didcomm.connections.findById(record.connectionId)
     if (!connection?.theirDid) throw new Error('Flow connection has no peer DID')
@@ -1097,6 +1092,44 @@ export class VtFlowOrchestrator {
       },
       issuerParticipantId: issuer.id,
     }
+  }
+
+  /**
+   * The ISSUER entry under which this agent issues the schema by Direct Issuance, if any.
+   * [VSA-VTI-FLOW-DI]: Direct Issuance is only for a schema with holder_onboarding_mode =
+   * PERMISSIONLESS, which no ECS schema has. The chain accepts the anchoring
+   * CreateOrUpdateParticipantSession only from the vs_operator of the entry.
+   */
+  private async directIssuanceIssuer(schemaId: string): Promise<ParticipantDto | undefined> {
+    const chain = this.requireChain()
+    if (!this.agent.did) throw new Error('Agent has no public DID')
+    const logger = this.agent.config.logger
+
+    const id = Number(schemaId)
+    if (!Number.isInteger(id) || id <= 0) {
+      logger.warn(`[vt-flow] ${JSON.stringify(schemaId)} is not a credential schema id`)
+      return undefined
+    }
+
+    const schema = await this.agent.indexer.getCredentialSchema(id, { allowNotFound: true })
+    if (!schema || schema.archived || schema.holder_onboarding_mode !== HolderOnboardingMode.Permissionless) {
+      logger.warn(
+        `[vt-flow] schema ${id} is not open to Direct Issuance (holder_onboarding_mode: ${schema?.holder_onboarding_mode ?? 'unknown'})`,
+      )
+      return undefined
+    }
+
+    const issuers = await this.agent.indexer.listParticipants({
+      did: this.agent.did,
+      schemaId: id,
+      role: ParticipantRole.Issuer,
+      participantState: ParticipantState.Active,
+    })
+    const issuer = issuers.find(p => !p.revoked && !p.slashed && p.vs_operator === chain.address)
+    if (!issuer) {
+      logger.warn(`[vt-flow] no active issuer participant with vs_operator ${chain.address} for schema ${id}`)
+    }
+    return issuer
   }
 
   /**
@@ -1376,6 +1409,20 @@ export class VtFlowOrchestrator {
       if (entry?.op_state === 'PENDING') return true
       if (Date.now() >= deadline) return false
       await new Promise(resolve => setTimeout(resolve, TX_LOOKUP_INTERVAL_MS))
+    }
+  }
+
+  // [VSA-VTI-FLOW-DI]: an issuance-request is refused before the flow moves unless this agent can
+  // issue its schema by Direct Issuance
+  async checkSchemaId({ record }: VtFlowCheckSchemaIdContext): Promise<boolean> {
+    if (!record.schemaId) return false
+    try {
+      return (await this.directIssuanceIssuer(record.schemaId)) !== undefined
+    } catch (error) {
+      this.agent.config.logger.warn(
+        `[vt-flow] could not check the schema of flow ${record.id}: ${(error as Error).message}`,
+      )
+      return false
     }
   }
 

@@ -178,33 +178,19 @@ describe('allowEcsIssuanceExemption: direct issuance request', () => {
     purpose: { schemaId },
   })
 
-  it('grants the exemption when this agent is an active ISSUER of the ECS Service schema', async () => {
+  // [VSA-DC-CONN-2]: only a PENDING Participant entry of the peer establishes the purpose, and a
+  // Direct Issuance request names none
+  it.each([
+    orgSchema,
+    serviceSchema,
+  ])('denies the ECS schema $id even when this agent is an active ISSUER of it', async schema => {
     const indexer = makeIndexer({
-      listParticipants: vi.fn().mockResolvedValue([{ ...ownIssuerParticipant, schema_id: serviceSchema.id }]),
+      listParticipants: vi.fn().mockResolvedValue([{ ...ownIssuerParticipant, schema_id: schema.id }]),
     })
 
-    await expect(makeHook(indexer)(issuance(String(serviceSchema.id)))).resolves.toBe(true)
-  })
-
-  it('denies a schema this agent does not issue', async () => {
-    await expect(makeHook(makeIndexer())(issuance(String(serviceSchema.id)))).resolves.toBe(false)
-  })
-
-  it('denies a revoked ISSUER participant', async () => {
-    const indexer = makeIndexer({
-      listParticipants: vi
-        .fn()
-        .mockResolvedValue([{ ...ownIssuerParticipant, schema_id: serviceSchema.id, revoked: '2026-01-01' }]),
-    })
-
-    await expect(makeHook(indexer)(issuance(String(serviceSchema.id)))).resolves.toBe(false)
-  })
-
-  it('denies a malformed schema id without querying the indexer', async () => {
-    const indexer = makeIndexer()
-
-    await expect(makeHook(indexer)(issuance('5/../../v4/ecosystem/list'))).resolves.toBe(false)
+    await expect(makeHook(indexer)(issuance(String(schema.id)))).resolves.toBe(false)
     expect(indexer.listParticipants).not.toHaveBeenCalled()
+    expect(indexer.getCredentialSchema).not.toHaveBeenCalled()
   })
 
   it('denies a request that carries no purpose the exemption can anchor on', async () => {
