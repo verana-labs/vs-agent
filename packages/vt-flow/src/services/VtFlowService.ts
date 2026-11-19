@@ -138,7 +138,10 @@ export class VtFlowService {
           `vt-flow: participant_session_id '${params.participantSessionId}' already belongs to a flow in state ${existing.state}; use a new session id`,
         )
       }
-      if (offerReplaced) await this.releaseCredentialExchange(agentContext, existing)
+      if (offerReplaced) {
+        await this.releaseCredentialExchange(agentContext, existing)
+        existing.errorMessage = undefined
+      }
       existing.connectionId = params.connectionId
       existing.threadId = message.id
       if (params.claims) existing.claims = params.claims

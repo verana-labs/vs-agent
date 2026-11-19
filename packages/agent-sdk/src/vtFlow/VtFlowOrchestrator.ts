@@ -41,7 +41,7 @@ import {
 import { AdminApiError, AdminApiErrorCode } from '../adminApi'
 import { BaseAgentModules, VsAgent } from '../agent'
 import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
-import { feeGranterFor, preflightFee } from '../blockchain/feePreflight'
+import { feeGranterFor, preflightFailureReason, preflightFee } from '../blockchain/feePreflight'
 import {
   Participant,
   ParticipantDto,
@@ -1179,17 +1179,17 @@ export class VtFlowOrchestrator {
     if (anchored && digest !== record.credentialDigest) {
       throw new Error(`the credential of flow ${record.id} does not have the digest that the flow anchored`)
     }
-    let tx: VtFlowTx | undefined
-    if (record.issuance?.tx?.status !== VtFlowTxStatus.Submitted) {
+    let tx: VtFlowTx | undefined = anchored
+    if (!tx && record.issuance?.tx?.status !== VtFlowTxStatus.Submitted) {
       // An earlier attempt can anchor the credential and stop before it records the tx.
-      const found = await this.agent.indexer
-        .getDigest(digest)
-        .catch((error: unknown) => new Error(errorMessage(error)))
-      if (found instanceof Error) {
-        const error = `the digest lookup failed: ${found.message}`
-        tx = { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.PreflightError, error }
-      } else if (found) {
-        tx = anchored ?? { status: VtFlowTxStatus.Succeeded }
+      try {
+        if (await this.agent.indexer.getDigest(digest)) tx = { status: VtFlowTxStatus.Succeeded }
+      } catch (error) {
+        tx = {
+          status: VtFlowTxStatus.Failed,
+          reason: preflightFailureReason(error),
+          error: `the digest lookup failed: ${errorMessage(error)}`,
+        }
       }
     }
     const message = chain.createOrUpdateParticipantSessionMsg({

@@ -95,6 +95,15 @@ describe('VtFlowsService pendingAction', () => {
     ).resolves.toBe(VtFlowPendingAction.Validator)
   })
 
+  it('hands CRED_OFFERED to the applicant when the agent did not repair the issuance', async () => {
+    const applicant = { state: VtFlowState.CredOffered, role: VtFlowRole.Applicant }
+
+    await expect(pendingActionFor(applicant)).resolves.toBe(VtFlowPendingAction.Agent)
+    await expect(pendingActionFor({ ...applicant, errorMessage: 'no credential arrived' })).resolves.toBe(
+      VtFlowPendingAction.Applicant,
+    )
+  })
+
   it('keeps a transaction that failed with SERVICE_UNAVAILABLE with the agent', async () => {
     const unavailable = { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.ServiceUnavailable }
     const rejected = { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.PreflightError }

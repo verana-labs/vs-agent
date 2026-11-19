@@ -1637,10 +1637,11 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
     const tx = { hash: 'AB12', height: 7, status: 'SUCCEEDED' }
     record.issuance = { tx }
     record.credentialDigest = computeCredentialDigestJCS(signed as never, 'sha384')
-    indexer.getDigest.mockResolvedValue({ digest: 'anchored' })
+    indexer.getDigest.mockRejectedValue(new Error('indexer unreachable'))
 
     const { issuance } = await orchestrator.onCredentialIssued('rec-v', signed)
 
+    expect(indexer.getDigest).not.toHaveBeenCalled()
     expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
     expect(issuance.tx).toEqual(tx)
   })
@@ -1670,6 +1671,19 @@ describe('VtFlowOrchestrator.onCredentialIssued', () => {
       error: expect.stringContaining('indexer unreachable'),
     })
     expect(logger.error).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    [502, 'SERVICE_UNAVAILABLE'],
+    [400, 'PREFLIGHT_ERROR'],
+  ])('records an HTTP %i of the digest lookup as %s', async (status, reason) => {
+    const { orchestrator, chain, indexer } = makeAnchorAgent()
+    indexer.getDigest.mockRejectedValue(Object.assign(new Error('bad status'), { cause: { status } }))
+
+    const { issuance } = await orchestrator.onCredentialIssued('rec-v', signed)
+
+    expect(chain.broadcastWithoutWaiting).not.toHaveBeenCalled()
+    expect(issuance.tx).toMatchObject({ status: 'FAILED', reason })
   })
 
   it('returns the anchoring transaction once it is included', async () => {

@@ -786,6 +786,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
       state: VtFlowState.CredOffered,
       credentialExchangeRecordId: 'cred-ex-1',
       subprotocolThid: 'sub-1',
+      errorMessage: 'no credential arrived',
     })
     const previousThread = existing.threadId
     const { service, agentContext, exchangeRepository } = makeService(existing)
@@ -808,6 +809,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(message).toMatchObject({ participantId: '42', participantSessionId: 'sess-1' })
     expect(record.credentialExchangeRecordId).toBeUndefined()
     expect(record.subprotocolThid).toBeUndefined()
+    expect(record.errorMessage).toBeUndefined()
     expect(stale.parentThreadId).toBeUndefined()
   })
 
