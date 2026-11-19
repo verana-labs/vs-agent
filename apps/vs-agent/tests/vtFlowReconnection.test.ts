@@ -100,7 +100,11 @@ describe('vt-flow: applicant reconnection', () => {
       label: 'Validator',
       domain: 'validator',
       didcommVersions: ['v1', 'v2'],
-      vtFlowOptions: { autoAcceptOnboardingRequest, autoOfferCredential: false },
+      vtFlowOptions: {
+        autoAcceptOnboardingRequest,
+        autoOfferCredential: false,
+        isParticipantPending: async () => opState === ValidationState.PENDING,
+      },
     })
     validator.didcomm.registerInboundTransport(new SubjectInboundTransport(subjectMap['rxjs:validator']))
     validator.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
@@ -192,6 +196,7 @@ describe('vt-flow: applicant reconnection', () => {
   it('reconnects during the credential offer and the flow is offered again on the new connection', async () => {
     const { record, validatorRecordId, connection } = await onboardUntilValidatorRotates()
     await validator.modules.vtFlow.markValidated(validatorRecordId)
+    opState = ValidationState.VALIDATED
     const credential = toOfferedCredentialJson(
       createW3cV2Credential({
         id: `${validator.did}#vtc-1`,
@@ -243,6 +248,60 @@ describe('vt-flow: applicant reconnection', () => {
       expect(reoffered.state).toBe(VtFlowState.CredOffered)
       expect(reoffered.subprotocolThid).toBe(secondExchange.threadId)
       expect(reoffered.connectionId).toBe(resent.connectionId)
+    })
+  }, 60_000)
+
+  it('renews a flow left in CRED_OFFERED on the open connection and the validator offers again', async () => {
+    const { record, validatorRecordId } = await onboardUntilValidatorRotates()
+    await validator.modules.vtFlow.markValidated(validatorRecordId)
+    opState = ValidationState.VALIDATED
+    const credential = toOfferedCredentialJson(
+      createW3cV2Credential({
+        id: `${validator.did}#vtc-1`,
+        type: ['VerifiableCredential', 'VerifiableTrustCredential'],
+        issuer: validator.did!,
+        credentialSubject: { id: applicant.did, name: 'Acme' },
+      }),
+    )
+    const offer = () =>
+      validator.modules.vtFlow.offerCredentialForSession({
+        vtFlowRecordId: validatorRecordId,
+        credentialFormats: { dataIntegrity: { credential, bindingRequired: false } },
+      })
+    const credOffered = waitForEvent(applicantEvents, isVtFlowStateChangedEvent(VtFlowState.CredOffered))
+    const { credentialExchangeRecord: firstExchange } = await offer()
+    await credOffered
+
+    opState = ValidationState.PENDING
+    const renewed = await orchestrator.startOnboardingProcess({
+      applicantParticipantId: APPLICANT_PARTICIPANT,
+    })
+
+    expect(renewed).toMatchObject({
+      id: record.id,
+      participantSessionId: record.participantSessionId,
+      connectionId: record.connectionId,
+    })
+    expect(renewed.threadId).not.toBe(record.threadId)
+    expect(renewed.credentialExchangeRecordId).toBeUndefined()
+    await vi.waitFor(async () => {
+      const validatorRecord = await validator.modules.vtFlow.getById(validatorRecordId)
+      expect(validatorRecord).toMatchObject({ state: VtFlowState.Validating, threadId: renewed.threadId })
+      expect(validatorRecord.credentialExchangeRecordId).toBeUndefined()
+      expect((await applicant.modules.vtFlow.getById(record.id)).state).toBe(VtFlowState.Validating)
+    })
+    expect(await validator.modules.vtFlow.findAllByQuery({ role: VtFlowRole.Validator })).toHaveLength(1)
+
+    await validator.modules.vtFlow.markValidated(validatorRecordId)
+    const { credentialExchangeRecord: secondExchange } = await offer()
+    expect(secondExchange.id).not.toBe(firstExchange.id)
+    await vi.waitFor(async () => {
+      const reoffered = await applicant.modules.vtFlow.getById(record.id)
+      expect(reoffered).toMatchObject({
+        state: VtFlowState.CredOffered,
+        threadId: renewed.threadId,
+        subprotocolThid: secondExchange.threadId,
+      })
     })
   }, 60_000)
 })

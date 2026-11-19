@@ -356,6 +356,29 @@ describe('VtFlowOrchestrator.startOnboardingProcess renewal/reconnection', () =>
       connectionId: 'conn-old',
     })
   })
+
+  describe('renewal of a flow left in CRED_OFFERED', () => {
+    it('sends the renewal request on the open connection with the same session', async () => {
+      const { agent, vtFlowApi } = makeAgent(openConnection, { ...holder, opState: ValidationState.PENDING })
+      vtFlowApi.findAllByQuery.mockResolvedValue([runningFlow('CRED_OFFERED')])
+
+      await new VtFlowOrchestrator(agent as never).startOnboardingProcess({
+        applicantParticipantId: 5,
+        claims: { name: 'Acme Renewed' },
+      })
+
+      expect(agent.didcomm.oob.receiveImplicitInvitation).not.toHaveBeenCalled()
+      expect(vtFlowApi.sendOnboardingRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          connectionId: 'conn-old',
+          participantSessionId: 'sess-old',
+          applicantParticipantId: '5',
+          claims: { name: 'Acme Renewed' },
+        }),
+      )
+      expect(vtFlowApi.resendOnboardingRequest).not.toHaveBeenCalled()
+    })
+  })
 })
 
 describe('VtFlowOrchestrator onboarding validation', () => {
@@ -673,6 +696,54 @@ describe('VtFlowOrchestrator.checkParticipantId', () => {
 
     expect(applicantLookups()).toBe(2)
     expect(markValidated).not.toHaveBeenCalled()
+  })
+})
+
+describe('VtFlowOrchestrator.isParticipantPending', () => {
+  const context = { record: { id: 'flow-1', applicantParticipantId: '42' } } as never
+  const pending = { id: 42, op_state: 'PENDING', revoked: null, slashed: null }
+  const validated = { ...pending, op_state: 'VALIDATED' }
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function ask(...reads: Array<Record<string, unknown>>) {
+    const getParticipant = vi.fn(async () => (reads.length > 1 ? reads.shift() : reads[0]))
+    const orchestrator = new VtFlowOrchestrator({ indexer: { getParticipant } } as never)
+    return { asking: orchestrator.isParticipantPending(context), getParticipant }
+  }
+
+  it('answers true for a PENDING entry', async () => {
+    await expect(ask(pending).asking).resolves.toBe(true)
+  })
+
+  it.each([
+    ['revoked', { revoked: '2026-09-01T00:00:00Z' }],
+    ['slashed', { slashed: '2026-09-01T00:00:00Z' }],
+  ])('answers false at once for a %s entry', async (_label, overrides) => {
+    const { asking, getParticipant } = ask({ ...pending, ...overrides })
+
+    await expect(asking).resolves.toBe(false)
+    expect(getParticipant).toHaveBeenCalledOnce()
+  })
+
+  it('answers false for an entry still VALIDATED once a transaction lookup would have given up', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    const { asking, getParticipant } = ask(validated)
+    await vi.runAllTimersAsync()
+    await expect(asking).resolves.toBe(false)
+
+    expect(getParticipant).toHaveBeenCalledTimes(21)
+  })
+
+  it('waits for the indexer to show the RenewParticipantOP of the applicant', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    const { asking, getParticipant } = ask(validated, pending)
+    await vi.runAllTimersAsync()
+    await expect(asking).resolves.toBe(true)
+
+    expect(getParticipant).toHaveBeenCalledTimes(2)
   })
 })
 

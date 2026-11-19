@@ -272,7 +272,7 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
   })
 
   it('applicant resend against a flow that is still running is rejected', async () => {
-    const existing = makeRecord({ state: VtFlowState.CredOffered })
+    const existing = makeRecord({ state: VtFlowState.Validating })
     const { service, repository } = makeService(existing)
 
     await expect(service.createOnboardingProcessRecord({} as never, applicantParams)).rejects.toThrow(
@@ -703,8 +703,10 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     })
     const stale = { id: 'cred-ex-1', parentThreadId: existing.threadId }
     exchangeRepository.findById.mockResolvedValue(stale)
+    const context = makeMessageContext(agentContext)
+    context.message.setThread({ threadId: existing.threadId })
 
-    const record = await service.processReceiveOnboardingRequest(makeMessageContext(agentContext) as never)
+    const record = await service.processReceiveOnboardingRequest(context as never)
 
     expect(record.state).toBe(VtFlowState.Validated)
     expect(record.credentialExchangeRecordId).toBeUndefined()
@@ -713,6 +715,170 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(record.connectionId).toBe('conn-new')
     expect(stale.parentThreadId).toBeUndefined()
     expect(exchangeRepository.update).toHaveBeenCalledWith(agentContext, stale)
+  })
+
+  it('applicant renewal re-enters a flow left in CRED_OFFERED and drops its exchange', async () => {
+    const existing = makeRecord({
+      state: VtFlowState.CredOffered,
+      credentialExchangeRecordId: 'cred-ex-1',
+      subprotocolThid: 'sub-1',
+    })
+    const previousThread = existing.threadId
+    const { service, agentContext, exchangeRepository } = makeService(existing)
+    const stale = { id: 'cred-ex-1', parentThreadId: previousThread }
+    exchangeRepository.findById.mockResolvedValue(stale)
+
+    const { message, record } = await service.createOnboardingProcessRecord(agentContext as never, {
+      ...applicantParams,
+      claims: { name: 'Acme Renewed' },
+    })
+
+    expect(record).toBe(existing)
+    expect(record).toMatchObject({
+      state: VtFlowState.OrSent,
+      threadId: message.id,
+      connectionId: 'conn-new',
+      claims: { name: 'Acme Renewed' },
+    })
+    expect(message.threadId).not.toBe(previousThread)
+    expect(message).toMatchObject({ participantId: '42', participantSessionId: 'sess-1' })
+    expect(record.credentialExchangeRecordId).toBeUndefined()
+    expect(record.subprotocolThid).toBeUndefined()
+    expect(stale.parentThreadId).toBeUndefined()
+  })
+
+  it('applicant renewal derives its thread from the stored round, and a new flow does not', async () => {
+    const stored = makeRecord({ state: VtFlowState.CredOffered })
+    const renew = async (record: VtFlowRecord | null) => {
+      const { service, agentContext } = makeService(record)
+      return (await service.createOnboardingProcessRecord(agentContext as never, applicantParams)).message.id
+    }
+
+    const first = await renew(JsonTransformer.clone(stored))
+    expect(await renew(JsonTransformer.clone(stored))).toBe(first)
+
+    const nextRound = makeRecord({ id: stored.id, threadId: first, state: VtFlowState.Completed })
+    const next = await renew(nextRound)
+    expect(next).not.toBe(first)
+    expect(await renew(makeRecord({ id: stored.id, threadId: first }))).toBe(next)
+
+    expect(await renew(null)).not.toBe(await renew(null))
+  })
+
+  it('validator takes a request on a new thread in CRED_OFFERED as a renewal', async () => {
+    const tx = { hash: 'AA', status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.PreflightError }
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.CredOffered,
+      claims: { name: 'Acme' },
+      credentialExchangeRecordId: 'cred-ex-1',
+      subprotocolThid: 'sub-1',
+      validation: { decidedAt: '2026-01-01T00:00:00.000Z', submission: VtFlowSubmission.Agent },
+      issuance: { tx },
+    })
+    const isParticipantPending = vi.fn().mockResolvedValue(true)
+    const { service, agentContext, exchangeRepository, eventEmitter } = makeService(
+      existing,
+      { id: 'conn-old', theirDid: 'did:web:agent-peer' },
+      { isParticipantPending },
+    )
+    const stale = { id: 'cred-ex-1', parentThreadId: existing.threadId }
+    exchangeRepository.findById.mockResolvedValue(stale)
+    const context = makeMessageContext(agentContext)
+    context.message.claims = { name: 'Acme Renewed' }
+
+    const record = await service.processReceiveOnboardingRequest(context as never)
+
+    expect(record).toMatchObject({
+      state: VtFlowState.AwaitingOr,
+      threadId: context.message.threadId,
+      claims: { name: 'Acme Renewed' },
+    })
+    expect(record.validation).toBeUndefined()
+    expect(record.issuance).toBeUndefined()
+    expect(record.credentialExchangeRecordId).toBeUndefined()
+    expect(isParticipantPending).toHaveBeenCalledWith({ agentContext, record: existing })
+    expect(stale.parentThreadId).toBeUndefined()
+    expect(eventEmitter.emit).toHaveBeenCalledExactlyOnceWith(agentContext, {
+      type: VtFlowEventTypes.VtFlowStateChanged,
+      payload: expect.objectContaining({
+        state: VtFlowState.AwaitingOr,
+        previousState: VtFlowState.CredOffered,
+      }),
+    })
+  })
+
+  it.each([
+    ['the hook finds the entry not PENDING', { isParticipantPending: async () => false }],
+    ['no hook is configured', {}],
+  ])('validator takes a request on a new thread in CRED_OFFERED as a reconnection when %s', async (_label, moduleConfig) => {
+    const validation = { decidedAt: '2026-01-01T00:00:00.000Z', submission: VtFlowSubmission.Agent }
+    const existing = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.CredOffered,
+      claims: { name: 'Acme' },
+      credentialExchangeRecordId: 'cred-ex-1',
+      validation,
+    })
+    const { service, agentContext } = makeService(
+      existing,
+      { id: 'conn-old', theirDid: 'did:web:agent-peer' },
+      moduleConfig,
+    )
+    const context = makeMessageContext(agentContext)
+    context.message.claims = { name: 'Acme Renewed' }
+
+    const record = await service.processReceiveOnboardingRequest(context as never)
+
+    expect(record).toMatchObject({
+      state: VtFlowState.Validated,
+      threadId: context.message.threadId,
+      claims: { name: 'Acme' },
+      validation,
+    })
+  })
+
+  it.each([
+    ['a request on the same thread in CRED_OFFERED', VtFlowState.CredOffered, true],
+    ['a request on a new thread in VALIDATING', VtFlowState.Validating, false],
+  ])('validator does not ask whether the entry is PENDING for %s', async (_label, state, sameThread) => {
+    const existing = makeRecord({ role: VtFlowRole.Validator, state })
+    const isParticipantPending = vi.fn().mockResolvedValue(true)
+    const { service, agentContext } = makeService(
+      existing,
+      { id: 'conn-old', theirDid: 'did:web:agent-peer' },
+      { isParticipantPending },
+    )
+    const context = makeMessageContext(agentContext)
+    if (sameThread) context.message.setThread({ threadId: existing.threadId })
+
+    await service.processReceiveOnboardingRequest(context as never)
+
+    expect(isParticipantPending).not.toHaveBeenCalled()
+  })
+
+  it('validator starts one validation when the renewal request comes twice on the same thread', async () => {
+    const existing = makeRecord({ role: VtFlowRole.Validator, state: VtFlowState.CredOffered })
+    const { service, repository, agentContext, eventEmitter } = makeService(
+      existing,
+      { id: 'conn-old', theirDid: 'did:web:agent-peer' },
+      { isParticipantPending: async () => true },
+    )
+    const renewal = makeMessageContext(agentContext)
+    const duplicate = makeMessageContext(agentContext)
+    duplicate.message.setThread({ threadId: renewal.message.threadId })
+
+    await service.processReceiveOnboardingRequest(renewal as never)
+    await service.acceptOnboardingRequest(agentContext as never, existing.id)
+    eventEmitter.emit.mockClear()
+    const record = await service.processReceiveOnboardingRequest(duplicate as never)
+
+    expect(record).toMatchObject({ state: VtFlowState.Validating, threadId: renewal.message.threadId })
+    expect(eventEmitter.emit).not.toHaveBeenCalled()
+    expect(repository.save).not.toHaveBeenCalled()
+    await expect(service.acceptOnboardingRequest(agentContext as never, existing.id)).rejects.toThrow(
+      /VALIDATING/,
+    )
   })
 })
 
@@ -1438,6 +1604,7 @@ describe('VtFlowModule state listeners', () => {
   it.each([
     ['re-entered a VALIDATED flow on a renewal', VtFlowState.Validated, 1],
     ['re-attached to a flow in AWAITING_OR', VtFlowState.AwaitingOr, 1],
+    ['renewed a flow left in CRED_OFFERED', VtFlowState.CredOffered, 1],
     ['rejected with a retryable code', VtFlowState.Validating, 0],
   ])('auto-accept an onboarding-request that %s', async (_label, previousState, accepts) => {
     const listeners: Array<(event: unknown) => Promise<void>> = []

@@ -222,7 +222,9 @@ export class VtFlowOrchestrator {
       .filter(record => !isVtFlowTerminalState(record.state))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
-    const running = latest !== undefined && !isVtFlowRenewable(latest)
+    const offerReplaced =
+      latest?.state === VtFlowState.CredOffered && holderParticipant.opState === ValidationState.PENDING
+    const running = latest !== undefined && !isVtFlowRenewable(latest) && !offerReplaced
 
     let connectionId: string | undefined
     if (latest) {
@@ -1239,6 +1241,21 @@ export class VtFlowOrchestrator {
           }
         }
       }
+      if (Date.now() >= deadline) return false
+      await new Promise(resolve => setTimeout(resolve, TX_LOOKUP_INTERVAL_MS))
+    }
+  }
+
+  // the indexer can still lag the applicant's RenewParticipantOP, so wait for it as checkParticipantId does
+  async isParticipantPending({ record }: VtFlowCheckParticipantIdContext): Promise<boolean> {
+    if (!record.applicantParticipantId) return false
+    const deadline = Date.now() + TX_LOOKUP_TIMEOUT_MS
+    for (;;) {
+      const entry = await this.agent.indexer
+        .getParticipant(record.applicantParticipantId)
+        .catch(() => undefined)
+      if (entry?.revoked || entry?.slashed) return false
+      if (entry?.op_state === 'PENDING') return true
       if (Date.now() >= deadline) return false
       await new Promise(resolve => setTimeout(resolve, TX_LOOKUP_INTERVAL_MS))
     }
