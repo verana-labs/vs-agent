@@ -74,13 +74,13 @@ export class VtFlowModule implements Module {
 
     eventEmitter.on<DidCommCredentialStateChangedEvent>(
       DidCommCredentialEventTypes.DidCommCredentialStateChanged,
-      async ({ payload: { credentialExchangeRecord } }) => {
+      async ({ payload: { credentialExchangeRecord, previousState } }) => {
         if (!credentialExchangeRecord.parentThreadId) return
 
         const record = await service.findByThreadId(agentContext, credentialExchangeRecord.parentThreadId)
         if (!record) return
 
-        await service.onSubprotocolStateChanged(agentContext, record, credentialExchangeRecord)
+        await service.onSubprotocolStateChanged(agentContext, record, credentialExchangeRecord, previousState)
 
         const config = service.getModuleConfig()
         if (
@@ -219,6 +219,7 @@ export class VtFlowModule implements Module {
           (payload.previousState === null ||
             payload.previousState === VtFlowState.AwaitingOr ||
             payload.previousState === VtFlowState.Completed ||
+            payload.previousState === VtFlowState.CredOffered ||
             payload.previousState === VtFlowState.Validated) &&
           config.autoAcceptOnboardingRequest
         ) {
@@ -251,7 +252,10 @@ export class VtFlowModule implements Module {
           return
         }
 
-        if (payload.state === VtFlowState.Validated && payload.previousState === VtFlowState.Validated) {
+        if (
+          payload.state === payload.previousState &&
+          (payload.state === VtFlowState.Validated || payload.state === VtFlowState.CredOffered)
+        ) {
           await config.onReconnected?.({ agentContext, record })
           return
         }

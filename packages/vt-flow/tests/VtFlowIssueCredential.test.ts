@@ -26,11 +26,18 @@ const SIGNED_CREDENTIAL = { id: 'urn:uuid:vtc-1', proof: { proofValue: 'zSIG' } 
 const buildApi = (
   options: VtFlowModuleConfigOptions,
   exchangeState = DidCommCredentialState.RequestReceived,
+  flow: Record<string, unknown> = {},
 ) => {
   const sendMessage = vi.fn(async () => undefined)
   const setCredentialDigest = vi.fn(async () => undefined)
   const recordIssuance = vi.fn(async () => undefined)
-  const record = { id: 'flow-1', assertRole: (role: VtFlowRole) => role }
+  const abandonCredentialExchange = vi.fn(async () => undefined)
+  const record = {
+    id: 'flow-1',
+    assertRole: (role: VtFlowRole) => role,
+    assertState: () => undefined,
+    ...flow,
+  }
 
   const protocol = {
     version: 'v2',
@@ -40,7 +47,7 @@ const buildApi = (
   }
 
   const api = new VtFlowApi(
-    { getById: async () => record, setCredentialDigest, recordIssuance } as never,
+    { getById: async () => record, setCredentialDigest, recordIssuance, abandonCredentialExchange } as never,
     { sendMessage } as never,
     { getById: async () => ({ assertReady: () => undefined }) } as never,
     {} as never,
@@ -56,7 +63,7 @@ const buildApi = (
     } as never,
   )
 
-  return { api, sendMessage, setCredentialDigest, recordIssuance, protocol }
+  return { api, sendMessage, setCredentialDigest, recordIssuance, protocol, abandonCredentialExchange }
 }
 
 const issue = (api: VtFlowApi) =>
@@ -133,6 +140,56 @@ describe('issueCredentialForSession', () => {
     )
   })
 
+  it('delivers a credential whose anchoring succeeded without anchoring it again', async () => {
+    const onBeforeCredentialIssued = vi.fn(async () => undefined)
+    const { api, protocol } = buildApi(
+      { onBeforeCredentialIssued },
+      DidCommCredentialState.CredentialIssued,
+      {
+        credentialExchangeRecordId: 'cx-1',
+        issuance: { tx: { hash: 'CD34', status: VtFlowTxStatus.Succeeded } },
+      },
+    )
+
+    // the outbound context needs a real agent, so delivery throws after the checks
+    await issue(api).catch(() => undefined)
+
+    expect(protocol.findCredentialMessage).toHaveBeenCalledWith(expect.anything(), 'cx-1')
+    expect(onBeforeCredentialIssued).not.toHaveBeenCalled()
+  })
+
+  it('does not issue an exchange that is not the current run of the flow', async () => {
+    const onBeforeCredentialIssued = vi.fn(async () => undefined)
+    const { api, protocol } = buildApi({ onBeforeCredentialIssued }, DidCommCredentialState.RequestReceived, {
+      credentialExchangeRecordId: 'cx-2',
+    })
+
+    await issue(api)
+
+    expect(protocol.acceptRequest).not.toHaveBeenCalled()
+    expect(onBeforeCredentialIssued).not.toHaveBeenCalled()
+  })
+
+  it('anchors a run one time when two calls come at the same time', async () => {
+    let release!: () => void
+    const held = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const onBeforeCredentialIssued = vi.fn(async () => {
+      await held
+      return undefined
+    })
+    const { api } = buildApi({ onBeforeCredentialIssued })
+
+    const first = issue(api).catch(() => undefined)
+    await vi.waitFor(() => expect(onBeforeCredentialIssued).toHaveBeenCalled())
+    await issue(api)
+    release()
+    await first
+
+    expect(onBeforeCredentialIssued).toHaveBeenCalledTimes(1)
+  })
+
   it('records an anchoring transaction SUBMITTED on the flow before it lands', async () => {
     const { api, recordIssuance } = buildApi({})
     const issuance = { tx: { hash: 'CD34', status: VtFlowTxStatus.Submitted } }
@@ -140,6 +197,28 @@ describe('issueCredentialForSession', () => {
     await api.recordIssuance('flow-1', issuance)
 
     expect(recordIssuance).toHaveBeenCalledWith(expect.anything(), 'flow-1', issuance)
+  })
+})
+
+describe('abandonIssuanceRun', () => {
+  it('abandons a run whose anchoring succeeded, which the next run delivers', async () => {
+    const tx = { hash: 'CD34', status: VtFlowTxStatus.Succeeded }
+    const { api, abandonCredentialExchange } = buildApi({}, undefined, { issuance: { tx } })
+
+    await api.abandonIssuanceRun('flow-1')
+
+    expect(abandonCredentialExchange).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    [{ hash: 'CD34', status: VtFlowTxStatus.Submitted }],
+    [{ hash: 'CD34', status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.TxFailed }],
+    [{ status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.BroadcastError }],
+  ])('keeps a run whose anchoring is %o', async tx => {
+    const { api, abandonCredentialExchange } = buildApi({}, undefined, { issuance: { tx } })
+
+    await expect(api.abandonIssuanceRun('flow-1')).rejects.toThrow('has an anchoring of its run')
+    expect(abandonCredentialExchange).not.toHaveBeenCalled()
   })
 })
 

@@ -15,6 +15,8 @@ vi.mock('../src/vtFlow/VtFlowOrchestrator', () => ({
     startOnboardingProcess = startOnboardingProcess
   },
 }))
+const { repairIssuance } = vi.hoisted(() => ({ repairIssuance: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../src/vtFlow/issuanceRepair', () => ({ repairIssuance }))
 vi.mock('../src/utils/didReadiness', () => ({
   waitUntilOwnDidIsPubliclyResolvable: vi.fn().mockResolvedValue(undefined),
 }))
@@ -326,6 +328,28 @@ describe('EcsBootstrapService standalone', () => {
       credentialExchangeRecord: exchange,
     })
     expect(mocks.agent.didcomm.credentials.acceptCredential.mock.calls).toEqual(accepted)
+    expect(mocks.vtFlowApi.acceptCredentialOffer).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [DidCommCredentialState.RequestSent],
+    [DidCommCredentialState.Abandoned],
+  ])('repairs at startup an applicant run left in %s instead of accepting its offer again', async state => {
+    const mocks = makeMocks()
+    mocks.indexer.listParticipants.mockImplementation(async (filter: { did?: string }) =>
+      filter.did === 'did:web:agent'
+        ? [{ id: 9, participant_state: ParticipantState.Active, revoked: null, slashed: null }]
+        : [],
+    )
+    mocks.vtFlowApi.findAllByQuery.mockResolvedValue([
+      { id: 'flow-1', connectionId: 'conn-1', credentialExchangeRecordId: 'cred-ex-1' },
+    ])
+    mocks.agent.didcomm.credentials.getById.mockResolvedValue({ id: 'cred-ex-1', state })
+    repairIssuance.mockClear()
+
+    await makeService(mocks).run()
+
+    expect(repairIssuance).toHaveBeenCalledExactlyOnceWith(mocks.agent, logger, 'flow-1')
     expect(mocks.vtFlowApi.acceptCredentialOffer).not.toHaveBeenCalled()
   })
 

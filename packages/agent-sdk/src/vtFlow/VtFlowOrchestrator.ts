@@ -9,6 +9,7 @@ import {
   utils,
 } from '@credo-ts/core'
 import type { DataIntegrityCredential, DidCommDataIntegrityOfferCredentialFormat } from '@credo-ts/didcomm'
+import { DidCommCredentialState } from '@credo-ts/didcomm'
 import {
   VtFlowApi,
   VtFlowRecord,
@@ -21,6 +22,7 @@ import {
   VtFlowVariant,
   isVtFlowRenewable,
   isVtFlowTerminalState,
+  isVtFlowTxSent,
   type VtFlowCheckParticipantIdContext,
   type VtFlowEcsIssuanceExemptionContext,
   type VtFlowIssuance,
@@ -39,7 +41,7 @@ import {
 import { AdminApiError, AdminApiErrorCode } from '../adminApi'
 import { BaseAgentModules, VsAgent } from '../agent'
 import { isEcsIssuanceExempt } from './ecsIssuanceExemption'
-import { feeGranterFor, preflightFee } from '../blockchain/feePreflight'
+import { feeGranterFor, preflightFailureReason, preflightFee } from '../blockchain/feePreflight'
 import {
   Participant,
   ParticipantDto,
@@ -73,9 +75,11 @@ import {
 const DISCOUNT_SCALE = 10_000
 const TX_LOOKUP_TIMEOUT_MS = 60_000
 const TX_LOOKUP_INTERVAL_MS = 3_000
+export const FAILED_SUBMISSION_RETRY_INTERVAL_MS = 60_000
 // the notification handler and the tx lookup can both reach markValidated for one flow at the same time
 const markingValidated = new Set<string>()
 const continuingAfterValidated = new Map<string, Promise<void>>()
+const validatingFlows = new Map<string, Promise<void>>()
 
 const FEE_KEYS = ['validationFees', 'issuanceFees', 'verificationFees'] as const
 const DISCOUNT_KEYS = ['issuanceFeeDiscount', 'verificationFeeDiscount'] as const
@@ -97,6 +101,25 @@ function sameTerm(key: string, given: number, onEntry: number): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+const REASONS_AFTER_BROADCAST: ReadonlySet<VtFlowTxReason | undefined> = new Set([
+  VtFlowTxReason.BroadcastError,
+  VtFlowTxReason.TxFailed,
+  VtFlowTxReason.TxNotFound,
+])
+
+// A transaction that failed in the pre-flight: a repeat cannot put a second transaction on chain.
+function failedInPreflight(tx: VtFlowTx | undefined): boolean {
+  return tx?.status === VtFlowTxStatus.Failed && !REASONS_AFTER_BROADCAST.has(tx.reason)
+}
+
+function repeatsOnInterval(tx: VtFlowTx | undefined): boolean {
+  return tx?.status === VtFlowTxStatus.Failed && tx.reason === VtFlowTxReason.ServiceUnavailable
+}
+
+function flowTx(record: VtFlowRecord): VtFlowTx | undefined {
+  return record.state === VtFlowState.CredOffered ? record.issuance?.tx : record.validation?.tx
 }
 
 export interface VtFlowOrchestratorOptions {
@@ -147,6 +170,8 @@ export interface AcceptCredentialInput {
 }
 
 export class VtFlowOrchestrator {
+  private startupRepeats?: Set<string>
+
   constructor(
     private readonly agent: VsAgent<BaseAgentModules>,
     private readonly options: VtFlowOrchestratorOptions = {},
@@ -199,7 +224,9 @@ export class VtFlowOrchestrator {
       .filter(record => !isVtFlowTerminalState(record.state))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
-    const running = latest !== undefined && !isVtFlowRenewable(latest)
+    const offerReplaced =
+      latest?.state === VtFlowState.CredOffered && holderParticipant.opState === ValidationState.PENDING
+    const running = latest !== undefined && !isVtFlowRenewable(latest) && !offerReplaced
 
     let connectionId: string | undefined
     if (latest) {
@@ -351,6 +378,10 @@ export class VtFlowOrchestrator {
 
   /** [VSA-ADM-VT-FL-VALIDATE] */
   async validateFlow(input: ValidateFlowInput): Promise<VtFlowRecord> {
+    return this.oneAtATime(input.vtFlowRecordId, () => this.validateFlowOnce(input), validatingFlows)
+  }
+
+  private async validateFlowOnce(input: ValidateFlowInput): Promise<VtFlowRecord> {
     this.requireChain()
     const vtFlowApi = this.resolveVtFlowApi()
     const record = await vtFlowApi.findById(input.vtFlowRecordId)
@@ -796,17 +827,25 @@ export class VtFlowOrchestrator {
 
   // one run at a time per flow: two callers at once would both read VALIDATED and offer twice
   async continueAfterValidated(recordId: string): Promise<VtFlowRecord> {
-    const previous = continuingAfterValidated.get(recordId) ?? Promise.resolve()
-    const run = previous.then(() => this.issuanceAfterValidated(recordId))
+    return this.oneAtATime(recordId, () => this.issuanceAfterValidated(recordId))
+  }
+
+  private async oneAtATime<T>(
+    recordId: string,
+    task: () => Promise<T>,
+    runs = continuingAfterValidated,
+  ): Promise<T> {
+    const previous = runs.get(recordId) ?? Promise.resolve()
+    const run = previous.then(task)
     const settled = run.then(
       () => undefined,
       () => undefined,
     )
-    continuingAfterValidated.set(recordId, settled)
+    runs.set(recordId, settled)
     try {
       return await run
     } finally {
-      if (continuingAfterValidated.get(recordId) === settled) continuingAfterValidated.delete(recordId)
+      if (runs.get(recordId) === settled) runs.delete(recordId)
     }
   }
 
@@ -846,26 +885,159 @@ export class VtFlowOrchestrator {
     await Promise.all(pending.map(record => this.resolveValidationTx(record.id)))
   }
 
-  /**
-   * [VSA-VTI-FLOW-ISSUE-1]: at startup, resume through the stored issued credential every anchoring
-   * left SUBMITTED, and every anchoring that failed in the pre-flight, which sent no transaction.
-   */
+  /** [VSA-VTI-FLOW-ISSUE-1]: at startup, resume through the stored issued credential every anchoring left SUBMITTED. */
   async resumeIssuanceSubmissions(): Promise<void> {
     const vtFlowApi = this.resolveVtFlowApi()
     const offered = await vtFlowApi.findAllByQuery({
       role: VtFlowRole.Validator,
       flowState: VtFlowState.CredOffered,
     })
-    const resumable = (tx: VtFlowTx | undefined): boolean =>
-      tx?.status === VtFlowTxStatus.Submitted ||
-      (tx?.status === VtFlowTxStatus.Failed && tx.reason === VtFlowTxReason.PreflightError)
     await Promise.all(
       offered.map(({ id, issuance, credentialExchangeRecordId }) =>
-        resumable(issuance?.tx) && credentialExchangeRecordId
+        issuance?.tx?.status === VtFlowTxStatus.Submitted && credentialExchangeRecordId
           ? vtFlowApi.issueCredentialForSession({ vtFlowRecordId: id, credentialExchangeRecordId })
           : undefined,
       ),
     )
+  }
+
+  async resumeIssuance(recordId: string, reoffer = true): Promise<VtFlowRecord | null> {
+    return this.oneAtATime(recordId, () => this.resumeIssuanceRun(recordId, reoffer))
+  }
+
+  private async resumeIssuanceRun(recordId: string, reoffer: boolean): Promise<VtFlowRecord | null> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const record = await vtFlowApi.findById(recordId)
+    if (!record || record.role !== VtFlowRole.Validator) return record
+    if (record.state === VtFlowState.Validated) return this.issuanceAfterValidated(record.id)
+    if (record.state !== VtFlowState.CredOffered) return record
+
+    const tx = record.issuance?.tx
+    const sent = isVtFlowTxSent(tx)
+    if (sent && tx?.status !== VtFlowTxStatus.Succeeded) return record
+    const exchange = record.credentialExchangeRecordId
+      ? await this.agent.didcomm.credentials.findById(record.credentialExchangeRecordId)
+      : null
+    // Credo cannot continue a run whose messages used an earlier connection.
+    const elsewhere = !!exchange && exchange.connectionId !== record.connectionId
+    if (
+      !elsewhere &&
+      (exchange?.state === DidCommCredentialState.RequestReceived ||
+        exchange?.state === DidCommCredentialState.CredentialIssued)
+    ) {
+      return (
+        await vtFlowApi.issueCredentialForSession({
+          vtFlowRecordId: record.id,
+          credentialExchangeRecordId: exchange.id,
+        })
+      ).record
+    }
+    const anchored =
+      tx?.status === VtFlowTxStatus.Succeeded &&
+      !!exchange &&
+      (elsewhere || (reoffer && exchange.state === DidCommCredentialState.OfferSent))
+    if (
+      !anchored &&
+      (sent || (exchange && !elsewhere && (!reoffer || exchange.state !== DidCommCredentialState.OfferSent)))
+    )
+      return record
+
+    // [VSA-VTI-FLOW-ISSUE-3]: the new run signs the same credential again, so its digest is the anchored one.
+    const offered = anchored
+      ? (await this.agent.didcomm.credentials.getFormatData(exchange.id)).offer?.dataIntegrity?.credential
+      : undefined
+    if (anchored && !offered)
+      throw new Error(`the anchored run of flow ${record.id} has no offered credential`)
+    await vtFlowApi.abandonIssuanceRun(record.id)
+    if (offered) {
+      const { record: reoffered } = await vtFlowApi.offerCredentialForSession({
+        vtFlowRecordId: record.id,
+        issuerParticipantId: record.issuerParticipantId,
+        credentialFormats: { dataIntegrity: { credential: offered, bindingRequired: false } },
+      })
+      return reoffered
+    }
+    if (record.variant === VtFlowVariant.DirectIssuance) {
+      const offer = await this.buildDirectIssuanceOffer(record.id)
+      if (!offer) return vtFlowApi.findById(record.id)
+      return (await vtFlowApi.offerCredentialForSession({ vtFlowRecordId: record.id, ...offer })).record
+    }
+    return this.offerOnboardingCredential({ vtFlowRecordId: record.id })
+  }
+
+  async resumeIssuanceRuns(): Promise<void> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const offered = await vtFlowApi.findAllByQuery({
+      role: VtFlowRole.Validator,
+      flowState: VtFlowState.CredOffered,
+    })
+    const validated = await vtFlowApi.findAllByQuery({
+      role: VtFlowRole.Validator,
+      flowState: VtFlowState.Validated,
+    })
+    const resumable = [
+      ...offered.filter(record => !record.issuance?.tx),
+      ...validated.filter(
+        record =>
+          record.variant === VtFlowVariant.OnboardingProcess &&
+          !record.credentialExchangeRecordId &&
+          !record.connectionTerminated &&
+          (record.applicantParticipantRole === undefined ||
+            record.applicantParticipantRole === HOLDER_PARTICIPANT_TYPE),
+      ),
+    ]
+    for (const record of resumable) {
+      try {
+        const connection = await this.agent.didcomm.connections.findById(record.connectionId)
+        // A slow holder can still answer an old Direct Issuance offer.
+        const reoffer = record.variant === VtFlowVariant.OnboardingProcess
+        if (connection?.isReady) await this.resumeIssuance(record.id, reoffer)
+      } catch (error) {
+        this.agent.config.logger.warn(
+          `[vt-flow] could not resume the issuance of flow ${record.id}: ${errorMessage(error)}`,
+        )
+      }
+    }
+  }
+
+  /**
+   * [VSA-ADM-VT-FL-VALIDATE-12], [VSA-VTI-FLOW-ISSUE-3]: repeat validateFlow for each anchoring and
+   * validation that failed in the pre-flight. The first run repeats each of them one time. A later run
+   * repeats only SERVICE_UNAVAILABLE. A run stops after a validation it broadcasts, as its inclusion
+   * is not awaited and a second signature would reuse the account sequence. The flows that the first
+   * run did not reach stay for the subsequent runs.
+   */
+  async resumeFailedSubmissions(): Promise<void> {
+    const vtFlowApi = this.resolveVtFlowApi()
+    const [offered, failedValidations] = await Promise.all([
+      vtFlowApi.findAllByQuery({ role: VtFlowRole.Validator, flowState: VtFlowState.CredOffered }),
+      vtFlowApi.findAllByQuery({ role: VtFlowRole.Validator, flowState: VtFlowState.ValidationTxFailed }),
+    ])
+    const failed = [
+      ...offered.filter(record => record.credentialExchangeRecordId),
+      ...failedValidations.filter(record => !record.connectionTerminated),
+    ].filter(record => failedInPreflight(flowTx(record)))
+    const failedIds = new Set(failed.map(record => record.id))
+    if (!this.startupRepeats) this.startupRepeats = failedIds
+    for (const id of this.startupRepeats) if (!failedIds.has(id)) this.startupRepeats.delete(id)
+
+    for (const record of failed) {
+      if (!this.startupRepeats.has(record.id) && !repeatsOnInterval(flowTx(record))) continue
+      if (validatingFlows.has(record.id)) continue
+      this.startupRepeats.delete(record.id)
+      const warn = (details: Record<string, unknown>) =>
+        this.agent.config.logger.warn(
+          `[vt-flow] retrying the transaction of flow ${record.id} failed`,
+          details,
+        )
+      const retried = await this.validateFlow({ vtFlowRecordId: record.id }).catch(error => {
+        warn({ error: errorMessage(error) })
+        return undefined
+      })
+      const tx = retried && flowTx(retried)
+      if (tx?.status === VtFlowTxStatus.Failed) warn({ reason: tx.reason, error: tx.error })
+      if (retried?.state === VtFlowState.ValidationTxSubmitted) return
+    }
   }
 
   async acceptCredential(input: AcceptCredentialInput): Promise<VtFlowRecord> {
@@ -1003,6 +1175,23 @@ export class VtFlowOrchestrator {
       signedCredential as unknown as W3cVerifiableCredential,
       algorithm,
     )
+    const anchored = record.issuance?.tx?.status === VtFlowTxStatus.Succeeded ? record.issuance.tx : undefined
+    if (anchored && digest !== record.credentialDigest) {
+      throw new Error(`the credential of flow ${record.id} does not have the digest that the flow anchored`)
+    }
+    let tx: VtFlowTx | undefined = anchored
+    if (!tx && record.issuance?.tx?.status !== VtFlowTxStatus.Submitted) {
+      // An earlier attempt can anchor the credential and stop before it records the tx.
+      try {
+        if (await this.agent.indexer.getDigest(digest)) tx = { status: VtFlowTxStatus.Succeeded }
+      } catch (error) {
+        tx = {
+          status: VtFlowTxStatus.Failed,
+          reason: preflightFailureReason(error),
+          error: `the digest lookup failed: ${errorMessage(error)}`,
+        }
+      }
+    }
     const message = chain.createOrUpdateParticipantSessionMsg({
       id: record.participantSessionId,
       issuerParticipantId: record.issuerParticipantId,
@@ -1010,7 +1199,7 @@ export class VtFlowOrchestrator {
       walletAgentParticipantId: Number(record.walletAgentParticipantId ?? 0) || 0,
       digest,
     })
-    const tx = await this.anchor(record, message, record.issuerParticipantId)
+    tx ??= await this.anchor(record, message, record.issuerParticipantId)
     if (tx.status === VtFlowTxStatus.Failed) {
       this.agent.config.logger.error(
         `[vt-flow] the anchoring of the credential of flow ${record.id} (session ${record.participantSessionId}) failed, credential not delivered: ${tx.reason}: ${tx.error}`,
@@ -1170,6 +1359,21 @@ export class VtFlowOrchestrator {
           }
         }
       }
+      if (Date.now() >= deadline) return false
+      await new Promise(resolve => setTimeout(resolve, TX_LOOKUP_INTERVAL_MS))
+    }
+  }
+
+  // the indexer can still lag the applicant's RenewParticipantOP, so wait for it as checkParticipantId does
+  async isParticipantPending({ record }: VtFlowCheckParticipantIdContext): Promise<boolean> {
+    if (!record.applicantParticipantId) return false
+    const deadline = Date.now() + TX_LOOKUP_TIMEOUT_MS
+    for (;;) {
+      const entry = await this.agent.indexer
+        .getParticipant(record.applicantParticipantId)
+        .catch(() => undefined)
+      if (entry?.revoked || entry?.slashed) return false
+      if (entry?.op_state === 'PENDING') return true
       if (Date.now() >= deadline) return false
       await new Promise(resolve => setTimeout(resolve, TX_LOOKUP_INTERVAL_MS))
     }

@@ -116,6 +116,7 @@ export enum VtFlowTxReason {
   FeegrantExhausted = 'FEEGRANT_EXHAUSTED',
   FeegrantExpired = 'FEEGRANT_EXPIRED',
   AuthorizationExpired = 'AUTHORIZATION_EXPIRED',
+  ServiceUnavailable = 'SERVICE_UNAVAILABLE',
   PreflightError = 'PREFLIGHT_ERROR',
   BroadcastError = 'BROADCAST_ERROR',
   TxFailed = 'TX_FAILED',
@@ -136,6 +137,12 @@ export interface VtFlowTx {
   status: VtFlowTxStatus
   reason?: VtFlowTxReason
   error?: string
+}
+
+/** True when the anchoring sent a transaction; a failed pre-flight sends none. */
+export function isVtFlowTxSent(tx?: VtFlowTx): boolean {
+  if (!tx) return false
+  return tx.status !== VtFlowTxStatus.Failed || !!tx.hash || tx.reason === VtFlowTxReason.BroadcastError
 }
 
 /** The validation decision of an Onboarding Process flow, recorded by `validateFlow`. Discounts are decimals between 0 and 1. */

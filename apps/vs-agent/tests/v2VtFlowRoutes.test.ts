@@ -5,6 +5,7 @@ import {
   VtFlowPendingAction,
   VtFlowRole,
   VtFlowState,
+  VtFlowTxReason,
   VtFlowTxStatus,
   VtFlowVariant,
 } from '@verana-labs/credo-ts-didcomm-vt-flow'
@@ -90,6 +91,41 @@ describe('VtFlowsService pendingAction', () => {
       pendingActionFor({
         state: VtFlowState.CredOffered,
         issuance: { tx: { status: VtFlowTxStatus.Failed } },
+      }),
+    ).resolves.toBe(VtFlowPendingAction.Validator)
+  })
+
+  it('hands CRED_OFFERED to the applicant when the agent did not repair the issuance', async () => {
+    const applicant = { state: VtFlowState.CredOffered, role: VtFlowRole.Applicant }
+
+    await expect(pendingActionFor(applicant)).resolves.toBe(VtFlowPendingAction.Agent)
+    await expect(pendingActionFor({ ...applicant, errorMessage: 'no credential arrived' })).resolves.toBe(
+      VtFlowPendingAction.Applicant,
+    )
+  })
+
+  it('keeps a transaction that failed with SERVICE_UNAVAILABLE with the agent', async () => {
+    const unavailable = { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.ServiceUnavailable }
+    const rejected = { status: VtFlowTxStatus.Failed, reason: VtFlowTxReason.PreflightError }
+
+    await expect(
+      pendingActionFor({ state: VtFlowState.CredOffered, issuance: { tx: unavailable } }),
+    ).resolves.toBe(VtFlowPendingAction.Agent)
+    await expect(
+      pendingActionFor({ state: VtFlowState.CredOffered, issuance: { tx: rejected } }),
+    ).resolves.toBe(VtFlowPendingAction.Validator)
+
+    await expect(
+      pendingActionFor({ state: VtFlowState.ValidationTxFailed, validation: { tx: unavailable } }),
+    ).resolves.toBe(VtFlowPendingAction.Agent)
+    await expect(
+      pendingActionFor({ state: VtFlowState.ValidationTxFailed, validation: { tx: rejected } }),
+    ).resolves.toBe(VtFlowPendingAction.Validator)
+    await expect(
+      pendingActionFor({
+        state: VtFlowState.ValidationTxFailed,
+        connectionTerminated: true,
+        validation: { tx: unavailable },
       }),
     ).resolves.toBe(VtFlowPendingAction.Validator)
   })

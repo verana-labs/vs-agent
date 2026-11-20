@@ -5,11 +5,12 @@ import type {
   DidCommInboundMessageContext,
 } from '@credo-ts/didcomm'
 
-import { CredoError, EventEmitter, InjectionSymbols, inject, injectable } from '@credo-ts/core'
+import { CredoError, EventEmitter, InjectionSymbols, inject, injectable, utils } from '@credo-ts/core'
 import {
   DidCommConnectionRepository,
   DidCommCredentialExchangeRepository,
   DidCommCredentialState,
+  DidCommCredentialsModuleConfig,
   WhoRetriesStatus,
 } from '@credo-ts/didcomm'
 
@@ -47,6 +48,7 @@ import {
   VtFlowMessageType,
   VtFlowRole,
   VtFlowState,
+  VtFlowTxStatus,
   VtFlowValidatedFromStates,
   VtFlowVariant,
   type VtFlowStateChangedEvent,
@@ -113,7 +115,14 @@ export class VtFlowService {
     agentContext: AgentContext,
     params: CreateOnboardingRequestParams,
   ): Promise<{ message: OnboardingRequestMessage; record: VtFlowRecord }> {
+    const existing = await this.repository.findByParticipantSessionId(
+      agentContext,
+      params.participantSessionId,
+      VtFlowRole.Applicant,
+    )
     const message = new OnboardingRequestMessage({
+      // Two renewals that read the same round send the same thread, also from different replicas.
+      id: existing ? utils.uuidFromName(existing.threadId, existing.id) : undefined,
       participantId: params.applicantParticipantId,
       participantSessionId: params.participantSessionId,
       agentParticipantId: params.agentParticipantId,
@@ -122,16 +131,16 @@ export class VtFlowService {
     })
     message.setThread({ threadId: message.id })
 
-    const existing = await this.repository.findByParticipantSessionId(
-      agentContext,
-      params.participantSessionId,
-      VtFlowRole.Applicant,
-    )
     if (existing) {
-      if (!isVtFlowRenewable(existing)) {
+      const offerReplaced = existing.state === VtFlowState.CredOffered
+      if (!isVtFlowRenewable(existing) && !offerReplaced) {
         throw new CredoError(
           `vt-flow: participant_session_id '${params.participantSessionId}' already belongs to a flow in state ${existing.state}; use a new session id`,
         )
+      }
+      if (offerReplaced) {
+        await this.releaseCredentialExchange(agentContext, existing)
+        existing.errorMessage = undefined
       }
       existing.connectionId = params.connectionId
       existing.threadId = message.id
@@ -221,13 +230,58 @@ export class VtFlowService {
     message.setThread({ threadId: record.threadId })
 
     record.connectionId = params.connectionId
-    if (record.state === VtFlowState.CredOffered) {
-      await this.releaseCredentialExchange(agentContext, record)
-      await this.updateState(agentContext, record, VtFlowState.Validating)
-    } else {
-      await this.repository.update(agentContext, record)
-    }
+    await this.repository.update(agentContext, record)
     return { message, record }
+  }
+
+  public async reattachDirectIssuanceRecord(
+    agentContext: AgentContext,
+    params: { vtFlowRecordId: string; connectionId: string },
+  ): Promise<{ message: IssuanceRequestMessage; record: VtFlowRecord }> {
+    const record = await this.repository.getById(agentContext, params.vtFlowRecordId)
+    record.assertRole(VtFlowRole.Applicant)
+    record.assertVariant(VtFlowVariant.DirectIssuance)
+    if (record.state !== VtFlowState.CredOffered) {
+      throw new CredoError(`vt-flow: flow '${record.id}' in state ${record.state} cannot be re-attached`)
+    }
+    if (!record.schemaId) throw new CredoError(`vt-flow: flow '${record.id}' has no schema_id`)
+
+    const message = new IssuanceRequestMessage({
+      schemaId: record.schemaId,
+      participantSessionId: record.participantSessionId,
+      agentParticipantId: record.agentParticipantId,
+      walletAgentParticipantId: record.walletAgentParticipantId,
+      claims: record.claims,
+    })
+    message.setThread({ threadId: record.threadId })
+
+    record.connectionId = params.connectionId
+    await this.repository.update(agentContext, record)
+    return { message, record }
+  }
+
+  public async abandonCredentialExchange(agentContext: AgentContext, record: VtFlowRecord): Promise<void> {
+    const exchangeId = record.credentialExchangeRecordId
+    const { issuance } = record
+    await this.releaseCredentialExchange(agentContext, record)
+    // The next run delivers the credential that this anchoring put on chain.
+    if (issuance?.tx?.status === VtFlowTxStatus.Succeeded) record.issuance = issuance
+    await this.repository.update(agentContext, record)
+    if (!exchangeId) return
+
+    const exchanges = agentContext.dependencyManager.resolve(DidCommCredentialExchangeRepository)
+    const exchange = await exchanges.findById(agentContext, exchangeId)
+    const open =
+      exchange &&
+      ![
+        DidCommCredentialState.Done,
+        DidCommCredentialState.Abandoned,
+        DidCommCredentialState.Declined,
+      ].includes(exchange.state)
+    const protocol = agentContext.dependencyManager
+      .resolve(DidCommCredentialsModuleConfig)
+      .credentialProtocols.find(p => p.version === exchange?.protocolVersion)
+    if (open && protocol) await protocol.updateState(agentContext, exchange, DidCommCredentialState.Abandoned)
   }
 
   private async releaseCredentialExchange(agentContext: AgentContext, record: VtFlowRecord): Promise<void> {
@@ -283,37 +337,43 @@ export class VtFlowService {
         )
       }
       await this.assertSamePeer(agentContext, existing, connection)
+      const pending =
+        existing.threadId !== message.threadId &&
+        existing.state === VtFlowState.CredOffered &&
+        ((await this.config.isParticipantPending?.({ agentContext, record: existing })) ?? false)
       // the checks above await, and a chain notification can move the flow meanwhile
       const fresh = await this.repository.getById(agentContext, existing.id)
       this.assertNotTerminated(fresh)
       const reconnected = fresh.connectionTerminated
       fresh.connectionId = connection.id
       fresh.connectionTerminated = undefined
-      if (fresh.threadId !== message.threadId) {
+      const newThread = fresh.threadId !== message.threadId
+      const renewal =
+        isVtFlowRenewable(fresh) || (pending && newThread && fresh.state === VtFlowState.CredOffered)
+      if (newThread) {
         fresh.threadId = message.threadId
-        if (fresh.state === VtFlowState.AwaitingOr || isVtFlowRenewable(fresh)) {
+        if (fresh.state === VtFlowState.AwaitingOr || renewal) {
           if (message.claims) fresh.claims = message.claims
           if (message.proofsAttach) fresh.proofsAttach = message.proofsAttach
         }
       }
-      if (isVtFlowRenewable(fresh)) {
-        // A finished flow re-entered with a new OR is a renewal (VSA-VTI-FLOW-OP-RENEW): re-run it.
+      if (renewal) {
+        if (fresh.state === VtFlowState.CredOffered) await this.releaseCredentialExchange(agentContext, fresh)
         fresh.oobLink = undefined
         fresh.validation = undefined
         fresh.issuance = undefined
         await this.updateState(agentContext, fresh, VtFlowState.AwaitingOr)
-      } else if (fresh.state === VtFlowState.CredOffered) {
-        await this.releaseCredentialExchange(agentContext, fresh)
-        await this.updateState(agentContext, fresh, VtFlowState.Validated)
+      } else if (
+        fresh.state === VtFlowState.CredOffered ||
+        (fresh.state === VtFlowState.Validated && (!newThread || reconnected))
+      ) {
+        // [VSA-ADM-VT-FL-REJECT-2]: after a reject, a reconnection on a new thread also resumes the run.
+        await this.repository.update(agentContext, fresh)
+        this.emitStateChanged(agentContext, fresh, fresh.state)
       } else {
         await this.repository.update(agentContext, fresh)
-        // [VSA-VTI-FLOW-OP-OR] checks every request, and [VSA-ADM-VT-FL-REJECT-2] issuance waits for this reconnection
-        if (
-          fresh.state === VtFlowState.AwaitingOr ||
-          (reconnected && fresh.state === VtFlowState.Validated)
-        ) {
-          this.emitStateChanged(agentContext, fresh, fresh.state)
-        }
+        // [VSA-VTI-FLOW-OP-OR] checks every request
+        if (fresh.state === VtFlowState.AwaitingOr) this.emitStateChanged(agentContext, fresh, fresh.state)
       }
       return fresh
     }
@@ -364,9 +424,13 @@ export class VtFlowService {
       // the checks above await, and an auto accept can move the flow meanwhile
       const fresh = await this.repository.getById(agentContext, existing.id)
       this.assertNotTerminated(fresh)
+      const repair = fresh.threadId === message.threadId && fresh.state === VtFlowState.CredOffered
       fresh.connectionId = connection.id
       fresh.threadId = message.threadId
-      if (fresh.state === VtFlowState.CredOffered) {
+      if (repair) {
+        await this.repository.update(agentContext, fresh)
+        this.emitStateChanged(agentContext, fresh, fresh.state)
+      } else if (fresh.state === VtFlowState.CredOffered) {
         await this.releaseCredentialExchange(agentContext, fresh)
         await this.updateState(agentContext, fresh, VtFlowState.Validating)
       } else {
@@ -800,6 +864,8 @@ export class VtFlowService {
       VtFlowState.ValidatedPendingClaims,
       VtFlowState.Completed,
       ...(record.variant === VtFlowVariant.DirectIssuance ? [VtFlowState.Validating] : []),
+      // A run that abandonCredentialExchange ended can get a new offer.
+      ...(record.credentialExchangeRecordId ? [] : [VtFlowState.CredOffered]),
     ])
   }
 
@@ -823,6 +889,13 @@ export class VtFlowService {
 
     await this.updateState(agentContext, record, VtFlowState.CredOffered)
     return record
+  }
+
+  public async setErrorMessage(agentContext: AgentContext, recordId: string, cause?: string): Promise<void> {
+    const record = await this.repository.getById(agentContext, recordId)
+    if (record.errorMessage === cause) return
+    record.errorMessage = cause
+    await this.repository.update(agentContext, record)
   }
 
   public async setEcsSchemaKey(
@@ -934,11 +1007,16 @@ export class VtFlowService {
     agentContext: AgentContext,
     record: VtFlowRecord,
     credentialExchangeRecord: DidCommCredentialExchangeRecord,
+    previousState: DidCommCredentialState | null = null,
   ): Promise<void> {
-    if (
-      !record.credentialExchangeRecordId ||
-      record.credentialExchangeRecordId !== credentialExchangeRecord.id
-    ) {
+    const { state } = credentialExchangeRecord
+    const current = record.credentialExchangeRecordId
+    const offer = state === DidCommCredentialState.OfferSent || state === DidCommCredentialState.OfferReceived
+    if (current && current !== credentialExchangeRecord.id && !offer) return
+    let replaced = false
+    if (current !== credentialExchangeRecord.id) {
+      replaced = !!current && record.role === VtFlowRole.Applicant && record.state === VtFlowState.CredOffered
+      if (replaced) await this.abandonCredentialExchange(agentContext, record)
       record.credentialExchangeRecordId = credentialExchangeRecord.id
       record.subprotocolThid = credentialExchangeRecord.threadId
       await this.repository.update(agentContext, record)
@@ -960,6 +1038,9 @@ export class VtFlowService {
         }
         if (record.state !== VtFlowState.CredOffered) {
           await this.updateState(agentContext, record, VtFlowState.CredOffered)
+        } else if (replaced) {
+          // The auto-accept of the offer reacts to this signal.
+          this.emitStateChanged(agentContext, record, record.state)
         }
         break
       case DidCommCredentialState.CredentialReceived:
@@ -973,12 +1054,19 @@ export class VtFlowService {
         }
         break
       case DidCommCredentialState.Abandoned:
-      case DidCommCredentialState.Declined:
-        if (record.state !== VtFlowState.Error) {
+      case DidCommCredentialState.Declined: {
+        // The applicant repairs a refused request, per vt-flow Error Handling.
+        const repaired =
+          state === DidCommCredentialState.Abandoned &&
+          record.role === VtFlowRole.Applicant &&
+          record.state === VtFlowState.CredOffered &&
+          previousState === DidCommCredentialState.RequestSent
+        if (!repaired && record.state !== VtFlowState.Error) {
           record.errorMessage = record.errorMessage ?? 'Subprotocol abandoned'
           await this.updateState(agentContext, record, VtFlowState.Error)
         }
         break
+      }
       default:
         break
     }

@@ -32,7 +32,7 @@ export type VtFlowOnCredentialRevokedHook = (ctx: {
   record: VtFlowRecord
 }) => Promise<void>
 
-/** Validator hook fired when the applicant re-attaches a `VALIDATED` flow whose issuance waited for its reconnection ([VSA-ADM-VT-FL-REJECT-2]). */
+/** The validator calls this hook when the applicant re-attaches a `VALIDATED` or `CRED_OFFERED` flow. */
 export type VtFlowOnReconnectedHook = (ctx: {
   agentContext: AgentContext
   record: VtFlowRecord
@@ -91,6 +91,9 @@ export type VtFlowCheckParticipantIdHook = (
   ctx: VtFlowCheckParticipantIdContext,
 ) => Promise<boolean | 'validated'>
 
+/** Validator renews a `CRED_OFFERED` flow on a new thread only when this hook returns `true`. */
+export type VtFlowIsParticipantPendingHook = (ctx: VtFlowCheckParticipantIdContext) => Promise<boolean>
+
 /** Default Data Integrity cryptosuite, applied when `dataIntegrityCryptosuite` is not configured. */
 export const DEFAULT_DATA_INTEGRITY_CRYPTOSUITE = 'eddsa-jcs-2022'
 
@@ -122,6 +125,7 @@ export interface VtFlowModuleConfigOptions {
   assertVerifiableService?: VtFlowAssertVerifiableServiceHook
   checkEcsIssuanceExemption?: VtFlowEcsIssuanceExemptionHook
   checkParticipantId?: VtFlowCheckParticipantIdHook
+  isParticipantPending?: VtFlowIsParticipantPendingHook
 }
 
 /** Read-only view over VtFlowModuleConfigOptions with defaults applied. */
@@ -202,5 +206,9 @@ export class VtFlowModuleConfig {
 
   public get checkParticipantId(): VtFlowCheckParticipantIdHook | undefined {
     return this.options.checkParticipantId
+  }
+
+  public get isParticipantPending(): VtFlowIsParticipantPendingHook | undefined {
+    return this.options.isParticipantPending
   }
 }
