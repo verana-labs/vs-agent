@@ -11,6 +11,7 @@ import {
   VtCredentialState,
   VtFlowApi,
   VtFlowEventTypes,
+  type VtFlowMessage,
   VtFlowMessageType,
   VtFlowModule,
   VtFlowModuleConfig,
@@ -456,17 +457,20 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     expect(running.eventEmitter.emit).not.toHaveBeenCalled()
   })
 
-  it('validator signals an issuance-request resent to a flow in AWAITING_IR, so its checks run again', async () => {
+  it('validator signals an issuance-request resent after a refusal, so its checks run again', async () => {
     const peer = { id: 'conn-old', theirDid: 'did:web:agent-peer' }
-    const directIssuance = (state: VtFlowState) =>
+    const directIssuance = (state: VtFlowState, messages?: VtFlowMessage[]) =>
       makeRecord({
         role: VtFlowRole.Validator,
         state,
         variant: VtFlowVariant.DirectIssuance,
         applicantParticipantId: undefined,
         schemaId: '5',
+        claims: { name: 'First' },
+        messages,
       })
-    const refused = directIssuance(VtFlowState.AwaitingIr)
+    const refusal = { type: VtFlowMessageType.ProblemReport, at: '2026-01-01T00:00:00.000Z' }
+    const refused = directIssuance(VtFlowState.AwaitingIr, [refusal])
     const retry = makeService(refused, peer)
     const context = makeIssuanceContext(retry.agentContext)
     context.message.claims = { name: 'Acme' }
@@ -492,6 +496,26 @@ describe('VtFlowService re-attach on same participant_session_id', () => {
     const running = makeService(directIssuance(VtFlowState.Validating), peer)
     await running.service.processReceiveIssuanceRequest(makeIssuanceContext(running.agentContext) as never)
     expect(running.eventEmitter.emit).not.toHaveBeenCalled()
+  })
+
+  it('validator does not signal a duplicate issuance-request that arrives while the first one is checked', async () => {
+    const peer = { id: 'conn-old', theirDid: 'did:web:agent-peer' }
+    const checking = makeRecord({
+      role: VtFlowRole.Validator,
+      state: VtFlowState.AwaitingIr,
+      variant: VtFlowVariant.DirectIssuance,
+      applicantParticipantId: undefined,
+      schemaId: '5',
+      claims: { name: 'First' },
+    })
+    const duplicate = makeService(checking, peer)
+    const context = makeIssuanceContext(duplicate.agentContext)
+    context.message.claims = { name: 'Acme' }
+
+    const record = await duplicate.service.processReceiveIssuanceRequest(context as never)
+
+    expect(record).toMatchObject({ state: VtFlowState.AwaitingIr, claims: { name: 'First' } })
+    expect(duplicate.eventEmitter.emit).not.toHaveBeenCalled()
   })
 
   it('validator writes the copy a notification moved to VALIDATED while the peer check ran', async () => {

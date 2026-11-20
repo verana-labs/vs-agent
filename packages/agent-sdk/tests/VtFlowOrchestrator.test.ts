@@ -840,12 +840,24 @@ describe('VtFlowOrchestrator.checkSchemaId', () => {
     expect(indexer.getCredentialSchema).not.toHaveBeenCalled()
   })
 
-  it('refuses and logs when the indexer cannot be reached', async () => {
+  it('refuses and logs that the indexer, not the schema, is the reason when the indexer cannot be reached', async () => {
     const { orchestrator, indexer, logger } = makeOrchestrator()
-    indexer.getCredentialSchema.mockRejectedValue(new Error('indexer unreachable'))
+    indexer.getCredentialSchema.mockRejectedValue(new Error('fetch failed'))
 
     await expect(orchestrator.checkSchemaId(context('22'))).resolves.toBe(false)
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('indexer unreachable'))
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+      '[vt-flow] refusing the issuance-request of flow flow-1 because the indexer could not be reached, not because of schema 22: fetch failed',
+    )
+  })
+
+  it('refuses without querying the indexer when the agent has no Verana chain', async () => {
+    const indexer = { getCredentialSchema: vi.fn(), listParticipants: vi.fn() }
+    const logger = { warn: vi.fn() }
+    const orchestrator = new VtFlowOrchestrator({ did: VALIDATOR_DID, config: { logger }, indexer } as never)
+
+    await expect(orchestrator.checkSchemaId(context('22'))).resolves.toBe(false)
+    expect(indexer.getCredentialSchema).not.toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('no Verana chain or public DID'))
   })
 })
 
@@ -927,6 +939,7 @@ describe('VtFlowOrchestrator validateFlow', () => {
         getParticipant: vi.fn(async (id: string | number) => (Number(id) === 93 ? validator : applicant)),
         findParticipant: vi.fn(async () => ({ id: 94, role: 1, did: 'did:web:applicant' })),
         getCredentialSchema: vi.fn(async () => ({
+          id: 22,
           json_schema: JSON.stringify(
             options.jsonSchema ?? {
               properties: {
@@ -1314,6 +1327,30 @@ describe('VtFlowOrchestrator validateFlow', () => {
     else await expect(validated).rejects.toMatchObject({ code: 'INVALID_STATE', status: 409 })
     expect(vtFlowApi.sendValidating).toHaveBeenCalledTimes(sends)
     expect(offerCredentialForSession).toHaveBeenCalledTimes(sends)
+  })
+
+  it('reads the schema of a Direct Issuance flow once when validate offers its credential', async () => {
+    const { orchestrator, agent, listParticipants, offerCredentialForSession } =
+      makeDirectIssuanceOffer('PERMISSIONLESS')
+
+    await orchestrator.validateFlow({ vtFlowRecordId: 'rec-v' })
+
+    expect(offerCredentialForSession).toHaveBeenCalledOnce()
+    expect(agent.indexer.getCredentialSchema).toHaveBeenCalledOnce()
+    expect(listParticipants).toHaveBeenCalledOnce()
+  })
+
+  it('reads the schema again when it is handed one for another schema id', async () => {
+    const { orchestrator, agent } = makeDirectIssuanceOffer('PERMISSIONLESS')
+
+    const offer = await orchestrator.buildDirectIssuanceOffer('rec-v', {
+      id: 23,
+      holder_onboarding_mode: 'PERMISSIONLESS',
+    } as never)
+
+    expect(offer?.issuerParticipantId).toBe(93)
+    expect(agent.indexer.getCredentialSchema).toHaveBeenCalledTimes(2)
+    expect(agent.indexer.getCredentialSchema).toHaveBeenCalledWith(22, { allowNotFound: true })
   })
 
   it.each([

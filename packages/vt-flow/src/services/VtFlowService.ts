@@ -425,9 +425,13 @@ export class VtFlowService {
       const fresh = await this.repository.getById(agentContext, existing.id)
       this.assertNotTerminated(fresh)
       const repair = fresh.threadId === message.threadId && fresh.state === VtFlowState.CredOffered
+      // [VSA-VTI-FLOW-DI] step 2: a request resent after a refusal is checked again, with its claims.
+      // A duplicate that arrives while the first request is still checked is not one.
+      const lastSent = fresh.messages?.[fresh.messages.length - 1]
+      const resent =
+        fresh.state === VtFlowState.AwaitingIr && lastSent?.type === VtFlowMessageType.ProblemReport
       fresh.connectionId = connection.id
-      // a request resent after a refusal carries the claims to check and issue
-      if (fresh.state === VtFlowState.AwaitingIr && message.claims) fresh.claims = message.claims
+      if (resent && message.claims) fresh.claims = message.claims
       fresh.threadId = message.threadId
       if (repair) {
         await this.repository.update(agentContext, fresh)
@@ -439,8 +443,7 @@ export class VtFlowService {
         await this.repository.update(agentContext, fresh)
       }
 
-      // [VSA-VTI-FLOW-DI] step 2: a request resent after a refusal is checked again
-      if (fresh.state === VtFlowState.AwaitingIr) this.emitStateChanged(agentContext, fresh, fresh.state)
+      if (resent) this.emitStateChanged(agentContext, fresh, fresh.state)
       return fresh
     }
 
