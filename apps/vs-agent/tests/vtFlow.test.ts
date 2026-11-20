@@ -729,3 +729,148 @@ describe('vt-flow: Direct Issuance validated after an out-of-band step', () => {
     expect(await validator.didcomm.credentials.getAll()).toHaveLength(1)
   }, 60_000)
 })
+
+// [VSA-VTI-FLOW-DI]: Direct Issuance is only for a schema with holder_onboarding_mode = PERMISSIONLESS
+describe('vt-flow: Direct Issuance schema check', () => {
+  let applicant: VsAgent<any>
+  let validator: VsAgent<any>
+
+  afterEach(async () => {
+    await applicant?.shutdown()
+    await validator?.shutdown()
+    vi.restoreAllMocks()
+  })
+
+  // the schema is read on each check, so a test can change its mode between two requests
+  async function startAgents(schema: { holderOnboardingMode: string }) {
+    const sharedResolver = new FakeDidResolver()
+    const subjectMap = {
+      'rxjs:applicant': new Subject<SubjectMessage>(),
+      'rxjs:validator': new Subject<SubjectMessage>(),
+    }
+    const buildCredentialOffer = vi.fn(async (): Promise<VtFlowCredentialOfferPayload | null> => null)
+
+    applicant = await startAgent({ label: 'Applicant', domain: 'applicant', vtFlowOptions: {} })
+    validator = await startAgent({
+      label: 'Validator',
+      domain: 'validator',
+      vtFlowOptions: {
+        autoAcceptIssuanceRequest: true,
+        autoOfferCredential: true,
+        buildCredentialOffer,
+        checkSchemaId: context => new VtFlowOrchestrator(validator).checkSchemaId(context),
+      },
+      veranaChain: { address: 'verana1agent' } as never,
+      indexer: {
+        getCredentialSchema: async () => ({
+          id: 22,
+          archived: null,
+          holder_onboarding_mode: schema.holderOnboardingMode,
+          json_schema: JSON.stringify({ title: 'OrganizationCredential' }),
+        }),
+        listParticipants: async () => [{ id: 93, vs_operator: 'verana1agent', revoked: null, slashed: null }],
+      } as never,
+    })
+    for (const [agent, domain] of [
+      [applicant, 'applicant'],
+      [validator, 'validator'],
+    ] as const) {
+      agent.didcomm.registerInboundTransport(new SubjectInboundTransport(subjectMap[`rxjs:${domain}`]))
+      agent.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
+      agent.dids.config.resolvers.unshift(sharedResolver)
+      await agent.initialize()
+      await sharedResolver.registerAgent(agent)
+    }
+    const validatorEvents = vi.spyOn(validator.events, 'emit')
+    const applicantEvents = vi.spyOn(applicant.events, 'emit')
+
+    const { connectionRecord } = await applicant.didcomm.oob.receiveImplicitInvitation({
+      did: validator.did,
+      label: 'Applicant',
+      didCommVersion: 'v2',
+      ourDid: applicant.did,
+    })
+    if (!connectionRecord) throw new Error('Failed to establish DIDComm connection to validator')
+    const connection = await applicant.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
+
+    const sendIssuanceRequest = (participantSessionId?: string, claims = { name: 'Acme' }) =>
+      applicant.modules.vtFlow.sendIssuanceRequest({
+        connectionId: connection.id,
+        participantSessionId,
+        schemaId: '22',
+        agentParticipantId: '0',
+        walletAgentParticipantId: '0',
+        claims,
+      })
+    return { sendIssuanceRequest, applicantEvents, validatorEvents, buildCredentialOffer }
+  }
+
+  it('refuses an ISSUER_ONBOARDING_PROCESS schema with vt-flow.invalid-schema-id and never offers', async () => {
+    const { sendIssuanceRequest, applicantEvents, validatorEvents, buildCredentialOffer } = await startAgents(
+      {
+        holderOnboardingMode: 'ISSUER_ONBOARDING_PROCESS',
+      },
+    )
+    const applicantRecord = await sendIssuanceRequest()
+
+    const report = await waitForEvent(applicantEvents, (ev: unknown): ev is any => {
+      const e = ev as any
+      return e?.type === 'DidCommMessageProcessed' && e?.payload?.message?.description?.code !== undefined
+    })
+    expect(report.payload.message.description.code).toBe('vt-flow.invalid-schema-id')
+    const validatorRecord = await validator.modules.vtFlow.findByThreadId(applicantRecord.threadId)
+    expect(validatorRecord?.state).toBe(VtFlowState.AwaitingIr)
+    expect(validatorRecord?.messages).toEqual([expect.objectContaining({ type: 'problem-report' })])
+    expect((await applicant.modules.vtFlow.getById(applicantRecord.id)).state).toBe(VtFlowState.IrSent)
+    expect(
+      validatorEvents.mock.calls.flat().find(isVtFlowStateChangedEvent(VtFlowState.Validating)),
+    ).toBeUndefined()
+    expect(buildCredentialOffer).not.toHaveBeenCalled()
+  }, 30_000)
+
+  it('accepts a PERMISSIONLESS schema and moves the flow to VALIDATING', async () => {
+    const { sendIssuanceRequest, validatorEvents, buildCredentialOffer } = await startAgents({
+      holderOnboardingMode: 'PERMISSIONLESS',
+    })
+    await sendIssuanceRequest()
+
+    await vi.waitFor(() =>
+      expect(
+        validatorEvents.mock.calls.flat().find(isVtFlowStateChangedEvent(VtFlowState.Validating)),
+      ).toBeDefined(),
+    )
+    await vi.waitFor(() => expect(buildCredentialOffer).toHaveBeenCalledTimes(1))
+  }, 30_000)
+
+  it('checks a request resent after a refusal again, and accepts it once the schema is PERMISSIONLESS', async () => {
+    const schema = { holderOnboardingMode: 'ISSUER_ONBOARDING_PROCESS' }
+    const { sendIssuanceRequest, applicantEvents, validatorEvents, buildCredentialOffer } =
+      await startAgents(schema)
+    const refusals = (): number =>
+      applicantEvents.mock.calls
+        .flat()
+        .filter(
+          (ev: any) => ev?.type === 'DidCommMessageProcessed' && ev?.payload?.message?.description?.code,
+        ).length
+    const first = await sendIssuanceRequest()
+    await vi.waitFor(() => expect(refusals()).toBe(1))
+
+    await sendIssuanceRequest(first.participantSessionId)
+    await vi.waitFor(() => expect(refusals()).toBe(2))
+    const [refused, ...others] = await validator.modules.vtFlow.findAllByQuery({ role: VtFlowRole.Validator })
+    expect(others).toHaveLength(0)
+    expect(refused).toMatchObject({ state: VtFlowState.AwaitingIr, messages: [{}, {}] })
+
+    schema.holderOnboardingMode = 'PERMISSIONLESS'
+    const validating = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
+    const accepted = await sendIssuanceRequest(first.participantSessionId, { name: 'Acme Corp' })
+
+    expect((await validating).payload.vtFlowRecordId).toBe(refused.id)
+    await vi.waitFor(async () =>
+      expect((await applicant.modules.vtFlow.getById(accepted.id)).state).toBe(VtFlowState.Validating),
+    )
+    await vi.waitFor(() => expect(buildCredentialOffer).toHaveBeenCalledTimes(1))
+    expect((await validator.modules.vtFlow.getById(refused.id)).claims).toEqual({ name: 'Acme Corp' })
+    expect(refusals()).toBe(2)
+  }, 30_000)
+})

@@ -232,7 +232,7 @@ export class VtFlowModule implements Module {
 
         if (
           payload.state === VtFlowState.AwaitingIr &&
-          payload.previousState === null &&
+          (payload.previousState === null || payload.previousState === VtFlowState.AwaitingIr) &&
           config.autoAcceptIssuanceRequest
         ) {
           service

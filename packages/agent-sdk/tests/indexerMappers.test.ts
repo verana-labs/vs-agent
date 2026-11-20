@@ -54,4 +54,12 @@ describe('indexer to ledger shape', () => {
     expect(mode('GRANTOR_ONBOARDING_PROCESS')).toBe(3)
     expect(toCredentialSchema({ id: 5, ecosystem_id: 1 } as never).issuerOnboardingMode).toBe(0)
   })
+
+  it('maps the holder onboarding mode to the chain value', () => {
+    const mode = (m: string | null) =>
+      toCredentialSchema({ id: 5, ecosystem_id: 1, holder_onboarding_mode: m } as never).holderOnboardingMode
+    expect(mode('ISSUER_ONBOARDING_PROCESS')).toBe(1)
+    expect(mode('PERMISSIONLESS')).toBe(2)
+    expect(mode(null)).toBe(0)
+  })
 })
