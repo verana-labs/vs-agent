@@ -219,3 +219,17 @@ export const ENABLED_PLUGINS: string[] = (process.env.VS_AGENT_PLUGINS ?? 'chat'
   .split(',')
   .map(s => s.trim())
   .filter(Boolean)
+
+// External plugins, comma-separated: the names of npm packages installed in the plugin directory, loaded
+// after the built-in plugins. A name given twice is loaded once.
+export const PLUGIN_PACKAGES: string[] = [
+  ...new Set(
+    (process.env.VS_AGENT_PLUGIN_PACKAGES ?? '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean),
+  ),
+]
+
+// Where the external plugins are installed. Default: the `plugins` directory of the app.
+export const PLUGIN_DIRECTORY = process.env.VS_AGENT_PLUGIN_DIR?.trim() || undefined
