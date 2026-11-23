@@ -93,6 +93,19 @@ export class CreateCredentialOfferBodyDto {
 
   @ApiPropertyOptional({
     description:
+      'Thread this offer is a step of, sent as the parent thread (`pthid`) of the offer message. ' +
+      'A peer that runs several exchanges inside one enclosing protocol thread uses it to tell which ' +
+      'thread the offer belongs to. The agent accepts it with a `connectionId` only: an offer ' +
+      'carried by an invitation has the invitation as its parent thread.',
+    example: 'b2c3d4e5-6789-01ab-cdef-234567890abc',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  parentThreadId?: string
+
+  @ApiPropertyOptional({
+    description:
       'Complete the issuer steps without a call: the agent issues the credential on ' +
       '`request-received`, with no `acceptCredentialRequest` call.',
     default: false,
@@ -161,6 +174,11 @@ export class ListCredentialExchangesQueryDto extends PaginationQueryDto {
   @IsString()
   threadId?: string
 
+  @ApiPropertyOptional({ description: 'Filter by the identifier of the parent thread' })
+  @IsOptional()
+  @IsString()
+  parentThreadId?: string
+
   @ApiPropertyOptional({
     description: 'Filter by the role of the agent in the exchange',
     enum: DidCommCredentialRole,
@@ -194,6 +212,12 @@ export class CredentialExchangeRecordDto {
 
   @ApiProperty({ description: 'DIDComm thread identifier', example: 'thread-8765-4321' })
   threadId!: string
+
+  @ApiPropertyOptional({
+    description: 'Identifier of the parent thread (`pthid`), when the offer names one',
+    example: 'b2c3d4e5-6789-01ab-cdef-234567890abc',
+  })
+  parentThreadId?: string
 
   @ApiPropertyOptional({ description: 'Connection identifier', example: 'conn-1234' })
   connectionId?: string

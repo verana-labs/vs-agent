@@ -10,6 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import { RecordNotFoundError } from '@credo-ts/core'
+import { DidCommCredentialExchangeRepository, DidCommCredentialsModuleConfig } from '@credo-ts/didcomm'
 import {
   VtFlowRecord,
   VtFlowRole,
@@ -22,6 +23,7 @@ import {
   AnonCredsTrustErrorReason,
   createInvitation,
   ParticipantRole,
+  sendMessage,
 } from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
@@ -35,7 +37,7 @@ import { VsAgentService } from '../src/services/VsAgentService'
 
 vi.mock('@verana-labs/vs-agent-sdk', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>()
-  return { ...actual, createInvitation: vi.fn() }
+  return { ...actual, createInvitation: vi.fn(), sendMessage: vi.fn() }
 })
 
 const schema = { name: 'phoneNumber', version: '1.0', attrNames: ['phoneNumber', 'issuedAt'] }
@@ -294,6 +296,7 @@ describe('v2 didcomm credential exchange routes', () => {
   it.each([
     ['connectionId', 'conn-ce-a'],
     ['threadId', 'thread-ce-a'],
+    ['parentThreadId', 'thread-parent'],
     ['role', 'holder'],
     ['state', 'offer-received'],
   ])('passes the %s filter to the repository', async (name, value) => {
@@ -305,10 +308,20 @@ describe('v2 didcomm credential exchange routes', () => {
     expect(agent.didcomm.credentials.findAllByQuery).toHaveBeenCalledWith({
       connectionId: undefined,
       threadId: undefined,
+      parentThreadId: undefined,
       role: undefined,
       state: undefined,
       [name]: value,
     })
+  })
+
+  it('names the parent thread of an exchange that has one', async () => {
+    agent.didcomm.credentials.findById.mockResolvedValue({ ...records[0], parentThreadId: 'thread-parent' })
+
+    const response = await request(app.getHttpServer()).get('/v2/didcomm/credential-exchanges/ce-a')
+
+    expect(response.status).toBe(200)
+    expect(response.body.parentThreadId).toBe('thread-parent')
   })
 
   it('rejects a role and a state outside the protocol values', async () => {
@@ -453,6 +466,89 @@ describe('v2 didcomm credential exchange routes', () => {
 
     expect(response.status).toBe(201)
     expect(createInvitation).not.toHaveBeenCalled()
+  })
+
+  describe('parentThreadId', () => {
+    const offer = {
+      credentialDefinitionId: 'credDef:a',
+      claims: [{ name: 'phoneNumber', value: '+57128348520' }],
+      parentThreadId: 'thread-parent',
+    }
+    const offerMessage = { id: 'offer-1', setThread: vi.fn() }
+    const createOffer = vi.fn()
+    const exchangeRepository = { update: vi.fn() }
+
+    beforeEach(() => {
+      createOffer.mockResolvedValue({
+        credentialExchangeRecord: { id: 'ce-new', threadId: 'thread-new' },
+        message: offerMessage,
+      })
+      agent.dependencyManager.resolve.mockImplementation((token: unknown) => {
+        if (token === DidCommCredentialsModuleConfig)
+          return { credentialProtocols: [{ version: 'v1' }, { version: 'v2', createOffer }] }
+        if (token === DidCommCredentialExchangeRepository) return exchangeRepository
+        return vtFlowApi
+      })
+    })
+
+    it('sends the offer on the connection with its parent thread, and keeps it on the record', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/v2/didcomm/credential-offer')
+        .send({ ...offer, connectionId: 'conn-1' })
+
+      expect(response.status).toBe(201)
+      expect(response.body).toEqual({ credentialExchangeId: 'ce-new' })
+
+      expect(createOffer).toHaveBeenCalledWith(
+        agent.context,
+        expect.objectContaining({
+          connectionRecord: { id: 'conn-1' },
+          autoAcceptCredential: 'never',
+          credentialFormats: {
+            anoncreds: expect.objectContaining({
+              credentialDefinitionId: 'credDef:a',
+              attributes: [{ name: 'phoneNumber', value: '+57128348520', mimeType: undefined }],
+            }),
+          },
+        }),
+      )
+      const stored = { id: 'ce-new', threadId: 'thread-new', parentThreadId: 'thread-parent' }
+      expect(exchangeRepository.update).toHaveBeenCalledWith(agent.context, stored)
+      expect(offerMessage.setThread).toHaveBeenCalledWith({
+        threadId: 'thread-new',
+        parentThreadId: 'thread-parent',
+      })
+
+      expect(sendMessage).toHaveBeenCalledExactlyOnceWith(agent, { id: 'conn-1' }, offerMessage, stored)
+      // The record and the message have their parent thread before the message leaves.
+      const sent = vi.mocked(sendMessage).mock.invocationCallOrder[0]
+      expect(exchangeRepository.update.mock.invocationCallOrder[0]).toBeLessThan(sent)
+      expect(offerMessage.setThread.mock.invocationCallOrder[0]).toBeLessThan(sent)
+      expect(agent.didcomm.credentials.offerCredential).not.toHaveBeenCalled()
+      expect(createInvitation).not.toHaveBeenCalled()
+    })
+
+    it('refuses a parent thread without a connection, and offers nothing', async () => {
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/credential-offer').send(offer)
+
+      expect(response.status).toBe(400)
+      expect(response.body.error.code).toBe('INVALID_INPUT')
+      expect(createOffer).not.toHaveBeenCalled()
+      expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
+    })
+
+    it('refuses an empty parent thread in the offer body', async () => {
+      const errors = await validate(
+        plainToInstance(CreateCredentialOfferBodyDto, {
+          ...offer,
+          connectionId: 'conn-1',
+          parentThreadId: '',
+        }),
+        { whitelist: true, forbidNonWhitelisted: true },
+      )
+
+      expect(errors.map(error => error.property)).toEqual(['parentThreadId'])
+    })
   })
 
   it('answers UNKNOWN_ID for an unknown connection, and offers nothing', async () => {

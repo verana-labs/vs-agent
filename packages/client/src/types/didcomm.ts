@@ -290,6 +290,7 @@ export interface RequestEmrtdDataBody {
 export interface ListPresentationsQuery extends PaginationQuery {
   connectionId?: string
   threadId?: string
+  parentThreadId?: string
   role?: ProofRole
   state?: ProofState
 }
@@ -345,6 +346,8 @@ export interface PresentationRecord {
   rejectedCredentials: RejectedCredential[]
   verified: boolean
   threadId?: string
+  /** Identifier of the parent thread (`pthid`), when the request names one. */
+  parentThreadId?: string
   errorMessage?: string
   createdAt: string
   updatedAt: string
@@ -360,6 +363,11 @@ export interface CreatePresentationRequestBody {
   requestedCredentials: RequestedCredentialInput[]
   /** An established connection to send the request on, in place of an invitation. */
   connectionId?: string
+  /**
+   * Thread this request is a step of, sent as the parent thread (`pthid`) of the request. The agent
+   * accepts it with a `connectionId` only.
+   */
+  parentThreadId?: string
   requireNonRevocation?: boolean
   autoAccept?: boolean
   /** The agent ignores it when `connectionId` is present. */
@@ -383,6 +391,7 @@ export interface DeclineExchangeBody {
 export interface ListCredentialExchangesQuery extends PaginationQuery {
   connectionId?: string
   threadId?: string
+  parentThreadId?: string
   role?: CredentialRole
   state?: CredentialState
 }
@@ -392,6 +401,8 @@ export interface CredentialExchangeRecord {
   state: CredentialState
   role: CredentialRole
   threadId: string
+  /** Identifier of the parent thread (`pthid`), when the offer names one. */
+  parentThreadId?: string
   connectionId?: string
   credentialDefinitionId?: string
   schemaId?: string
@@ -406,6 +417,11 @@ export interface CreateCredentialOfferBody {
   claims: Claim[]
   /** An established connection to send the offer on, in place of an invitation. */
   connectionId?: string
+  /**
+   * Thread this offer is a step of, sent as the parent thread (`pthid`) of the offer. The agent
+   * accepts it with a `connectionId` only.
+   */
+  parentThreadId?: string
   revocationRegistryDefinitionId?: string
   revocationRegistryIndex?: number
   autoAccept?: boolean

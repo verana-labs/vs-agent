@@ -76,6 +76,19 @@ export class CreatePresentationRequestBodyDto {
   connectionId?: string
 
   @ApiPropertyOptional({
+    description:
+      'Thread this request is a step of, sent as the parent thread (`pthid`) of the request message. ' +
+      'A peer that runs several exchanges inside one enclosing protocol thread uses it to tell which ' +
+      'thread the request belongs to. The agent accepts it with a `connectionId` only: a request ' +
+      'carried by an invitation has the invitation as its parent thread.',
+    example: 'b2c3d4e5-6789-01ab-cdef-234567890abc',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  parentThreadId?: string
+
+  @ApiPropertyOptional({
     description: 'Ask the holder for a non-revocation proof at verification time',
     default: false,
   })
@@ -148,6 +161,11 @@ export class ListPresentationsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   threadId?: string
+
+  @ApiPropertyOptional({ description: 'Filter by the identifier of the parent thread' })
+  @IsOptional()
+  @IsString()
+  parentThreadId?: string
 
   @ApiPropertyOptional({
     description: 'Filter by the role of the agent in the flow',
@@ -310,6 +328,12 @@ export class PresentationRecordDto {
 
   @ApiPropertyOptional({ description: 'DIDComm thread identifier', example: 'thread-8765-4321' })
   threadId?: string
+
+  @ApiPropertyOptional({
+    description: 'Identifier of the parent thread (`pthid`), when the request names one',
+    example: 'b2c3d4e5-6789-01ab-cdef-234567890abc',
+  })
+  parentThreadId?: string
 
   @ApiPropertyOptional({
     description:
