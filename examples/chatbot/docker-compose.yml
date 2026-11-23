@@ -37,6 +37,7 @@ services:
       - PORT=5000
       - VS_AGENT_ADMIN_BASE_URL=http://chatbot-vs-agent:3000
       - CREDENTIAL_DEFINITION_ID=
+      - JSON_SCHEMA_CREDENTIAL_ID=
 
 networks:
   chatbot:

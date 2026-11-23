@@ -72,6 +72,11 @@ spec:
             - name: CREDENTIAL_DEFINITION_ID
               value: {{ .Values.env.credentialDefinitionId | quote }}
             {{- end }}
+            {{- if .Values.env.jsonSchemaCredentialId }}
+            # VTJSC of the phoneNumber schema, the bot finds or creates its credential definition on startup
+            - name: JSON_SCHEMA_CREDENTIAL_ID
+              value: {{ .Values.env.jsonSchemaCredentialId | quote }}
+            {{- end }}
             # Base URL for the Service API
             - name: PUBLIC_BASE_URL
               value: "https://{{ tpl .Values.ingress.host . }}"

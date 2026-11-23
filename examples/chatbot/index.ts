@@ -1,6 +1,7 @@
 import {
   ApiClient,
   ApiError,
+  CredentialDefinition,
   EventDispatcher,
   EventEnvelope,
   SharedMediaItem,
@@ -36,6 +37,11 @@ const VISION_SERVICE_BASE_URL =
   process.env.VISION_SERVICE_BASE_URL || 'https://webrtc-pymediasoup-client-demo.dev.2060.io'
 const WEBRTC_SERVER_BASE_URL = process.env.WEBRTC_SERVER_BASE_URL || 'https://dts-webrtc.dev.2060.io'
 const CREDENTIAL_DEFINITION_ID = process.env.CREDENTIAL_DEFINITION_ID || undefined
+const JSON_SCHEMA_CREDENTIAL_ID = process.env.JSON_SCHEMA_CREDENTIAL_ID || undefined
+const REVOCATION_REGISTRY_CAPACITY = 1000
+const CREDENTIAL_SETUP_RETRY_STATUSES = [404, 409, 503]
+const CREDENTIAL_SETUP_FIRST_DELAY_MS = 5_000
+const CREDENTIAL_SETUP_MAX_DELAY_MS = 60_000
 const MEDIA_DOWNLOAD_TIMEOUT_MS = 15_000
 const DEFAULT_PHONE_NUMBER = '+5712345678'
 const TRACED_MESSAGE_MEMORY = 200
@@ -55,6 +61,7 @@ app.use(express.urlencoded({ extended: true }))
 
 app.set('json spaces', 2)
 
+let credentialDefinitionId: string | undefined
 let revocationRegistryDefinitionId: string | undefined
 let revocationRegistryIndex = 0
 
@@ -94,30 +101,73 @@ interface OngoingCall {
 
 const ongoingCalls: OngoingCall[] = []
 
+const openRevocationRegistry = async (definitionId: string): Promise<void> => {
+  const registry = await client.anoncreds.createRevocationRegistry({
+    credentialDefinitionId: definitionId,
+    maximumCredentialNumber: REVOCATION_REGISTRY_CAPACITY,
+  })
+  revocationRegistryDefinitionId = registry.revocationRegistryDefinitionId
+  revocationRegistryIndex = 0
+  logger.info(`revocationRegistryDefinitionId: ${revocationRegistryDefinitionId}`)
+}
+
 const server = app.listen(PORT, async (): Promise<void> => {
   logger.info(`Demo chatbot started on port ${PORT}`)
 
-  if (!CREDENTIAL_DEFINITION_ID) {
-    logger.warn('CREDENTIAL_DEFINITION_ID is not set, credential issuance and proof requests are disabled')
+  if (!CREDENTIAL_DEFINITION_ID && !JSON_SCHEMA_CREDENTIAL_ID) {
+    logger.warn(
+      'Neither CREDENTIAL_DEFINITION_ID nor JSON_SCHEMA_CREDENTIAL_ID is set, credential issuance and proof requests are disabled',
+    )
     return
   }
-  logger.info(`credentialDefinitionId: ${CREDENTIAL_DEFINITION_ID}`)
+  if (CREDENTIAL_DEFINITION_ID && JSON_SCHEMA_CREDENTIAL_ID) {
+    logger.warn('CREDENTIAL_DEFINITION_ID is set, so the bot ignores JSON_SCHEMA_CREDENTIAL_ID')
+  }
+  const relatedJsonSchemaCredentialId = CREDENTIAL_DEFINITION_ID ? undefined : JSON_SCHEMA_CREDENTIAL_ID
 
-  try {
-    const registries = await client.anoncreds.listRevocationRegistries({
-      credentialDefinitionId: CREDENTIAL_DEFINITION_ID,
-    })
-    revocationRegistryDefinitionId =
-      registries.items[0] ??
-      (
-        await client.anoncreds.createRevocationRegistry({
-          credentialDefinitionId: CREDENTIAL_DEFINITION_ID,
-          maximumCredentialNumber: 1000,
+  let delay = CREDENTIAL_SETUP_FIRST_DELAY_MS
+  for (;;) {
+    try {
+      let definition: CredentialDefinition | undefined
+      let cursor: string | undefined
+      do {
+        const page = await client.anoncreds.listCredentialDefinitions({ cursor })
+        definition = page.items.find(candidate =>
+          relatedJsonSchemaCredentialId
+            ? candidate.relatedJsonSchemaCredentialId === relatedJsonSchemaCredentialId
+            : candidate.id === CREDENTIAL_DEFINITION_ID,
+        )
+        cursor = page.nextCursor ?? undefined
+      } while (!definition && cursor)
+
+      if (!definition) {
+        if (!relatedJsonSchemaCredentialId) {
+          throw new Error(`the agent has no credential definition ${CREDENTIAL_DEFINITION_ID}`)
+        }
+        definition = await client.anoncreds.createCredentialDefinition({
+          relatedJsonSchemaCredentialId,
+          supportRevocation: true,
         })
-      ).revocationRegistryDefinitionId
-    logger.info(`revocationRegistryDefinitionId: ${revocationRegistryDefinitionId}`)
-  } catch (error) {
-    logger.error(`Could not get or create the revocation registry: ${error}`)
+        logger.info(`Credential definition created for ${relatedJsonSchemaCredentialId}`)
+      }
+
+      if (definition.supportRevocation) await openRevocationRegistry(definition.id)
+      credentialDefinitionId = definition.id
+      logger.info(`credentialDefinitionId: ${credentialDefinitionId}`)
+      return
+    } catch (error) {
+      const retryable =
+        error instanceof ApiError
+          ? CREDENTIAL_SETUP_RETRY_STATUSES.includes(error.status)
+          : error instanceof TypeError
+      if (!retryable) {
+        logger.error(`Credential issuance and proof requests are disabled: ${error}`)
+        return
+      }
+      logger.warn(`Cannot set up the credential definition yet, next try in ${delay / 1000} s: ${error}`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+      delay = Math.min(delay * 2, CREDENTIAL_SETUP_MAX_DELAY_MS)
+    }
   }
 })
 
@@ -156,44 +206,58 @@ const sendQuestion = async (
 }
 
 const issueCredential = async (connectionId: string, phoneNumber?: string): Promise<void> => {
-  if (!CREDENTIAL_DEFINITION_ID) {
+  if (!credentialDefinitionId) {
     await sendText(connectionId, 'Service not available')
     return
   }
-  let index: number | undefined
-  if (revocationRegistryDefinitionId) {
-    revocationRegistryIndex += 1
-    index = revocationRegistryIndex
+  try {
+    if (revocationRegistryDefinitionId && revocationRegistryIndex + 1 >= REVOCATION_REGISTRY_CAPACITY) {
+      await openRevocationRegistry(credentialDefinitionId)
+    }
+    const registryId = revocationRegistryDefinitionId
+    let index: number | undefined
+    if (registryId) {
+      revocationRegistryIndex += 1
+      index = revocationRegistryIndex
+    }
+    // The offer goes out on the chat connection, so the wallet shows it in this
+    // conversation and no link is needed.
+    const offer = await client.didcomm.createCredentialOffer({
+      credentialDefinitionId,
+      claims: [{ name: 'phoneNumber', value: phoneNumber || DEFAULT_PHONE_NUMBER, mimeType: 'text/plain' }],
+      connectionId,
+      revocationRegistryDefinitionId: registryId,
+      revocationRegistryIndex: index,
+      autoAccept: true,
+    })
+    issuedCredentials.set(offer.credentialExchangeId, {
+      connectionId,
+      revocationRegistryDefinitionId: registryId,
+      revocationRegistryIndex: index,
+    })
+  } catch (error) {
+    logger.error(`Cannot offer the credential: ${error}`)
+    await sendText(connectionId, `Cannot offer the credential: ${describeApiFailure(error)}`)
   }
-  // The offer goes out on the chat connection, so the wallet shows it in this
-  // conversation and no link is needed.
-  const offer = await client.didcomm.createCredentialOffer({
-    credentialDefinitionId: CREDENTIAL_DEFINITION_ID,
-    claims: [{ name: 'phoneNumber', value: phoneNumber || DEFAULT_PHONE_NUMBER, mimeType: 'text/plain' }],
-    connectionId,
-    revocationRegistryDefinitionId,
-    revocationRegistryIndex: index,
-    autoAccept: true,
-  })
-  issuedCredentials.set(offer.credentialExchangeId, {
-    connectionId,
-    revocationRegistryDefinitionId,
-    revocationRegistryIndex: index,
-  })
 }
 
 const requestProof = async (connectionId: string): Promise<void> => {
-  if (!CREDENTIAL_DEFINITION_ID) {
+  if (!credentialDefinitionId) {
     await sendText(connectionId, 'Service not available')
     return
   }
   await sendText(connectionId, 'In order to start a new chat, we need some verifiable information from you')
-  const request = await client.didcomm.createPresentationRequest({
-    requestedCredentials: [{ credentialDefinitionId: CREDENTIAL_DEFINITION_ID, attributes: ['phoneNumber'] }],
-    connectionId,
-    autoAccept: true,
-  })
-  proofRequests.set(request.proofExchangeId, connectionId)
+  try {
+    const request = await client.didcomm.createPresentationRequest({
+      requestedCredentials: [{ credentialDefinitionId, attributes: ['phoneNumber'] }],
+      connectionId,
+      autoAccept: true,
+    })
+    proofRequests.set(request.proofExchangeId, connectionId)
+  } catch (error) {
+    logger.error(`Cannot request the proof: ${error}`)
+    await sendText(connectionId, `Cannot request the proof: ${describeApiFailure(error)}`)
+  }
 }
 
 const revokeCredential = async (connectionId: string, credentialExchangeId: string): Promise<void> => {
