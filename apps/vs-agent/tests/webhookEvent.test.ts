@@ -156,6 +156,7 @@ describe('Events API delivery', () => {
       connectionId: 'conn-1',
       content: 'hello',
       sentTime: '2026-09-01T00:00:00Z',
+      threadId: 'msg-1',
       createdAt: new Date('2026-09-01T00:00:01Z'),
     }
     emit(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, {
@@ -173,6 +174,7 @@ describe('Events API delivery', () => {
       role: 'receiver',
       content: 'hello',
       sentTime: '2026-09-01T00:00:00Z',
+      threadId: 'msg-1',
       createdAt: '2026-09-01T00:00:01.000Z',
     })
   })

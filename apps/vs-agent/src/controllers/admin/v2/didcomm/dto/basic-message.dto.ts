@@ -59,6 +59,15 @@ export class BasicMessageRecordDto {
   })
   sentTime!: string
 
+  @ApiPropertyOptional({
+    description:
+      'Thread of the message. A message that starts its thread, as a basic message usually does, has ' +
+      'its own DIDComm message id here: the id that a receipt or a reaction names, and the `id` that ' +
+      '`sendBasicMessage` returns for a message this agent sent.',
+    example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+  })
+  threadId?: string
+
   @ApiProperty({ type: String, format: 'date-time', description: 'When the agent stored the message' })
   createdAt!: Date
 }

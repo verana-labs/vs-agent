@@ -127,6 +127,11 @@ export interface BasicMessageRecord {
   role: BasicMessageRole
   content: string
   sentTime: string
+  /**
+   * Thread of the message: its own DIDComm message id when it starts its thread, the id that a
+   * receipt or a reaction names.
+   */
+  threadId?: string
   createdAt: string
 }
 
