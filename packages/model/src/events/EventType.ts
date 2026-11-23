@@ -2,6 +2,7 @@ export enum EventType {
   ConnectionStateUpdated = 'didcomm.connections.state-updated',
   InvitationStateUpdated = 'didcomm.invitations.state-updated',
   MessageReceived = 'didcomm.basic-messages.message-received',
+  DiscoverFeaturesDiscloseReceived = 'didcomm.discover-features.disclose-received',
   ReceiptsMessageReceived = 'didcomm.receipts.message-receipts-received',
   PresentationStateUpdated = 'didcomm.presentations.state-updated',
   CredentialExchangeStateUpdated = 'didcomm.credential-exchanges.state-updated',
