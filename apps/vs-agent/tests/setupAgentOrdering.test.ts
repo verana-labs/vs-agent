@@ -90,4 +90,29 @@ describe('setupAgent vt-flow', () => {
     resumeIssuance.mockRestore()
     await agent.shutdown()
   }, 60_000)
+
+  it('checks the schema_id of an issuance-request before it accepts it on its own ([VSA-VTI-FLOW-DI])', async () => {
+    const { agent } = await setupAgent({
+      port: 3996,
+      walletConfig: getAskarStoreConfig('setupAgent vt-flow schema'),
+      endpoints: ['wss://schema.example'],
+      publicApiBaseUrl: 'https://schema.example',
+      indexer: new VeranaIndexerService({
+        baseUrl: 'https://indexer.invalid',
+        logger: new ConsoleLogger(LogLevel.Off),
+      }),
+      parsedDid: parseDid('did:webvh:schema.example'),
+      logLevel: LogLevel.Off,
+    })
+    const checkSchemaId = vi.spyOn(VtFlowOrchestrator.prototype, 'checkSchemaId').mockResolvedValue(true)
+
+    const config = agent.dependencyManager.resolve(VtFlowModuleConfig)
+    expect(config.autoAcceptIssuanceRequest).toBe(true)
+    const context = { agentContext: agent.context, record: { id: 'flow-1', schemaId: '22' } as never }
+    await expect(config.checkSchemaId?.(context)).resolves.toBe(true)
+
+    expect(checkSchemaId).toHaveBeenCalledExactlyOnceWith(context)
+    checkSchemaId.mockRestore()
+    await agent.shutdown()
+  }, 60_000)
 })
