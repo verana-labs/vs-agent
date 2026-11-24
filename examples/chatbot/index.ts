@@ -37,6 +37,8 @@ const VISION_SERVICE_BASE_URL =
 const WEBRTC_SERVER_BASE_URL = process.env.WEBRTC_SERVER_BASE_URL || 'https://dts-webrtc.dev.2060.io'
 const CREDENTIAL_DEFINITION_ID = process.env.CREDENTIAL_DEFINITION_ID || undefined
 const MEDIA_DOWNLOAD_TIMEOUT_MS = 15_000
+const JOIN_CALL_TIMEOUT_MS = 15_000
+const CALL_RESULT_TIMEOUT_MS = 60_000
 const DEFAULT_PHONE_NUMBER = '+5712345678'
 const TRACED_MESSAGE_MEMORY = 200
 const MAXIMUM_QUESTION_OPTIONS = 10
@@ -90,6 +92,8 @@ interface OngoingCall {
   wsUrl: string
   roomId: string
   connectionId: string
+  visionPeerId?: string
+  resultTimer?: NodeJS.Timeout
 }
 
 const ongoingCalls: OngoingCall[] = []
@@ -264,6 +268,42 @@ const handleMenuSelection = async (connectionId: string, item: string): Promise<
 
 const parameterRegExp = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|[^\s]+/g
 
+const finishCall = (call: OngoingCall, text?: string): void => {
+  clearTimeout(call.resultTimer)
+  const index = ongoingCalls.indexOf(call)
+  if (index === -1) return
+  ongoingCalls.splice(index, 1)
+  if (text) sendText(call.connectionId, text).catch(error => logger.error(`Cannot send message: ${error}`))
+}
+
+const joinVisionPeer = async (call: OngoingCall): Promise<void> => {
+  clearTimeout(call.resultTimer)
+  call.visionPeerId = randomUUID()
+  call.resultTimer = setTimeout(() => {
+    logger.warn(`No result for the call in room ${call.roomId}`)
+    finishCall(call, 'Call failed')
+  }, CALL_RESULT_TIMEOUT_MS)
+
+  const body = JSON.stringify({
+    ws_url: `${call.wsUrl}/?roomId=${call.roomId}&peerId=${call.visionPeerId}`,
+    success_url: `${PUBLIC_BASE_URL}/call-success/${call.connectionId}/${call.roomId}`,
+    failure_url: `${PUBLIC_BASE_URL}/call-failure/${call.connectionId}/${call.roomId}`,
+  })
+  logger.info(`join-call parameters: ${body}`)
+  try {
+    const response = await fetch(`${VISION_SERVICE_BASE_URL}/join-call`, {
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      method: 'POST',
+      body,
+      timeout: JOIN_CALL_TIMEOUT_MS,
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  } catch (error) {
+    logger.error(`Cannot join the vision peer to room ${call.roomId}: ${error}`)
+    finishCall(call, 'Call failed')
+  }
+}
+
 const offerCall = async (connectionId: string, wsUrlArg?: string, roomIdArg?: string): Promise<void> => {
   let wsUrl = wsUrlArg
   let roomId = roomIdArg
@@ -280,6 +320,8 @@ const offerCall = async (connectionId: string, wsUrlArg?: string, roomIdArg?: st
       roomId = response.roomId
     }
 
+    const previousCall = ongoingCalls.find(item => item.connectionId === connectionId)
+    if (previousCall) finishCall(previousCall)
     ongoingCalls.push({ wsUrl, roomId, connectionId })
     await client.didcomm.offerCall({
       connectionId,
@@ -670,8 +712,10 @@ app.post('/events', async (req: Request, res: Response): Promise<void> => {
 
 app.post('/call-events', async (req: Request, res: Response): Promise<void> => {
   logger.info(`Event received: ${JSON.stringify(req.body)}`)
-  const event = req.body.event
-  const call = ongoingCalls.find(item => item.connectionId === req.body.peerId)
+  const { roomId, peerId, event } = req.body
+  const call = ongoingCalls.find(
+    item => item.roomId === roomId && (item.connectionId === peerId || item.visionPeerId === peerId),
+  )
 
   if (!call) {
     logger.warn('No call matching the event')
@@ -679,38 +723,32 @@ app.post('/call-events', async (req: Request, res: Response): Promise<void> => {
     return
   }
 
-  if (event === 'peer-joined') {
-    const body = JSON.stringify({
-      ws_url: `${call.wsUrl}/?roomId=${call.roomId}&peerId=${randomUUID()}`,
-      success_url: `${PUBLIC_BASE_URL}/call-success/${call.connectionId}`,
-      failure_url: `${PUBLIC_BASE_URL}/call-failure/${call.connectionId}`,
-    })
-    logger.info(`join-call parameters: ${body}`)
-    await fetch(`${VISION_SERVICE_BASE_URL}/join-call`, {
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      method: 'POST',
-      body,
-    })
-  } else if (event === 'peer-left') {
-    ongoingCalls.splice(ongoingCalls.indexOf(call), 1)
+  if (peerId === call.visionPeerId) {
+    if (event === 'peer-left') call.visionPeerId = undefined
+  } else if (event === 'peer-joined' && !call.visionPeerId) {
+    await joinVisionPeer(call)
   }
   res.end()
 })
 
-app.put('/call-success/:connectionId', (req: Request, res: Response): void => {
-  logger.info(`Call success for ${req.params.connectionId}: ${JSON.stringify(req.body)}`)
+const reportCallResult = (req: Request, res: Response, text: string): void => {
+  const { connectionId, roomId } = req.params
+  logger.info(`Call result "${text}" for ${connectionId} in room ${roomId}: ${JSON.stringify(req.body)}`)
   res.end()
-  sendText(req.params.connectionId, 'Call was succesful').catch(error =>
-    logger.error(`Cannot send message: ${error}`),
-  )
-})
+  const call = ongoingCalls.find(item => item.connectionId === connectionId && item.roomId === roomId)
+  if (!call) {
+    logger.warn('No call matching the result')
+    return
+  }
+  finishCall(call, text)
+}
 
-app.put('/call-failure/:connectionId', (req: Request, res: Response): void => {
-  logger.info(`Call failure for ${req.params.connectionId}: ${JSON.stringify(req.body)}`)
-  res.end()
-  sendText(req.params.connectionId, 'Call failed').catch(error =>
-    logger.error(`Cannot send message: ${error}`),
-  )
-})
+app.put('/call-success/:connectionId/:roomId', (req: Request, res: Response): void =>
+  reportCallResult(req, res, 'Call was succesful'),
+)
+
+app.put('/call-failure/:connectionId/:roomId', (req: Request, res: Response): void =>
+  reportCallResult(req, res, 'Call failed'),
+)
 
 export { app, server }
