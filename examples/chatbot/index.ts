@@ -36,12 +36,7 @@ const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'http://localhost:5000'
 const VISION_SERVICE_BASE_URL =
   process.env.VISION_SERVICE_BASE_URL || 'https://webrtc-pymediasoup-client-demo.dev.2060.io'
 const WEBRTC_SERVER_BASE_URL = process.env.WEBRTC_SERVER_BASE_URL || 'https://dts-webrtc.dev.2060.io'
-const CREDENTIAL_DEFINITION_ID = process.env.CREDENTIAL_DEFINITION_ID || undefined
 const JSON_SCHEMA_CREDENTIAL_ID = process.env.JSON_SCHEMA_CREDENTIAL_ID || undefined
-const REVOCATION_REGISTRY_CAPACITY = 1000
-const CREDENTIAL_SETUP_RETRY_STATUSES = [404, 409, 503]
-const CREDENTIAL_SETUP_FIRST_DELAY_MS = 5_000
-const CREDENTIAL_SETUP_MAX_DELAY_MS = 60_000
 const MEDIA_DOWNLOAD_TIMEOUT_MS = 15_000
 const DEFAULT_PHONE_NUMBER = '+5712345678'
 const TRACED_MESSAGE_MEMORY = 200
@@ -101,73 +96,53 @@ interface OngoingCall {
 
 const ongoingCalls: OngoingCall[] = []
 
-const openRevocationRegistry = async (definitionId: string): Promise<void> => {
-  const registry = await client.anoncreds.createRevocationRegistry({
-    credentialDefinitionId: definitionId,
-    maximumCredentialNumber: REVOCATION_REGISTRY_CAPACITY,
-  })
-  revocationRegistryDefinitionId = registry.revocationRegistryDefinitionId
-  revocationRegistryIndex = 0
-  logger.info(`revocationRegistryDefinitionId: ${revocationRegistryDefinitionId}`)
+const listCredentialDefinitions = async (): Promise<CredentialDefinition[]> => {
+  const definitions: CredentialDefinition[] = []
+  let cursor: string | undefined
+  do {
+    const page = await client.anoncreds.listCredentialDefinitions({ cursor })
+    definitions.push(...page.items)
+    cursor = page.nextCursor ?? undefined
+  } while (cursor)
+  return definitions
 }
 
 const server = app.listen(PORT, async (): Promise<void> => {
   logger.info(`Demo chatbot started on port ${PORT}`)
 
-  if (!CREDENTIAL_DEFINITION_ID && !JSON_SCHEMA_CREDENTIAL_ID) {
-    logger.warn(
-      'Neither CREDENTIAL_DEFINITION_ID nor JSON_SCHEMA_CREDENTIAL_ID is set, credential issuance and proof requests are disabled',
-    )
+  if (!JSON_SCHEMA_CREDENTIAL_ID) {
+    logger.warn('JSON_SCHEMA_CREDENTIAL_ID is not set, credential issuance and proof requests are disabled')
     return
   }
-  if (CREDENTIAL_DEFINITION_ID && JSON_SCHEMA_CREDENTIAL_ID) {
-    logger.warn('CREDENTIAL_DEFINITION_ID is set, so the bot ignores JSON_SCHEMA_CREDENTIAL_ID')
-  }
-  const relatedJsonSchemaCredentialId = CREDENTIAL_DEFINITION_ID ? undefined : JSON_SCHEMA_CREDENTIAL_ID
 
-  let delay = CREDENTIAL_SETUP_FIRST_DELAY_MS
-  for (;;) {
-    try {
-      let definition: CredentialDefinition | undefined
-      let cursor: string | undefined
-      do {
-        const page = await client.anoncreds.listCredentialDefinitions({ cursor })
-        definition = page.items.find(candidate =>
-          relatedJsonSchemaCredentialId
-            ? candidate.relatedJsonSchemaCredentialId === relatedJsonSchemaCredentialId
-            : candidate.id === CREDENTIAL_DEFINITION_ID,
-        )
-        cursor = page.nextCursor ?? undefined
-      } while (!definition && cursor)
+  try {
+    const definitions = await listCredentialDefinitions()
+    const definition =
+      definitions.find(candidate => candidate.relatedJsonSchemaCredentialId === JSON_SCHEMA_CREDENTIAL_ID) ??
+      (await client.anoncreds.createCredentialDefinition({
+        relatedJsonSchemaCredentialId: JSON_SCHEMA_CREDENTIAL_ID,
+        supportRevocation: true,
+      }))
+    logger.info(`credentialDefinitionId: ${definition.id}`)
 
-      if (!definition) {
-        if (!relatedJsonSchemaCredentialId) {
-          throw new Error(`the agent has no credential definition ${CREDENTIAL_DEFINITION_ID}`)
-        }
-        definition = await client.anoncreds.createCredentialDefinition({
-          relatedJsonSchemaCredentialId,
-          supportRevocation: true,
-        })
-        logger.info(`Credential definition created for ${relatedJsonSchemaCredentialId}`)
-      }
-
-      if (definition.supportRevocation) await openRevocationRegistry(definition.id)
-      credentialDefinitionId = definition.id
-      logger.info(`credentialDefinitionId: ${credentialDefinitionId}`)
-      return
-    } catch (error) {
-      const retryable =
-        error instanceof ApiError
-          ? CREDENTIAL_SETUP_RETRY_STATUSES.includes(error.status)
-          : error instanceof TypeError
-      if (!retryable) {
-        logger.error(`Credential issuance and proof requests are disabled: ${error}`)
-        return
-      }
-      logger.warn(`Cannot set up the credential definition yet, next try in ${delay / 1000} s: ${error}`)
-      await new Promise(resolve => setTimeout(resolve, delay))
-      delay = Math.min(delay * 2, CREDENTIAL_SETUP_MAX_DELAY_MS)
+    if (definition.supportRevocation) {
+      const registries = await client.anoncreds.listRevocationRegistries({
+        credentialDefinitionId: definition.id,
+      })
+      revocationRegistryDefinitionId =
+        registries.items[0] ??
+        (
+          await client.anoncreds.createRevocationRegistry({
+            credentialDefinitionId: definition.id,
+            maximumCredentialNumber: 1000,
+          })
+        ).revocationRegistryDefinitionId
+      logger.info(`revocationRegistryDefinitionId: ${revocationRegistryDefinitionId}`)
     }
+    credentialDefinitionId = definition.id
+  } catch (error) {
+    logger.error(`Cannot set up the credential definition for ${JSON_SCHEMA_CREDENTIAL_ID}: ${error}`)
+    process.exit(1)
   }
 })
 
@@ -211,12 +186,8 @@ const issueCredential = async (connectionId: string, phoneNumber?: string): Prom
     return
   }
   try {
-    if (revocationRegistryDefinitionId && revocationRegistryIndex + 1 >= REVOCATION_REGISTRY_CAPACITY) {
-      await openRevocationRegistry(credentialDefinitionId)
-    }
-    const registryId = revocationRegistryDefinitionId
     let index: number | undefined
-    if (registryId) {
+    if (revocationRegistryDefinitionId) {
       revocationRegistryIndex += 1
       index = revocationRegistryIndex
     }
@@ -226,13 +197,13 @@ const issueCredential = async (connectionId: string, phoneNumber?: string): Prom
       credentialDefinitionId,
       claims: [{ name: 'phoneNumber', value: phoneNumber || DEFAULT_PHONE_NUMBER, mimeType: 'text/plain' }],
       connectionId,
-      revocationRegistryDefinitionId: registryId,
+      revocationRegistryDefinitionId,
       revocationRegistryIndex: index,
       autoAccept: true,
     })
     issuedCredentials.set(offer.credentialExchangeId, {
       connectionId,
-      revocationRegistryDefinitionId: registryId,
+      revocationRegistryDefinitionId,
       revocationRegistryIndex: index,
     })
   } catch (error) {
