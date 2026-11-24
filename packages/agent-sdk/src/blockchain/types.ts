@@ -159,10 +159,16 @@ export interface CredentialSchemaDto {
   digest_algorithm: string
   issuer_onboarding_mode?: string
   verifier_onboarding_mode?: string
+  holder_onboarding_mode?: HolderOnboardingMode | null
   holder_validation_validity_period?: number
   archived: string | null
   created: string
   modified: string
+}
+
+export enum HolderOnboardingMode {
+  IssuerOnboardingProcess = 'ISSUER_ONBOARDING_PROCESS',
+  Permissionless = 'PERMISSIONLESS',
 }
 
 export enum ParticipantRole {
