@@ -45,7 +45,7 @@ When the setup fails, the process stops, and the restart policy of the container
 
 To create the definition, the agent does not need a role in the ecosystem. To offer the credential and to request the proof, it does: `createCredentialOffer` and `createPresentationRequest` require an active ISSUER or VERIFIER Participant for the credential schema. Without the role the bot answers `Cannot offer the credential: <reason>` or `Cannot request the proof: <reason>` in the chat. See [examples/vt-flow-demo](../vt-flow-demo/README.md) for the setup.
 
-For a revocable definition, the bot picks the first revocation registry of the definition on startup, or creates one.
+For a revocable definition, the bot creates a new revocation registry of 1000 credentials on each start, and a new one when the registry is full. The bot keeps the next index of the registry in memory, and the admin API does not tell which indices are in use. If the bot used an old registry after a restart, it could give an index that a credential already has, and a revocation of one credential would revoke the other too. A new registry starts with no index in use. The bot also keeps the issued credentials in memory, so after a restart `/revoke` does not find the credentials of an earlier run.
 
 Both methods take the `connectionId` of the chat, so the offer and the request go out on that connection and the wallet shows them in the same conversation. The bot sends no link, and the exchange needs no second connection. The bot still keeps the chat connection per exchange id, because an event carries the exchange id.
 
