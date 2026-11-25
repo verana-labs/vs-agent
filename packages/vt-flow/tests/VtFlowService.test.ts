@@ -1196,6 +1196,7 @@ describe('VtFlowService.createDirectIssuanceRecord', () => {
       claims: { name: 'Acme Corp' },
     })
 
+    expect(repository.findByParticipantSessionId).toHaveBeenCalledWith({}, 'sess-1', VtFlowRole.Applicant)
     expect(record).toBe(existing)
     expect(record).toMatchObject({
       state: VtFlowState.IrSent,

@@ -170,7 +170,7 @@ export class VtFlowService {
     return { message, record }
   }
 
-  /** Applicant-side DirectIssuance: build the outbound `issuance-request` and persist a record in `IR_SENT`. */
+  /** Applicant-side DirectIssuance: build the outbound `issuance-request` and persist a record in `IR_SENT`, or reuse the flow in `IR_SENT` that its `participant_session_id` names. */
   public async createDirectIssuanceRecord(
     agentContext: AgentContext,
     params: CreateIssuanceRequestParams,
@@ -188,7 +188,7 @@ export class VtFlowService {
       claims: params.claims,
     })
 
-    // A refused request leaves the flow in IR_SENT, and the corrected request goes on that flow and its thread.
+    // [VSA-VTI-FLOW-DI] step 2: a refused request leaves the flow in IR_SENT, and the retry goes on that flow and its thread.
     if (
       existing?.variant === VtFlowVariant.DirectIssuance &&
       existing.state === VtFlowState.IrSent &&
