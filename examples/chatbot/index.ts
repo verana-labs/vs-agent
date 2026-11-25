@@ -744,7 +744,7 @@ const reportCallResult = (req: Request, res: Response, text: string): void => {
 }
 
 app.put('/call-success/:connectionId/:roomId', (req: Request, res: Response): void =>
-  reportCallResult(req, res, 'Call was succesful'),
+  reportCallResult(req, res, 'Call was successful'),
 )
 
 app.put('/call-failure/:connectionId/:roomId', (req: Request, res: Response): void =>
