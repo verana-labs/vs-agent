@@ -1168,6 +1168,78 @@ describe('VtFlowService.reattachOnboardingProcessRecord', () => {
   })
 })
 
+describe('VtFlowService.createDirectIssuanceRecord', () => {
+  const issuanceParams = {
+    connectionId: 'conn-new',
+    participantSessionId: 'sess-1',
+    schemaId: '5',
+    agentParticipantId: '0',
+    walletAgentParticipantId: '0',
+  }
+  const refusedFlow = (overrides: Partial<ConstructorParameters<typeof VtFlowRecord>[0]> = {}) =>
+    makeRecord({
+      state: VtFlowState.IrSent,
+      variant: VtFlowVariant.DirectIssuance,
+      applicantParticipantId: undefined,
+      schemaId: '5',
+      claims: { name: 'Acme' },
+      messages: [{ type: VtFlowMessageType.ProblemReport, at: '2026-01-01T00:00:00.000Z' }],
+      ...overrides,
+    })
+
+  it('resends a refused request on its flow and thread, with the new claims', async () => {
+    const existing = refusedFlow()
+    const { service, repository, eventEmitter } = makeService(existing)
+
+    const { message, record } = await service.createDirectIssuanceRecord({} as never, {
+      ...issuanceParams,
+      claims: { name: 'Acme Corp' },
+    })
+
+    expect(record).toBe(existing)
+    expect(record).toMatchObject({
+      state: VtFlowState.IrSent,
+      connectionId: 'conn-new',
+      claims: { name: 'Acme Corp' },
+    })
+    expect(message.id).not.toBe(existing.threadId)
+    expect(message.threadId).toBe(existing.threadId)
+    expect(message).toMatchObject({
+      participantSessionId: 'sess-1',
+      schemaId: '5',
+      claims: { name: 'Acme Corp' },
+    })
+    expect(repository.update).toHaveBeenCalledWith({}, existing)
+    expect(repository.save).not.toHaveBeenCalled()
+    expect(eventEmitter.emit).not.toHaveBeenCalled()
+  })
+
+  it('keeps the claims of the flow when the resent request carries none', async () => {
+    const existing = refusedFlow()
+    const { service } = makeService(existing)
+
+    const { message, record } = await service.createDirectIssuanceRecord({} as never, issuanceParams)
+
+    expect(record).toBe(existing)
+    expect(record.claims).toEqual({ name: 'Acme' })
+    expect(message.claims).toBeUndefined()
+  })
+
+  it('leaves alone a flow of another schema or one the validator has taken further', async () => {
+    for (const existing of [refusedFlow({ schemaId: '6' }), refusedFlow({ state: VtFlowState.Validating })]) {
+      const stored = JsonTransformer.clone(existing)
+      const { service, repository } = makeService(existing)
+
+      const { message, record } = await service.createDirectIssuanceRecord({} as never, issuanceParams)
+
+      expect(record).not.toBe(existing)
+      expect(record.threadId).toBe(message.id)
+      expect(existing).toEqual(stored)
+      expect(repository.update).not.toHaveBeenCalled()
+    }
+  })
+})
+
 describe('VtFlowService.processReceiveValidating', () => {
   it.each([
     { state: VtFlowState.OrSent, messages: undefined },
