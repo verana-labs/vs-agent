@@ -41,6 +41,7 @@ const REVOCATION_REGISTRY_CAPACITY = 1000
 const MEDIA_DOWNLOAD_TIMEOUT_MS = 15_000
 const JOIN_CALL_TIMEOUT_MS = 15_000
 const CALL_RESULT_TIMEOUT_MS = 60_000
+const MAX_JOIN_CALL_ATTEMPTS = 2
 const DEFAULT_PHONE_NUMBER = '+5712345678'
 const TRACED_MESSAGE_MEMORY = 200
 const MAXIMUM_QUESTION_OPTIONS = 10
@@ -96,6 +97,9 @@ interface OngoingCall {
   roomId: string
   connectionId: string
   visionPeerId?: string
+  visionInRoom: boolean
+  userInRoom: boolean
+  joinAttempts: number
   resultTimer?: NodeJS.Timeout
 }
 
@@ -315,7 +319,9 @@ const finishCall = (call: OngoingCall, text?: string): void => {
 
 const joinVisionPeer = async (call: OngoingCall): Promise<void> => {
   clearTimeout(call.resultTimer)
+  call.joinAttempts++
   call.visionPeerId = randomUUID()
+  call.visionInRoom = false
   call.resultTimer = setTimeout(() => {
     logger.warn(`No result for the call in room ${call.roomId}`)
     finishCall(call, 'Call failed')
@@ -323,8 +329,8 @@ const joinVisionPeer = async (call: OngoingCall): Promise<void> => {
 
   const body = JSON.stringify({
     ws_url: `${call.wsUrl}/?roomId=${call.roomId}&peerId=${call.visionPeerId}`,
-    success_url: `${PUBLIC_BASE_URL}/call-success/${call.connectionId}/${call.roomId}`,
-    failure_url: `${PUBLIC_BASE_URL}/call-failure/${call.connectionId}/${call.roomId}`,
+    success_url: `${PUBLIC_BASE_URL}/call-success/${call.visionPeerId}`,
+    failure_url: `${PUBLIC_BASE_URL}/call-failure/${call.visionPeerId}`,
   })
   logger.info(`join-call parameters: ${body}`)
   try {
@@ -359,7 +365,14 @@ const offerCall = async (connectionId: string, wsUrlArg?: string, roomIdArg?: st
 
     const previousCall = ongoingCalls.find(item => item.connectionId === connectionId)
     if (previousCall) finishCall(previousCall)
-    ongoingCalls.push({ wsUrl, roomId, connectionId })
+    ongoingCalls.push({
+      wsUrl,
+      roomId,
+      connectionId,
+      visionInRoom: false,
+      userInRoom: false,
+      joinAttempts: 0,
+    })
     await client.didcomm.offerCall({
       connectionId,
       callType: 'service',
@@ -761,18 +774,22 @@ app.post('/call-events', async (req: Request, res: Response): Promise<void> => {
   }
 
   if (peerId === call.visionPeerId) {
-    if (event === 'peer-left') call.visionPeerId = undefined
-  } else if (event === 'peer-joined' && !call.visionPeerId) {
-    await joinVisionPeer(call)
+    if (event === 'peer-joined') call.visionInRoom = true
+    else if (event === 'peer-left') call.visionInRoom = false
+  } else if (event === 'peer-left') {
+    call.userInRoom = false
+  } else if (event === 'peer-joined' && !call.userInRoom) {
+    call.userInRoom = true
+    if (!call.visionInRoom && call.joinAttempts < MAX_JOIN_CALL_ATTEMPTS) await joinVisionPeer(call)
   }
   res.end()
 })
 
 const reportCallResult = (req: Request, res: Response, text: string): void => {
-  const { connectionId, roomId } = req.params
-  logger.info(`Call result "${text}" for ${connectionId} in room ${roomId}: ${JSON.stringify(req.body)}`)
+  const { visionPeerId } = req.params
+  logger.info(`Call result "${text}" for vision peer ${visionPeerId}: ${JSON.stringify(req.body)}`)
   res.end()
-  const call = ongoingCalls.find(item => item.connectionId === connectionId && item.roomId === roomId)
+  const call = ongoingCalls.find(item => item.visionPeerId === visionPeerId)
   if (!call) {
     logger.warn('No call matching the result')
     return
@@ -780,11 +797,11 @@ const reportCallResult = (req: Request, res: Response, text: string): void => {
   finishCall(call, text)
 }
 
-app.put('/call-success/:connectionId/:roomId', (req: Request, res: Response): void =>
+app.put('/call-success/:visionPeerId', (req: Request, res: Response): void =>
   reportCallResult(req, res, 'Call was successful'),
 )
 
-app.put('/call-failure/:connectionId/:roomId', (req: Request, res: Response): void =>
+app.put('/call-failure/:visionPeerId', (req: Request, res: Response): void =>
   reportCallResult(req, res, 'Call failed'),
 )
 
