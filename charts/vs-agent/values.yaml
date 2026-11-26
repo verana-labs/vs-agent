@@ -73,6 +73,16 @@ openid4vc:
 
 # Enable cors for the VS Agent
 ingress:
+  # "ingress" publishes an Ingress and needs an ingress-nginx controller.
+  # "gateway" publishes an HTTPRoute instead, for a cluster whose public traffic
+  # arrives through a Gateway API controller.
+  type: ingress
+  # Read only when type is "gateway". The Gateway listener holds the certificate,
+  # so tlsSecret and the CORS annotation take no part in that mode.
+  gateway:
+    name: "" # Gateway that accepts the route
+    namespace: "" # namespace of the Gateway, when it is not the release namespace
+    sectionName: "" # listener of the Gateway, when it has more than one
   host: "{{ .Values.name }}.{{ .Values.global.domain }}"
   tlsSecret: public.{{ .Values.name }}.{{ .Values.global.domain }}-cert
   public:

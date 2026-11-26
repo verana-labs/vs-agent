@@ -14,8 +14,7 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 ## Kubernetes Resources
 
 * **Service:** Exposes two TCP ports, one for the agent (`didcomm`) and one for admin access.
-* **Ingress:**
-  * Public ingress for external access with TLS
+* **Public route:** an Ingress (ingress-nginx) or an HTTPRoute (Gateway API), picked with `ingress.type`
 * **PersistentVolumeClaim:** Provides persistent storage for agent data.
 * **StatefulSet:** Runs the VS-Agent container(s) with configurable replicas.
 
@@ -141,6 +140,12 @@ extraEnv:
 | Parameter                      | Description                                 | Default       |
 | ------------------------------ | ------------------------------------------- | ------------- |
 | `ingress.public.enableCors`    | Enable CORS for public ingress              | `true`        |
+| `ingress.type`                 | `ingress` for ingress-nginx, `gateway` for an HTTPRoute | `ingress` |
+| `ingress.gateway.name`         | Gateway that accepts the route (type `gateway`) | `""`      |
+| `ingress.gateway.namespace`    | Namespace of the Gateway, when it is another one | `""`     |
+| `ingress.gateway.sectionName`  | Listener of the Gateway, when it has more than one | `""`   |
+
+With type `gateway` the Gateway listener terminates TLS and holds the certificate, so `ingress.tlsSecret` and the CORS annotation take no part. That mode publishes the public host only: the source-range allow list of the private ingress has no Gateway API equivalent, so rendering stops if `ingress.private.host` is set.
 
 ### Extra Environment Variables
 
