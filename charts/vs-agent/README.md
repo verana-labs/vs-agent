@@ -27,6 +27,7 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 | ------------------------------ | ------------------------------------------- | ------------- |
 | `name`                         | Application name                            | `vs-agent`    |
 | `replicas`                     | Number of agent pods                        | `1`           |
+| `enableServiceLinks`           | Inject the `<SERVICE>_PORT` variables of the namespace Services into the pod. Keep it `false` when a Service is named `agent`: Kubernetes then sets `AGENT_PORT`, the agent reads it as its port and does not start | `false`       |
 | `domain`                       | Domain for ingress hosts                    | `example.com` |
 
 ### Ports
@@ -128,6 +129,8 @@ extraEnv:
 | `database.existingSecret`  | Name of a pre-existing Secret containing the PostgreSQL password            | `""`                 |
 | `database.user`            | PostgreSQL username (plain value)                                           | `""`                 |
 | `database.secretPwdKey`    | Key name for the password inside `database.existingSecret`                  | `POSTGRES_PASSWORD`  |
+| `database.storage.size`    | Size of the persistent volume for PostgreSQL                                | `1Gi`                |
+| `database.storage.storageClassName` | Storage class for the PostgreSQL persistent volume                 | `csi-cinder-classic` |
 
 ### Persistent Storage
 
@@ -141,6 +144,7 @@ extraEnv:
 | Parameter                      | Description                                 | Default       |
 | ------------------------------ | ------------------------------------------- | ------------- |
 | `ingress.public.enableCors`    | Enable CORS for public ingress              | `true`        |
+| `ingress.clusterIssuer`        | cert-manager ClusterIssuer for both ingresses | `letsencrypt-prod` |
 
 ### Extra Environment Variables
 
