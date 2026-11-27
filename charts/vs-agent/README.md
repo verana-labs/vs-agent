@@ -26,6 +26,7 @@ This Helm chart deploys **VS Agent** application with a StatefulSet, supporting 
 | ------------------------------ | ------------------------------------------- | ------------- |
 | `name`                         | Application name                            | `vs-agent`    |
 | `replicas`                     | Number of agent pods                        | `1`           |
+| `enableServiceLinks`           | Inject the `<SERVICE>_PORT` variables of the namespace Services into the pod. Keep it `false` when a Service is named `agent`: Kubernetes then sets `AGENT_PORT`, the agent reads it as its port and does not start | `false`       |
 | `domain`                       | Domain for ingress hosts                    | `example.com` |
 
 ### Ports
@@ -127,6 +128,8 @@ extraEnv:
 | `database.existingSecret`  | Name of a pre-existing Secret containing the PostgreSQL password            | `""`                 |
 | `database.user`            | PostgreSQL username (plain value)                                           | `""`                 |
 | `database.secretPwdKey`    | Key name for the password inside `database.existingSecret`                  | `POSTGRES_PASSWORD`  |
+| `database.storage.size`    | Size of the persistent volume for PostgreSQL                                | `1Gi`                |
+| `database.storage.storageClassName` | Storage class for the PostgreSQL persistent volume                 | `csi-cinder-classic` |
 
 ### Persistent Storage
 
@@ -146,6 +149,7 @@ extraEnv:
 | `ingress.gateway.sectionName`  | HTTPS listener of the Gateway; empty attaches the route to every one | `""`   |
 
 With type `gateway` the Gateway listener terminates TLS and holds the certificate, so `ingress.tlsSecret` and the CORS annotation take no part. Leave `ingress.gateway.sectionName` empty only when the Gateway has a single HTTPS listener: a `parentRef` without it attaches the route to every listener, so a plain HTTP one would serve the agent with no redirect. That mode publishes the public host only: the source-range allow list of the private ingress has no Gateway API equivalent, so rendering stops if `ingress.private.host` is set.
+| `ingress.clusterIssuer`        | cert-manager ClusterIssuer for both ingresses | `letsencrypt-prod` |
 
 ### Extra Environment Variables
 

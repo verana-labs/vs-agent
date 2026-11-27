@@ -165,9 +165,11 @@ The Admin API is served on a single port (`ADMIN_API_PORT`). Each request is cla
 
 ### Agent feature discovery
 
-When connecting to other agents, VS-A tries to get information from them in order to know what capabilities they support and adapt the flow to it. For example, it can request for user's preferred language to send messages using their locale, or NFC reading capability, to ask users to tap NFC tags and read their content (or fall back to another method in case they don't support that).
+When connecting to other agents, VS-A tries to get information from them in order to know what capabilities they support and adapt the flow to it. For example, it can request for user's preferred language to send messages using their locale, or NFC reading capability, to ask users to tap NFC tags and read their content (or fall back to another method in case they don't support that). It asks again when a peer accepts one of its invitations on a connection it already has, since the peer may have gained capabilities since it first connected.
 
-VS-A fetches capabilities from the `discovery.json` file (which is located at at `/www/apps/vs-agent/discovery.json` in the deployed container) to determine available features. If you want to customize the capabilities to look for, replace the volume at this path with your own `discovery.json` file.
+VS-A reads the features to ask for from the `discovery.json` file, located at `/www/apps/vs-agent/discovery.json` in the deployed container. If you want to customize the capabilities to look for, mount your own `discovery.json` at this path. A `discovery.json` in the working directory of the agent takes precedence, and without any the agent asks its peers nothing.
+
+The controller receives each answer on the events webhook, as a `didcomm.discover-features.disclose-received` event: `connectionId`, `threadId` (the thread of the query) and `features`, each with its `featureType`, `id` and own properties (`roles` for a protocol, `value` for a capability, for example `mrtd.emrtd-read-support`). A disclosure is not a connection state change, so no `didcomm.connections.state-updated` is emitted for it.
 
 ### ECS credential claims
 
