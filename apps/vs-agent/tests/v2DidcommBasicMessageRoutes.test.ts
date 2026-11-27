@@ -71,7 +71,35 @@ describe('v2 didcomm basic message routes', () => {
 
     expect(response.status).toBe(201)
     expect(response.body).toEqual({ id: 'thread-m-9' })
-    expect(basicMessages.sendMessage).toHaveBeenCalledWith('conn-1', 'hello')
+    expect(basicMessages.sendMessage).toHaveBeenCalledWith('conn-1', 'hello', undefined)
+  })
+
+  it('sends a reply with the message that it answers as its parent thread', async () => {
+    basicMessages.sendMessage.mockResolvedValue(
+      message('m-9', '2026-01-09T00:00:00.000Z', { role: 'sender', parentThreadId: 'thread-m-1' }),
+    )
+
+    const response = await request(app.getHttpServer())
+      .post('/v2/didcomm/basic-messages')
+      .send({ connectionId: 'conn-1', content: 'yes', parentThreadId: 'thread-m-1' })
+
+    expect(response.status).toBe(201)
+    expect(response.body).toEqual({ id: 'thread-m-9' })
+    expect(basicMessages.sendMessage).toHaveBeenCalledWith('conn-1', 'yes', 'thread-m-1')
+  })
+
+  it('rejects an empty parent thread, or one that is not a string', async () => {
+    const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })
+    const metadata = { type: 'body', metatype: SendBasicMessageBodyDto } as const
+    const body = { connectionId: 'conn-1', content: 'yes' }
+
+    await expect(pipe.transform({ ...body, parentThreadId: '' }, metadata)).rejects.toMatchObject({
+      status: 400,
+    })
+    await expect(pipe.transform({ ...body, parentThreadId: 7 }, metadata)).rejects.toMatchObject({
+      status: 400,
+    })
+    await expect(pipe.transform({ ...body, parentThreadId: 'thread-m-1' }, metadata)).resolves.toBeDefined()
   })
 
   it('reports the connection that the agent did not find as UNKNOWN_ID', async () => {
@@ -151,6 +179,18 @@ describe('v2 didcomm basic message routes', () => {
       threadId: 'thread-m-1',
       createdAt: '2026-01-01T00:00:00.000Z',
     })
+  })
+
+  it('returns the parent thread of a reply, and none on a message that answers no other', async () => {
+    basicMessages.findAllByQuery.mockResolvedValue([
+      message('m-1', '2026-01-01T00:00:00.000Z', { role: 'sender' }),
+      message('m-2', '2026-01-02T00:00:00.000Z', { parentThreadId: 'thread-m-1' }),
+    ])
+
+    const response = await request(app.getHttpServer()).get('/v2/didcomm/basic-messages')
+
+    expect(response.body.items[0]).not.toHaveProperty('parentThreadId')
+    expect(response.body.items[1]).toMatchObject({ id: 'm-2', parentThreadId: 'thread-m-1' })
   })
 
   it('rejects a role outside sender and receiver', async () => {
