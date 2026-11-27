@@ -43,6 +43,7 @@ export function toBasicMessageDto(record: DidCommBasicMessageRecord): BasicMessa
     content: record.content,
     sentTime: record.sentTime,
     createdAt: record.createdAt,
+    parentThreadId: record.parentThreadId,
   }
 }
 

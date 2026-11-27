@@ -114,6 +114,8 @@ export interface ListInvitationsQuery extends PaginationQuery {
 export interface SendBasicMessageBody {
   connectionId: string
   content: string
+  /** DIDComm message id of the message that this one answers, sent as its parent thread (`pthid`). */
+  parentThreadId?: string
 }
 
 export interface ListBasicMessagesQuery extends PaginationQuery {
@@ -128,6 +130,8 @@ export interface BasicMessageRecord {
   content: string
   sentTime: string
   createdAt: string
+  /** DIDComm message id of the message that this one answers (`pthid`), when the message is a reply. */
+  parentThreadId?: string
 }
 
 export type MessageState = 'created' | 'submitted' | 'received' | 'viewed' | 'deleted'

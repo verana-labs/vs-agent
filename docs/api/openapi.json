@@ -168,7 +168,7 @@
     },
     "/v2/didcomm/basic-messages": {
       "post": {
-        "description": "Sends a text message on an established connection.",
+        "description": "Sends a text message on an established connection. A message that names a `parentThreadId` is a reply to the message with that id.",
         "operationId": "V2DidcommBasicMessagesController_sendBasicMessage_v2",
         "parameters": [],
         "requestBody": {
@@ -3657,6 +3657,11 @@
             "type": "string",
             "description": "Text of the message",
             "example": "Hello"
+          },
+          "parentThreadId": {
+            "type": "string",
+            "description": "DIDComm message id of the message that this one answers, sent as the parent thread (`pthid`) of the message. The peer can then present the message as a reply to that one.",
+            "example": "b2c3d4e5-6789-01ab-cdef-234567890abc"
           }
         },
         "required": [
@@ -3710,6 +3715,11 @@
             "type": "string",
             "format": "date-time",
             "description": "When the agent stored the message"
+          },
+          "parentThreadId": {
+            "type": "string",
+            "description": "DIDComm message id of the message that this one answers (`pthid`), when the message is a reply",
+            "example": "b2c3d4e5-6789-01ab-cdef-234567890abc"
           }
         },
         "required": [
