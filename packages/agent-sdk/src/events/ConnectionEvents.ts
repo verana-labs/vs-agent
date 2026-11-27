@@ -6,6 +6,7 @@ import {
   DidCommConnectionDidRotatedEvent,
   DidCommConnectionEventTypes,
   DidCommConnectionRepository,
+  DidCommConnectionService,
   DidCommConnectionStateChangedEvent,
   DidCommDidExchangeState,
   DidCommDiscoverFeaturesDisclosureReceivedEvent,
@@ -147,6 +148,16 @@ export const connectionEvents = async (
         const isTerminationByPeer =
           record.theirDid === undefined && (record.previousTheirDids?.length ?? 0) > 0
         if (!isTerminationByPeer) return
+
+        // Credo processes a hangup as a rotation to no DID and leaves the record `completed`, so
+        // no connection state change reaches the Events API and the connection still reads as
+        // usable. Mark it abandoned: the record then reads as closed, Credo refuses further
+        // messages on it, and the state change is delivered like any other.
+        if (record.state !== DidCommDidExchangeState.Abandoned) {
+          await agent.context.dependencyManager
+            .resolve(DidCommConnectionService)
+            .updateState(agent.context, record, DidCommDidExchangeState.Abandoned)
+        }
 
         const body = new ConnectionStateUpdated({
           connectionId: record.id,

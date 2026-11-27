@@ -76,7 +76,13 @@ export class ConnectionRecordDto {
   })
   id!: string
 
-  @ApiProperty({ enum: DidCommDidExchangeState, description: 'Current state of the DID exchange' })
+  @ApiProperty({
+    enum: DidCommDidExchangeState,
+    description:
+      'Current state of the DID exchange. `abandoned` also marks a connection that the peer hung ' +
+      'up: the agent closes the connection when the peer terminates the relationship, and ' +
+      'reports the change on `didcomm.connections.state-updated`.',
+  })
   state!: DidCommDidExchangeState
 
   @ApiProperty({ enum: DidCommDidExchangeRole, description: 'Role in the DID exchange' })
