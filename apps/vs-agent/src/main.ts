@@ -33,7 +33,6 @@ import {
   type PublicDidLocation,
 } from '@verana-labs/vs-agent-sdk'
 import * as express from 'express'
-import * as fs from 'fs'
 import { IncomingMessage, Server } from 'http'
 import { Socket } from 'net'
 import * as path from 'path'
@@ -102,6 +101,7 @@ import {
   mountPublicPluginMiddleware,
   registerNestPluginEvents,
   registerNestPluginIndexerHandlers,
+  readDiscoveryOptions,
   runWithRetries,
   type ServerConfig,
   setupAgent,
@@ -421,14 +421,9 @@ const run = async () => {
     }
   }
 
-  const discoveryOptions = (() => {
-    try {
-      return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'discovery.json'), 'utf-8'))
-    } catch (error) {
-      serverLogger.warn('Error reading discovery.json file:', error.message)
-      return undefined
-    }
-  })()
+  // The working directory, then the app directory: the image starts the agent from /www and keeps
+  // the file in /www/apps/vs-agent, two levels above the compiled main
+  const discoveryOptions = readDiscoveryOptions([process.cwd(), path.join(__dirname, '../..')], serverLogger)
 
   const { agent, verifyPeer } = await setupAgent({
     indexer: indexerService,

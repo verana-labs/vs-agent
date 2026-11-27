@@ -36,7 +36,7 @@ metadata:
   name: private-{{ .Values.name }}
   namespace: {{ .Release.Namespace }}
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer | default "letsencrypt-prod" }}
     nginx.ingress.kubernetes.io/enable-cors: "{{ .Values.ingress.private.enableCors | default "true" }}"
     nginx.ingress.kubernetes.io/whitelist-source-range: "{{ .Values.ingress.private.whitelistSourceRange }}"
 spec:
@@ -64,7 +64,7 @@ metadata:
   name: public-{{ .Values.name }}
   namespace: {{ .Release.Namespace }}
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer | default "letsencrypt-prod" }}
     nginx.ingress.kubernetes.io/enable-cors: "{{ .Values.ingress.public.enableCors | default "true" }}"
 spec:
   ingressClassName: nginx
@@ -120,10 +120,10 @@ metadata:
 spec:
   accessModes:
     - "ReadWriteOnce"
-  storageClassName: csi-cinder-classic
+  storageClassName: {{ .Values.database.storage.storageClassName | default "csi-cinder-classic" }}
   resources:
     requests:
-      storage: 1Gi
+      storage: {{ .Values.database.storage.size | default "1Gi" }}
 {{- end }}
 ---
 # StatefulSet description for the VS Agent
@@ -148,6 +148,7 @@ spec:
          labels:
             app: {{ .Values.name }}
       spec:
+         enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
          containers:
          -  name: {{ .Values.name }}-sa-container
             image: {{ .Values.image.repository | default "veranalabs/vs-agent" }}:{{ .Values.image.tag | default .Chart.Version }}
