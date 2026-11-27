@@ -61,8 +61,8 @@ export class BasicMessageRecordDto {
 
   @ApiPropertyOptional({
     description:
-      'Thread of the message. A message that starts its thread, as a basic message usually does, has ' +
-      'its own DIDComm message id here: the id that a receipt or a reaction names, and the `id` that ' +
+      'DIDComm message id of the message. A basic message starts its own thread, so its thread id is ' +
+      'its message id: the id that a receipt or a reaction names, and the `id` that ' +
       '`sendBasicMessage` returns for a message this agent sent.',
     example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
   })

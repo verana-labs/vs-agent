@@ -128,8 +128,8 @@ export interface BasicMessageRecord {
   content: string
   sentTime: string
   /**
-   * Thread of the message: its own DIDComm message id when it starts its thread, the id that a
-   * receipt or a reaction names.
+   * DIDComm message id of the message, the id that a receipt or a reaction names. A basic message
+   * starts its own thread, so its thread id is its message id.
    */
   threadId?: string
   createdAt: string
