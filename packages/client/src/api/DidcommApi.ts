@@ -14,6 +14,7 @@ import {
   DeclineExchangeBody,
   InvitationRecord,
   ListBasicMessagesQuery,
+  DeleteConnectionQuery,
   ListConnectionsQuery,
   ListCredentialExchangesQuery,
   ListInvitationsQuery,
@@ -50,8 +51,13 @@ export class DidcommApi {
     return this.http.request('GET', `/didcomm/connections/${encodeURIComponent(connectionId)}`)
   }
 
-  public deleteConnection(connectionId: string): Promise<void> {
-    return this.http.request('DELETE', `/didcomm/connections/${encodeURIComponent(connectionId)}`)
+  /** Ends the relationship and keeps the record, which becomes `abandoned`. */
+  public terminateConnection(connectionId: string): Promise<ConnectionRecord> {
+    return this.http.request('POST', `/didcomm/connections/${encodeURIComponent(connectionId)}/terminate`)
+  }
+
+  public deleteConnection(connectionId: string, query?: DeleteConnectionQuery): Promise<void> {
+    return this.http.request('DELETE', `/didcomm/connections/${encodeURIComponent(connectionId)}`, { query })
   }
 
   public createInvitation(body: CreateInvitationBody): Promise<CreateInvitationResponse> {

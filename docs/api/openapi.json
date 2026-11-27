@@ -811,7 +811,7 @@
         ]
       },
       "delete": {
-        "description": "Terminates the DIDComm connection: notifies the other party and deletes the connection record.",
+        "description": "Deletes the connection record. Unless `notify` is false, the agent first tells the peer that the connection ends (a hangup).",
         "operationId": "V2DidcommConnectionsController_deleteConnection_v2",
         "parameters": [
           {
@@ -822,6 +822,16 @@
             "schema": {
               "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
               "type": "string"
+            }
+          },
+          {
+            "name": "notify",
+            "required": false,
+            "in": "query",
+            "description": "Whether to tell the peer that the connection ends (a hangup) before the record is deleted. False drops a record silently, for example a stale connection whose peer is gone.",
+            "schema": {
+              "default": true,
+              "type": "boolean"
             }
           }
         ],
@@ -834,6 +844,43 @@
           }
         },
         "summary": "Delete a connection",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/connections/{connectionId}/terminate": {
+      "post": {
+        "description": "Ends the DIDComm relationship and keeps the record: tells the peer that the connection ends (a hangup) and marks the record `abandoned`, so that its history stays readable and no further message is sent on it. Delete the connection to drop the record as well.",
+        "operationId": "V2DidcommConnectionsController_terminateConnection_v2",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "description": "UUID of the connection to terminate",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The terminated connection record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id"
+          }
+        },
+        "summary": "Terminate a connection",
         "tags": [
           "v2/didcomm"
         ]

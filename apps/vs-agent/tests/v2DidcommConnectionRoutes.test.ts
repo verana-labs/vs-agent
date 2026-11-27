@@ -4,6 +4,7 @@ import { DidCommShareMediaMessage } from '@credo-ts/didcomm-media-sharing'
 import { RecordNotFoundError } from '@credo-ts/core'
 import {
   DidCommAttachment,
+  DidCommConnectionService,
   DidCommHandshakeProtocol,
   DidCommOutOfBandInvitation,
   DidCommOutOfBandInvitationV2,
@@ -64,12 +65,17 @@ const basicMessages = { sendMessage: vi.fn().mockResolvedValue({ id: 'bm-1' }) }
 const outOfBandRepository = { update: vi.fn() }
 const invitationRepository = { save: vi.fn(), findByQuery: vi.fn(), findById: vi.fn(), delete: vi.fn() }
 const messageSender = { sendMessage: vi.fn() }
+const connectionService = { updateState: vi.fn() }
 const dids = { getCreatedDids: vi.fn().mockResolvedValue([]) }
 
 const agent = {
   did: 'did:webvh:QmAgent:agent.test',
   publicApiBaseUrl: 'https://agent.test',
-  context: { dependencyManager: { resolve: () => messageSender } },
+  context: {
+    dependencyManager: {
+      resolve: (token: unknown) => (token === DidCommConnectionService ? connectionService : messageSender),
+    },
+  },
   dependencyManager: {
     resolve: (token: unknown) =>
       token === InvitationRepository ? invitationRepository : outOfBandRepository,
@@ -271,6 +277,68 @@ describe('v2 didcomm connection routes', () => {
     expect(response.body).toEqual({})
     expect(connections.hangup).toHaveBeenCalledWith({ connectionId: 'c-1' })
     expect(connections.deleteById).toHaveBeenCalledWith('c-1')
+  })
+
+  it('deletes a connection without a hangup when notify is false', async () => {
+    connections.deleteById.mockResolvedValue(undefined)
+
+    const response = await request(app.getHttpServer()).delete('/v2/didcomm/connections/c-1?notify=false')
+
+    expect(response.status).toBe(204)
+    expect(connections.hangup).not.toHaveBeenCalled()
+    expect(connections.deleteById).toHaveBeenCalledWith('c-1')
+  })
+
+  it('refuses a notify value that is not a boolean', async () => {
+    const response = await request(app.getHttpServer()).delete('/v2/didcomm/connections/c-1?notify=maybe')
+
+    expect(response.status).toBe(400)
+    expect(connections.deleteById).not.toHaveBeenCalled()
+  })
+
+  it('terminates a connection: hangs up, marks the record abandoned and returns it', async () => {
+    const record = connection('c-1', '2026-01-01T00:00:00.000Z')
+    connections.findById.mockResolvedValue(record)
+
+    const response = await request(app.getHttpServer()).post('/v2/didcomm/connections/c-1/terminate')
+
+    expect(response.status).toBe(200)
+    expect(response.body).toMatchObject({ id: 'c-1', invitationId: null, parentConnectionId: null })
+    expect(connections.hangup).toHaveBeenCalledWith({ connectionId: 'c-1' })
+    expect(connectionService.updateState).toHaveBeenCalledWith(agent.context, record, 'abandoned')
+    expect(connections.deleteById).not.toHaveBeenCalled()
+  })
+
+  it('terminates a connection whose peer cannot be reached, and logs it', async () => {
+    connections.findById.mockResolvedValue(connection('c-1', '2026-01-01T00:00:00.000Z'))
+    connections.hangup.mockRejectedValueOnce(new Error('no route to the peer'))
+
+    const response = await request(app.getHttpServer()).post('/v2/didcomm/connections/c-1/terminate')
+
+    expect(response.status).toBe(200)
+    expect(connectionService.updateState).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not hang up an already terminated connection again', async () => {
+    connections.findById.mockResolvedValue(
+      connection('c-1', '2026-01-01T00:00:00.000Z', { state: 'abandoned' }),
+    )
+
+    const response = await request(app.getHttpServer()).post('/v2/didcomm/connections/c-1/terminate')
+
+    expect(response.status).toBe(200)
+    expect(response.body.state).toBe('abandoned')
+    expect(connections.hangup).not.toHaveBeenCalled()
+    expect(connectionService.updateState).not.toHaveBeenCalled()
+  })
+
+  it('answers 404 on terminating an unknown connection', async () => {
+    connections.findById.mockResolvedValue(null)
+
+    const response = await request(app.getHttpServer()).post('/v2/didcomm/connections/nope/terminate')
+
+    expect(response.status).toBe(404)
+    expect(response.body.error.code).toBe('UNKNOWN_ID')
   })
 
   it('deletes a parent connection alone and keeps its children listed by parentConnectionId', async () => {
