@@ -28,14 +28,20 @@ export class V2DidcommBasicMessagesController {
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   @ApiOperation({
     summary: 'Send a basic message',
-    description: 'Sends a text message on an established connection.',
+    description:
+      'Sends a text message on an established connection. A message that names a `parentThreadId` ' +
+      'is a reply to the message with that id.',
   })
   @ApiCreatedResponse({ description: 'Sent message id', type: SentMessageDto })
   @ApiNotFoundResponse({ description: 'No connection with the given id' })
   public async sendBasicMessage(@Body() body: SendBasicMessageBodyDto): Promise<SentMessageDto> {
     const agent = await this.vsAgentService.getAgent()
 
-    const record = await agent.didcomm.basicMessages.sendMessage(body.connectionId, body.content)
+    const record = await agent.didcomm.basicMessages.sendMessage(
+      body.connectionId,
+      body.content,
+      body.parentThreadId,
+    )
 
     return { id: record.threadId! }
   }
