@@ -153,6 +153,52 @@ describe('chat module events', () => {
     ])
   })
 
+  it('emits a received media request with the thread the share must answer', async () => {
+    const { emitted, process } = fakeAgent()
+
+    await process({
+      connection: { id: 'conn-1' },
+      message: {
+        type: 'https://didcomm.org/media-sharing/1.0/request-media',
+        threadId: 'request-1',
+        thread: { parentThreadId: 'flow-1' },
+        description: 'send me the photo',
+        itemIds: ['i-1'],
+      },
+    })
+
+    expect(emitted).toEqual([
+      {
+        type: 'didcomm.media-sharing.request-media-received',
+        data: {
+          connectionId: 'conn-1',
+          threadId: 'request-1',
+          parentThreadId: 'flow-1',
+          description: 'send me the photo',
+          itemIds: ['i-1'],
+        },
+      },
+    ])
+  })
+
+  it('emits a shared media record with the request that the share answers as its parent thread', () => {
+    const { emitted, emit } = fakeAgent()
+
+    emit('DidCommMediaSharingStateChangedEvent', {
+      mediaSharingRecord: {
+        connectionId: 'conn-1',
+        role: 'receiver',
+        state: 'media-shared',
+        threadId: 'share-thread-2',
+        parentThreadId: 'request-1',
+        description: 'the photo',
+        items: [{ id: 'i-1', uri: 'https://media.example/1', mimeType: 'image/png' }],
+      },
+    })
+
+    expect(emitted[0].data).toMatchObject({ threadId: 'share-thread-2', parentThreadId: 'request-1' })
+  })
+
   it('emits a shared media record with the thread id of an unsolicited share', () => {
     const { emitted, emit } = fakeAgent()
 
@@ -174,6 +220,7 @@ describe('chat module events', () => {
         data: {
           connectionId: 'conn-1',
           threadId: 'share-thread-1',
+          parentThreadId: undefined,
           description: 'a photo',
           items: [{ id: 'i-1', uri: 'https://media.example/1', mimeType: 'image/png' }],
         },

@@ -42,6 +42,7 @@ const CATALOG: Record<string, (message: Message, connectionId: string) => Record
   'https://didcomm.org/media-sharing/1.0/request-media': (message, connectionId) => ({
     connectionId,
     threadId: message.threadId,
+    parentThreadId: message.thread?.parentThreadId,
     description: message.description,
     itemIds: message.itemIds,
   }),
@@ -115,9 +116,12 @@ export function registerDidcommModuleEvents(agent: VsAgent): void {
       if (record.role !== DidCommMediaSharingRole.Receiver) return
       if (record.state !== DidCommMediaSharingState.MediaShared) return
 
+      // The thread of a share is the id of the share-media message, and its parent thread names the
+      // request-media message that it answers, when there is one
       emitModuleMessageEvent(agent, 'didcomm.media-sharing.share-media-received', {
         connectionId: record.connectionId,
         threadId: record.threadId,
+        parentThreadId: record.parentThreadId,
         description: record.description,
         items: record.items,
       })

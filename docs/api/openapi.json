@@ -5207,9 +5207,10 @@
             "type": "string",
             "description": "Text that describes the share"
           },
-          "threadId": {
+          "parentThreadId": {
             "type": "string",
-            "description": "Thread of the request-media message this share answers"
+            "description": "DIDComm message id of the request-media message that this share answers, sent as the parent thread (`pthid`) of the share (`threadId` of the `didcomm.media-sharing.request-media-received` event).",
+            "example": "b2c3d4e5-6789-01ab-cdef-234567890abc"
           },
           "items": {
             "description": "The items to share",
