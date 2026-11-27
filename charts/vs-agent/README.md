@@ -143,13 +143,15 @@ extraEnv:
 | Parameter                      | Description                                 | Default       |
 | ------------------------------ | ------------------------------------------- | ------------- |
 | `ingress.public.enableCors`    | Enable CORS for public ingress              | `true`        |
+| `ingress.clusterIssuer`        | cert-manager ClusterIssuer for both ingresses | `letsencrypt-prod` |
 | `ingress.type`                 | `ingress` for ingress-nginx, `gateway` for an HTTPRoute | `ingress` |
 | `ingress.gateway.name`         | Gateway that accepts the route (type `gateway`) | `""`      |
 | `ingress.gateway.namespace`    | Namespace of the Gateway, when it is another one | `""`     |
 | `ingress.gateway.sectionName`  | HTTPS listener of the Gateway; empty attaches the route to every one | `""`   |
 
-With type `gateway` the Gateway listener terminates TLS and holds the certificate, so `ingress.tlsSecret` and the CORS annotation take no part. Leave `ingress.gateway.sectionName` empty only when the Gateway has a single HTTPS listener: a `parentRef` without it attaches the route to every listener, so a plain HTTP one would serve the agent with no redirect. That mode publishes the public host only: the source-range allow list of the private ingress has no Gateway API equivalent, so rendering stops if `ingress.private.host` is set.
-| `ingress.clusterIssuer`        | cert-manager ClusterIssuer for both ingresses | `letsencrypt-prod` |
+With type `gateway` the Gateway listener terminates TLS and holds the certificate, so `ingress.tlsSecret`, `ingress.clusterIssuer` and the CORS annotation take no part. Leave `ingress.gateway.sectionName` empty only when the Gateway has a single HTTPS listener: a `parentRef` without it attaches the route to every listener, so a plain HTTP one would serve the agent with no redirect. That mode publishes the public host only: the source-range allow list of the private ingress has no Gateway API equivalent, so rendering stops if `ingress.private.host` is set.
+
+The DIDComm endpoint is `wss://`: the Gateway must allow WebSocket upgrades on this listener and must not close idle connections too soon.
 
 ### Extra Environment Variables
 
