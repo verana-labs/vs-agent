@@ -380,4 +380,4 @@ services:
 
 ## API
 
-The Administration API is the [Administration API](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#administration-api) of the VS Agent specification. Swagger UI and the OpenAPI document are served at `/api` on `ADMIN_API_PORT`, to callers from `ADMIN_API_TRUSTED_NETWORKS` only.
+The Administration API is the [Administration API](https://github.com/verana-labs/verana-spec/blob/main/v4/vs-agent/spec.md#administration-api) of the VS Agent specification. Swagger UI and the OpenAPI document are served at `/api` on `ADMIN_API_PORT`, to callers from `ADMIN_API_TRUSTED_NETWORKS` only. A controller written against 1.x finds what changed in [`docs/migration-1.x-to-2.0.md`](../../docs/migration-1.x-to-2.0.md).
