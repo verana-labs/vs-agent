@@ -69,6 +69,8 @@ import {
   SUPERSEDED_VAR_WARNINGS,
   validateRuntimeConfig,
   ENABLED_PLUGINS,
+  PLUGIN_DIRECTORY,
+  PLUGIN_PACKAGES,
   EVENTS_WEBHOOK_API_KEY,
   EVENTS_WEBHOOK_URL,
   POSTGRES_HOST,
@@ -98,7 +100,9 @@ import { PublicModule } from './public.module'
 import { parseTrustedNetworks, restrictDocsToTrustedPeers } from './security'
 import {
   commonAppConfig,
+  loadPluginPackages,
   mountPublicPluginMiddleware,
+  pluginDirectoryOf,
   registerNestPluginEvents,
   registerNestPluginIndexerHandlers,
   readDiscoveryOptions,
@@ -309,6 +313,12 @@ const run = async () => {
     configErrors.push(...openId4Vc.errors)
   }
 
+  // The compiled main sits in `build/src` of the app, and the plugin directory next to `build`
+  const externalPlugins = await loadPluginPackages(PLUGIN_PACKAGES, {
+    pluginDirectory: pluginDirectoryOf(path.join(__dirname, '../..'), PLUGIN_DIRECTORY),
+  })
+  configErrors.push(...externalPlugins.errors)
+
   if (configErrors.length > 0 || !didLocation) {
     serverLogger.error(`Invalid configuration:\n- ${configErrors.join('\n- ')}`)
     process.exit(1)
@@ -358,7 +368,12 @@ const run = async () => {
       : []),
     ...(openId4VcOptions ? [OpenId4VcPlugin(openId4VcOptions)] : []),
     VtFlowNestPlugin,
+    ...externalPlugins.plugins,
   ]
+  if (externalPlugins.plugins.length > 0)
+    serverLogger.info(
+      `External plugins loaded: ${externalPlugins.plugins.map(plugin => plugin.name).join(', ')}`,
+    )
 
   const indexerService = new VeranaIndexerService({
     baseUrl: VERANA_INDEXER_BASE_URL,

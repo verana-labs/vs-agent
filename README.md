@@ -43,7 +43,9 @@ the service and under which governance, and only then connect.
   and a [base JS client](./packages/client) are provided.
 - **Plugin architecture**: load only the DIDComm features you need (`chat`,
   `mrtd`) via `VS_AGENT_PLUGINS`. OpenID4VC ships in every image and turns on
-  with its configuration file.
+  with its configuration file. Add your own DIDComm protocols as
+  [external plugin packages](./apps/vs-agent/README.md#external-plugin-packages),
+  without forking the image.
 
 ---
 

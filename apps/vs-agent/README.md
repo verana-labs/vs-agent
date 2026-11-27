@@ -101,6 +101,8 @@ These are variables that are updated only on specific use cases.
 | OID4VC_CREDENTIAL_OFFER_EXPIRATION_SECONDS | How long a credential offer stays redeemable, independently of the `ttlSeconds` of the credential: an integer between 60 and 7776000. The agent refuses to start on any other value. | 900 |
 | OID4VC_PRESENTATION_REQUEST_EXPIRATION_SECONDS | How long a presentation request stays valid: an integer between 60 and 7776000. The agent reports it as `expiresAt`, and refuses to start on any other value. | 900 |
 | VS_AGENT_PLUGINS                       | Comma-separated list of plugins to load at startup. Set by the Docker image in production, only override in development. See [Plugin system](#plugin-system) for available values.                                                               | `chat`                   |
+| VS_AGENT_PLUGIN_PACKAGES               | Comma-separated names of the npm packages of external plugins to load at startup, after the built-in ones. The agent refuses to start when one of them cannot be loaded. See [External plugin packages](#external-plugin-packages). | none |
+| VS_AGENT_PLUGIN_DIR                    | Directory the external plugin packages are installed in. It must be inside the directory tree of the agent (`/www` in the Docker image), so that the plugins use the agent's copies of their peer dependencies. | `apps/vs-agent/plugins` |
 
 > **Note about Key derivation method**: By default, we use the strongest ARGON2I_MOD, but since this is the slowest one as well, depending on the security infrastructure you have, you might want to not derive the key at all (use RAW). However, in versions of VS Agent we are going to deprecate this setting, so we recommend to keep the default setting to make migration process easier.
 
@@ -265,7 +267,7 @@ MRTD_MASTER_LIST_CSCA_LOCATION=https://pkddownloadsg.icao.int/file?id=f6e328050f
 
 ## Plugin system
 
-VS Agent uses an opt-in plugin architecture. Each plugin is an independent package that brings its own Credo modules, NestJS controllers, and event listeners. Plugins are loaded dynamically at startup based on the `VS_AGENT_PLUGINS` environment variable, so only the required dependencies are pulled into the process.
+VS Agent uses an opt-in plugin architecture. Each plugin is an independent package that brings its own Credo modules, NestJS controllers, and event listeners. Plugins are loaded dynamically at startup based on the `VS_AGENT_PLUGINS` environment variable, so only the required dependencies are pulled into the process. A deployment adds plugins of its own with `VS_AGENT_PLUGIN_PACKAGES`, see [External plugin packages](#external-plugin-packages).
 
 ### Available plugins
 
@@ -300,6 +302,54 @@ VS_AGENT_PLUGINS=chat,mrtd
 # Install without mrtd plugin (no native binaries required)
 pnpm install --no-optional
 ```
+
+### External plugin packages
+
+A plugin does not have to live in this repository. A deployment can add its own DIDComm protocols on top of the published image, without forking it: it installs the plugin as an npm package next to the agent and names it in `VS_AGENT_PLUGIN_PACKAGES`.
+
+#### Writing a plugin package
+
+The package exports a function named `createVsAgentPlugin`. The agent calls it once at startup with the environment of the process, so that the plugin reads its own variables, and expects a `VsAgentNestPlugin` (from `@verana-labs/vs-agent-sdk`), returned directly or through a promise:
+
+```ts
+import type { VsAgentNestPlugin } from '@verana-labs/vs-agent-sdk'
+
+export function createVsAgentPlugin(env: NodeJS.ProcessEnv): VsAgentNestPlugin {
+  return {
+    name: 'example',
+    credoPlugin: { modules: { example: new ExampleModule({ mode: env.EXAMPLE_MODE }) } },
+    controllers: [V2DidcommExampleController],
+    didcommModules: [{ module: 'example', prefixes: ['https://example.org/example/'] }],
+    registerEvents: (agent, logger) => exampleEvents(agent, logger),
+  }
+}
+```
+
+This is the same object the built-in plugins return (see [`packages/plugin-chat`](../../packages/plugin-chat)). External plugins are loaded after the built-in ones and take part in the agent in the same way: their Credo modules are registered on the agent, and their controllers are served by the Admin API and listed in its Swagger UI.
+
+The package lists as `peerDependencies`, not as `dependencies`, everything it must share with the agent: `@credo-ts/core`, `@credo-ts/didcomm`, `@verana-labs/vs-agent-sdk`, `@nestjs/common`, `@nestjs/swagger`, `class-validator` and `class-transformer`. A Credo module or a Nest controller that runs on its own copy of one of these does not work, because the dependency injection container and the decorator metadata are kept per copy.
+
+The package can be CommonJS or an ES module. The agent loads it with `require`, so an ES module must not use top-level `await`.
+
+#### Installing it in the image
+
+```dockerfile
+FROM veranalabs/vs-agent:<version>
+
+RUN mkdir -p apps/vs-agent/plugins && cd apps/vs-agent/plugins \
+    && npm init -y > /dev/null \
+    && npm install --omit=dev --legacy-peer-deps @acme/vs-agent-plugin-example@<version>
+
+ENV VS_AGENT_PLUGIN_PACKAGES=@acme/vs-agent-plugin-example
+```
+
+- The **plugin directory** is `apps/vs-agent/plugins` (`/www/apps/vs-agent/plugins` in the image), unless `VS_AGENT_PLUGIN_DIR` names another one. `npm init -y` gives it a `package.json` of its own, so that npm installs the plugin there and leaves the dependencies of the agent alone.
+- **`--legacy-peer-deps`** tells npm to install the dependencies of the plugin and not its peer dependencies. Node then finds those higher up the directory tree, in the copies of the agent. This is why the plugin directory must be inside the tree of the agent.
+- **`VS_AGENT_PLUGIN_PACKAGES`** takes several names separated by commas. They are loaded in the order given.
+
+The agent refuses to start when a package named in `VS_AGENT_PLUGIN_PACKAGES` is not installed, fails while it loads, does not export `createVsAgentPlugin`, or when that function throws. The reason is logged with the other configuration errors. A protocol the deployment asked for is never skipped silently.
+
+To learn which of the plugin's protocols a peer supports, add them to the queries of `discovery.json` (see [Agent feature discovery](#agent-feature-discovery)).
 
 ---
 

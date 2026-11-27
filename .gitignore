@@ -16,6 +16,9 @@ packages/**/test/logs
 *.tgz
 Chart.lock
 
+# External plugin packages installed for local development
+apps/vs-agent/plugins/
+
 CLAUDE.md
 
 # Editor and agent config (not shared)
