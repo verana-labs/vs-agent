@@ -10,6 +10,9 @@ import {
   DidCommDidExchangeState,
   DidCommDiscoverFeaturesDisclosureReceivedEvent,
   DidCommDiscoverFeaturesEventTypes,
+  DidCommHandshakeReusedEvent,
+  DidCommOutOfBandEventTypes,
+  DidCommOutOfBandRole,
 } from '@credo-ts/didcomm'
 import {
   ConnectionStateUpdated,
@@ -193,6 +196,29 @@ export const connectionEvents = async (
         emitVsAgentEvent(agent, VsAgentEventTypes.ConnectionStateUpdated, body)
       } catch (error) {
         config.logger.error(`[connection-events] disclosure handler failed: ${(error as Error).message}`)
+      }
+    },
+  )
+
+  // A peer that accepts an invitation on a connection it already has opens no new connection, so
+  // the query of a completed connection is not sent. It is asked here: since it connected, the
+  // peer may have gained features, as a wallet does when it is updated.
+  agent.events.on(
+    DidCommOutOfBandEventTypes.HandshakeReused,
+    async ({ payload }: DidCommHandshakeReusedEvent) => {
+      // an event listener is never awaited, so a rejection here would surface as an
+      // unhandled rejection and take the process down
+      try {
+        if (!config.discoveryOptions || payload.outOfBandRecord.role !== DidCommOutOfBandRole.Sender) return
+        await agent.didcomm.discovery.queryFeatures({
+          connectionId: payload.connectionRecord.id,
+          protocolVersion: 'v2',
+          queries: config.discoveryOptions,
+        })
+      } catch (error) {
+        config.logger.warn(
+          `[connection-events] feature query after a handshake reuse failed: ${(error as Error).message}`,
+        )
       }
     },
   )
