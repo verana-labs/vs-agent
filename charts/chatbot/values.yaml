@@ -7,6 +7,16 @@ global:
 name: chatbot-backend # Name of the chatbot backend service
 replicas: 1 # Number of replicas for the chatbot backend service
 ingress:
+  # "ingress" publishes an Ingress and needs an ingress-nginx controller.
+  # "gateway" publishes an HTTPRoute instead, for a cluster whose public traffic
+  # arrives through a Gateway API controller.
+  type: ingress
+  # Read only when type is "gateway". The Gateway listener holds the certificate,
+  # so tlsSecret takes no part in that mode.
+  gateway:
+    name: "" # Gateway that accepts the route
+    namespace: "" # namespace of the Gateway, when it is not the release namespace
+    sectionName: "" # HTTPS listener of the Gateway; empty attaches the route to every listener
   host: '{{ .Values.name }}.{{ .Values.global.domain }}'
   tlsSecret: public.{{ .Values.name }}.{{ .Values.global.domain }}-cert
 env:

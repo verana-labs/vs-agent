@@ -29,6 +29,14 @@ spec:
 # Ingress resource for the VS Agent
 # This resource defines how external traffic can access the VS Agent service
 # It routes traffic to the agent service and provides TLS termination
+{{- $routeType := .Values.ingress.type | default "ingress" }}
+{{- if not (has $routeType (list "ingress" "gateway")) }}
+{{- fail (printf "ingress.type must be ingress or gateway, not %q" $routeType) }}
+{{- end }}
+{{- $gw := .Values.ingress.gateway | default dict }}
+{{- if and (eq $routeType "gateway") .Values.ingress.private.host }}
+{{- fail "ingress.type gateway publishes the public host only: the source-range allow list of the private ingress has no Gateway API equivalent. Leave ingress.private.host empty and reach the admin API from inside the cluster." }}
+{{- end }}
 {{- if and .Values.ingress.private.host .Values.ingress.private.tlsSecret }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -58,6 +66,35 @@ spec:
                    number: {{ .Values.adminPort }}
 {{- end }}
 ---
+{{- if eq $routeType "gateway" }}
+# Gateway API route, for a cluster served by a Gateway instead of ingress-nginx.
+# The Gateway listener named here terminates TLS, so ingress.tlsSecret and the
+# nginx annotations take no part in this mode.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: public-{{ .Values.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  parentRefs:
+    - name: {{ required "ingress.gateway.name is needed when ingress.type is gateway" $gw.name }}
+      {{- with $gw.namespace }}
+      namespace: {{ . }}
+      {{- end }}
+      {{- with $gw.sectionName }}
+      sectionName: {{ . }}
+      {{- end }}
+  hostnames:
+    - {{ tpl .Values.ingress.host . }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ .Values.name }}
+          port: {{ .Values.didcommPort }}
+{{- else }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -83,6 +120,7 @@ spec:
                  name: {{ .Values.name }}
                  port:
                    number: {{ .Values.didcommPort }}
+{{- end }}
 ---
 # PersistentVolumeClaim for the VS Agent
 # This PVC is used to store the agent's data and configuration
