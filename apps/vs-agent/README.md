@@ -146,7 +146,9 @@ These variables connect the agent to the Verana network (permission management, 
 
 Every vt-flow session is gated on trust resolution: the peer DID must resolve to a Verifiable Service whose trust chain reaches a production registry. A self-signed ECS credential is not enough.
 
-As allowed by [VS-CONN-VS], a Validator still accepts a peer that is not a Verifiable Service yet when the request is an ECS Organization, Persona or Service issuance — otherwise no agent could ever onboard. The exemption is not granted on the peer's word: for an onboarding request the peer must own a `PENDING` Participant entry naming this agent as its validator, and for a direct issuance request this agent must hold an active ISSUER Participant for the requested schema. In both cases the schema must be an ECS Organization, Persona or Service schema of an ecosystem listed in `TRUSTED_ECS_ECOSYSTEM_DIDS`. An Applicant never exempts its Validator: the peer it contacts must always be a Verifiable Service.
+As allowed by [VS-CONN-VS], a Validator still accepts a peer that is not a Verifiable Service yet when the request is an ECS Organization, Persona or Service issuance — otherwise no agent could ever onboard. The exemption is not granted on the peer's word: the request must be an onboarding request, the peer must own a `PENDING` Participant entry naming this agent as its validator, and the schema must be an ECS Organization, Persona or Service schema of an ecosystem listed in `TRUSTED_ECS_ECOSYSTEM_DIDS`. A direct issuance request never qualifies, as it names no Participant entry. An Applicant never exempts its Validator: the peer it contacts must always be a Verifiable Service.
+
+A Validator accepts a direct issuance request only for a schema that is not archived and whose `holder_onboarding_mode` is `PERMISSIONLESS`, and only when it holds an active ISSUER Participant for that schema whose `vs_operator` is the agent account. It refuses any other direct issuance request with `vt-flow.invalid-schema-id`, and checks a request resent after a refusal again. The ECS Organization, Persona and Service schemas use `ISSUER_ONBOARDING_PROCESS`, so the agent never issues them to another party by direct issuance.
 
 #### Admin API authentication
 
@@ -165,7 +167,7 @@ The Admin API is served on a single port (`ADMIN_API_PORT`). Each request is cla
 
 When connecting to other agents, VS-A tries to get information from them in order to know what capabilities they support and adapt the flow to it. For example, it can request for user's preferred language to send messages using their locale, or NFC reading capability, to ask users to tap NFC tags and read their content (or fall back to another method in case they don't support that).
 
-VS-A fetches capabilities from the `discovery.json` file (which is located at at `/www/apps/vs-agent/discovery.json` in the deployed container) to determine available features. If you want to customize the capabilities to look for, replace the volume at this path with your own `discovery.json` file.
+VS-A reads the features to ask for from the `discovery.json` file, located at `/www/apps/vs-agent/discovery.json` in the deployed container. If you want to customize the capabilities to look for, mount your own `discovery.json` at this path. A `discovery.json` in the working directory of the agent takes precedence, and without any the agent asks its peers nothing.
 
 ### ECS credential claims
 

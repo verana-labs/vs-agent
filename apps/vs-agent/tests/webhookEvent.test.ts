@@ -156,6 +156,7 @@ describe('Events API delivery', () => {
       connectionId: 'conn-1',
       content: 'hello',
       sentTime: '2026-09-01T00:00:00Z',
+      threadId: 'msg-1',
       createdAt: new Date('2026-09-01T00:00:01Z'),
     }
     emit(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, {
@@ -173,8 +174,30 @@ describe('Events API delivery', () => {
       role: 'receiver',
       content: 'hello',
       sentTime: '2026-09-01T00:00:00Z',
+      threadId: 'msg-1',
       createdAt: '2026-09-01T00:00:01.000Z',
     })
+  })
+
+  it('delivers a received reply with the message that it answers', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, {
+      basicMessageRecord: {
+        id: 'bm-2',
+        connectionId: 'conn-1',
+        role: DidCommBasicMessageRole.Receiver,
+        content: 'yes',
+        sentTime: '2026-09-01T00:00:02Z',
+        createdAt: new Date('2026-09-01T00:00:03Z'),
+        parentThreadId: 'msg-1',
+      },
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.basic-messages.message-received')
+    expect(body.data.parentThreadId).toBe('msg-1')
   })
 
   it('delivers a module message event as its own envelope', async () => {

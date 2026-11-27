@@ -115,6 +115,8 @@ export interface ListInvitationsQuery extends PaginationQuery {
 export interface SendBasicMessageBody {
   connectionId: string
   content: string
+  /** DIDComm message id of the message that this one answers, sent as its parent thread (`pthid`). */
+  parentThreadId?: string
 }
 
 export interface ListBasicMessagesQuery extends PaginationQuery {
@@ -128,7 +130,14 @@ export interface BasicMessageRecord {
   role: BasicMessageRole
   content: string
   sentTime: string
+  /**
+   * DIDComm message id of the message, the id that a receipt or a reaction names. A basic message
+   * starts its own thread, so its thread id is its message id.
+   */
+  threadId?: string
   createdAt: string
+  /** DIDComm message id of the message that this one answers (`pthid`), when the message is a reply. */
+  parentThreadId?: string
 }
 
 export type MessageState = 'created' | 'submitted' | 'received' | 'viewed' | 'deleted'

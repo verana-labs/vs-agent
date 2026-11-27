@@ -1,6 +1,7 @@
 import {
   CredentialSchema,
   CredentialSchemaDto,
+  HolderOnboardingMode,
   Participant,
   ParticipantDto,
   ParticipantRole,
@@ -28,6 +29,11 @@ const ONBOARDING_MODE: Record<string, number> = {
   GRANTOR_ONBOARDING_PROCESS: 3,
 }
 
+const HOLDER_ONBOARDING_MODE: Record<string, number> = {
+  [HolderOnboardingMode.IssuerOnboardingProcess]: 1,
+  [HolderOnboardingMode.Permissionless]: 2,
+}
+
 const date = (v: string | null | undefined): Date | undefined => (v ? new Date(v) : undefined)
 
 export function toParticipant(dto: ParticipantDto): Participant {
@@ -53,7 +59,7 @@ export function toCredentialSchema(dto: CredentialSchemaDto): CredentialSchema {
     digestAlgorithm: dto.digest_algorithm,
     issuerOnboardingMode: ONBOARDING_MODE[dto.issuer_onboarding_mode ?? ''] ?? 0,
     verifierOnboardingMode: ONBOARDING_MODE[dto.verifier_onboarding_mode ?? ''] ?? 0,
-    holderOnboardingMode: 0,
+    holderOnboardingMode: HOLDER_ONBOARDING_MODE[dto.holder_onboarding_mode ?? ''] ?? 0,
     archived: date(dto.archived),
   }
 }
