@@ -20,6 +20,7 @@ export interface ProtocolModule {
 
 export interface ConnectionRecord {
   id: string
+  /** `abandoned` also marks a connection that the peer hung up */
   state: DidExchangeState
   role: DidExchangeRole
   did?: string

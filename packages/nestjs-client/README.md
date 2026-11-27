@@ -54,7 +54,7 @@ export interface EventHandler {
 
 ## Connections
 
-`didcomm.connections.state-updated` with `state: 'completed'` creates the row. `didcomm.user-profile.profile-received` stores the profile. `newConnection` fires once per connection, once it is `completed` and a profile with `preferredLanguage` has been received when `requireProfile` is true (the default), or right after `completed` when it is false. `closeConnection` fires on `state: 'abandoned'`. A peer hangup by DID rotation emits no Events API event today, so it does not reach `closeConnection`.
+`didcomm.connections.state-updated` with `state: 'completed'` creates the row. `didcomm.user-profile.profile-received` stores the profile. `newConnection` fires once per connection, once it is `completed` and a profile with `preferredLanguage` has been received when `requireProfile` is true (the default), or right after `completed` when it is false. `closeConnection` fires on `state: 'abandoned'`, which the agent also reports when the peer hangs up.
 
 `newConnection` also fires for the connection each accepted credential offer or proof request creates, since those go through an out of band invitation.
 

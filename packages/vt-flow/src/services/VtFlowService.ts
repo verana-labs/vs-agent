@@ -170,11 +170,16 @@ export class VtFlowService {
     return { message, record }
   }
 
-  /** Applicant-side DirectIssuance: build the outbound `issuance-request` and persist a record in `IR_SENT`. */
+  /** Applicant-side DirectIssuance: build the outbound `issuance-request` and persist a record in `IR_SENT`, or reuse the flow in `IR_SENT` that its `participant_session_id` names. */
   public async createDirectIssuanceRecord(
     agentContext: AgentContext,
     params: CreateIssuanceRequestParams,
   ): Promise<{ message: IssuanceRequestMessage; record: VtFlowRecord }> {
+    const existing = await this.repository.findByParticipantSessionId(
+      agentContext,
+      params.participantSessionId,
+      VtFlowRole.Applicant,
+    )
     const message = new IssuanceRequestMessage({
       schemaId: params.schemaId,
       participantSessionId: params.participantSessionId,
@@ -182,6 +187,20 @@ export class VtFlowService {
       walletAgentParticipantId: params.walletAgentParticipantId,
       claims: params.claims,
     })
+
+    // [VSA-VTI-FLOW-DI] step 2: a refused request leaves the flow in IR_SENT, and the retry goes on that flow and its thread.
+    if (
+      existing?.variant === VtFlowVariant.DirectIssuance &&
+      existing.state === VtFlowState.IrSent &&
+      existing.schemaId === params.schemaId
+    ) {
+      message.setThread({ threadId: existing.threadId })
+      existing.connectionId = params.connectionId
+      if (params.claims) existing.claims = params.claims
+      await this.repository.update(agentContext, existing)
+      return { message, record: existing }
+    }
+
     message.setThread({ threadId: message.id })
 
     const record = new VtFlowRecord({
