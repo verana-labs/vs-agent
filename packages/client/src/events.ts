@@ -6,6 +6,7 @@ const EVENT_TYPES: Record<EventType, true> = {
   'didcomm.connections.state-updated': true,
   'didcomm.invitations.state-updated': true,
   'didcomm.basic-messages.message-received': true,
+  'didcomm.discover-features.disclose-received': true,
   'didcomm.receipts.message-receipts-received': true,
   'didcomm.reactions.message-reactions-received': true,
   'didcomm.user-profile.profile-received': true,

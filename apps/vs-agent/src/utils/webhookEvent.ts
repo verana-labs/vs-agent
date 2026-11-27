@@ -5,6 +5,7 @@ import type {
   DidCommBasicMessageV2StateChangedEvent,
   DidCommConnectionStateChangedEvent,
   DidCommCredentialStateChangedEvent,
+  DidCommDiscoverFeaturesDisclosureReceivedEvent,
   DidCommProofStateChangedEvent,
 } from '@credo-ts/didcomm'
 import type { Event } from '@verana-labs/vs-agent-model'
@@ -15,6 +16,7 @@ import {
   DidCommBasicMessageRole,
   DidCommConnectionEventTypes,
   DidCommCredentialEventTypes,
+  DidCommDiscoverFeaturesEventTypes,
   DidCommProofEventTypes,
   DidCommProofRole,
   DidCommProofState,
@@ -85,6 +87,22 @@ export const webhookEvent = (agent: VsAgent, options: WebhookOptions, logger: Ba
         toConnectionDto(payload.connectionRecord),
         payload.previousState,
       ),
+  )
+
+  // A disclosure answers a feature query of the agent ([VSA-ADM-DC-DF-3]). It is not a change of the
+  // connection, so it has its own event: each feature with its `featureType`, `id` and own
+  // properties (`roles` for a protocol, `value` for a capability)
+  agent.events.on<DidCommDiscoverFeaturesDisclosureReceivedEvent>(
+    DidCommDiscoverFeaturesEventTypes.DisclosureReceived,
+    ({ payload }) =>
+      deliver(EventType.DiscoverFeaturesDiscloseReceived, {
+        connectionId: payload.connection.id,
+        threadId: payload.threadId,
+        features: payload.disclosures.map(feature => {
+          const { 'feature-type': featureType, ...properties } = feature.toJSON()
+          return { featureType, ...properties }
+        }),
+      }),
   )
 
   agent.events.on<VsAgentInvitationStateUpdatedEvent>(

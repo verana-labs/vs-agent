@@ -59,6 +59,10 @@ const events = new EventDispatcher()
   .on('didcomm.connections.state-updated', data => {
     if (data.state === 'completed' && data.previousState !== 'completed') console.log('new connection', data.id)
   })
+  .on('didcomm.discover-features.disclose-received', ({ connectionId, features }) => {
+    // with feature discovery on, the peer answers the queries of the agent after it connects
+    console.log('features of', connectionId, features.map(feature => feature.id))
+  })
 
 app.post('/events', async (req, res) => {
   await events.dispatch(req.body as EventEnvelope)

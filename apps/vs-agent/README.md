@@ -169,6 +169,8 @@ When connecting to other agents, VS-A tries to get information from them in orde
 
 VS-A reads the features to ask for from the `discovery.json` file, located at `/www/apps/vs-agent/discovery.json` in the deployed container. If you want to customize the capabilities to look for, mount your own `discovery.json` at this path. A `discovery.json` in the working directory of the agent takes precedence, and without any the agent asks its peers nothing.
 
+The controller receives each answer on the events webhook, as a `didcomm.discover-features.disclose-received` event: `connectionId`, `threadId` (the thread of the query) and `features`, each with its `featureType`, `id` and own properties (`roles` for a protocol, `value` for a capability, for example `mrtd.emrtd-read-support`). A disclosure is not a connection state change, so no `didcomm.connections.state-updated` is emitted for it.
+
 ### ECS credential claims
 
 The agent composes the claims of its own ECS credentials from the variables below. Behaviour is
