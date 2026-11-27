@@ -5,6 +5,9 @@ global:
 # General configuration
 name: vs-agent
 replicas: 1 # Number of replicas for the VS Agent service
+# Kubernetes injects a <SERVICE>_PORT variable for each Service of the namespace when this is true.
+# A Service named "agent" then gives AGENT_PORT, which the agent reads as its port, and the agent does not start.
+enableServiceLinks: false
 
 # Ports
 adminPort: 3000 # adminPort is the port for the Agent Admin API
@@ -54,6 +57,9 @@ database:
   existingSecret: ""   # name of a pre-existing Secret containing POSTGRES_PASSWORD
   secretPwdKey: ""     # key name for POSTGRES_PASSWORD in the secret (default: POSTGRES_PASSWORD)
   user: ""             # plain value, injected directly
+  storage:
+    size: 1Gi
+    storageClassName: csi-cinder-classic
   resources:
     requests:
       cpu: 100m
@@ -75,6 +81,7 @@ openid4vc:
 ingress:
   host: "{{ .Values.name }}.{{ .Values.global.domain }}"
   tlsSecret: public.{{ .Values.name }}.{{ .Values.global.domain }}-cert
+  clusterIssuer: letsencrypt-prod # cert-manager ClusterIssuer that signs the certificates of both ingresses
   public:
     enableCors: true
   # The agent reads the address of each TCP connection. The ingress controller has an
