@@ -30,6 +30,9 @@ spec:
 # This resource defines how external traffic can access the VS Agent service
 # It routes traffic to the agent service and provides TLS termination
 {{- $routeType := .Values.ingress.type | default "ingress" }}
+{{- if not (has $routeType (list "ingress" "gateway")) }}
+{{- fail (printf "ingress.type must be ingress or gateway, not %q" $routeType) }}
+{{- end }}
 {{- $gw := .Values.ingress.gateway | default dict }}
 {{- if and (eq $routeType "gateway") .Values.ingress.private.host }}
 {{- fail "ingress.type gateway publishes the public host only: the source-range allow list of the private ingress has no Gateway API equivalent. Leave ingress.private.host empty and reach the admin API from inside the cluster." }}

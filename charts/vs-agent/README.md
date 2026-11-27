@@ -143,9 +143,9 @@ extraEnv:
 | `ingress.type`                 | `ingress` for ingress-nginx, `gateway` for an HTTPRoute | `ingress` |
 | `ingress.gateway.name`         | Gateway that accepts the route (type `gateway`) | `""`      |
 | `ingress.gateway.namespace`    | Namespace of the Gateway, when it is another one | `""`     |
-| `ingress.gateway.sectionName`  | Listener of the Gateway, when it has more than one | `""`   |
+| `ingress.gateway.sectionName`  | HTTPS listener of the Gateway; empty attaches the route to every one | `""`   |
 
-With type `gateway` the Gateway listener terminates TLS and holds the certificate, so `ingress.tlsSecret` and the CORS annotation take no part. That mode publishes the public host only: the source-range allow list of the private ingress has no Gateway API equivalent, so rendering stops if `ingress.private.host` is set.
+With type `gateway` the Gateway listener terminates TLS and holds the certificate, so `ingress.tlsSecret` and the CORS annotation take no part. Leave `ingress.gateway.sectionName` empty only when the Gateway has a single HTTPS listener: a `parentRef` without it attaches the route to every listener, so a plain HTTP one would serve the agent with no redirect. That mode publishes the public host only: the source-range allow list of the private ingress has no Gateway API equivalent, so rendering stops if `ingress.private.host` is set.
 
 ### Extra Environment Variables
 

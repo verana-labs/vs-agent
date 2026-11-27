@@ -18,7 +18,11 @@ spec:
 # Ingress resource for chatbot application
 # This resource defines how external traffic can access the chatbot service
 # routes traffic to the backend service
-{{- if eq (.Values.ingress.type | default "ingress") "gateway" }}
+{{- $routeType := .Values.ingress.type | default "ingress" }}
+{{- if not (has $routeType (list "ingress" "gateway")) }}
+{{- fail (printf "ingress.type must be ingress or gateway, not %q" $routeType) }}
+{{- end }}
+{{- if eq $routeType "gateway" }}
 {{- $gw := .Values.ingress.gateway | default dict }}
 # Gateway API route, for a cluster served by a Gateway instead of ingress-nginx.
 # The Gateway listener named here terminates TLS, so ingress.tlsSecret takes no

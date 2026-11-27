@@ -16,7 +16,7 @@ ingress:
   gateway:
     name: "" # Gateway that accepts the route
     namespace: "" # namespace of the Gateway, when it is not the release namespace
-    sectionName: "" # listener of the Gateway, when it has more than one
+    sectionName: "" # HTTPS listener of the Gateway; empty attaches the route to every listener
   host: '{{ .Values.name }}.{{ .Values.global.domain }}'
   tlsSecret: public.{{ .Values.name }}.{{ .Values.global.domain }}-cert
 env:
