@@ -129,6 +129,11 @@ export interface BasicMessageRecord {
   role: BasicMessageRole
   content: string
   sentTime: string
+  /**
+   * DIDComm message id of the message, the id that a receipt or a reaction names. A basic message
+   * starts its own thread, so its thread id is its message id.
+   */
+  threadId?: string
   createdAt: string
   /** DIDComm message id of the message that this one answers (`pthid`), when the message is a reply. */
   parentThreadId?: string

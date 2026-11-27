@@ -167,7 +167,7 @@ describe('v2 didcomm basic message routes', () => {
     expect(replayed.body.error.code).toBe('INVALID_CURSOR')
   })
 
-  it('returns exactly the fields the spec names on each record', async () => {
+  it('returns exactly the fields of the record, with the thread of the message', async () => {
     const response = await request(app.getHttpServer()).get('/v2/didcomm/basic-messages?limit=1')
 
     expect(response.body.items[0]).toEqual({
@@ -176,6 +176,7 @@ describe('v2 didcomm basic message routes', () => {
       role: 'receiver',
       content: 'content of m-1',
       sentTime: '2026-01-01T00:00:00.000Z',
+      threadId: 'thread-m-1',
       createdAt: '2026-01-01T00:00:00.000Z',
     })
   })
