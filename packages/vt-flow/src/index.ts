@@ -87,6 +87,8 @@ export type {
   VtFlowBuildCredentialOfferHook,
   VtFlowCheckParticipantIdContext,
   VtFlowCheckParticipantIdHook,
+  VtFlowCheckSchemaIdContext,
+  VtFlowCheckSchemaIdHook,
   VtFlowCredentialLifecycleContext,
   VtFlowCredentialOfferPayload,
   VtFlowIsParticipantPendingHook,

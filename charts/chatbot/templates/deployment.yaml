@@ -67,10 +67,10 @@ spec:
             # Base URL for the Agent Admin API
             - name: VS_AGENT_ADMIN_BASE_URL
               value: "{{ .Values.env.vsAgentAdminUrl }}"
-            {{- if .Values.env.credentialDefinitionId }}
-            # AnonCreds credential definition behind the issue, proof and /revoke features
-            - name: CREDENTIAL_DEFINITION_ID
-              value: {{ .Values.env.credentialDefinitionId | quote }}
+            {{- if .Values.env.jsonSchemaCredentialId }}
+            # VTJSC of the phoneNumber schema, the bot finds or creates its credential definition on startup
+            - name: JSON_SCHEMA_CREDENTIAL_ID
+              value: {{ .Values.env.jsonSchemaCredentialId | quote }}
             {{- end }}
             # Base URL for the Service API
             - name: PUBLIC_BASE_URL

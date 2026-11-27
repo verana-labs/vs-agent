@@ -425,7 +425,13 @@ export class VtFlowService {
       const fresh = await this.repository.getById(agentContext, existing.id)
       this.assertNotTerminated(fresh)
       const repair = fresh.threadId === message.threadId && fresh.state === VtFlowState.CredOffered
+      // [VSA-VTI-FLOW-DI] step 2: a request resent after a refusal is checked again, with its claims.
+      // A duplicate that arrives while the first request is still checked is not one.
+      const lastSent = fresh.messages?.[fresh.messages.length - 1]
+      const resent =
+        fresh.state === VtFlowState.AwaitingIr && lastSent?.type === VtFlowMessageType.ProblemReport
       fresh.connectionId = connection.id
+      if (resent && message.claims) fresh.claims = message.claims
       fresh.threadId = message.threadId
       if (repair) {
         await this.repository.update(agentContext, fresh)
@@ -436,6 +442,8 @@ export class VtFlowService {
       } else {
         await this.repository.update(agentContext, fresh)
       }
+
+      if (resent) this.emitStateChanged(agentContext, fresh, fresh.state)
       return fresh
     }
 
@@ -560,15 +568,29 @@ export class VtFlowService {
     return { record, message: new ValidatingMessage({ threadId: record.threadId }) }
   }
 
-  /** DirectIssuance: `AWAITING_IR => VALIDATING`; transient before `CRED_OFFERED`. */
+  /** DirectIssuance: `AWAITING_IR => VALIDATING` once the `checkSchemaId` hook accepts the `schema_id`; transient before `CRED_OFFERED`. */
   public async acceptIssuanceRequest(
     agentContext: AgentContext,
     recordId: string,
   ): Promise<{ record: VtFlowRecord; message: ValidatingMessage }> {
-    const record = await this.repository.getById(agentContext, recordId)
+    let record = await this.repository.getById(agentContext, recordId)
     record.assertRole(VtFlowRole.Validator)
     record.assertState(VtFlowState.AwaitingIr)
     record.assertVariant(VtFlowVariant.DirectIssuance)
+
+    const { checkSchemaId } = this.config
+    if (checkSchemaId) {
+      const checked = await checkSchemaId({ agentContext, record })
+      // the check reads the indexer while the flow can move on, and a flow that moved on is not refused
+      record = await this.repository.getById(agentContext, recordId)
+      record.assertState(VtFlowState.AwaitingIr)
+      if (!checked) {
+        throw new VtFlowError(
+          VtFlowErrorCode.InvalidSchemaId,
+          `vt-flow: schema_id '${record.schemaId}' is not a schema this agent issues by Direct Issuance`,
+        )
+      }
+    }
 
     await this.updateState(agentContext, record, VtFlowState.Validating)
     return { record, message: new ValidatingMessage({ threadId: record.threadId }) }
