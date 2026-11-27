@@ -4,7 +4,6 @@ import { DidCommShareMediaMessage } from '@credo-ts/didcomm-media-sharing'
 import { RecordNotFoundError } from '@credo-ts/core'
 import {
   DidCommAttachment,
-  DidCommConnectionService,
   DidCommHandshakeProtocol,
   DidCommOutOfBandInvitation,
   DidCommOutOfBandInvitationV2,
@@ -56,6 +55,7 @@ const records = [
 const connections = {
   findAllByQuery: vi.fn(),
   findById: vi.fn(),
+  getById: vi.fn(),
   deleteById: vi.fn(),
   hangup: vi.fn(),
 }
@@ -65,17 +65,12 @@ const basicMessages = { sendMessage: vi.fn().mockResolvedValue({ id: 'bm-1' }) }
 const outOfBandRepository = { update: vi.fn() }
 const invitationRepository = { save: vi.fn(), findByQuery: vi.fn(), findById: vi.fn(), delete: vi.fn() }
 const messageSender = { sendMessage: vi.fn() }
-const connectionService = { updateState: vi.fn() }
 const dids = { getCreatedDids: vi.fn().mockResolvedValue([]) }
 
 const agent = {
   did: 'did:webvh:QmAgent:agent.test',
   publicApiBaseUrl: 'https://agent.test',
-  context: {
-    dependencyManager: {
-      resolve: (token: unknown) => (token === DidCommConnectionService ? connectionService : messageSender),
-    },
-  },
+  context: { dependencyManager: { resolve: () => messageSender } },
   dependencyManager: {
     resolve: (token: unknown) =>
       token === InvitationRepository ? invitationRepository : outOfBandRepository,
@@ -296,27 +291,46 @@ describe('v2 didcomm connection routes', () => {
     expect(connections.deleteById).not.toHaveBeenCalled()
   })
 
-  it('terminates a connection: hangs up, marks the record abandoned and returns it', async () => {
+  // What Credo stores when it hangs up: the record is abandoned before the message goes out
+  const hungUp = (record: ReturnType<typeof connection>) => ({
+    ...record,
+    state: 'abandoned',
+    did: undefined,
+    previousDids: [record.did],
+    errorMessage: 'Connection hangup by us',
+  })
+
+  it('terminates a connection: hangs up and returns the record as Credo stored it', async () => {
     const record = connection('c-1', '2026-01-01T00:00:00.000Z')
     connections.findById.mockResolvedValue(record)
+    connections.getById.mockResolvedValue(hungUp(record))
 
     const response = await request(app.getHttpServer()).post('/v2/didcomm/connections/c-1/terminate')
 
     expect(response.status).toBe(200)
-    expect(response.body).toMatchObject({ id: 'c-1', invitationId: null, parentConnectionId: null })
+    expect(response.body).toMatchObject({
+      id: 'c-1',
+      state: 'abandoned',
+      previousDids: [record.did],
+      invitationId: null,
+      parentConnectionId: null,
+    })
+    expect(response.body).not.toHaveProperty('did')
     expect(connections.hangup).toHaveBeenCalledWith({ connectionId: 'c-1' })
-    expect(connectionService.updateState).toHaveBeenCalledWith(agent.context, record, 'abandoned')
+    expect(connections.getById).toHaveBeenCalledWith('c-1')
     expect(connections.deleteById).not.toHaveBeenCalled()
   })
 
   it('terminates a connection whose peer cannot be reached, and logs it', async () => {
-    connections.findById.mockResolvedValue(connection('c-1', '2026-01-01T00:00:00.000Z'))
+    const record = connection('c-1', '2026-01-01T00:00:00.000Z')
+    connections.findById.mockResolvedValue(record)
+    connections.getById.mockResolvedValue(hungUp(record))
     connections.hangup.mockRejectedValueOnce(new Error('no route to the peer'))
 
     const response = await request(app.getHttpServer()).post('/v2/didcomm/connections/c-1/terminate')
 
     expect(response.status).toBe(200)
-    expect(connectionService.updateState).toHaveBeenCalledTimes(1)
+    expect(response.body.state).toBe('abandoned')
   })
 
   it('does not hang up an already terminated connection again', async () => {
@@ -329,7 +343,7 @@ describe('v2 didcomm connection routes', () => {
     expect(response.status).toBe(200)
     expect(response.body.state).toBe('abandoned')
     expect(connections.hangup).not.toHaveBeenCalled()
-    expect(connectionService.updateState).not.toHaveBeenCalled()
+    expect(connections.getById).not.toHaveBeenCalled()
   })
 
   it('answers 404 on terminating an unknown connection', async () => {

@@ -1,5 +1,5 @@
 import { RecordNotFoundError } from '@credo-ts/core'
-import { DidCommConnectionService, DidCommDidExchangeState } from '@credo-ts/didcomm'
+import { DidCommDidExchangeState } from '@credo-ts/didcomm'
 import {
   Controller,
   Delete,
@@ -133,16 +133,13 @@ export class V2DidcommConnectionsController {
     const record = await agent.didcomm.connections.findById(connectionId)
     if (!record) throw unknownConnection(connectionId)
 
-    if (record.state !== DidCommDidExchangeState.Abandoned) {
-      await this.hangup(agent, connectionId)
-      // Credo leaves the record as it was after a hangup. Abandoned, the record reads as terminated,
-      // Credo refuses further messages on it, and the state change is delivered like any other.
-      await agent.context.dependencyManager
-        .resolve(DidCommConnectionService)
-        .updateState(agent.context, record, DidCommDidExchangeState.Abandoned)
-    }
+    if (record.state === DidCommDidExchangeState.Abandoned) return toConnectionDto(record)
 
-    return toConnectionDto(record)
+    // Credo marks the record abandoned when it hangs up, before it sends the message, so the state
+    // change is delivered like any other. The record is read back for what Credo stored.
+    await this.hangup(agent, connectionId)
+
+    return toConnectionDto(await agent.didcomm.connections.getById(connectionId))
   }
 
   @Delete(':connectionId')
