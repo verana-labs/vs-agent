@@ -17,6 +17,17 @@ export class SendBasicMessageBodyDto {
   @IsString()
   @IsNotEmpty()
   content!: string
+
+  @ApiPropertyOptional({
+    description:
+      'DIDComm message id of the message that this one answers, sent as the parent thread (`pthid`) ' +
+      'of the message. The peer can then present the message as a reply to that one.',
+    example: 'b2c3d4e5-6789-01ab-cdef-234567890abc',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  parentThreadId?: string
 }
 
 export class ListBasicMessagesQueryDto extends PaginationQueryDto {
@@ -59,8 +70,24 @@ export class BasicMessageRecordDto {
   })
   sentTime!: string
 
+  @ApiPropertyOptional({
+    description:
+      'DIDComm message id of the message. A basic message starts its own thread, so its thread id is ' +
+      'its message id: the id that a receipt or a reaction names, and the `id` that ' +
+      '`sendBasicMessage` returns for a message this agent sent.',
+    example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+  })
+  threadId?: string
+
   @ApiProperty({ type: String, format: 'date-time', description: 'When the agent stored the message' })
   createdAt!: Date
+
+  @ApiPropertyOptional({
+    description:
+      'DIDComm message id of the message that this one answers (`pthid`), when the message is a reply',
+    example: 'b2c3d4e5-6789-01ab-cdef-234567890abc',
+  })
+  parentThreadId?: string
 }
 
 export const BasicMessageRecordPageDto = PageDto(BasicMessageRecordDto)

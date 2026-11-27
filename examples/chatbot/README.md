@@ -23,7 +23,7 @@ Services:
 | `PORT` | `5000` | Port of the backend |
 | `VS_AGENT_ADMIN_BASE_URL` | `http://localhost:3000` | Admin API origin, the client appends `/v2` |
 | `PUBLIC_BASE_URL` | `http://localhost:5000` | Public URL of the backend, used for the media sample and the call callbacks |
-| `CREDENTIAL_DEFINITION_ID` | unset | AnonCreds credential definition with a `phoneNumber` attribute. Unset disables `issue`, `proof` and `/revoke` |
+| `JSON_SCHEMA_CREDENTIAL_ID` | unset | URL of the VTJSC of the `phoneNumber` schema. On startup the bot finds or creates the credential definition for it. Unset disables `issue`, `proof` and `/revoke`. See [Credentials](#credentials) |
 | `VISION_SERVICE_BASE_URL`, `WEBRTC_SERVER_BASE_URL` | 2060 dev services | Used by `/call` |
 
 ## Endpoints
@@ -39,7 +39,13 @@ All endpoints are on `PORT`.
 
 ## Credentials
 
-`issue`, `proof` and `/revoke` need an agent enrolled on a Verana ecosystem: `createCredentialOffer` and `createPresentationRequest` require an active ISSUER or VERIFIER Participant for the credential schema behind `CREDENTIAL_DEFINITION_ID`. See [examples/vt-flow-demo](../vt-flow-demo/README.md) for the setup. On startup the bot picks the first revocation registry of the definition or creates one.
+`issue`, `proof` and `/revoke` need a credential definition. `JSON_SCHEMA_CREDENTIAL_ID` names the VTJSC of the schema, and the agent holds at most one credential definition for a VTJSC. On startup the bot lists the credential definitions of the agent and uses the one whose `relatedJsonSchemaCredentialId` is that URL. When there is none, the bot creates it with `supportRevocation: true`. So a new deployment needs no manual step on the admin API. When the variable is not set, the commands answer `Service not available`.
+
+When the setup fails, the process stops, and the restart policy of the container starts it again. In a new environment the VTJSC, or the AnonCreds schema that its issuer publishes, can take minutes to appear, so the bot can restart some times before it stays up.
+
+To create the definition, the agent does not need a role in the ecosystem. To offer the credential and to request the proof, it does: `createCredentialOffer` and `createPresentationRequest` require an active ISSUER or VERIFIER Participant for the credential schema. Without the role the bot answers `Cannot offer the credential: <reason>` or `Cannot request the proof: <reason>` in the chat. See [examples/vt-flow-demo](../vt-flow-demo/README.md) for the setup.
+
+For a revocable definition, the bot creates a new revocation registry of 1000 credentials on each start, and a new one when the registry is full. The bot keeps the next index of the registry in memory, and the admin API does not tell which indices are in use. If the bot used an old registry after a restart, it could give an index that a credential already has, and a revocation of one credential would revoke the other too. A new registry starts with no index in use. The bot also keeps the issued credentials in memory, so after a restart `/revoke` does not find the credentials of an earlier run.
 
 Both methods take the `connectionId` of the chat, so the offer and the request go out on that connection and the wallet shows them in the same conversation. The bot sends no link, and the exchange needs no second connection. The bot still keeps the chat connection per exchange id, because an event carries the exchange id.
 
