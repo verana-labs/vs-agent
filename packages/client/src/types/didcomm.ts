@@ -20,6 +20,7 @@ export interface ProtocolModule {
 
 export interface ConnectionRecord {
   id: string
+  /** `abandoned` also marks a connection that the peer hung up */
   state: DidExchangeState
   role: DidExchangeRole
   did?: string
@@ -211,7 +212,11 @@ export interface SharedMediaItem {
 export interface ShareMediaBody {
   connectionId: string
   description?: string
-  threadId?: string
+  /**
+   * DIDComm message id of the request-media message that this share answers, sent as the parent
+   * thread (`pthid`) of the share (`threadId` of the `request-media-received` event).
+   */
+  parentThreadId?: string
   items: SharedMediaItem[]
 }
 

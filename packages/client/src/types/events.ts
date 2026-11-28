@@ -14,6 +14,26 @@ import { VtFlowRecord } from './vt'
 
 export type ConnectionStateUpdatedData = ConnectionRecord & { previousState: DidExchangeState | null }
 
+/** A feature a peer disclosed, per the Discover Features protocol. */
+export interface DisclosedFeature {
+  /** `protocol`, `goal-code`, or an extension type such as `capability` */
+  featureType: string
+  id: string
+  /** For a protocol: the roles the peer plays */
+  roles?: string[]
+  /** For a capability: whether the peer has it */
+  value?: unknown
+  [property: string]: unknown
+}
+
+/** The answer of a peer to a feature query of the agent. Not a connection state change. */
+export interface DiscloseReceivedData {
+  connectionId: string
+  /** The thread of the query */
+  threadId: string
+  features: DisclosedFeature[]
+}
+
 export type InvitationStateUpdatedData = InvitationRecord & { previousState: InvitationState | null }
 
 export type PresentationStateUpdatedData = PresentationRecord & { previousState: ProofState | null }
@@ -57,14 +77,20 @@ export interface RequestProfileReceivedData {
 
 export interface ShareMediaReceivedData {
   connectionId: string
+  /** DIDComm message id of the share-media message. */
   threadId?: string
+  /** DIDComm message id of the request-media message that the share answers, when it answers one. */
+  parentThreadId?: string
   description?: string
   items?: (SharedMediaItem & { id: string })[]
 }
 
 export interface RequestMediaReceivedData {
   connectionId: string
+  /** DIDComm message id of the request-media message, to send as `parentThreadId` of the share. */
   threadId: string
+  /** Parent thread (`pthid`) of the request, when the peer sent one. */
+  parentThreadId?: string
   description?: string
   itemIds: string[]
 }
@@ -165,6 +191,7 @@ export interface EventDataMap {
   'didcomm.connections.state-updated': ConnectionStateUpdatedData
   'didcomm.invitations.state-updated': InvitationStateUpdatedData
   'didcomm.basic-messages.message-received': BasicMessageRecord
+  'didcomm.discover-features.disclose-received': DiscloseReceivedData
   'didcomm.receipts.message-receipts-received': MessageReceiptsReceivedData
   'didcomm.reactions.message-reactions-received': MessageReactionsReceivedData
   'didcomm.user-profile.profile-received': ProfileReceivedData

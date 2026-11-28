@@ -24,14 +24,14 @@ export class V2DidcommMediaSharingController {
     const items = body.items.map(item => new SharedMediaItem(item))
     const record = await this.agent.modules.media.create({
       connectionId: body.connectionId,
-      parentThreadId: body.threadId,
+      parentThreadId: body.parentThreadId,
       description: body.description,
       items,
     })
     // The share method sets the thread id of the record to the id of the sent message.
     const { threadId } = await this.agent.modules.media.share({
       recordId: record.id,
-      parentThreadId: body.threadId,
+      parentThreadId: body.parentThreadId,
       description: body.description,
       items,
     })

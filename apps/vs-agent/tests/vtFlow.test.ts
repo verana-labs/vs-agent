@@ -860,17 +860,22 @@ describe('vt-flow: Direct Issuance schema check', () => {
     const [refused, ...others] = await validator.modules.vtFlow.findAllByQuery({ role: VtFlowRole.Validator })
     expect(others).toHaveLength(0)
     expect(refused).toMatchObject({ state: VtFlowState.AwaitingIr, messages: [{}, {}] })
+    expect(await applicant.modules.vtFlow.findAllByQuery({ role: VtFlowRole.Applicant })).toEqual([
+      expect.objectContaining({ id: first.id, threadId: first.threadId, state: VtFlowState.IrSent }),
+    ])
 
     schema.holderOnboardingMode = 'PERMISSIONLESS'
     const validating = waitForEvent(validatorEvents, isVtFlowStateChangedEvent(VtFlowState.Validating))
     const accepted = await sendIssuanceRequest(first.participantSessionId, { name: 'Acme Corp' })
 
+    expect(accepted.id).toBe(first.id)
     expect((await validating).payload.vtFlowRecordId).toBe(refused.id)
     await vi.waitFor(async () =>
-      expect((await applicant.modules.vtFlow.getById(accepted.id)).state).toBe(VtFlowState.Validating),
+      expect((await applicant.modules.vtFlow.getById(first.id)).state).toBe(VtFlowState.Validating),
     )
     await vi.waitFor(() => expect(buildCredentialOffer).toHaveBeenCalledTimes(1))
     expect((await validator.modules.vtFlow.getById(refused.id)).claims).toEqual({ name: 'Acme Corp' })
+    expect(await applicant.modules.vtFlow.findAllByQuery({ role: VtFlowRole.Applicant })).toHaveLength(1)
     expect(refusals()).toBe(2)
   }, 30_000)
 })
