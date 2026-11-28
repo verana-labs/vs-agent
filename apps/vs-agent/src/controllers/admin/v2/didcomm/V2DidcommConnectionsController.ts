@@ -1,5 +1,18 @@
 import { RecordNotFoundError } from '@credo-ts/core'
-import { Controller, Delete, Get, HttpCode, HttpStatus, Inject, Logger, Param, Query } from '@nestjs/common'
+import { DidCommDidExchangeState } from '@credo-ts/didcomm'
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Logger,
+  Param,
+  Post,
+  Query,
+  ValidationPipe,
+} from '@nestjs/common'
 import {
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -12,7 +25,12 @@ import {
 import { createdAtKey, mapPage, Page, paginate, unknownConnection } from '../../../../common'
 import { VsAgentService } from '../../../../services/VsAgentService'
 
-import { ConnectionRecordDto, ConnectionRecordPageDto, ListConnectionsQueryDto } from './dto'
+import {
+  ConnectionRecordDto,
+  ConnectionRecordPageDto,
+  DeleteConnectionQueryDto,
+  ListConnectionsQueryDto,
+} from './dto'
 import { toConnectionDto } from './mappers'
 
 /**
@@ -90,12 +108,47 @@ export class V2DidcommConnectionsController {
     return toConnectionDto(record)
   }
 
+  @Post(':connectionId/terminate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Terminate a connection',
+    description:
+      'Ends the DIDComm relationship and keeps the record: tells the peer that the connection ends ' +
+      '(a hangup) and marks the record `abandoned`, so that its history stays readable and no ' +
+      'further message is sent on it. Delete the connection to drop the record as well.',
+  })
+  @ApiParam({
+    name: 'connectionId',
+    type: String,
+    description: 'UUID of the connection to terminate',
+    example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  })
+  @ApiOkResponse({ description: 'The terminated connection record', type: ConnectionRecordDto })
+  @ApiNotFoundResponse({ description: 'No connection with the given id' })
+  public async terminateConnection(
+    @Param('connectionId') connectionId: string,
+  ): Promise<ConnectionRecordDto> {
+    const agent = await this.vsAgentService.getAgent()
+
+    const record = await agent.didcomm.connections.findById(connectionId)
+    if (!record) throw unknownConnection(connectionId)
+
+    if (record.state === DidCommDidExchangeState.Abandoned) return toConnectionDto(record)
+
+    // Credo marks the record abandoned when it hangs up, before it sends the message, so the state
+    // change is delivered like any other. The record is read back for what Credo stored.
+    await this.hangup(agent, connectionId)
+
+    return toConnectionDto(await agent.didcomm.connections.getById(connectionId))
+  }
+
   @Delete(':connectionId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Delete a connection',
     description:
-      'Terminates the DIDComm connection: notifies the other party and deletes the connection record.',
+      'Deletes the connection record. Unless `notify` is false, the agent first tells the peer ' +
+      'that the connection ends (a hangup).',
   })
   @ApiParam({
     name: 'connectionId',
@@ -105,21 +158,30 @@ export class V2DidcommConnectionsController {
   })
   @ApiNoContentResponse({ description: 'The connection record is deleted' })
   @ApiNotFoundResponse({ description: 'No connection with the given id' })
-  public async deleteConnection(@Param('connectionId') connectionId: string): Promise<void> {
+  public async deleteConnection(
+    @Param('connectionId') connectionId: string,
+    // esbuild drops the design:type metadata that the global pipe infers from, so the type is named
+    @Query(new ValidationPipe({ expectedType: DeleteConnectionQueryDto })) query: DeleteConnectionQueryDto,
+  ): Promise<void> {
     const agent = await this.vsAgentService.getAgent()
 
-    try {
-      await agent.didcomm.connections.hangup({ connectionId })
-    } catch (error) {
-      if (error instanceof RecordNotFoundError) throw unknownConnection(connectionId)
-      this.logger.warn(`Cannot tell connection ${connectionId} that it ends: ${error}`)
-    }
+    if (query.notify !== 'false') await this.hangup(agent, connectionId)
 
     try {
       await agent.didcomm.connections.deleteById(connectionId)
     } catch (error) {
       if (error instanceof RecordNotFoundError) throw unknownConnection(connectionId)
       throw error
+    }
+  }
+
+  /** Tells the peer that the connection ends. A peer that cannot be reached is logged, not an error. */
+  private async hangup(agent: Awaited<ReturnType<VsAgentService['getAgent']>>, connectionId: string) {
+    try {
+      await agent.didcomm.connections.hangup({ connectionId })
+    } catch (error) {
+      if (error instanceof RecordNotFoundError) throw unknownConnection(connectionId)
+      this.logger.warn(`Cannot tell connection ${connectionId} that it ends: ${error}`)
     }
   }
 }

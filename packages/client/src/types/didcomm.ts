@@ -53,6 +53,11 @@ export interface ListConnectionsQuery extends PaginationQuery {
   mediatorId?: string
 }
 
+export interface DeleteConnectionQuery {
+  /** Whether to tell the peer that the connection ends before the record is deleted. Default true. */
+  notify?: boolean
+}
+
 export interface CreateInvitationBody {
   /** When absent, the agent creates a standalone invitation and returns it. */
   connectionId?: string
