@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { DidCommConnectionEventTypes, DidCommDidExchangeState } from '@credo-ts/didcomm'
+import { describe, expect, it, vi } from 'vitest'
 
 import { registerDidcommModuleEvents } from '../src/events/didcommModuleEvents'
 import { ChatPlugin } from '../src/nestjs/ChatPlugin'
@@ -11,6 +12,7 @@ function fakeAgent(register: (agent: unknown) => void = registerDidcommModuleEve
   const handlers = new Map<string, Handler>()
   const middlewares: Middleware[] = []
   const emitted: Emitted[] = []
+  const requestUserProfile = vi.fn()
   const agent = {
     context: {},
     events: {
@@ -20,10 +22,12 @@ function fakeAgent(register: (agent: unknown) => void = registerDidcommModuleEve
     didcomm: {
       registerMessageHandlerMiddleware: (middleware: Middleware) => middlewares.push(middleware),
     },
+    modules: { userProfile: { requestUserProfile } },
   }
   register(agent)
   return {
     emitted,
+    requestUserProfile,
     emit: (type: string, payload: unknown) => handlers.get(type)?.({ payload }),
     process: (context: unknown) => middlewares[0](context, async () => {}),
   }
@@ -240,5 +244,21 @@ describe('chat module events', () => {
     })
 
     expect(emitted.map(event => event.type)).toEqual(['didcomm.receipts.message-receipts-received'])
+  })
+
+  it('requests the profile of the peer when a connection completes, and in no other state', async () => {
+    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
+    const { emit, requestUserProfile } = fakeAgent(agent =>
+      ChatPlugin().registerEvents?.(agent as never, logger as never),
+    )
+
+    await emit(DidCommConnectionEventTypes.DidCommConnectionStateChanged, {
+      connectionRecord: { id: 'conn-2', state: DidCommDidExchangeState.RequestReceived },
+    })
+    await emit(DidCommConnectionEventTypes.DidCommConnectionStateChanged, {
+      connectionRecord: { id: 'conn-1', state: DidCommDidExchangeState.Completed },
+    })
+
+    expect(requestUserProfile.mock.calls).toEqual([[{ connectionId: 'conn-1' }]])
   })
 })

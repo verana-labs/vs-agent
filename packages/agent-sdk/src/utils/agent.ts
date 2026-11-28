@@ -168,11 +168,6 @@ export async function publicDidsOf(agent: VsAgent): Promise<string[]> {
   return [agent.did, ...(Array.isArray(alternativeDids) ? alternativeDids : [])]
 }
 
-export async function getRecordId(agent: VsAgent, id: string): Promise<string> {
-  const record = await agent.genericRecords.findById(id)
-  return (record?.getTag('messageId') as string) ?? id
-}
-
 /** The record type of every attested resource of the AnonCreds registry, per [VSA-PUB-AC]. */
 export const ATTESTED_RESOURCE_TYPE = 'AttestedResource'
 

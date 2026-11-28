@@ -14,12 +14,7 @@ import {
   DidCommOutOfBandEventTypes,
   DidCommOutOfBandRole,
 } from '@credo-ts/didcomm'
-import {
-  ConnectionStateUpdated,
-  ExtendedDidExchangeState,
-  PresentationState,
-  PresentationStateUpdated,
-} from '@verana-labs/vs-agent-model'
+import { ConnectionStateUpdated, ExtendedDidExchangeState } from '@verana-labs/vs-agent-model'
 
 import { INVITATION_ID_TAG } from '../connections/InvitationRecord'
 import { publicDidsOf } from '../utils/agent'
@@ -92,37 +87,6 @@ export const connectionEvents = async (
               protocolVersion: 'v2',
               queries: config.discoveryOptions,
             })
-        }
-
-        // If an out-of-band ID exists, use the invitation to find the thread IDs
-        // and identify the invitation that created the connection to update its state.
-        if (record.outOfBandId) {
-          const invitationRecord = await agent.didcomm.oob.findById(record.outOfBandId)
-          const threadIds = invitationRecord?.getTag('invitationRequestsThreadIds') as string[] | undefined
-          threadIds?.map(async threadId => {
-            const [proofRecord] = await agent.didcomm.proofs.findAllByQuery({ threadId })
-            if (!proofRecord) return
-            const callbackParameters = proofRecord.metadata.get('_2060/callbackParameters') as
-              | { ref?: string; callbackUrl?: string }
-              | undefined
-
-            if (
-              callbackParameters &&
-              callbackParameters.callbackUrl &&
-              record.state === DidCommDidExchangeState.RequestReceived
-            ) {
-              emitVsAgentEvent(
-                agent,
-                VsAgentEventTypes.PresentationStateUpdated,
-                new PresentationStateUpdated({
-                  proofExchangeId: proofRecord.id,
-                  callbackUrl: callbackParameters.callbackUrl,
-                  state: PresentationState.CONNECTED,
-                  ref: callbackParameters.ref,
-                }),
-              )
-            }
-          })
         }
 
         // If discovery is enabled, send an empty 'completed' state so that the recipient knows to expect async features.
