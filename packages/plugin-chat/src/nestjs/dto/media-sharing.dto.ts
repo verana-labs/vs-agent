@@ -79,11 +79,16 @@ export class ShareMediaBodyDto {
   @IsString()
   description?: string
 
-  @ApiPropertyOptional({ description: 'Thread of the request-media message this share answers' })
+  @ApiPropertyOptional({
+    description:
+      'DIDComm message id of the request-media message that this share answers, sent as the parent ' +
+      'thread (`pthid`) of the share (`threadId` of the `didcomm.media-sharing.request-media-received` event).',
+    example: 'b2c3d4e5-6789-01ab-cdef-234567890abc',
+  })
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  threadId?: string
+  parentThreadId?: string
 
   @ApiProperty({ type: [SharedMediaItemDto], description: 'The items to share' })
   @IsArray()

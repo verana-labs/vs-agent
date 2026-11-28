@@ -77,14 +77,20 @@ export interface RequestProfileReceivedData {
 
 export interface ShareMediaReceivedData {
   connectionId: string
+  /** DIDComm message id of the share-media message. */
   threadId?: string
+  /** DIDComm message id of the request-media message that the share answers, when it answers one. */
+  parentThreadId?: string
   description?: string
   items?: (SharedMediaItem & { id: string })[]
 }
 
 export interface RequestMediaReceivedData {
   connectionId: string
+  /** DIDComm message id of the request-media message, to send as `parentThreadId` of the share. */
   threadId: string
+  /** Parent thread (`pthid`) of the request, when the peer sent one. */
+  parentThreadId?: string
   description?: string
   itemIds: string[]
 }
