@@ -55,6 +55,7 @@ const records = [
 const connections = {
   findAllByQuery: vi.fn(),
   findById: vi.fn(),
+  getById: vi.fn(),
   deleteById: vi.fn(),
   hangup: vi.fn(),
 }
@@ -271,6 +272,87 @@ describe('v2 didcomm connection routes', () => {
     expect(response.body).toEqual({})
     expect(connections.hangup).toHaveBeenCalledWith({ connectionId: 'c-1' })
     expect(connections.deleteById).toHaveBeenCalledWith('c-1')
+  })
+
+  it('deletes a connection without a hangup when notify is false', async () => {
+    connections.deleteById.mockResolvedValue(undefined)
+
+    const response = await request(app.getHttpServer()).delete('/v2/didcomm/connections/c-1?notify=false')
+
+    expect(response.status).toBe(204)
+    expect(connections.hangup).not.toHaveBeenCalled()
+    expect(connections.deleteById).toHaveBeenCalledWith('c-1')
+  })
+
+  it('refuses a notify value that is not a boolean', async () => {
+    const response = await request(app.getHttpServer()).delete('/v2/didcomm/connections/c-1?notify=maybe')
+
+    expect(response.status).toBe(400)
+    expect(connections.deleteById).not.toHaveBeenCalled()
+  })
+
+  // What Credo stores when it hangs up: the record is abandoned before the message goes out
+  const hungUp = (record: ReturnType<typeof connection>) => ({
+    ...record,
+    state: 'abandoned',
+    did: undefined,
+    previousDids: [record.did],
+    errorMessage: 'Connection hangup by us',
+  })
+
+  it('terminates a connection: hangs up and returns the record as Credo stored it', async () => {
+    const record = connection('c-1', '2026-01-01T00:00:00.000Z')
+    connections.findById.mockResolvedValue(record)
+    connections.getById.mockResolvedValue(hungUp(record))
+
+    const response = await request(app.getHttpServer()).post('/v2/didcomm/connections/c-1/terminate')
+
+    expect(response.status).toBe(200)
+    expect(response.body).toMatchObject({
+      id: 'c-1',
+      state: 'abandoned',
+      previousDids: [record.did],
+      invitationId: null,
+      parentConnectionId: null,
+    })
+    expect(response.body).not.toHaveProperty('did')
+    expect(connections.hangup).toHaveBeenCalledWith({ connectionId: 'c-1' })
+    expect(connections.getById).toHaveBeenCalledWith('c-1')
+    expect(connections.deleteById).not.toHaveBeenCalled()
+  })
+
+  it('terminates a connection whose peer cannot be reached, and logs it', async () => {
+    const record = connection('c-1', '2026-01-01T00:00:00.000Z')
+    connections.findById.mockResolvedValue(record)
+    connections.getById.mockResolvedValue(hungUp(record))
+    connections.hangup.mockRejectedValueOnce(new Error('no route to the peer'))
+
+    const response = await request(app.getHttpServer()).post('/v2/didcomm/connections/c-1/terminate')
+
+    expect(response.status).toBe(200)
+    expect(response.body.state).toBe('abandoned')
+  })
+
+  it('does not hang up an already terminated connection again', async () => {
+    connections.findById.mockResolvedValue(
+      connection('c-1', '2026-01-01T00:00:00.000Z', { state: 'abandoned' }),
+    )
+
+    const response = await request(app.getHttpServer()).post('/v2/didcomm/connections/c-1/terminate')
+
+    expect(response.status).toBe(200)
+    expect(response.body.state).toBe('abandoned')
+    expect(connections.hangup).not.toHaveBeenCalled()
+    expect(connections.getById).not.toHaveBeenCalled()
+  })
+
+  it('answers 404 on terminating an unknown connection', async () => {
+    connections.findById.mockResolvedValue(null)
+
+    const response = await request(app.getHttpServer()).post('/v2/didcomm/connections/nope/terminate')
+
+    expect(response.status).toBe(404)
+    expect(response.body.error.code).toBe('UNKNOWN_ID')
   })
 
   it('deletes a parent connection alone and keeps its children listed by parentConnectionId', async () => {

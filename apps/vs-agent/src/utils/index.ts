@@ -1,4 +1,5 @@
 export * from './ServerConfig'
+export * from './discoveryOptions'
 export * from './logger'
 export * from './pluginLifecycle'
 export * from './runWithRetries'

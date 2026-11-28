@@ -168,7 +168,7 @@
     },
     "/v2/didcomm/basic-messages": {
       "post": {
-        "description": "Sends a text message on an established connection.",
+        "description": "Sends a text message on an established connection. A message that names a `parentThreadId` is a reply to the message with that id.",
         "operationId": "V2DidcommBasicMessagesController_sendBasicMessage_v2",
         "parameters": [],
         "requestBody": {
@@ -820,7 +820,7 @@
         ]
       },
       "delete": {
-        "description": "Terminates the DIDComm connection: notifies the other party and deletes the connection record.",
+        "description": "Deletes the connection record. Unless `notify` is false, the agent first tells the peer that the connection ends (a hangup).",
         "operationId": "V2DidcommConnectionsController_deleteConnection_v2",
         "parameters": [
           {
@@ -831,6 +831,16 @@
             "schema": {
               "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
               "type": "string"
+            }
+          },
+          {
+            "name": "notify",
+            "required": false,
+            "in": "query",
+            "description": "Whether to tell the peer that the connection ends (a hangup) before the record is deleted. False drops a record silently, for example a stale connection whose peer is gone.",
+            "schema": {
+              "default": true,
+              "type": "boolean"
             }
           }
         ],
@@ -843,6 +853,43 @@
           }
         },
         "summary": "Delete a connection",
+        "tags": [
+          "v2/didcomm"
+        ]
+      }
+    },
+    "/v2/didcomm/connections/{connectionId}/terminate": {
+      "post": {
+        "description": "Ends the DIDComm relationship and keeps the record: tells the peer that the connection ends (a hangup) and marks the record `abandoned`, so that its history stays readable and no further message is sent on it. Delete the connection to drop the record as well.",
+        "operationId": "V2DidcommConnectionsController_terminateConnection_v2",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "description": "UUID of the connection to terminate",
+            "schema": {
+              "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The terminated connection record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionRecordDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No connection with the given id"
+          }
+        },
+        "summary": "Terminate a connection",
         "tags": [
           "v2/didcomm"
         ]
@@ -3675,6 +3722,11 @@
             "type": "string",
             "description": "Text of the message",
             "example": "Hello"
+          },
+          "parentThreadId": {
+            "type": "string",
+            "description": "DIDComm message id of the message that this one answers, sent as the parent thread (`pthid`) of the message. The peer can then present the message as a reply to that one.",
+            "example": "b2c3d4e5-6789-01ab-cdef-234567890abc"
           }
         },
         "required": [
@@ -3724,10 +3776,20 @@
             "description": "When the sender sent the message, ISO 8601",
             "example": "2026-09-10T12:00:00.000Z"
           },
+          "threadId": {
+            "type": "string",
+            "description": "DIDComm message id of the message. A basic message starts its own thread, so its thread id is its message id: the id that a receipt or a reaction names, and the `id` that `sendBasicMessage` returns for a message this agent sent.",
+            "example": "a1b2c3d4-5678-90ab-cdef-1234567890ab"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
             "description": "When the agent stored the message"
+          },
+          "parentThreadId": {
+            "type": "string",
+            "description": "DIDComm message id of the message that this one answers (`pthid`), when the message is a reply",
+            "example": "b2c3d4e5-6789-01ab-cdef-234567890abc"
           }
         },
         "required": [
@@ -4125,7 +4187,7 @@
               "abandoned",
               "completed"
             ],
-            "description": "Current state of the DID exchange"
+            "description": "Current state of the DID exchange. `abandoned` also marks a connection that the peer hung up; the change is reported on `didcomm.connections.state-updated` like any other."
           },
           "role": {
             "type": "string",
@@ -5230,9 +5292,10 @@
             "type": "string",
             "description": "Text that describes the share"
           },
-          "threadId": {
+          "parentThreadId": {
             "type": "string",
-            "description": "Thread of the request-media message this share answers"
+            "description": "DIDComm message id of the request-media message that this share answers, sent as the parent thread (`pthid`) of the share (`threadId` of the `didcomm.media-sharing.request-media-received` event).",
+            "example": "b2c3d4e5-6789-01ab-cdef-234567890abc"
           },
           "items": {
             "description": "The items to share",

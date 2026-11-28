@@ -20,6 +20,7 @@ export interface ProtocolModule {
 
 export interface ConnectionRecord {
   id: string
+  /** `abandoned` also marks a connection that the peer hung up */
   state: DidExchangeState
   role: DidExchangeRole
   did?: string
@@ -50,6 +51,11 @@ export interface ListConnectionsQuery extends PaginationQuery {
   invitationDid?: string
   didcommVersion?: DidCommVersion
   mediatorId?: string
+}
+
+export interface DeleteConnectionQuery {
+  /** Whether to tell the peer that the connection ends before the record is deleted. Default true. */
+  notify?: boolean
 }
 
 export interface CreateInvitationBody {
@@ -114,6 +120,8 @@ export interface ListInvitationsQuery extends PaginationQuery {
 export interface SendBasicMessageBody {
   connectionId: string
   content: string
+  /** DIDComm message id of the message that this one answers, sent as its parent thread (`pthid`). */
+  parentThreadId?: string
 }
 
 export interface ListBasicMessagesQuery extends PaginationQuery {
@@ -127,7 +135,14 @@ export interface BasicMessageRecord {
   role: BasicMessageRole
   content: string
   sentTime: string
+  /**
+   * DIDComm message id of the message, the id that a receipt or a reaction names. A basic message
+   * starts its own thread, so its thread id is its message id.
+   */
+  threadId?: string
   createdAt: string
+  /** DIDComm message id of the message that this one answers (`pthid`), when the message is a reply. */
+  parentThreadId?: string
 }
 
 export type MessageState = 'created' | 'submitted' | 'received' | 'viewed' | 'deleted'
@@ -202,7 +217,11 @@ export interface SharedMediaItem {
 export interface ShareMediaBody {
   connectionId: string
   description?: string
-  threadId?: string
+  /**
+   * DIDComm message id of the request-media message that this share answers, sent as the parent
+   * thread (`pthid`) of the share (`threadId` of the `request-media-received` event).
+   */
+  parentThreadId?: string
   items: SharedMediaItem[]
 }
 

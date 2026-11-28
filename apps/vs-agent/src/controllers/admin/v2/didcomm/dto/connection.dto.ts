@@ -67,6 +67,22 @@ export class ListConnectionsQueryDto extends PaginationQueryDto {
 }
 
 /**
+ * Query of [VSA-ADM-DC-CN-DELETE] deleteConnection
+ */
+export class DeleteConnectionQueryDto {
+  @ApiPropertyOptional({
+    type: Boolean,
+    description:
+      'Whether to tell the peer that the connection ends (a hangup) before the record is deleted. ' +
+      'False drops a record silently, for example a stale connection whose peer is gone.',
+    default: true,
+  })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  notify?: 'true' | 'false'
+}
+
+/**
  * A DIDComm connection record, as returned by listConnections and getConnection.
  */
 export class ConnectionRecordDto {
@@ -76,7 +92,12 @@ export class ConnectionRecordDto {
   })
   id!: string
 
-  @ApiProperty({ enum: DidCommDidExchangeState, description: 'Current state of the DID exchange' })
+  @ApiProperty({
+    enum: DidCommDidExchangeState,
+    description:
+      'Current state of the DID exchange. `abandoned` also marks a connection that the peer hung ' +
+      'up; the change is reported on `didcomm.connections.state-updated` like any other.',
+  })
   state!: DidCommDidExchangeState
 
   @ApiProperty({ enum: DidCommDidExchangeRole, description: 'Role in the DID exchange' })

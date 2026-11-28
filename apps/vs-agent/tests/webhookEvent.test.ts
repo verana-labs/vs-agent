@@ -2,7 +2,11 @@ import {
   DidCommBasicMessageEventTypes,
   DidCommBasicMessageRole,
   DidCommConnectionEventTypes,
+  DidCommDiscoverFeaturesEventTypes,
+  DidCommFeature,
+  DidCommGoalCode,
   DidCommProofEventTypes,
+  DidCommProtocol,
 } from '@credo-ts/didcomm'
 import { InvitationRecord, InvitationRepository } from '@verana-labs/vs-agent-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -110,6 +114,73 @@ describe('Events API delivery', () => {
     expect(body.data).toMatchObject({ id: 'conn-1', invitationId: 'oob-1', parentConnectionId: 'conn-0' })
   })
 
+  it('delivers a disclosure as its own event, each feature with its type, id and own properties', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit(DidCommDiscoverFeaturesEventTypes.DisclosureReceived, {
+      connection: connectionRecord,
+      disclosures: [
+        new DidCommProtocol({ id: 'https://didcomm.org/questionanswer/1.0', roles: ['responder'] }),
+        new DidCommGoalCode({ id: 'aries.vc.issue' }),
+      ],
+      protocolVersion: 'v2',
+      threadId: 'query-1',
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.discover-features.disclose-received')
+    expect(body.data).toEqual({
+      connectionId: 'conn-1',
+      threadId: 'query-1',
+      features: [
+        { featureType: 'protocol', id: 'https://didcomm.org/questionanswer/1.0', roles: ['responder'] },
+        { featureType: 'goal-code', id: 'aries.vc.issue' },
+      ],
+    })
+  })
+
+  it('keeps the own properties of an extension feature, such as the value of a capability', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    class Capability extends DidCommFeature {
+      public value?: boolean
+      public constructor(props: { id: string; value: boolean }) {
+        super({ id: props.id, type: 'capability' })
+        this.value = props.value
+      }
+    }
+
+    emit(DidCommDiscoverFeaturesEventTypes.DisclosureReceived, {
+      connection: connectionRecord,
+      disclosures: [new Capability({ id: 'mrtd.emrtd-read-support', value: true })],
+      protocolVersion: 'v2',
+      threadId: 'query-2',
+    })
+
+    const { body } = await delivered()
+    expect(body.data.features).toEqual([
+      { featureType: 'capability', id: 'mrtd.emrtd-read-support', value: true },
+    ])
+  })
+
+  it('does not report a disclosure as a connection state change', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit(DidCommDiscoverFeaturesEventTypes.DisclosureReceived, {
+      connection: connectionRecord,
+      disclosures: [new DidCommProtocol({ id: 'https://didcomm.org/receipts/1.0' })],
+      protocolVersion: 'v2',
+      threadId: 'query-3',
+    })
+
+    const { body } = await delivered()
+    expect(body.type).not.toBe('didcomm.connections.state-updated')
+    expect(body.data).not.toHaveProperty('state')
+  })
+
   it('delivers an invitation record, read back from the store, with its previousState', async () => {
     const { agent, emit } = fakeAgent()
     webhookEvent(agent as never, { url: URL }, logger as never)
@@ -156,6 +227,7 @@ describe('Events API delivery', () => {
       connectionId: 'conn-1',
       content: 'hello',
       sentTime: '2026-09-01T00:00:00Z',
+      threadId: 'msg-1',
       createdAt: new Date('2026-09-01T00:00:01Z'),
     }
     emit(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, {
@@ -173,8 +245,30 @@ describe('Events API delivery', () => {
       role: 'receiver',
       content: 'hello',
       sentTime: '2026-09-01T00:00:00Z',
+      threadId: 'msg-1',
       createdAt: '2026-09-01T00:00:01.000Z',
     })
+  })
+
+  it('delivers a received reply with the message that it answers', async () => {
+    const { agent, emit } = fakeAgent()
+    webhookEvent(agent as never, { url: URL }, logger as never)
+
+    emit(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, {
+      basicMessageRecord: {
+        id: 'bm-2',
+        connectionId: 'conn-1',
+        role: DidCommBasicMessageRole.Receiver,
+        content: 'yes',
+        sentTime: '2026-09-01T00:00:02Z',
+        createdAt: new Date('2026-09-01T00:00:03Z'),
+        parentThreadId: 'msg-1',
+      },
+    })
+
+    const { body } = await delivered()
+    expect(body.type).toBe('didcomm.basic-messages.message-received')
+    expect(body.data.parentThreadId).toBe('msg-1')
   })
 
   it('delivers a module message event as its own envelope', async () => {

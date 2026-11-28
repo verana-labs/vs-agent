@@ -18,6 +18,40 @@ spec:
 # Ingress resource for chatbot application
 # This resource defines how external traffic can access the chatbot service
 # routes traffic to the backend service
+{{- $routeType := .Values.ingress.type | default "ingress" }}
+{{- if not (has $routeType (list "ingress" "gateway")) }}
+{{- fail (printf "ingress.type must be ingress or gateway, not %q" $routeType) }}
+{{- end }}
+{{- if eq $routeType "gateway" }}
+{{- $gw := .Values.ingress.gateway | default dict }}
+# Gateway API route, for a cluster served by a Gateway instead of ingress-nginx.
+# The Gateway listener named here terminates TLS, so ingress.tlsSecret takes no
+# part in this mode.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  parentRefs:
+    - name: {{ required "ingress.gateway.name is needed when ingress.type is gateway" $gw.name }}
+      {{- with $gw.namespace }}
+      namespace: {{ . }}
+      {{- end }}
+      {{- with $gw.sectionName }}
+      sectionName: {{ . }}
+      {{- end }}
+  hostnames:
+    - {{ tpl .Values.ingress.host . }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ .Values.name }}
+          port: {{ .Values.env.port | default 5000 }}
+{{- else }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -42,6 +76,7 @@ spec:
                  name: {{ .Values.name }}
                  port:
                    number: {{ .Values.env.port | default 5000 }} # Port on the service to which the ingress routes traffic
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -67,10 +102,10 @@ spec:
             # Base URL for the Agent Admin API
             - name: VS_AGENT_ADMIN_BASE_URL
               value: "{{ .Values.env.vsAgentAdminUrl }}"
-            {{- if .Values.env.credentialDefinitionId }}
-            # AnonCreds credential definition behind the issue, proof and /revoke features
-            - name: CREDENTIAL_DEFINITION_ID
-              value: {{ .Values.env.credentialDefinitionId | quote }}
+            {{- if .Values.env.jsonSchemaCredentialId }}
+            # VTJSC of the phoneNumber schema, the bot finds or creates its credential definition on startup
+            - name: JSON_SCHEMA_CREDENTIAL_ID
+              value: {{ .Values.env.jsonSchemaCredentialId | quote }}
             {{- end }}
             # Base URL for the Service API
             - name: PUBLIC_BASE_URL
