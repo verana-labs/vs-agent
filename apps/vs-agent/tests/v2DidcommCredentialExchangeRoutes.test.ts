@@ -10,7 +10,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import { RecordNotFoundError } from '@credo-ts/core'
-import { DidCommCredentialExchangeRepository, DidCommCredentialsModuleConfig } from '@credo-ts/didcomm'
 import {
   VtFlowRecord,
   VtFlowRole,
@@ -23,7 +22,6 @@ import {
   AnonCredsTrustErrorReason,
   createInvitation,
   ParticipantRole,
-  sendMessage,
 } from '@verana-labs/vs-agent-sdk'
 
 import { ErrorEnvelopeFilter } from '../src/common'
@@ -37,7 +35,7 @@ import { VsAgentService } from '../src/services/VsAgentService'
 
 vi.mock('@verana-labs/vs-agent-sdk', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>()
-  return { ...actual, createInvitation: vi.fn(), sendMessage: vi.fn() }
+  return { ...actual, createInvitation: vi.fn() }
 })
 
 const schema = { name: 'phoneNumber', version: '1.0', attrNames: ['phoneNumber', 'issuedAt'] }
@@ -474,35 +472,19 @@ describe('v2 didcomm credential exchange routes', () => {
       claims: [{ name: 'phoneNumber', value: '+57128348520' }],
       parentThreadId: 'thread-parent',
     }
-    const offerMessage = { id: 'offer-1', setThread: vi.fn() }
-    const createOffer = vi.fn()
-    const exchangeRepository = { update: vi.fn() }
+    it('sends the offer on the connection with its parent thread', async () => {
+      agent.didcomm.credentials.offerCredential.mockResolvedValue({ id: 'ce-new' })
 
-    beforeEach(() => {
-      createOffer.mockResolvedValue({
-        credentialExchangeRecord: { id: 'ce-new', threadId: 'thread-new' },
-        message: offerMessage,
-      })
-      agent.dependencyManager.resolve.mockImplementation((token: unknown) => {
-        if (token === DidCommCredentialsModuleConfig)
-          return { credentialProtocols: [{ version: 'v1' }, { version: 'v2', createOffer }] }
-        if (token === DidCommCredentialExchangeRepository) return exchangeRepository
-        return vtFlowApi
-      })
-    })
-
-    it('sends the offer on the connection with its parent thread, and keeps it on the record', async () => {
       const response = await request(app.getHttpServer())
         .post('/v2/didcomm/credential-offer')
         .send({ ...offer, connectionId: 'conn-1' })
 
       expect(response.status).toBe(201)
       expect(response.body).toEqual({ credentialExchangeId: 'ce-new' })
-
-      expect(createOffer).toHaveBeenCalledWith(
-        agent.context,
+      expect(agent.didcomm.credentials.offerCredential).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({
-          connectionRecord: { id: 'conn-1' },
+          connectionId: 'conn-1',
+          parentThreadId: 'thread-parent',
           autoAcceptCredential: 'never',
           credentialFormats: {
             anoncreds: expect.objectContaining({
@@ -512,19 +494,6 @@ describe('v2 didcomm credential exchange routes', () => {
           },
         }),
       )
-      const stored = { id: 'ce-new', threadId: 'thread-new', parentThreadId: 'thread-parent' }
-      expect(exchangeRepository.update).toHaveBeenCalledWith(agent.context, stored)
-      expect(offerMessage.setThread).toHaveBeenCalledWith({
-        threadId: 'thread-new',
-        parentThreadId: 'thread-parent',
-      })
-
-      expect(sendMessage).toHaveBeenCalledExactlyOnceWith(agent, { id: 'conn-1' }, offerMessage, stored)
-      // The record and the message have their parent thread before the message leaves.
-      const sent = vi.mocked(sendMessage).mock.invocationCallOrder[0]
-      expect(exchangeRepository.update.mock.invocationCallOrder[0]).toBeLessThan(sent)
-      expect(offerMessage.setThread.mock.invocationCallOrder[0]).toBeLessThan(sent)
-      expect(agent.didcomm.credentials.offerCredential).not.toHaveBeenCalled()
       expect(createInvitation).not.toHaveBeenCalled()
     })
 
@@ -533,7 +502,7 @@ describe('v2 didcomm credential exchange routes', () => {
 
       expect(response.status).toBe(400)
       expect(response.body.error.code).toBe('INVALID_INPUT')
-      expect(createOffer).not.toHaveBeenCalled()
+      expect(agent.didcomm.credentials.offerCredential).not.toHaveBeenCalled()
       expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
     })
 

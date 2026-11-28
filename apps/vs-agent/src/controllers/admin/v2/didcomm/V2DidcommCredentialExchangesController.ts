@@ -1,9 +1,4 @@
-import type {
-  DidCommConnectionRecord,
-  DidCommCredentialExchangeRecord,
-  DidCommCredentialStateChangedEvent,
-} from '@credo-ts/didcomm'
-import type { VsAgent } from '@verana-labs/vs-agent-sdk'
+import type { DidCommCredentialExchangeRecord, DidCommCredentialStateChangedEvent } from '@credo-ts/didcomm'
 
 import {
   Body,
@@ -23,9 +18,7 @@ import {
 import {
   DidCommAutoAcceptCredential,
   DidCommCredentialEventTypes,
-  DidCommCredentialExchangeRepository,
   DidCommCredentialState,
-  DidCommCredentialsModuleConfig,
 } from '@credo-ts/didcomm'
 import { RecordNotFoundError } from '@credo-ts/core'
 import {
@@ -46,7 +39,6 @@ import {
   createInvitation,
   findExchangeCredentialId,
   ParticipantRole,
-  sendMessage,
 } from '@verana-labs/vs-agent-sdk'
 
 import {
@@ -230,12 +222,11 @@ export class V2DidcommCredentialExchangesController {
     // answers with neither `invitation` nor `shortUrl`. `useLegacyDid` and `didcommVersion`
     // describe an invitation only, so the agent ignores them here.
     if (connectionRecord) {
-      const credentialExchangeRecord = parentThreadId
-        ? await offerCredentialInThread(agent, { ...offerOptions, connectionRecord, parentThreadId })
-        : await agent.didcomm.credentials.offerCredential({
-            ...offerOptions,
-            connectionId: connectionRecord.id,
-          })
+      const credentialExchangeRecord = await agent.didcomm.credentials.offerCredential({
+        ...offerOptions,
+        connectionId: connectionRecord.id,
+        parentThreadId,
+      })
       return { credentialExchangeId: credentialExchangeRecord.id }
     }
 
@@ -608,44 +599,6 @@ export class V2DidcommCredentialExchangesController {
       throw error
     }
   }
-}
-
-/**
- * Sends an offer that names a parent thread. `offerCredential` of Credo takes none, so the offer
- * is made by the protocol, given its thread, and sent here.
- */
-async function offerCredentialInThread(
-  agent: VsAgent,
-  options: {
-    connectionRecord: DidCommConnectionRecord
-    parentThreadId: string
-    autoAcceptCredential: DidCommAutoAcceptCredential
-    credentialFormats: Parameters<
-      VsAgent['didcomm']['credentials']['offerCredential']
-    >[0]['credentialFormats']
-  },
-): Promise<DidCommCredentialExchangeRecord> {
-  const { connectionRecord, parentThreadId, autoAcceptCredential, credentialFormats } = options
-
-  const protocol = agent.dependencyManager
-    .resolve(DidCommCredentialsModuleConfig)
-    .credentialProtocols.find(({ version }) => version === 'v2')
-  if (!protocol) throw new Error('The Issue Credential 2.0 protocol is not registered on the agent')
-
-  const { credentialExchangeRecord, message } = await protocol.createOffer(agent.context, {
-    connectionRecord,
-    credentialFormats,
-    autoAcceptCredential,
-  })
-
-  credentialExchangeRecord.parentThreadId = parentThreadId
-  await agent.dependencyManager
-    .resolve(DidCommCredentialExchangeRepository)
-    .update(agent.context, credentialExchangeRecord)
-  message.setThread({ threadId: credentialExchangeRecord.threadId, parentThreadId })
-
-  await sendMessage(agent, connectionRecord, message, credentialExchangeRecord)
-  return credentialExchangeRecord
 }
 
 function invalidInput(message: string): AdminApiError {
