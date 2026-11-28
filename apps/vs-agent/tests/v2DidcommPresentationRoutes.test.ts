@@ -291,6 +291,50 @@ describe('v2 didcomm presentation routes', () => {
       expect(proofs.update).toHaveBeenCalledWith(proofRecordSpy)
     })
 
+    it('sends the parent thread that the caller names with the request on the connection', async () => {
+      proofs.requestProof.mockResolvedValue({ id: 'proof-1', metadata: metadata() })
+      connections.findById.mockResolvedValue({ id: 'conn-1' })
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({
+          requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }],
+          connectionId: 'conn-1',
+          parentThreadId: 'thread-parent',
+        })
+
+      expect(response.status).toBe(201)
+      expect(proofs.requestProof).toHaveBeenCalledWith(
+        expect.objectContaining({ connectionId: 'conn-1', parentThreadId: 'thread-parent' }),
+      )
+    })
+
+    it('names no parent thread when the caller gives none', async () => {
+      proofs.requestProof.mockResolvedValue({ id: 'proof-1', metadata: metadata() })
+      connections.findById.mockResolvedValue({ id: 'conn-1' })
+
+      await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({ requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }], connectionId: 'conn-1' })
+
+      expect(proofs.requestProof.mock.calls[0][0].parentThreadId).toBeUndefined()
+    })
+
+    it('refuses a parent thread without a connection, and requests nothing', async () => {
+      // the invitation that would carry the request is its parent thread
+      const response = await request(app.getHttpServer())
+        .post('/v2/didcomm/presentation-request')
+        .send({
+          requestedCredentials: [{ credentialDefinitionId: 'cred-def-1' }],
+          parentThreadId: 'thread-parent',
+        })
+
+      expect(response.status).toBe(400)
+      expect(response.body.error.code).toBe('INVALID_INPUT')
+      expect(proofs.createRequest).not.toHaveBeenCalled()
+      expect(createInvitation).not.toHaveBeenCalled()
+    })
+
     it('answers UNKNOWN_ID for an unknown connection, and requests nothing', async () => {
       connections.findById.mockResolvedValue(null)
 
@@ -383,6 +427,7 @@ describe('v2 didcomm presentation routes', () => {
     it.each([
       ['connectionId', 'conn-p-1'],
       ['threadId', 'thread-p-1'],
+      ['parentThreadId', 'thread-parent'],
       ['role', 'prover'],
       ['state', 'presentation-received'],
     ])('passes the %s filter to the repository', async (name, value) => {
@@ -392,6 +437,7 @@ describe('v2 didcomm presentation routes', () => {
       expect(proofs.findAllByQuery).toHaveBeenCalledWith({
         connectionId: undefined,
         threadId: undefined,
+        parentThreadId: undefined,
         role: undefined,
         state: undefined,
         [name]: value,
@@ -422,6 +468,17 @@ describe('v2 didcomm presentation routes', () => {
 
       expect(replayed.status).toBe(400)
       expect(replayed.body.error.code).toBe('INVALID_CURSOR')
+    })
+
+    it('names the parent thread of a presentation that has one', async () => {
+      proofs.findById.mockResolvedValue(
+        proofRecord('p-1', '2026-01-01T00:00:00.000Z', { parentThreadId: 'thread-parent' }),
+      )
+
+      const response = await request(app.getHttpServer()).get('/v2/didcomm/presentations/p-1')
+
+      expect(response.status).toBe(200)
+      expect(response.body.parentThreadId).toBe('thread-parent')
     })
 
     it('flattens the revealed attributes and the revealed attribute groups into one claim list', async () => {

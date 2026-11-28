@@ -142,7 +142,7 @@ export class V2DidcommPresentationsController {
   ): Promise<CreatePresentationRequestResponseDto> {
     const agent = await this.vsAgentService.getAgent()
 
-    const { requestedCredentials, connectionId, useLegacyDid, didcommVersion } = body
+    const { requestedCredentials, connectionId, useLegacyDid, didcommVersion, parentThreadId } = body
     const requireNonRevocation = body.requireNonRevocation ?? false
     const autoAccept = body.autoAccept ?? false
 
@@ -150,6 +150,10 @@ export class V2DidcommPresentationsController {
       throw invalidInput('`requestedCredentials` must name at least one credential')
     }
 
+    // An out-of-band invitation is the parent thread of the request it carries, so a request names
+    // a parent thread of its own on an established connection only
+    if (parentThreadId && !connectionId)
+      throw invalidInput('`parentThreadId` is accepted with a `connectionId` only')
     if (connectionId) await connectionOf(agent, connectionId)
 
     // One requested-attribute group per entry, so a request may span several credentials. Groups are
@@ -215,7 +219,11 @@ export class V2DidcommPresentationsController {
     // answers with neither `invitation` nor `shortUrl`. `useLegacyDid` and `didcommVersion`
     // describe an invitation only, so the agent ignores them here.
     if (connectionId) {
-      const proofRecord = await agent.didcomm.proofs.requestProof({ ...requestOptions, connectionId })
+      const proofRecord = await agent.didcomm.proofs.requestProof({
+        ...requestOptions,
+        connectionId,
+        parentThreadId,
+      })
       await storeRequestMetadata(proofRecord)
       return { proofExchangeId: proofRecord.id }
     }
@@ -435,6 +443,7 @@ export class V2DidcommPresentationsController {
     const filters = {
       connectionId: query.connectionId,
       threadId: query.threadId,
+      parentThreadId: query.parentThreadId,
       role: query.role,
       state: query.state,
     }

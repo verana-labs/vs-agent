@@ -139,10 +139,15 @@ export class V2DidcommCredentialExchangesController {
       revocationRegistryIndex,
       useLegacyDid,
       didcommVersion,
+      parentThreadId,
     } = body
     const autoAccept = body.autoAccept ?? false
 
-    if (connectionId) await connectionOf(agent, connectionId)
+    // An out-of-band invitation is the parent thread of the offer it carries, so an offer names a
+    // parent thread of its own on an established connection only
+    if (parentThreadId && !connectionId)
+      throw invalidInput('`parentThreadId` is accepted with a `connectionId` only')
+    const connectionRecord = connectionId ? await connectionOf(agent, connectionId) : undefined
 
     const [record] = await agent.modules.anoncreds.getCreatedCredentialDefinitions({
       credentialDefinitionId,
@@ -216,10 +221,11 @@ export class V2DidcommCredentialExchangesController {
     // An established connection carries the offer itself, so the agent makes no invitation and
     // answers with neither `invitation` nor `shortUrl`. `useLegacyDid` and `didcommVersion`
     // describe an invitation only, so the agent ignores them here.
-    if (connectionId) {
+    if (connectionRecord) {
       const credentialExchangeRecord = await agent.didcomm.credentials.offerCredential({
         ...offerOptions,
-        connectionId,
+        connectionId: connectionRecord.id,
+        parentThreadId,
       })
       return { credentialExchangeId: credentialExchangeRecord.id }
     }
@@ -488,6 +494,7 @@ export class V2DidcommCredentialExchangesController {
     const filters = {
       connectionId: query.connectionId,
       threadId: query.threadId,
+      parentThreadId: query.parentThreadId,
       role: query.role,
       state: query.state,
     }

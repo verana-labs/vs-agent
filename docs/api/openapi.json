@@ -454,6 +454,15 @@
             }
           },
           {
+            "name": "parentThreadId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the identifier of the parent thread",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "role",
             "required": false,
             "in": "query",
@@ -1163,6 +1172,15 @@
             "required": false,
             "in": "query",
             "description": "Filter by DIDComm thread identifier",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parentThreadId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the identifier of the parent thread",
             "schema": {
               "type": "string"
             }
@@ -3845,6 +3863,11 @@
             "description": "An established connection to send the request on. The agent creates an Out-of-Band invitation when the caller omits it.",
             "example": "conn-1234-5678"
           },
+          "parentThreadId": {
+            "type": "string",
+            "description": "Thread this request is a step of, sent as the parent thread (`pthid`) of the request message. A peer that runs several exchanges inside one enclosing protocol thread uses it to tell which thread the request belongs to. The agent accepts it with a `connectionId` only: a request carried by an invitation has the invitation as its parent thread.",
+            "example": "b2c3d4e5-6789-01ab-cdef-234567890abc"
+          },
           "requireNonRevocation": {
             "type": "boolean",
             "description": "Ask the holder for a non-revocation proof at verification time",
@@ -4078,6 +4101,11 @@
             "type": "string",
             "description": "DIDComm thread identifier",
             "example": "thread-8765-4321"
+          },
+          "parentThreadId": {
+            "type": "string",
+            "description": "Identifier of the parent thread (`pthid`), when the request names one",
+            "example": "b2c3d4e5-6789-01ab-cdef-234567890abc"
           },
           "errorMessage": {
             "type": "string",
@@ -4334,6 +4362,11 @@
             "description": "An established connection to send the offer on. The agent creates an Out-of-Band invitation when the caller omits it.",
             "example": "conn-1234-5678"
           },
+          "parentThreadId": {
+            "type": "string",
+            "description": "Thread this offer is a step of, sent as the parent thread (`pthid`) of the offer message. A peer that runs several exchanges inside one enclosing protocol thread uses it to tell which thread the offer belongs to. The agent accepts it with a `connectionId` only: an offer carried by an invitation has the invitation as its parent thread.",
+            "example": "b2c3d4e5-6789-01ab-cdef-234567890abc"
+          },
           "autoAccept": {
             "type": "boolean",
             "description": "Complete the issuer steps without a call: the agent issues the credential on `request-received`, with no `acceptCredentialRequest` call.",
@@ -4417,6 +4450,11 @@
             "type": "string",
             "description": "DIDComm thread identifier",
             "example": "thread-8765-4321"
+          },
+          "parentThreadId": {
+            "type": "string",
+            "description": "Identifier of the parent thread (`pthid`), when the offer names one",
+            "example": "b2c3d4e5-6789-01ab-cdef-234567890abc"
           },
           "connectionId": {
             "type": "string",

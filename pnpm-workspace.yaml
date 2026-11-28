@@ -4,10 +4,10 @@ packages:
   - 'examples/*'
 
 catalog:
-  '@credo-ts/anoncreds': 0.8.0-alpha-20261127091731
-  '@credo-ts/askar': 0.8.0-alpha-20261127091731
-  '@credo-ts/core': 0.8.0-alpha-20261127091731
-  '@credo-ts/didcomm': 0.8.0-alpha-20261127091731
+  '@credo-ts/anoncreds': 0.8.0-alpha-20261128092258
+  '@credo-ts/askar': 0.8.0-alpha-20261128092258
+  '@credo-ts/core': 0.8.0-alpha-20261128092258
+  '@credo-ts/didcomm': 0.8.0-alpha-20261128092258
   '@credo-ts/didcomm-action-menu': 0.8.0
   '@credo-ts/didcomm-calls': 0.2.0
   '@credo-ts/didcomm-media-sharing': 0.2.0
@@ -16,6 +16,6 @@ catalog:
   '@credo-ts/didcomm-reactions': 0.2.0
   '@credo-ts/didcomm-receipts': 0.2.0
   '@credo-ts/didcomm-user-profile': 0.2.0
-  '@credo-ts/node': 0.8.0-alpha-20261127091731
-  '@credo-ts/openid4vc': 0.8.0-alpha-20261127091731
-  '@credo-ts/webvh': 0.8.0-alpha-20261127091731
+  '@credo-ts/node': 0.8.0-alpha-20261128092258
+  '@credo-ts/openid4vc': 0.8.0-alpha-20261128092258
+  '@credo-ts/webvh': 0.8.0-alpha-20261128092258

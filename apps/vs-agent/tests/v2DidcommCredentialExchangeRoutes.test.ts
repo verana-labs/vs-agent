@@ -294,6 +294,7 @@ describe('v2 didcomm credential exchange routes', () => {
   it.each([
     ['connectionId', 'conn-ce-a'],
     ['threadId', 'thread-ce-a'],
+    ['parentThreadId', 'thread-parent'],
     ['role', 'holder'],
     ['state', 'offer-received'],
   ])('passes the %s filter to the repository', async (name, value) => {
@@ -305,10 +306,20 @@ describe('v2 didcomm credential exchange routes', () => {
     expect(agent.didcomm.credentials.findAllByQuery).toHaveBeenCalledWith({
       connectionId: undefined,
       threadId: undefined,
+      parentThreadId: undefined,
       role: undefined,
       state: undefined,
       [name]: value,
     })
+  })
+
+  it('names the parent thread of an exchange that has one', async () => {
+    agent.didcomm.credentials.findById.mockResolvedValue({ ...records[0], parentThreadId: 'thread-parent' })
+
+    const response = await request(app.getHttpServer()).get('/v2/didcomm/credential-exchanges/ce-a')
+
+    expect(response.status).toBe(200)
+    expect(response.body.parentThreadId).toBe('thread-parent')
   })
 
   it('rejects a role and a state outside the protocol values', async () => {
@@ -453,6 +464,60 @@ describe('v2 didcomm credential exchange routes', () => {
 
     expect(response.status).toBe(201)
     expect(createInvitation).not.toHaveBeenCalled()
+  })
+
+  describe('parentThreadId', () => {
+    const offer = {
+      credentialDefinitionId: 'credDef:a',
+      claims: [{ name: 'phoneNumber', value: '+57128348520' }],
+      parentThreadId: 'thread-parent',
+    }
+    it('sends the offer on the connection with its parent thread', async () => {
+      agent.didcomm.credentials.offerCredential.mockResolvedValue({ id: 'ce-new' })
+
+      const response = await request(app.getHttpServer())
+        .post('/v2/didcomm/credential-offer')
+        .send({ ...offer, connectionId: 'conn-1' })
+
+      expect(response.status).toBe(201)
+      expect(response.body).toEqual({ credentialExchangeId: 'ce-new' })
+      expect(agent.didcomm.credentials.offerCredential).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          connectionId: 'conn-1',
+          parentThreadId: 'thread-parent',
+          autoAcceptCredential: 'never',
+          credentialFormats: {
+            anoncreds: expect.objectContaining({
+              credentialDefinitionId: 'credDef:a',
+              attributes: [{ name: 'phoneNumber', value: '+57128348520', mimeType: undefined }],
+            }),
+          },
+        }),
+      )
+      expect(createInvitation).not.toHaveBeenCalled()
+    })
+
+    it('refuses a parent thread without a connection, and offers nothing', async () => {
+      const response = await request(app.getHttpServer()).post('/v2/didcomm/credential-offer').send(offer)
+
+      expect(response.status).toBe(400)
+      expect(response.body.error.code).toBe('INVALID_INPUT')
+      expect(agent.didcomm.credentials.offerCredential).not.toHaveBeenCalled()
+      expect(agent.didcomm.credentials.createOffer).not.toHaveBeenCalled()
+    })
+
+    it('refuses an empty parent thread in the offer body', async () => {
+      const errors = await validate(
+        plainToInstance(CreateCredentialOfferBodyDto, {
+          ...offer,
+          connectionId: 'conn-1',
+          parentThreadId: '',
+        }),
+        { whitelist: true, forbidNonWhitelisted: true },
+      )
+
+      expect(errors.map(error => error.property)).toEqual(['parentThreadId'])
+    })
   })
 
   it('answers UNKNOWN_ID for an unknown connection, and offers nothing', async () => {
